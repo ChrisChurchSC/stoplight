@@ -1959,6 +1959,10 @@ button {
   border-radius: 20px;
   padding: 2px 10px;
 }
+.icp-source {
+  font-size: 11px;
+  color: var(--text-faint);
+}
 .gate-status.s-not-reviewed { background: var(--surface); color: var(--text-faint); border: 1px solid var(--border-strong); }
 .gate-status.s-coherent { background: #e3f4ea; color: #1a7a47; }
 .gate-status.s-mixed { background: #fdf2dd; color: #9a6a00; }

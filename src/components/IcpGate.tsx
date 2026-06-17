@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { CampaignVerdict } from '../adapters/icp/types'
 import { rtbCoverage, rtbsForCampaign } from '../domain/rtb'
@@ -29,6 +30,11 @@ export function IcpGate() {
   const campaigns = [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))].sort()
   const cov = rtbCoverage(scoped)
 
+  // The ICP page populates itself — pull from Clay on open, no click needed.
+  useEffect(() => {
+    if (!icp) loadIcp()
+  }, [icp, loadIcp])
+
   const status = gateCleared ? 'cleared' : review ? review.verdict : 'not-reviewed'
 
   return (
@@ -38,12 +44,8 @@ export function IcpGate() {
         <span className={`gate-status s-${status}`}>
           {gateCleared ? '✓ Cleared' : review ? VERDICT_LABEL[review.verdict] : 'Not reviewed'}
         </span>
+        <span className="icp-source" title="ICP pulled from Clay">via Clay</span>
         <span className="spacer" />
-        {!icp && (
-          <button className="btn sm" onClick={loadIcp}>
-            ⬇ Load ICP from Clay
-          </button>
-        )}
         {icp && (
           <button
             className="btn sm"
