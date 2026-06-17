@@ -56,7 +56,7 @@ export function Workbench() {
         onDrop={onDrop}
       >
         <Breadcrumb />
-        <ClientTabs />
+        {!overview && <ClientTabs />}
 
         {overview ? (
           <ClientsOverview />
