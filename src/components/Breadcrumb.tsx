@@ -14,6 +14,7 @@ export function Breadcrumb() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
 
@@ -34,9 +35,17 @@ export function Breadcrumb() {
 
   return (
     <div className="breadcrumb">
-      <span className="crumb active">{overview ? 'All clients' : clientFilter}</span>
+      {overview ? (
+        <span className="crumb active">All clients</span>
+      ) : (
+        <button className="crumb crumb-link" onClick={() => setClientFilter('all')}>
+          All clients
+        </button>
+      )}
       {!overview && (
         <>
+          <span className="crumb-sep">/</span>
+          <span className="crumb active">{clientFilter}</span>
           <span className="crumb-sep">/</span>
           <select
             className={`crumb-select${campaignFilter === 'all' ? ' muted' : ''}`}

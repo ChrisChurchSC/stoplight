@@ -1059,6 +1059,20 @@ button {
   color: var(--text);
   font-weight: 600;
 }
+.crumb-link {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+.crumb-link:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
 .crumb-sep {
   color: var(--text-faint);
 }
