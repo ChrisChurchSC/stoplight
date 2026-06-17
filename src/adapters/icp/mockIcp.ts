@@ -75,6 +75,8 @@ export class MockIcpReviewer implements IcpReviewer {
       }
 
       for (const fl of filled) {
+        // Action labels (CTA buttons, display paths) aren't pain statements — skip.
+        if (/cta|path|business|link/.test(fl.key)) continue
         if (!textOnMessage(map[fl.key], pains)) {
           flags.push({
             rowId: r.id,
