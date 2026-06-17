@@ -1472,7 +1472,7 @@ button {
 /* ---- Messaging column (collapsed cell) ---- */
 .msg-cell {
   cursor: pointer;
-  padding: 8px 9px;
+  padding: 10px 12px;
   vertical-align: top;
 }
 .msg-cell:hover {
@@ -1873,7 +1873,7 @@ button {
 
 /* ---- RTB column cell ---- */
 .rtb-cell {
-  padding: 6px 9px;
+  padding: 10px 12px;
   vertical-align: top;
   cursor: pointer;
 }
