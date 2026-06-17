@@ -1,4 +1,6 @@
 import { useRef } from 'react'
+import { CHANNELS } from '../domain/channels'
+import { isTrackingClean } from '../domain/tracking'
 import { filesToAssets } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -11,7 +13,13 @@ export function Toolbar() {
   const loadSample = useTrafficStore((s) => s.loadSample)
   const gateCleared = useTrafficStore((s) => s.gateCleared)
   const trackingCleared = useTrafficStore((s) => s.trackingCleared)
+  const generateTracking = useTrafficStore((s) => s.generateTracking)
+  const acceptTracking = useTrafficStore((s) => s.acceptTracking)
   const cleared = gateCleared && trackingCleared
+
+  const reviewable = rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+  const missingUtm = reviewable.filter((r) => !r.utm)
+  const dirtyTracking = reviewable.filter((r) => r.utm && !isTrackingClean(r))
 
   const inputRef = useRef<HTMLInputElement>(null)
   const draftCount = rows.filter((r) => r.status === 'draft').length
@@ -41,6 +49,30 @@ export function Toolbar() {
         ⟳ Approve {draftCount} draft{draftCount === 1 ? '' : 's'}
         {!cleared && ' 🔒'}
       </button>
+
+      {trackingCleared ? (
+        <span className="toolbar-stat" title="Tracking verified">✓ Tracking</span>
+      ) : missingUtm.length > 0 ? (
+        <button
+          className="btn sm"
+          onClick={generateTracking}
+          title="Build UTMs + verify pixels/events for all assets"
+        >
+          Generate tracking ({missingUtm.length})
+        </button>
+      ) : dirtyTracking.length > 0 ? (
+        <button
+          className="btn sm"
+          disabled
+          title={`Unverified tracking: ${[...new Set(dirtyTracking.map((r) => CHANNELS[r.channel].label))].join(', ')}`}
+        >
+          🔒 {dirtyTracking.length} unverified
+        </button>
+      ) : reviewable.length > 0 ? (
+        <button className="btn green sm" onClick={acceptTracking}>
+          Accept tracking
+        </button>
+      ) : null}
 
       <button className="btn sm" onClick={() => inputRef.current?.click()}>
         + Add assets
