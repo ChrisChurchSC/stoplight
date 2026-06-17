@@ -948,6 +948,105 @@ button {
   color: var(--text);
   line-height: 1.45;
 }
+.settings-card-btn {
+  margin-top: 12px;
+}
+
+/* ---- Billing page ---- */
+.billing-top {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.billing-plan,
+.billing-usage,
+.billing-invoices {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.billing-plan-label,
+.billing-invoices-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.billing-plan-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.billing-plan-price {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.billing-plan-price span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.billing-plan-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.billing-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.billing-usage-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.billing-usage-row:last-child {
+  border-bottom: none;
+}
+.billing-usage-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.billing-usage-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.billing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.billing-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.billing-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.billing-status {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 20px;
+  padding: 1px 9px;
+}
+.billing-status.s-paid { background: #e3f4ea; color: #1a7a47; }
+.billing-status.s-due { background: #fdf2dd; color: #9a6a00; }
 
 /* ---- sidebar ---- */
 .sidebar {

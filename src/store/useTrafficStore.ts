@@ -44,13 +44,13 @@ interface TrafficState {
   /** Per-client workspace view. */
   view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp' | 'assets'
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'settings'
+  page: 'clients' | 'connectors' | 'billing'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp' | 'assets') => void
-  setPage: (page: 'clients' | 'settings') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing') => void
 
   refresh: () => Promise<void>
 

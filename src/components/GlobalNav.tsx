@@ -5,7 +5,8 @@ const CAR =
 
 const PAGES = [
   { key: 'clients', label: 'Clients', icon: '◳' },
-  { key: 'settings', label: 'Settings', icon: '⚙' },
+  { key: 'connectors', label: 'Connectors', icon: '⇄' },
+  { key: 'billing', label: 'Billing', icon: '▤' },
 ] as const
 
 export function GlobalNav() {

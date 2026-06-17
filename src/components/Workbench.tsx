@@ -13,7 +13,8 @@ import { CalendarView } from './CalendarView'
 import { FlowView } from './FlowView'
 import { InsightsView } from './InsightsView'
 import { AssetsPage } from './AssetsPage'
-import { SettingsPage } from './SettingsPage'
+import { ConnectorsPage } from './ConnectorsPage'
+import { BillingPage } from './BillingPage'
 import { IcpGate } from './IcpGate'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
@@ -91,7 +92,7 @@ export function Workbench() {
         </>
       ) : (
         <div className="main">
-          <SettingsPage />
+          {page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
         </div>
       )}
 
