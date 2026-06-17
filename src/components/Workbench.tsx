@@ -7,12 +7,14 @@ import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
 import { IcpGate } from './IcpGate'
 import { SheetGrid } from './SheetGrid'
+import { CalendarView } from './CalendarView'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
   const addAssets = useTrafficStore((s) => s.addAssets)
+  const view = useTrafficStore((s) => s.view)
   const [over, setOver] = useState(false)
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export function Workbench() {
         <Toolbar />
         <IngestTray />
         <IcpGate />
-        <SheetGrid />
+        {view === 'calendar' ? <CalendarView /> : <SheetGrid />}
         <CopyReview />
         <CommentDrawer />
 

@@ -22,6 +22,8 @@ export function Toolbar() {
   const acceptBudget = useTrafficStore((s) => s.acceptBudget)
   const comments = useTrafficStore((s) => s.comments)
   const syncComments = useTrafficStore((s) => s.syncComments)
+  const view = useTrafficStore((s) => s.view)
+  const setView = useTrafficStore((s) => s.setView)
   const cleared = gateCleared && trackingCleared && budgetCleared
 
   const needsReply = Object.values(comments)
@@ -159,6 +161,23 @@ export function Toolbar() {
           placeholder="Search assets…"
           onChange={(e) => setQuery(e.target.value)}
         />
+      </div>
+
+      <div className="view-toggle" role="group" aria-label="View">
+        <button
+          className={`view-btn${view === 'grid' ? ' active' : ''}`}
+          onClick={() => setView('grid')}
+          title="Spreadsheet view"
+        >
+          ▦ Grid
+        </button>
+        <button
+          className={`view-btn${view === 'calendar' ? ' active' : ''}`}
+          onClick={() => setView('calendar')}
+          title="Calendar view"
+        >
+          ◷ Calendar
+        </button>
       </div>
     </div>
   )

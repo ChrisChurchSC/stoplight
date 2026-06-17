@@ -38,8 +38,11 @@ interface TrafficState {
   filter: ChannelId | 'all'
   /** Toolbar search across asset name / caption. */
   query: string
+  /** Workspace view: the spreadsheet grid or the schedule calendar. */
+  view: 'grid' | 'calendar'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
+  setView: (view: 'grid' | 'calendar') => void
 
   refresh: () => Promise<void>
 
@@ -120,6 +123,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loading: false,
   filter: 'all',
   query: '',
+  view: 'grid',
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -134,6 +138,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   setFilter: (filter) => set({ filter }),
   setQuery: (query) => set({ query }),
+  setView: (view) => set({ view }),
 
   refresh: async () => {
     set({ loading: true })
