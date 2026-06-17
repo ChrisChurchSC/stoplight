@@ -31,11 +31,12 @@ const COLUMNS = [
   { key: 'budget', label: 'Budget', icon: '◧' },
   { key: 'attribution', label: 'Attribution', icon: '↗' },
   { key: 'posted', label: 'Posted', icon: '✓' },
+  { key: 'comments', label: 'Comments', icon: '💬' },
   { key: 'actions', label: '', icon: '' },
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 184, 138, 200, 200, 150, 120, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 184, 138, 200, 200, 150, 120, 150, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -167,6 +168,7 @@ export function SheetGrid() {
     const a = mockAttio.attributionForAsset(r.assetName)
     return a.leads > 0 || a.wonRevenue > 0
   }).length
+  const commentedN = view.filter((r) => (commentMap[r.id]?.length ?? 0) > 0).length
   const now = Date.now()
 
   const pad = Math.max(0, MIN_ROWS - view.length)
@@ -235,6 +237,7 @@ export function SheetGrid() {
               <th><CovBar n={budgetSetN} total={paidN} /></th>
               <th><CovBar n={attributedN} total={totalRows} /></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
+              <th><CovBar n={commentedN} total={postedN} /></th>
               <th />
             </tr>
           </thead>
@@ -529,6 +532,39 @@ export function SheetGrid() {
 
                   <td className="cell-ro">{postedLabel(row)}</td>
 
+                  <td className="comments-cell">
+                    {row.status === 'posted'
+                      ? (() => {
+                          const cs = commentMap[row.id] ?? []
+                          const needs = cs.filter((c) => c.needsResponse).length
+                          if (cs.length === 0)
+                            return (
+                              <button
+                                className="comments-link muted"
+                                onClick={() => openComments(row.id)}
+                                title="Sync comments to pull replies"
+                              >
+                                No comments
+                              </button>
+                            )
+                          return (
+                            <button
+                              className="comments-link"
+                              onClick={() => openComments(row.id)}
+                              title="Open comments"
+                            >
+                              💬 {cs.length}
+                              {needs > 0 && (
+                                <span className="comments-badge" title={`${needs} need a reply`}>
+                                  {needs} to reply
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })()
+                      : <span className="cell-ro">—</span>}
+                  </td>
+
                   <td className="act">
                     <button
                       className={`btn ghost sm${row.copyReviewed ? ' reviewed' : ''}`}
@@ -537,15 +573,6 @@ export function SheetGrid() {
                     >
                       {row.copyReviewed ? '✓' : '✎'}
                     </button>
-                    {row.status === 'posted' && (
-                      <button
-                        className="btn ghost sm"
-                        title="Comments"
-                        onClick={() => openComments(row.id)}
-                      >
-                        💬 {commentMap[row.id]?.length ?? ''}
-                      </button>
-                    )}
                     {(row.status === 'approved' || row.status === 'failed') && (
                       <button className="btn sm" onClick={() => publishRow(row.id)}>
                         Publish
