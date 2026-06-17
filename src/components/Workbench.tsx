@@ -5,6 +5,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { Sidebar } from './Sidebar'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
+import { IcpGate } from './IcpGate'
 import { SheetGrid } from './SheetGrid'
 import { CopyReview } from './CopyReview'
 
@@ -54,6 +55,7 @@ export function Workbench() {
 
         <Toolbar />
         <IngestTray />
+        <IcpGate />
         <SheetGrid />
         <CopyReview />
 

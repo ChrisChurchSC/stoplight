@@ -8,10 +8,14 @@ import { proposeSchedule } from '../scheduling/propose'
 import { sampleRows } from '../domain/sampleData'
 import { slotsFor } from '../domain/channelAssets'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
+import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
+import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
 const publishers: PublisherRegistry = channelPublishers
+const icpSource: IcpSource = new MockIcpSource()
+const icpReviewer: IcpReviewer = new MockIcpReviewer()
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
@@ -53,6 +57,17 @@ interface TrafficState {
   /** Add a placeholder row for each required slot of a channel not yet present. */
   addMissingSlots: (channel: ChannelId) => Promise<void>
 
+  // ICP messaging gate
+  icp: Icp | null
+  /** Result of the batch messaging review, or null if not run / stale. */
+  batchReview: BatchReview | null
+  reviewing: boolean
+  /** True once the user has accepted the review — unlocks scheduling. */
+  gateCleared: boolean
+  loadIcp: () => Promise<void>
+  runBatchReview: () => Promise<void>
+  acceptReview: () => void
+
   // copy review
   /** Row whose copy-review drawer is open, or null. */
   reviewRowId: string | null
@@ -70,6 +85,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   filter: 'all',
   query: '',
   reviewRowId: null,
+  icp: null,
+  batchReview: null,
+  reviewing: false,
+  gateCleared: false,
 
   setFilter: (filter) => set({ filter }),
   setQuery: (query) => set({ query }),
@@ -111,6 +130,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await sheet.append(rows)
     const stagedIds = new Set(ready.map((a) => a.id))
     set((s) => ({ assets: s.assets.filter((a) => !stagedIds.has(a.id)) }))
+    // New assets change the campaign — the messaging clearance is now stale.
+    set({ batchReview: null, gateCleared: false })
     await get().refresh()
   },
 
@@ -141,6 +162,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   approveAll: async () => {
+    // Gate: messaging review must be cleared before scheduling.
+    if (!get().gateCleared) return
     const draftIds = get()
       .rows.filter((r) => r.status === 'draft')
       .map((r) => r.id)
@@ -175,6 +198,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loadSample: async () => {
     await sheet.clear()
     await sheet.append(sampleRows())
+    set({ batchReview: null, gateCleared: false })
     await get().refresh()
   },
 
@@ -219,4 +243,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await sheet.update(id, { copyReviewed: value })
     await get().refresh()
   },
+
+  loadIcp: async () => {
+    const icp = await icpSource.fetch()
+    set({ icp })
+  },
+
+  runBatchReview: async () => {
+    set({ reviewing: true })
+    let icp = get().icp
+    if (!icp) {
+      icp = await icpSource.fetch()
+      set({ icp })
+    }
+    const batchReview = await icpReviewer.review(icp, get().rows)
+    set({ batchReview, reviewing: false })
+  },
+
+  acceptReview: () => set({ gateCleared: true }),
 }))

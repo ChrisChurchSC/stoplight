@@ -9,6 +9,7 @@ export function Toolbar() {
   const addAssets = useTrafficStore((s) => s.addAssets)
   const approveAll = useTrafficStore((s) => s.approveAll)
   const loadSample = useTrafficStore((s) => s.loadSample)
+  const gateCleared = useTrafficStore((s) => s.gateCleared)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const draftCount = rows.filter((r) => r.status === 'draft').length
@@ -25,11 +26,16 @@ export function Toolbar() {
     <div className="toolbar">
       <button
         className="btn green sm"
-        disabled={draftCount === 0}
+        disabled={draftCount === 0 || !gateCleared}
         onClick={approveAll}
-        title="Approve all draft rows"
+        title={
+          gateCleared
+            ? 'Approve all draft rows'
+            : 'Clear the ICP messaging review to unlock scheduling'
+        }
       >
         ⟳ Approve {draftCount} draft{draftCount === 1 ? '' : 's'}
+        {!gateCleared && ' 🔒'}
       </button>
 
       <button className="btn sm" onClick={() => inputRef.current?.click()}>
