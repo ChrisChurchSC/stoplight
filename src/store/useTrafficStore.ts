@@ -10,6 +10,7 @@ import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
+import { buildUtm, isTrackingClean } from '../domain/tracking'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -68,6 +69,13 @@ interface TrafficState {
   runBatchReview: () => Promise<void>
   acceptReview: () => void
 
+  // pre-flight tracking gate (sequential, after the ICP gate)
+  trackingRan: boolean
+  trackingCleared: boolean
+  /** Build UTMs for every row (write back to the sheet) + run presence checks. */
+  generateTracking: () => Promise<void>
+  acceptTracking: () => void
+
   // copy review
   /** Row whose copy-review drawer is open, or null. */
   reviewRowId: string | null
@@ -89,6 +97,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   batchReview: null,
   reviewing: false,
   gateCleared: false,
+  trackingRan: false,
+  trackingCleared: false,
 
   setFilter: (filter) => set({ filter }),
   setQuery: (query) => set({ query }),
@@ -131,7 +141,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const stagedIds = new Set(ready.map((a) => a.id))
     set((s) => ({ assets: s.assets.filter((a) => !stagedIds.has(a.id)) }))
     // New assets change the campaign — the messaging clearance is now stale.
-    set({ batchReview: null, gateCleared: false })
+    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false })
     await get().refresh()
   },
 
@@ -162,8 +172,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   approveAll: async () => {
-    // Gate: messaging review must be cleared before scheduling.
-    if (!get().gateCleared) return
+    // Both gates must clear: messaging on-ICP AND tracking wired clean.
+    if (!get().gateCleared || !get().trackingCleared) return
     const draftIds = get()
       .rows.filter((r) => r.status === 'draft')
       .map((r) => r.id)
@@ -198,7 +208,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loadSample: async () => {
     await sheet.clear()
     await sheet.append(sampleRows())
-    set({ batchReview: null, gateCleared: false })
+    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false })
     await get().refresh()
   },
 
@@ -262,4 +272,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   acceptReview: () => set({ gateCleared: true }),
+
+  generateTracking: async () => {
+    // Build UTMs from each row's own metadata and persist to the sheet.
+    const rows = get().rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+    for (const r of rows) {
+      await sheet.update(r.id, { utm: buildUtm(r) })
+    }
+    set({ trackingRan: true })
+    await get().refresh()
+  },
+
+  acceptTracking: () => {
+    // Only clearable once every trackable asset's tracking is clean.
+    const dirty = get()
+      .rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+      .some((r) => !isTrackingClean(r))
+    if (dirty) return
+    set({ trackingCleared: true })
+  },
 }))

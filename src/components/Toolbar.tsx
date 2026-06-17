@@ -10,6 +10,8 @@ export function Toolbar() {
   const approveAll = useTrafficStore((s) => s.approveAll)
   const loadSample = useTrafficStore((s) => s.loadSample)
   const gateCleared = useTrafficStore((s) => s.gateCleared)
+  const trackingCleared = useTrafficStore((s) => s.trackingCleared)
+  const cleared = gateCleared && trackingCleared
 
   const inputRef = useRef<HTMLInputElement>(null)
   const draftCount = rows.filter((r) => r.status === 'draft').length
@@ -26,16 +28,18 @@ export function Toolbar() {
     <div className="toolbar">
       <button
         className="btn green sm"
-        disabled={draftCount === 0 || !gateCleared}
+        disabled={draftCount === 0 || !cleared}
         onClick={approveAll}
         title={
-          gateCleared
-            ? 'Approve all draft rows'
-            : 'Clear the ICP messaging review to unlock scheduling'
+          cleared
+            ? 'Approve all draft rows — messaging on-ICP and tracking clean'
+            : !gateCleared
+              ? 'Clear the ICP messaging review to unlock scheduling'
+              : 'Clear the pre-flight tracking gate to unlock scheduling'
         }
       >
         ⟳ Approve {draftCount} draft{draftCount === 1 ? '' : 's'}
-        {!gateCleared && ' 🔒'}
+        {!cleared && ' 🔒'}
       </button>
 
       <button className="btn sm" onClick={() => inputRef.current?.click()}>

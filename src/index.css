@@ -1558,3 +1558,73 @@ button {
   color: var(--accent);
   margin-top: 2px;
 }
+
+/* ---- pre-flight tracking gate ---- */
+.tracking-gate .review-summary {
+  margin-top: 0;
+}
+.track-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 34vh;
+  overflow-y: auto;
+}
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.track-row:hover {
+  background: var(--surface-2);
+}
+.track-row.dirty {
+  background: #fff8f8;
+}
+.track-asset {
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 130px;
+}
+.track-checks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.track-check {
+  font-size: 11px;
+  border-radius: 20px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.track-check.ok {
+  background: #e3f4ea;
+  color: #1a7a47;
+}
+.track-check.bad {
+  background: #fde7e7;
+  color: #b42318;
+  font-weight: 600;
+}
+.track-utm {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 38%;
+}
+.track-hint {
+  font-size: 11.5px;
+  color: #9a6a00;
+}

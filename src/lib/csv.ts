@@ -1,5 +1,6 @@
 import type { TrafficRow } from '../domain/types'
 import { messagingAllText } from '../domain/messaging'
+import { utmQuery } from '../domain/tracking'
 
 const COLUMNS: (keyof TrafficRow)[] = [
   'id',
@@ -24,9 +25,13 @@ function escape(value: unknown): string {
 /** Serialize the sheet's rows to CSV. Messaging components are flattened into a
  *  single "messaging" column (label: value pairs). */
 export function rowsToCsv(rows: TrafficRow[]): string {
-  const header = [...COLUMNS, 'messaging'].join(',')
+  const header = [...COLUMNS, 'messaging', 'utm'].join(',')
   const lines = rows.map((r) =>
-    [...COLUMNS.map((c) => escape(r[c])), escape(messagingAllText(r))].join(','),
+    [
+      ...COLUMNS.map((c) => escape(r[c])),
+      escape(messagingAllText(r)),
+      escape(r.utm ? utmQuery(r.utm) : ''),
+    ].join(','),
   )
   return [header, ...lines].join('\n')
 }

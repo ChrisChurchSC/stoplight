@@ -100,6 +100,9 @@ export interface TrafficRow {
   extractedCopy?: string
   /** Reviewer has read & signed off on all copy for this row. */
   copyReviewed?: boolean
+  /** Auto-generated tracking parameters, written back to the sheet so they
+   *  carry through to the platforms (see tracking.ts). */
+  utm?: { source: string; medium: string; campaign: string; content: string }
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   status: RowStatus
