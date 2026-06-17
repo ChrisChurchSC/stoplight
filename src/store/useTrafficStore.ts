@@ -74,6 +74,8 @@ interface TrafficState {
   trackingCleared: boolean
   /** Build UTMs for every row (write back to the sheet) + run presence checks. */
   generateTracking: () => Promise<void>
+  /** Build UTMs for a single asset (per-row generate from the Tracking column). */
+  generateTrackingForRow: (id: string) => Promise<void>
   acceptTracking: () => void
 
   // copy review
@@ -280,6 +282,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       await sheet.update(r.id, { utm: buildUtm(r) })
     }
     set({ trackingRan: true })
+    await get().refresh()
+  },
+
+  generateTrackingForRow: async (id) => {
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    await sheet.update(id, { utm: buildUtm(row) })
+    set({ trackingRan: true, trackingCleared: false })
     await get().refresh()
   },
 

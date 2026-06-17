@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typesFor } from '../domain/channelAssetTypes'
 import { messagingAllText, messagingSummary } from '../domain/messaging'
+import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
@@ -22,12 +23,13 @@ const COLUMNS = [
   { key: 'messaging', label: 'Messaging', icon: '¶' },
   { key: 'scheduled', label: 'Scheduled', icon: '◷' },
   { key: 'status', label: 'Status', icon: '●' },
+  { key: 'tracking', label: 'Tracking', icon: '◈' },
   { key: 'posted', label: 'Posted', icon: '✓' },
   { key: 'actions', label: '', icon: '' },
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 120, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 200, 120, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -94,6 +96,7 @@ export function SheetGrid() {
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const publishRow = useTrafficStore((s) => s.publishRow)
   const openReview = useTrafficStore((s) => s.openReview)
+  const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
 
@@ -148,6 +151,7 @@ export function SheetGrid() {
   const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
   const pastDraft = view.filter((r) => r.status !== 'draft').length
   const postedN = view.filter((r) => r.status === 'posted').length
+  const trackingCleanN = view.filter((r) => r.utm && isTrackingClean(r)).length
 
   const pad = Math.max(0, MIN_ROWS - view.length)
 
@@ -210,6 +214,7 @@ export function SheetGrid() {
               <th><CovBar n={messagingFilled} total={totalRows} /></th>
               <th><span className="cov-check">✓</span></th>
               <th><CovBar n={pastDraft} total={totalRows} /></th>
+              <th><CovBar n={trackingCleanN} total={totalRows} /></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th />
             </tr>
@@ -334,6 +339,34 @@ export function SheetGrid() {
                         </option>
                       ))}
                     </select>
+                  </td>
+
+                  <td className="track-cell">
+                    {row.utm ? (
+                      (() => {
+                        const checks = trackingChecks(row)
+                        const clean = checks.every((c) => c.ok)
+                        const bad = checks.filter((c) => !c.ok).map((c) => c.label)
+                        return (
+                          <div
+                            className="track-cell-inner"
+                            title={clean ? utmQuery(row.utm) : `Missing: ${bad.join(', ')}`}
+                          >
+                            <span className={`trk ${clean ? 'ok' : 'bad'}`}>
+                              {clean ? '✓ Tracked' : `⚑ ${bad.length}`}
+                            </span>
+                            <code className="trk-utm">?{utmQuery(row.utm)}</code>
+                          </div>
+                        )
+                      })()
+                    ) : (
+                      <button
+                        className="btn ghost sm"
+                        onClick={() => generateTrackingForRow(row.id)}
+                      >
+                        Generate
+                      </button>
+                    )}
                   </td>
 
                   <td className="cell-ro">{postedLabel(row)}</td>
