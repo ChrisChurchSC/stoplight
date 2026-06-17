@@ -1870,3 +1870,27 @@ button {
 .rtb-cov-flag.gap { background: #fdf2dd; color: #9a6a00; }
 .rtb-cov-flag.unsupported { background: #fde7e7; color: #b42318; }
 .rtb-cov-flag.over { background: var(--surface-2); color: var(--text-muted); }
+
+/* ---- RTB column cell ---- */
+.rtb-cell {
+  padding: 6px 9px;
+  vertical-align: top;
+  cursor: pointer;
+}
+.rtb-cell:hover {
+  background: #fafbff;
+}
+.rtb-cell-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rtb-mini {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: #eef0fe;
+  border: 1px solid #d7dafc;
+  border-radius: 20px;
+  padding: 1px 8px;
+}

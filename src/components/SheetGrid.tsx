@@ -6,6 +6,7 @@ import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { mockAttio } from '../adapters/attio/mockAttio'
+import { assetRtbIds, rtbById } from '../domain/rtb'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -23,6 +24,7 @@ const COLUMNS = [
   { key: 'campaign', label: 'Campaign', icon: '◇' },
   { key: 'audience', label: 'Audience', icon: '◎' },
   { key: 'messaging', label: 'Messaging', icon: '¶' },
+  { key: 'rtb', label: 'RTB', icon: '◆' },
   { key: 'scheduled', label: 'Scheduled', icon: '◷' },
   { key: 'status', label: 'Status', icon: '●' },
   { key: 'tracking', label: 'Tracking', icon: '◈' },
@@ -33,7 +35,7 @@ const COLUMNS = [
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 200, 200, 150, 120, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 160, 184, 138, 200, 200, 150, 120, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -153,6 +155,7 @@ export function SheetGrid() {
   const totalRows = view.length
   const typeSet = view.filter((r) => isValidType(r.channel, r.assetType)).length
   const messagingFilled = view.filter((r) => messagingAllText(r).trim()).length
+  const rtbSetN = view.filter((r) => assetRtbIds(r).length > 0).length
   const campaignFilled = view.filter((r) => (r.campaign ?? '').trim()).length
   const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
   const pastDraft = view.filter((r) => r.status !== 'draft').length
@@ -225,6 +228,7 @@ export function SheetGrid() {
               <th><CovBar n={campaignFilled} total={totalRows} /></th>
               <th><CovBar n={audienceFilled} total={totalRows} /></th>
               <th><CovBar n={messagingFilled} total={totalRows} /></th>
+              <th><CovBar n={rtbSetN} total={totalRows} /></th>
               <th><span className="cov-check">✓</span></th>
               <th><CovBar n={pastDraft} total={totalRows} /></th>
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
@@ -329,6 +333,32 @@ export function SheetGrid() {
                         </span>
                       )}
                     </div>
+                  </td>
+
+                  <td
+                    className="rtb-cell"
+                    onClick={() => openReview(row.id)}
+                    title="Map proof (RTBs) in messaging"
+                  >
+                    {(() => {
+                      const ids = assetRtbIds(row)
+                      if (ids.length) {
+                        return (
+                          <div className="rtb-cell-chips">
+                            {ids.map((id) => (
+                              <span key={id} className="rtb-mini">
+                                {rtbById(row.campaign, id)?.label ?? id}
+                              </span>
+                            ))}
+                          </div>
+                        )
+                      }
+                      return messagingAllText(row).trim() ? (
+                        <span className="rtb-warn">unsupported</span>
+                      ) : (
+                        <span className="cell-ro">—</span>
+                      )
+                    })()}
                   </td>
 
                   <td>
