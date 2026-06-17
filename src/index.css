@@ -1470,7 +1470,7 @@ button {
 }
 
 /* ---- Messaging column (collapsed cell) ---- */
-.msg-cell {
+.sheet td.msg-cell {
   cursor: pointer;
   padding: 10px 12px;
   vertical-align: top;
@@ -1872,7 +1872,7 @@ button {
 .rtb-cov-flag.over { background: var(--surface-2); color: var(--text-muted); }
 
 /* ---- RTB column cell ---- */
-.rtb-cell {
+.sheet td.rtb-cell {
   padding: 10px 12px;
   vertical-align: top;
   cursor: pointer;
