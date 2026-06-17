@@ -1,5 +1,6 @@
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { AssetVerdict, CampaignVerdict } from '../adapters/icp/types'
+import { rtbCoverage } from '../domain/rtb'
 import { ChannelIcon } from './ChannelIcon'
 
 const VERDICT_LABEL: Record<CampaignVerdict, string> = {
@@ -23,6 +24,8 @@ export function IcpGate() {
   const openReview = useTrafficStore((s) => s.openReview)
   const icpFromClosedWon = useTrafficStore((s) => s.icpFromClosedWon)
   const refreshIcpFromClosedWon = useTrafficStore((s) => s.refreshIcpFromClosedWon)
+  const rows = useTrafficStore((s) => s.rows)
+  const cov = rtbCoverage(rows)
 
   const status = gateCleared
     ? 'cleared'
@@ -79,6 +82,30 @@ export function IcpGate() {
             ))}
           </div>
           <p className="icp-summary">{icp.summary}</p>
+        </div>
+      )}
+
+      {cov.total > 0 && (
+        <div className="rtb-coverage">
+          <span className="rtb-cov-label">Proof (RTBs)</span>
+          <span className="rtb-cov-stat">
+            {cov.used}/{cov.total} used
+          </span>
+          {cov.gaps.length > 0 && (
+            <span className="rtb-cov-flag gap" title={cov.gaps.map((g) => `${g.campaign}: ${g.rtb.label}`).join('\n')}>
+              {cov.gaps.length} gap{cov.gaps.length === 1 ? '' : 's'}
+            </span>
+          )}
+          {cov.unsupported.length > 0 && (
+            <span className="rtb-cov-flag unsupported">
+              {cov.unsupported.length} unsupported claim{cov.unsupported.length === 1 ? '' : 's'}
+            </span>
+          )}
+          {cov.overReliance && (
+            <span className="rtb-cov-flag over" title={`${Math.round(cov.overReliance.share * 100)}% of ${cov.overReliance.campaign} proof`}>
+              over-reliant on “{cov.overReliance.rtb.label}”
+            </span>
+          )}
         </div>
       )}
 

@@ -100,6 +100,8 @@ export interface TrafficRow {
   extractedCopy?: string
   /** Reviewer has read & signed off on all copy for this row. */
   copyReviewed?: boolean
+  /** RTBs (proof points) backing each messaging component: componentKey → rtb ids. */
+  rtbMap?: Record<string, string[]>
   /** Auto-generated tracking parameters, written back to the sheet so they
    *  carry through to the platforms (see tracking.ts). */
   utm?: { source: string; medium: string; campaign: string; content: string }

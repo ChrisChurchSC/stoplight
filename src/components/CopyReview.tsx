@@ -1,6 +1,7 @@
 import { CHANNELS } from '../domain/channels'
 import { typeLabel } from '../domain/channelAssetTypes'
 import { messagingFields, messagingMap } from '../domain/messaging'
+import { rtbsForCampaign } from '../domain/rtb'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
@@ -32,6 +33,14 @@ export function CopyReview() {
 
   const setField = (key: string, value: string) =>
     updateRow(row.id, { messaging: { ...map, [key]: value } })
+
+  const rtbs = rtbsForCampaign(row.campaign)
+  const toggleRtb = (key: string, rtbId: string) => {
+    const rmap = row.rtbMap ?? {}
+    const cur = rmap[key] ?? []
+    const next = cur.includes(rtbId) ? cur.filter((x) => x !== rtbId) : [...cur, rtbId]
+    updateRow(row.id, { rtbMap: { ...rmap, [key]: next } })
+  }
 
   return (
     <>
@@ -96,6 +105,28 @@ export function CopyReview() {
                       <div className="flag-reason">{flag.issue}</div>
                       {flag.suggestion && <div className="flag-suggest">→ {flag.suggestion}</div>}
                     </div>
+                  </div>
+                )}
+                {rtbs.length > 0 && (
+                  <div className="rtb-row">
+                    <span className="rtb-tag-label">Proof</span>
+                    {rtbs.map((rtb) => {
+                      const on = (row.rtbMap?.[fl.key] ?? []).includes(rtb.id)
+                      return (
+                        <button
+                          key={rtb.id}
+                          type="button"
+                          className={`rtb-chip${on ? ' on' : ''}`}
+                          title={rtb.detail}
+                          onClick={() => toggleRtb(fl.key, rtb.id)}
+                        >
+                          {rtb.label}
+                        </button>
+                      )
+                    })}
+                    {val.trim() && (row.rtbMap?.[fl.key] ?? []).length === 0 && (
+                      <span className="rtb-warn">unsupported claim</span>
+                    )}
                   </div>
                 )}
               </label>
