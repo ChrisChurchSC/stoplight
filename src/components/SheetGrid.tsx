@@ -534,6 +534,11 @@ export function SheetGrid() {
                             <option value="lifetime">lifetime</option>
                           </select>
                         </div>
+                        {!hasBudget(row) && row.status !== 'posted' && row.status !== 'failed' && (
+                          <span className="bud-flag" title="Set a budget to clear the budget gate">
+                            ⚑ needs budget
+                          </span>
+                        )}
                         {row.spend &&
                           (() => {
                             const p = pacing(row, now)

@@ -1,5 +1,4 @@
 import { useRef } from 'react'
-import { CHANNELS } from '../domain/channels'
 import { isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow } from '../domain/budget'
 import { filesToAssets } from '../lib/files'
@@ -73,15 +72,7 @@ export function Toolbar() {
         >
           Generate tracking ({missingUtm.length})
         </button>
-      ) : dirtyTracking.length > 0 ? (
-        <button
-          className="btn sm"
-          disabled
-          title={`Unverified tracking: ${[...new Set(dirtyTracking.map((r) => CHANNELS[r.channel].label))].join(', ')}`}
-        >
-          🔒 {dirtyTracking.length} unverified
-        </button>
-      ) : reviewable.length > 0 ? (
+      ) : dirtyTracking.length === 0 && reviewable.length > 0 ? (
         <button className="btn green sm" onClick={acceptTracking}>
           Accept tracking
         </button>
@@ -92,15 +83,11 @@ export function Toolbar() {
           <span className="toolbar-stat" title="Budgets set on all paid assets">
             ✓ Budget
           </span>
-        ) : missingBudget.length > 0 ? (
-          <button className="btn sm" disabled title="Set a budget on every paid asset to unlock">
-            🔒 {missingBudget.length} need budget
-          </button>
-        ) : (
+        ) : missingBudget.length === 0 ? (
           <button className="btn green sm" onClick={acceptBudget}>
             Accept budget
           </button>
-        ))}
+        ) : null)}
 
       {paidReviewable.some((r) => hasBudget(r)) && (
         <button className="btn sm" onClick={syncSpend} title="Pull actual spend (daily sync)">
