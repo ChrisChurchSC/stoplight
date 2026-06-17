@@ -8,6 +8,7 @@ import { IngestTray } from './IngestTray'
 import { IcpGate } from './IcpGate'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
+import { FlowView } from './FlowView'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 
@@ -59,7 +60,7 @@ export function Workbench() {
         <Toolbar />
         <IngestTray />
         <IcpGate />
-        {view === 'calendar' ? <CalendarView /> : <SheetGrid />}
+        {view === 'calendar' ? <CalendarView /> : view === 'flow' ? <FlowView /> : <SheetGrid />}
         <CopyReview />
         <CommentDrawer />
 

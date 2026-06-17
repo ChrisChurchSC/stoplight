@@ -1378,6 +1378,153 @@ button {
 .sheet tbody tr.data-row {
   cursor: pointer;
 }
+
+/* ---- Flow chart (pipeline) view ---- */
+.flow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+}
+.flow-lanes {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+}
+.flow-lane-wrap {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+}
+.flow-lane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.flow-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 4px;
+}
+.flow-lane-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.flow-lane-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: 0 8px;
+  min-width: 22px;
+  text-align: center;
+}
+.flow-lane-hint {
+  padding: 0 12px 10px;
+  font-size: 11px;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+}
+.flow-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+.flow-cards.row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.flow-empty {
+  color: var(--text-faint);
+  text-align: center;
+  padding: 8px 0;
+}
+.flow-arrow {
+  align-self: center;
+  flex: none;
+  width: 26px;
+  text-align: center;
+  font-size: 22px;
+  color: var(--text-faint);
+}
+.flow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-faint);
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 7px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.flow-card:hover {
+  background: var(--surface-2);
+}
+.flow-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.flow-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.flow-card-campaign {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-failed {
+  border: 1px solid #f6c9c2;
+  border-radius: var(--radius);
+  background: #fff7f6;
+  flex: none;
+}
+.flow-failed .flow-lane-head {
+  padding: 10px 12px;
+}
+.flow-failed .flow-lane-title {
+  color: #b42318;
+}
+.flow-failed-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 240px;
+}
+.flow-error {
+  font-size: 11px;
+  color: #b42318;
+  padding-left: 2px;
+}
 .drawer-foot {
   display: flex;
   align-items: center;

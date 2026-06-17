@@ -178,6 +178,13 @@ export function Toolbar() {
         >
           ◷ Calendar
         </button>
+        <button
+          className={`view-btn${view === 'flow' ? ' active' : ''}`}
+          onClick={() => setView('flow')}
+          title="Flow chart view — assets by trafficking stage"
+        >
+          ⇄ Flow
+        </button>
       </div>
     </div>
   )

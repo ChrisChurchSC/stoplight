@@ -39,10 +39,10 @@ interface TrafficState {
   /** Toolbar search across asset name / caption. */
   query: string
   /** Workspace view: the spreadsheet grid or the schedule calendar. */
-  view: 'grid' | 'calendar'
+  view: 'grid' | 'calendar' | 'flow'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
-  setView: (view: 'grid' | 'calendar') => void
+  setView: (view: 'grid' | 'calendar' | 'flow') => void
 
   refresh: () => Promise<void>
 
