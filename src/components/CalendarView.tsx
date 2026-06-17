@@ -64,8 +64,9 @@ export function CalendarView() {
   const scheduled = view.length
 
   return (
-    <div className="cal">
-      <div className="cal-head">
+    <div className="sheet-grid">
+      <div className="cal">
+        <div className="cal-head">
         <div className="cal-nav">
           <button
             className="btn ghost sm"
@@ -133,6 +134,7 @@ export function CalendarView() {
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )
