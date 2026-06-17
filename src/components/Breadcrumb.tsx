@@ -1,5 +1,13 @@
 import { clientForCampaign } from '../domain/clients'
+import { mockAttio } from '../adapters/attio/mockAttio'
 import { useTrafficStore } from '../store/useTrafficStore'
+
+const VIEWS = [
+  { key: 'grid', label: '▦ Grid' },
+  { key: 'calendar', label: '◷ Calendar' },
+  { key: 'flow', label: '⇄ Flow' },
+  { key: 'insights', label: '◧ Insights' },
+] as const
 
 export function Breadcrumb() {
   const rows = useTrafficStore((s) => s.rows)
@@ -7,6 +15,8 @@ export function Breadcrumb() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
+  const view = useTrafficStore((s) => s.view)
+  const setView = useTrafficStore((s) => s.setView)
 
   // Distinct clients across all rows, and campaigns within the active client.
   const clients = [...new Set(rows.map((r) => clientForCampaign(r.campaign)))].sort()
@@ -18,6 +28,9 @@ export function Breadcrumb() {
         .filter(Boolean),
     ),
   ].sort()
+
+  const posted = rows.filter((r) => r.status === 'posted').length
+  const approved = rows.filter((r) => r.status === 'approved' || r.status === 'scheduled').length
 
   return (
     <div className="breadcrumb">
@@ -50,6 +63,34 @@ export function Breadcrumb() {
           </option>
         ))}
       </select>
+
+      <span className="spacer" />
+
+      <div className="bc-stats">
+        <span className="toolbar-stat">▦ {rows.length} rows</span>
+        <span className="toolbar-stat">
+          <span className="dot" style={{ background: 'var(--blue)' }} /> {approved} approved
+        </span>
+        <span className="toolbar-stat">
+          <span className="dot" style={{ background: 'var(--green)' }} /> {posted} posted
+        </span>
+        <span className="toolbar-stat" title="Closed-won revenue attributed to assets (Attio)">
+          ↗ ${mockAttio.totalWonRevenue().toLocaleString()} won
+        </span>
+      </div>
+
+      <div className="view-toggle" role="group" aria-label="View">
+        {VIEWS.map((v) => (
+          <button
+            key={v.key}
+            className={`view-btn${view === v.key ? ' active' : ''}`}
+            onClick={() => setView(v.key)}
+            title={`${v.label.replace(/^\S+\s/, '')} view`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

@@ -880,6 +880,15 @@ button {
   flex-shrink: 0;
   font-size: 13px;
 }
+.breadcrumb .spacer {
+  flex: 1;
+}
+.bc-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-right: 6px;
+}
 .crumb {
   color: var(--text-muted);
 }

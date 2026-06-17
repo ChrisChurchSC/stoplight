@@ -2,7 +2,6 @@ import { useRef } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow } from '../domain/budget'
-import { mockAttio } from '../adapters/attio/mockAttio'
 import { filesToAssets } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -22,8 +21,6 @@ export function Toolbar() {
   const acceptBudget = useTrafficStore((s) => s.acceptBudget)
   const comments = useTrafficStore((s) => s.comments)
   const syncComments = useTrafficStore((s) => s.syncComments)
-  const view = useTrafficStore((s) => s.view)
-  const setView = useTrafficStore((s) => s.setView)
   const cleared = gateCleared && trackingCleared && budgetCleared
 
   const needsReply = Object.values(comments)
@@ -39,8 +36,6 @@ export function Toolbar() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const draftCount = rows.filter((r) => r.status === 'draft').length
-  const posted = rows.filter((r) => r.status === 'posted').length
-  const approved = rows.filter((r) => r.status === 'approved' || r.status === 'scheduled').length
 
   async function onFiles(files: FileList | null) {
     if (!files) return
@@ -141,17 +136,6 @@ export function Toolbar() {
         }}
       />
 
-      <div className="toolbar-stat">▦ {rows.length} rows</div>
-      <div className="toolbar-stat">
-        <span className="dot" style={{ background: 'var(--blue)' }} /> {approved} approved
-      </div>
-      <div className="toolbar-stat">
-        <span className="dot" style={{ background: 'var(--green)' }} /> {posted} posted
-      </div>
-      <div className="toolbar-stat" title="Closed-won revenue attributed to assets (Attio)">
-        ↗ ${mockAttio.totalWonRevenue().toLocaleString()} won
-      </div>
-
       <span className="spacer" />
 
       <div className="toolbar-search">
@@ -161,37 +145,6 @@ export function Toolbar() {
           placeholder="Search assets…"
           onChange={(e) => setQuery(e.target.value)}
         />
-      </div>
-
-      <div className="view-toggle" role="group" aria-label="View">
-        <button
-          className={`view-btn${view === 'grid' ? ' active' : ''}`}
-          onClick={() => setView('grid')}
-          title="Spreadsheet view"
-        >
-          ▦ Grid
-        </button>
-        <button
-          className={`view-btn${view === 'calendar' ? ' active' : ''}`}
-          onClick={() => setView('calendar')}
-          title="Calendar view"
-        >
-          ◷ Calendar
-        </button>
-        <button
-          className={`view-btn${view === 'flow' ? ' active' : ''}`}
-          onClick={() => setView('flow')}
-          title="Flow chart view — assets by user-flow stage"
-        >
-          ⇄ Flow
-        </button>
-        <button
-          className={`view-btn${view === 'insights' ? ' active' : ''}`}
-          onClick={() => setView('insights')}
-          title="Insights — what the connected data tells us"
-        >
-          ◧ Insights
-        </button>
       </div>
     </div>
   )
