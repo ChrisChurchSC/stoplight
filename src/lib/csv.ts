@@ -1,4 +1,5 @@
 import type { TrafficRow } from '../domain/types'
+import { messagingAllText } from '../domain/messaging'
 
 const COLUMNS: (keyof TrafficRow)[] = [
   'id',
@@ -6,7 +7,6 @@ const COLUMNS: (keyof TrafficRow)[] = [
   'mediaType',
   'channel',
   'assetType',
-  'caption',
   'campaign',
   'audience',
   'scheduledAt',
@@ -21,10 +21,13 @@ function escape(value: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** Serialize the sheet's rows to CSV in the canonical column order. */
+/** Serialize the sheet's rows to CSV. Messaging components are flattened into a
+ *  single "messaging" column (label: value pairs). */
 export function rowsToCsv(rows: TrafficRow[]): string {
-  const header = COLUMNS.join(',')
-  const lines = rows.map((r) => COLUMNS.map((c) => escape(r[c])).join(','))
+  const header = [...COLUMNS, 'messaging'].join(',')
+  const lines = rows.map((r) =>
+    [...COLUMNS.map((c) => escape(r[c])), escape(messagingAllText(r))].join(','),
+  )
   return [header, ...lines].join('\n')
 }
 

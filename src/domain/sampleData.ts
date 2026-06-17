@@ -1,5 +1,6 @@
 import type { ChannelId, MediaType, RowStatus, TrafficRow } from './types'
 import { primaryTypeKey } from './channelAssetTypes'
+import { primaryFieldKey } from './messaging'
 
 interface Seed {
   asset: string
@@ -59,7 +60,7 @@ export function sampleRows(now: number = Date.now()): TrafficRow[] {
       mediaType: s.mediaType,
       channel: s.channel,
       assetType: primaryTypeKey(s.channel),
-      caption: s.caption,
+      messaging: { [primaryFieldKey(s.channel, primaryTypeKey(s.channel))]: s.caption },
       body: s.body,
       extractedCopy: s.extracted,
       copyReviewed: s.copyReviewed,

@@ -1,4 +1,5 @@
 import { CHANNELS, channelAccepts } from '../../domain/channels'
+import { messagingAllText } from '../../domain/messaging'
 import type { ChannelId, TrafficRow } from '../../domain/types'
 import type { Publisher, PublisherRegistry, PublishResult } from './types'
 
@@ -17,8 +18,8 @@ class MockPublisher implements Publisher {
         `${row.mediaType} is an unusual fit for ${CHANNELS[this.channel].label}`,
       )
     }
-    if (!row.caption.trim()) {
-      warnings.push('No caption/copy set')
+    if (!messagingAllText(row).trim()) {
+      warnings.push('No messaging/copy set')
     }
     return { ok: warnings.length === 0, warnings }
   }

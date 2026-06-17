@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typesFor } from '../domain/channelAssetTypes'
+import { messagingAllText, messagingSummary } from '../domain/messaging'
+import { flagResolved } from '../adapters/icp/mockIcp'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -17,7 +19,7 @@ const COLUMNS = [
   { key: 'type', label: 'Type', icon: '◆' },
   { key: 'campaign', label: 'Campaign', icon: '◇' },
   { key: 'audience', label: 'Audience', icon: '◎' },
-  { key: 'caption', label: 'Caption', icon: '¶' },
+  { key: 'messaging', label: 'Messaging', icon: '¶' },
   { key: 'scheduled', label: 'Scheduled', icon: '◷' },
   { key: 'status', label: 'Status', icon: '●' },
   { key: 'posted', label: 'Posted', icon: '✓' },
@@ -92,6 +94,14 @@ export function SheetGrid() {
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const publishRow = useTrafficStore((s) => s.publishRow)
   const openReview = useTrafficStore((s) => s.openReview)
+  const batchReview = useTrafficStore((s) => s.batchReview)
+  const icp = useTrafficStore((s) => s.icp)
+
+  const pains = icp?.pains ?? []
+  const unresolvedFlags = (row: TrafficRow) =>
+    batchReview
+      ? batchReview.flags.filter((fl) => fl.rowId === row.id && !flagResolved(fl, row, pains)).length
+      : 0
 
   const [widths, setWidths] = useState<number[]>(DEFAULT_WIDTHS)
   const total = widths.reduce((a, b) => a + b, 0)
@@ -127,13 +137,13 @@ export function SheetGrid() {
       (filter === 'all' || r.channel === filter) &&
       (q === '' ||
         r.assetName.toLowerCase().includes(q) ||
-        r.caption.toLowerCase().includes(q) ||
+        messagingAllText(r).toLowerCase().includes(q) ||
         r.channel.includes(q)),
   )
 
   const totalRows = view.length
   const typeSet = view.filter((r) => isValidType(r.channel, r.assetType)).length
-  const captionFilled = view.filter((r) => r.caption.trim()).length
+  const messagingFilled = view.filter((r) => messagingAllText(r).trim()).length
   const campaignFilled = view.filter((r) => (r.campaign ?? '').trim()).length
   const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
   const pastDraft = view.filter((r) => r.status !== 'draft').length
@@ -197,7 +207,7 @@ export function SheetGrid() {
               <th><CovBar n={typeSet} total={totalRows} /></th>
               <th><CovBar n={campaignFilled} total={totalRows} /></th>
               <th><CovBar n={audienceFilled} total={totalRows} /></th>
-              <th><CovBar n={captionFilled} total={totalRows} /></th>
+              <th><CovBar n={messagingFilled} total={totalRows} /></th>
               <th><span className="cov-check">✓</span></th>
               <th><CovBar n={pastDraft} total={totalRows} /></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
@@ -282,13 +292,23 @@ export function SheetGrid() {
                     />
                   </td>
 
-                  <td>
-                    <GrowCell
-                      value={row.caption}
-                      placeholder="Add copy…"
-                      dep={total}
-                      onChange={(v) => updateRow(row.id, { caption: v })}
-                    />
+                  <td
+                    className="msg-cell"
+                    onClick={() => openReview(row.id)}
+                    title="Open messaging"
+                  >
+                    <div className="msg-row">
+                      {messagingSummary(row) ? (
+                        <span className="msg-summary">{messagingSummary(row)}</span>
+                      ) : (
+                        <span className="msg-empty">Add messaging…</span>
+                      )}
+                      {unresolvedFlags(row) > 0 && (
+                        <span className="msg-flags" title="Unresolved ICP flags">
+                          ⚑ {unresolvedFlags(row)}
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   <td>

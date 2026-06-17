@@ -1,5 +1,6 @@
 import { CHANNELS } from '../domain/channels'
 import { primaryTypeKey } from '../domain/channelAssetTypes'
+import { primaryFieldKey } from '../domain/messaging'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 
 let rowSeq = 0
@@ -54,7 +55,9 @@ export function proposeSchedule(assets: Asset[], now: Date = new Date()): Traffi
         mediaType: asset.mediaType,
         channel,
         assetType: primaryTypeKey(channel),
-        caption: asset.caption,
+        messaging: asset.caption
+          ? { [primaryFieldKey(channel, primaryTypeKey(channel))]: asset.caption }
+          : {},
         body: asset.body,
         campaign: '',
         audience: '',

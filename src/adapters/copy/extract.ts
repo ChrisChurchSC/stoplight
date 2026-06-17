@@ -1,4 +1,5 @@
 import type { TrafficRow } from '../../domain/types'
+import { messagingAllText } from '../../domain/messaging'
 
 export interface CopyPiece {
   label: string
@@ -8,7 +9,7 @@ export interface CopyPiece {
 
 /** Every piece of reviewable copy attached to a row, for the review panel. */
 export function copyPieces(row: TrafficRow): CopyPiece[] {
-  const pieces: CopyPiece[] = [{ label: 'Caption', text: row.caption, source: 'caption' }]
+  const pieces: CopyPiece[] = [{ label: 'Messaging', text: messagingAllText(row), source: 'caption' }]
   if (row.body) pieces.push({ label: 'Body', text: row.body, source: 'body' })
   if (row.extractedCopy) {
     pieces.push({ label: 'In-creative copy', text: row.extractedCopy, source: 'extracted' })

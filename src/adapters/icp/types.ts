@@ -27,6 +27,8 @@ export interface AssetFlag {
   assetName: string
   channel: ChannelId
   verdict: AssetVerdict
+  /** The specific messaging component this flag is about (key + label). */
+  field?: { key: string; label: string }
   issue?: string
   suggestion?: string
 }

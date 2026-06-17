@@ -219,7 +219,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       mediaType: 'text',
       channel,
       assetType: type.value,
-      caption: '',
+      messaging: {},
       campaign: '',
       audience: '',
       scheduledAt: nowIso,

@@ -80,7 +80,9 @@ export interface TrafficRow {
   channel: ChannelId
   /** Channel-specific asset-type category (see channelAssetTypes.ts). */
   assetType?: string
-  caption: string
+  /** All messaging components, keyed by field (see messaging.ts). The full copy
+   *  for the asset — headline, primary text, description, CTA, etc. */
+  messaging: Record<string, string>
   /**
    * Campaign this row rolls up to. The CRM attribution key: content → campaign
    * → contact → pipeline. Maps to a HubSpot/Salesforce campaign object.

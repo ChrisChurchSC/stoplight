@@ -1,4 +1,5 @@
 import { CHANNELS } from '../../domain/channels'
+import { messagingAllText } from '../../domain/messaging'
 import type { ChannelId, TrafficRow } from '../../domain/types'
 import type { Publisher, PublishResult } from './types'
 
@@ -46,7 +47,7 @@ export class HubSpotPublisher implements Publisher {
 
   validate(row: TrafficRow): { ok: boolean; warnings: string[] } {
     const warnings: string[] = []
-    if (!row.caption.trim()) warnings.push('No copy/body set for the HubSpot asset')
+    if (!messagingAllText(row).trim()) warnings.push('No copy/body set for the HubSpot asset')
     if (!(row.campaign ?? '').trim()) {
       warnings.push("No campaign — won't roll up to CRM attribution")
     }
@@ -61,7 +62,7 @@ export class HubSpotPublisher implements Publisher {
       endpoint: ENDPOINT[object],
       payload: {
         name: `${row.assetName} — ${CHANNELS[this.channel].label}`,
-        body: row.caption,
+        body: messagingAllText(row),
         publishDate: row.scheduledAt,
         // Associate to a campaign so content → contact → pipeline closes the loop.
         campaignName: row.campaign || undefined,
