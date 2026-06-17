@@ -8,6 +8,10 @@ export function Sidebar() {
   const filter = useTrafficStore((s) => s.filter)
   const setFilter = useTrafficStore((s) => s.setFilter)
   const clearSheet = useTrafficStore((s) => s.clearSheet)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+
+  // Channel filtering is per-client; the All-clients overview hides it.
+  const overview = clientFilter === 'all'
 
   const countFor = (id: string) => rows.filter((r) => r.channel === id).length
 
@@ -22,35 +26,39 @@ export function Sidebar() {
         <span className="sidebar-brand-name">Rushhour</span>
       </div>
 
-      <nav className="sidebar-nav">
-        <button
-          className={`nav-item${filter === 'all' ? ' active' : ''}`}
-          onClick={() => setFilter('all')}
-        >
-          <span className="nav-ico">▦</span>
-          <span className="nav-label">All channels</span>
-          <span className="nav-count">{rows.length}</span>
-        </button>
+      {overview ? (
+        <div className="sidebar-nav-spacer" />
+      ) : (
+        <nav className="sidebar-nav">
+          <button
+            className={`nav-item${filter === 'all' ? ' active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            <span className="nav-ico">▦</span>
+            <span className="nav-label">All channels</span>
+            <span className="nav-count">{rows.length}</span>
+          </button>
 
-        {KIND_ORDER.map((section) => (
-          <div key={section.kind}>
-            <div className="nav-section">{section.label}</div>
-            {channelsByKind(section.kind).map((c) => (
-              <button
-                key={c.id}
-                className={`nav-item${filter === c.id ? ' active' : ''}`}
-                onClick={() => setFilter(c.id)}
-              >
-                <span className="nav-logo">
-                  <ChannelIcon channel={c.id} size={15} />
-                </span>
-                <span className="nav-label">{c.label}</span>
-                <span className="nav-count">{countFor(c.id)}</span>
-              </button>
-            ))}
-          </div>
-        ))}
-      </nav>
+          {KIND_ORDER.map((section) => (
+            <div key={section.kind}>
+              <div className="nav-section">{section.label}</div>
+              {channelsByKind(section.kind).map((c) => (
+                <button
+                  key={c.id}
+                  className={`nav-item${filter === c.id ? ' active' : ''}`}
+                  onClick={() => setFilter(c.id)}
+                >
+                  <span className="nav-logo">
+                    <ChannelIcon channel={c.id} size={15} />
+                  </span>
+                  <span className="nav-label">{c.label}</span>
+                  <span className="nav-count">{countFor(c.id)}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+      )}
 
       <div className="sidebar-foot">
         <button

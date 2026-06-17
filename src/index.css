@@ -800,6 +800,9 @@ button {
   overflow-y: auto;
   flex: 1;
 }
+.sidebar-nav-spacer {
+  flex: 1;
+}
 .nav-section {
   font-size: 10.5px;
   letter-spacing: 0.06em;
