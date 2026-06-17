@@ -103,6 +103,10 @@ export interface TrafficRow {
   /** Auto-generated tracking parameters, written back to the sheet so they
    *  carry through to the platforms (see tracking.ts). */
   utm?: { source: string; medium: string; campaign: string; content: string }
+  /** Paid-channel budget (planning side). Flight start = scheduledAt. */
+  budget?: { amount: number; type: 'daily' | 'lifetime'; endDate?: string }
+  /** Actual spend pulled back from the platform (read-only, daily sync). */
+  spend?: { toDate: number; updatedAt: number }
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   status: RowStatus

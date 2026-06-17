@@ -11,6 +11,7 @@ import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
 import { buildUtm, isTrackingClean } from '../domain/tracking'
+import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -78,6 +79,12 @@ interface TrafficState {
   generateTrackingForRow: (id: string) => Promise<void>
   acceptTracking: () => void
 
+  // budget gate (paid assets only — planning: a budget must be set)
+  budgetCleared: boolean
+  /** Daily sync: pull actual spend back for paid assets that have a budget. */
+  syncSpend: () => Promise<void>
+  acceptBudget: () => void
+
   // copy review
   /** Row whose copy-review drawer is open, or null. */
   reviewRowId: string | null
@@ -101,6 +108,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   gateCleared: false,
   trackingRan: false,
   trackingCleared: false,
+  budgetCleared: false,
 
   setFilter: (filter) => set({ filter }),
   setQuery: (query) => set({ query }),
@@ -143,7 +151,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const stagedIds = new Set(ready.map((a) => a.id))
     set((s) => ({ assets: s.assets.filter((a) => !stagedIds.has(a.id)) }))
     // New assets change the campaign — the messaging clearance is now stale.
-    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false })
+    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false, budgetCleared: false })
     await get().refresh()
   },
 
@@ -174,8 +182,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   approveAll: async () => {
-    // Both gates must clear: messaging on-ICP AND tracking wired clean.
-    if (!get().gateCleared || !get().trackingCleared) return
+    // All gates must clear: messaging on-ICP, tracking clean, budgets set.
+    if (!get().gateCleared || !get().trackingCleared || !get().budgetCleared) return
     const draftIds = get()
       .rows.filter((r) => r.status === 'draft')
       .map((r) => r.id)
@@ -210,7 +218,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loadSample: async () => {
     await sheet.clear()
     await sheet.append(sampleRows())
-    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false })
+    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false, budgetCleared: false })
     await get().refresh()
   },
 
@@ -300,5 +308,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       .some((r) => !isTrackingClean(r))
     if (dirty) return
     set({ trackingCleared: true })
+  },
+
+  syncSpend: async () => {
+    const now = Date.now()
+    const paid = get().rows.filter((r) => isPaidRow(r) && hasBudget(r))
+    for (const r of paid) {
+      await sheet.update(r.id, { spend: { toDate: mockSpend(r, now), updatedAt: now } })
+    }
+    await get().refresh()
+  },
+
+  acceptBudget: () => {
+    // Planning gate: every paid, to-be-trafficked asset needs a valid budget.
+    const missing = get()
+      .rows.filter((r) => isPaidRow(r) && r.status !== 'posted' && r.status !== 'failed')
+      .some((r) => !hasBudget(r))
+    if (missing) return
+    set({ budgetCleared: true })
   },
 }))

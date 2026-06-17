@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { isTrackingClean } from '../domain/tracking'
+import { hasBudget, isPaidRow } from '../domain/budget'
 import { filesToAssets } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -15,11 +16,16 @@ export function Toolbar() {
   const trackingCleared = useTrafficStore((s) => s.trackingCleared)
   const generateTracking = useTrafficStore((s) => s.generateTracking)
   const acceptTracking = useTrafficStore((s) => s.acceptTracking)
-  const cleared = gateCleared && trackingCleared
+  const budgetCleared = useTrafficStore((s) => s.budgetCleared)
+  const syncSpend = useTrafficStore((s) => s.syncSpend)
+  const acceptBudget = useTrafficStore((s) => s.acceptBudget)
+  const cleared = gateCleared && trackingCleared && budgetCleared
 
   const reviewable = rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
   const missingUtm = reviewable.filter((r) => !r.utm)
   const dirtyTracking = reviewable.filter((r) => r.utm && !isTrackingClean(r))
+  const paidReviewable = reviewable.filter(isPaidRow)
+  const missingBudget = paidReviewable.filter((r) => !hasBudget(r))
 
   const inputRef = useRef<HTMLInputElement>(null)
   const draftCount = rows.filter((r) => r.status === 'draft').length
@@ -40,10 +46,12 @@ export function Toolbar() {
         onClick={approveAll}
         title={
           cleared
-            ? 'Approve all draft rows — messaging on-ICP and tracking clean'
+            ? 'Approve all draft rows — messaging on-ICP, tracking clean, budgets set'
             : !gateCleared
               ? 'Clear the ICP messaging review to unlock scheduling'
-              : 'Clear the pre-flight tracking gate to unlock scheduling'
+              : !trackingCleared
+                ? 'Clear the pre-flight tracking gate to unlock scheduling'
+                : 'Set budgets on all paid assets to unlock scheduling'
         }
       >
         ⟳ Approve {draftCount} draft{draftCount === 1 ? '' : 's'}
@@ -73,6 +81,27 @@ export function Toolbar() {
           Accept tracking
         </button>
       ) : null}
+
+      {paidReviewable.length > 0 &&
+        (budgetCleared ? (
+          <span className="toolbar-stat" title="Budgets set on all paid assets">
+            ✓ Budget
+          </span>
+        ) : missingBudget.length > 0 ? (
+          <button className="btn sm" disabled title="Set a budget on every paid asset to unlock">
+            🔒 {missingBudget.length} need budget
+          </button>
+        ) : (
+          <button className="btn green sm" onClick={acceptBudget}>
+            Accept budget
+          </button>
+        ))}
+
+      {paidReviewable.some((r) => hasBudget(r)) && (
+        <button className="btn sm" onClick={syncSpend} title="Pull actual spend (daily sync)">
+          ↻ Sync spend
+        </button>
+      )}
 
       <button className="btn sm" onClick={() => inputRef.current?.click()}>
         + Add assets

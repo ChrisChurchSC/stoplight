@@ -3,6 +3,7 @@ import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typesFor } from '../domain/channelAssetTypes'
 import { messagingAllText, messagingSummary } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
+import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
@@ -24,12 +25,13 @@ const COLUMNS = [
   { key: 'scheduled', label: 'Scheduled', icon: '◷' },
   { key: 'status', label: 'Status', icon: '●' },
   { key: 'tracking', label: 'Tracking', icon: '◈' },
+  { key: 'budget', label: 'Budget', icon: '◧' },
   { key: 'posted', label: 'Posted', icon: '✓' },
   { key: 'actions', label: '', icon: '' },
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 200, 120, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 200, 200, 120, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -152,6 +154,9 @@ export function SheetGrid() {
   const pastDraft = view.filter((r) => r.status !== 'draft').length
   const postedN = view.filter((r) => r.status === 'posted').length
   const trackingCleanN = view.filter((r) => r.utm && isTrackingClean(r)).length
+  const paidN = view.filter(isPaidRow).length
+  const budgetSetN = view.filter((r) => isPaidRow(r) && hasBudget(r)).length
+  const now = Date.now()
 
   const pad = Math.max(0, MIN_ROWS - view.length)
 
@@ -215,6 +220,7 @@ export function SheetGrid() {
               <th><span className="cov-check">✓</span></th>
               <th><CovBar n={pastDraft} total={totalRows} /></th>
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
+              <th><CovBar n={budgetSetN} total={paidN} /></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th />
             </tr>
@@ -366,6 +372,59 @@ export function SheetGrid() {
                       >
                         Generate
                       </button>
+                    )}
+                  </td>
+
+                  <td className="budget-cell">
+                    {isPaidRow(row) ? (
+                      <div className="bud">
+                        <div className="bud-line">
+                          <span className="bud-cur">$</span>
+                          <input
+                            className="bud-amt"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={row.budget?.amount || ''}
+                            onChange={(e) =>
+                              updateRow(row.id, {
+                                budget: {
+                                  amount: Number(e.target.value) || 0,
+                                  type: row.budget?.type ?? 'daily',
+                                  endDate: row.budget?.endDate,
+                                },
+                              })
+                            }
+                          />
+                          <select
+                            className="bud-type"
+                            value={row.budget?.type ?? 'daily'}
+                            onChange={(e) =>
+                              updateRow(row.id, {
+                                budget: {
+                                  amount: row.budget?.amount ?? 0,
+                                  type: e.target.value as 'daily' | 'lifetime',
+                                  endDate: row.budget?.endDate,
+                                },
+                              })
+                            }
+                          >
+                            <option value="daily">daily</option>
+                            <option value="lifetime">lifetime</option>
+                          </select>
+                        </div>
+                        {row.spend &&
+                          (() => {
+                            const p = pacing(row, now)
+                            return (
+                              <span className={`pace pace-${p.status}`} title={`Planned ${money(p.planned)} · spent ${money(p.spent)}`}>
+                                {money(p.spent)} · {PACE_LABEL[p.status]}
+                              </span>
+                            )
+                          })()}
+                      </div>
+                    ) : (
+                      <span className="cell-ro">—</span>
                     )}
                   </td>
 

@@ -1663,3 +1663,51 @@ button {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
+/* ---- budget column cell ---- */
+.budget-cell {
+  padding: 6px 9px;
+  vertical-align: top;
+}
+.bud {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bud-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.bud-cur {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.bud-amt {
+  width: 64px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12.5px;
+}
+.bud-type {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 4px;
+  font: inherit;
+  font-size: 12px;
+  background: var(--surface);
+}
+.pace {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 1px 8px;
+  width: fit-content;
+}
+.pace-on-track { background: #e3f4ea; color: #1a7a47; }
+.pace-under { background: #e7effe; color: #1d4ed8; }
+.pace-over { background: #fde7e7; color: #b42318; }
+.pace-cap { background: #fdf2dd; color: #9a6a00; }
+.pace-none { background: var(--surface-2); color: var(--text-faint); }
