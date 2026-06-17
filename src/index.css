@@ -1468,10 +1468,6 @@ button {
   overflow-y: auto;
   flex: 1;
 }
-.flow-cards.row {
-  flex-direction: row;
-  flex-wrap: wrap;
-}
 .flow-empty {
   color: var(--text-faint);
   text-align: center;
@@ -1524,29 +1520,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.flow-failed {
-  border: 1px solid #f6c9c2;
-  border-radius: var(--radius);
-  background: #fff7f6;
-  flex: none;
-}
-.flow-failed .flow-lane-head {
-  padding: 10px 12px;
-}
-.flow-failed .flow-lane-title {
-  color: #b42318;
-}
-.flow-failed-item {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 240px;
-}
-.flow-error {
-  font-size: 11px;
-  color: #b42318;
-  padding-left: 2px;
 }
 .drawer-foot {
   display: flex;

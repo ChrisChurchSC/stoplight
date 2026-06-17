@@ -1,17 +1,11 @@
 import { CHANNELS } from '../domain/channels'
+import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from '../domain/funnel'
 import type { RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
-// The trafficking pipeline, left to right. Failed is an off-flow lane.
-const STAGES: { status: RowStatus; label: string; hint: string }[] = [
-  { status: 'draft', label: 'Draft', hint: 'Being prepared' },
-  { status: 'approved', label: 'Approved', hint: 'Gates cleared' },
-  { status: 'scheduled', label: 'Scheduled', hint: 'Queued to post' },
-  { status: 'posted', label: 'Posted', hint: 'Live' },
-]
-
+// Card accent reflects delivery status, so the journey view still signals state.
 const STATUS_COLOR: Record<RowStatus, string> = {
   draft: '#9aa0aa',
   approved: 'var(--blue)',
@@ -32,12 +26,10 @@ export function FlowView() {
     rowInScope(r, { filter, query, clientFilter, campaignFilter }),
   )
 
-  const byStatus = (status: RowStatus) =>
+  const byStage = (stage: FunnelStage) =>
     view
-      .filter((r) => r.status === status)
+      .filter((r) => funnelStageFor(r.channel) === stage)
       .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))
-
-  const failed = byStatus('failed')
 
   const Card = ({ row }: { row: TrafficRow }) => (
     <button
@@ -58,10 +50,10 @@ export function FlowView() {
     <div className="sheet-grid">
       <div className="flow">
         <div className="flow-lanes">
-          {STAGES.map((stage, i) => {
-            const items = byStatus(stage.status)
+          {FUNNEL_STAGES.map((stage, i) => {
+            const items = byStage(stage.stage)
             return (
-              <div className="flow-lane-wrap" key={stage.status}>
+              <div className="flow-lane-wrap" key={stage.stage}>
                 <div className="flow-lane">
                   <div className="flow-lane-head">
                     <span className="flow-lane-title">{stage.label}</span>
@@ -76,28 +68,11 @@ export function FlowView() {
                     )}
                   </div>
                 </div>
-                {i < STAGES.length - 1 && <div className="flow-arrow">›</div>}
+                {i < FUNNEL_STAGES.length - 1 && <div className="flow-arrow">›</div>}
               </div>
             )
           })}
         </div>
-
-        {failed.length > 0 && (
-          <div className="flow-failed">
-            <div className="flow-lane-head">
-              <span className="flow-lane-title">⚠ Failed</span>
-              <span className="flow-lane-count">{failed.length}</span>
-            </div>
-            <div className="flow-cards row">
-              {failed.map((row) => (
-                <div key={row.id} className="flow-failed-item">
-                  <Card row={row} />
-                  {row.error && <span className="flow-error">{row.error}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

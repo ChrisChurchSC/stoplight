@@ -1,0 +1,49 @@
+import type { ChannelId } from './types'
+
+/**
+ * The user flow (customer journey) an asset drives, derived from its channel.
+ * The flow view lays these out left to right so you can see where a campaign's
+ * content lands across the journey — and where it's thin.
+ */
+export type FunnelStage = 'awareness' | 'consideration' | 'conversion' | 'retention'
+
+export const FUNNEL_STAGES: { stage: FunnelStage; label: string; hint: string }[] = [
+  { stage: 'awareness', label: 'Awareness', hint: 'Reach new audiences' },
+  { stage: 'consideration', label: 'Consideration', hint: 'Educate & nurture interest' },
+  { stage: 'conversion', label: 'Conversion', hint: 'Capture intent & convert' },
+  { stage: 'retention', label: 'Retention', hint: 'Keep & grow customers' },
+]
+
+const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
+  // Top of funnel — broad reach, prospecting.
+  'meta-ads': 'awareness',
+  'tiktok-ads': 'awareness',
+  'x-ads': 'awareness',
+  'pinterest-ads': 'awareness',
+  'snapchat-ads': 'awareness',
+  'reddit-ads': 'awareness',
+  'youtube-ads': 'awareness',
+  instagram: 'awareness',
+  facebook: 'awareness',
+  x: 'awareness',
+  tiktok: 'awareness',
+  youtube: 'awareness',
+  pinterest: 'awareness',
+  // Mid funnel — education, nurture, demand gen.
+  'linkedin-ads': 'consideration',
+  'google-demand': 'consideration',
+  linkedin: 'consideration',
+  blog: 'consideration',
+  'lead-magnet': 'consideration',
+  // Bottom funnel — high intent, conversion.
+  'google-search': 'conversion',
+  pmax: 'conversion',
+  'landing-page': 'conversion',
+  // Post-conversion — lifecycle, retention.
+  email: 'retention',
+  sms: 'retention',
+  push: 'retention',
+}
+
+export const funnelStageFor = (channel: ChannelId): FunnelStage =>
+  STAGE_BY_CHANNEL[channel] ?? 'awareness'
