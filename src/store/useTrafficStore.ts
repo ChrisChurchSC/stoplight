@@ -255,7 +255,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loadSample: async () => {
     await sheet.clear()
     await sheet.append(sampleRows())
-    set({ batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false, budgetCleared: false })
+    // Bring in the sample ICP (Clay pull) alongside the sheet so the gate is populated.
+    const icp = await icpSource.fetch()
+    set({ icp, icpFromClosedWon: false, batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false, budgetCleared: false })
     await get().refresh()
   },
 

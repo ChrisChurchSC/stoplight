@@ -9,16 +9,23 @@ import type { AssetFlag, BatchReview, Icp, IcpReviewer, IcpSource } from './type
  */
 export class MockIcpSource implements IcpSource {
   async fetch(): Promise<Icp> {
+    // Sample enrichment as it comes back from a Clay table: firmographics +
+    // a scored segment + signal columns (tech stack, hiring, intent).
     return {
       name: 'Mid-market Ops leaders',
-      segment: 'Tier 1 — Enterprise-ready',
+      segment: 'Tier 1 — Enterprise-ready · Clay fit score 87',
       summary:
-        'VPs and Directors of Operations at mid-market B2B SaaS companies (200–2,000 employees) drowning in manual, fragmented workflows. They value speed, reliability, and cutting busywork for their teams. Skeptical of hype; they want proof and fast time-to-value.',
+        'Pulled from Clay (842 accounts, 312 enriched). VPs and Directors of Operations at mid-market B2B SaaS companies (200–2,000 employees, $20M–$200M ARR, Series B–D) drowning in manual, fragmented workflows. Strong intent signal on "workflow automation" and "time-to-value"; most run Slack + Jira + Snowflake and are actively hiring RevOps. Skeptical of hype, they want proof and fast time-to-value.',
       firmographics: [
-        { label: 'Industry', value: 'B2B SaaS' },
+        { label: 'Industry', value: 'B2B SaaS (Ops / DevTools)' },
         { label: 'Company size', value: '200–2,000 employees' },
+        { label: 'Revenue', value: '$20M–$200M ARR' },
+        { label: 'Funding', value: 'Series B–D' },
         { label: 'Region', value: 'North America' },
         { label: 'Buyer', value: 'VP / Director of Operations' },
+        { label: 'Tech stack', value: 'Slack · Jira · Snowflake · Zapier' },
+        { label: 'Hiring signal', value: 'Actively hiring RevOps' },
+        { label: 'Intent', value: 'Researching "workflow automation"' },
       ],
       pains: ['manual workflows', 'slow tools', 'busywork', 'fragmented stack', 'time-to-value', 'speed', 'faster'],
     }
