@@ -42,7 +42,7 @@ interface TrafficState {
   clientFilter: string
   campaignFilter: string
   /** Per-client workspace view. */
-  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'assets'
+  view: 'grid' | 'calendar' | 'flow' | 'insights'
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing'
   /** ICP & proof side drawer. */
@@ -51,7 +51,7 @@ interface TrafficState {
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
-  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'assets') => void
+  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights') => void
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
   setIcpOpen: (open: boolean) => void
 
