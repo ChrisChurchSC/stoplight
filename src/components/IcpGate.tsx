@@ -21,6 +21,8 @@ export function IcpGate() {
   const runBatchReview = useTrafficStore((s) => s.runBatchReview)
   const acceptReview = useTrafficStore((s) => s.acceptReview)
   const openReview = useTrafficStore((s) => s.openReview)
+  const icpFromClosedWon = useTrafficStore((s) => s.icpFromClosedWon)
+  const refreshIcpFromClosedWon = useTrafficStore((s) => s.refreshIcpFromClosedWon)
 
   const status = gateCleared
     ? 'cleared'
@@ -42,6 +44,15 @@ export function IcpGate() {
           </button>
         )}
         {icp && (
+          <button
+            className="btn sm"
+            onClick={refreshIcpFromClosedWon}
+            title="Refine the ICP from actual closed-won customers in Attio"
+          >
+            ↻ From closed-won
+          </button>
+        )}
+        {icp && (
           <button className="btn sm primary" disabled={reviewing} onClick={runBatchReview}>
             {reviewing ? 'Reviewing…' : review ? '⟳ Re-run review' : 'Run messaging review'}
           </button>
@@ -53,6 +64,11 @@ export function IcpGate() {
           <div className="icp-name">
             {icp.name}
             {icp.segment && <span className="icp-segment">{icp.segment}</span>}
+            {icpFromClosedWon && (
+              <span className="icp-grounded" title="ICP refined from Attio closed-won customers">
+                ↗ grounded in closed-won
+              </span>
+            )}
           </div>
           <div className="icp-fields">
             {icp.firmographics.map((f) => (

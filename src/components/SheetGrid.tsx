@@ -5,6 +5,7 @@ import { messagingAllText, messagingSummary } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
+import { mockAttio } from '../adapters/attio/mockAttio'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -26,12 +27,13 @@ const COLUMNS = [
   { key: 'status', label: 'Status', icon: '●' },
   { key: 'tracking', label: 'Tracking', icon: '◈' },
   { key: 'budget', label: 'Budget', icon: '◧' },
+  { key: 'attribution', label: 'Attribution', icon: '↗' },
   { key: 'posted', label: 'Posted', icon: '✓' },
   { key: 'actions', label: '', icon: '' },
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 200, 200, 120, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 200, 200, 150, 120, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -156,6 +158,10 @@ export function SheetGrid() {
   const trackingCleanN = view.filter((r) => r.utm && isTrackingClean(r)).length
   const paidN = view.filter(isPaidRow).length
   const budgetSetN = view.filter((r) => isPaidRow(r) && hasBudget(r)).length
+  const attributedN = view.filter((r) => {
+    const a = mockAttio.attributionForAsset(r.assetName)
+    return a.leads > 0 || a.wonRevenue > 0
+  }).length
   const now = Date.now()
 
   const pad = Math.max(0, MIN_ROWS - view.length)
@@ -221,6 +227,7 @@ export function SheetGrid() {
               <th><CovBar n={pastDraft} total={totalRows} /></th>
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
               <th><CovBar n={budgetSetN} total={paidN} /></th>
+              <th><CovBar n={attributedN} total={totalRows} /></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th />
             </tr>
@@ -426,6 +433,22 @@ export function SheetGrid() {
                     ) : (
                       <span className="cell-ro">—</span>
                     )}
+                  </td>
+
+                  <td className="attr-cell">
+                    {(() => {
+                      const a = mockAttio.attributionForAsset(row.assetName)
+                      if (!a.leads && !a.wonRevenue) return <span className="cell-ro">—</span>
+                      return (
+                        <div className="attr">
+                          {a.wonRevenue > 0 && <span className="attr-rev">{money(a.wonRevenue)}</span>}
+                          <span className="attr-leads">
+                            {a.leads} lead{a.leads === 1 ? '' : 's'}
+                            {a.openDeals ? ` · ${a.openDeals} open` : ''}
+                          </span>
+                        </div>
+                      )
+                    })()}
                   </td>
 
                   <td className="cell-ro">{postedLabel(row)}</td>

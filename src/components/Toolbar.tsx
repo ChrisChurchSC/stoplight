@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow } from '../domain/budget'
+import { mockAttio } from '../adapters/attio/mockAttio'
 import { filesToAssets } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -126,6 +127,9 @@ export function Toolbar() {
       </div>
       <div className="toolbar-stat">
         <span className="dot" style={{ background: 'var(--green)' }} /> {posted} posted
+      </div>
+      <div className="toolbar-stat" title="Closed-won revenue attributed to assets (Attio)">
+        ↗ ${mockAttio.totalWonRevenue().toLocaleString()} won
       </div>
 
       <span className="spacer" />

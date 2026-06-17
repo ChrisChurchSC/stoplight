@@ -12,6 +12,7 @@ import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
 import { buildUtm, isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
+import { mockAttio } from '../adapters/attio/mockAttio'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -69,6 +70,10 @@ interface TrafficState {
   loadIcp: () => Promise<void>
   runBatchReview: () => Promise<void>
   acceptReview: () => void
+  /** True when the ICP was refined from Attio closed-won data (feedback loop). */
+  icpFromClosedWon: boolean
+  /** Refresh the ICP from actual closed-won customers in Attio. */
+  refreshIcpFromClosedWon: () => void
 
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
@@ -106,6 +111,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   batchReview: null,
   reviewing: false,
   gateCleared: false,
+  icpFromClosedWon: false,
   trackingRan: false,
   trackingCleared: false,
   budgetCleared: false,
@@ -267,7 +273,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   loadIcp: async () => {
     const icp = await icpSource.fetch()
-    set({ icp })
+    set({ icp, icpFromClosedWon: false })
+  },
+
+  refreshIcpFromClosedWon: () => {
+    // Feedback loop: real closed-won buyers sharpen the ICP that drives the gate.
+    set({ icp: mockAttio.closedWonIcp(), icpFromClosedWon: true, batchReview: null, gateCleared: false })
   },
 
   runBatchReview: async () => {
