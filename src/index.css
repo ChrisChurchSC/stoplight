@@ -1894,3 +1894,26 @@ button {
   border-radius: 20px;
   padding: 1px 8px;
 }
+
+/* ---- Messaging cell as per-component pills ---- */
+.msg-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.msg-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1px 9px;
+  white-space: nowrap;
+}
+.msg-pill.flagged {
+  color: #9a6a00;
+  background: #fdf2dd;
+  border-color: #f0d9a8;
+}

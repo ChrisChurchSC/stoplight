@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typesFor } from '../domain/channelAssetTypes'
-import { messagingAllText, messagingSummary } from '../domain/messaging'
+import { messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
@@ -321,18 +321,36 @@ export function SheetGrid() {
                     onClick={() => openReview(row.id)}
                     title="Open messaging"
                   >
-                    <div className="msg-row">
-                      {messagingSummary(row) ? (
-                        <span className="msg-summary">{messagingSummary(row)}</span>
-                      ) : (
-                        <span className="msg-empty">Add messaging…</span>
-                      )}
-                      {unresolvedFlags(row) > 0 && (
-                        <span className="msg-flags" title="Unresolved ICP flags">
-                          ⚑ {unresolvedFlags(row)}
-                        </span>
-                      )}
-                    </div>
+                    {(() => {
+                      const map = messagingMap(row)
+                      const filled = messagingFields(row.channel, row.assetType).filter(
+                        (fl) => (map[fl.key] ?? '').trim(),
+                      )
+                      const flagged = (key: string) =>
+                        !!batchReview &&
+                        batchReview.flags.some(
+                          (f) => f.rowId === row.id && f.field?.key === key && !flagResolved(f, row, pains),
+                        )
+                      if (filled.length === 0) return <span className="msg-empty">Add messaging…</span>
+                      return (
+                        <div className="msg-pills">
+                          {filled.map((fl) => (
+                            <span
+                              key={fl.key}
+                              className={`msg-pill${flagged(fl.key) ? ' flagged' : ''}`}
+                              title={map[fl.key]}
+                            >
+                              {fl.label}
+                            </span>
+                          ))}
+                          {unresolvedFlags(row) > 0 && (
+                            <span className="msg-flags" title="Unresolved ICP flags">
+                              ⚑ {unresolvedFlags(row)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </td>
 
                   <td
