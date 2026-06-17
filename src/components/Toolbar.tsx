@@ -181,9 +181,16 @@ export function Toolbar() {
         <button
           className={`view-btn${view === 'flow' ? ' active' : ''}`}
           onClick={() => setView('flow')}
-          title="Flow chart view — assets by trafficking stage"
+          title="Flow chart view — assets by user-flow stage"
         >
           ⇄ Flow
+        </button>
+        <button
+          className={`view-btn${view === 'insights' ? ' active' : ''}`}
+          onClick={() => setView('insights')}
+          title="Insights — what the connected data tells us"
+        >
+          ◧ Insights
         </button>
       </div>
     </div>
