@@ -35,7 +35,7 @@ const COLUMNS = [
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 160, 184, 138, 200, 200, 150, 120, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 184, 138, 200, 200, 150, 120, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -381,7 +381,6 @@ export function SheetGrid() {
                                 >
                                   {(map[key] ?? '').trim() || labelFor(key)}
                                 </span>
-                                <span className="rtb-map-arrow">→</span>
                                 <span className="rtb-map-proof">
                                   {ids.map((id) => (
                                     <span
