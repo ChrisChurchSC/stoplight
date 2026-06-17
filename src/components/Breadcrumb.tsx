@@ -7,6 +7,7 @@ const VIEWS = [
   { key: 'flow', label: '⇄ Flow' },
   { key: 'insights', label: '◧ Insights' },
   { key: 'icp', label: '◎ ICP' },
+  { key: 'assets', label: '⬡ Assets' },
 ] as const
 
 export function Breadcrumb() {

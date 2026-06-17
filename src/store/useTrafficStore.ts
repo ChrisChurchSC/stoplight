@@ -41,16 +41,16 @@ interface TrafficState {
   /** Breadcrumb scope: which client, then which campaign. 'all' = no scope. */
   clientFilter: string
   campaignFilter: string
-  /** Workspace view: the spreadsheet grid or the schedule calendar. */
-  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp'
+  /** Per-client workspace view. */
+  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp' | 'assets'
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'calendar' | 'insights' | 'assets' | 'settings'
+  page: 'clients' | 'settings'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
-  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp') => void
-  setPage: (page: 'clients' | 'calendar' | 'insights' | 'assets' | 'settings') => void
+  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp' | 'assets') => void
+  setPage: (page: 'clients' | 'settings') => void
 
   refresh: () => Promise<void>
 

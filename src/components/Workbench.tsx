@@ -8,7 +8,6 @@ import { Breadcrumb } from './Breadcrumb'
 import { CampaignTabs } from './CampaignTabs'
 import { ClientsOverview } from './ClientsOverview'
 import { Toolbar } from './Toolbar'
-import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowView } from './FlowView'
@@ -71,7 +70,6 @@ export function Workbench() {
             ) : (
               <>
                 <Toolbar />
-                <IngestTray />
                 {view === 'calendar' ? (
                   <CalendarView />
                 ) : view === 'flow' ? (
@@ -80,6 +78,8 @@ export function Workbench() {
                   <InsightsView />
                 ) : view === 'icp' ? (
                   <IcpGate />
+                ) : view === 'assets' ? (
+                  <AssetsPage />
                 ) : (
                   <SheetGrid />
                 )}
@@ -91,27 +91,7 @@ export function Workbench() {
         </>
       ) : (
         <div className="main">
-          {page === 'calendar' ? (
-            <div className="page">
-              <div className="page-head">
-                <h1>Calendar</h1>
-                <span className="page-sub">Everything scheduled across all clients</span>
-              </div>
-              <CalendarView allClients />
-            </div>
-          ) : page === 'insights' ? (
-            <div className="page">
-              <div className="page-head">
-                <h1>Insights</h1>
-                <span className="page-sub">Performance rolled up across all clients</span>
-              </div>
-              <InsightsView allClients />
-            </div>
-          ) : page === 'assets' ? (
-            <AssetsPage />
-          ) : (
-            <SettingsPage />
-          )}
+          <SettingsPage />
         </div>
       )}
 

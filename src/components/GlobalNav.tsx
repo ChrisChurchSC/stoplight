@@ -5,9 +5,6 @@ const CAR =
 
 const PAGES = [
   { key: 'clients', label: 'Clients', icon: '◳' },
-  { key: 'calendar', label: 'Calendar', icon: '◷' },
-  { key: 'insights', label: 'Insights', icon: '◧' },
-  { key: 'assets', label: 'Assets', icon: '▦' },
   { key: 'settings', label: 'Settings', icon: '⚙' },
 ] as const
 
