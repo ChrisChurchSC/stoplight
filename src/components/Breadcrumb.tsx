@@ -1,4 +1,3 @@
-import { clientForCampaign } from '../domain/clients'
 import { mockAttio } from '../adapters/attio/mockAttio'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -13,20 +12,9 @@ export function Breadcrumb() {
   const rows = useTrafficStore((s) => s.rows)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
-  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
-
-  // Campaigns within the active client (client is chosen via the client tabs).
-  const campaigns = [
-    ...new Set(
-      rows
-        .filter((r) => clientFilter === 'all' || clientForCampaign(r.campaign) === clientFilter)
-        .map((r) => (r.campaign ?? '').trim())
-        .filter(Boolean),
-    ),
-  ].sort()
 
   const posted = rows.filter((r) => r.status === 'posted').length
   const approved = rows.filter((r) => r.status === 'approved' || r.status === 'scheduled').length
@@ -47,19 +35,7 @@ export function Breadcrumb() {
           <span className="crumb-sep">/</span>
           <span className="crumb active">{clientFilter}</span>
           <span className="crumb-sep">/</span>
-          <select
-            className={`crumb-select${campaignFilter === 'all' ? ' muted' : ''}`}
-            value={campaignFilter}
-            onChange={(e) => setCampaignFilter(e.target.value)}
-            title="Campaign"
-          >
-            <option value="all">All campaigns</option>
-            {campaigns.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <span className="crumb">{campaignFilter === 'all' ? 'All campaigns' : campaignFilter}</span>
         </>
       )}
 

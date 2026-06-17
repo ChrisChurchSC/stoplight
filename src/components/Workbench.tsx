@@ -4,7 +4,7 @@ import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
-import { ClientTabs } from './ClientTabs'
+import { CampaignTabs } from './CampaignTabs'
 import { ClientsOverview } from './ClientsOverview'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
@@ -56,7 +56,7 @@ export function Workbench() {
         onDrop={onDrop}
       >
         <Breadcrumb />
-        {!overview && <ClientTabs />}
+        {!overview && <CampaignTabs />}
 
         {overview ? (
           <ClientsOverview />
