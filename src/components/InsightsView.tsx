@@ -13,7 +13,7 @@ function Bar({ value, max }: { value: number; max: number }) {
   )
 }
 
-export function InsightsView() {
+export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const query = useTrafficStore((s) => s.query)
@@ -23,7 +23,9 @@ export function InsightsView() {
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
 
-  const view = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+  const view = allClients
+    ? rows
+    : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
 
   const pains = icp?.pains ?? []
   const flaggedRowIds = new Set(

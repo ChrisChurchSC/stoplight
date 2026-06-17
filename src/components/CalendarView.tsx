@@ -21,7 +21,7 @@ const STATUS_COLOR: Record<RowStatus, string> = {
 
 const ymd = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 
-export function CalendarView() {
+export function CalendarView({ allClients = false }: { allClients?: boolean }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const query = useTrafficStore((s) => s.query)
@@ -32,9 +32,9 @@ export function CalendarView() {
   const now = new Date()
   const [cursor, setCursor] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
 
-  const view = rows.filter((r) =>
-    rowInScope(r, { filter, query, clientFilter, campaignFilter }),
-  )
+  const view = allClients
+    ? rows
+    : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
 
   // Bucket rows by their scheduled calendar day.
   const byDay = new Map<string, TrafficRow[]>()

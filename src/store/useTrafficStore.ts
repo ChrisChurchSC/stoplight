@@ -43,11 +43,14 @@ interface TrafficState {
   campaignFilter: string
   /** Workspace view: the spreadsheet grid or the schedule calendar. */
   view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp'
+  /** Top-level destination in the global nav rail. */
+  page: 'clients' | 'calendar' | 'insights' | 'assets' | 'settings'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp') => void
+  setPage: (page: 'clients' | 'calendar' | 'insights' | 'assets' | 'settings') => void
 
   refresh: () => Promise<void>
 
@@ -131,6 +134,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientFilter: 'all',
   campaignFilter: 'all',
   view: 'grid',
+  page: 'clients',
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -149,6 +153,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setClientFilter: (clientFilter) => set({ clientFilter, campaignFilter: 'all' }),
   setCampaignFilter: (campaignFilter) => set({ campaignFilter }),
   setView: (view) => set({ view }),
+  setPage: (page) => set({ page }),
 
   refresh: async () => {
     set({ loading: true })

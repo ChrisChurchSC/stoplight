@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { GlobalNav } from './GlobalNav'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { CampaignTabs } from './CampaignTabs'
 import { ClientsOverview } from './ClientsOverview'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
-import { IcpGate } from './IcpGate'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowView } from './FlowView'
 import { InsightsView } from './InsightsView'
+import { AssetsPage } from './AssetsPage'
+import { SettingsPage } from './SettingsPage'
+import { IcpGate } from './IcpGate'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 
@@ -20,6 +23,7 @@ export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
   const addAssets = useTrafficStore((s) => s.addAssets)
   const view = useTrafficStore((s) => s.view)
+  const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const [over, setOver] = useState(false)
   const overview = clientFilter === 'all'
@@ -43,45 +47,76 @@ export function Workbench() {
 
   return (
     <div className="workspace">
-      <Sidebar />
-      <div
-        className={`main${over ? ' drop-over' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault()
-          setOver(true)
-        }}
-        onDragLeave={(e) => {
-          if (e.currentTarget === e.target) setOver(false)
-        }}
-        onDrop={onDrop}
-      >
-        <Breadcrumb />
-        {!overview && <CampaignTabs />}
+      <GlobalNav />
 
-        {overview ? (
-          <ClientsOverview />
-        ) : (
-          <>
-            <Toolbar />
-            <IngestTray />
-            {view === 'calendar' ? (
-              <CalendarView />
-            ) : view === 'flow' ? (
-              <FlowView />
-            ) : view === 'insights' ? (
-              <InsightsView />
-            ) : view === 'icp' ? (
-              <IcpGate />
+      {page === 'clients' ? (
+        <>
+          {!overview && <Sidebar />}
+          <div
+            className={`main${over ? ' drop-over' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setOver(true)
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget === e.target) setOver(false)
+            }}
+            onDrop={onDrop}
+          >
+            <Breadcrumb />
+            {!overview && <CampaignTabs />}
+
+            {overview ? (
+              <ClientsOverview />
             ) : (
-              <SheetGrid />
+              <>
+                <Toolbar />
+                <IngestTray />
+                {view === 'calendar' ? (
+                  <CalendarView />
+                ) : view === 'flow' ? (
+                  <FlowView />
+                ) : view === 'insights' ? (
+                  <InsightsView />
+                ) : view === 'icp' ? (
+                  <IcpGate />
+                ) : (
+                  <SheetGrid />
+                )}
+              </>
             )}
-          </>
-        )}
-        <CopyReview />
-        <CommentDrawer />
 
-        {over && <div className="drop-veil">Drop to add assets</div>}
-      </div>
+            {over && <div className="drop-veil">Drop to add assets</div>}
+          </div>
+        </>
+      ) : (
+        <div className="main">
+          {page === 'calendar' ? (
+            <div className="page">
+              <div className="page-head">
+                <h1>Calendar</h1>
+                <span className="page-sub">Everything scheduled across all clients</span>
+              </div>
+              <CalendarView allClients />
+            </div>
+          ) : page === 'insights' ? (
+            <div className="page">
+              <div className="page-head">
+                <h1>Insights</h1>
+                <span className="page-sub">Performance rolled up across all clients</span>
+              </div>
+              <InsightsView allClients />
+            </div>
+          ) : page === 'assets' ? (
+            <AssetsPage />
+          ) : (
+            <SettingsPage />
+          )}
+        </div>
+      )}
+
+      <CopyReview />
+      <CommentDrawer />
     </div>
   )
 }
