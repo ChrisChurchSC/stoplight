@@ -245,7 +245,18 @@ export function SheetGrid() {
             {view.map((row, i) => {
               const typeValid = isValidType(row.channel, row.assetType)
               return (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  className="data-row"
+                  onClick={(e) => {
+                    // Open the editor for clicks on dead space, but let inline
+                    // controls (selects, inputs, buttons) handle their own clicks.
+                    const t = e.target as HTMLElement
+                    if (t.closest('input, select, textarea, button, code, a, .col-resizer'))
+                      return
+                    openReview(row.id)
+                  }}
+                >
                   <td className="gutter">{i + 1}</td>
 
                   <td>
