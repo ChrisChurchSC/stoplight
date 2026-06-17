@@ -9,6 +9,7 @@ import { sampleRows } from '../domain/sampleData'
 import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
+import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
 import { buildUtm, isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
@@ -19,7 +20,8 @@ import { mockCommentSource, type Comment } from '../adapters/comments/mockCommen
 const sheet: SheetAdapter = new MockSheetAdapter()
 const publishers: PublisherRegistry = channelPublishers
 const icpSource: IcpSource = new MockIcpSource()
-const icpReviewer: IcpReviewer = new MockIcpReviewer()
+// Real Claude batch review when a backend + key are present; heuristic otherwise.
+const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
