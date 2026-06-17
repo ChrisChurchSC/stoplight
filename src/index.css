@@ -756,6 +756,22 @@ button {
   white-space: nowrap;
   text-align: center;
 }
+.sheet .act-publish,
+.sheet .act-hover,
+.sheet .act-delete {
+  padding: 5px 8px;
+  white-space: nowrap;
+  text-align: center;
+}
+/* Edit / duplicate stay hidden until the row is hovered. */
+.sheet .act-hover {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.sheet tbody tr.data-row:hover .act-hover,
+.sheet .act-hover:focus-within {
+  opacity: 1;
+}
 
 /* ============ Clay-style workspace shell ============ */
 .workspace {

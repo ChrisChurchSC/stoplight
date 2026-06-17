@@ -19,7 +19,7 @@ export function Sidebar() {
           <span className="a" />
           <span className="g" />
         </div>
-        <span className="sidebar-brand-name">Stoplight</span>
+        <span className="sidebar-brand-name">Rushhour</span>
       </div>
 
       <nav className="sidebar-nav">
@@ -56,7 +56,7 @@ export function Sidebar() {
         <button
           className="nav-item"
           disabled={rows.length === 0}
-          onClick={() => downloadCsv('stoplight-sheet.csv', rowsToCsv(rows))}
+          onClick={() => downloadCsv('rushhour-sheet.csv', rowsToCsv(rows))}
         >
           <span className="nav-ico">⤓</span>
           <span className="nav-label">Export CSV</span>

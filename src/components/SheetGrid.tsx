@@ -33,11 +33,13 @@ const COLUMNS = [
   { key: 'attribution', label: 'Attribution', icon: '↗' },
   { key: 'posted', label: 'Posted', icon: '✓' },
   { key: 'comments', label: 'Comments', icon: '💬' },
+  { key: 'publish', label: 'Publish', icon: '▷' },
   { key: 'actions', label: '', icon: '' },
+  { key: 'delete', label: '', icon: '' },
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 184, 138, 200, 200, 150, 120, 150, 130]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 184, 138, 200, 200, 150, 120, 150, 100, 84, 64]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -235,6 +237,8 @@ export function SheetGrid() {
               <th><CovBar n={attributedN} total={totalRows} /></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th><CovBar n={commentedN} total={postedN} /></th>
+              <th />
+              <th />
               <th />
             </tr>
           </thead>
@@ -573,19 +577,24 @@ export function SheetGrid() {
                       : <span className="cell-ro">—</span>}
                   </td>
 
-                  <td className="act">
-                    <button
-                      className={`btn ghost sm${row.copyReviewed ? ' reviewed' : ''}`}
-                      title={row.copyReviewed ? 'Copy reviewed — open' : 'Review copy'}
-                      onClick={() => openReview(row.id)}
-                    >
-                      {row.copyReviewed ? '✓' : '✎'}
-                    </button>
-                    {(row.status === 'approved' || row.status === 'failed') && (
+                  <td className="act-publish">
+                    {row.status === 'approved' || row.status === 'failed' ? (
                       <button className="btn sm" onClick={() => publishRow(row.id)}>
                         Publish
                       </button>
+                    ) : (
+                      <span className="cell-ro">—</span>
                     )}
+                  </td>
+
+                  <td className="act-hover">
+                    <button
+                      className="btn ghost sm"
+                      title="Edit row"
+                      onClick={() => openReview(row.id)}
+                    >
+                      ✎
+                    </button>
                     <button
                       className="btn ghost sm"
                       title="Duplicate row (re-traffic to another channel)"
@@ -593,6 +602,9 @@ export function SheetGrid() {
                     >
                       ⎘
                     </button>
+                  </td>
+
+                  <td className="act-delete">
                     <button
                       className="btn ghost sm"
                       title="Remove row"

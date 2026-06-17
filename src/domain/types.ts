@@ -1,4 +1,4 @@
-// Core domain model for Stoplight.
+// Core domain model for Rushhour.
 //
 // The "sheet" is the source of truth. Each ingested asset, targeted at one
 // channel, becomes one TrafficRow. The schema here is what the (mock) sheet
