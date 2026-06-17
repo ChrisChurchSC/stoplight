@@ -73,21 +73,12 @@ button {
 }
 .logo {
   display: inline-flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  justify-content: center;
   padding: 6px;
   background: #1a1d23;
   border-radius: 8px;
 }
-.logo span {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  display: block;
-}
-.logo .r { background: var(--red); }
-.logo .a { background: var(--amber); }
-.logo .g { background: var(--green); }
 .brand h1 {
   font-size: 18px;
   margin: 0;
