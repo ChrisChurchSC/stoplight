@@ -42,15 +42,18 @@ interface TrafficState {
   clientFilter: string
   campaignFilter: string
   /** Per-client workspace view. */
-  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp' | 'assets'
+  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'assets'
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing'
+  /** ICP & proof side drawer. */
+  icpOpen: boolean
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
-  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp' | 'assets') => void
+  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'assets') => void
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
+  setIcpOpen: (open: boolean) => void
 
   refresh: () => Promise<void>
 
@@ -135,6 +138,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   campaignFilter: 'all',
   view: 'grid',
   page: 'clients',
+  icpOpen: false,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -154,6 +158,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setCampaignFilter: (campaignFilter) => set({ campaignFilter }),
   setView: (view) => set({ view }),
   setPage: (page) => set({ page }),
+  setIcpOpen: (icpOpen) => set({ icpOpen }),
 
   refresh: async () => {
     set({ loading: true })

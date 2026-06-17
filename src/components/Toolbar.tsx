@@ -5,12 +5,14 @@ export function Toolbar() {
   const setQuery = useTrafficStore((s) => s.setQuery)
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
+  const icpOpen = useTrafficStore((s) => s.icpOpen)
+  const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
 
   return (
     <div className="toolbar">
       <button
-        className={`btn sm${view === 'icp' ? ' primary' : ''}`}
-        onClick={() => setView(view === 'icp' ? 'grid' : 'icp')}
+        className={`btn sm${icpOpen ? ' primary' : ''}`}
+        onClick={() => setIcpOpen(!icpOpen)}
         title="ICP & proof"
       >
         ◎ ICP

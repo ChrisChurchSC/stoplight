@@ -1882,6 +1882,25 @@ button {
   display: flex;
   flex-direction: column;
 }
+/* ICP drawer: a bit wider, panel stacks vertically. */
+.drawer.icp-drawer {
+  width: 520px;
+}
+.icp-drawer .icp-panel {
+  grid-template-columns: 1fr;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.icp-drawer .icp-panel .icp-card {
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+}
+.icp-drawer .icp-review-foot {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-top: 12px;
+}
 .drawer-head {
   display: flex;
   align-items: center;

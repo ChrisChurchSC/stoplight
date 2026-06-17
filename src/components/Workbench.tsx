@@ -16,7 +16,7 @@ import { ViewToggle } from './ViewToggle'
 import { AssetsPage } from './AssetsPage'
 import { ConnectorsPage } from './ConnectorsPage'
 import { BillingPage } from './BillingPage'
-import { IcpGate } from './IcpGate'
+import { IcpDrawer } from './IcpDrawer'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 
@@ -78,8 +78,6 @@ export function Workbench() {
                   <FlowView />
                 ) : view === 'insights' ? (
                   <InsightsView />
-                ) : view === 'icp' ? (
-                  <IcpGate />
                 ) : view === 'assets' ? (
                   <AssetsPage />
                 ) : (
@@ -98,6 +96,7 @@ export function Workbench() {
         </div>
       )}
 
+      <IcpDrawer />
       <CopyReview />
       <CommentDrawer />
     </div>
