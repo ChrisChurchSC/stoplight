@@ -114,6 +114,16 @@ export function SheetGrid() {
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
+  // Batch (column-header) actions.
+  const approveAll = useTrafficStore((s) => s.approveAll)
+  const gateCleared = useTrafficStore((s) => s.gateCleared)
+  const trackingCleared = useTrafficStore((s) => s.trackingCleared)
+  const budgetCleared = useTrafficStore((s) => s.budgetCleared)
+  const generateTracking = useTrafficStore((s) => s.generateTracking)
+  const acceptTracking = useTrafficStore((s) => s.acceptTracking)
+  const acceptBudget = useTrafficStore((s) => s.acceptBudget)
+  const syncSpend = useTrafficStore((s) => s.syncSpend)
+  const syncComments = useTrafficStore((s) => s.syncComments)
 
   const pains = icp?.pains ?? []
   const unresolvedFlags = (row: TrafficRow) =>
@@ -185,6 +195,20 @@ export function SheetGrid() {
   const commentedN = view.filter((r) => (commentMap[r.id]?.length ?? 0) > 0).length
   const now = Date.now()
 
+  // ---- Batch-action states for the column headers ----
+  const reviewable = view.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+  const draftN = view.filter((r) => r.status === 'draft').length
+  const allGatesCleared = gateCleared && trackingCleared && budgetCleared
+  const missingUtmN = reviewable.filter((r) => !r.utm).length
+  const dirtyTrackingN = reviewable.filter((r) => r.utm && !isTrackingClean(r)).length
+  const paidReviewable = reviewable.filter(isPaidRow)
+  const missingBudgetN = paidReviewable.filter((r) => !hasBudget(r)).length
+  const paidWithBudget = paidReviewable.some((r) => hasBudget(r))
+  const hasPosted = view.some((r) => r.status === 'posted')
+  const needsReplyN = view
+    .flatMap((r) => commentMap[r.id] ?? [])
+    .filter((c) => c.needsResponse).length
+
   const pad = Math.max(0, MIN_ROWS - view.length)
 
   function onStatusChange(row: TrafficRow, status: RowStatus) {
@@ -235,6 +259,73 @@ export function SheetGrid() {
                   <span className="col-resizer" onMouseDown={(e) => startResize(i + 1, e)} />
                 </th>
               ))}
+            </tr>
+            <tr className="col-actions">
+              <th className="corner" />
+              <th />
+              <th />
+              <th />
+              <th />
+              <th />
+              <th />
+              <th />
+              <th />
+              <th />
+              <th>
+                {draftN > 0 ? (
+                  <button
+                    className="cov-btn green"
+                    disabled={!allGatesCleared}
+                    onClick={approveAll}
+                    title={
+                      allGatesCleared
+                        ? 'Approve all draft rows'
+                        : 'Clear ICP, tracking, and budget gates to unlock'
+                    }
+                  >
+                    Approve {draftN}
+                    {!allGatesCleared && ' 🔒'}
+                  </button>
+                ) : null}
+              </th>
+              <th>
+                {trackingCleared ? (
+                  <span className="cov-ok">✓ Tracked</span>
+                ) : missingUtmN > 0 ? (
+                  <button className="cov-btn" onClick={generateTracking} title="Build UTMs for all rows">
+                    Generate ({missingUtmN})
+                  </button>
+                ) : dirtyTrackingN === 0 && reviewable.length > 0 ? (
+                  <button className="cov-btn green" onClick={acceptTracking}>
+                    Accept
+                  </button>
+                ) : null}
+              </th>
+              <th>
+                {paidReviewable.length === 0 ? null : budgetCleared ? (
+                  <span className="cov-ok">✓ Set</span>
+                ) : missingBudgetN === 0 ? (
+                  <button className="cov-btn green" onClick={acceptBudget}>
+                    Accept
+                  </button>
+                ) : paidWithBudget ? (
+                  <button className="cov-btn" onClick={syncSpend} title="Pull actual spend">
+                    ↻ Spend
+                  </button>
+                ) : null}
+              </th>
+              <th />
+              <th />
+              <th>
+                {hasPosted ? (
+                  <button className="cov-btn" onClick={syncComments} title="Pull comments from posted assets">
+                    ↻ Sync{needsReplyN > 0 ? ` (${needsReplyN})` : ''}
+                  </button>
+                ) : null}
+              </th>
+              <th />
+              <th />
+              <th />
             </tr>
             <tr className="coverage">
               <th className="corner">%</th>

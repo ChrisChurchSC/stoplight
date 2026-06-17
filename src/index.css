@@ -609,11 +609,51 @@ button {
   color: var(--text-faint);
   font-weight: 600;
 }
+.sheet thead .col-actions th {
+  height: 34px;
+  padding: 0 8px;
+  top: 52px;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
 .sheet thead .coverage th {
   height: 28px;
   padding: 0 9px;
-  top: 52px;
+  top: 86px;
   box-shadow: inset 0 -1px 0 var(--border-strong);
+}
+.cov-btn {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 3px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cov-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.cov-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.cov-btn.green {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.cov-ok {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--green);
+  text-transform: none;
+  letter-spacing: 0;
 }
 .cov {
   display: flex;
