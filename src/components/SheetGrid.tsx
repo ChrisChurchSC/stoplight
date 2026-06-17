@@ -379,7 +379,7 @@ export function SheetGrid() {
                                   className="rtb-map-claim"
                                   title={(map[key] ?? '').trim() || labelFor(key)}
                                 >
-                                  {(map[key] ?? '').trim() || labelFor(key)}
+                                  {labelFor(key)}
                                 </span>
                                 <span className="rtb-map-proof">
                                   {ids.map((id) => (
