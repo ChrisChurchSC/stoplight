@@ -334,15 +334,19 @@ export function SheetGrid() {
                       if (filled.length === 0) return <span className="msg-empty">Add messaging…</span>
                       return (
                         <div className="msg-pills">
-                          {filled.map((fl) => (
-                            <span
-                              key={fl.key}
-                              className={`msg-pill${flagged(fl.key) ? ' flagged' : ''}`}
-                              title={map[fl.key]}
-                            >
-                              {fl.label}
-                            </span>
-                          ))}
+                          {filled.map((fl) => {
+                            const copy = (map[fl.key] ?? '').trim()
+                            return (
+                              <span
+                                key={fl.key}
+                                className={`msg-pill${flagged(fl.key) ? ' flagged' : ''}`}
+                                title={`${fl.label}: ${copy}`}
+                              >
+                                <span className="msg-pill-key">{fl.label}</span>
+                                <span className="msg-pill-copy">{copy}</span>
+                              </span>
+                            )
+                          })}
                           {unresolvedFlags(row) > 0 && (
                             <span className="msg-flags" title="Unresolved ICP flags">
                               ⚑ {unresolvedFlags(row)}
