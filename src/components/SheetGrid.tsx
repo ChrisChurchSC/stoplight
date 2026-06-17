@@ -363,14 +363,37 @@ export function SheetGrid() {
                     title="Map proof (RTBs) in messaging"
                   >
                     {(() => {
-                      const ids = assetRtbIds(row)
-                      if (ids.length) {
+                      const map = messagingMap(row)
+                      const fields = messagingFields(row.channel, row.assetType)
+                      const labelFor = (key: string) =>
+                        fields.find((f) => f.key === key)?.label ?? key
+                      const entries = Object.entries(row.rtbMap ?? {}).filter(
+                        ([, ids]) => ids.length,
+                      )
+                      if (entries.length) {
                         return (
-                          <div className="rtb-cell-chips">
-                            {ids.map((id) => (
-                              <span key={id} className="rtb-mini">
-                                {rtbById(row.campaign, id)?.label ?? id}
-                              </span>
+                          <div className="rtb-map">
+                            {entries.map(([key, ids]) => (
+                              <div key={key} className="rtb-map-row">
+                                <span
+                                  className="rtb-map-claim"
+                                  title={(map[key] ?? '').trim() || labelFor(key)}
+                                >
+                                  {(map[key] ?? '').trim() || labelFor(key)}
+                                </span>
+                                <span className="rtb-map-arrow">→</span>
+                                <span className="rtb-map-proof">
+                                  {ids.map((id) => (
+                                    <span
+                                      key={id}
+                                      className="rtb-mini"
+                                      title={rtbById(row.campaign, id)?.detail}
+                                    >
+                                      {rtbById(row.campaign, id)?.label ?? id}
+                                    </span>
+                                  ))}
+                                </span>
+                              </div>
                             ))}
                           </div>
                         )

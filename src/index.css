@@ -1895,6 +1895,39 @@ button {
   padding: 1px 8px;
 }
 
+/* ---- RTB cell as claim → proof mappings ---- */
+.rtb-map {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rtb-map-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.rtb-map-claim {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.rtb-map-arrow {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.rtb-map-proof {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 /* ---- Messaging cell as per-component pills ---- */
 .msg-pills {
   display: flex;
