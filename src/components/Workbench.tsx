@@ -3,6 +3,7 @@ import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { Sidebar } from './Sidebar'
+import { Breadcrumb } from './Breadcrumb'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
 import { IcpGate } from './IcpGate'
@@ -49,13 +50,7 @@ export function Workbench() {
         }}
         onDrop={onDrop}
       >
-        <div className="breadcrumb">
-          <span className="crumb">Sheets</span>
-          <span className="crumb-sep">/</span>
-          <span className="crumb">Trafficking</span>
-          <span className="crumb-sep">/</span>
-          <span className="crumb active">Untitled sheet</span>
-        </div>
+        <Breadcrumb />
 
         <Toolbar />
         <IngestTray />

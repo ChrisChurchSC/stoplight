@@ -9,6 +9,7 @@ import { mockAttio } from '../adapters/attio/mockAttio'
 import { assetRtbIds, rtbById } from '../domain/rtb'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
+import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
@@ -98,6 +99,8 @@ export function SheetGrid() {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const query = useTrafficStore((s) => s.query)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
@@ -143,14 +146,8 @@ export function SheetGrid() {
     document.body.style.userSelect = 'none'
   }
 
-  const q = query.trim().toLowerCase()
-  const view = rows.filter(
-    (r) =>
-      (filter === 'all' || r.channel === filter) &&
-      (q === '' ||
-        r.assetName.toLowerCase().includes(q) ||
-        messagingAllText(r).toLowerCase().includes(q) ||
-        r.channel.includes(q)),
+  const view = rows.filter((r) =>
+    rowInScope(r, { filter, query, clientFilter, campaignFilter }),
   )
 
   const totalRows = view.length

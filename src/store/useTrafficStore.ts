@@ -38,10 +38,15 @@ interface TrafficState {
   filter: ChannelId | 'all'
   /** Toolbar search across asset name / caption. */
   query: string
+  /** Breadcrumb scope: which client, then which campaign. 'all' = no scope. */
+  clientFilter: string
+  campaignFilter: string
   /** Workspace view: the spreadsheet grid or the schedule calendar. */
   view: 'grid' | 'calendar' | 'flow'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
+  setClientFilter: (client: string) => void
+  setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow') => void
 
   refresh: () => Promise<void>
@@ -123,6 +128,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loading: false,
   filter: 'all',
   query: '',
+  clientFilter: 'all',
+  campaignFilter: 'all',
   view: 'grid',
   reviewRowId: null,
   comments: {},
@@ -138,6 +145,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   setFilter: (filter) => set({ filter }),
   setQuery: (query) => set({ query }),
+  // Switching client resets the campaign scope (campaigns belong to a client).
+  setClientFilter: (clientFilter) => set({ clientFilter, campaignFilter: 'all' }),
+  setCampaignFilter: (campaignFilter) => set({ campaignFilter }),
   setView: (view) => set({ view }),
 
   refresh: async () => {

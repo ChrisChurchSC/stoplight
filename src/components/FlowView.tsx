@@ -1,6 +1,6 @@
 import { CHANNELS } from '../domain/channels'
-import { messagingAllText } from '../domain/messaging'
 import type { RowStatus, TrafficRow } from '../domain/types'
+import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -24,16 +24,12 @@ export function FlowView() {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const query = useTrafficStore((s) => s.query)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const openReview = useTrafficStore((s) => s.openReview)
 
-  const q = query.trim().toLowerCase()
-  const view = rows.filter(
-    (r) =>
-      (filter === 'all' || r.channel === filter) &&
-      (q === '' ||
-        r.assetName.toLowerCase().includes(q) ||
-        messagingAllText(r).toLowerCase().includes(q) ||
-        r.channel.includes(q)),
+  const view = rows.filter((r) =>
+    rowInScope(r, { filter, query, clientFilter, campaignFilter }),
   )
 
   const byStatus = (status: RowStatus) =>
