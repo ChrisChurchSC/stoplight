@@ -26,6 +26,7 @@ const COLUMNS = [
   { key: 'audience', label: 'Audience', icon: '◎' },
   { key: 'messaging', label: 'Messaging', icon: '¶' },
   { key: 'rtb', label: 'RTB', icon: '◆' },
+  { key: 'review', label: 'ICP', icon: '◑' },
   { key: 'scheduled', label: 'Scheduled', icon: '◷' },
   { key: 'status', label: 'Status', icon: '●' },
   { key: 'tracking', label: 'Tracking', icon: '◈' },
@@ -39,7 +40,7 @@ const COLUMNS = [
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 184, 138, 200, 200, 150, 120, 150, 100, 84, 64]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 116, 184, 138, 200, 200, 150, 120, 150, 100, 84, 64]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -120,6 +121,18 @@ export function SheetGrid() {
       ? batchReview.flags.filter((fl) => fl.rowId === row.id && !flagResolved(fl, row, pains)).length
       : 0
 
+  // Per-row ICP verdict shown in the grid (the review, row by row).
+  type RowVerdict = 'none' | 'on' | 'drift' | 'off'
+  const rowVerdict = (row: TrafficRow): RowVerdict => {
+    if (!batchReview) return 'none'
+    if (row.status === 'posted' || row.status === 'failed') return 'none'
+    const flags = batchReview.flags.filter(
+      (fl) => fl.rowId === row.id && !flagResolved(fl, row, pains),
+    )
+    if (flags.length === 0) return 'on'
+    return flags.some((fl) => fl.verdict === 'off-icp') ? 'off' : 'drift'
+  }
+
   const [widths, setWidths] = useState<number[]>(DEFAULT_WIDTHS)
   const total = widths.reduce((a, b) => a + b, 0)
 
@@ -156,6 +169,8 @@ export function SheetGrid() {
   const typeSet = view.filter((r) => isValidType(r.channel, r.assetType)).length
   const messagingFilled = view.filter((r) => messagingAllText(r).trim()).length
   const rtbSetN = view.filter((r) => assetRtbIds(r).length > 0).length
+  const reviewableN = view.filter((r) => r.status !== 'posted' && r.status !== 'failed').length
+  const onMessageN = view.filter((r) => rowVerdict(r) === 'on').length
   const campaignFilled = view.filter((r) => (r.campaign ?? '').trim()).length
   const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
   const pastDraft = view.filter((r) => r.status !== 'draft').length
@@ -230,6 +245,7 @@ export function SheetGrid() {
               <th><CovBar n={audienceFilled} total={totalRows} /></th>
               <th><CovBar n={messagingFilled} total={totalRows} /></th>
               <th><CovBar n={rtbSetN} total={totalRows} /></th>
+              <th><CovBar n={onMessageN} total={reviewableN} /></th>
               <th><span className="cov-check">✓</span></th>
               <th><CovBar n={pastDraft} total={totalRows} /></th>
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
@@ -362,11 +378,6 @@ export function SheetGrid() {
                               </span>
                             )
                           })}
-                          {unresolvedFlags(row) > 0 && (
-                            <span className="msg-flags" title="Unresolved ICP flags">
-                              ⚑ {unresolvedFlags(row)}
-                            </span>
-                          )}
                         </div>
                       )
                     })()}
@@ -416,6 +427,18 @@ export function SheetGrid() {
                         <span className="rtb-warn">unsupported</span>
                       ) : (
                         <span className="cell-ro">—</span>
+                      )
+                    })()}
+                  </td>
+
+                  <td className="icp-cell" onClick={() => openReview(row.id)} title="Open to review vs ICP">
+                    {(() => {
+                      const v = rowVerdict(row)
+                      if (v === 'none') return <span className="cell-ro">—</span>
+                      if (v === 'on') return <span className="icp-verdict on">✓ On-ICP</span>
+                      if (v === 'off') return <span className="icp-verdict off">✕ Off-ICP</span>
+                      return (
+                        <span className="icp-verdict drift">⚠ Drift {unresolvedFlags(row)}</span>
                       )
                     })()}
                   </td>
