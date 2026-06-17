@@ -7,6 +7,7 @@ import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { sampleRows } from '../domain/sampleData'
 import { slotsFor } from '../domain/channelAssets'
+import { extractInCreativeCopy } from '../adapters/copy/extract'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -51,6 +52,15 @@ interface TrafficState {
   loadSample: () => Promise<void>
   /** Add a placeholder row for each required slot of a channel not yet present. */
   addMissingSlots: (channel: ChannelId) => Promise<void>
+
+  // copy review
+  /** Row whose copy-review drawer is open, or null. */
+  reviewRowId: string | null
+  openReview: (id: string | null) => void
+  /** Extract the in-creative copy for a row (text body real; vision stubbed). */
+  extractCopy: (id: string) => Promise<void>
+  /** Toggle the "copy reviewed" sign-off for a row. */
+  toggleReviewed: (id: string, value: boolean) => Promise<void>
 }
 
 export const useTrafficStore = create<TrafficState>((set, get) => ({
@@ -59,6 +69,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loading: false,
   filter: 'all',
   query: '',
+  reviewRowId: null,
 
   setFilter: (filter) => set({ filter }),
   setQuery: (query) => set({ query }),
@@ -191,6 +202,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       createdAt: Date.now(),
     }))
     await sheet.append(rows)
+    await get().refresh()
+  },
+
+  openReview: (id) => set({ reviewRowId: id }),
+
+  extractCopy: async (id) => {
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    const result = await extractInCreativeCopy(row)
+    await sheet.update(id, { extractedCopy: result.text })
+    await get().refresh()
+  },
+
+  toggleReviewed: async (id, value) => {
+    await sheet.update(id, { copyReviewed: value })
     await get().refresh()
   },
 }))

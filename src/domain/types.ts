@@ -94,6 +94,13 @@ export interface TrafficRow {
    * segment (Meta Custom Audience, LinkedIn Matched Audience, etc.).
    */
   audience?: string
+  /** Full text body (for text/markdown assets and landing copy). */
+  body?: string
+  /** Copy found INSIDE the creative — image/video text overlays, VO, page copy.
+   *  Populated by the copy extractor so reviewers can read every word. */
+  extractedCopy?: string
+  /** Reviewer has read & signed off on all copy for this row. */
+  copyReviewed?: boolean
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   status: RowStatus

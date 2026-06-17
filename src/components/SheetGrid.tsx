@@ -94,6 +94,7 @@ export function SheetGrid() {
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const publishRow = useTrafficStore((s) => s.publishRow)
   const loadSample = useTrafficStore((s) => s.loadSample)
+  const openReview = useTrafficStore((s) => s.openReview)
 
   const [widths, setWidths] = useState<number[]>(DEFAULT_WIDTHS)
   const total = widths.reduce((a, b) => a + b, 0)
@@ -318,6 +319,13 @@ export function SheetGrid() {
                 <td className="cell-ro">{postedLabel(row)}</td>
 
                 <td className="act">
+                  <button
+                    className={`btn ghost sm${row.copyReviewed ? ' reviewed' : ''}`}
+                    title={row.copyReviewed ? 'Copy reviewed — open' : 'Review copy'}
+                    onClick={() => openReview(row.id)}
+                  >
+                    {row.copyReviewed ? '✓' : '✎'}
+                  </button>
                   {(row.status === 'approved' || row.status === 'failed') && (
                     <button className="btn sm" onClick={() => publishRow(row.id)}>
                       Publish

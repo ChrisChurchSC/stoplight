@@ -62,6 +62,7 @@ export function proposeSchedule(assets: Asset[], now: Date = new Date()): Traffi
           channel,
           format,
           caption: asset.caption,
+          body: asset.body,
           campaign: '',
           audience: '',
           scheduledAt: when.toISOString(),

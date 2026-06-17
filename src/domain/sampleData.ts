@@ -12,6 +12,11 @@ interface Seed {
   /** Hours from "now" for scheduledAt (negative = already in the past). */
   at: number
   error?: string
+  /** Full text body (text assets). */
+  body?: string
+  /** Copy baked into the creative (image/video overlays, VO). */
+  extracted?: string
+  copyReviewed?: boolean
 }
 
 // A believable cross-channel content plan spanning three campaigns, so the
@@ -19,10 +24,10 @@ interface Seed {
 // on the paid rows, and a spread of statuses (incl. one failed).
 const SEEDS: Seed[] = [
   // ---- Spring Launch 2026 ----
-  { asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Spring Launch 2026', audience: 'Lookalike – Customers', caption: 'Meet the all-new Spring lineup — built for speed.', status: 'posted', at: -48 },
+  { asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Spring Launch 2026', audience: 'Lookalike – Customers', caption: 'Meet the all-new Spring lineup — built for speed.', status: 'posted', at: -48, extracted: 'SPRING 2026\nBuilt for speed\nShip 2x faster →', copyReviewed: true },
   { asset: 'spring-promo-9x16.jpg', mediaType: 'image', channel: 'tiktok-ads', campaign: 'Spring Launch 2026', audience: 'Interest – Productivity', caption: 'POV: your workflow just got 2x faster ⚡', status: 'posted', at: -36 },
   { asset: 'spring-promo-1x1.jpg', mediaType: 'image', channel: 'instagram', campaign: 'Spring Launch 2026', caption: 'Spring is here. Tap to see what’s new.', status: 'scheduled', at: 6 },
-  { asset: 'launch-announcement.md', mediaType: 'text', channel: 'email', campaign: 'Spring Launch 2026', caption: 'The Spring release is live — here’s everything new.', status: 'approved', at: 18 },
+  { asset: 'launch-announcement.md', mediaType: 'text', channel: 'email', campaign: 'Spring Launch 2026', caption: 'The Spring release is live — here’s everything new.', status: 'approved', at: 18, body: 'The Spring release is here.\n\nThree things shipped today: 2x faster builds, a redesigned dashboard, and one-click rollback. Everything you told us slowed you down — gone.\n\nSee what’s new →' },
   { asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'youtube-ads', campaign: 'Spring Launch 2026', audience: 'Retargeting – Site Visitors', caption: 'The Spring launch in 30 seconds.', status: 'approved', at: 26 },
   { asset: 'launch-story.md', mediaType: 'text', channel: 'linkedin', campaign: 'Spring Launch 2026', caption: 'We just shipped our biggest release yet. Here’s the story 🧵', status: 'scheduled', at: 8 },
   { asset: 'spring-launch-lp', mediaType: 'link', channel: 'landing-page', campaign: 'Spring Launch 2026', caption: 'Spring 2026 — explore the launch.', status: 'approved', at: 4 },
@@ -30,7 +35,7 @@ const SEEDS: Seed[] = [
 
   // ---- Q2 Demand Gen ----
   { asset: 'acme-case-study.pdf', mediaType: 'link', channel: 'lead-magnet', campaign: 'Q2 Demand Gen', caption: 'How Acme cut ops time 40% — full case study.', status: 'posted', at: -12 },
-  { asset: 'founder-story-60s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Q2 Demand Gen', audience: 'Lookalike – Newsletter', caption: 'Why we started — a 60-second founder story.', status: 'draft', at: 40 },
+  { asset: 'founder-story-60s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Q2 Demand Gen', audience: 'Lookalike – Newsletter', caption: 'Why we started — a 60-second founder story.', status: 'draft', at: 40, extracted: 'We were tired of slow tools.\nSo we built our own.' },
   { asset: 'productivity-tips.jpg', mediaType: 'image', channel: 'instagram', campaign: 'Q2 Demand Gen', caption: '5 ways to speed up your week (save this).', status: 'scheduled', at: 12 },
   { asset: 'demand-gen-rsa', mediaType: 'text', channel: 'google-search', campaign: 'Q2 Demand Gen', audience: 'In-market – Ops Software', caption: 'Faster ops software — start free today.', status: 'approved', at: 2 },
   { asset: 'may-digest.md', mediaType: 'text', channel: 'email', campaign: 'Q2 Demand Gen', caption: 'May digest: 3 plays to ship faster.', status: 'approved', at: 50 },
@@ -55,6 +60,9 @@ export function sampleRows(now: number = Date.now()): TrafficRow[] {
       channel: s.channel,
       format: primarySlotKey(s.channel),
       caption: s.caption,
+      body: s.body,
+      extractedCopy: s.extracted,
+      copyReviewed: s.copyReviewed,
       campaign: s.campaign,
       audience: s.audience ?? '',
       scheduledAt: new Date(scheduledMs).toISOString(),

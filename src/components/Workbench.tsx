@@ -6,6 +6,7 @@ import { Sidebar } from './Sidebar'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
+import { CopyReview } from './CopyReview'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -54,6 +55,7 @@ export function Workbench() {
         <Toolbar />
         <IngestTray />
         <SheetGrid />
+        <CopyReview />
 
         {over && <div className="drop-veil">Drop to add assets</div>}
       </div>

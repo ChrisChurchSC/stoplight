@@ -88,7 +88,7 @@ export const CHANNEL_SOURCE: Record<ChannelId, SpecSource> = {
   'reddit-ads': { url: 'business.reddithelp.com (ad unit specs)', verified: PLATFORM },
   'youtube-ads': { url: 'support.google.com/google-ads/answer/13676244', verified: PLATFORM, note: 'Headline limit varies by format; 15 shown is in-stream.' },
   'google-search': { url: 'support.google.com/google-ads/answer/7684791', verified: PLATFORM },
-  'google-demand': { url: 'support.google.com/google-ads/answer/13704860', verified: PLATFORM, confidence: 'medium', note: 'Char limits vary by surface; verify in Ads UI.' },
+  'google-demand': { url: 'support.google.com/google-ads/answer/13704860', verified: PLATFORM, confidence: 'medium', note: 'Standard limits (40/90/90); product-only ads allow 1 each. Verify exact table in Ads UI.' },
   pmax: { url: 'support.google.com/google-ads/answer/17091269', verified: PLATFORM },
   instagram: { url: 'meta business / IG help', verified: PLATFORM },
   facebook: { url: 'meta business / FB help', verified: PLATFORM },
