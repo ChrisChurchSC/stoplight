@@ -7,6 +7,8 @@ export function Toolbar() {
   const setQuery = useTrafficStore((s) => s.setQuery)
   const addAssets = useTrafficStore((s) => s.addAssets)
   const loadSample = useTrafficStore((s) => s.loadSample)
+  const view = useTrafficStore((s) => s.view)
+  const setView = useTrafficStore((s) => s.setView)
 
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -18,6 +20,14 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
+      <button
+        className={`btn sm${view === 'icp' ? ' primary' : ''}`}
+        onClick={() => setView(view === 'icp' ? 'grid' : 'icp')}
+        title="ICP & proof"
+      >
+        ◎ ICP
+      </button>
+
       <button className="btn sm" onClick={() => inputRef.current?.click()}>
         + Add assets
       </button>
@@ -45,6 +55,14 @@ export function Toolbar() {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+
+      <button
+        className={`btn sm${view === 'assets' ? ' primary' : ''}`}
+        onClick={() => setView(view === 'assets' ? 'grid' : 'assets')}
+        title="Assets — staged intake"
+      >
+        ⬡ Assets
+      </button>
     </div>
   )
 }
