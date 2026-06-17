@@ -5,6 +5,7 @@ const COLUMNS: (keyof TrafficRow)[] = [
   'assetName',
   'mediaType',
   'channel',
+  'assetType',
   'caption',
   'campaign',
   'audience',

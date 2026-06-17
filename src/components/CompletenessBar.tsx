@@ -1,11 +1,11 @@
 import { CHANNELS } from '../domain/channels'
-import { CHANNEL_SOURCE, slotSpec, slotsFor } from '../domain/channelAssets'
+import { typesFor } from '../domain/channelAssetTypes'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
 /**
- * When a single channel is selected in the sidebar, show its required asset set
- * and which slots are present in the sheet — the creative-completeness check.
+ * When a single channel is selected, show its asset-type set and which types
+ * are present in the sheet — the creative-completeness check.
  */
 export function CompletenessBar() {
   const filter = useTrafficStore((s) => s.filter)
@@ -14,11 +14,11 @@ export function CompletenessBar() {
 
   if (filter === 'all') return null
 
-  const slots = slotsFor(filter)
-  const present = new Set(rows.filter((r) => r.channel === filter).map((r) => r.format))
-  const filled = slots.filter((s) => present.has(s.key)).length
-  const missing = slots.length - filled
-  const source = CHANNEL_SOURCE[filter]
+  // Required set excludes the Other/custom escape hatch.
+  const types = typesFor(filter).filter((x) => x.value !== 'other')
+  const present = new Set(rows.filter((r) => r.channel === filter).map((r) => r.assetType))
+  const filled = types.filter((x) => present.has(x.value)).length
+  const missing = types.length - filled
 
   return (
     <div className="completeness">
@@ -26,7 +26,7 @@ export function CompletenessBar() {
         <ChannelIcon channel={filter} size={15} />
         <strong>{CHANNELS[filter].label}</strong>
         <span className="completeness-count">
-          {filled}/{slots.length} asset types
+          {filled}/{types.length} asset types
         </span>
         {missing > 0 && (
           <button className="btn sm" onClick={() => addMissingSlots(filter)}>
@@ -35,24 +35,16 @@ export function CompletenessBar() {
         )}
       </div>
       <div className="slot-chips">
-        {slots.map((s) => {
-          const has = present.has(s.key)
+        {types.map((x) => {
+          const has = present.has(x.value)
           return (
-            <span key={s.key} className={`slot-chip${has ? ' has' : ''}`} title={slotSpec(s)}>
+            <span key={x.value} className={`slot-chip${has ? ' has' : ''}`}>
               <span className="slot-mark">{has ? '✓' : '○'}</span>
-              {s.label}
-              <span className="slot-spec">{slotSpec(s)}</span>
+              {x.label}
             </span>
           )
         })}
       </div>
-
-      {source && (
-        <div className="completeness-source">
-          specs verified {source.verified} · {source.url}
-          {source.confidence && <span className="conf-badge">{source.confidence} confidence</span>}
-        </div>
-      )}
     </div>
   )
 }

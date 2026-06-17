@@ -6,7 +6,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { sampleRows } from '../domain/sampleData'
-import { slotsFor } from '../domain/channelAssets'
+import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
@@ -54,7 +54,7 @@ interface TrafficState {
   clearSheet: () => Promise<void>
   /** Replace the sheet with a curated sample dataset. */
   loadSample: () => Promise<void>
-  /** Add a placeholder row for each required slot of a channel not yet present. */
+  /** Add a placeholder row for each asset type of a channel not yet present. */
   addMissingSlots: (channel: ChannelId) => Promise<void>
 
   // ICP messaging gate
@@ -206,18 +206,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const present = new Set(
       get()
         .rows.filter((r) => r.channel === channel)
-        .map((r) => r.format),
+        .map((r) => r.assetType),
     )
-    const missing = slotsFor(channel).filter((s) => !present.has(s.key))
+    // Skip the Other/custom escape hatch when filling required types.
+    const missing = typesFor(channel).filter((x) => x.value !== 'other' && !present.has(x.value))
     if (missing.length === 0) return
     const nowIso = new Date().toISOString()
-    const rows: TrafficRow[] = missing.map((slot) => ({
+    const rows: TrafficRow[] = missing.map((type) => ({
       id: freshRowId(),
       assetId: '',
       assetName: '—',
-      mediaType: slot.kind === 'copy' ? 'text' : slot.mediaTypes?.[0] ?? 'image',
+      mediaType: 'text',
       channel,
-      format: slot.key,
+      assetType: type.value,
       caption: '',
       campaign: '',
       audience: '',

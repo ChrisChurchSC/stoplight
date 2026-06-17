@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
-import { primarySlotKey, slotsFor } from '../domain/channelAssets'
+import { isValidType, typesFor } from '../domain/channelAssetTypes'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -13,9 +13,8 @@ const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'fail
 // Named columns of the spreadsheet, in order, with a Clay-style type glyph.
 const COLUMNS = [
   { key: 'asset', label: 'Asset', icon: '▦' },
-  { key: 'type', label: 'Type', icon: 'T' },
   { key: 'channel', label: 'Channel', icon: '◉' },
-  { key: 'format', label: 'Format', icon: '▱' },
+  { key: 'type', label: 'Type', icon: '◆' },
   { key: 'campaign', label: 'Campaign', icon: '◇' },
   { key: 'audience', label: 'Audience', icon: '◎' },
   { key: 'caption', label: 'Caption', icon: '¶' },
@@ -26,7 +25,7 @@ const COLUMNS = [
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 70, 140, 150, 150, 150, 320, 184, 138, 120, 120]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 300, 184, 138, 120, 130]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -53,8 +52,7 @@ function CovBar({ n, total }: { n: number; total: number }) {
   )
 }
 
-/** Auto-growing text cell: wraps content and expands the row to fit. `dep`
- *  forces a re-measure when the column width changes. */
+/** Auto-growing text cell: wraps content and expands the row to fit. */
 function GrowCell({
   value,
   placeholder,
@@ -93,7 +91,6 @@ export function SheetGrid() {
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const publishRow = useTrafficStore((s) => s.publishRow)
-  const loadSample = useTrafficStore((s) => s.loadSample)
   const openReview = useTrafficStore((s) => s.openReview)
 
   const [widths, setWidths] = useState<number[]>(DEFAULT_WIDTHS)
@@ -135,6 +132,7 @@ export function SheetGrid() {
   )
 
   const totalRows = view.length
+  const typeSet = view.filter((r) => isValidType(r.channel, r.assetType)).length
   const captionFilled = view.filter((r) => r.caption.trim()).length
   const campaignFilled = view.filter((r) => (r.campaign ?? '').trim()).length
   const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
@@ -163,7 +161,7 @@ export function SheetGrid() {
             <button
               className="btn sm"
               style={{ marginTop: 12, pointerEvents: 'auto' }}
-              onClick={loadSample}
+              onClick={loadSampleHint}
             >
               Load sample data
             </button>
@@ -196,8 +194,7 @@ export function SheetGrid() {
               <th className="corner">%</th>
               <th><span className="cov-check">✓</span></th>
               <th><span className="cov-check">✓</span></th>
-              <th><span className="cov-check">✓</span></th>
-              <th><span className="cov-check">✓</span></th>
+              <th><CovBar n={typeSet} total={totalRows} /></th>
               <th><CovBar n={campaignFilled} total={totalRows} /></th>
               <th><CovBar n={audienceFilled} total={totalRows} /></th>
               <th><CovBar n={captionFilled} total={totalRows} /></th>
@@ -208,146 +205,150 @@ export function SheetGrid() {
             </tr>
           </thead>
           <tbody>
-            {view.map((row, i) => (
-              <tr key={row.id}>
-                <td className="gutter">{i + 1}</td>
+            {view.map((row, i) => {
+              const typeValid = isValidType(row.channel, row.assetType)
+              return (
+                <tr key={row.id}>
+                  <td className="gutter">{i + 1}</td>
 
-                <td>
-                  <div className="sheet-asset">
-                    <div className="mini">
-                      <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+                  <td>
+                    <div className="sheet-asset">
+                      <div className="mini">
+                        <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+                      </div>
+                      <span className="nm" title={row.assetName}>
+                        {row.assetName}
+                      </span>
                     </div>
-                    <span className="nm" title={row.assetName}>
-                      {row.assetName}
-                    </span>
-                  </div>
-                </td>
+                  </td>
 
-                <td className="cell-ro">{row.mediaType}</td>
+                  <td>
+                    <div className="ch-cell">
+                      <ChannelIcon channel={row.channel} size={15} />
+                      <select
+                        className="cell-select"
+                        style={{ color: CHANNELS[row.channel].color }}
+                        value={row.channel}
+                        onChange={(e) => {
+                          const channel = e.target.value as ChannelId
+                          // Keep the type only if still valid for the new channel; else clear & prompt.
+                          const assetType = isValidType(channel, row.assetType) ? row.assetType : ''
+                          updateRow(row.id, { channel, assetType })
+                        }}
+                      >
+                        {KIND_ORDER.map((section) => (
+                          <optgroup key={section.kind} label={section.label}>
+                            {channelsByKind(section.kind).map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
 
-                <td>
-                  <div className="ch-cell">
-                    <ChannelIcon channel={row.channel} size={15} />
+                  <td>
                     <select
-                      className="cell-select"
-                      style={{ color: CHANNELS[row.channel].color }}
-                      value={row.channel}
-                      onChange={(e) => {
-                        const channel = e.target.value as ChannelId
-                        updateRow(row.id, { channel, format: primarySlotKey(channel) })
-                      }}
+                      className={`cell-select${typeValid ? '' : ' unset'}`}
+                      value={typeValid ? row.assetType : ''}
+                      onChange={(e) => updateRow(row.id, { assetType: e.target.value })}
                     >
-                      {KIND_ORDER.map((section) => (
-                        <optgroup key={section.kind} label={section.label}>
-                          {channelsByKind(section.kind).map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </optgroup>
+                      {!typeValid && <option value="">Select…</option>}
+                      {typesFor(row.channel).map((x) => (
+                        <option key={x.value} value={x.value}>
+                          {x.label}
+                        </option>
                       ))}
                     </select>
-                  </div>
-                </td>
+                  </td>
 
-                <td>
-                  <select
-                    className="cell-select"
-                    value={row.format ?? primarySlotKey(row.channel)}
-                    onChange={(e) => updateRow(row.id, { format: e.target.value })}
-                  >
-                    {slotsFor(row.channel).map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+                  <td>
+                    <GrowCell
+                      value={row.campaign ?? ''}
+                      placeholder="—"
+                      dep={total}
+                      onChange={(v) => updateRow(row.id, { campaign: v })}
+                    />
+                  </td>
 
-                <td>
-                  <GrowCell
-                    value={row.campaign ?? ''}
-                    placeholder="—"
-                    dep={total}
-                    onChange={(v) => updateRow(row.id, { campaign: v })}
-                  />
-                </td>
+                  <td>
+                    <GrowCell
+                      value={row.audience ?? ''}
+                      placeholder="—"
+                      dep={total}
+                      onChange={(v) => updateRow(row.id, { audience: v })}
+                    />
+                  </td>
 
-                <td>
-                  <GrowCell
-                    value={row.audience ?? ''}
-                    placeholder="—"
-                    dep={total}
-                    onChange={(v) => updateRow(row.id, { audience: v })}
-                  />
-                </td>
+                  <td>
+                    <GrowCell
+                      value={row.caption}
+                      placeholder="Add copy…"
+                      dep={total}
+                      onChange={(v) => updateRow(row.id, { caption: v })}
+                    />
+                  </td>
 
-                <td>
-                  <GrowCell
-                    value={row.caption}
-                    placeholder="Add copy…"
-                    dep={total}
-                    onChange={(v) => updateRow(row.id, { caption: v })}
-                  />
-                </td>
+                  <td>
+                    <input
+                      className="cell-input"
+                      type="datetime-local"
+                      value={isoToLocalInput(row.scheduledAt)}
+                      onChange={(e) =>
+                        updateRow(row.id, { scheduledAt: localInputToIso(e.target.value) })
+                      }
+                    />
+                  </td>
 
-                <td>
-                  <input
-                    className="cell-input"
-                    type="datetime-local"
-                    value={isoToLocalInput(row.scheduledAt)}
-                    onChange={(e) =>
-                      updateRow(row.id, { scheduledAt: localInputToIso(e.target.value) })
-                    }
-                  />
-                </td>
+                  <td>
+                    <select
+                      className={`cell-select st-${row.status}`}
+                      value={row.status}
+                      onChange={(e) => onStatusChange(row, e.target.value as RowStatus)}
+                    >
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
 
-                <td>
-                  <select
-                    className={`cell-select st-${row.status}`}
-                    value={row.status}
-                    onChange={(e) => onStatusChange(row, e.target.value as RowStatus)}
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+                  <td className="cell-ro">{postedLabel(row)}</td>
 
-                <td className="cell-ro">{postedLabel(row)}</td>
-
-                <td className="act">
-                  <button
-                    className={`btn ghost sm${row.copyReviewed ? ' reviewed' : ''}`}
-                    title={row.copyReviewed ? 'Copy reviewed — open' : 'Review copy'}
-                    onClick={() => openReview(row.id)}
-                  >
-                    {row.copyReviewed ? '✓' : '✎'}
-                  </button>
-                  {(row.status === 'approved' || row.status === 'failed') && (
-                    <button className="btn sm" onClick={() => publishRow(row.id)}>
-                      Publish
+                  <td className="act">
+                    <button
+                      className={`btn ghost sm${row.copyReviewed ? ' reviewed' : ''}`}
+                      title={row.copyReviewed ? 'Copy reviewed — open' : 'Review copy'}
+                      onClick={() => openReview(row.id)}
+                    >
+                      {row.copyReviewed ? '✓' : '✎'}
                     </button>
-                  )}
-                  <button
-                    className="btn ghost sm"
-                    title="Duplicate row (re-traffic to another channel)"
-                    onClick={() => duplicateRow(row.id)}
-                  >
-                    ⎘
-                  </button>
-                  <button
-                    className="btn ghost sm"
-                    title="Remove row"
-                    onClick={() => removeRow(row.id)}
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    {(row.status === 'approved' || row.status === 'failed') && (
+                      <button className="btn sm" onClick={() => publishRow(row.id)}>
+                        Publish
+                      </button>
+                    )}
+                    <button
+                      className="btn ghost sm"
+                      title="Duplicate row (re-traffic to another channel)"
+                      onClick={() => duplicateRow(row.id)}
+                    >
+                      ⎘
+                    </button>
+                    <button
+                      className="btn ghost sm"
+                      title="Remove row"
+                      onClick={() => removeRow(row.id)}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
 
             {Array.from({ length: pad }).map((_, i) => (
               <tr key={`pad-${i}`} className="pad-row">
@@ -362,4 +363,9 @@ export function SheetGrid() {
       </div>
     </div>
   )
+}
+
+// Load-sample handler reads the store lazily so the empty-state button works.
+function loadSampleHint() {
+  void useTrafficStore.getState().loadSample()
 }

@@ -1,15 +1,9 @@
 import { CHANNELS } from '../domain/channels'
-import { slotLabel, slotsFor } from '../domain/channelAssets'
+import { typeLabel } from '../domain/channelAssetTypes'
 import { copyPieces } from '../adapters/copy/extract'
-import type { TrafficRow } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { Thumb } from './Thumb'
-
-/** Char limit for a piece, if the row's slot defines one (caption only here). */
-function limitFor(row: TrafficRow): number | undefined {
-  return slotsFor(row.channel).find((s) => s.key === row.format)?.hardLimit
-}
 
 export function CopyReview() {
   const reviewRowId = useTrafficStore((s) => s.reviewRowId)
@@ -23,7 +17,6 @@ export function CopyReview() {
   if (!row) return null
 
   const pieces = copyPieces(row)
-  const captionLimit = limitFor(row)
   const isMedia = row.mediaType === 'image' || row.mediaType === 'video' || row.mediaType === 'link'
 
   return (
@@ -45,7 +38,7 @@ export function CopyReview() {
             <div className="drawer-name">{row.assetName}</div>
             <div className="drawer-sub">
               <ChannelIcon channel={row.channel} size={13} />
-              {CHANNELS[row.channel].label} · {slotLabel(row.channel, row.format)}
+              {CHANNELS[row.channel].label} · {typeLabel(row.channel, row.assetType) || '—'}
             </div>
           </div>
         </div>
@@ -55,11 +48,7 @@ export function CopyReview() {
           <label className="copy-field">
             <span className="copy-label">
               Caption
-              {captionLimit && (
-                <span className={`copy-count${row.caption.length > captionLimit ? ' over' : ''}`}>
-                  {row.caption.length}/{captionLimit}
-                </span>
-              )}
+              <span className="copy-count">{row.caption.length} chars</span>
             </span>
             <textarea
               value={row.caption}

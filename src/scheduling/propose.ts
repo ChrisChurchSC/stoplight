@@ -1,5 +1,5 @@
 import { CHANNELS } from '../domain/channels'
-import { primarySlotKey, slotsFor } from '../domain/channelAssets'
+import { primaryTypeKey } from '../domain/channelAssetTypes'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 
 let rowSeq = 0
@@ -47,30 +47,22 @@ export function proposeSchedule(assets: Asset[], now: Date = new Date()): Traffi
       placedPerChannel[channel] = index + 1
       const when = nthSlot(channel, index, now)
 
-      // One row per required slot when allFormats, else just the primary slot.
-      // All slots of a (asset, channel) share the same scheduled time.
-      const slotKeys = asset.allFormats
-        ? slotsFor(channel).map((s) => s.key)
-        : [primarySlotKey(channel)]
-
-      for (const format of slotKeys) {
-        rows.push({
-          id: rowId(),
-          assetId: asset.id,
-          assetName: asset.name,
-          mediaType: asset.mediaType,
-          channel,
-          format,
-          caption: asset.caption,
-          body: asset.body,
-          campaign: '',
-          audience: '',
-          scheduledAt: when.toISOString(),
-          status: 'draft',
-          mediaRef: asset.previewUrl,
-          createdAt: Date.now(),
-        })
-      }
+      rows.push({
+        id: rowId(),
+        assetId: asset.id,
+        assetName: asset.name,
+        mediaType: asset.mediaType,
+        channel,
+        assetType: primaryTypeKey(channel),
+        caption: asset.caption,
+        body: asset.body,
+        campaign: '',
+        audience: '',
+        scheduledAt: when.toISOString(),
+        status: 'draft',
+        mediaRef: asset.previewUrl,
+        createdAt: Date.now(),
+      })
     }
   }
 
