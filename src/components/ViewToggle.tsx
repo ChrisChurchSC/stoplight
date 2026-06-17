@@ -10,9 +10,11 @@ const VIEWS = [
 export function ViewToggle() {
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
+  const loadSample = useTrafficStore((s) => s.loadSample)
 
   return (
     <div className="view-bar">
+      <span className="view-bar-spacer" />
       <div className="view-toggle" role="group" aria-label="View">
         {VIEWS.map((v) => (
           <button
@@ -24,6 +26,11 @@ export function ViewToggle() {
             {v.label}
           </button>
         ))}
+      </div>
+      <div className="view-bar-right">
+        <button className="btn ghost sm" onClick={loadSample} title="Replace the sheet with sample data">
+          Load sample data
+        </button>
       </div>
     </div>
   )
