@@ -1,5 +1,5 @@
 import { CHANNELS } from '../domain/channels'
-import { slotsFor } from '../domain/channelAssets'
+import { CHANNEL_SOURCE, slotSpec, slotsFor } from '../domain/channelAssets'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -18,6 +18,7 @@ export function CompletenessBar() {
   const present = new Set(rows.filter((r) => r.channel === filter).map((r) => r.format))
   const filled = slots.filter((s) => present.has(s.key)).length
   const missing = slots.length - filled
+  const source = CHANNEL_SOURCE[filter]
 
   return (
     <div className="completeness">
@@ -37,13 +38,21 @@ export function CompletenessBar() {
         {slots.map((s) => {
           const has = present.has(s.key)
           return (
-            <span key={s.key} className={`slot-chip${has ? ' has' : ''}`} title={s.kind === 'media' ? s.ratio : s.charLimit ? `${s.charLimit} chars` : 'text'}>
+            <span key={s.key} className={`slot-chip${has ? ' has' : ''}`} title={slotSpec(s)}>
               <span className="slot-mark">{has ? '✓' : '○'}</span>
               {s.label}
+              <span className="slot-spec">{slotSpec(s)}</span>
             </span>
           )
         })}
       </div>
+
+      {source && (
+        <div className="completeness-source">
+          specs verified {source.verified} · {source.url}
+          {source.confidence && <span className="conf-badge">{source.confidence} confidence</span>}
+        </div>
+      )}
     </div>
   )
 }

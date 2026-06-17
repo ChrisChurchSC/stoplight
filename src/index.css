@@ -1136,3 +1136,29 @@ button {
 .slot-chip.has .slot-mark {
   color: var(--green);
 }
+
+/* slot spec hint + source line in completeness panel */
+.slot-chip .slot-spec {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.slot-chip.has .slot-spec {
+  color: var(--green);
+  opacity: 0.8;
+}
+.completeness-source {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conf-badge {
+  background: #fdf2dd;
+  color: #9a6a00;
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-weight: 600;
+}
