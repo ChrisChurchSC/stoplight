@@ -30,23 +30,29 @@ export function Breadcrumb() {
   const posted = rows.filter((r) => r.status === 'posted').length
   const approved = rows.filter((r) => r.status === 'approved' || r.status === 'scheduled').length
 
+  const overview = clientFilter === 'all'
+
   return (
     <div className="breadcrumb">
-      <span className="crumb active">{clientFilter === 'all' ? 'All clients' : clientFilter}</span>
-      <span className="crumb-sep">/</span>
-      <select
-        className={`crumb-select${campaignFilter === 'all' ? ' muted' : ''}`}
-        value={campaignFilter}
-        onChange={(e) => setCampaignFilter(e.target.value)}
-        title="Campaign"
-      >
-        <option value="all">All campaigns</option>
-        {campaigns.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
+      <span className="crumb active">{overview ? 'All clients' : clientFilter}</span>
+      {!overview && (
+        <>
+          <span className="crumb-sep">/</span>
+          <select
+            className={`crumb-select${campaignFilter === 'all' ? ' muted' : ''}`}
+            value={campaignFilter}
+            onChange={(e) => setCampaignFilter(e.target.value)}
+            title="Campaign"
+          >
+            <option value="all">All campaigns</option>
+            {campaigns.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
       <span className="spacer" />
 
@@ -63,18 +69,20 @@ export function Breadcrumb() {
         </span>
       </div>
 
-      <div className="view-toggle" role="group" aria-label="View">
-        {VIEWS.map((v) => (
-          <button
-            key={v.key}
-            className={`view-btn${view === v.key ? ' active' : ''}`}
-            onClick={() => setView(v.key)}
-            title={`${v.label.replace(/^\S+\s/, '')} view`}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
+      {!overview && (
+        <div className="view-toggle" role="group" aria-label="View">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              className={`view-btn${view === v.key ? ' active' : ''}`}
+              onClick={() => setView(v.key)}
+              title={`${v.label.replace(/^\S+\s/, '')} view`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

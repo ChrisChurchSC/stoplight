@@ -5,6 +5,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { ClientTabs } from './ClientTabs'
+import { ClientsOverview } from './ClientsOverview'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
 import { IcpGate } from './IcpGate'
@@ -19,7 +20,9 @@ export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
   const addAssets = useTrafficStore((s) => s.addAssets)
   const view = useTrafficStore((s) => s.view)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
   const [over, setOver] = useState(false)
+  const overview = clientFilter === 'all'
 
   useEffect(() => {
     refresh()
@@ -55,17 +58,23 @@ export function Workbench() {
         <Breadcrumb />
         <ClientTabs />
 
-        <Toolbar />
-        <IngestTray />
-        <IcpGate />
-        {view === 'calendar' ? (
-          <CalendarView />
-        ) : view === 'flow' ? (
-          <FlowView />
-        ) : view === 'insights' ? (
-          <InsightsView />
+        {overview ? (
+          <ClientsOverview />
         ) : (
-          <SheetGrid />
+          <>
+            <Toolbar />
+            <IngestTray />
+            <IcpGate />
+            {view === 'calendar' ? (
+              <CalendarView />
+            ) : view === 'flow' ? (
+              <FlowView />
+            ) : view === 'insights' ? (
+              <InsightsView />
+            ) : (
+              <SheetGrid />
+            )}
+          </>
         )}
         <CopyReview />
         <CommentDrawer />

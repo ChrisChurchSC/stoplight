@@ -946,6 +946,109 @@ button {
   margin: 0 4px;
   color: var(--text-faint);
 }
+
+/* ---- All-clients overview page ---- */
+.clients-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.clients-empty {
+  color: var(--text-faint);
+  text-align: center;
+  padding: 40px 0;
+}
+.clients-portfolio {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.clients-port-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+.clients-port-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.clients-port-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+.clients-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.client-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  cursor: pointer;
+  font: inherit;
+}
+.client-card:hover {
+  border-color: var(--accent);
+}
+.client-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.client-card-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+.client-card-rev {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.client-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.client-card-campaigns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.client-card-camp {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1px 9px;
+}
+.client-card-open {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
 .crumb {
   color: var(--text-muted);
 }
