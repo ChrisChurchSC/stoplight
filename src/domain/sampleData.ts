@@ -1,4 +1,5 @@
 import type { ChannelId, MediaType, RowStatus, TrafficRow } from './types'
+import { primarySlotKey } from './channelAssets'
 
 interface Seed {
   asset: string
@@ -52,6 +53,7 @@ export function sampleRows(now: number = Date.now()): TrafficRow[] {
       assetName: s.asset,
       mediaType: s.mediaType,
       channel: s.channel,
+      format: primarySlotKey(s.channel),
       caption: s.caption,
       campaign: s.campaign,
       audience: s.audience ?? '',

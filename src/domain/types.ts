@@ -65,6 +65,9 @@ export interface Asset {
   channels: ChannelId[]
   /** Per-channel caption/copy override; falls back to a shared default. */
   caption: string
+  /** When true, create a row for every required asset slot of each channel
+   *  (all placements + copy fields), not just the primary one. */
+  allFormats?: boolean
   createdAt: number
 }
 
@@ -78,6 +81,8 @@ export interface TrafficRow {
   assetName: string
   mediaType: MediaType
   channel: ChannelId
+  /** Which asset slot of the channel this row is (placement/copy field key). */
+  format?: string
   caption: string
   /**
    * Campaign this row rolls up to. The CRM attribution key: content → campaign

@@ -6,6 +6,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { sampleRows } from '../domain/sampleData'
+import { slotsFor } from '../domain/channelAssets'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -48,6 +49,8 @@ interface TrafficState {
   clearSheet: () => Promise<void>
   /** Replace the sheet with a curated sample dataset. */
   loadSample: () => Promise<void>
+  /** Add a placeholder row for each required slot of a channel not yet present. */
+  addMissingSlots: (channel: ChannelId) => Promise<void>
 }
 
 export const useTrafficStore = create<TrafficState>((set, get) => ({
@@ -161,6 +164,33 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loadSample: async () => {
     await sheet.clear()
     await sheet.append(sampleRows())
+    await get().refresh()
+  },
+
+  addMissingSlots: async (channel) => {
+    const present = new Set(
+      get()
+        .rows.filter((r) => r.channel === channel)
+        .map((r) => r.format),
+    )
+    const missing = slotsFor(channel).filter((s) => !present.has(s.key))
+    if (missing.length === 0) return
+    const nowIso = new Date().toISOString()
+    const rows: TrafficRow[] = missing.map((slot) => ({
+      id: freshRowId(),
+      assetId: '',
+      assetName: '—',
+      mediaType: slot.kind === 'copy' ? 'text' : slot.mediaTypes?.[0] ?? 'image',
+      channel,
+      format: slot.key,
+      caption: '',
+      campaign: '',
+      audience: '',
+      scheduledAt: nowIso,
+      status: 'draft',
+      createdAt: Date.now(),
+    }))
+    await sheet.append(rows)
     await get().refresh()
   },
 }))

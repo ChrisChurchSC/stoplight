@@ -1,4 +1,5 @@
 import { KIND_ORDER, channelsByKind, channelAccepts } from '../domain/channels'
+import { slotsFor } from '../domain/channelAssets'
 import type { Asset } from '../domain/types'
 import { formatBytes } from '../lib/format'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -63,6 +64,17 @@ function PendingCard({ asset }: { asset: Asset }) {
         {asset.channels.length === 0 && (
           <div className="warn-text">Pick at least one channel to traffic this asset.</div>
         )}
+
+        {asset.channels.length > 0 && (
+          <label className="all-formats">
+            <input
+              type="checkbox"
+              checked={!!asset.allFormats}
+              onChange={(e) => updateAsset(asset.id, { allFormats: e.target.checked })}
+            />
+            Add every required format per channel ({asset.channels.reduce((n, ch) => n + slotsFor(ch).length, 0)} slots)
+          </label>
+        )}
       </div>
     </div>
   )
@@ -72,7 +84,11 @@ export function IngestTray() {
   const assets = useTrafficStore((s) => s.assets)
   const addToSheet = useTrafficStore((s) => s.addToSheet)
 
-  const rowCount = assets.reduce((n, a) => n + a.channels.length, 0)
+  const rowCount = assets.reduce(
+    (n, a) =>
+      n + a.channels.reduce((m, ch) => m + (a.allFormats ? slotsFor(ch).length : 1), 0),
+    0,
+  )
 
   if (assets.length === 0) return null
 

@@ -1,9 +1,11 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
+import { primarySlotKey, slotsFor } from '../domain/channelAssets'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { CompletenessBar } from './CompletenessBar'
 import { Thumb } from './Thumb'
 
 const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
@@ -13,6 +15,7 @@ const COLUMNS = [
   { key: 'asset', label: 'Asset', icon: '▦' },
   { key: 'type', label: 'Type', icon: 'T' },
   { key: 'channel', label: 'Channel', icon: '◉' },
+  { key: 'format', label: 'Format', icon: '▱' },
   { key: 'campaign', label: 'Campaign', icon: '◇' },
   { key: 'audience', label: 'Audience', icon: '◎' },
   { key: 'caption', label: 'Caption', icon: '¶' },
@@ -23,7 +26,7 @@ const COLUMNS = [
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 70, 140, 150, 150, 320, 184, 138, 120, 120]
+const DEFAULT_WIDTHS = [40, 220, 70, 140, 150, 150, 150, 320, 184, 138, 120, 120]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -149,6 +152,7 @@ export function SheetGrid() {
 
   return (
     <div className="sheet-grid">
+      <CompletenessBar />
       <div className="sheet-wrap">
         {rows.length === 0 && (
           <div className="sheet-hint">
@@ -192,6 +196,7 @@ export function SheetGrid() {
               <th><span className="cov-check">✓</span></th>
               <th><span className="cov-check">✓</span></th>
               <th><span className="cov-check">✓</span></th>
+              <th><span className="cov-check">✓</span></th>
               <th><CovBar n={campaignFilled} total={totalRows} /></th>
               <th><CovBar n={audienceFilled} total={totalRows} /></th>
               <th><CovBar n={captionFilled} total={totalRows} /></th>
@@ -226,7 +231,10 @@ export function SheetGrid() {
                       className="cell-select"
                       style={{ color: CHANNELS[row.channel].color }}
                       value={row.channel}
-                      onChange={(e) => updateRow(row.id, { channel: e.target.value as ChannelId })}
+                      onChange={(e) => {
+                        const channel = e.target.value as ChannelId
+                        updateRow(row.id, { channel, format: primarySlotKey(channel) })
+                      }}
                     >
                       {KIND_ORDER.map((section) => (
                         <optgroup key={section.kind} label={section.label}>
@@ -239,6 +247,20 @@ export function SheetGrid() {
                       ))}
                     </select>
                   </div>
+                </td>
+
+                <td>
+                  <select
+                    className="cell-select"
+                    value={row.format ?? primarySlotKey(row.channel)}
+                    onChange={(e) => updateRow(row.id, { format: e.target.value })}
+                  >
+                    {slotsFor(row.channel).map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
                 </td>
 
                 <td>
