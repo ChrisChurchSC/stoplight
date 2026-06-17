@@ -42,12 +42,12 @@ interface TrafficState {
   clientFilter: string
   campaignFilter: string
   /** Workspace view: the spreadsheet grid or the schedule calendar. */
-  view: 'grid' | 'calendar' | 'flow' | 'insights'
+  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp'
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
-  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights') => void
+  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'icp') => void
 
   refresh: () => Promise<void>
 

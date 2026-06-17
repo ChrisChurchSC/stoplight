@@ -64,13 +64,14 @@ export function Workbench() {
           <>
             <Toolbar />
             <IngestTray />
-            <IcpGate />
             {view === 'calendar' ? (
               <CalendarView />
             ) : view === 'flow' ? (
               <FlowView />
             ) : view === 'insights' ? (
               <InsightsView />
+            ) : view === 'icp' ? (
+              <IcpGate />
             ) : (
               <SheetGrid />
             )}
