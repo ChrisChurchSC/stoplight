@@ -8,6 +8,7 @@ import { IngestTray } from './IngestTray'
 import { IcpGate } from './IcpGate'
 import { SheetGrid } from './SheetGrid'
 import { CopyReview } from './CopyReview'
+import { CommentDrawer } from './CommentDrawer'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -58,6 +59,7 @@ export function Workbench() {
         <IcpGate />
         <SheetGrid />
         <CopyReview />
+        <CommentDrawer />
 
         {over && <div className="drop-veil">Drop to add assets</div>}
       </div>

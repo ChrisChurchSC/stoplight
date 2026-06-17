@@ -100,6 +100,8 @@ export function SheetGrid() {
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const publishRow = useTrafficStore((s) => s.publishRow)
   const openReview = useTrafficStore((s) => s.openReview)
+  const openComments = useTrafficStore((s) => s.openComments)
+  const commentMap = useTrafficStore((s) => s.comments)
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
@@ -461,6 +463,15 @@ export function SheetGrid() {
                     >
                       {row.copyReviewed ? '✓' : '✎'}
                     </button>
+                    {row.status === 'posted' && (
+                      <button
+                        className="btn ghost sm"
+                        title="Comments"
+                        onClick={() => openComments(row.id)}
+                      >
+                        💬 {commentMap[row.id]?.length ?? ''}
+                      </button>
+                    )}
                     {(row.status === 'approved' || row.status === 'failed') && (
                       <button className="btn sm" onClick={() => publishRow(row.id)}>
                         Publish

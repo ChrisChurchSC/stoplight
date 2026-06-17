@@ -20,7 +20,14 @@ export function Toolbar() {
   const budgetCleared = useTrafficStore((s) => s.budgetCleared)
   const syncSpend = useTrafficStore((s) => s.syncSpend)
   const acceptBudget = useTrafficStore((s) => s.acceptBudget)
+  const comments = useTrafficStore((s) => s.comments)
+  const syncComments = useTrafficStore((s) => s.syncComments)
   const cleared = gateCleared && trackingCleared && budgetCleared
+
+  const needsReply = Object.values(comments)
+    .flat()
+    .filter((c) => c.needsResponse).length
+  const hasPosted = rows.some((r) => r.status === 'posted')
 
   const reviewable = rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
   const missingUtm = reviewable.filter((r) => !r.utm)
@@ -102,6 +109,17 @@ export function Toolbar() {
         <button className="btn sm" onClick={syncSpend} title="Pull actual spend (daily sync)">
           ↻ Sync spend
         </button>
+      )}
+
+      {hasPosted && (
+        <button className="btn sm" onClick={syncComments} title="Pull comments from published posts (read-only)">
+          ↻ Sync comments
+        </button>
+      )}
+      {needsReply > 0 && (
+        <div className="toolbar-stat" title="Comments that likely need a reply">
+          💬 {needsReply} need reply
+        </div>
       )}
 
       <button className="btn sm" onClick={() => inputRef.current?.click()}>

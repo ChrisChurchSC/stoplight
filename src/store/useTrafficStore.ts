@@ -13,6 +13,7 @@ import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/t
 import { buildUtm, isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
 import { mockAttio } from '../adapters/attio/mockAttio'
+import { mockCommentSource, type Comment } from '../adapters/comments/mockComments'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -90,6 +91,17 @@ interface TrafficState {
   syncSpend: () => Promise<void>
   acceptBudget: () => void
 
+  // comment ingest (inbound — read-only)
+  /** Comments pulled back per posted row. */
+  comments: Record<string, Comment[]>
+  /** Row whose comments drawer is open, or null. */
+  commentRowId: string | null
+  openComments: (id: string | null) => void
+  /** Pull comments for every published asset (read-only sync). */
+  syncComments: () => Promise<void>
+  /** Route an intent-y commenter to Attio as a contact (closes the loop). */
+  routeCommenterToAttio: (rowId: string, commentId: string) => Promise<void>
+
   // copy review
   /** Row whose copy-review drawer is open, or null. */
   reviewRowId: string | null
@@ -107,6 +119,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   filter: 'all',
   query: '',
   reviewRowId: null,
+  comments: {},
+  commentRowId: null,
   icp: null,
   batchReview: null,
   reviewing: false,
@@ -254,6 +268,37 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }))
     await sheet.append(rows)
     await get().refresh()
+  },
+
+  openComments: (id) => set({ commentRowId: id }),
+
+  syncComments: async () => {
+    const posted = get().rows.filter((r) => r.status === 'posted')
+    const comments: Record<string, Comment[]> = {}
+    for (const r of posted) {
+      comments[r.id] = await mockCommentSource.fetch(r)
+    }
+    set({ comments })
+  },
+
+  routeCommenterToAttio: async (rowId, commentId) => {
+    const row = get().rows.find((r) => r.id === rowId)
+    const comment = get().comments[rowId]?.find((c) => c.id === commentId)
+    if (!row || !comment) return
+    const email = `${comment.author.toLowerCase().replace(/\s+/g, '.')}@example.test`
+    await mockAttio.pushContact({
+      email,
+      name: comment.author,
+      sourceAsset: row.assetName,
+      sourceCampaign: row.campaign,
+    })
+    // Mark the comment routed so the UI reflects it.
+    set((s) => ({
+      comments: {
+        ...s.comments,
+        [rowId]: s.comments[rowId].map((c) => (c.id === commentId ? { ...c, routed: true } : c)),
+      },
+    }))
   },
 
   openReview: (id) => set({ reviewRowId: id }),
