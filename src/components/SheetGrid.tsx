@@ -183,16 +183,16 @@ export function SheetGrid() {
   const onMessageN = view.filter((r) => rowVerdict(r) === 'on').length
   const campaignFilled = view.filter((r) => (r.campaign ?? '').trim()).length
   const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
-  const pastDraft = view.filter((r) => r.status !== 'draft').length
   const postedN = view.filter((r) => r.status === 'posted').length
   const trackingCleanN = view.filter((r) => r.utm && isTrackingClean(r)).length
   const paidN = view.filter(isPaidRow).length
   const budgetSetN = view.filter((r) => isPaidRow(r) && hasBudget(r)).length
-  const attributedN = view.filter((r) => {
-    const a = mockAttio.attributionForAsset(r.assetName)
-    return a.leads > 0 || a.wonRevenue > 0
-  }).length
   const commentedN = view.filter((r) => (commentMap[r.id]?.length ?? 0) > 0).length
+  const approvedN = view.filter((r) => r.status === 'approved' || r.status === 'scheduled').length
+  const wonScoped = [...new Set(view.map((r) => r.assetName))].reduce(
+    (a, name) => a + mockAttio.attributionForAsset(name).wonRevenue,
+    0,
+  )
   const now = Date.now()
 
   // ---- Batch-action states for the column headers ----
@@ -329,7 +329,7 @@ export function SheetGrid() {
             </tr>
             <tr className="coverage">
               <th className="corner">%</th>
-              <th><span className="cov-check">✓</span></th>
+              <th><span className="cov-stat">{totalRows} row{totalRows === 1 ? '' : 's'}</span></th>
               <th><span className="cov-check">✓</span></th>
               <th><CovBar n={typeSet} total={totalRows} /></th>
               <th><CovBar n={campaignFilled} total={totalRows} /></th>
@@ -338,10 +338,10 @@ export function SheetGrid() {
               <th><CovBar n={rtbSetN} total={totalRows} /></th>
               <th><CovBar n={onMessageN} total={reviewableN} /></th>
               <th><span className="cov-check">✓</span></th>
-              <th><CovBar n={pastDraft} total={totalRows} /></th>
+              <th><span className="cov-stat">{approvedN} approved · {postedN} posted</span></th>
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
               <th><CovBar n={budgetSetN} total={paidN} /></th>
-              <th><CovBar n={attributedN} total={totalRows} /></th>
+              <th><span className="cov-stat">↗ {money(wonScoped)} won</span></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th><CovBar n={commentedN} total={postedN} /></th>
               <th />
