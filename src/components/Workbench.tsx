@@ -12,6 +12,7 @@ import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowView } from './FlowView'
 import { InsightsView } from './InsightsView'
+import { ViewToggle } from './ViewToggle'
 import { AssetsPage } from './AssetsPage'
 import { ConnectorsPage } from './ConnectorsPage'
 import { BillingPage } from './BillingPage'
@@ -84,6 +85,7 @@ export function Workbench() {
                 ) : (
                   <SheetGrid />
                 )}
+                <ViewToggle />
               </>
             )}
 

@@ -3187,6 +3187,14 @@ button {
 }
 
 /* ---- Grid / Calendar view toggle ---- */
+.view-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
 .view-toggle {
   display: inline-flex;
   border: 1px solid var(--border-strong);
