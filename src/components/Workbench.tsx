@@ -4,6 +4,7 @@ import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
+import { ClientTabs } from './ClientTabs'
 import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
 import { IcpGate } from './IcpGate'
@@ -52,6 +53,7 @@ export function Workbench() {
         onDrop={onDrop}
       >
         <Breadcrumb />
+        <ClientTabs />
 
         <Toolbar />
         <IngestTray />

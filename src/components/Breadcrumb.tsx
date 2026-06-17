@@ -13,13 +13,11 @@ export function Breadcrumb() {
   const rows = useTrafficStore((s) => s.rows)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
 
-  // Distinct clients across all rows, and campaigns within the active client.
-  const clients = [...new Set(rows.map((r) => clientForCampaign(r.campaign)))].sort()
+  // Campaigns within the active client (client is chosen via the client tabs).
   const campaigns = [
     ...new Set(
       rows
@@ -34,21 +32,7 @@ export function Breadcrumb() {
 
   return (
     <div className="breadcrumb">
-      <span className="crumb">Clients</span>
-      <span className="crumb-sep">/</span>
-      <select
-        className="crumb-select"
-        value={clientFilter}
-        onChange={(e) => setClientFilter(e.target.value)}
-        title="Client"
-      >
-        <option value="all">All clients</option>
-        {clients.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
+      <span className="crumb active">{clientFilter === 'all' ? 'All clients' : clientFilter}</span>
       <span className="crumb-sep">/</span>
       <select
         className={`crumb-select${campaignFilter === 'all' ? ' muted' : ''}`}
