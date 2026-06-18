@@ -201,15 +201,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ drivePickerOpen: true })
       return
     }
-    // Real Drive → native Google Picker, same pipeline as the demo.
+    // Real Drive → native Google Picker, same pipeline as the demo. A configured
+    // user must NOT be shown the demo fixture on cancel/error (cancel now no-ops
+    // via an empty result); surface real failures to the console instead.
     try {
       const files = await pickFromGoogleDrive()
-      if (files.length) get().addAssets(driveFilesToAssets(files))
-      set({ driveConnected: true })
-      if (get().page !== 'clients') set({ page: 'clients' })
-    } catch {
-      // Auth cancelled / picker failed → fall back to the demo modal.
-      set({ drivePickerOpen: true })
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true })
+        if (get().page !== 'clients') set({ page: 'clients' })
+      }
+    } catch (e) {
+      console.error('[drive] file import failed', e)
     }
   },
   importFolderFromDrive: async () => {
@@ -221,11 +224,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     try {
       const files = await pickFolderFromGoogleDrive()
-      if (files.length) get().addAssets(driveFilesToAssets(files))
-      set({ driveConnected: true })
-      if (get().page !== 'clients') set({ page: 'clients' })
-    } catch {
-      set({ drivePickerOpen: true })
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true })
+        if (get().page !== 'clients') set({ page: 'clients' })
+      }
+    } catch (e) {
+      console.error('[drive] folder import failed', e)
     }
   },
 
@@ -236,8 +241,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   // Auto-organize each ingested batch to channel + per-channel type before it
-  // hits the staging tray. Batch-aware (carousel slides detected across the group).
-  addAssets: (assets) => set((s) => ({ assets: [...s.assets, ...classifyAssets(assets)] })),
+  // hits the staging tray. Batch-aware (carousel slides detected across the
+  // group). De-dupes by id so re-importing the same Drive files (stable ids)
+  // doesn't create duplicate tray cards / rows.
+  addAssets: (assets) =>
+    set((s) => {
+      const have = new Set(s.assets.map((a) => a.id))
+      const fresh = classifyAssets(assets).filter((a) => !have.has(a.id))
+      return { assets: [...s.assets, ...fresh] }
+    }),
 
   updateAsset: (id, patch) =>
     set((s) => ({

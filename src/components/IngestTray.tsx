@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { KIND_ORDER, channelsByKind, channelAccepts, CHANNEL_LIST, CHANNELS } from '../domain/channels'
 import { typesFor } from '../domain/channelAssetTypes'
 import type { Asset, ChannelId } from '../domain/types'
@@ -46,6 +47,8 @@ function dimsLabel(a: Asset): string | null {
 function PendingCard({ asset }: { asset: Asset }) {
   const { updateAsset, toggleChannel, removeAsset } = useTrafficStore()
   const b = band(asset)
+  // Local so picking the first channel doesn't snap the panel shut mid-interaction.
+  const [addOpen, setAddOpen] = useState(asset.channels.length === 0)
 
   const setType = (channel: ChannelId, value: string) =>
     updateAsset(asset.id, { suggestedTypeFor: { ...asset.suggestedTypeFor, [channel]: value } })
@@ -124,7 +127,11 @@ function PendingCard({ asset }: { asset: Asset }) {
         )}
 
         {/* Add or change channels. */}
-        <details className="cpf-add" open={asset.channels.length === 0}>
+        <details
+          className="cpf-add"
+          open={addOpen}
+          onToggle={(e) => setAddOpen((e.target as HTMLDetailsElement).open)}
+        >
           <summary>{asset.channels.length === 0 ? 'Pick a channel' : 'Add or change channels'}</summary>
           {KIND_ORDER.map((section) => (
             <div className="chip-group" key={section.kind}>

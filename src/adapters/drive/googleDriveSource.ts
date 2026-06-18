@@ -25,6 +25,10 @@ const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 
 export const isGoogleDriveConfigured = !!CLIENT_ID && !!API_KEY
 
+// The Picker needs the Cloud project number (setAppId) for drive.file files.get
+// /files.list to resolve. It's the numeric prefix of the OAuth client id.
+const APP_ID = CLIENT_ID ? CLIENT_ID.split('-')[0] : undefined
+
 // Minimal ambient access to the Google globals (no @types needed).
 type AnyObj = Record<string, unknown>
 function g(): AnyObj {
@@ -64,9 +68,14 @@ async function getToken(): Promise<string> {
   const now = Date.now()
   if (tokenCache && tokenCache.exp > now + 60_000) return tokenCache.token
   await ensureGis()
-  const token = await requestAccessToken()
-  tokenCache = { token, exp: now + 55 * 60 * 1000 } // GIS tokens last ~1h
+  const { token, expiresIn } = await requestAccessToken()
+  tokenCache = { token, exp: now + expiresIn * 1000 }
   return token
+}
+
+/** Drop the cached token (e.g. after a 401) so the next call re-auths. */
+function clearToken(): void {
+  tokenCache = null
 }
 
 /** "Connect account": run the Google sign-in/consent flow up front so the
@@ -79,7 +88,7 @@ export async function connectGoogleDrive(): Promise<void> {
 }
 
 /** Open the GIS consent flow and resolve an access token (drive.file). */
-function requestAccessToken(): Promise<string> {
+function requestAccessToken(): Promise<{ token: string; expiresIn: number }> {
   return new Promise((resolve, reject) => {
     const oauth2 = (g().accounts as AnyObj | undefined)?.oauth2 as AnyObj | undefined
     if (!oauth2) return reject(new Error('Google Identity Services not loaded'))
@@ -87,8 +96,8 @@ function requestAccessToken(): Promise<string> {
     const client = initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPE,
-      callback: (resp: { access_token?: string; error?: string }) => {
-        if (resp.access_token) resolve(resp.access_token)
+      callback: (resp: { access_token?: string; expires_in?: number; error?: string }) => {
+        if (resp.access_token) resolve({ token: resp.access_token, expiresIn: resp.expires_in ?? 3600 })
         else reject(new Error(resp.error || 'Authorization was cancelled'))
       },
     })
@@ -110,11 +119,16 @@ function showPicker(token: string): Promise<Array<{ id: string; parentId?: strin
     chain('addView', view)
     chain('setOAuthToken', token)
     if (API_KEY) chain('setDeveloperKey', API_KEY)
+    if (APP_ID) chain('setAppId', APP_ID)
     chain('enableFeature', (picker.Feature as AnyObj).MULTISELECT_ENABLED)
     chain('setCallback', (data: AnyObj) => {
       const Response = picker.Response as AnyObj
       const Action = picker.Action as AnyObj
-      if (data[Response.ACTION as string] !== Action.PICKED) return
+      const action = data[Response.ACTION as string]
+      // Resolve empty on cancel/close so the await never hangs; ignore transient
+      // actions (LOADED) which fire on open.
+      if (action === (Action as AnyObj).CANCEL) return resolve([])
+      if (action !== (Action as AnyObj).PICKED) return
       const Doc = picker.Document as AnyObj
       const docs = (data[Response.DOCUMENTS as string] as AnyObj[]) ?? []
       resolve(
@@ -139,22 +153,40 @@ interface DriveMeta {
   videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string }
 }
 
+/** Log a failed Drive REST call so a first real connect has diagnostics instead
+ *  of silently importing nothing. Clears the token on 401 so the next call re-auths. */
+async function logDriveError(label: string, res: Response): Promise<void> {
+  if (res.status === 401) clearToken()
+  let body = ''
+  try {
+    body = await res.text()
+  } catch {
+    /* ignore */
+  }
+  console.error(`[drive] ${label} → ${res.status} ${res.statusText}`, body.slice(0, 300))
+}
+
 async function fileMeta(id: string, token: string): Promise<DriveMeta | null> {
   const fields =
     'id,name,mimeType,size,parents,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis)'
   const url = `https://www.googleapis.com/drive/v3/files/${id}?fields=${encodeURIComponent(fields)}&supportsAllDrives=true`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) return null
+  if (!res.ok) {
+    await logDriveError(`files.get ${id}`, res)
+    return null
+  }
   return (await res.json()) as DriveMeta
 }
 
 /** Best-effort immediate parent folder name (enough for channel detection).
- *  drive.file may not grant the parent, so this can come back empty. */
+ *  Under drive.file the parent often isn't granted, so this commonly returns ''
+ *  for per-file picks — channel then falls back to the filename. The folder-pick
+ *  path (pickFolderFromGoogleDrive) gets the name reliably from the picked folder. */
 async function folderName(parentId: string | undefined, token: string): Promise<string> {
   if (!parentId) return ''
   const url = `https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) return ''
+  if (!res.ok) return '' // expected under drive.file; not an error worth logging
   const j = (await res.json()) as { name?: string }
   return j.name ?? ''
 }
@@ -213,10 +245,13 @@ function showFolderPicker(token: string): Promise<{ id: string; name: string } |
     chain('addView', view)
     chain('setOAuthToken', token)
     if (API_KEY) chain('setDeveloperKey', API_KEY)
+    if (APP_ID) chain('setAppId', APP_ID)
     chain('setCallback', (data: AnyObj) => {
       const Response = picker.Response as AnyObj
       const Action = picker.Action as AnyObj
-      if (data[Response.ACTION as string] !== Action.PICKED) return
+      const action = data[Response.ACTION as string]
+      if (action === (Action as AnyObj).CANCEL) return resolve(null)
+      if (action !== (Action as AnyObj).PICKED) return
       const Doc = picker.Document as AnyObj
       const docs = (data[Response.DOCUMENTS as string] as AnyObj[]) ?? []
       const d = docs[0]
@@ -234,7 +269,10 @@ async function listFolder(folderId: string, token: string): Promise<DriveMeta[]>
   const q = `'${folderId}' in parents and trashed = false`
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent(fields)}&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) return []
+  if (!res.ok) {
+    await logDriveError(`files.list ${folderId}`, res)
+    return []
+  }
   const j = (await res.json()) as { files?: DriveMeta[] }
   return j.files ?? []
 }

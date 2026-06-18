@@ -36,6 +36,9 @@ interface Alias {
   paid?: ChannelId
   /** Full platform word → high confidence; short alias → lower. */
   strong?: boolean
+  /** Ambiguous alias (e.g. 'x') that must match a FOLDER token, never a
+   *  filename token — so "Mockups x Final.png" doesn't get routed to X. */
+  strict?: boolean
 }
 
 // Order matters only for confidence (strong wins); channels are de-duped.
@@ -48,7 +51,7 @@ const ALIASES: Alias[] = [
   { words: ['fb'], base: 'facebook', paid: 'meta-ads' },
   { words: ['meta'], paid: 'meta-ads', base: 'meta-ads', strong: true },
   { words: ['twitter'], base: 'x', paid: 'x-ads', strong: true },
-  { words: ['x'], base: 'x', paid: 'x-ads' },
+  { words: ['x'], base: 'x', paid: 'x-ads', strict: true },
   { words: ['tiktok'], base: 'tiktok', paid: 'tiktok-ads', strong: true },
   { words: ['tt'], base: 'tiktok', paid: 'tiktok-ads' },
   { words: ['youtube'], base: 'youtube', paid: 'youtube-ads', strong: true },
@@ -76,9 +79,10 @@ const ALL_CHANNELS = Object.keys(CHANNELS) as ChannelId[]
 /**
  * Tokenize a path/name into a set of candidate words to match aliases against.
  * Includes: raw separator-split tokens ('YouTube' → 'youtube'), camelCase splits
- * ('liCarousel' → 'li','carousel'), adjacent bigrams ('Lead Magnets' →
- * 'leadmagnets'), and singular forms ('ads' → 'ad', 'magnets' → 'magnet') so
- * two-word and pluralized folder names still resolve.
+ * ('liCarousel' → 'li','carousel'), and adjacent bigrams + their singular form
+ * ('Lead Magnets' → 'leadmagnets' → 'leadmagnet') so two-word folder names
+ * resolve. Single tokens are deliberately NOT singularized — that would let a
+ * "Pins" folder collide with the 'pin' alias.
  */
 function tokenize(s: string): string[] {
   const raw = s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
@@ -88,8 +92,11 @@ function tokenize(s: string): string[] {
     .split(/[^a-z0-9]+/)
     .filter(Boolean)
   const out = new Set<string>([...raw, ...camel])
-  for (let i = 0; i < raw.length - 1; i++) out.add(raw[i] + raw[i + 1])
-  for (const t of [...out]) if (t.length > 2 && t.endsWith('s')) out.add(t.slice(0, -1))
+  for (let i = 0; i < raw.length - 1; i++) {
+    const bigram = raw[i] + raw[i + 1]
+    out.add(bigram)
+    if (bigram.length > 3 && bigram.endsWith('s')) out.add(bigram.slice(0, -1))
+  }
   return [...out]
 }
 
@@ -163,17 +170,34 @@ function typeFor(channel: ChannelId, family: Family, asset: Asset): string {
       break
   }
   for (const c of candidates) if (isValidType(channel, c)) return c
+  // Media-appropriate safety net before the channel's primary type — which may
+  // be video-only (e.g. tiktok-ads → 'in-feed'), so a still image must not fall
+  // through to it.
+  const generic = isVideo
+    ? ['video', 'reel', 'short', 'in-feed', 'long-form']
+    : ['single-image', 'image', 'feed', 'standard', 'carousel', 'photo', 'idea', 'article']
+  for (const c of generic) if (isValidType(channel, c)) return c
+  if (isValidType(channel, 'other')) return 'other'
   return primaryTypeKey(channel)
 }
 
-/** Resolve channels named by folder/filename tokens, paid-aware, media-filtered. */
-function resolveChannels(tokens: string[], asset: Asset): { channels: ChannelId[]; strong: boolean } {
-  const tokenSet = new Set(tokens)
-  const paid = tokens.some((t) => PAID_TOKENS.has(t))
+/** Stable key for grouping carousel slides: folder-scoped so two unrelated
+ *  camera-roll exports in different folders can't collide. */
+function stemKey(asset: Asset): string {
+  return `${asset.folderPath ?? ''}::${stem(asset.name)}`
+}
+
+/** Resolve channels named by folder/filename tokens, paid-aware, media-filtered.
+ *  Strict aliases ('x') only match FOLDER tokens, never filename tokens. */
+function resolveChannels(asset: Asset): { channels: ChannelId[]; strong: boolean } {
+  const folderTokens = new Set(tokenize(asset.folderPath ?? ''))
+  const allTokens = new Set(tokenize(`${asset.folderPath ?? ''} ${asset.name}`))
+  const paid = [...allTokens].some((t) => PAID_TOKENS.has(t))
   const found: ChannelId[] = []
   let strong = false
   for (const a of ALIASES) {
-    if (!a.words.some((w) => tokenSet.has(w))) continue
+    const pool = a.strict ? folderTokens : allTokens
+    if (!a.words.some((w) => pool.has(w))) continue
     const ch = paid ? (a.paid ?? a.base) : (a.base ?? a.paid)
     if (ch && !found.includes(ch)) {
       found.push(ch)
@@ -185,13 +209,11 @@ function resolveChannels(tokens: string[], asset: Asset): { channels: ChannelId[
 }
 
 function classifyOne(asset: Asset, stemCounts: Map<string, number>): Asset {
-  const tokens = tokenize(`${asset.folderPath ?? ''} ${asset.name}`)
-  const tokenSet = new Set(tokens)
+  const tokenSet = new Set(tokenize(`${asset.folderPath ?? ''} ${asset.name}`))
+  const sharesStem =
+    asset.mediaType === 'image' && stem(asset.name).length >= 4 && (stemCounts.get(stemKey(asset)) ?? 0) >= 2
   const isCarousel =
-    tokenSet.has('carousel') ||
-    tokenSet.has('slide') ||
-    tokenSet.has('slides') ||
-    (asset.mediaType === 'image' && (stemCounts.get(stem(asset.name)) ?? 0) >= 2)
+    tokenSet.has('carousel') || tokenSet.has('slide') || tokenSet.has('slides') || sharesStem
   const family: Family = isCarousel ? 'carousel' : formatFamily(asset)
 
   const suggestedTypeFor: Partial<Record<ChannelId, string>> = {}
@@ -199,7 +221,7 @@ function classifyOne(asset: Asset, stemCounts: Map<string, number>): Asset {
     if (channelAccepts(ch, asset.mediaType)) suggestedTypeFor[ch] = typeFor(ch, family, asset)
   }
 
-  const { channels, strong } = resolveChannels(tokens, asset)
+  const { channels, strong } = resolveChannels(asset)
   const hasChannel = channels.length > 0
   return {
     ...asset,
@@ -216,8 +238,8 @@ export function classifyAssets(assets: Asset[]): Asset[] {
   const stemCounts = new Map<string, number>()
   for (const a of assets) {
     if (a.mediaType !== 'image') continue
-    const s = stem(a.name)
-    if (s) stemCounts.set(s, (stemCounts.get(s) ?? 0) + 1)
+    if (stem(a.name).length < 4) continue // skip 'img', 'dsc' camera-roll stems
+    stemCounts.set(stemKey(a), (stemCounts.get(stemKey(a)) ?? 0) + 1)
   }
   return assets.map((a) => classifyOne(a, stemCounts))
 }
