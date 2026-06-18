@@ -4,7 +4,6 @@ const VIEWS = [
   { key: 'grid', label: '▦ Grid' },
   { key: 'calendar', label: '◷ Calendar' },
   { key: 'flow', label: '⇄ Flow' },
-  { key: 'insights', label: '◧ Insights' },
 ] as const
 
 export function ViewToggle() {

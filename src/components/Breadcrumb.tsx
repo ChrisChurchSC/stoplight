@@ -11,6 +11,8 @@ export function Breadcrumb() {
   const setQuery = useTrafficStore((s) => s.setQuery)
   const icpOpen = useTrafficStore((s) => s.icpOpen)
   const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
+  const view = useTrafficStore((s) => s.view)
+  const setView = useTrafficStore((s) => s.setView)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const overview = clientFilter === 'all'
@@ -23,20 +25,48 @@ export function Breadcrumb() {
 
   return (
     <div className="breadcrumb">
-      {overview ? (
-        <span className="crumb active">All clients</span>
-      ) : (
-        <button className="crumb crumb-link" onClick={() => setClientFilter('all')}>
-          All clients
-        </button>
-      )}
-      {!overview && (
-        <>
-          <span className="crumb-sep">/</span>
-          <span className="crumb active">{clientFilter}</span>
-          <span className="crumb-sep">/</span>
-          <span className="crumb">{campaignFilter === 'all' ? 'All campaigns' : campaignFilter}</span>
+      <div className="bc-left">
+        {overview ? (
+          <span className="crumb active">All clients</span>
+        ) : (
+          <button className="crumb crumb-link" onClick={() => setClientFilter('all')}>
+            All clients
+          </button>
+        )}
+        {!overview && (
+          <>
+            <span className="crumb-sep">/</span>
+            <span className="crumb active">{clientFilter}</span>
+            <span className="crumb-sep">/</span>
+            <span className="crumb">{campaignFilter === 'all' ? 'All campaigns' : campaignFilter}</span>
+          </>
+        )}
+      </div>
 
+      {!overview && (
+        <div className="bc-center">
+          <div className="toolbar-search">
+            <span className="search-ico">⌕</span>
+            <input
+              value={query}
+              placeholder="Search assets…"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="bc-right">
+        {!overview && (
+          <button
+            className={`btn sm${view === 'insights' ? ' primary' : ''}`}
+            onClick={() => setView(view === 'insights' ? 'grid' : 'insights')}
+            title="Insights"
+          >
+            ◧ Insights
+          </button>
+        )}
+        {!overview && (
           <button
             className={`btn sm${icpOpen ? ' primary' : ''}`}
             onClick={() => setIcpOpen(!icpOpen)}
@@ -44,35 +74,21 @@ export function Breadcrumb() {
           >
             ◎ ICP
           </button>
-        </>
-      )}
-
-      <span className="spacer" />
-
-      {!overview && (
-        <div className="toolbar-search">
-          <span className="search-ico">⌕</span>
-          <input
-            value={query}
-            placeholder="Search assets…"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-      )}
-
-      <button className="btn sm primary" onClick={() => inputRef.current?.click()}>
-        + Add assets
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        hidden
-        onChange={(e) => {
-          onFiles(e.target.files)
-          e.target.value = ''
-        }}
-      />
+        )}
+        <button className="btn sm primary" onClick={() => inputRef.current?.click()}>
+          + Add assets
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            onFiles(e.target.files)
+            e.target.value = ''
+          }}
+        />
+      </div>
     </div>
   )
 }
