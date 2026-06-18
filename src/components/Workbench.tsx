@@ -68,7 +68,12 @@ export function Workbench() {
               {!overview && <CampaignTabs />}
 
               {overview ? (
-                <ClientsOverview />
+                <>
+                  {/* Show freshly-ingested assets here too — otherwise an upload
+                      from the home overview gives no visible feedback. */}
+                  <IngestTray />
+                  <ClientsOverview />
+                </>
               ) : (
                 <>
                   <IngestTray />
