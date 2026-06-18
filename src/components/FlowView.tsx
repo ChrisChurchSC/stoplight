@@ -61,6 +61,7 @@ export function FlowView() {
         if (c.dataset.name && !byName.has(c.dataset.name)) byName.set(c.dataset.name, c)
       }
       const next: Edge[] = []
+      const linked = new Set<string>()
       for (const r of view) {
         if (!r.linksTo) continue
         const src = byId.get(r.id)
@@ -73,6 +74,7 @@ export function FlowView() {
         const back = t.right <= s.left + 1
         const targetRow = rows.find((x) => x.assetName === r.linksTo)
         const h = targetRow ? handoffFor(r, targetRow) : { level: 'weak' as const, reason: '' }
+        linked.add(r.id)
         next.push({
           key: r.id,
           sourceId: r.id,
@@ -87,10 +89,9 @@ export function FlowView() {
           y2: t.top + t.height / 2 - base.top,
         })
       }
-      // No explicit per-asset links (e.g. a wizard-seeded campaign): connect each
-      // asset forward to the next populated funnel stage so the individual assets
-      // read as connected.
-      if (next.length === 0) {
+      // Connect any asset WITHOUT an explicit link forward to the next populated
+      // stage (preferring its landing page) so every asset reads as connected.
+      {
         const order = FUNNEL_STAGES.map((s) => s.stage)
         const byStage = new Map<FunnelStage, TrafficRow[]>()
         for (const r of view) {
@@ -103,18 +104,20 @@ export function FlowView() {
           list.sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))
         const populated = order.filter((st) => (byStage.get(st)?.length ?? 0) > 0)
         for (let i = 0; i < populated.length - 1; i++) {
-          const toFirst = byStage.get(populated[i + 1])![0]
-          const tgt = byId.get(toFirst.id)
+          const nextRows = byStage.get(populated[i + 1])!
+          const toTarget = nextRows.find((r) => r.channel === 'landing-page') ?? nextRows[0]
+          const tgt = byId.get(toTarget.id)
           if (!tgt) continue
           const t = tgt.getBoundingClientRect()
           for (const fr of byStage.get(populated[i])!) {
+            if (linked.has(fr.id)) continue
             const src = byId.get(fr.id)
             if (!src) continue
             const s = src.getBoundingClientRect()
             next.push({
               key: `auto-${fr.id}`,
               sourceId: fr.id,
-              targetName: toFirst.assetName,
+              targetName: toTarget.assetName,
               level: 'coherent',
               reason: '',
               back: false,

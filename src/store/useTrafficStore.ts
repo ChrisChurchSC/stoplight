@@ -463,6 +463,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         })
       }
     })
+    // Emails drive to a page: link each email to the campaign's landing page.
+    const page =
+      rows.find((r) => r.channel === 'landing-page' && r.assetType === 'lead-capture') ??
+      rows.find((r) => r.channel === 'landing-page')
+    if (page) for (const r of rows) if (r.channel === 'email') r.linksTo = page.assetName
     // Split the media budget evenly across the paid rows for the flight.
     const budget = opts?.mediaBudget
     if (budget && budget > 0) {
