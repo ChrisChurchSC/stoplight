@@ -8,6 +8,7 @@ import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign } from '../domain/clients'
 import type { Deliverable } from '../domain/strategyAssets'
+import { CHANNELS } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
 import {
   pickFromGoogleDrive,
@@ -131,8 +132,13 @@ interface TrafficState {
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
-  /** Seed the spreadsheet with draft rows for a strategy's needed assets. */
-  seedCampaignAssets: (campaign: string, deliverables: Deliverable[]) => Promise<void>
+  /** Seed the spreadsheet with draft rows for a strategy's needed assets,
+   *  optionally splitting a media budget across the paid rows over the flight. */
+  seedCampaignAssets: (
+    campaign: string,
+    deliverables: Deliverable[],
+    opts?: { mediaBudget?: number; endDate?: string },
+  ) => Promise<void>
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -386,7 +392,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
-  seedCampaignAssets: async (campaign, deliverables) => {
+  seedCampaignAssets: async (campaign, deliverables, opts) => {
     if (!deliverables.length) return
     // Synthesize one asset per deliverable, carrying its channel + intended type,
     // then run them through the scheduler so each gets the right type + a slot.
@@ -400,7 +406,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       suggestedTypeFor: { [d.channel]: d.assetType },
       createdAt: stamp,
     }))
-    const rows = proposeSchedule(assets).map((r) => ({ ...r, campaign }))
+    let rows = proposeSchedule(assets).map((r) => ({ ...r, campaign }))
+    // Split the media budget evenly across the paid rows for the flight.
+    const budget = opts?.mediaBudget
+    if (budget && budget > 0) {
+      const paidIds = rows.filter((r) => CHANNELS[r.channel].kind === 'paid').map((r) => r.id)
+      if (paidIds.length) {
+        const per = Math.round(budget / paidIds.length)
+        const paid = new Set(paidIds)
+        rows = rows.map((r) =>
+          paid.has(r.id)
+            ? { ...r, budget: { amount: per, type: 'lifetime' as const, endDate: opts?.endDate } }
+            : r,
+        )
+      }
+    }
     await sheet.append(rows)
     await get().refresh()
   },

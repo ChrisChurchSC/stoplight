@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GTM_STRATEGIES, type GtmStrategy } from '../domain/strategies'
+import { GTM_STRATEGIES, mediaSharePct, type GtmStrategy } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { typeLabel } from '../domain/channelAssetTypes'
@@ -26,8 +26,15 @@ export function NewClientWizard({ onClose }: Props) {
   const [campaignName, setCampaignName] = useState('')
   const [objective, setObjective] = useState('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [durationWeeks, setDurationWeeks] = useState(8)
+  const [budget, setBudget] = useState('')
 
   const deliverables = strategy ? STRATEGY_ASSETS[strategy] ?? [] : []
+  const chosen = deliverables.filter((_, i) => selected.has(i))
+  const paidChosen = chosen.filter((d) => CHANNELS[d.channel].kind === 'paid')
+  const needsBudget = paidChosen.length > 0
+  const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
+  const mediaPct = selectedStrategy ? mediaSharePct(selectedStrategy) : null
   const toggleAsset = (i: number) =>
     setSelected((prev) => {
       const next = new Set(prev)
@@ -46,24 +53,38 @@ export function NewClientWizard({ onClose }: Props) {
     }
   }
 
+  // Content/people-led motions run longer; set a sensible default flight.
+  const LONG_HORIZON = new Set(['content-seo', 'community', 'lifecycle', 'bowtie'])
+
   const chooseStrategy = (s: GtmStrategy) => {
     setStrategy(s.key)
     if (!campaignName.trim()) setCampaignName(`${s.name} — ${name || 'Campaign'}`)
     // Pre-select all of the strategy's recommended assets (editable below).
     setSelected(new Set((STRATEGY_ASSETS[s.key] ?? []).map((_, i) => i)))
     if (!objective.trim()) setObjective(s.bestFor)
+    setDurationWeeks(LONG_HORIZON.has(s.key) ? 12 : 8)
   }
-
-  const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
 
   const create = () => {
     const client = name.trim()
     if (!client || !strategy || !campaignName.trim()) return
     const strategyName = selectedStrategy?.name ?? strategy
     const campaign = campaignName.trim()
+    const budgetNum = needsBudget ? Number(budget) || 0 : 0
+    const endDate =
+      durationWeeks > 0
+        ? new Date(Date.now() + durationWeeks * 7 * 86_400_000).toISOString().slice(0, 10)
+        : undefined
     addClient(client)
-    addCampaign({ name: campaign, client, strategy: strategyName, objective: objective.trim() || undefined })
-    void seedCampaignAssets(campaign, deliverables.filter((_, i) => selected.has(i)))
+    addCampaign({
+      name: campaign,
+      client,
+      strategy: strategyName,
+      objective: objective.trim() || undefined,
+      durationWeeks: durationWeeks || undefined,
+      mediaBudget: budgetNum || undefined,
+    })
+    void seedCampaignAssets(campaign, chosen, { mediaBudget: budgetNum, endDate })
     setClientFilter(client)
     setCampaignFilter(campaign)
     onClose()
@@ -163,6 +184,20 @@ export function NewClientWizard({ onClose }: Props) {
               onChange={(e) => setCampaignName(e.target.value)}
             />
 
+            <label className="wiz-label">Duration</label>
+            <select
+              className="wiz-input"
+              value={durationWeeks}
+              onChange={(e) => setDurationWeeks(Number(e.target.value))}
+            >
+              <option value={2}>2 weeks</option>
+              <option value={4}>4 weeks</option>
+              <option value={8}>8 weeks</option>
+              <option value={12}>12 weeks</option>
+              <option value={26}>6 months</option>
+              <option value={0}>Ongoing</option>
+            </select>
+
             <label className="wiz-label">Objective (optional)</label>
             <textarea
               className="wiz-input wiz-textarea"
@@ -185,6 +220,42 @@ export function NewClientWizard({ onClose }: Props) {
                     </label>
                   ))}
                 </div>
+              </>
+            )}
+
+            {selectedStrategy && (
+              <>
+                <label className="wiz-label">Media budget</label>
+                {needsBudget ? (
+                  <div className="wiz-budget on">
+                    <div className="wiz-budget-rec">
+                      ✓ Recommended —{' '}
+                      {mediaPct != null
+                        ? `${selectedStrategy.name} runs ~${mediaPct}% paid media`
+                        : `${selectedStrategy.name} runs paid media`}
+                      . Paid channels here: {paidChosen.map((d) => CHANNELS[d.channel].label).join(', ')}.
+                    </div>
+                    <div className="wiz-budget-input">
+                      <span>$</span>
+                      <input
+                        value={budget}
+                        inputMode="numeric"
+                        placeholder={`Total media budget${durationWeeks ? ` over ${durationWeeks} wks` : ''} (optional)`}
+                        onChange={(e) => setBudget(e.target.value.replace(/[^0-9]/g, ''))}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="wiz-budget">
+                    <div className="wiz-budget-opt">
+                      No paid channels in this plan — a media budget isn't needed
+                      {mediaPct != null && mediaPct <= 20
+                        ? `. ${selectedStrategy.name} is content/people-led (~${mediaPct}% paid)`
+                        : ''}
+                      .
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

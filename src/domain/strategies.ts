@@ -17,6 +17,13 @@ export interface GtmStrategy {
   mediaContent: string
 }
 
+/** The paid-media share (%) from a strategy's "media : content" split, or null
+ *  when it has no fixed split (e.g. AARRR "follows the underlying motion"). */
+export function mediaSharePct(s: GtmStrategy): number | null {
+  const m = s.mediaContent.match(/(\d+)\s*:\s*(\d+)/)
+  return m ? Number(m[1]) : null
+}
+
 export const GTM_STRATEGIES: GtmStrategy[] = [
   {
     key: 'demand-gen',

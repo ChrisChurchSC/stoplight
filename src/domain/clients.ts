@@ -17,6 +17,10 @@ export interface Campaign {
   client: string
   strategy: string
   objective?: string
+  /** Flight length in weeks; omitted/0 = ongoing. */
+  durationWeeks?: number
+  /** Total paid-media budget for the flight (omitted when organic-only). */
+  mediaBudget?: number
 }
 
 // Campaigns created at runtime (the wizard) register here so clientForCampaign
