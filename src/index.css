@@ -2106,14 +2106,33 @@ button {
   font-size: 13px;
   color: var(--text-muted);
 }
+.journey-graph {
+  position: relative;
+}
+.journey-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 3;
+}
+.journey-edge {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  opacity: 0.5;
+}
 .journey-rail {
   display: flex;
-  align-items: stretch;
-  min-height: 0;
+  align-items: flex-start;
+  gap: 26px;
+  position: relative;
+  z-index: 1;
 }
 .journey-station-wrap {
   display: flex;
-  align-items: stretch;
   flex: 1;
   min-width: 0;
 }
@@ -2201,8 +2220,6 @@ button {
   flex-direction: column;
   gap: 7px;
   padding: 10px;
-  overflow-y: auto;
-  flex: 1;
 }
 .flow-empty {
   color: var(--text-faint);
