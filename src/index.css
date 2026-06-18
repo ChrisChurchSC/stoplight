@@ -2122,12 +2122,20 @@ button {
   fill: none;
   stroke: var(--accent);
   stroke-width: 1.6;
-  opacity: 0.5;
+  opacity: 0.3;
+  transition: opacity 0.12s ease, stroke-width 0.12s ease;
+}
+.journey-edge.dim {
+  opacity: 0.07;
+}
+.journey-edge.active {
+  opacity: 0.95;
+  stroke-width: 2.4;
 }
 .journey-rail {
   display: flex;
   align-items: flex-start;
-  gap: 26px;
+  gap: 64px;
   position: relative;
   z-index: 1;
 }

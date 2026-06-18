@@ -18,6 +18,8 @@ const STATUS_COLOR: Record<RowStatus, string> = {
 
 interface Edge {
   key: string
+  sourceId: string
+  targetName: string
   x1: number
   y1: number
   x2: number
@@ -36,6 +38,7 @@ export function FlowView() {
 
   const graphRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState<Edge[]>([])
+  const [hover, setHover] = useState<{ id: string; name: string } | null>(null)
 
   // Recompute connector geometry when the data or layout changes.
   const linkKey = view.map((r) => `${r.id}:${r.linksTo ?? ''}`).join('|')
@@ -51,20 +54,34 @@ export function FlowView() {
         if (c.dataset.id) byId.set(c.dataset.id, c)
         if (c.dataset.name && !byName.has(c.dataset.name)) byName.set(c.dataset.name, c)
       }
-      const next: Edge[] = []
+      // Group links by destination so we can fan the incoming lines across the
+      // target card's edge instead of converging on a single point.
+      const groups = new Map<HTMLElement, TrafficRow[]>()
       for (const r of view) {
         if (!r.linksTo) continue
         const src = byId.get(r.id)
         const tgt = byName.get(r.linksTo)
         if (!src || !tgt || src === tgt) continue
-        const s = src.getBoundingClientRect()
+        const list = groups.get(tgt)
+        if (list) list.push(r)
+        else groups.set(tgt, [r])
+      }
+      const next: Edge[] = []
+      for (const [tgt, list] of groups) {
         const t = tgt.getBoundingClientRect()
-        next.push({
-          key: r.id,
-          x1: s.right - base.left,
-          y1: s.top + s.height / 2 - base.top,
-          x2: t.left - base.left,
-          y2: t.top + t.height / 2 - base.top,
+        list.forEach((r, k) => {
+          const src = byId.get(r.id)!
+          const s = src.getBoundingClientRect()
+          const frac = (k + 1) / (list.length + 1)
+          next.push({
+            key: r.id,
+            sourceId: r.id,
+            targetName: r.linksTo!,
+            x1: s.right - base.left,
+            y1: s.top + s.height / 2 - base.top,
+            x2: t.left - base.left,
+            y2: t.top + t.height * frac - base.top,
+          })
         })
       }
       setEdges(next)
@@ -97,6 +114,8 @@ export function FlowView() {
         data-name={row.assetName}
         style={{ borderLeftColor: STATUS_COLOR[row.status] }}
         onClick={() => openReview(row.id)}
+        onMouseEnter={() => setHover({ id: row.id, name: row.assetName })}
+        onMouseLeave={() => setHover(null)}
         title={`${CHANNELS[row.channel].label} · ${row.assetName}`}
       >
         <div className="flow-card-head">
@@ -159,10 +178,12 @@ export function FlowView() {
             </defs>
             {edges.map((e) => {
               const dx = Math.max(40, (e.x2 - e.x1) / 2)
+              const active = hover && (hover.id === e.sourceId || hover.name === e.targetName)
+              const cls = hover ? (active ? ' active' : ' dim') : ''
               return (
                 <path
                   key={e.key}
-                  className="journey-edge"
+                  className={`journey-edge${cls}`}
                   d={`M ${e.x1} ${e.y1} C ${e.x1 + dx} ${e.y1}, ${e.x2 - dx} ${e.y2}, ${e.x2} ${e.y2}`}
                   markerEnd="url(#journey-arrow)"
                 />
