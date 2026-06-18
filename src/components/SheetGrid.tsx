@@ -406,18 +406,28 @@ export function SheetGrid() {
                   </td>
 
                   <td>
-                    <select
-                      className={`cell-select${typeValid ? '' : ' unset'}`}
-                      value={typeValid ? row.assetType : ''}
-                      onChange={(e) => updateRow(row.id, { assetType: e.target.value })}
-                    >
-                      {!typeValid && <option value="">Select…</option>}
-                      {typesFor(row.channel).map((x) => (
-                        <option key={x.value} value={x.value}>
-                          {x.label}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="type-cell">
+                      {(row.classifySource === 'path' || row.classifySource === 'ai') && (
+                        <span
+                          className="auto-dot"
+                          title={`Channel auto-organized from ${
+                            row.classifySource === 'ai' ? 'Claude' : 'folder & name'
+                          }`}
+                        />
+                      )}
+                      <select
+                        className={`cell-select${typeValid ? '' : ' unset'}`}
+                        value={typeValid ? row.assetType : ''}
+                        onChange={(e) => updateRow(row.id, { assetType: e.target.value })}
+                      >
+                        {!typeValid && <option value="">Select…</option>}
+                        {typesFor(row.channel).map((x) => (
+                          <option key={x.value} value={x.value}>
+                            {x.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </td>
 
                   <td>

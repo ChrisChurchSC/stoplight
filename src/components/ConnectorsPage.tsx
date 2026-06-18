@@ -1,3 +1,6 @@
+import { isGoogleDriveConfigured } from '../adapters/drive'
+import { useTrafficStore } from '../store/useTrafficStore'
+
 interface Connector {
   name: string
   purpose: string
@@ -6,6 +9,14 @@ interface Connector {
 }
 
 const CONNECTORS: Connector[] = [
+  {
+    name: 'Google Drive',
+    purpose: 'Asset import & auto-organize',
+    status: isGoogleDriveConfigured ? 'config' : 'mock',
+    detail: isGoogleDriveConfigured
+      ? 'Connected via OAuth (drive.file scope, no key stored). Folders → channel + type through the same classifier as local uploads.'
+      : 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY to connect a real Drive (drive.file scope, no app secret).',
+  },
   { name: 'Clay', purpose: 'ICP enrichment', status: 'mock', detail: 'Sample ICP pull. Swap MockIcpSource for the Clay MCP.' },
   { name: 'Anthropic (Claude)', purpose: 'ICP messaging review', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real review; heuristic fallback otherwise.' },
   { name: 'Attio', purpose: 'Attribution & closed-won', status: 'mock', detail: 'MockAttioAdapter. Swap for the Attio MCP (contacts + deals).' },
@@ -23,6 +34,10 @@ const STATUS_LABEL: Record<Connector['status'], string> = {
 }
 
 export function ConnectorsPage() {
+  const importFromDrive = useTrafficStore((s) => s.importFromDrive)
+  const importFolderFromDrive = useTrafficStore((s) => s.importFolderFromDrive)
+  const connectDrive = useTrafficStore((s) => s.connectDrive)
+  const driveConnected = useTrafficStore((s) => s.driveConnected)
   return (
     <div className="page">
       <div className="page-head">
@@ -39,9 +54,29 @@ export function ConnectorsPage() {
               </div>
               <div className="settings-card-purpose">{c.purpose}</div>
               <div className="settings-card-detail">{c.detail}</div>
-              <button className="btn sm settings-card-btn" disabled>
-                {c.status === 'connected' ? 'Manage' : 'Connect'}
-              </button>
+              {c.name === 'Google Drive' ? (
+                <div className="settings-card-actions">
+                  {driveConnected ? (
+                    <span className="drive-connected">
+                      ✓ {isGoogleDriveConfigured ? 'Account connected' : 'Demo connected'}
+                    </span>
+                  ) : (
+                    <button className="btn sm settings-card-btn" onClick={() => connectDrive()}>
+                      Connect account
+                    </button>
+                  )}
+                  <button className="btn sm settings-card-btn" onClick={() => importFolderFromDrive()}>
+                    Connect folder
+                  </button>
+                  <button className="btn sm settings-card-btn" onClick={() => importFromDrive()}>
+                    {isGoogleDriveConfigured ? 'Import files' : 'Browse Demo Drive'}
+                  </button>
+                </div>
+              ) : (
+                <button className="btn sm settings-card-btn" disabled>
+                  {c.status === 'connected' ? 'Manage' : 'Connect'}
+                </button>
+              )}
             </div>
           ))}
         </div>

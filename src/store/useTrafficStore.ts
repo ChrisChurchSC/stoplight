@@ -5,6 +5,16 @@ import { publishers as channelPublishers } from '../adapters/publishers/registry
 import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
+import { classifyAssets } from '../lib/classifyAsset'
+import { driveFilesToAssets } from '../lib/driveImport'
+import {
+  pickFromGoogleDrive,
+  pickFolderFromGoogleDrive,
+  connectGoogleDrive,
+  listFolderByUrl,
+  isGoogleDriveConfigured,
+  mockDriveSource,
+} from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
 import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
@@ -27,6 +37,43 @@ function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
 }
 
+// Per-client Google Drive folder links, persisted (clients are derived from
+// rows, so the link can't live on a client record).
+const DRIVE_LINKS_KEY = 'stoplight.driveLinks.v1'
+function loadDriveLinks(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(DRIVE_LINKS_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+function saveDriveLinks(links: Record<string, string>): void {
+  try {
+    localStorage.setItem(DRIVE_LINKS_KEY, JSON.stringify(links))
+  } catch {
+    /* ignore quota / private-mode errors */
+  }
+}
+
+// Explicitly-added clients, persisted. Clients are otherwise derived from rows
+// (campaign → client), so a brand-new client with no assets needs its own list.
+const CLIENTS_KEY = 'stoplight.clients.v1'
+function loadClients(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLIENTS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveClients(list: string[]): void {
+  try {
+    localStorage.setItem(CLIENTS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
 interface TrafficState {
   /** Assets dropped into the tray, not yet trafficked into the sheet. */
   assets: Asset[]
@@ -47,6 +94,15 @@ interface TrafficState {
   page: 'clients' | 'connectors' | 'billing'
   /** ICP & proof side drawer. */
   icpOpen: boolean
+  /** Google Drive / Demo Drive import picker. */
+  drivePickerOpen: boolean
+  /** True once the Drive account is connected (real sign-in, or demo). */
+  driveConnected: boolean
+  /** Per-client saved Google Drive folder link. */
+  driveLinks: Record<string, string>
+  /** Explicitly-added clients (persisted), merged with clients derived from rows. */
+  clientList: string[]
+  addClient: (name: string) => void
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -54,6 +110,20 @@ interface TrafficState {
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights') => void
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
   setIcpOpen: (open: boolean) => void
+  setDrivePickerOpen: (open: boolean) => void
+  /** Connect the Drive account (real sign-in, or demo). */
+  connectDrive: () => Promise<void>
+  /** Entry point for "Import from Drive": opens the real Google Picker when
+   *  configured, else the Demo Drive modal. */
+  importFromDrive: () => Promise<void>
+  /** Pick a whole Drive folder and import its files. */
+  importFolderFromDrive: () => Promise<void>
+  /** Ingest the assets in a Google Drive folder from its link. */
+  ingestDriveFolderUrl: (url: string) => Promise<void>
+  /** Save a Google Drive folder link for a client. */
+  setDriveLink: (client: string, url: string) => void
+  /** Ingest the assets from a client's saved Drive folder link. */
+  ingestDriveLink: (client: string) => Promise<void>
 
   refresh: () => Promise<void>
 
@@ -139,6 +209,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   view: 'grid',
   page: 'clients',
   icpOpen: false,
+  drivePickerOpen: false,
+  driveConnected: false,
+  driveLinks: loadDriveLinks(),
+  clientList: loadClients(),
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -159,6 +233,95 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setView: (view) => set({ view }),
   setPage: (page) => set({ page }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
+  setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
+  connectDrive: async () => {
+    // Demo (no creds): simulate a connected account so the flow is visible.
+    if (!isGoogleDriveConfigured) {
+      set({ driveConnected: true })
+      return
+    }
+    try {
+      await connectGoogleDrive()
+      set({ driveConnected: true })
+    } catch {
+      set({ driveConnected: false })
+    }
+  },
+  importFromDrive: async () => {
+    // Demo Drive (no creds) → in-app fixture modal.
+    if (!isGoogleDriveConfigured) {
+      set({ drivePickerOpen: true })
+      return
+    }
+    // Real Drive → native Google Picker, same pipeline as the demo. A configured
+    // user must NOT be shown the demo fixture on cancel/error (cancel now no-ops
+    // via an empty result); surface real failures to the console instead.
+    try {
+      const files = await pickFromGoogleDrive()
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true })
+        if (get().page !== 'clients') set({ page: 'clients' })
+      }
+    } catch (e) {
+      console.error('[drive] file import failed', e)
+    }
+  },
+  importFolderFromDrive: async () => {
+    // Demo Drive (no creds) → the fixture modal (its folder checkboxes stand in
+    // for folder selection).
+    if (!isGoogleDriveConfigured) {
+      set({ drivePickerOpen: true })
+      return
+    }
+    try {
+      const files = await pickFolderFromGoogleDrive()
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true })
+        if (get().page !== 'clients') set({ page: 'clients' })
+      }
+    } catch (e) {
+      console.error('[drive] folder import failed', e)
+    }
+  },
+  ingestDriveFolderUrl: async (url) => {
+    if (!url.trim()) return
+    try {
+      // Real Drive lists the linked folder (drive.readonly); demo ingests the
+      // fixture so the flow works with no credentials.
+      const files = isGoogleDriveConfigured ? await listFolderByUrl(url) : await mockDriveSource.list()
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true })
+      }
+    } catch (e) {
+      console.error('[drive] folder ingest failed', e)
+    }
+  },
+  setDriveLink: (client, url) =>
+    set((s) => {
+      const driveLinks = { ...s.driveLinks }
+      if (url.trim()) driveLinks[client] = url.trim()
+      else delete driveLinks[client]
+      saveDriveLinks(driveLinks)
+      return { driveLinks }
+    }),
+  ingestDriveLink: async (client) => {
+    const url = get().driveLinks[client]
+    if (!url) return
+    await get().ingestDriveFolderUrl(url)
+    // Scope to the client so the freshly-ingested assets show in its workspace.
+    set({ clientFilter: client })
+  },
+  addClient: (name) =>
+    set((s) => {
+      const n = name.trim()
+      if (!n || s.clientList.includes(n)) return {}
+      const clientList = [...s.clientList, n]
+      saveClients(clientList)
+      return { clientList }
+    }),
 
   refresh: async () => {
     set({ loading: true })
@@ -166,7 +329,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ rows, loading: false })
   },
 
-  addAssets: (assets) => set((s) => ({ assets: [...s.assets, ...assets] })),
+  // Auto-organize each ingested batch to channel + per-channel type before it
+  // hits the staging tray. Batch-aware (carousel slides detected across the
+  // group). De-dupes by id so re-importing the same Drive files (stable ids)
+  // doesn't create duplicate tray cards / rows.
+  addAssets: (assets) =>
+    set((s) => {
+      const have = new Set(s.assets.map((a) => a.id))
+      const fresh = classifyAssets(assets).filter((a) => !have.has(a.id))
+      return { assets: [...s.assets, ...fresh] }
+    }),
 
   updateAsset: (id, patch) =>
     set((s) => ({

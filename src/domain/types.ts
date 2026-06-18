@@ -61,10 +61,29 @@ export interface Asset {
   previewUrl?: string
   /** Inline body for text/markdown assets. */
   body?: string
-  /** Channels the user wants this asset trafficked to. */
+  /** Source MIME type (File.type, or Drive mimeType later). Drives PDF/type heuristics. */
+  mimeType?: string
+  /** Pixel dimensions for image/video, captured client-side on ingest. Feeds
+   *  the aspect-ratio classifier; aspectRatio is derived (width/height), never stored. */
+  width?: number
+  height?: number
+  /** Video duration in seconds (video only). */
+  durationSec?: number
+  /** Folder path the asset came from (Drive); a channel signal. Empty for local drops. */
+  folderPath?: string
+  /** Channels the user wants this asset trafficked to. Pre-toggled by the classifier. */
   channels: ChannelId[]
   /** Per-channel caption/copy override; falls back to a shared default. */
   caption: string
+  /** Auto-suggested asset-type keyed by channel. One asset maps to many channels
+   *  with different type names (a 9:16 video is a Reel on instagram, a Video on
+   *  tiktok, a Short on youtube), so the suggestion is per-channel. Read by the
+   *  scheduler (propose.ts) so the inferred type lands on the row. */
+  suggestedTypeFor?: Partial<Record<ChannelId, string>>
+  /** 0–1 confidence of the channel auto-classification (drives confirm-board bands). */
+  classifyConfidence?: number
+  /** Which layer produced the suggestion. */
+  classifySource?: 'path' | 'heuristic' | 'ai'
   createdAt: number
 }
 
@@ -80,6 +99,9 @@ export interface TrafficRow {
   channel: ChannelId
   /** Channel-specific asset-type category (see channelAssetTypes.ts). */
   assetType?: string
+  /** Carried from the classifier so the grid can flag auto-organized rows. */
+  classifyConfidence?: number
+  classifySource?: 'path' | 'heuristic' | 'ai'
   /** All messaging components, keyed by field (see messaging.ts). The full copy
    *  for the asset — headline, primary text, description, CTA, etc. */
   messaging: Record<string, string>

@@ -18,6 +18,7 @@ import { BillingPage } from './BillingPage'
 import { IcpDrawer } from './IcpDrawer'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
+import { DrivePicker } from './DrivePicker'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -68,7 +69,12 @@ export function Workbench() {
               {!overview && <CampaignTabs />}
 
               {overview ? (
-                <ClientsOverview />
+                <>
+                  {/* Show freshly-ingested assets here too — otherwise an upload
+                      from the home overview gives no visible feedback. */}
+                  <IngestTray />
+                  <ClientsOverview />
+                </>
               ) : (
                 <>
                   <IngestTray />
@@ -98,6 +104,7 @@ export function Workbench() {
       <IcpDrawer />
       <CopyReview />
       <CommentDrawer />
+      <DrivePicker />
     </div>
   )
 }
