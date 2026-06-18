@@ -1767,6 +1767,50 @@ button {
   background: transparent;
 }
 
+/* add-client hero */
+.home-sub {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: -8px 0 18px;
+}
+.home-newclient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px 12px 10px 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.home-newclient-ico {
+  color: var(--accent);
+  font-weight: 700;
+  flex: none;
+}
+.home-newclient input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 15px;
+  background: transparent;
+}
+.home-link {
+  display: inline-block;
+  margin-top: 12px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+.home-link:hover {
+  text-decoration: underline;
+}
+
 /* "+ Add assets" popover (breadcrumb) */
 .bc-add {
   position: relative;

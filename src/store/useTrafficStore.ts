@@ -55,6 +55,25 @@ function saveDriveLinks(links: Record<string, string>): void {
   }
 }
 
+// Explicitly-added clients, persisted. Clients are otherwise derived from rows
+// (campaign → client), so a brand-new client with no assets needs its own list.
+const CLIENTS_KEY = 'stoplight.clients.v1'
+function loadClients(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLIENTS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveClients(list: string[]): void {
+  try {
+    localStorage.setItem(CLIENTS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
 interface TrafficState {
   /** Assets dropped into the tray, not yet trafficked into the sheet. */
   assets: Asset[]
@@ -81,6 +100,9 @@ interface TrafficState {
   driveConnected: boolean
   /** Per-client saved Google Drive folder link. */
   driveLinks: Record<string, string>
+  /** Explicitly-added clients (persisted), merged with clients derived from rows. */
+  clientList: string[]
+  addClient: (name: string) => void
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -190,6 +212,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   drivePickerOpen: false,
   driveConnected: false,
   driveLinks: loadDriveLinks(),
+  clientList: loadClients(),
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -291,6 +314,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Scope to the client so the freshly-ingested assets show in its workspace.
     set({ clientFilter: client })
   },
+  addClient: (name) =>
+    set((s) => {
+      const n = name.trim()
+      if (!n || s.clientList.includes(n)) return {}
+      const clientList = [...s.clientList, n]
+      saveClients(clientList)
+      return { clientList }
+    }),
 
   refresh: async () => {
     set({ loading: true })
