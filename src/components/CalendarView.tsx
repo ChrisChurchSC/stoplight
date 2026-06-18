@@ -105,6 +105,8 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
           const events = (byDay.get(key) ?? []).sort(
             (a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt),
           )
+          const shown = events.slice(0, 3)
+          const more = events.length - shown.length
           return (
             <div
               key={key}
@@ -112,20 +114,31 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
             >
               <div className="cal-daynum">{d.getDate()}</div>
               <div className="cal-events">
-                {events.map((r) => (
+                {shown.map((r) => (
                   <button
                     key={r.id}
                     className="cal-event"
-                    style={{ borderLeftColor: STATUS_COLOR[r.status] }}
                     onClick={() => openReview(r.id)}
                     title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(
                       r.scheduledAt,
                     ).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' })} · ${r.status}`}
                   >
+                    <span className="cal-event-dot" style={{ background: STATUS_COLOR[r.status] }} />
                     <ChannelIcon channel={r.channel} size={12} />
                     <span className="cal-event-name">{r.assetName}</span>
                   </button>
                 ))}
+                {more > 0 && (
+                  <span
+                    className="cal-more"
+                    title={events
+                      .slice(3)
+                      .map((r) => r.assetName)
+                      .join('\n')}
+                  >
+                    +{more} more
+                  </span>
+                )}
               </div>
             </div>
           )
