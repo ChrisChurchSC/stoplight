@@ -7,6 +7,7 @@ import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign } from '../domain/clients'
+import type { Deliverable } from '../domain/strategyAssets'
 import { driveFilesToAssets } from '../lib/driveImport'
 import {
   pickFromGoogleDrive,
@@ -130,6 +131,8 @@ interface TrafficState {
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
+  /** Seed the spreadsheet with draft rows for a strategy's needed assets. */
+  seedCampaignAssets: (campaign: string, deliverables: Deliverable[]) => Promise<void>
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -383,6 +386,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
+  seedCampaignAssets: async (campaign, deliverables) => {
+    if (!deliverables.length) return
+    // Synthesize one asset per deliverable, carrying its channel + intended type,
+    // then run them through the scheduler so each gets the right type + a slot.
+    const stamp = Date.now()
+    const assets: Asset[] = deliverables.map((d, i) => ({
+      id: `seed_${stamp.toString(36)}_${i}`,
+      name: d.label,
+      mediaType: d.media,
+      channels: [d.channel],
+      caption: '',
+      suggestedTypeFor: { [d.channel]: d.assetType },
+      createdAt: stamp,
+    }))
+    const rows = proposeSchedule(assets).map((r) => ({ ...r, campaign }))
+    await sheet.append(rows)
+    await get().refresh()
+  },
 
   refresh: async () => {
     set({ loading: true })

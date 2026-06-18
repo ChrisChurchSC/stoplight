@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { GTM_STRATEGIES } from '../domain/strategies'
+import { GTM_STRATEGIES, type GtmStrategy } from '../domain/strategies'
+import { STRATEGY_ASSETS } from '../domain/strategyAssets'
+import { CHANNELS } from '../domain/channels'
+import { typeLabel } from '../domain/channelAssetTypes'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 interface Props {
@@ -11,6 +14,7 @@ export function NewClientWizard({ onClose }: Props) {
   const loadIcp = useTrafficStore((s) => s.loadIcp)
   const addClient = useTrafficStore((s) => s.addClient)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
 
@@ -21,6 +25,16 @@ export function NewClientWizard({ onClose }: Props) {
   const [strategy, setStrategy] = useState('')
   const [campaignName, setCampaignName] = useState('')
   const [objective, setObjective] = useState('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+
+  const deliverables = strategy ? STRATEGY_ASSETS[strategy] ?? [] : []
+  const toggleAsset = (i: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
 
   const pullIcp = async () => {
     setPullingIcp(true)
@@ -32,9 +46,12 @@ export function NewClientWizard({ onClose }: Props) {
     }
   }
 
-  const chooseStrategy = (s: { key: string; name: string }) => {
+  const chooseStrategy = (s: GtmStrategy) => {
     setStrategy(s.key)
     if (!campaignName.trim()) setCampaignName(`${s.name} — ${name || 'Campaign'}`)
+    // Pre-select all of the strategy's recommended assets (editable below).
+    setSelected(new Set((STRATEGY_ASSETS[s.key] ?? []).map((_, i) => i)))
+    if (!objective.trim()) setObjective(s.bestFor)
   }
 
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
@@ -43,10 +60,12 @@ export function NewClientWizard({ onClose }: Props) {
     const client = name.trim()
     if (!client || !strategy || !campaignName.trim()) return
     const strategyName = selectedStrategy?.name ?? strategy
+    const campaign = campaignName.trim()
     addClient(client)
-    addCampaign({ name: campaignName.trim(), client, strategy: strategyName, objective: objective.trim() || undefined })
+    addCampaign({ name: campaign, client, strategy: strategyName, objective: objective.trim() || undefined })
+    void seedCampaignAssets(campaign, deliverables.filter((_, i) => selected.has(i)))
     setClientFilter(client)
-    setCampaignFilter(campaignName.trim())
+    setCampaignFilter(campaign)
     onClose()
   }
 
@@ -152,10 +171,30 @@ export function NewClientWizard({ onClose }: Props) {
               onChange={(e) => setObjective(e.target.value)}
             />
 
+            {deliverables.length > 0 && (
+              <>
+                <label className="wiz-label">Assets to create ({selected.size})</label>
+                <div className="wiz-assets">
+                  {deliverables.map((d, i) => (
+                    <label key={`${d.label}-${i}`} className={`wiz-asset${selected.has(i) ? ' on' : ''}`}>
+                      <input type="checkbox" checked={selected.has(i)} onChange={() => toggleAsset(i)} />
+                      <span className="wiz-asset-label">{d.label}</span>
+                      <span className="wiz-asset-meta">
+                        {CHANNELS[d.channel].label} · {typeLabel(d.channel, d.assetType)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
             <div className="wiz-foot">
               <button className="btn sm" onClick={() => setStep(1)}>
                 ← Back
               </button>
+              <span className="wiz-hint">
+                {selected.size} draft row{selected.size === 1 ? '' : 's'} → spreadsheet
+              </span>
               <span className="spacer" />
               <button
                 className="btn primary"
