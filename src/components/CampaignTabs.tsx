@@ -37,7 +37,9 @@ export function CampaignTabs() {
 
   const clientRows = rows.filter((r) => clientForCampaign(r.campaign) === clientFilter)
   // Campaigns from existing rows + ones created in the wizard (which may have no rows yet).
-  const registered = campaignList.filter((c) => c.client === clientFilter).map((c) => c.name)
+  const forClient = campaignList.filter((c) => c.client === clientFilter)
+  const registered = forClient.map((c) => c.name)
+  const campMeta = new Map(forClient.map((c) => [c.name, c] as const))
   if (clientRows.length === 0 && registered.length === 0) return null
 
   const campaigns = [
@@ -50,26 +52,40 @@ export function CampaignTabs() {
 
   return (
     <div className="client-tabs" role="tablist" aria-label="Campaigns">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          role="tab"
-          aria-selected={campaignFilter === t.key}
-          className={`client-tab${campaignFilter === t.key ? ' active' : ''}`}
-          onClick={() => setCampaignFilter(t.key)}
-        >
-          <span className="client-tab-name">{t.name}</span>
-          <span className="client-tab-stats">
-            <span className="client-tab-rev">{money(t.revenue)}</span>
-            <span className="client-tab-dot">·</span>
-            {t.assets} asset{t.assets === 1 ? '' : 's'}
-            <span className="client-tab-dot">·</span>
-            {t.posted} posted
-            <span className="client-tab-dot">·</span>
-            {t.scheduled} scheduled
-          </span>
-        </button>
-      ))}
+      {tabs.map((t) => {
+        const meta = t.key === 'all' ? undefined : campMeta.get(t.key)
+        const duration = meta
+          ? meta.durationWeeks
+            ? `${meta.durationWeeks} wks`
+            : 'Ongoing'
+          : null
+        return (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={campaignFilter === t.key}
+            className={`client-tab${campaignFilter === t.key ? ' active' : ''}`}
+            onClick={() => setCampaignFilter(t.key)}
+          >
+            <span className="client-tab-name">{t.name}</span>
+            <span className="client-tab-stats">
+              <span className="client-tab-rev">{money(t.revenue)}</span>
+              <span className="client-tab-dot">·</span>
+              {t.assets} asset{t.assets === 1 ? '' : 's'}
+              <span className="client-tab-dot">·</span>
+              {t.posted} posted
+              <span className="client-tab-dot">·</span>
+              {t.scheduled} scheduled
+              {duration && (
+                <>
+                  <span className="client-tab-dot">·</span>
+                  <span className="client-tab-dur">{duration}</span>
+                </>
+              )}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
