@@ -24,8 +24,8 @@ interface Edge {
   level: HandoffLevel
   reason: string
   back: boolean
-  /** True for the stage→stage funnel guides (vs. a per-asset linksTo edge). */
-  stage?: boolean
+  /** True for auto-derived funnel edges (vs. an explicit per-asset linksTo edge). */
+  auto?: boolean
   x1: number
   y1: number
   x2: number
@@ -87,26 +87,44 @@ export function FlowView() {
           y2: t.top + t.height / 2 - base.top,
         })
       }
-      // No explicit per-asset links (e.g. a wizard-seeded campaign): connect the
-      // funnel stages in sequence so the journey still reads as connected.
+      // No explicit per-asset links (e.g. a wizard-seeded campaign): connect each
+      // asset forward to the next populated funnel stage so the individual assets
+      // read as connected.
       if (next.length === 0) {
-        const nums = [...root.querySelectorAll<HTMLElement>('.journey-step-num')]
-        for (let i = 0; i < nums.length - 1; i++) {
-          const a = nums[i].getBoundingClientRect()
-          const b = nums[i + 1].getBoundingClientRect()
-          next.push({
-            key: `stage-${i}`,
-            sourceId: '',
-            targetName: '',
-            level: 'coherent',
-            reason: '',
-            back: false,
-            stage: true,
-            x1: a.right - base.left,
-            y1: a.top + a.height / 2 - base.top,
-            x2: b.left - base.left,
-            y2: b.top + b.height / 2 - base.top,
-          })
+        const order = FUNNEL_STAGES.map((s) => s.stage)
+        const byStage = new Map<FunnelStage, TrafficRow[]>()
+        for (const r of view) {
+          const st = funnelStageFor(r.channel)
+          const list = byStage.get(st)
+          if (list) list.push(r)
+          else byStage.set(st, [r])
+        }
+        for (const list of byStage.values())
+          list.sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))
+        const populated = order.filter((st) => (byStage.get(st)?.length ?? 0) > 0)
+        for (let i = 0; i < populated.length - 1; i++) {
+          const toFirst = byStage.get(populated[i + 1])![0]
+          const tgt = byId.get(toFirst.id)
+          if (!tgt) continue
+          const t = tgt.getBoundingClientRect()
+          for (const fr of byStage.get(populated[i])!) {
+            const src = byId.get(fr.id)
+            if (!src) continue
+            const s = src.getBoundingClientRect()
+            next.push({
+              key: `auto-${fr.id}`,
+              sourceId: fr.id,
+              targetName: toFirst.assetName,
+              level: 'coherent',
+              reason: '',
+              back: false,
+              auto: true,
+              x1: s.right + 5 - base.left,
+              y1: s.top + s.height / 2 - base.top,
+              x2: t.left - 5 - base.left,
+              y2: t.top + t.height / 2 - base.top,
+            })
+          }
         }
       }
       setEdges(next)
@@ -217,11 +235,12 @@ export function FlowView() {
               const cx1 = e.back ? e.x1 - dx : e.x1 + dx
               const cx2 = e.back ? e.x2 + dx : e.x2 - dx
               const active = hover && (hover.id === e.sourceId || hover.name === e.targetName)
-              const cls = e.stage ? '' : hover ? (active ? ' active' : ' dim') : ''
+              const cls = hover ? (active ? ' active' : ' dim') : ''
+              const variant = e.auto ? ' journey-edge--flow' : ` h-${e.level}`
               return (
                 <path
                   key={e.key}
-                  className={`journey-edge${e.stage ? ' journey-edge--stage' : ` h-${e.level}`}${cls}`}
+                  className={`journey-edge${variant}${cls}`}
                   d={`M ${e.x1} ${e.y1} C ${cx1} ${e.y1}, ${cx2} ${e.y2}, ${e.x2} ${e.y2}`}
                   markerStart="url(#journey-dot)"
                   markerEnd="url(#journey-dot)"
