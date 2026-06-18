@@ -32,9 +32,12 @@ export function NewClientWizard({ onClose }: Props) {
   const deliverables = strategy ? STRATEGY_ASSETS[strategy] ?? [] : []
   const chosen = deliverables.filter((_, i) => selected.has(i))
   const months = durationWeeks > 0 ? Math.max(1, Math.round(durationWeeks / 4)) : 1
-  // Recurring pieces repeat for the flight; single assets are made once.
-  const totalPieces = chosen.reduce((n, d) => n + (d.perMonth > 1 ? d.perMonth * months : 1), 0)
   const paidChosen = chosen.filter((d) => CHANNELS[d.channel].kind === 'paid')
+  // Paid = one flight each; owned/organic recurring pieces repeat across the flight.
+  const totalPieces = chosen.reduce((n, d) => {
+    if (CHANNELS[d.channel].kind === 'paid') return n + 1
+    return n + (d.perMonth > 1 ? d.perMonth * months : 1)
+  }, 0)
   const needsBudget = paidChosen.length > 0
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
   const mediaPct = selectedStrategy ? mediaSharePct(selectedStrategy) : null

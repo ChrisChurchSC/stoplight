@@ -39,8 +39,8 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   'demand-gen': [
     d('Lead-capture landing page', 'landing-page', 'lead-capture', 'link', 1, 'always-on'),
     d('Lead magnet (guide)', 'lead-magnet', 'ebook', 'link', 1, 'one-off'),
-    d('Search ad', 'google-search', 'rsa', 'text', 1, 'always-on'),
-    d('Meta prospecting ad', 'meta-ads', 'single-image', 'image', 2, 'always-on'),
+    d('Search ad', 'google-search', 'rsa', 'text', 1, 'flight'),
+    d('Meta prospecting ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
     d('Nurture email sequence', 'email', 'nurture', 'text', 1, 'always-on'),
     d('Weekly newsletter', 'email', 'newsletter', 'text', 4, 'always-on'),
     d('SEO blog article', 'blog', 'article', 'text', 4, 'always-on'),
@@ -71,7 +71,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
     d('Win-back / re-engagement email', 'email', 're-engagement', 'text', 1, 'always-on'),
   ],
   aarrr: [
-    d('Acquisition ad', 'meta-ads', 'single-image', 'image', 2, 'always-on'),
+    d('Acquisition ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
     d('Lead-capture landing page', 'landing-page', 'lead-capture', 'link', 1, 'always-on'),
     d('Onboarding email', 'email', 'welcome', 'text', 1, 'always-on'),
     d('Newsletter', 'email', 'newsletter', 'text', 4, 'always-on'),
@@ -79,7 +79,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
     d('Pricing page', 'landing-page', 'sales', 'link', 1, 'always-on'),
   ],
   bowtie: [
-    d('Acquisition ad', 'meta-ads', 'single-image', 'image', 2, 'always-on'),
+    d('Acquisition ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
     d('Sales / landing page', 'landing-page', 'sales', 'link', 1, 'always-on'),
     d('Onboarding email series', 'email', 'welcome', 'text', 1, 'always-on'),
     d('Adoption webinar', 'lead-magnet', 'webinar', 'link', 1, 'flight'),
@@ -88,8 +88,8 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
     d('Win-back email', 'email', 're-engagement', 'text', 1, 'always-on'),
   ],
   abm: [
-    d('LinkedIn account-targeted ad', 'linkedin-ads', 'single-image', 'image', 2, 'always-on'),
-    d('Display ad set', 'google-demand', 'image', 'image', 2, 'always-on'),
+    d('LinkedIn account-targeted ad', 'linkedin-ads', 'single-image', 'image', 1, 'flight'),
+    d('Display ad set', 'google-demand', 'image', 'image', 1, 'flight'),
     d('Vertical landing page', 'landing-page', 'lead-capture', 'link', 1, 'flight'),
     d('Personalized 1:1 email', 'email', 'nurture', 'text', 2, 'always-on'),
     d('Vertical case study', 'blog', 'case-study', 'text', 1, 'one-off'),

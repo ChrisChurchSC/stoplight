@@ -408,33 +408,45 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       dt.setHours(bt.hour, bt.minute ?? 0, 0, 0)
       return dt.toISOString()
     }
-    // Recurring pieces (perMonth > 1) repeat for the whole flight, spread evenly;
-    // single assets sit near the start. Numbered when there's more than one.
-    // Continuous single assets (always-on / for-the-flight) run as a span.
+    // Paid media runs as a flight: one bar spanning the campaign (shown as a
+    // multi-day span on the calendar). Owned/organic content is point-in-time —
+    // recurring pieces (perMonth > 1) spread across the flight; singles once.
     const flightEnd = new Date(start)
     flightEnd.setDate(flightEnd.getDate() + flightDays)
     const flightEndIso = flightEnd.toISOString()
     const rows: TrafficRow[] = []
     deliverables.forEach((d, di) => {
+      const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
+      const base = {
+        assetId: '',
+        mediaType: d.media,
+        channel: d.channel,
+        assetType,
+        messaging: {} as Record<string, string>,
+        campaign,
+        audience: '',
+        status: 'draft' as const,
+      }
+      if (CHANNELS[d.channel].kind === 'paid') {
+        rows.push({
+          ...base,
+          id: freshRowId(),
+          assetName: d.label,
+          scheduledAt: slotIso(d.channel, 1 + (di % 6)),
+          endsAt: flightEndIso,
+          createdAt: Date.now(),
+        })
+        return
+      }
       const recurring = d.perMonth > 1
       const count = recurring ? d.perMonth * months : 1
-      const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
-      const spans = !recurring && d.runtime !== 'one-off'
       for (let k = 0; k < count; k++) {
         const offset = recurring ? Math.round(((k + 0.5) / count) * flightDays) : 1 + (di % 6)
         rows.push({
+          ...base,
           id: freshRowId(),
-          assetId: '',
           assetName: count > 1 ? `${d.label} #${k + 1}` : d.label,
-          mediaType: d.media,
-          channel: d.channel,
-          assetType,
-          messaging: {},
-          campaign,
-          audience: '',
           scheduledAt: slotIso(d.channel, offset),
-          endsAt: spans ? flightEndIso : undefined,
-          status: 'draft',
           createdAt: Date.now(),
         })
       }
