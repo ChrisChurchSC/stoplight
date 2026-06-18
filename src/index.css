@@ -2093,8 +2093,8 @@ button {
   cursor: pointer;
 }
 
-/* ---- Flow chart (pipeline) view ---- */
-.flow {
+/* ---- Flow = user journey ---- */
+.journey {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2102,19 +2102,22 @@ button {
   gap: 14px;
   overflow: auto;
 }
-.flow-lanes {
+.journey-intro {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.journey-rail {
   display: flex;
   align-items: stretch;
-  gap: 0;
   min-height: 0;
 }
-.flow-lane-wrap {
+.journey-station-wrap {
   display: flex;
   align-items: stretch;
   flex: 1;
   min-width: 0;
 }
-.flow-lane {
+.journey-station {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -2125,33 +2128,75 @@ button {
   box-shadow: var(--shadow);
   overflow: hidden;
 }
-.flow-lane-head {
+.journey-step {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px 4px;
+  gap: 10px;
+  padding: 12px;
 }
-.flow-lane-title {
+.journey-step-num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.flow-lane-count {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: var(--surface-2);
-  border-radius: 20px;
-  padding: 0 8px;
-  min-width: 22px;
-  text-align: center;
+.journey-step-name {
+  font-size: 14px;
+  font-weight: 700;
 }
-.flow-lane-hint {
-  padding: 0 12px 10px;
+.journey-step-hint {
   font-size: 11px;
   color: var(--text-faint);
-  border-bottom: 1px solid var(--border);
 }
-.flow-cards {
+.journey-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 0 12px 10px;
+}
+.journey-chan {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+.journey-none {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.journey-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.journey-outcome b {
+  color: var(--text);
+}
+.journey-outcome-rev {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--accent);
+}
+.journey-assets {
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -2164,13 +2209,14 @@ button {
   text-align: center;
   padding: 8px 0;
 }
-.flow-arrow {
+.journey-link {
   align-self: center;
   flex: none;
-  width: 26px;
+  width: 34px;
   text-align: center;
-  font-size: 22px;
-  color: var(--text-faint);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
 }
 .flow-card {
   display: flex;
