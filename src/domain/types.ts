@@ -102,6 +102,9 @@ export interface TrafficRow {
   copyReviewed?: boolean
   /** RTBs (proof points) backing each messaging component: componentKey → rtb ids. */
   rtbMap?: Record<string, string[]>
+  /** Destination this unit drives to — the next asset in the journey (by asset
+   *  name), e.g. an ad → its landing page, a lead magnet → its nurture email. */
+  linksTo?: string
   /** Auto-generated tracking parameters, written back to the sheet so they
    *  carry through to the platforms (see tracking.ts). */
   utm?: { source: string; medium: string; campaign: string; content: string }

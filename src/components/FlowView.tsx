@@ -42,20 +42,37 @@ export function FlowView() {
     return { items, channels, assets: names.size, revenue, leads }
   }
 
-  const Card = ({ row }: { row: TrafficRow }) => (
-    <button
-      className="flow-card"
-      style={{ borderLeftColor: STATUS_COLOR[row.status] }}
-      onClick={() => openReview(row.id)}
-      title={`${CHANNELS[row.channel].label} · ${row.assetName}`}
-    >
-      <div className="flow-card-head">
-        <ChannelIcon channel={row.channel} size={13} />
-        <span className="flow-card-name">{row.assetName}</span>
-      </div>
-      {row.campaign && <span className="flow-card-campaign">{row.campaign}</span>}
-    </button>
-  )
+  const targetId = (name: string) => rows.find((r) => r.assetName === name)?.id
+
+  const Card = ({ row }: { row: TrafficRow }) => {
+    const linkId = row.linksTo ? targetId(row.linksTo) : undefined
+    return (
+      <button
+        className="flow-card"
+        style={{ borderLeftColor: STATUS_COLOR[row.status] }}
+        onClick={() => openReview(row.id)}
+        title={`${CHANNELS[row.channel].label} · ${row.assetName}`}
+      >
+        <div className="flow-card-head">
+          <ChannelIcon channel={row.channel} size={13} />
+          <span className="flow-card-name">{row.assetName}</span>
+        </div>
+        {row.campaign && <span className="flow-card-campaign">{row.campaign}</span>}
+        {row.linksTo && (
+          <span
+            className="flow-card-link"
+            title={`Drives to ${row.linksTo}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (linkId) openReview(linkId)
+            }}
+          >
+            → {row.linksTo}
+          </span>
+        )}
+      </button>
+    )
+  }
 
   return (
     <div className="sheet-grid">

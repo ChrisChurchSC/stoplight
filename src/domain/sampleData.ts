@@ -18,6 +18,8 @@ interface Seed {
   /** Copy baked into the creative (image/video overlays, VO). */
   extracted?: string
   copyReviewed?: boolean
+  /** Destination asset this unit drives to (asset name of the next step). */
+  links?: string
 }
 
 // A believable cross-channel content plan across three campaigns, fully mapped:
@@ -29,25 +31,25 @@ const SEEDS: Seed[] = [
   // ---- Spring Launch 2026 (RTBs: speed, rollback, redesign) ----
   {
     asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Spring Launch 2026',
-    audience: 'Lookalike – Customers', status: 'posted', at: -48, extracted: 'SPRING 2026\nBuilt for speed\nShip 2x faster →', copyReviewed: true,
+    audience: 'Lookalike – Customers', status: 'posted', at: -48, extracted: 'SPRING 2026\nBuilt for speed\nShip 2x faster →', copyReviewed: true, links: 'spring-launch-lp',
     messaging: { primary: 'Spring is here. Ship 2x faster and cut the busywork your team hates.', headline: 'Build 2x faster', description: 'One-click rollback', cta: 'Shop now' },
     rtbs: { primary: ['speed'], headline: ['speed'], description: ['rollback'] },
   },
   {
     asset: 'spring-promo-9x16.jpg', mediaType: 'image', channel: 'tiktok-ads', campaign: 'Spring Launch 2026',
-    audience: 'Interest – Productivity', status: 'posted', at: -36,
+    audience: 'Interest – Productivity', status: 'posted', at: -36, links: 'spring-launch-lp',
     messaging: { caption: 'POV: your workflow just got 2x faster ⚡ no more manual busywork', cta: 'Learn more' },
     rtbs: { caption: ['speed'] },
   },
   {
     asset: 'spring-promo-1x1.jpg', mediaType: 'image', channel: 'instagram', campaign: 'Spring Launch 2026',
-    status: 'scheduled', at: 6,
+    status: 'scheduled', at: 6, links: 'spring-launch-lp',
     messaging: { caption: 'Spring 2026 is here — ship faster, leave the busywork behind. Tap to see what’s new.' },
     rtbs: { caption: ['speed'] },
   },
   {
     asset: 'launch-announcement.md', mediaType: 'text', channel: 'email', campaign: 'Spring Launch 2026',
-    status: 'approved', at: 18,
+    status: 'approved', at: 18, links: 'spring-launch-lp',
     messaging: {
       subject: 'The Spring release is live',
       preview: '2x faster builds, one-click rollback, redesigned dashboard',
@@ -58,13 +60,13 @@ const SEEDS: Seed[] = [
   },
   {
     asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'youtube-ads', campaign: 'Spring Launch 2026',
-    audience: 'Retargeting – Site Visitors', status: 'approved', at: 26,
+    audience: 'Retargeting – Site Visitors', status: 'approved', at: 26, links: 'spring-launch-lp',
     messaging: { headline: 'Ship 2x faster', description: 'One-click rollback. Live now.', cta: 'Watch' },
     rtbs: { headline: ['speed'], description: ['rollback'] },
   },
   {
     asset: 'launch-story.md', mediaType: 'text', channel: 'linkedin', campaign: 'Spring Launch 2026',
-    status: 'scheduled', at: 8,
+    status: 'scheduled', at: 8, links: 'spring-launch-lp',
     messaging: { body: 'We just shipped our biggest release yet. Builds run 2x faster and rollback is one click — less busywork, faster time-to-value for ops teams. Here’s the story 🧵' },
     rtbs: { body: ['speed', 'rollback'] },
   },
@@ -81,7 +83,7 @@ const SEEDS: Seed[] = [
   },
   {
     asset: 'spring-promo-1x1.jpg', mediaType: 'image', channel: 'linkedin-ads', campaign: 'Spring Launch 2026',
-    audience: 'ABM – Enterprise', status: 'draft', at: 30,
+    audience: 'ABM – Enterprise', status: 'draft', at: 30, links: 'spring-launch-lp',
     messaging: { intro: 'Enterprise-ready and now 2x faster.', headline: 'Built for ops at scale', description: 'Less busywork, faster results.', cta: 'Request a demo' },
     rtbs: { intro: ['speed'], description: ['speed'] }, // headline off-message + unmapped → drift flag
   },
@@ -89,7 +91,7 @@ const SEEDS: Seed[] = [
   // ---- Q2 Demand Gen (RTBs: acme, integrations, ttv) ----
   {
     asset: 'acme-case-study.pdf', mediaType: 'link', channel: 'lead-magnet', campaign: 'Q2 Demand Gen',
-    status: 'posted', at: -12,
+    status: 'posted', at: -12, links: 'may-digest.md',
     messaging: {
       title: 'How Acme cut ops time 40%',
       subtitle: 'A mid-market ops playbook',
@@ -100,19 +102,19 @@ const SEEDS: Seed[] = [
   },
   {
     asset: 'founder-story-60s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Q2 Demand Gen',
-    audience: 'Lookalike – Newsletter', status: 'draft', at: 40, extracted: 'We were tired of slow tools.\nSo we built our own.',
+    audience: 'Lookalike – Newsletter', status: 'draft', at: 40, extracted: 'We were tired of slow tools.\nSo we built our own.', links: 'acme-case-study.pdf',
     messaging: { primary: 'Why we started — we were tired of slow tools and manual busywork.', headline: 'Founder story', description: 'Live in a week', cta: 'Watch' },
     rtbs: { description: ['ttv'] }, // primary on-message but unbacked; headline drift
   },
   {
     asset: 'productivity-tips.jpg', mediaType: 'image', channel: 'instagram', campaign: 'Q2 Demand Gen',
-    status: 'scheduled', at: 12,
+    status: 'scheduled', at: 12, links: 'acme-case-study.pdf',
     messaging: { caption: '5 ways to cut manual busywork and ship faster this quarter (save this).' },
     // rtbs intentionally omitted → unsupported claim in the column + coverage
   },
   {
     asset: 'demand-gen-rsa', mediaType: 'text', channel: 'google-search', campaign: 'Q2 Demand Gen',
-    audience: 'In-market – Ops Software', status: 'approved', at: 2,
+    audience: 'In-market – Ops Software', status: 'approved', at: 2, links: 'acme-case-study.pdf',
     messaging: {
       h1: 'Faster ops software', h2: 'Cut manual busywork', h3: 'Live in a week',
       d1: 'Ship 2x faster with 200+ integrations. Start free.', d2: 'Mid-market ops teams hit time-to-value in days, not months.', path: 'ops/free-trial',
@@ -151,7 +153,7 @@ const SEEDS: Seed[] = [
   },
   {
     asset: 'webinar-promo.jpg', mediaType: 'image', channel: 'x-ads', campaign: 'Webinar: Scaling Ops',
-    audience: 'Followers – Lookalike', status: 'failed', error: 'Media ratio rejected (needs 1.91:1)', at: -6,
+    audience: 'Followers – Lookalike', status: 'failed', error: 'Media ratio rejected (needs 1.91:1)', at: -6, links: 'webinar-invite.md',
     messaging: { post: 'Free live session: scaling ops without the busywork. Save your seat.', cta: 'Register' },
     rtbs: { post: ['playbook'] },
   },
@@ -172,6 +174,7 @@ export function sampleRows(now: number = Date.now()): TrafficRow[] {
       assetType: primaryTypeKey(s.channel),
       messaging: s.messaging,
       rtbMap: s.rtbs,
+      linksTo: s.links,
       extractedCopy: s.extracted,
       copyReviewed: s.copyReviewed,
       campaign: s.campaign,
