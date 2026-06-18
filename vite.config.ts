@@ -35,6 +35,39 @@ function icpReviewApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server endpoint for real publishing (Buffer). Keeps the Buffer token
+ * server-side; mirrors /api/icp-review. Moves to a serverless function for prod.
+ */
+function publishApi(): PluginOption {
+  return {
+    name: 'publish-api',
+    configureServer(server) {
+      server.middlewares.use('/api/publish', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runPublish } = await import('./server/publishHandler')
+            const result = await runPublish(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), icpReviewApi()],
+  plugins: [react(), icpReviewApi(), publishApi()],
 })
