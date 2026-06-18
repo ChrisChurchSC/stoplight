@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { GTM_STRATEGIES, mediaSharePct, type GtmStrategy } from '../domain/strategies'
-import { STRATEGY_ASSETS } from '../domain/strategyAssets'
+import { STRATEGY_ASSETS, RUNTIME_LABEL } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { typeLabel } from '../domain/channelAssetTypes'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -31,6 +31,7 @@ export function NewClientWizard({ onClose }: Props) {
 
   const deliverables = strategy ? STRATEGY_ASSETS[strategy] ?? [] : []
   const chosen = deliverables.filter((_, i) => selected.has(i))
+  const piecesPerMonth = chosen.reduce((n, d) => n + Math.max(1, d.perMonth), 0)
   const paidChosen = chosen.filter((d) => CHANNELS[d.channel].kind === 'paid')
   const needsBudget = paidChosen.length > 0
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
@@ -213,9 +214,15 @@ export function NewClientWizard({ onClose }: Props) {
                   {deliverables.map((d, i) => (
                     <label key={`${d.label}-${i}`} className={`wiz-asset${selected.has(i) ? ' on' : ''}`}>
                       <input type="checkbox" checked={selected.has(i)} onChange={() => toggleAsset(i)} />
-                      <span className="wiz-asset-label">{d.label}</span>
-                      <span className="wiz-asset-meta">
-                        {CHANNELS[d.channel].label} · {typeLabel(d.channel, d.assetType)}
+                      <span className="wiz-asset-label">
+                        {d.label}
+                        <span className="wiz-asset-sub">
+                          {CHANNELS[d.channel].label} · {typeLabel(d.channel, d.assetType)}
+                        </span>
+                      </span>
+                      <span className="wiz-asset-cadence">
+                        {d.perMonth > 1 ? `${d.perMonth}/mo` : '1'}
+                        <span className="wiz-asset-runtime">{RUNTIME_LABEL[d.runtime]}</span>
                       </span>
                     </label>
                   ))}
@@ -264,7 +271,8 @@ export function NewClientWizard({ onClose }: Props) {
                 ← Back
               </button>
               <span className="wiz-hint">
-                {selected.size} draft row{selected.size === 1 ? '' : 's'} → spreadsheet
+                {piecesPerMonth} piece{piecesPerMonth === 1 ? '' : 's'}/mo → spreadsheet
+                {durationWeeks ? ` · runs ${durationWeeks} wks` : ' · ongoing'}
               </span>
               <span className="spacer" />
               <button

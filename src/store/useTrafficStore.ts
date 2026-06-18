@@ -397,15 +397,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Synthesize one asset per deliverable, carrying its channel + intended type,
     // then run them through the scheduler so each gets the right type + a slot.
     const stamp = Date.now()
-    const assets: Asset[] = deliverables.map((d, i) => ({
-      id: `seed_${stamp.toString(36)}_${i}`,
-      name: d.label,
-      mediaType: d.media,
-      channels: [d.channel],
-      caption: '',
-      suggestedTypeFor: { [d.channel]: d.assetType },
-      createdAt: stamp,
-    }))
+    // One row per piece needed this month (perMonth); numbered when there's more
+    // than one so the spreadsheet reads as a content calendar.
+    const assets: Asset[] = deliverables.flatMap((d, di) => {
+      const n = Math.max(1, d.perMonth)
+      return Array.from({ length: n }, (_, k) => ({
+        id: `seed_${stamp.toString(36)}_${di}_${k}`,
+        name: n > 1 ? `${d.label} #${k + 1}` : d.label,
+        mediaType: d.media,
+        channels: [d.channel],
+        caption: '',
+        suggestedTypeFor: { [d.channel]: d.assetType },
+        createdAt: stamp,
+      }))
+    })
     let rows = proposeSchedule(assets).map((r) => ({ ...r, campaign }))
     // Split the media budget evenly across the paid rows for the flight.
     const budget = opts?.mediaBudget
