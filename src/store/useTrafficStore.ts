@@ -6,7 +6,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
-import { registerCampaign, type Campaign } from '../domain/clients'
+import { registerCampaign, clientForCampaign, type Campaign } from '../domain/clients'
 import { driveFilesToAssets } from '../lib/driveImport'
 import {
   pickFromGoogleDrive,
@@ -125,6 +125,8 @@ interface TrafficState {
   /** Explicitly-added clients (persisted), merged with clients derived from rows. */
   clientList: string[]
   addClient: (name: string) => void
+  /** Remove a client: its rows, campaigns, saved Drive link, and list entry. */
+  deleteClient: (name: string) => Promise<void>
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
@@ -348,6 +350,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveClients(clientList)
       return { clientList }
     }),
+  deleteClient: async (name) => {
+    // Remove the client's rows from the sheet.
+    const ids = get()
+      .rows.filter((r) => clientForCampaign(r.campaign) === name)
+      .map((r) => r.id)
+    for (const id of ids) await sheet.remove(id)
+    // Drop its persisted client entry, campaigns, and saved Drive link.
+    set((s) => {
+      const clientList = s.clientList.filter((c) => c !== name)
+      const campaignList = s.campaignList.filter((c) => c.client !== name)
+      const driveLinks = { ...s.driveLinks }
+      delete driveLinks[name]
+      saveClients(clientList)
+      saveCampaigns(campaignList)
+      saveDriveLinks(driveLinks)
+      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks }
+      // If we're scoped into the client being deleted, pop back to the overview.
+      if (s.clientFilter === name) {
+        next.clientFilter = 'all'
+        next.campaignFilter = 'all'
+      }
+      return next
+    })
+    await get().refresh()
+  },
   addCampaign: (campaign) =>
     set((s) => {
       registerCampaign(campaign.name, campaign.client)

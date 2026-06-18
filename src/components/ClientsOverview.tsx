@@ -43,6 +43,7 @@ export function ClientsOverview() {
   const setDriveLink = useTrafficStore((s) => s.setDriveLink)
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
   const clientList = useTrafficStore((s) => s.clientList)
+  const deleteClient = useTrafficStore((s) => s.deleteClient)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
@@ -50,6 +51,7 @@ export function ClientsOverview() {
   const [linkClient, setLinkClient] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const openLink = (client: string) => {
     setDraftUrl(driveLinks[client] ?? '')
@@ -132,6 +134,7 @@ export function ClientsOverview() {
               <th>Drive folder</th>
               <th>Last activity</th>
               <th>Owner</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -164,6 +167,16 @@ export function ClientsOverview() {
                 <td className="home-muted">{fmtDate(c.lastActivity)}</td>
                 <td className="home-owner">
                   <span className="home-owner-dot" /> Chris Church
+                </td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="home-del"
+                    onClick={() => setConfirmDelete(c.client)}
+                    title={`Delete ${c.client}`}
+                    aria-label={`Delete ${c.client}`}
+                  >
+                    ✕
+                  </button>
                 </td>
               </tr>
             ))}
@@ -226,6 +239,41 @@ export function ClientsOverview() {
       )}
 
       {wizardOpen && <NewClientWizard onClose={() => setWizardOpen(false)} />}
+
+      {confirmDelete &&
+        (() => {
+          const t = all.find((c) => c.client === confirmDelete)
+          return (
+            <>
+              <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
+              <div className="confirm-modal" role="dialog" aria-label="Delete client">
+                <strong className="confirm-title">Delete {confirmDelete}?</strong>
+                <p className="confirm-text">
+                  This removes the client
+                  {t && (t.assets > 0 || t.campaigns > 0)
+                    ? ` and its ${t.campaigns} campaign${t.campaigns === 1 ? '' : 's'} · ${t.assets} asset${t.assets === 1 ? '' : 's'}`
+                    : ''}
+                  . This can't be undone.
+                </p>
+                <div className="confirm-foot">
+                  <button className="btn sm" onClick={() => setConfirmDelete(null)}>
+                    Cancel
+                  </button>
+                  <span className="spacer" />
+                  <button
+                    className="btn sm danger"
+                    onClick={() => {
+                      void deleteClient(confirmDelete)
+                      setConfirmDelete(null)
+                    }}
+                  >
+                    Delete client
+                  </button>
+                </div>
+              </div>
+            </>
+          )
+        })()}
     </div>
   )
 }

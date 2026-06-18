@@ -2029,6 +2029,63 @@ button {
   font-weight: 700;
   margin-right: 6px;
 }
+
+/* delete-client button + confirm dialog */
+.home-del {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.home-table tbody tr:hover .home-del {
+  opacity: 1;
+}
+.home-del:hover {
+  color: #b42318;
+  background: #fdecea;
+}
+.btn.danger {
+  border-color: #e6b3ad;
+  background: #b42318;
+  color: #fff;
+}
+.btn.danger:hover {
+  background: #971a12;
+}
+.confirm-modal {
+  position: fixed;
+  z-index: 60;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  padding: 18px;
+}
+.confirm-title {
+  display: block;
+  font-size: 16px;
+}
+.confirm-text {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 8px 0 16px;
+}
+.confirm-foot {
+  display: flex;
+  align-items: center;
+}
+.confirm-foot .spacer {
+  flex: 1;
+}
 .wiz-foot {
   display: flex;
   align-items: center;
