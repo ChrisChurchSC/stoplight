@@ -132,7 +132,7 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
 
   // ---- Funnel coverage vs outcome ----
   const stages: StageRoi[] = FUNNEL_STAGES.map(({ stage, label, hint }) => {
-    const stageRows = rows.filter((r) => funnelStageFor(r.channel) === stage)
+    const stageRows = rows.filter((r) => funnelStageFor(r.channel, r.assetType) === stage)
     const names = new Set(stageRows.map((r) => r.assetName))
     const { revenue, leads } = rollup(names)
     return {

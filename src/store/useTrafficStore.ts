@@ -6,6 +6,9 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
+import { registerCampaign, clientForCampaign, type Campaign } from '../domain/clients'
+import type { Deliverable } from '../domain/strategyAssets'
+import { CHANNELS } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
 import {
   pickFromGoogleDrive,
@@ -16,7 +19,7 @@ import {
   mockDriveSource,
 } from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
-import { typesFor } from '../domain/channelAssetTypes'
+import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
@@ -74,6 +77,27 @@ function saveClients(list: string[]): void {
   }
 }
 
+// Campaigns created in the new-client wizard, persisted. Registered into
+// clientForCampaign on load so they resolve to their client before any rows exist.
+const CAMPAIGNS_KEY = 'stoplight.campaigns.v1'
+function loadCampaigns(): Campaign[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]')
+    const list: Campaign[] = Array.isArray(v) ? v : []
+    for (const c of list) registerCampaign(c.name, c.client)
+    return list
+  } catch {
+    return []
+  }
+}
+function saveCampaigns(list: Campaign[]): void {
+  try {
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
 interface TrafficState {
   /** Assets dropped into the tray, not yet trafficked into the sheet. */
   assets: Asset[]
@@ -103,6 +127,19 @@ interface TrafficState {
   /** Explicitly-added clients (persisted), merged with clients derived from rows. */
   clientList: string[]
   addClient: (name: string) => void
+  /** Remove a client: its rows, campaigns, saved Drive link, and list entry. */
+  deleteClient: (name: string) => Promise<void>
+  /** Campaigns created via the new-client wizard (persisted). */
+  campaignList: Campaign[]
+  addCampaign: (campaign: Campaign) => void
+  /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
+   *  across the flight at each asset's monthly cadence, optionally splitting a
+   *  media budget across the paid rows. */
+  seedCampaignAssets: (
+    campaign: string,
+    deliverables: Deliverable[],
+    opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string },
+  ) => Promise<void>
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -213,6 +250,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   driveConnected: false,
   driveLinks: loadDriveLinks(),
   clientList: loadClients(),
+  campaignList: loadCampaigns(),
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -322,6 +360,121 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveClients(clientList)
       return { clientList }
     }),
+  deleteClient: async (name) => {
+    // Remove the client's rows from the sheet.
+    const ids = get()
+      .rows.filter((r) => clientForCampaign(r.campaign) === name)
+      .map((r) => r.id)
+    for (const id of ids) await sheet.remove(id)
+    // Drop its persisted client entry, campaigns, and saved Drive link.
+    set((s) => {
+      const clientList = s.clientList.filter((c) => c !== name)
+      const campaignList = s.campaignList.filter((c) => c.client !== name)
+      const driveLinks = { ...s.driveLinks }
+      delete driveLinks[name]
+      saveClients(clientList)
+      saveCampaigns(campaignList)
+      saveDriveLinks(driveLinks)
+      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks }
+      // If we're scoped into the client being deleted, pop back to the overview.
+      if (s.clientFilter === name) {
+        next.clientFilter = 'all'
+        next.campaignFilter = 'all'
+      }
+      return next
+    })
+    await get().refresh()
+  },
+  addCampaign: (campaign) =>
+    set((s) => {
+      registerCampaign(campaign.name, campaign.client)
+      if (s.campaignList.some((c) => c.name === campaign.name && c.client === campaign.client)) return {}
+      const campaignList = [...s.campaignList, campaign]
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+  seedCampaignAssets: async (campaign, deliverables, opts) => {
+    if (!deliverables.length) return
+    const flightWeeks = opts?.flightWeeks && opts.flightWeeks > 0 ? opts.flightWeeks : 4
+    const flightDays = flightWeeks * 7
+    const months = Math.max(1, Math.round(flightWeeks / 4))
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    // A date `offsetDays` into the flight, at the channel's first best-time hour.
+    const slotIso = (channel: ChannelId, offsetDays: number): string => {
+      const dt = new Date(start)
+      dt.setDate(dt.getDate() + Math.min(offsetDays, flightDays))
+      const bt = CHANNELS[channel].bestTimes[0] ?? { hour: 10, minute: 0 }
+      dt.setHours(bt.hour, bt.minute ?? 0, 0, 0)
+      return dt.toISOString()
+    }
+    // Paid media runs as a flight: one bar spanning the campaign (shown as a
+    // multi-day span on the calendar). Owned/organic content is point-in-time —
+    // recurring pieces (perMonth > 1) spread across the flight; singles once.
+    const flightEnd = new Date(start)
+    flightEnd.setDate(flightEnd.getDate() + flightDays)
+    const flightEndIso = flightEnd.toISOString()
+    const rows: TrafficRow[] = []
+    deliverables.forEach((d, di) => {
+      const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
+      const base = {
+        assetId: '',
+        mediaType: d.media,
+        channel: d.channel,
+        assetType,
+        messaging: {} as Record<string, string>,
+        campaign,
+        audience: '',
+        status: 'draft' as const,
+      }
+      // Paid media → one flight bar spanning the campaign.
+      if (CHANNELS[d.channel].kind === 'paid') {
+        rows.push({
+          ...base,
+          id: freshRowId(),
+          assetName: d.label,
+          scheduledAt: slotIso(d.channel, 1 + (di % 6)),
+          endsAt: flightEndIso,
+          createdAt: Date.now(),
+        })
+        return
+      }
+      // Brand asset → built once, near the start.
+      if (d.brand) {
+        rows.push({
+          ...base,
+          id: freshRowId(),
+          assetName: d.label,
+          scheduledAt: slotIso(d.channel, 1 + (di % 6)),
+          createdAt: Date.now(),
+        })
+        return
+      }
+      // Content → produced on a monthly cadence, spread across the flight.
+      const count = Math.max(1, d.perMonth * months)
+      for (let k = 0; k < count; k++) {
+        const offset = Math.round(((k + 0.5) / count) * flightDays)
+        rows.push({
+          ...base,
+          id: freshRowId(),
+          assetName: count > 1 ? `${d.label} #${k + 1}` : d.label,
+          scheduledAt: slotIso(d.channel, offset),
+          createdAt: Date.now(),
+        })
+      }
+    })
+    // Split the media budget evenly across the paid rows for the flight.
+    const budget = opts?.mediaBudget
+    if (budget && budget > 0) {
+      const paid = rows.filter((r) => CHANNELS[r.channel].kind === 'paid')
+      if (paid.length) {
+        const per = Math.round(budget / paid.length)
+        for (const r of paid) r.budget = { amount: per, type: 'lifetime', endDate: opts?.endDate }
+      }
+    }
+    await sheet.append(rows)
+    await get().refresh()
+  },
 
   refresh: async () => {
     set({ loading: true })

@@ -5,6 +5,7 @@ import { money } from '../domain/budget'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { NewClientWizard } from './NewClientWizard'
 
 interface ClientRow {
   client: string
@@ -42,21 +43,15 @@ export function ClientsOverview() {
   const setDriveLink = useTrafficStore((s) => s.setDriveLink)
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
   const clientList = useTrafficStore((s) => s.clientList)
-  const addClient = useTrafficStore((s) => s.addClient)
+  const deleteClient = useTrafficStore((s) => s.deleteClient)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
   const [linkClient, setLinkClient] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState('')
-  const [newClient, setNewClient] = useState('')
-
-  const submitClient = () => {
-    const n = newClient.trim()
-    if (!n) return
-    addClient(n)
-    setNewClient('')
-  }
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const openLink = (client: string) => {
     setDraftUrl(driveLinks[client] ?? '')
@@ -88,24 +83,20 @@ export function ClientsOverview() {
       <h1 className="home-greeting">Your clients</h1>
       <p className="home-sub">Add a client, then bring their creative in from Drive or upload inside their workspace.</p>
 
-      <div className="home-newclient">
-        <span className="home-newclient-ico">＋</span>
-        <input
-          value={newClient}
-          placeholder="Add a client by name…"
-          onChange={(e) => setNewClient(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submitClient()}
-          autoFocus
-        />
-        <button className="btn primary" disabled={!newClient.trim()} onClick={submitClient}>
-          Add client
+      <div className="home-newclient-cta">
+        <button className="home-addclient" onClick={() => setWizardOpen(true)}>
+          <span className="home-addclient-ico">＋</span>
+          <span>
+            <span className="home-addclient-title">Add new client</span>
+            <span className="home-addclient-sub">Name, ICP via Clay, then a first campaign.</span>
+          </span>
         </button>
+        {all.length === 0 && (
+          <button className="home-link" onClick={loadSample}>
+            or load sample data
+          </button>
+        )}
       </div>
-      {all.length === 0 && (
-        <button className="home-link" onClick={loadSample}>
-          or load sample data
-        </button>
-      )}
 
       <div className="home-tabs">
         {(['all', 'recents', 'favorites'] as Tab[]).map((t) => (
@@ -143,6 +134,7 @@ export function ClientsOverview() {
               <th>Drive folder</th>
               <th>Last activity</th>
               <th>Owner</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -175,6 +167,16 @@ export function ClientsOverview() {
                 <td className="home-muted">{fmtDate(c.lastActivity)}</td>
                 <td className="home-owner">
                   <span className="home-owner-dot" /> Chris Church
+                </td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="home-del"
+                    onClick={() => setConfirmDelete(c.client)}
+                    title={`Delete ${c.client}`}
+                    aria-label={`Delete ${c.client}`}
+                  >
+                    ✕
+                  </button>
                 </td>
               </tr>
             ))}
@@ -235,6 +237,43 @@ export function ClientsOverview() {
           </div>
         </>
       )}
+
+      {wizardOpen && <NewClientWizard onClose={() => setWizardOpen(false)} />}
+
+      {confirmDelete &&
+        (() => {
+          const t = all.find((c) => c.client === confirmDelete)
+          return (
+            <>
+              <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
+              <div className="confirm-modal" role="dialog" aria-label="Delete client">
+                <strong className="confirm-title">Delete {confirmDelete}?</strong>
+                <p className="confirm-text">
+                  This removes the client
+                  {t && (t.assets > 0 || t.campaigns > 0)
+                    ? ` and its ${t.campaigns} campaign${t.campaigns === 1 ? '' : 's'} · ${t.assets} asset${t.assets === 1 ? '' : 's'}`
+                    : ''}
+                  . This can't be undone.
+                </p>
+                <div className="confirm-foot">
+                  <button className="btn sm" onClick={() => setConfirmDelete(null)}>
+                    Cancel
+                  </button>
+                  <span className="spacer" />
+                  <button
+                    className="btn sm danger"
+                    onClick={() => {
+                      void deleteClient(confirmDelete)
+                      setConfirmDelete(null)
+                    }}
+                  >
+                    Delete client
+                  </button>
+                </div>
+              </div>
+            </>
+          )
+        })()}
     </div>
   )
 }

@@ -33,11 +33,18 @@ export function CampaignTabs() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
+  const campaignList = useTrafficStore((s) => s.campaignList)
 
   const clientRows = rows.filter((r) => clientForCampaign(r.campaign) === clientFilter)
-  if (clientRows.length === 0) return null
+  // Campaigns from existing rows + ones created in the wizard (which may have no rows yet).
+  const forClient = campaignList.filter((c) => c.client === clientFilter)
+  const registered = forClient.map((c) => c.name)
+  const campMeta = new Map(forClient.map((c) => [c.name, c] as const))
+  if (clientRows.length === 0 && registered.length === 0) return null
 
-  const campaigns = [...new Set(clientRows.map((r) => (r.campaign ?? '').trim()).filter(Boolean))].sort()
+  const campaigns = [
+    ...new Set([...clientRows.map((r) => (r.campaign ?? '').trim()).filter(Boolean), ...registered]),
+  ].sort()
   const tabs: Snap[] = [
     snapshot('all', 'All campaigns', clientRows),
     ...campaigns.map((c) => snapshot(c, c, clientRows.filter((r) => (r.campaign ?? '').trim() === c))),
@@ -45,26 +52,52 @@ export function CampaignTabs() {
 
   return (
     <div className="client-tabs" role="tablist" aria-label="Campaigns">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          role="tab"
-          aria-selected={campaignFilter === t.key}
-          className={`client-tab${campaignFilter === t.key ? ' active' : ''}`}
-          onClick={() => setCampaignFilter(t.key)}
-        >
-          <span className="client-tab-name">{t.name}</span>
-          <span className="client-tab-stats">
-            <span className="client-tab-rev">{money(t.revenue)}</span>
-            <span className="client-tab-dot">·</span>
-            {t.assets} asset{t.assets === 1 ? '' : 's'}
-            <span className="client-tab-dot">·</span>
-            {t.posted} posted
-            <span className="client-tab-dot">·</span>
-            {t.scheduled} scheduled
-          </span>
-        </button>
-      ))}
+      {tabs.map((t) => {
+        const meta = t.key === 'all' ? undefined : campMeta.get(t.key)
+        const duration = meta
+          ? meta.durationWeeks
+            ? `${meta.durationWeeks} wks`
+            : 'Ongoing'
+          : null
+        return (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={campaignFilter === t.key}
+            className={`client-tab${campaignFilter === t.key ? ' active' : ''}`}
+            onClick={() => setCampaignFilter(t.key)}
+          >
+            <span className="client-tab-name">{t.name}</span>
+            <span className="client-tab-stats">
+              <span className="client-tab-rev">{money(t.revenue)}</span>
+              <span className="client-tab-dot">·</span>
+              {t.assets} asset{t.assets === 1 ? '' : 's'}
+              <span className="client-tab-dot">·</span>
+              {t.posted} posted
+              <span className="client-tab-dot">·</span>
+              {t.scheduled} scheduled
+              {duration && (
+                <>
+                  <span className="client-tab-dot">·</span>
+                  <span className="client-tab-dur">{duration}</span>
+                </>
+              )}
+              {meta?.contentPerMonth ? (
+                <>
+                  <span className="client-tab-dot">·</span>
+                  {meta.contentPerMonth}/mo
+                </>
+              ) : null}
+              {meta?.oneTimeAssets ? (
+                <>
+                  <span className="client-tab-dot">·</span>
+                  {meta.oneTimeAssets} one-time
+                </>
+              ) : null}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }

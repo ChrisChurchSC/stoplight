@@ -11,5 +11,30 @@ export const CAMPAIGN_CLIENTS: Record<string, string> = {
 
 export const UNASSIGNED = 'Unassigned'
 
+/** A campaign created through the new-client wizard. */
+export interface Campaign {
+  name: string
+  client: string
+  strategy: string
+  objective?: string
+  /** Flight length in weeks; omitted/0 = ongoing. */
+  durationWeeks?: number
+  /** Total paid-media budget for the flight (omitted when organic-only). */
+  mediaBudget?: number
+  /** Content pieces produced per month (monthly cadence total). */
+  contentPerMonth?: number
+  /** One-time brand assets built for the campaign (landing pages, etc.). */
+  oneTimeAssets?: number
+}
+
+// Campaigns created at runtime (the wizard) register here so clientForCampaign
+// resolves them before any rows exist. The store hydrates this from localStorage.
+const runtimeCampaignClients: Record<string, string> = {}
+
+export function registerCampaign(name: string, client: string): void {
+  const n = name.trim()
+  if (n) runtimeCampaignClients[n] = client
+}
+
 export const clientForCampaign = (campaign?: string): string =>
-  (campaign && CAMPAIGN_CLIENTS[campaign]) || UNASSIGNED
+  (campaign && (runtimeCampaignClients[campaign] ?? CAMPAIGN_CLIENTS[campaign])) || UNASSIGNED
