@@ -9,6 +9,7 @@ import { flagResolved } from '../adapters/icp/mockIcp'
 import type { ChannelId, RowStatus } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { ChannelPreview } from './ChannelPreview'
 import { Thumb } from './Thumb'
 
 const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
@@ -102,6 +103,13 @@ export function CopyReview() {
         </div>
 
         <div className="drawer-body">
+          {/* ---- Preview ---- */}
+          <div className="drawer-section">
+            Preview
+            <span className="drawer-section-note">{CHANNELS[row.channel].label} · {typeLabel(row.channel, row.assetType) || 'asset'}</span>
+          </div>
+          <ChannelPreview row={row} />
+
           {/* ---- Details ---- */}
           <div className="drawer-section">Details</div>
 
