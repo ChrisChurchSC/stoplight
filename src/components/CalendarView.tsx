@@ -113,24 +113,34 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
             const key = ymd(d)
             const inMonth = d.getMonth() === anchor.getMonth()
             const evs = eventsOn(d)
-            const shown = evs.slice(0, 3)
-            const more = evs.length - shown.length
+            const channels = [...new Set(evs.map((r) => r.channel))]
             return (
               <div
                 key={key}
                 className={`cal-day${inMonth ? '' : ' out'}${key === todayKey ? ' today' : ''}`}
               >
                 <div className="cal-daynum">{d.getDate()}</div>
-                <div className="cal-events">
-                  {shown.map((r) => (
-                    <Event key={r.id} r={r} />
-                  ))}
-                  {more > 0 && (
-                    <button className="cal-more" onClick={() => setDayKey(key)}>
-                      +{more} more
-                    </button>
-                  )}
-                </div>
+                {evs.length > 0 && (
+                  <button
+                    className="cal-day-summary"
+                    onClick={() => setDayKey(key)}
+                    title={`${evs.length} scheduled`}
+                  >
+                    <span className="cal-day-logos">
+                      {channels.slice(0, 5).map((c) => (
+                        <span key={c} className="cal-logo" title={CHANNELS[c].label}>
+                          <ChannelIcon channel={c} size={13} />
+                        </span>
+                      ))}
+                      {channels.length > 5 && (
+                        <span className="cal-logo cal-logo-more">+{channels.length - 5}</span>
+                      )}
+                    </span>
+                    <span className="cal-day-count">
+                      {evs.length} asset{evs.length === 1 ? '' : 's'}
+                    </span>
+                  </button>
+                )}
               </div>
             )
           })}
