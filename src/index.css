@@ -833,6 +833,21 @@ button {
   font-weight: 700;
   color: #1a7f37;
 }
+.drive-link-body {
+  padding: 14px 16px;
+}
+.drive-url-input {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 13px;
+}
+.drive-url-input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
 
 /* the spreadsheet fills the rest of the viewport and scrolls within itself */
 .sheet-grid {

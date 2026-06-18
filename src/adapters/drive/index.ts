@@ -3,6 +3,8 @@ export {
   pickFromGoogleDrive,
   pickFolderFromGoogleDrive,
   connectGoogleDrive,
+  listFolderByUrl,
+  parseDriveFolderId,
   isGoogleDriveConfigured,
   googleDriveLabel,
 } from './googleDriveSource'

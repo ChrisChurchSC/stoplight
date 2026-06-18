@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { mockAttio } from '../adapters/attio/mockAttio'
+import { isGoogleDriveConfigured } from '../adapters/drive'
 import { money } from '../domain/budget'
 import { clientForCampaign } from '../domain/clients'
 import { filesToAssets } from '../lib/files'
@@ -40,11 +41,21 @@ export function ClientsOverview() {
   const loadSample = useTrafficStore((s) => s.loadSample)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const driveLinks = useTrafficStore((s) => s.driveLinks)
+  const setDriveLink = useTrafficStore((s) => s.setDriveLink)
+  const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const [linkClient, setLinkClient] = useState<string | null>(null)
+  const [draftUrl, setDraftUrl] = useState('')
+
+  const openLink = (client: string) => {
+    setDraftUrl(driveLinks[client] ?? '')
+    setLinkClient(client)
+  }
 
   const clientNames = [...new Set(rows.map((r) => clientForCampaign(r.campaign)))]
   const all = clientNames.map((c) =>
@@ -137,6 +148,7 @@ export function ClientsOverview() {
               <th>Revenue</th>
               <th>Assets</th>
               <th>Campaigns</th>
+              <th>Drive folder</th>
               <th>Last activity</th>
               <th>Owner</th>
             </tr>
@@ -163,6 +175,11 @@ export function ClientsOverview() {
                 <td>{money(c.revenue)}</td>
                 <td>{c.assets}</td>
                 <td>{c.campaigns}</td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <button className="btn ghost sm" onClick={() => openLink(c.client)}>
+                    {driveLinks[c.client] ? '⬇ Folder linked' : '+ Drive folder'}
+                  </button>
+                </td>
                 <td className="home-muted">{fmtDate(c.lastActivity)}</td>
                 <td className="home-owner">
                   <span className="home-owner-dot" /> Chris Church
@@ -183,6 +200,60 @@ export function ClientsOverview() {
           e.target.value = ''
         }}
       />
+
+      {linkClient && (
+        <>
+          <div className="drawer-scrim" onClick={() => setLinkClient(null)} />
+          <div className="drive-modal" role="dialog" aria-label="Drive folder">
+            <div className="drive-head">
+              <strong>Drive folder · {linkClient}</strong>
+              <button className="btn ghost sm" onClick={() => setLinkClient(null)}>
+                Close
+              </button>
+            </div>
+            <div className="drive-note">
+              Paste a Google Drive folder link — ingesting pulls the files and auto-organizes them by
+              folder + filename.{' '}
+              {isGoogleDriveConfigured
+                ? 'Reads the folder via your Google sign-in (drive.readonly).'
+                : 'Demo: ingests sample files. Set VITE_GOOGLE_CLIENT_ID to read real folders.'}
+            </div>
+            <div className="drive-link-body">
+              <input
+                className="drive-url-input"
+                value={draftUrl}
+                placeholder="https://drive.google.com/drive/folders/…"
+                onChange={(e) => setDraftUrl(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="drive-foot">
+              <button
+                className="btn sm"
+                onClick={() => {
+                  setDriveLink(linkClient, draftUrl)
+                  setLinkClient(null)
+                }}
+              >
+                Save link
+              </button>
+              <span className="spacer" />
+              <button
+                className="btn primary"
+                disabled={!draftUrl.trim()}
+                onClick={() => {
+                  const client = linkClient
+                  setDriveLink(client, draftUrl)
+                  setLinkClient(null)
+                  void ingestDriveLink(client)
+                }}
+              >
+                Ingest assets ↓
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

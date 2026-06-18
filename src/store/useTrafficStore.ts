@@ -11,7 +11,9 @@ import {
   pickFromGoogleDrive,
   pickFolderFromGoogleDrive,
   connectGoogleDrive,
+  listFolderByUrl,
   isGoogleDriveConfigured,
+  mockDriveSource,
 } from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
 import { typesFor } from '../domain/channelAssetTypes'
@@ -33,6 +35,24 @@ const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
+}
+
+// Per-client Google Drive folder links, persisted (clients are derived from
+// rows, so the link can't live on a client record).
+const DRIVE_LINKS_KEY = 'stoplight.driveLinks.v1'
+function loadDriveLinks(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(DRIVE_LINKS_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+function saveDriveLinks(links: Record<string, string>): void {
+  try {
+    localStorage.setItem(DRIVE_LINKS_KEY, JSON.stringify(links))
+  } catch {
+    /* ignore quota / private-mode errors */
+  }
 }
 
 interface TrafficState {
@@ -59,6 +79,8 @@ interface TrafficState {
   drivePickerOpen: boolean
   /** True once the Drive account is connected (real sign-in, or demo). */
   driveConnected: boolean
+  /** Per-client saved Google Drive folder link. */
+  driveLinks: Record<string, string>
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -74,6 +96,10 @@ interface TrafficState {
   importFromDrive: () => Promise<void>
   /** Pick a whole Drive folder and import its files. */
   importFolderFromDrive: () => Promise<void>
+  /** Save a Google Drive folder link for a client. */
+  setDriveLink: (client: string, url: string) => void
+  /** Ingest the assets from a client's saved Drive folder link. */
+  ingestDriveLink: (client: string) => Promise<void>
 
   refresh: () => Promise<void>
 
@@ -161,6 +187,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   icpOpen: false,
   drivePickerOpen: false,
   driveConnected: false,
+  driveLinks: loadDriveLinks(),
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -231,6 +258,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
     } catch (e) {
       console.error('[drive] folder import failed', e)
+    }
+  },
+  setDriveLink: (client, url) =>
+    set((s) => {
+      const driveLinks = { ...s.driveLinks }
+      if (url.trim()) driveLinks[client] = url.trim()
+      else delete driveLinks[client]
+      saveDriveLinks(driveLinks)
+      return { driveLinks }
+    }),
+  ingestDriveLink: async (client) => {
+    const url = get().driveLinks[client]
+    if (!url) return
+    try {
+      // Real Drive lists the linked folder (drive.readonly); demo ingests the
+      // fixture so the flow works with no credentials.
+      const files = isGoogleDriveConfigured ? await listFolderByUrl(url) : await mockDriveSource.list()
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true, clientFilter: client })
+      }
+    } catch (e) {
+      console.error('[drive] link ingest failed', e)
     }
   },
 

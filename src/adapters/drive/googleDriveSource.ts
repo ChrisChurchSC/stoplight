@@ -61,21 +61,26 @@ async function ensureGis(): Promise<void> {
   await loadScript('https://accounts.google.com/gsi/client')
 }
 
-// Cache the access token so connect / file-pick / folder-pick reuse one sign-in.
-let tokenCache: { token: string; exp: number } | null = null
+// Listing an arbitrary folder by link (not picked via the Picker) needs the
+// broader read scope; the Picker itself only needs drive.file.
+const READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
-async function getToken(): Promise<string> {
+// Cache an access token per scope so connect / pick / link-ingest reuse sign-ins.
+const tokenCache = new Map<string, { token: string; exp: number }>()
+
+async function getToken(scope: string = SCOPE): Promise<string> {
   const now = Date.now()
-  if (tokenCache && tokenCache.exp > now + 60_000) return tokenCache.token
+  const cached = tokenCache.get(scope)
+  if (cached && cached.exp > now + 60_000) return cached.token
   await ensureGis()
-  const { token, expiresIn } = await requestAccessToken()
-  tokenCache = { token, exp: now + expiresIn * 1000 }
+  const { token, expiresIn } = await requestAccessToken(scope)
+  tokenCache.set(scope, { token, exp: now + expiresIn * 1000 })
   return token
 }
 
-/** Drop the cached token (e.g. after a 401) so the next call re-auths. */
+/** Drop all cached tokens (e.g. after a 401) so the next call re-auths. */
 function clearToken(): void {
-  tokenCache = null
+  tokenCache.clear()
 }
 
 /** "Connect account": run the Google sign-in/consent flow up front so the
@@ -87,15 +92,15 @@ export async function connectGoogleDrive(): Promise<void> {
   await getToken()
 }
 
-/** Open the GIS consent flow and resolve an access token (drive.file). */
-function requestAccessToken(): Promise<{ token: string; expiresIn: number }> {
+/** Open the GIS consent flow and resolve an access token for the given scope. */
+function requestAccessToken(scope: string): Promise<{ token: string; expiresIn: number }> {
   return new Promise((resolve, reject) => {
     const oauth2 = (g().accounts as AnyObj | undefined)?.oauth2 as AnyObj | undefined
     if (!oauth2) return reject(new Error('Google Identity Services not loaded'))
     const initTokenClient = oauth2.initTokenClient as (cfg: AnyObj) => { requestAccessToken: () => void }
     const client = initTokenClient({
       client_id: CLIENT_ID,
-      scope: SCOPE,
+      scope,
       callback: (resp: { access_token?: string; expires_in?: number; error?: string }) => {
         if (resp.access_token) resolve({ token: resp.access_token, expiresIn: resp.expires_in ?? 3600 })
         else reject(new Error(resp.error || 'Authorization was cancelled'))
@@ -291,6 +296,33 @@ export async function pickFolderFromGoogleDrive(): Promise<DriveFile[]> {
   return metas
     .filter((m) => m.mimeType !== 'application/vnd.google-apps.folder')
     .map((m) => toDriveFile(m, folder.name))
+}
+
+/** Pull the folder id out of a Google Drive folder URL (or a bare id). */
+export function parseDriveFolderId(url: string): string | null {
+  const u = url.trim()
+  const m =
+    u.match(/\/folders\/([a-zA-Z0-9_-]+)/) ||
+    u.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+    u.match(/^([a-zA-Z0-9_-]{20,})$/)
+  return m ? m[1] : null
+}
+
+/** Ingest a folder from its share link: list the folder's files via Drive REST
+ *  (needs drive.readonly, since the folder wasn't picked through the Picker).
+ *  Files are tagged with the folder name so the classifier reads the channel. */
+export async function listFolderByUrl(url: string): Promise<DriveFile[]> {
+  if (!isGoogleDriveConfigured) {
+    throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY).')
+  }
+  const folderId = parseDriveFolderId(url)
+  if (!folderId) throw new Error('That does not look like a Google Drive folder link.')
+  const token = await getToken(READONLY_SCOPE)
+  const folder = await folderName(folderId, token)
+  const metas = await listFolder(folderId, token)
+  return metas
+    .filter((m) => m.mimeType !== 'application/vnd.google-apps.folder')
+    .map((m) => toDriveFile(m, folder || 'Drive folder'))
 }
 
 export const googleDriveLabel = 'Google Drive'
