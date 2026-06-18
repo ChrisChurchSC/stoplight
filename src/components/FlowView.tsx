@@ -77,9 +77,11 @@ export function FlowView() {
             key: r.id,
             sourceId: r.id,
             targetName: r.linksTo!,
-            x1: s.right - base.left,
+            // Inset endpoints into the gap so the dots sit clear of the cards
+            // (the lines themselves run behind the cards).
+            x1: s.right - base.left + 5,
             y1: s.top + s.height / 2 - base.top,
-            x2: t.left - base.left,
+            x2: t.left - base.left - 5,
             y2: t.top + t.height * frac - base.top,
           })
         })
@@ -164,16 +166,8 @@ export function FlowView() {
         <div className="journey-graph" ref={graphRef}>
           <svg className="journey-svg" aria-hidden="true">
             <defs>
-              <marker
-                id="journey-arrow"
-                viewBox="0 0 10 10"
-                refX="8"
-                refY="5"
-                markerWidth="7"
-                markerHeight="7"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+              <marker id="journey-dot" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5">
+                <circle cx="5" cy="5" r="4" fill="var(--accent)" />
               </marker>
             </defs>
             {edges.map((e) => {
@@ -185,7 +179,8 @@ export function FlowView() {
                   key={e.key}
                   className={`journey-edge${cls}`}
                   d={`M ${e.x1} ${e.y1} C ${e.x1 + dx} ${e.y1}, ${e.x2 - dx} ${e.y2}, ${e.x2} ${e.y2}`}
-                  markerEnd="url(#journey-arrow)"
+                  markerStart="url(#journey-dot)"
+                  markerEnd="url(#journey-dot)"
                 />
               )
             })}
