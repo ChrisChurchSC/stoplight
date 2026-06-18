@@ -5,6 +5,7 @@ import { publishers as channelPublishers } from '../adapters/publishers/registry
 import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
+import { classifyAssets } from '../lib/classifyAsset'
 import { sampleRows } from '../domain/sampleData'
 import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
@@ -166,7 +167,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ rows, loading: false })
   },
 
-  addAssets: (assets) => set((s) => ({ assets: [...s.assets, ...assets] })),
+  // Auto-organize each ingested batch to channel + per-channel type before it
+  // hits the staging tray. Batch-aware (carousel slides detected across the group).
+  addAssets: (assets) => set((s) => ({ assets: [...s.assets, ...classifyAssets(assets)] })),
 
   updateAsset: (id, patch) =>
     set((s) => ({

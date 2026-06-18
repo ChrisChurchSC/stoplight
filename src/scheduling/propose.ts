@@ -48,15 +48,19 @@ export function proposeSchedule(assets: Asset[], now: Date = new Date()): Traffi
       placedPerChannel[channel] = index + 1
       const when = nthSlot(channel, index, now)
 
+      // Use the classifier's per-channel inference; fall back to the channel's
+      // primary type when the asset wasn't auto-organized for this channel.
+      const assetType = asset.suggestedTypeFor?.[channel] ?? primaryTypeKey(channel)
+
       rows.push({
         id: rowId(),
         assetId: asset.id,
         assetName: asset.name,
         mediaType: asset.mediaType,
         channel,
-        assetType: primaryTypeKey(channel),
+        assetType,
         messaging: asset.caption
-          ? { [primaryFieldKey(channel, primaryTypeKey(channel))]: asset.caption }
+          ? { [primaryFieldKey(channel, assetType)]: asset.caption }
           : {},
         body: asset.body,
         campaign: '',
