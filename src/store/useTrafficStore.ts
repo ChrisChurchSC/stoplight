@@ -19,7 +19,7 @@ import {
   mockDriveSource,
 } from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
-import { typesFor } from '../domain/channelAssetTypes'
+import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
@@ -132,12 +132,13 @@ interface TrafficState {
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
-  /** Seed the spreadsheet with draft rows for a strategy's needed assets,
-   *  optionally splitting a media budget across the paid rows over the flight. */
+  /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
+   *  across the flight at each asset's monthly cadence, optionally splitting a
+   *  media budget across the paid rows. */
   seedCampaignAssets: (
     campaign: string,
     deliverables: Deliverable[],
-    opts?: { mediaBudget?: number; endDate?: string },
+    opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string },
   ) => Promise<void>
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
@@ -394,36 +395,51 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }),
   seedCampaignAssets: async (campaign, deliverables, opts) => {
     if (!deliverables.length) return
-    // Synthesize one asset per deliverable, carrying its channel + intended type,
-    // then run them through the scheduler so each gets the right type + a slot.
-    const stamp = Date.now()
-    // One row per piece needed this month (perMonth); numbered when there's more
-    // than one so the spreadsheet reads as a content calendar.
-    const assets: Asset[] = deliverables.flatMap((d, di) => {
-      const n = Math.max(1, d.perMonth)
-      return Array.from({ length: n }, (_, k) => ({
-        id: `seed_${stamp.toString(36)}_${di}_${k}`,
-        name: n > 1 ? `${d.label} #${k + 1}` : d.label,
-        mediaType: d.media,
-        channels: [d.channel],
-        caption: '',
-        suggestedTypeFor: { [d.channel]: d.assetType },
-        createdAt: stamp,
-      }))
+    const flightWeeks = opts?.flightWeeks && opts.flightWeeks > 0 ? opts.flightWeeks : 4
+    const flightDays = flightWeeks * 7
+    const months = Math.max(1, Math.round(flightWeeks / 4))
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    // A date `offsetDays` into the flight, at the channel's first best-time hour.
+    const slotIso = (channel: ChannelId, offsetDays: number): string => {
+      const dt = new Date(start)
+      dt.setDate(dt.getDate() + Math.min(offsetDays, flightDays))
+      const bt = CHANNELS[channel].bestTimes[0] ?? { hour: 10, minute: 0 }
+      dt.setHours(bt.hour, bt.minute ?? 0, 0, 0)
+      return dt.toISOString()
+    }
+    // Recurring pieces (perMonth > 1) repeat for the whole flight, spread evenly;
+    // single assets sit near the start. Numbered when there's more than one.
+    const rows: TrafficRow[] = []
+    deliverables.forEach((d, di) => {
+      const recurring = d.perMonth > 1
+      const count = recurring ? d.perMonth * months : 1
+      const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
+      for (let k = 0; k < count; k++) {
+        const offset = recurring ? Math.round(((k + 0.5) / count) * flightDays) : 1 + (di % 6)
+        rows.push({
+          id: freshRowId(),
+          assetId: '',
+          assetName: count > 1 ? `${d.label} #${k + 1}` : d.label,
+          mediaType: d.media,
+          channel: d.channel,
+          assetType,
+          messaging: {},
+          campaign,
+          audience: '',
+          scheduledAt: slotIso(d.channel, offset),
+          status: 'draft',
+          createdAt: Date.now(),
+        })
+      }
     })
-    let rows = proposeSchedule(assets).map((r) => ({ ...r, campaign }))
     // Split the media budget evenly across the paid rows for the flight.
     const budget = opts?.mediaBudget
     if (budget && budget > 0) {
-      const paidIds = rows.filter((r) => CHANNELS[r.channel].kind === 'paid').map((r) => r.id)
-      if (paidIds.length) {
-        const per = Math.round(budget / paidIds.length)
-        const paid = new Set(paidIds)
-        rows = rows.map((r) =>
-          paid.has(r.id)
-            ? { ...r, budget: { amount: per, type: 'lifetime' as const, endDate: opts?.endDate } }
-            : r,
-        )
+      const paid = rows.filter((r) => CHANNELS[r.channel].kind === 'paid')
+      if (paid.length) {
+        const per = Math.round(budget / paid.length)
+        for (const r of paid) r.budget = { amount: per, type: 'lifetime', endDate: opts?.endDate }
       }
     }
     await sheet.append(rows)

@@ -31,7 +31,9 @@ export function NewClientWizard({ onClose }: Props) {
 
   const deliverables = strategy ? STRATEGY_ASSETS[strategy] ?? [] : []
   const chosen = deliverables.filter((_, i) => selected.has(i))
-  const piecesPerMonth = chosen.reduce((n, d) => n + Math.max(1, d.perMonth), 0)
+  const months = durationWeeks > 0 ? Math.max(1, Math.round(durationWeeks / 4)) : 1
+  // Recurring pieces repeat for the flight; single assets are made once.
+  const totalPieces = chosen.reduce((n, d) => n + (d.perMonth > 1 ? d.perMonth * months : 1), 0)
   const paidChosen = chosen.filter((d) => CHANNELS[d.channel].kind === 'paid')
   const needsBudget = paidChosen.length > 0
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
@@ -85,7 +87,7 @@ export function NewClientWizard({ onClose }: Props) {
       durationWeeks: durationWeeks || undefined,
       mediaBudget: budgetNum || undefined,
     })
-    void seedCampaignAssets(campaign, chosen, { mediaBudget: budgetNum, endDate })
+    void seedCampaignAssets(campaign, chosen, { mediaBudget: budgetNum, flightWeeks: durationWeeks, endDate })
     setClientFilter(client)
     setCampaignFilter(campaign)
     onClose()
@@ -271,8 +273,8 @@ export function NewClientWizard({ onClose }: Props) {
                 ← Back
               </button>
               <span className="wiz-hint">
-                {piecesPerMonth} piece{piecesPerMonth === 1 ? '' : 's'}/mo → spreadsheet
-                {durationWeeks ? ` · runs ${durationWeeks} wks` : ' · ongoing'}
+                {totalPieces} piece{totalPieces === 1 ? '' : 's'} on the calendar
+                {durationWeeks ? ` over ${durationWeeks} wks` : ' (rolling month)'}
               </span>
               <span className="spacer" />
               <button
