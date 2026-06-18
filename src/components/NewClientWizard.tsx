@@ -87,6 +87,10 @@ export function NewClientWizard({ onClose }: Props) {
       durationWeeks > 0
         ? new Date(Date.now() + durationWeeks * 7 * 86_400_000).toISOString().slice(0, 10)
         : undefined
+    const oneTimeAssets = chosen.filter((d) => d.brand).length
+    const contentPerMonth = chosen
+      .filter((d) => CHANNELS[d.channel].kind !== 'paid' && !d.brand)
+      .reduce((n, d) => n + d.perMonth, 0)
     addClient(client)
     addCampaign({
       name: campaign,
@@ -95,6 +99,8 @@ export function NewClientWizard({ onClose }: Props) {
       objective: objective.trim() || undefined,
       durationWeeks: durationWeeks || undefined,
       mediaBudget: budgetNum || undefined,
+      contentPerMonth: contentPerMonth || undefined,
+      oneTimeAssets: oneTimeAssets || undefined,
     })
     void seedCampaignAssets(campaign, chosen, { mediaBudget: budgetNum, flightWeeks: durationWeeks, endDate })
     setClientFilter(client)

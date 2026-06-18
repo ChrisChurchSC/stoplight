@@ -21,6 +21,10 @@ export interface Campaign {
   durationWeeks?: number
   /** Total paid-media budget for the flight (omitted when organic-only). */
   mediaBudget?: number
+  /** Content pieces produced per month (monthly cadence total). */
+  contentPerMonth?: number
+  /** One-time brand assets built for the campaign (landing pages, etc.). */
+  oneTimeAssets?: number
 }
 
 // Campaigns created at runtime (the wizard) register here so clientForCampaign

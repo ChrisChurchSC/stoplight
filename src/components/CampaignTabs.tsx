@@ -82,6 +82,18 @@ export function CampaignTabs() {
                   <span className="client-tab-dur">{duration}</span>
                 </>
               )}
+              {meta?.contentPerMonth ? (
+                <>
+                  <span className="client-tab-dot">·</span>
+                  {meta.contentPerMonth}/mo
+                </>
+              ) : null}
+              {meta?.oneTimeAssets ? (
+                <>
+                  <span className="client-tab-dot">·</span>
+                  {meta.oneTimeAssets} one-time
+                </>
+              ) : null}
             </span>
           </button>
         )
