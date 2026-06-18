@@ -7,6 +7,10 @@ export function Breadcrumb() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const addAssets = useTrafficStore((s) => s.addAssets)
+  const query = useTrafficStore((s) => s.query)
+  const setQuery = useTrafficStore((s) => s.setQuery)
+  const icpOpen = useTrafficStore((s) => s.icpOpen)
+  const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const overview = clientFilter === 'all'
@@ -32,10 +36,29 @@ export function Breadcrumb() {
           <span className="crumb active">{clientFilter}</span>
           <span className="crumb-sep">/</span>
           <span className="crumb">{campaignFilter === 'all' ? 'All campaigns' : campaignFilter}</span>
+
+          <button
+            className={`btn sm${icpOpen ? ' primary' : ''}`}
+            onClick={() => setIcpOpen(!icpOpen)}
+            title="ICP & proof"
+          >
+            ◎ ICP
+          </button>
         </>
       )}
 
       <span className="spacer" />
+
+      {!overview && (
+        <div className="toolbar-search">
+          <span className="search-ico">⌕</span>
+          <input
+            value={query}
+            placeholder="Search assets…"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
 
       <button className="btn sm primary" onClick={() => inputRef.current?.click()}>
         + Add assets

@@ -7,7 +7,6 @@ import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { CampaignTabs } from './CampaignTabs'
 import { ClientsOverview } from './ClientsOverview'
-import { Toolbar } from './Toolbar'
 import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
@@ -71,7 +70,6 @@ export function Workbench() {
               <ClientsOverview />
             ) : (
               <>
-                <Toolbar />
                 <IngestTray />
                 {view === 'calendar' ? (
                   <CalendarView />
