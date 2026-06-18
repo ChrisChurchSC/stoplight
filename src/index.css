@@ -3024,6 +3024,12 @@ button {
 .journey-edge.h-mismatch {
   stroke: var(--red);
 }
+/* Stage→stage funnel guides (when there are no per-asset links). */
+.journey-edge--stage {
+  stroke: var(--accent);
+  stroke-width: 1.25;
+  opacity: 0.55;
+}
 .journey-handoffs {
   margin-left: 10px;
   font-weight: 600;

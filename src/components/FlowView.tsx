@@ -24,6 +24,8 @@ interface Edge {
   level: HandoffLevel
   reason: string
   back: boolean
+  /** True for the stage→stage funnel guides (vs. a per-asset linksTo edge). */
+  stage?: boolean
   x1: number
   y1: number
   x2: number
@@ -84,6 +86,28 @@ export function FlowView() {
           x2: (back ? t.right + 5 : t.left - 5) - base.left,
           y2: t.top + t.height / 2 - base.top,
         })
+      }
+      // No explicit per-asset links (e.g. a wizard-seeded campaign): connect the
+      // funnel stages in sequence so the journey still reads as connected.
+      if (next.length === 0) {
+        const nums = [...root.querySelectorAll<HTMLElement>('.journey-step-num')]
+        for (let i = 0; i < nums.length - 1; i++) {
+          const a = nums[i].getBoundingClientRect()
+          const b = nums[i + 1].getBoundingClientRect()
+          next.push({
+            key: `stage-${i}`,
+            sourceId: '',
+            targetName: '',
+            level: 'coherent',
+            reason: '',
+            back: false,
+            stage: true,
+            x1: a.right - base.left,
+            y1: a.top + a.height / 2 - base.top,
+            x2: b.left - base.left,
+            y2: b.top + b.height / 2 - base.top,
+          })
+        }
       }
       setEdges(next)
     }
@@ -193,11 +217,11 @@ export function FlowView() {
               const cx1 = e.back ? e.x1 - dx : e.x1 + dx
               const cx2 = e.back ? e.x2 + dx : e.x2 - dx
               const active = hover && (hover.id === e.sourceId || hover.name === e.targetName)
-              const cls = hover ? (active ? ' active' : ' dim') : ''
+              const cls = e.stage ? '' : hover ? (active ? ' active' : ' dim') : ''
               return (
                 <path
                   key={e.key}
-                  className={`journey-edge h-${e.level}${cls}`}
+                  className={`journey-edge${e.stage ? ' journey-edge--stage' : ` h-${e.level}`}${cls}`}
                   d={`M ${e.x1} ${e.y1} C ${cx1} ${e.y1}, ${cx2} ${e.y2}, ${e.x2} ${e.y2}`}
                   markerStart="url(#journey-dot)"
                   markerEnd="url(#journey-dot)"
