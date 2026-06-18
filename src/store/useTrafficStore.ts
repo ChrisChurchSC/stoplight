@@ -6,6 +6,8 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
+import { driveFilesToAssets } from '../lib/driveImport'
+import { pickFromGoogleDrive, isGoogleDriveConfigured } from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
 import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
@@ -58,6 +60,9 @@ interface TrafficState {
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
   setIcpOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
+  /** Entry point for "Import from Drive": opens the real Google Picker when
+   *  configured, else the Demo Drive modal. */
+  importFromDrive: () => Promise<void>
 
   refresh: () => Promise<void>
 
@@ -165,6 +170,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setPage: (page) => set({ page }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
+  importFromDrive: async () => {
+    // Demo Drive (no creds) → in-app fixture modal.
+    if (!isGoogleDriveConfigured) {
+      set({ drivePickerOpen: true })
+      return
+    }
+    // Real Drive → native Google Picker, same pipeline as the demo.
+    try {
+      const files = await pickFromGoogleDrive()
+      if (files.length) get().addAssets(driveFilesToAssets(files))
+      if (get().page !== 'clients') set({ page: 'clients' })
+    } catch {
+      // Auth cancelled / picker failed → fall back to the demo modal.
+      set({ drivePickerOpen: true })
+    }
+  },
 
   refresh: async () => {
     set({ loading: true })

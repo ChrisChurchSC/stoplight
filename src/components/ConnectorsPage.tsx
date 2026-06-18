@@ -1,3 +1,4 @@
+import { isGoogleDriveConfigured } from '../adapters/drive'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 interface Connector {
@@ -8,7 +9,14 @@ interface Connector {
 }
 
 const CONNECTORS: Connector[] = [
-  { name: 'Google Drive', purpose: 'Asset import & auto-organize', status: 'mock', detail: 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID to connect a real Drive (drive.file scope, no key stored).' },
+  {
+    name: 'Google Drive',
+    purpose: 'Asset import & auto-organize',
+    status: isGoogleDriveConfigured ? 'config' : 'mock',
+    detail: isGoogleDriveConfigured
+      ? 'Connected via OAuth (drive.file scope, no key stored). Folders → channel + type through the same classifier as local uploads.'
+      : 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY to connect a real Drive (drive.file scope, no app secret).',
+  },
   { name: 'Clay', purpose: 'ICP enrichment', status: 'mock', detail: 'Sample ICP pull. Swap MockIcpSource for the Clay MCP.' },
   { name: 'Anthropic (Claude)', purpose: 'ICP messaging review', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real review; heuristic fallback otherwise.' },
   { name: 'Attio', purpose: 'Attribution & closed-won', status: 'mock', detail: 'MockAttioAdapter. Swap for the Attio MCP (contacts + deals).' },
@@ -26,7 +34,7 @@ const STATUS_LABEL: Record<Connector['status'], string> = {
 }
 
 export function ConnectorsPage() {
-  const setDrivePickerOpen = useTrafficStore((s) => s.setDrivePickerOpen)
+  const importFromDrive = useTrafficStore((s) => s.importFromDrive)
   return (
     <div className="page">
       <div className="page-head">
@@ -44,8 +52,8 @@ export function ConnectorsPage() {
               <div className="settings-card-purpose">{c.purpose}</div>
               <div className="settings-card-detail">{c.detail}</div>
               {c.name === 'Google Drive' ? (
-                <button className="btn sm settings-card-btn" onClick={() => setDrivePickerOpen(true)}>
-                  Browse Demo Drive
+                <button className="btn sm settings-card-btn" onClick={() => importFromDrive()}>
+                  {isGoogleDriveConfigured ? 'Import from Drive' : 'Browse Demo Drive'}
                 </button>
               ) : (
                 <button className="btn sm settings-card-btn" disabled>

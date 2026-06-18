@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { driveSource } from '../adapters/drive'
+import { mockDriveSource } from '../adapters/drive'
 import type { DriveFile } from '../adapters/drive'
 import { driveFilesToAssets } from '../lib/driveImport'
 import { formatBytes } from '../lib/format'
@@ -34,7 +34,7 @@ export function DrivePicker() {
     let live = true
     setLoading(true)
     setError(null)
-    driveSource
+    mockDriveSource
       .list()
       .then((fs) => {
         if (!live) return
@@ -87,15 +87,15 @@ export function DrivePicker() {
       <div className="drive-modal" role="dialog" aria-label="Import from Drive">
         <div className="drive-head">
           <div>
-            <strong>Import from {driveSource.label}</strong>
-            {driveSource.isDemo && <span className="drive-demo-badge">Demo</span>}
+            <strong>Import from {mockDriveSource.label}</strong>
+            {mockDriveSource.isDemo && <span className="drive-demo-badge">Demo</span>}
           </div>
           <button className="btn ghost sm" onClick={() => setOpen(false)}>
             Close
           </button>
         </div>
 
-        {driveSource.isDemo && (
+        {mockDriveSource.isDemo && (
           <div className="drive-note">
             Sample files so you can see the flow. Set <code>VITE_GOOGLE_CLIENT_ID</code> to connect a
             real Drive. Folders carry the channel; files import + auto-organize on the next screen.

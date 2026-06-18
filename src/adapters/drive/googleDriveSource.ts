@@ -1,33 +1,179 @@
-import type { DriveFile, DriveSource } from './types'
+import type { DriveFile } from './types'
 
 /**
- * Real Google Drive source — the "flip the switch" follow-up to the Demo Drive.
+ * Real Google Drive import via Google Identity Services + the Google Picker.
  *
- * Wiring (no app secret, no backend; mirrors the key-gate pattern):
- *  1. Set VITE_GOOGLE_CLIENT_ID to an OAuth client (type: Web) from a Google
- *     Cloud project with the Picker API + Drive API enabled.
- *  2. Load Google Identity Services + the Picker script, request an access
- *     token for scope https://www.googleapis.com/auth/drive.file (per-file
- *     consent — the lightest verification, the user only exposes what they pick).
- *  3. Open google.picker, and for each picked id call
- *     GET drive/v3/files/{id}?fields=id,name,mimeType,size,parents,thumbnailLink,
- *       imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis)
- *     then walk parents to build folderPath. Map the result into DriveFile —
- *     the same shape the Demo Drive returns, so driveFilesToAssets + the
- *     classifier + the confirm board all work unchanged.
+ * No app secret, no backend: the user's OAuth consent IS the key-gate (mirrors
+ * how ANTHROPIC_API_KEY gates the ICP review). Scope is drive.file — the user
+ * only exposes the files they actually pick, which is the lightest Google
+ * verification path. Picked files flow through the SAME driveFilesToAssets +
+ * classifier + confirm board as the Demo Drive.
  *
- * Until step 1 is done, this source is never selected (see index.ts), so the
- * app falls back to the Demo Drive. list() throws a clear message if it is ever
- * called without configuration, rather than failing obscurely.
+ * To turn it on (see ConnectorsPage / the Phase-4 checklist):
+ *   1. Google Cloud project with the Picker API + Drive API enabled.
+ *   2. OAuth client ID (Web) + an API key (browser).
+ *   3. Put them in .env as VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY.
+ * Until then isGoogleDriveConfigured is false and the app uses the Demo Drive.
+ *
+ * NOTE: this path needs a live client ID to exercise end-to-end; it is written
+ * to Google's documented Picker + GIS API but has not been run without creds.
  */
-export const isGoogleDriveConfigured = !!import.meta.env.VITE_GOOGLE_CLIENT_ID
 
-export const googleDriveSource: DriveSource = {
-  label: 'Google Drive',
-  isDemo: false,
-  async list(): Promise<DriveFile[]> {
-    throw new Error(
-      'Google Drive is not configured. Set VITE_GOOGLE_CLIENT_ID and implement the Picker flow (see googleDriveSource.ts).',
-    )
-  },
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined
+const SCOPE = 'https://www.googleapis.com/auth/drive.file'
+
+export const isGoogleDriveConfigured = !!CLIENT_ID && !!API_KEY
+
+// Minimal ambient access to the Google globals (no @types needed).
+type AnyObj = Record<string, unknown>
+function g(): AnyObj {
+  return (window as unknown as { google?: AnyObj }).google ?? {}
 }
+function gapi(): AnyObj {
+  return (window as unknown as { gapi?: AnyObj }).gapi ?? {}
+}
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve()
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error(`Failed to load ${src}`))
+    document.head.appendChild(s)
+  })
+}
+
+async function ensurePicker(): Promise<void> {
+  await loadScript('https://apis.google.com/js/api.js')
+  await new Promise<void>((resolve) => {
+    ;(gapi().load as (m: string, cb: () => void) => void)('picker', () => resolve())
+  })
+}
+
+async function ensureGis(): Promise<void> {
+  await loadScript('https://accounts.google.com/gsi/client')
+}
+
+/** Open the GIS consent flow and resolve an access token (drive.file). */
+function requestAccessToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const oauth2 = (g().accounts as AnyObj | undefined)?.oauth2 as AnyObj | undefined
+    if (!oauth2) return reject(new Error('Google Identity Services not loaded'))
+    const initTokenClient = oauth2.initTokenClient as (cfg: AnyObj) => { requestAccessToken: () => void }
+    const client = initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      callback: (resp: { access_token?: string; error?: string }) => {
+        if (resp.access_token) resolve(resp.access_token)
+        else reject(new Error(resp.error || 'Authorization was cancelled'))
+      },
+    })
+    client.requestAccessToken()
+  })
+}
+
+/** Show the native Google Picker and resolve the documents the user picks. */
+function showPicker(token: string): Promise<Array<{ id: string; parentId?: string }>> {
+  return new Promise((resolve) => {
+    const picker = g().picker as AnyObj
+    const DocsView = picker.DocsView as new (viewId?: unknown) => AnyObj
+    const view = new DocsView((picker.ViewId as AnyObj).DOCS)
+    ;(view.setIncludeFolders as (b: boolean) => AnyObj)?.(true)
+
+    const builder = new (picker.PickerBuilder as new () => AnyObj)()
+    const chain = (m: string, ...args: unknown[]) =>
+      (builder[m] as (...a: unknown[]) => AnyObj).apply(builder, args)
+    chain('addView', view)
+    chain('setOAuthToken', token)
+    if (API_KEY) chain('setDeveloperKey', API_KEY)
+    chain('enableFeature', (picker.Feature as AnyObj).MULTISELECT_ENABLED)
+    chain('setCallback', (data: AnyObj) => {
+      const Response = picker.Response as AnyObj
+      const Action = picker.Action as AnyObj
+      if (data[Response.ACTION as string] !== Action.PICKED) return
+      const Doc = picker.Document as AnyObj
+      const docs = (data[Response.DOCUMENTS as string] as AnyObj[]) ?? []
+      resolve(
+        docs.map((d) => ({
+          id: d[Doc.ID as string] as string,
+          parentId: d[Doc.PARENT_ID as string] as string | undefined,
+        })),
+      )
+    })
+    const built = chain('build') as AnyObj
+    ;(built.setVisible as (v: boolean) => void)(true)
+  })
+}
+
+interface DriveMeta {
+  id: string
+  name: string
+  mimeType: string
+  size?: string
+  parents?: string[]
+  imageMediaMetadata?: { width?: number; height?: number }
+  videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string }
+}
+
+async function fileMeta(id: string, token: string): Promise<DriveMeta | null> {
+  const fields =
+    'id,name,mimeType,size,parents,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis)'
+  const url = `https://www.googleapis.com/drive/v3/files/${id}?fields=${encodeURIComponent(fields)}&supportsAllDrives=true`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return null
+  return (await res.json()) as DriveMeta
+}
+
+/** Best-effort immediate parent folder name (enough for channel detection).
+ *  drive.file may not grant the parent, so this can come back empty. */
+async function folderName(parentId: string | undefined, token: string): Promise<string> {
+  if (!parentId) return ''
+  const url = `https://www.googleapis.com/drive/v3/files/${parentId}?fields=name&supportsAllDrives=true`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return ''
+  const j = (await res.json()) as { name?: string }
+  return j.name ?? ''
+}
+
+function toDriveFile(meta: DriveMeta, folder: string): DriveFile {
+  const img = meta.imageMediaMetadata
+  const vid = meta.videoMediaMetadata
+  const width = img?.width ?? vid?.width
+  const height = img?.height ?? vid?.height
+  const durationSec = vid?.durationMillis ? Math.round(Number(vid.durationMillis) / 1000) : undefined
+  return {
+    id: meta.id,
+    name: meta.name,
+    mimeType: meta.mimeType,
+    folderPath: folder,
+    size: meta.size ? Number(meta.size) : undefined,
+    width,
+    height,
+    durationSec,
+  }
+}
+
+/** Open the real Google Picker and return the chosen files, enriched with the
+ *  metadata (dimensions, parent folder) the classifier needs. */
+export async function pickFromGoogleDrive(): Promise<DriveFile[]> {
+  if (!isGoogleDriveConfigured) {
+    throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY).')
+  }
+  await Promise.all([ensurePicker(), ensureGis()])
+  const token = await requestAccessToken()
+  const picked = await showPicker(token)
+  const files = await Promise.all(
+    picked.map(async ({ id, parentId }) => {
+      const meta = await fileMeta(id, token)
+      if (!meta) return null
+      const folder = await folderName(parentId ?? meta.parents?.[0], token)
+      return toDriveFile(meta, folder)
+    }),
+  )
+  return files.filter((f): f is DriveFile => f !== null)
+}
+
+export const googleDriveLabel = 'Google Drive'

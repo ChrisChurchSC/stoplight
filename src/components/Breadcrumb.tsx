@@ -11,7 +11,7 @@ export function Breadcrumb() {
   const setQuery = useTrafficStore((s) => s.setQuery)
   const icpOpen = useTrafficStore((s) => s.icpOpen)
   const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
-  const setDrivePickerOpen = useTrafficStore((s) => s.setDrivePickerOpen)
+  const importFromDrive = useTrafficStore((s) => s.importFromDrive)
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
 
@@ -76,7 +76,7 @@ export function Breadcrumb() {
             ◎ ICP
           </button>
         )}
-        <button className="btn sm" onClick={() => setDrivePickerOpen(true)} title="Import from Drive">
+        <button className="btn sm" onClick={() => importFromDrive()} title="Import from Drive">
           ⬇ Drive
         </button>
         <button className="btn sm primary" onClick={() => inputRef.current?.click()}>
