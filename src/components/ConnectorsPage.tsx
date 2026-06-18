@@ -35,6 +35,9 @@ const STATUS_LABEL: Record<Connector['status'], string> = {
 
 export function ConnectorsPage() {
   const importFromDrive = useTrafficStore((s) => s.importFromDrive)
+  const importFolderFromDrive = useTrafficStore((s) => s.importFolderFromDrive)
+  const connectDrive = useTrafficStore((s) => s.connectDrive)
+  const driveConnected = useTrafficStore((s) => s.driveConnected)
   return (
     <div className="page">
       <div className="page-head">
@@ -52,9 +55,23 @@ export function ConnectorsPage() {
               <div className="settings-card-purpose">{c.purpose}</div>
               <div className="settings-card-detail">{c.detail}</div>
               {c.name === 'Google Drive' ? (
-                <button className="btn sm settings-card-btn" onClick={() => importFromDrive()}>
-                  {isGoogleDriveConfigured ? 'Import from Drive' : 'Browse Demo Drive'}
-                </button>
+                <div className="settings-card-actions">
+                  {driveConnected ? (
+                    <span className="drive-connected">
+                      ✓ {isGoogleDriveConfigured ? 'Account connected' : 'Demo connected'}
+                    </span>
+                  ) : (
+                    <button className="btn sm settings-card-btn" onClick={() => connectDrive()}>
+                      Connect account
+                    </button>
+                  )}
+                  <button className="btn sm settings-card-btn" onClick={() => importFolderFromDrive()}>
+                    Connect folder
+                  </button>
+                  <button className="btn sm settings-card-btn" onClick={() => importFromDrive()}>
+                    {isGoogleDriveConfigured ? 'Import files' : 'Browse Demo Drive'}
+                  </button>
+                </div>
               ) : (
                 <button className="btn sm settings-card-btn" disabled>
                   {c.status === 'connected' ? 'Manage' : 'Connect'}

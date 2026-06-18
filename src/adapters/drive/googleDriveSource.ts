@@ -57,6 +57,27 @@ async function ensureGis(): Promise<void> {
   await loadScript('https://accounts.google.com/gsi/client')
 }
 
+// Cache the access token so connect / file-pick / folder-pick reuse one sign-in.
+let tokenCache: { token: string; exp: number } | null = null
+
+async function getToken(): Promise<string> {
+  const now = Date.now()
+  if (tokenCache && tokenCache.exp > now + 60_000) return tokenCache.token
+  await ensureGis()
+  const token = await requestAccessToken()
+  tokenCache = { token, exp: now + 55 * 60 * 1000 } // GIS tokens last ~1h
+  return token
+}
+
+/** "Connect account": run the Google sign-in/consent flow up front so the
+ *  connection is an explicit step, not a side effect of the first import. */
+export async function connectGoogleDrive(): Promise<void> {
+  if (!isGoogleDriveConfigured) {
+    throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY).')
+  }
+  await getToken()
+}
+
 /** Open the GIS consent flow and resolve an access token (drive.file). */
 function requestAccessToken(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -162,8 +183,8 @@ export async function pickFromGoogleDrive(): Promise<DriveFile[]> {
   if (!isGoogleDriveConfigured) {
     throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY).')
   }
-  await Promise.all([ensurePicker(), ensureGis()])
-  const token = await requestAccessToken()
+  await ensurePicker()
+  const token = await getToken()
   const picked = await showPicker(token)
   const files = await Promise.all(
     picked.map(async ({ id, parentId }) => {
@@ -174,6 +195,64 @@ export async function pickFromGoogleDrive(): Promise<DriveFile[]> {
     }),
   )
   return files.filter((f): f is DriveFile => f !== null)
+}
+
+/** Show a folder-selection Picker and resolve the chosen folder. */
+function showFolderPicker(token: string): Promise<{ id: string; name: string } | null> {
+  return new Promise((resolve) => {
+    const picker = g().picker as AnyObj
+    const DocsView = picker.DocsView as new (viewId?: unknown) => AnyObj
+    const view = new DocsView((picker.ViewId as AnyObj).DOCS)
+    ;(view.setSelectFolderEnabled as (b: boolean) => AnyObj)?.(true)
+    ;(view.setIncludeFolders as (b: boolean) => AnyObj)?.(true)
+    ;(view.setMimeTypes as (m: string) => AnyObj)?.('application/vnd.google-apps.folder')
+
+    const builder = new (picker.PickerBuilder as new () => AnyObj)()
+    const chain = (m: string, ...args: unknown[]) =>
+      (builder[m] as (...a: unknown[]) => AnyObj).apply(builder, args)
+    chain('addView', view)
+    chain('setOAuthToken', token)
+    if (API_KEY) chain('setDeveloperKey', API_KEY)
+    chain('setCallback', (data: AnyObj) => {
+      const Response = picker.Response as AnyObj
+      const Action = picker.Action as AnyObj
+      if (data[Response.ACTION as string] !== Action.PICKED) return
+      const Doc = picker.Document as AnyObj
+      const docs = (data[Response.DOCUMENTS as string] as AnyObj[]) ?? []
+      const d = docs[0]
+      resolve(d ? { id: d[Doc.ID as string] as string, name: d[Doc.NAME as string] as string } : null)
+    })
+    const built = chain('build') as AnyObj
+    ;(built.setVisible as (v: boolean) => void)(true)
+  })
+}
+
+/** List the (supported) files directly inside a folder the user granted. */
+async function listFolder(folderId: string, token: string): Promise<DriveMeta[]> {
+  const fields =
+    'files(id,name,mimeType,size,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis))'
+  const q = `'${folderId}' in parents and trashed = false`
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent(fields)}&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return []
+  const j = (await res.json()) as { files?: DriveMeta[] }
+  return j.files ?? []
+}
+
+/** "Connect folder": pick a Drive folder and import everything inside it,
+ *  tagged with the folder name so the classifier reads the channel from it. */
+export async function pickFolderFromGoogleDrive(): Promise<DriveFile[]> {
+  if (!isGoogleDriveConfigured) {
+    throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY).')
+  }
+  await ensurePicker()
+  const token = await getToken()
+  const folder = await showFolderPicker(token)
+  if (!folder) return []
+  const metas = await listFolder(folder.id, token)
+  return metas
+    .filter((m) => m.mimeType !== 'application/vnd.google-apps.folder')
+    .map((m) => toDriveFile(m, folder.name))
 }
 
 export const googleDriveLabel = 'Google Drive'

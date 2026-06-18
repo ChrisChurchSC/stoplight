@@ -7,7 +7,12 @@ import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { driveFilesToAssets } from '../lib/driveImport'
-import { pickFromGoogleDrive, isGoogleDriveConfigured } from '../adapters/drive'
+import {
+  pickFromGoogleDrive,
+  pickFolderFromGoogleDrive,
+  connectGoogleDrive,
+  isGoogleDriveConfigured,
+} from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
 import { typesFor } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
@@ -52,6 +57,8 @@ interface TrafficState {
   icpOpen: boolean
   /** Google Drive / Demo Drive import picker. */
   drivePickerOpen: boolean
+  /** True once the Drive account is connected (real sign-in, or demo). */
+  driveConnected: boolean
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -60,9 +67,13 @@ interface TrafficState {
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
   setIcpOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
+  /** Connect the Drive account (real sign-in, or demo). */
+  connectDrive: () => Promise<void>
   /** Entry point for "Import from Drive": opens the real Google Picker when
    *  configured, else the Demo Drive modal. */
   importFromDrive: () => Promise<void>
+  /** Pick a whole Drive folder and import its files. */
+  importFolderFromDrive: () => Promise<void>
 
   refresh: () => Promise<void>
 
@@ -149,6 +160,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   page: 'clients',
   icpOpen: false,
   drivePickerOpen: false,
+  driveConnected: false,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -170,6 +182,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setPage: (page) => set({ page }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
+  connectDrive: async () => {
+    // Demo (no creds): simulate a connected account so the flow is visible.
+    if (!isGoogleDriveConfigured) {
+      set({ driveConnected: true })
+      return
+    }
+    try {
+      await connectGoogleDrive()
+      set({ driveConnected: true })
+    } catch {
+      set({ driveConnected: false })
+    }
+  },
   importFromDrive: async () => {
     // Demo Drive (no creds) → in-app fixture modal.
     if (!isGoogleDriveConfigured) {
@@ -180,9 +205,26 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     try {
       const files = await pickFromGoogleDrive()
       if (files.length) get().addAssets(driveFilesToAssets(files))
+      set({ driveConnected: true })
       if (get().page !== 'clients') set({ page: 'clients' })
     } catch {
       // Auth cancelled / picker failed → fall back to the demo modal.
+      set({ drivePickerOpen: true })
+    }
+  },
+  importFolderFromDrive: async () => {
+    // Demo Drive (no creds) → the fixture modal (its folder checkboxes stand in
+    // for folder selection).
+    if (!isGoogleDriveConfigured) {
+      set({ drivePickerOpen: true })
+      return
+    }
+    try {
+      const files = await pickFolderFromGoogleDrive()
+      if (files.length) get().addAssets(driveFilesToAssets(files))
+      set({ driveConnected: true })
+      if (get().page !== 'clients') set({ page: 'clients' })
+    } catch {
       set({ drivePickerOpen: true })
     }
   },

@@ -822,6 +822,17 @@ button {
   color: var(--text-muted);
   font-size: 13px;
 }
+.settings-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.drive-connected {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a7f37;
+}
 
 /* the spreadsheet fills the rest of the viewport and scrolls within itself */
 .sheet-grid {
