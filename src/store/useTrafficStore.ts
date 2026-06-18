@@ -6,6 +6,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
+import { registerCampaign, type Campaign } from '../domain/clients'
 import { driveFilesToAssets } from '../lib/driveImport'
 import {
   pickFromGoogleDrive,
@@ -74,6 +75,27 @@ function saveClients(list: string[]): void {
   }
 }
 
+// Campaigns created in the new-client wizard, persisted. Registered into
+// clientForCampaign on load so they resolve to their client before any rows exist.
+const CAMPAIGNS_KEY = 'stoplight.campaigns.v1'
+function loadCampaigns(): Campaign[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]')
+    const list: Campaign[] = Array.isArray(v) ? v : []
+    for (const c of list) registerCampaign(c.name, c.client)
+    return list
+  } catch {
+    return []
+  }
+}
+function saveCampaigns(list: Campaign[]): void {
+  try {
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
 interface TrafficState {
   /** Assets dropped into the tray, not yet trafficked into the sheet. */
   assets: Asset[]
@@ -103,6 +125,9 @@ interface TrafficState {
   /** Explicitly-added clients (persisted), merged with clients derived from rows. */
   clientList: string[]
   addClient: (name: string) => void
+  /** Campaigns created via the new-client wizard (persisted). */
+  campaignList: Campaign[]
+  addCampaign: (campaign: Campaign) => void
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -213,6 +238,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   driveConnected: false,
   driveLinks: loadDriveLinks(),
   clientList: loadClients(),
+  campaignList: loadCampaigns(),
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -321,6 +347,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const clientList = [...s.clientList, n]
       saveClients(clientList)
       return { clientList }
+    }),
+  addCampaign: (campaign) =>
+    set((s) => {
+      registerCampaign(campaign.name, campaign.client)
+      if (s.campaignList.some((c) => c.name === campaign.name && c.client === campaign.client)) return {}
+      const campaignList = [...s.campaignList, campaign]
+      saveCampaigns(campaignList)
+      return { campaignList }
     }),
 
   refresh: async () => {

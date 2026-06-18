@@ -5,6 +5,7 @@ import { money } from '../domain/budget'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { NewClientWizard } from './NewClientWizard'
 
 interface ClientRow {
   client: string
@@ -42,21 +43,13 @@ export function ClientsOverview() {
   const setDriveLink = useTrafficStore((s) => s.setDriveLink)
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
   const clientList = useTrafficStore((s) => s.clientList)
-  const addClient = useTrafficStore((s) => s.addClient)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
   const [linkClient, setLinkClient] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState('')
-  const [newClient, setNewClient] = useState('')
-
-  const submitClient = () => {
-    const n = newClient.trim()
-    if (!n) return
-    addClient(n)
-    setNewClient('')
-  }
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const openLink = (client: string) => {
     setDraftUrl(driveLinks[client] ?? '')
@@ -88,24 +81,20 @@ export function ClientsOverview() {
       <h1 className="home-greeting">Your clients</h1>
       <p className="home-sub">Add a client, then bring their creative in from Drive or upload inside their workspace.</p>
 
-      <div className="home-newclient">
-        <span className="home-newclient-ico">＋</span>
-        <input
-          value={newClient}
-          placeholder="Add a client by name…"
-          onChange={(e) => setNewClient(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submitClient()}
-          autoFocus
-        />
-        <button className="btn primary" disabled={!newClient.trim()} onClick={submitClient}>
-          Add client
+      <div className="home-newclient-cta">
+        <button className="home-addclient" onClick={() => setWizardOpen(true)}>
+          <span className="home-addclient-ico">＋</span>
+          <span>
+            <span className="home-addclient-title">Add new client</span>
+            <span className="home-addclient-sub">Name, ICP via Clay, then a first campaign.</span>
+          </span>
         </button>
+        {all.length === 0 && (
+          <button className="home-link" onClick={loadSample}>
+            or load sample data
+          </button>
+        )}
       </div>
-      {all.length === 0 && (
-        <button className="home-link" onClick={loadSample}>
-          or load sample data
-        </button>
-      )}
 
       <div className="home-tabs">
         {(['all', 'recents', 'favorites'] as Tab[]).map((t) => (
@@ -235,6 +224,8 @@ export function ClientsOverview() {
           </div>
         </>
       )}
+
+      {wizardOpen && <NewClientWizard onClose={() => setWizardOpen(false)} />}
     </div>
   )
 }

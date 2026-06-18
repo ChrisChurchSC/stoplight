@@ -1811,6 +1811,222 @@ button {
   text-decoration: underline;
 }
 
+/* add-client CTA */
+.home-newclient-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.home-addclient {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.home-addclient:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.home-addclient-ico {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+.home-addclient-title {
+  display: block;
+  font-weight: 700;
+  font-size: 15px;
+}
+.home-addclient-sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+/* new-client wizard */
+.wiz {
+  position: fixed;
+  z-index: 60;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.wiz-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.wiz-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.wiz-step {
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.wiz-step.active {
+  color: var(--accent);
+}
+.wiz-step.done {
+  color: var(--text-muted);
+}
+.wiz-step-sep {
+  color: var(--text-faint);
+}
+.wiz-body {
+  padding: 16px;
+  overflow: auto;
+}
+.wiz-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+.wiz-label:first-child {
+  margin-top: 0;
+}
+.wiz-input {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 14px;
+}
+.wiz-input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.wiz-textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+.wiz-icp-btn {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+.wiz-icp-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.wiz-icp-btn:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+.wiz-icp {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+.wiz-icp-name {
+  font-weight: 700;
+  color: #1a7f37;
+}
+.wiz-icp-seg {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.wiz-icp-pains {
+  margin: 8px 0 4px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.wiz-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 4px;
+}
+.wiz-strategies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.wiz-strategy {
+  text-align: left;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.wiz-strategy:hover {
+  border-color: var(--accent);
+}
+.wiz-strategy.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.wiz-strategy-name {
+  display: block;
+  font-weight: 700;
+  font-size: 13px;
+}
+.wiz-strategy-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.wiz-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.wiz-foot .spacer {
+  flex: 1;
+}
+.wiz-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 /* "+ Add assets" popover (breadcrumb) */
 .bc-add {
   position: relative;

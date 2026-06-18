@@ -33,11 +33,16 @@ export function CampaignTabs() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
+  const campaignList = useTrafficStore((s) => s.campaignList)
 
   const clientRows = rows.filter((r) => clientForCampaign(r.campaign) === clientFilter)
-  if (clientRows.length === 0) return null
+  // Campaigns from existing rows + ones created in the wizard (which may have no rows yet).
+  const registered = campaignList.filter((c) => c.client === clientFilter).map((c) => c.name)
+  if (clientRows.length === 0 && registered.length === 0) return null
 
-  const campaigns = [...new Set(clientRows.map((r) => (r.campaign ?? '').trim()).filter(Boolean))].sort()
+  const campaigns = [
+    ...new Set([...clientRows.map((r) => (r.campaign ?? '').trim()).filter(Boolean), ...registered]),
+  ].sort()
   const tabs: Snap[] = [
     snapshot('all', 'All campaigns', clientRows),
     ...campaigns.map((c) => snapshot(c, c, clientRows.filter((r) => (r.campaign ?? '').trim() === c))),
