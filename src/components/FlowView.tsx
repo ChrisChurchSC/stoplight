@@ -94,7 +94,7 @@ export function FlowView() {
         const order = FUNNEL_STAGES.map((s) => s.stage)
         const byStage = new Map<FunnelStage, TrafficRow[]>()
         for (const r of view) {
-          const st = funnelStageFor(r.channel)
+          const st = funnelStageFor(r.channel, r.assetType)
           const list = byStage.get(st)
           if (list) list.push(r)
           else byStage.set(st, [r])
@@ -194,7 +194,7 @@ export function FlowView() {
 
   const stageData = (stage: FunnelStage) => {
     const items = view
-      .filter((r) => funnelStageFor(r.channel) === stage)
+      .filter((r) => funnelStageFor(r.channel, r.assetType) === stage)
       .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))
     const channels = [...new Set(items.map((r) => r.channel))] as ChannelId[]
     const names = new Set(items.map((r) => r.assetName))

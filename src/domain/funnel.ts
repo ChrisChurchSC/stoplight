@@ -45,5 +45,15 @@ const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
   push: 'retention',
 }
 
-export const funnelStageFor = (channel: ChannelId): FunnelStage =>
-  STAGE_BY_CHANNEL[channel] ?? 'awareness'
+/**
+ * The funnel stage an asset sits in. Mostly channel-driven, with a few
+ * type-aware overrides where the same channel spans stages — a YouTube demo /
+ * explainer educates (consideration) rather than reaches (awareness), and a blog
+ * case study is conversion proof rather than top-of-funnel content.
+ */
+export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelStage => {
+  if (channel === 'youtube')
+    return assetType === 'short' || assetType === 'community' ? 'awareness' : 'consideration'
+  if (channel === 'blog' && assetType === 'case-study') return 'conversion'
+  return STAGE_BY_CHANNEL[channel] ?? 'awareness'
+}
