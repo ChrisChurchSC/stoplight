@@ -1744,6 +1744,28 @@ button {
   opacity: 0.6;
   cursor: default;
 }
+.home-drive-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  margin-bottom: 22px;
+}
+.home-drive-ico {
+  color: var(--accent);
+  flex: none;
+}
+.home-drive-bar input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 14px;
+  background: transparent;
+}
 .home-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

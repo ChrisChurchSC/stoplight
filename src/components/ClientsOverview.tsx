@@ -44,6 +44,7 @@ export function ClientsOverview() {
   const driveLinks = useTrafficStore((s) => s.driveLinks)
   const setDriveLink = useTrafficStore((s) => s.setDriveLink)
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
+  const ingestDriveFolderUrl = useTrafficStore((s) => s.ingestDriveFolderUrl)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
@@ -51,6 +52,13 @@ export function ClientsOverview() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [linkClient, setLinkClient] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState('')
+  const [folderUrl, setFolderUrl] = useState('')
+
+  const ingestFolder = () => {
+    if (!folderUrl.trim()) return
+    void ingestDriveFolderUrl(folderUrl)
+    setFolderUrl('')
+  }
 
   const openLink = (client: string) => {
     setDraftUrl(driveLinks[client] ?? '')
@@ -112,6 +120,19 @@ export function ClientsOverview() {
           <span className="home-action-ico">▤</span>
           <span className="home-action-title">New campaign</span>
           <span className="home-action-sub">Start from a brief or template.</span>
+        </button>
+      </div>
+
+      <div className="home-drive-bar">
+        <span className="home-drive-ico">⬇</span>
+        <input
+          value={folderUrl}
+          placeholder="Paste a Google Drive folder link to ingest…"
+          onChange={(e) => setFolderUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && ingestFolder()}
+        />
+        <button className="btn sm primary" disabled={!folderUrl.trim()} onClick={ingestFolder}>
+          Ingest
         </button>
       </div>
 

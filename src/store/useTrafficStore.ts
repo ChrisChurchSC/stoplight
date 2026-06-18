@@ -96,6 +96,8 @@ interface TrafficState {
   importFromDrive: () => Promise<void>
   /** Pick a whole Drive folder and import its files. */
   importFolderFromDrive: () => Promise<void>
+  /** Ingest the assets in a Google Drive folder from its link. */
+  ingestDriveFolderUrl: (url: string) => Promise<void>
   /** Save a Google Drive folder link for a client. */
   setDriveLink: (client: string, url: string) => void
   /** Ingest the assets from a client's saved Drive folder link. */
@@ -260,6 +262,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       console.error('[drive] folder import failed', e)
     }
   },
+  ingestDriveFolderUrl: async (url) => {
+    if (!url.trim()) return
+    try {
+      // Real Drive lists the linked folder (drive.readonly); demo ingests the
+      // fixture so the flow works with no credentials.
+      const files = isGoogleDriveConfigured ? await listFolderByUrl(url) : await mockDriveSource.list()
+      if (files.length) {
+        get().addAssets(driveFilesToAssets(files))
+        set({ driveConnected: true })
+      }
+    } catch (e) {
+      console.error('[drive] folder ingest failed', e)
+    }
+  },
   setDriveLink: (client, url) =>
     set((s) => {
       const driveLinks = { ...s.driveLinks }
@@ -271,17 +287,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   ingestDriveLink: async (client) => {
     const url = get().driveLinks[client]
     if (!url) return
-    try {
-      // Real Drive lists the linked folder (drive.readonly); demo ingests the
-      // fixture so the flow works with no credentials.
-      const files = isGoogleDriveConfigured ? await listFolderByUrl(url) : await mockDriveSource.list()
-      if (files.length) {
-        get().addAssets(driveFilesToAssets(files))
-        set({ driveConnected: true, clientFilter: client })
-      }
-    } catch (e) {
-      console.error('[drive] link ingest failed', e)
-    }
+    await get().ingestDriveFolderUrl(url)
+    // Scope to the client so the freshly-ingested assets show in its workspace.
+    set({ clientFilter: client })
   },
 
   refresh: async () => {
