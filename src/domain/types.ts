@@ -99,6 +99,9 @@ export interface TrafficRow {
   channel: ChannelId
   /** Channel-specific asset-type category (see channelAssetTypes.ts). */
   assetType?: string
+  /** Carried from the classifier so the grid can flag auto-organized rows. */
+  classifyConfidence?: number
+  classifySource?: 'path' | 'heuristic' | 'ai'
   /** All messaging components, keyed by field (see messaging.ts). The full copy
    *  for the asset — headline, primary text, description, CTA, etc. */
   messaging: Record<string, string>

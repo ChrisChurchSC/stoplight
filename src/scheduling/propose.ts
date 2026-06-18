@@ -59,6 +59,8 @@ export function proposeSchedule(assets: Asset[], now: Date = new Date()): Traffi
         mediaType: asset.mediaType,
         channel,
         assetType,
+        classifyConfidence: asset.suggestedTypeFor?.[channel] ? asset.classifyConfidence : undefined,
+        classifySource: asset.suggestedTypeFor?.[channel] ? asset.classifySource : undefined,
         messaging: asset.caption
           ? { [primaryFieldKey(channel, assetType)]: asset.caption }
           : {},
