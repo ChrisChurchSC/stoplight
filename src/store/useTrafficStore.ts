@@ -410,11 +410,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     // Recurring pieces (perMonth > 1) repeat for the whole flight, spread evenly;
     // single assets sit near the start. Numbered when there's more than one.
+    // Continuous single assets (always-on / for-the-flight) run as a span.
+    const flightEnd = new Date(start)
+    flightEnd.setDate(flightEnd.getDate() + flightDays)
+    const flightEndIso = flightEnd.toISOString()
     const rows: TrafficRow[] = []
     deliverables.forEach((d, di) => {
       const recurring = d.perMonth > 1
       const count = recurring ? d.perMonth * months : 1
       const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
+      const spans = !recurring && d.runtime !== 'one-off'
       for (let k = 0; k < count; k++) {
         const offset = recurring ? Math.round(((k + 0.5) / count) * flightDays) : 1 + (di % 6)
         rows.push({
@@ -428,6 +433,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           campaign,
           audience: '',
           scheduledAt: slotIso(d.channel, offset),
+          endsAt: spans ? flightEndIso : undefined,
           status: 'draft',
           createdAt: Date.now(),
         })

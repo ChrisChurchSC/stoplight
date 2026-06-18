@@ -53,15 +53,29 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
     ? rows
     : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
 
+  // Point-in-time content (a post, a send) vs. assets that run over a period
+  // (always-on ads, landing pages, nurture flows) — the latter render as spans.
+  const startOfDay = (s: string) => {
+    const d = new Date(s)
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+  const dayDiff = (a: Date, b: Date) => Math.round((+b - +a) / 86_400_000)
+  const spanRows = view.filter((r) => r.endsAt)
+  const pointRows = view.filter((r) => !r.endsAt)
+
   const byDay = new Map<string, TrafficRow[]>()
-  for (const r of view) {
+  for (const r of pointRows) {
     const key = ymd(new Date(r.scheduledAt))
     const list = byDay.get(key)
     if (list) list.push(r)
     else byDay.set(key, [r])
   }
-  const eventsOn = (d: Date) =>
+  const pointsOn = (d: Date) =>
     (byDay.get(ymd(d)) ?? []).slice().sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))
+  const spansOn = (d: Date) =>
+    spanRows.filter((r) => d >= startOfDay(r.scheduledAt) && d <= startOfDay(r.endsAt!))
+  const eventsOn = (d: Date) => [...pointsOn(d), ...spansOn(d)]
 
   const todayKey = ymd(now)
 
@@ -96,11 +110,13 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
     </button>
   )
 
-  // ---- Month grid (6 weeks, events capped) ----
+  // ---- Month grid: weeks of day cells + multi-day span bars overlaid ----
   function MonthBody({ anchor }: { anchor: Date }) {
     const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
     const gridStart = startOfWeek(first)
-    const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+    const weeks = Array.from({ length: 6 }, (_, w) =>
+      Array.from({ length: 7 }, (_, i) => addDays(gridStart, w * 7 + i)),
+    )
     return (
       <>
         <div className="cal-weekdays">
@@ -108,38 +124,88 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
             <div key={w} className="cal-weekday">{w}</div>
           ))}
         </div>
-        <div className="cal-grid">
-          {days.map((d) => {
-            const key = ymd(d)
-            const inMonth = d.getMonth() === anchor.getMonth()
-            const evs = eventsOn(d)
-            const channels = [...new Set(evs.map((r) => r.channel))]
+        <div className="cal-month">
+          {weeks.map((days, wi) => {
+            const ws = days[0]
+            const we = days[6]
+            // Spans intersecting this week, clamped to it, packed into lanes.
+            const hits = spanRows
+              .map((r) => {
+                const s = startOfDay(r.scheduledAt)
+                const e = startOfDay(r.endsAt!)
+                if (e < ws || s > we) return null
+                return {
+                  r,
+                  startCol: Math.max(0, dayDiff(ws, s)),
+                  endCol: Math.min(6, dayDiff(ws, e)),
+                  contL: s < ws,
+                  contR: e > we,
+                }
+              })
+              .filter((x): x is NonNullable<typeof x> => x !== null)
+              .sort((a, b) => a.startCol - b.startCol || b.endCol - a.endCol)
+            const laneEnd: number[] = []
+            const placed = hits.map((h) => {
+              let lane = 0
+              while (lane < laneEnd.length && laneEnd[lane] >= h.startCol) lane++
+              laneEnd[lane] = h.endCol
+              return { ...h, lane }
+            })
+            const bands = laneEnd.length
             return (
-              <div
-                key={key}
-                className={`cal-day${inMonth ? '' : ' out'}${key === todayKey ? ' today' : ''}`}
-              >
-                <div className="cal-daynum">{d.getDate()}</div>
-                {evs.length > 0 && (
-                  <button
-                    className="cal-day-summary"
-                    onClick={() => setDayKey(key)}
-                    title={`${evs.length} scheduled`}
-                  >
-                    <span className="cal-day-logos">
-                      {channels.slice(0, 5).map((c) => (
-                        <span key={c} className="cal-logo" title={CHANNELS[c].label}>
-                          <ChannelIcon channel={c} size={13} />
-                        </span>
-                      ))}
-                      {channels.length > 5 && (
-                        <span className="cal-logo cal-logo-more">+{channels.length - 5}</span>
+              <div className="cal-week" key={wi} style={{ ['--bands' as string]: bands }}>
+                {days.map((d) => {
+                  const key = ymd(d)
+                  const inMonth = d.getMonth() === anchor.getMonth()
+                  const evs = pointsOn(d)
+                  const channels = [...new Set(evs.map((r) => r.channel))]
+                  return (
+                    <div
+                      key={key}
+                      className={`cal-day cal-day--wk${inMonth ? '' : ' out'}${key === todayKey ? ' today' : ''}`}
+                    >
+                      <div className="cal-daynum">{d.getDate()}</div>
+                      {evs.length > 0 && (
+                        <button
+                          className="cal-day-summary"
+                          onClick={() => setDayKey(key)}
+                          title={`${evs.length} scheduled`}
+                        >
+                          <span className="cal-day-logos">
+                            {channels.slice(0, 5).map((c) => (
+                              <span key={c} className="cal-logo" title={CHANNELS[c].label}>
+                                <ChannelIcon channel={c} size={13} />
+                              </span>
+                            ))}
+                            {channels.length > 5 && (
+                              <span className="cal-logo cal-logo-more">+{channels.length - 5}</span>
+                            )}
+                          </span>
+                          <span className="cal-day-count">
+                            {evs.length} asset{evs.length === 1 ? '' : 's'}
+                          </span>
+                        </button>
                       )}
-                    </span>
-                    <span className="cal-day-count">
-                      {evs.length} asset{evs.length === 1 ? '' : 's'}
-                    </span>
-                  </button>
+                    </div>
+                  )
+                })}
+                {placed.length > 0 && (
+                  <div className="cal-week-spans">
+                    {placed.map((h) => (
+                      <button
+                        key={h.r.id}
+                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}`}
+                        style={{ gridColumn: `${h.startCol + 1} / ${h.endCol + 2}`, gridRow: h.lane + 1 }}
+                        onClick={() => openReview(h.r.id)}
+                        title={`${CHANNELS[h.r.channel].label} · ${h.r.assetName} · runs to ${new Date(
+                          h.r.endsAt!,
+                        ).toLocaleDateString()}`}
+                      >
+                        <ChannelIcon channel={h.r.channel} size={11} color="#fff" />
+                        <span className="cal-span-name">{h.r.assetName}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             )

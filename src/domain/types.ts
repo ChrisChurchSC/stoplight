@@ -136,6 +136,10 @@ export interface TrafficRow {
   spend?: { toDate: number; updatedAt: number }
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
+  /** For assets that run over a period (always-on ads, landing pages, nurture
+   *  flows): the ISO date they stop running. Drives multi-day spans on the
+   *  calendar. Omitted for point-in-time content (a post, a send). */
+  endsAt?: string
   status: RowStatus
   /** Local reference to the media (object URL / href). A real backend would
    *  hold a durable URL after upload. */
