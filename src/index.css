@@ -2132,6 +2132,27 @@ button {
   opacity: 0.95;
   stroke-width: 1.4;
 }
+/* Handoff health: does the CTA + message carry to the destination? */
+.journey-edge.h-coherent {
+  stroke: var(--green);
+}
+.journey-edge.h-weak {
+  stroke: var(--amber);
+}
+.journey-edge.h-mismatch {
+  stroke: var(--red);
+}
+.journey-handoffs {
+  margin-left: 10px;
+  font-weight: 600;
+}
+.journey-handoff-ok {
+  color: var(--green);
+}
+.journey-handoff-bad {
+  color: #9a6a00;
+  margin-left: 6px;
+}
 .journey-rail {
   display: flex;
   align-items: flex-start;

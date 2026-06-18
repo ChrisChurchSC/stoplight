@@ -3,6 +3,7 @@ import { mockAttio } from '../adapters/attio/mockAttio'
 import { money } from '../domain/budget'
 import { CHANNELS } from '../domain/channels'
 import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from '../domain/funnel'
+import { handoffFor, type HandoffLevel } from '../domain/flowReview'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -20,6 +21,8 @@ interface Edge {
   key: string
   sourceId: string
   targetName: string
+  level: HandoffLevel
+  reason: string
   x1: number
   y1: number
   x2: number
@@ -69,16 +72,19 @@ export function FlowView() {
       const next: Edge[] = []
       for (const [tgt, list] of groups) {
         const t = tgt.getBoundingClientRect()
+        const targetRow = rows.find((x) => x.assetName === list[0].linksTo)
         list.forEach((r, k) => {
           const src = byId.get(r.id)!
           const s = src.getBoundingClientRect()
           const frac = (k + 1) / (list.length + 1)
+          const h = targetRow ? handoffFor(r, targetRow) : { level: 'weak' as const, reason: '' }
           next.push({
             key: r.id,
             sourceId: r.id,
             targetName: r.linksTo!,
-            // Inset endpoints into the gap so the dots sit clear of the cards
-            // (the lines themselves run behind the cards).
+            level: h.level,
+            reason: h.reason,
+            // Inset endpoints into the gap so the dots sit clear of the cards.
             x1: s.right - base.left + 5,
             y1: s.top + s.height / 2 - base.top,
             x2: t.left - base.left - 5,
@@ -106,6 +112,17 @@ export function FlowView() {
   }, [linkKey])
 
   const targetId = (name: string) => rows.find((r) => r.assetName === name)?.id
+
+  // Handoff health across all linked units (CTA + message continuity).
+  const handoffs = view
+    .filter((r) => r.linksTo)
+    .map((r) => {
+      const t = rows.find((x) => x.assetName === r.linksTo)
+      return t ? handoffFor(r, t) : null
+    })
+    .filter((h): h is NonNullable<typeof h> => !!h)
+  const cleanN = handoffs.filter((h) => h.level === 'coherent').length
+  const breakN = handoffs.filter((h) => h.level !== 'coherent').length
 
   const Card = ({ row }: { row: TrafficRow }) => {
     const linkId = row.linksTo ? targetId(row.linksTo) : undefined
@@ -161,13 +178,21 @@ export function FlowView() {
       <div className="journey">
         <div className="journey-intro">
           The path a prospect travels — lines show how each unit drives to the next.
+          {handoffs.length > 0 && (
+            <span className="journey-handoffs">
+              <span className="journey-handoff-ok">{cleanN} clean</span>
+              {breakN > 0 && (
+                <span className="journey-handoff-bad">· {breakN} need a tighter CTA / message</span>
+              )}
+            </span>
+          )}
         </div>
 
         <div className="journey-graph" ref={graphRef}>
           <svg className="journey-svg" aria-hidden="true">
             <defs>
               <marker id="journey-dot" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5">
-                <circle cx="5" cy="5" r="4" fill="var(--accent)" />
+                <circle cx="5" cy="5" r="4" fill="context-stroke" />
               </marker>
             </defs>
             {edges.map((e) => {
@@ -177,11 +202,13 @@ export function FlowView() {
               return (
                 <path
                   key={e.key}
-                  className={`journey-edge${cls}`}
+                  className={`journey-edge h-${e.level}${cls}`}
                   d={`M ${e.x1} ${e.y1} C ${e.x1 + dx} ${e.y1}, ${e.x2 - dx} ${e.y2}, ${e.x2} ${e.y2}`}
                   markerStart="url(#journey-dot)"
                   markerEnd="url(#journey-dot)"
-                />
+                >
+                  <title>{e.reason}</title>
+                </path>
               )
             })}
           </svg>
