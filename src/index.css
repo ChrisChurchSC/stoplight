@@ -1766,6 +1766,76 @@ button {
   font-size: 14px;
   background: transparent;
 }
+
+/* "+ Add assets" popover (breadcrumb) */
+.bc-add {
+  position: relative;
+}
+.bc-add-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.bc-add-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+  padding: 12px;
+}
+.bc-add-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.bc-add-row {
+  display: flex;
+  gap: 8px;
+}
+.bc-add-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+}
+.bc-add-row input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.bc-add-or {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin: 8px 0;
+}
+.bc-add-opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.bc-add-opt + .bc-add-opt {
+  margin-top: 6px;
+}
+.bc-add-opt:hover {
+  background: var(--surface-2);
+}
 .home-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
