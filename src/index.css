@@ -680,6 +680,149 @@ button {
   background: #1a7f37;
 }
 
+/* ---------- Drive import picker ---------- */
+.drive-modal {
+  position: fixed;
+  z-index: 60;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.drive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.drive-head strong {
+  font-size: 15px;
+}
+.drive-demo-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 7px;
+  border-radius: 20px;
+  vertical-align: middle;
+}
+.drive-note {
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.drive-note code {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.drive-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 12px;
+}
+.drive-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-faint);
+}
+.drive-error {
+  color: #a4500f;
+}
+.drive-group {
+  margin: 6px 0 12px;
+}
+.drive-folder,
+.drive-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text);
+}
+.drive-folder {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.drive-file {
+  padding-left: 22px;
+}
+.drive-file:hover,
+.drive-folder:hover {
+  background: var(--surface-2);
+}
+.drive-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #fff;
+}
+.drive-check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.drive-folder-name,
+.drive-file-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.drive-folder-count {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.drive-file-sub {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+.drive-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.drive-foot .spacer {
+  flex: 1;
+}
+.drive-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 /* the spreadsheet fills the rest of the viewport and scrolls within itself */
 .sheet-grid {
   flex: 1;

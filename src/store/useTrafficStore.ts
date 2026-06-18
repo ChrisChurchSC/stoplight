@@ -48,6 +48,8 @@ interface TrafficState {
   page: 'clients' | 'connectors' | 'billing'
   /** ICP & proof side drawer. */
   icpOpen: boolean
+  /** Google Drive / Demo Drive import picker. */
+  drivePickerOpen: boolean
   setFilter: (filter: ChannelId | 'all') => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
@@ -55,6 +57,7 @@ interface TrafficState {
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights') => void
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
   setIcpOpen: (open: boolean) => void
+  setDrivePickerOpen: (open: boolean) => void
 
   refresh: () => Promise<void>
 
@@ -140,6 +143,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   view: 'grid',
   page: 'clients',
   icpOpen: false,
+  drivePickerOpen: false,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -160,6 +164,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setView: (view) => set({ view }),
   setPage: (page) => set({ page }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
+  setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
 
   refresh: async () => {
     set({ loading: true })

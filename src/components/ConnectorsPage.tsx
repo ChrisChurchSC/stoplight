@@ -1,3 +1,5 @@
+import { useTrafficStore } from '../store/useTrafficStore'
+
 interface Connector {
   name: string
   purpose: string
@@ -6,6 +8,7 @@ interface Connector {
 }
 
 const CONNECTORS: Connector[] = [
+  { name: 'Google Drive', purpose: 'Asset import & auto-organize', status: 'mock', detail: 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID to connect a real Drive (drive.file scope, no key stored).' },
   { name: 'Clay', purpose: 'ICP enrichment', status: 'mock', detail: 'Sample ICP pull. Swap MockIcpSource for the Clay MCP.' },
   { name: 'Anthropic (Claude)', purpose: 'ICP messaging review', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real review; heuristic fallback otherwise.' },
   { name: 'Attio', purpose: 'Attribution & closed-won', status: 'mock', detail: 'MockAttioAdapter. Swap for the Attio MCP (contacts + deals).' },
@@ -23,6 +26,7 @@ const STATUS_LABEL: Record<Connector['status'], string> = {
 }
 
 export function ConnectorsPage() {
+  const setDrivePickerOpen = useTrafficStore((s) => s.setDrivePickerOpen)
   return (
     <div className="page">
       <div className="page-head">
@@ -39,9 +43,15 @@ export function ConnectorsPage() {
               </div>
               <div className="settings-card-purpose">{c.purpose}</div>
               <div className="settings-card-detail">{c.detail}</div>
-              <button className="btn sm settings-card-btn" disabled>
-                {c.status === 'connected' ? 'Manage' : 'Connect'}
-              </button>
+              {c.name === 'Google Drive' ? (
+                <button className="btn sm settings-card-btn" onClick={() => setDrivePickerOpen(true)}>
+                  Browse Demo Drive
+                </button>
+              ) : (
+                <button className="btn sm settings-card-btn" disabled>
+                  {c.status === 'connected' ? 'Manage' : 'Connect'}
+                </button>
+              )}
             </div>
           ))}
         </div>
