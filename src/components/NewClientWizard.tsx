@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { GTM_STRATEGIES, mediaSharePct, type GtmStrategy } from '../domain/strategies'
-import { STRATEGY_ASSETS, RUNTIME_LABEL } from '../domain/strategyAssets'
+import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { typeLabel } from '../domain/channelAssetTypes'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -33,11 +33,17 @@ export function NewClientWizard({ onClose }: Props) {
   const chosen = deliverables.filter((_, i) => selected.has(i))
   const months = durationWeeks > 0 ? Math.max(1, Math.round(durationWeeks / 4)) : 1
   const paidChosen = chosen.filter((d) => CHANNELS[d.channel].kind === 'paid')
-  // Paid = one flight each; owned/organic recurring pieces repeat across the flight.
+  // Paid = one flight each; brand assets built once; content repeats monthly.
   const totalPieces = chosen.reduce((n, d) => {
-    if (CHANNELS[d.channel].kind === 'paid') return n + 1
-    return n + (d.perMonth > 1 ? d.perMonth * months : 1)
+    if (CHANNELS[d.channel].kind === 'paid' || d.brand) return n + 1
+    return n + d.perMonth * months
   }, 0)
+  const cadenceOf = (d: (typeof chosen)[number]) =>
+    CHANNELS[d.channel].kind === 'paid'
+      ? { count: 'Flight', sub: 'for the flight' }
+      : d.brand
+        ? { count: '1', sub: 'brand asset' }
+        : { count: `${d.perMonth}/mo`, sub: 'monthly' }
   const needsBudget = paidChosen.length > 0
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
   const mediaPct = selectedStrategy ? mediaSharePct(selectedStrategy) : null
@@ -226,8 +232,8 @@ export function NewClientWizard({ onClose }: Props) {
                         </span>
                       </span>
                       <span className="wiz-asset-cadence">
-                        {d.perMonth > 1 ? `${d.perMonth}/mo` : '1'}
-                        <span className="wiz-asset-runtime">{RUNTIME_LABEL[d.runtime]}</span>
+                        {cadenceOf(d).count}
+                        <span className="wiz-asset-runtime">{cadenceOf(d).sub}</span>
                       </span>
                     </label>
                   ))}

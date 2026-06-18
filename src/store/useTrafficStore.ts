@@ -427,6 +427,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         audience: '',
         status: 'draft' as const,
       }
+      // Paid media → one flight bar spanning the campaign.
       if (CHANNELS[d.channel].kind === 'paid') {
         rows.push({
           ...base,
@@ -438,10 +439,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         })
         return
       }
-      const recurring = d.perMonth > 1
-      const count = recurring ? d.perMonth * months : 1
+      // Brand asset → built once, near the start.
+      if (d.brand) {
+        rows.push({
+          ...base,
+          id: freshRowId(),
+          assetName: d.label,
+          scheduledAt: slotIso(d.channel, 1 + (di % 6)),
+          createdAt: Date.now(),
+        })
+        return
+      }
+      // Content → produced on a monthly cadence, spread across the flight.
+      const count = Math.max(1, d.perMonth * months)
       for (let k = 0; k < count; k++) {
-        const offset = recurring ? Math.round(((k + 0.5) / count) * flightDays) : 1 + (di % 6)
+        const offset = Math.round(((k + 0.5) / count) * flightDays)
         rows.push({
           ...base,
           id: freshRowId(),
