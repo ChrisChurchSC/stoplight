@@ -55,5 +55,13 @@ export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelSt
   if (channel === 'youtube')
     return assetType === 'short' || assetType === 'community' ? 'awareness' : 'consideration'
   if (channel === 'blog' && assetType === 'case-study') return 'conversion'
+  if (channel === 'email') {
+    // Lifecycle emails (onboarding, win-back) are post-conversion; nurture /
+    // newsletter / announcement drive prospects to content + offers, so they sit
+    // in the funnel and tie forward to the assets they promote.
+    if (assetType === 'welcome' || assetType === 're-engagement') return 'retention'
+    if (assetType === 'promotional') return 'conversion'
+    return 'consideration'
+  }
   return STAGE_BY_CHANNEL[channel] ?? 'awareness'
 }
