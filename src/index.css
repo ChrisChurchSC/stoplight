@@ -1163,6 +1163,19 @@ button {
   position: relative;
   background: var(--bg);
 }
+/* Breadcrumb spans the top, over the channel sidebar + main. */
+.work-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.work-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
 
 .breadcrumb {
   display: flex;

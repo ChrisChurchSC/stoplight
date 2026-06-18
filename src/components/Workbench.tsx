@@ -50,10 +50,10 @@ export function Workbench() {
       <GlobalNav />
 
       {page === 'clients' ? (
-        <>
-          {!overview && <Sidebar />}
+        <div className="work-col">
+          <Breadcrumb />
           <div
-            className={`main${over ? ' drop-over' : ''}`}
+            className={`work-body${over ? ' drop-over' : ''}`}
             onDragOver={(e) => {
               e.preventDefault()
               setOver(true)
@@ -63,30 +63,32 @@ export function Workbench() {
             }}
             onDrop={onDrop}
           >
-            <Breadcrumb />
-            {!overview && <CampaignTabs />}
+            {!overview && <Sidebar />}
+            <div className="main">
+              {!overview && <CampaignTabs />}
 
-            {overview ? (
-              <ClientsOverview />
-            ) : (
-              <>
-                <IngestTray />
-                {view === 'calendar' ? (
-                  <CalendarView />
-                ) : view === 'flow' ? (
-                  <FlowView />
-                ) : view === 'insights' ? (
-                  <InsightsView />
-                ) : (
-                  <SheetGrid />
-                )}
-                <ViewToggle />
-              </>
-            )}
+              {overview ? (
+                <ClientsOverview />
+              ) : (
+                <>
+                  <IngestTray />
+                  {view === 'calendar' ? (
+                    <CalendarView />
+                  ) : view === 'flow' ? (
+                    <FlowView />
+                  ) : view === 'insights' ? (
+                    <InsightsView />
+                  ) : (
+                    <SheetGrid />
+                  )}
+                  <ViewToggle />
+                </>
+              )}
+            </div>
 
             {over && <div className="drop-veil">Drop to add assets</div>}
           </div>
-        </>
+        </div>
       ) : (
         <div className="main">
           {page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
