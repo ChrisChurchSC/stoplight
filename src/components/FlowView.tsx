@@ -23,6 +23,7 @@ interface Edge {
   targetName: string
   level: HandoffLevel
   reason: string
+  back: boolean
   x1: number
   y1: number
   x2: number
@@ -57,39 +58,31 @@ export function FlowView() {
         if (c.dataset.id) byId.set(c.dataset.id, c)
         if (c.dataset.name && !byName.has(c.dataset.name)) byName.set(c.dataset.name, c)
       }
-      // Group links by destination so we can fan the incoming lines across the
-      // target card's edge instead of converging on a single point.
-      const groups = new Map<HTMLElement, TrafficRow[]>()
+      const next: Edge[] = []
       for (const r of view) {
         if (!r.linksTo) continue
         const src = byId.get(r.id)
         const tgt = byName.get(r.linksTo)
         if (!src || !tgt || src === tgt) continue
-        const list = groups.get(tgt)
-        if (list) list.push(r)
-        else groups.set(tgt, [r])
-      }
-      const next: Edge[] = []
-      for (const [tgt, list] of groups) {
+        const s = src.getBoundingClientRect()
         const t = tgt.getBoundingClientRect()
-        const targetRow = rows.find((x) => x.assetName === list[0].linksTo)
-        list.forEach((r, k) => {
-          const src = byId.get(r.id)!
-          const s = src.getBoundingClientRect()
-          const frac = (k + 1) / (list.length + 1)
-          const h = targetRow ? handoffFor(r, targetRow) : { level: 'weak' as const, reason: '' }
-          next.push({
-            key: r.id,
-            sourceId: r.id,
-            targetName: r.linksTo!,
-            level: h.level,
-            reason: h.reason,
-            // Inset endpoints into the gap so the dots sit clear of the cards.
-            x1: s.right - base.left + 5,
-            y1: s.top + s.height / 2 - base.top,
-            x2: t.left - base.left - 5,
-            y2: t.top + t.height * frac - base.top,
-          })
+        // Backward link (destination is an earlier stage / to the left): attach
+        // to the RIGHT side of both cards. Forward: source-right → target-left.
+        const back = t.right <= s.left + 1
+        const targetRow = rows.find((x) => x.assetName === r.linksTo)
+        const h = targetRow ? handoffFor(r, targetRow) : { level: 'weak' as const, reason: '' }
+        next.push({
+          key: r.id,
+          sourceId: r.id,
+          targetName: r.linksTo,
+          level: h.level,
+          reason: h.reason,
+          back,
+          // Center of the facing side, inset a few px so the dot clears the card.
+          x1: (back ? s.left - 5 : s.right + 5) - base.left,
+          y1: s.top + s.height / 2 - base.top,
+          x2: (back ? t.right + 5 : t.left - 5) - base.left,
+          y2: t.top + t.height / 2 - base.top,
         })
       }
       setEdges(next)
@@ -196,14 +189,16 @@ export function FlowView() {
               </marker>
             </defs>
             {edges.map((e) => {
-              const dx = Math.max(40, (e.x2 - e.x1) / 2)
+              const dx = Math.max(40, Math.abs(e.x2 - e.x1) / 2)
+              const cx1 = e.back ? e.x1 - dx : e.x1 + dx
+              const cx2 = e.back ? e.x2 + dx : e.x2 - dx
               const active = hover && (hover.id === e.sourceId || hover.name === e.targetName)
               const cls = hover ? (active ? ' active' : ' dim') : ''
               return (
                 <path
                   key={e.key}
                   className={`journey-edge h-${e.level}${cls}`}
-                  d={`M ${e.x1} ${e.y1} C ${e.x1 + dx} ${e.y1}, ${e.x2 - dx} ${e.y2}, ${e.x2} ${e.y2}`}
+                  d={`M ${e.x1} ${e.y1} C ${cx1} ${e.y1}, ${cx2} ${e.y2}, ${e.x2} ${e.y2}`}
                   markerStart="url(#journey-dot)"
                   markerEnd="url(#journey-dot)"
                 >
