@@ -1,17 +1,10 @@
 import { useState } from 'react'
+import { GTM_STRATEGIES } from '../domain/strategies'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 interface Props {
   onClose: () => void
 }
-
-const STRATEGIES: { key: string; name: string; desc: string }[] = [
-  { key: 'demand-gen', name: 'Demand Gen', desc: 'Fill pipeline with high-intent leads.' },
-  { key: 'launch', name: 'Product Launch', desc: 'Awareness + signups for a new release.' },
-  { key: 'awareness', name: 'Brand Awareness', desc: 'Top-of-funnel reach and recall.' },
-  { key: 'nurture', name: 'Lead Nurture', desc: 'Move existing leads down-funnel.' },
-  { key: 'retargeting', name: 'Retargeting', desc: 'Re-engage warm audiences.' },
-]
 
 export function NewClientWizard({ onClose }: Props) {
   const icp = useTrafficStore((s) => s.icp)
@@ -44,10 +37,12 @@ export function NewClientWizard({ onClose }: Props) {
     if (!campaignName.trim()) setCampaignName(`${s.name} — ${name || 'Campaign'}`)
   }
 
+  const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
+
   const create = () => {
     const client = name.trim()
     if (!client || !strategy || !campaignName.trim()) return
-    const strategyName = STRATEGIES.find((x) => x.key === strategy)?.name ?? strategy
+    const strategyName = selectedStrategy?.name ?? strategy
     addClient(client)
     addCampaign({ name: campaignName.trim(), client, strategy: strategyName, objective: objective.trim() || undefined })
     setClientFilter(client)
@@ -116,17 +111,30 @@ export function NewClientWizard({ onClose }: Props) {
           <div className="wiz-body">
             <label className="wiz-label">Select campaign strategy</label>
             <div className="wiz-strategies">
-              {STRATEGIES.map((s) => (
+              {GTM_STRATEGIES.map((s) => (
                 <button
                   key={s.key}
                   className={`wiz-strategy${strategy === s.key ? ' on' : ''}`}
                   onClick={() => chooseStrategy(s)}
                 >
                   <span className="wiz-strategy-name">{s.name}</span>
-                  <span className="wiz-strategy-desc">{s.desc}</span>
+                  <span className="wiz-strategy-desc">{s.bestFor}</span>
                 </button>
               ))}
             </div>
+            {selectedStrategy && (
+              <div className="wiz-strategy-detail">
+                <span>
+                  <b>Stages</b> {selectedStrategy.sequence}
+                </span>
+                <span>
+                  <b>Watch</b> {selectedStrategy.coreMetrics}
+                </span>
+                <span>
+                  <b>Spend</b> {selectedStrategy.mediaContent}
+                </span>
+              </div>
+            )}
 
             <label className="wiz-label">Campaign name</label>
             <input
