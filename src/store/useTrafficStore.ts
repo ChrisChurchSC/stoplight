@@ -414,6 +414,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const flightEnd = new Date(start)
     flightEnd.setDate(flightEnd.getDate() + flightDays)
     const flightEndIso = flightEnd.toISOString()
+    // Business days (Mon–Fri) across the flight — content + brand builds land on
+    // these, never a weekend.
+    const businessDays: Date[] = []
+    for (let i = 0; i <= flightDays; i++) {
+      const dt = new Date(start)
+      dt.setDate(dt.getDate() + i)
+      const wd = dt.getDay()
+      if (wd !== 0 && wd !== 6) businessDays.push(dt)
+    }
+    if (businessDays.length === 0) businessDays.push(new Date(start))
+    // A weekday `n` business-days into the flight, at the channel's first best hour.
+    const bizSlotIso = (channel: ChannelId, n: number): string => {
+      const slot = businessDays[Math.min(businessDays.length - 1, Math.max(0, n))]
+      const bt = CHANNELS[channel].bestTimes[0] ?? { hour: 10, minute: 0 }
+      const dt = new Date(slot)
+      dt.setHours(bt.hour, bt.minute ?? 0, 0, 0)
+      return dt.toISOString()
+    }
     const rows: TrafficRow[] = []
     deliverables.forEach((d, di) => {
       const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
@@ -439,29 +457,62 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         })
         return
       }
-      // Brand asset → built once, near the start.
+      // Brand asset → built once, near the start (on a weekday).
       if (d.brand) {
         rows.push({
           ...base,
           id: freshRowId(),
           assetName: d.label,
-          scheduledAt: slotIso(d.channel, 1 + (di % 6)),
-          createdAt: Date.now(),
-        })
-        return
-      }
-      // Content → produced on a monthly cadence, spread across the flight.
-      const count = Math.max(1, d.perMonth * months)
-      for (let k = 0; k < count; k++) {
-        const offset = Math.round(((k + 0.5) / count) * flightDays)
-        rows.push({
-          ...base,
-          id: freshRowId(),
-          assetName: count > 1 ? `${d.label} #${k + 1}` : d.label,
-          scheduledAt: slotIso(d.channel, offset),
+          scheduledAt: bizSlotIso(d.channel, 1 + (di % 6)),
           createdAt: Date.now(),
         })
       }
+      // Content is scheduled below, as an interleaved weekday cadence.
+    })
+
+    // Content → a real publishing cadence: interleave the formats and spread
+    // them across the flight's business days, so each day mixes types instead of
+    // stacking three of the same.
+    const queues = deliverables
+      .filter((d) => CHANNELS[d.channel].kind !== 'paid' && !d.brand)
+      .map((d) => {
+        const count = Math.max(1, d.perMonth * months)
+        return Array.from({ length: count }, (_, k) => ({ d, k, count }))
+      })
+    // Round-robin so consecutive pieces are different formats, then lay the
+    // sequence evenly over the business days.
+    const interleaved: { d: Deliverable; k: number; count: number }[] = []
+    while (queues.some((q) => q.length)) {
+      for (const q of queues) {
+        const it = q.shift()
+        if (it) interleaved.push(it)
+      }
+    }
+    interleaved.forEach((it, i) => {
+      const slot =
+        businessDays[
+          Math.min(businessDays.length - 1, Math.floor((i * businessDays.length) / interleaved.length))
+        ]
+      const bt = CHANNELS[it.d.channel].bestTimes[0] ?? { hour: 10, minute: 0 }
+      const at = new Date(slot)
+      at.setHours(bt.hour, bt.minute ?? 0, 0, 0)
+      const assetType = isValidType(it.d.channel, it.d.assetType)
+        ? it.d.assetType
+        : primaryTypeKey(it.d.channel)
+      rows.push({
+        assetId: '',
+        mediaType: it.d.media,
+        channel: it.d.channel,
+        assetType,
+        messaging: {},
+        campaign,
+        audience: '',
+        status: 'draft',
+        id: freshRowId(),
+        assetName: it.count > 1 ? `${it.d.label} #${it.k + 1}` : it.d.label,
+        scheduledAt: at.toISOString(),
+        createdAt: Date.now(),
+      })
     })
     // Emails drive to a page: link each email to the campaign's landing page.
     const page =
