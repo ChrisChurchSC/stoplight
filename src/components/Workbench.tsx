@@ -19,6 +19,7 @@ import { IcpDrawer } from './IcpDrawer'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
+import { NewClientWizard } from './NewClientWizard'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -26,6 +27,9 @@ export function Workbench() {
   const view = useTrafficStore((s) => s.view)
   const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const wizardOpen = useTrafficStore((s) => s.wizardOpen)
+  const wizardClient = useTrafficStore((s) => s.wizardClient)
+  const closeWizard = useTrafficStore((s) => s.closeWizard)
   const [over, setOver] = useState(false)
   const overview = clientFilter === 'all'
 
@@ -105,6 +109,7 @@ export function Workbench() {
       <CopyReview />
       <CommentDrawer />
       <DrivePicker />
+      {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
     </div>
   )
 }

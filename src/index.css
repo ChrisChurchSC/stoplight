@@ -1593,6 +1593,22 @@ button {
   font-weight: 600;
   color: var(--accent);
 }
+.client-tab-add {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  border-style: dashed;
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.client-tab-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 /* ---- All-clients overview page ---- */
 .clients-page {
@@ -1903,6 +1919,10 @@ button {
 }
 .wiz-step.done {
   color: var(--text-muted);
+}
+.wiz-step-client {
+  color: var(--text);
+  font-weight: 700;
 }
 .wiz-step-sep {
   color: var(--text-faint);

@@ -5,7 +5,6 @@ import { money } from '../domain/budget'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
-import { NewClientWizard } from './NewClientWizard'
 
 interface ClientRow {
   client: string
@@ -44,13 +43,13 @@ export function ClientsOverview() {
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
   const clientList = useTrafficStore((s) => s.clientList)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
+  const openClientWizard = useTrafficStore((s) => s.openClientWizard)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
   const [linkClient, setLinkClient] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState('')
-  const [wizardOpen, setWizardOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const openLink = (client: string) => {
@@ -84,7 +83,7 @@ export function ClientsOverview() {
       <p className="home-sub">Add a client, then bring their creative in from Drive or upload inside their workspace.</p>
 
       <div className="home-newclient-cta">
-        <button className="home-addclient" onClick={() => setWizardOpen(true)}>
+        <button className="home-addclient" onClick={openClientWizard}>
           <span className="home-addclient-ico">＋</span>
           <span>
             <span className="home-addclient-title">Add new client</span>
@@ -237,8 +236,6 @@ export function ClientsOverview() {
           </div>
         </>
       )}
-
-      {wizardOpen && <NewClientWizard onClose={() => setWizardOpen(false)} />}
 
       {confirmDelete &&
         (() => {
