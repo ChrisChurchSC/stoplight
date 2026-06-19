@@ -227,6 +227,10 @@ interface TrafficState {
   openClientWizard: () => void
   openCampaignWizard: (client: string) => void
   closeWizard: () => void
+  /** Add-audience flow (a guided modal under the active client's profile). */
+  audienceWizardOpen: boolean
+  openAudienceWizard: () => void
+  closeAudienceWizard: () => void
   /** "Claude sets up the workspace" flow. */
   setupOpen: boolean
   openSetup: () => void
@@ -370,6 +374,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   campaignList: loadCampaigns(),
   wizardOpen: false,
   wizardClient: null,
+  audienceWizardOpen: false,
   setupOpen: false,
   reviewRowId: null,
   comments: {},
@@ -541,6 +546,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openClientWizard: () => set({ wizardOpen: true, wizardClient: null }),
   openCampaignWizard: (client) => set({ wizardOpen: true, wizardClient: client }),
   closeWizard: () => set({ wizardOpen: false, wizardClient: null }),
+  openAudienceWizard: () => set({ audienceWizardOpen: true }),
+  closeAudienceWizard: () => set({ audienceWizardOpen: false }),
 
   openSetup: () => set({ setupOpen: true }),
   closeSetup: () => set({ setupOpen: false }),
@@ -849,7 +856,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   loadSample: async () => {
     await sheet.clear()
     await sheet.append(sampleRows())
-    // Bring in the sample ICP (Clay pull) alongside the sheet so the gate is populated.
+    // Bring in the sample ICP (pulled via Claude) alongside the sheet so the gate is populated.
     const icp = await icpSource.fetch()
     set({ icp, icpFromClosedWon: false, batchReview: null, gateCleared: false, trackingRan: false, trackingCleared: false, budgetCleared: false })
     await get().refresh()

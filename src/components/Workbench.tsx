@@ -22,6 +22,7 @@ import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
 import { NewClientWizard } from './NewClientWizard'
 import { SetupWizard } from './SetupWizard'
+import { AudienceWizard } from './AudienceWizard'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -114,6 +115,7 @@ export function Workbench() {
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
       <SetupWizard />
+      <AudienceWizard />
     </div>
   )
 }

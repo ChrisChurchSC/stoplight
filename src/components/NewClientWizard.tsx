@@ -262,12 +262,12 @@ export function NewClientWizard({ onClose, client }: Props) {
                   </ul>
                 )}
                 <button className="wiz-link" onClick={pullIcp} disabled={pullingIcp}>
-                  Re-pull from Clay
+                  Re-pull from Claude
                 </button>
               </div>
             ) : (
               <button className="wiz-icp-btn" onClick={pullIcp} disabled={pullingIcp}>
-                {pullingIcp ? 'Pulling from Clay…' : '⊕ Add ICP via Clay'}
+                {pullingIcp ? 'Pulling…' : '⊕ Add ICP via Claude'}
               </button>
             )}
 

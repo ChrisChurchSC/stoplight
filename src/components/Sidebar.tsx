@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { freshAudienceId } from '../domain/audiences'
+import { useEffect } from 'react'
 import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
@@ -29,11 +28,8 @@ export function Sidebar() {
   const icp = useTrafficStore((s) => s.icp)
   const loadIcp = useTrafficStore((s) => s.loadIcp)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
-
-  const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState('')
+  const openAudienceWizard = useTrafficStore((s) => s.openAudienceWizard)
 
   // Surface the ICP in the profile card (not behind a button) — pull it if a
   // client is in view and we don't have one yet.
@@ -42,23 +38,9 @@ export function Sidebar() {
   }, [clientFilter, icp, loadIcp])
 
   // Audiences (personas under the ICP) live in the profile card. The card lists
-  // them and adds new ones; full editing (angle, proof, strategy) opens the ICP
-  // drawer where there's room for it.
+  // them; "+ Add audience" opens the guided flow, and a chip opens the ICP drawer
+  // where there's room for full editing (angle, proof, strategy).
   const audiences = clientFilter !== 'all' ? clientAudiences[clientFilter] ?? [] : []
-  const addAudience = () => {
-    const name = newName.trim()
-    if (!name) {
-      setAdding(false)
-      return
-    }
-    setClientAudiences(clientFilter, [
-      ...audiences,
-      { id: freshAudienceId(), name, messageAngle: '', rtbEmphasis: [], strategy: '' },
-    ])
-    setNewName('')
-    setAdding(false)
-    setIcpOpen(true)
-  }
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -103,7 +85,7 @@ export function Sidebar() {
 
         {icp && (
           <div className="sidebar-icp">
-            <div className="sidebar-icp-label">ICP · via Clay</div>
+            <div className="sidebar-icp-label">ICP · via Claude</div>
             <div className="sidebar-icp-name">{icp.name}</div>
             {icp.segment && <div className="sidebar-icp-seg">{icp.segment}</div>}
             {icp.pains?.length > 0 && (
@@ -138,27 +120,9 @@ export function Sidebar() {
                 ))}
               </div>
             )}
-            {adding ? (
-              <input
-                className="sidebar-aud-input"
-                autoFocus
-                value={newName}
-                placeholder="Audience name"
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') addAudience()
-                  if (e.key === 'Escape') {
-                    setNewName('')
-                    setAdding(false)
-                  }
-                }}
-                onBlur={addAudience}
-              />
-            ) : (
-              <button className="sidebar-aud-add" onClick={() => setAdding(true)}>
-                ＋ Add audience
-              </button>
-            )}
+            <button className="sidebar-aud-add" onClick={openAudienceWizard}>
+              ＋ Add audience
+            </button>
           </div>
         )}
       </div>

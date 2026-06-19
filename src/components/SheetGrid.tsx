@@ -17,7 +17,7 @@ import { Thumb } from './Thumb'
 
 const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
 
-// Named columns of the spreadsheet, in order, with a Clay-style type glyph.
+// Named columns of the spreadsheet, in order, with a type glyph per column.
 const COLUMNS = [
   { key: 'asset', label: 'Asset', icon: '▦' },
   { key: 'channel', label: 'Channel', icon: '◉' },

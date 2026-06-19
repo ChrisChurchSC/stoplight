@@ -6,9 +6,9 @@ export interface IcpField {
 }
 
 /**
- * The target buyer, as consumed from Clay. Supports both shapes: structured
- * firmographic fields + scored segment, and a narrative summary used as
- * interpretive context. The review reads fields when present, falls back to
+ * The target buyer, as enriched via Claude (MCP). Supports both shapes:
+ * structured firmographic fields + scored segment, and a narrative summary used
+ * as interpretive context. The review reads fields when present, falls back to
  * the summary.
  */
 export interface Icp {
@@ -42,7 +42,7 @@ export interface BatchReview {
   flags: AssetFlag[]
 }
 
-/** Pulls the ICP from Clay (table / scored segment / written profile). */
+/** Pulls the ICP via Claude (scored segment / written profile). */
 export interface IcpSource {
   fetch(): Promise<Icp>
 }

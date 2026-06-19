@@ -1768,16 +1768,6 @@ button {
   border-color: var(--accent);
   color: var(--accent);
 }
-.sidebar-aud-input {
-  margin-top: 6px;
-  width: 100%;
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  color: var(--text);
-}
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -4407,6 +4397,16 @@ button {
 .aud-del:hover {
   color: #b42318;
 }
+.aud-role {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  background: var(--surface-2);
+}
 .aud-angle {
   width: 100%;
   margin-top: 6px;
@@ -4954,6 +4954,9 @@ button {
   font-weight: 700;
 }
 .rtb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text-muted);
@@ -4961,6 +4964,7 @@ button {
   padding: 2px 9px;
   font-size: 11.5px;
   font-weight: 600;
+  cursor: pointer;
 }
 .rtb-chip.on {
   background: #eef0fe;

@@ -22,8 +22,7 @@ const CONNECTORS: Connector[] = [
       ? 'Connected via OAuth (drive.file scope, no key stored). Folders → channel + type through the same classifier as local uploads.'
       : 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY to connect a real Drive (drive.file scope, no app secret).',
   },
-  { name: 'Anthropic (Claude)', purpose: 'Setup, ICP review, copy drafting', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real generation; heuristic fallback otherwise. Connecting Claude also brings its MCP tools (Clay, Attio) — no separate OAuth for those.' },
-  { name: 'Clay', purpose: 'ICP enrichment', status: 'mock', viaClaude: true, detail: 'Reached through Claude over MCP — connecting Claude is the connection. No separate Clay OAuth.' },
+  { name: 'Anthropic (Claude)', purpose: 'Setup, ICP enrichment, review, copy', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real generation; heuristic fallback otherwise. Connecting Claude also brings its MCP tools (ICP enrichment, Attio) — no separate OAuth for those.' },
   { name: 'Attio', purpose: 'Attribution & closed-won', status: 'mock', viaClaude: true, detail: 'Reached through Claude over MCP (contacts + deals). No separate Attio OAuth.' },
   { name: 'Buffer', purpose: 'Publishing (social)', status: 'mock', detail: 'Mock publisher. Wire BufferPublisher (MCP) behind the registry.' },
   { name: 'HubSpot', purpose: 'Publishing (owned)', status: 'mock', detail: 'Mock publisher for email / landing pages.' },

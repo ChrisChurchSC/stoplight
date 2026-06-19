@@ -3,19 +3,19 @@ import { messagingFields, messagingMap } from '../../domain/messaging'
 import type { AssetFlag, BatchReview, Icp, IcpReviewer, IcpSource } from './types'
 
 /**
- * Stand-in for the Clay pull. Returns a sample ICP that fits the seeded
- * campaign. Swap for a real adapter that reads a Clay table / scored segment
- * (structured) and/or a written profile (narrative) via the Clay MCP.
+ * Stand-in for the ICP pull. Returns a sample ICP that fits the seeded
+ * campaign. Swap for a real adapter that reads a scored segment (structured)
+ * and/or a written profile (narrative) via Claude's enrichment tools (MCP).
  */
 export class MockIcpSource implements IcpSource {
   async fetch(): Promise<Icp> {
-    // Sample enrichment as it comes back from a Clay table: firmographics +
-    // a scored segment + signal columns (tech stack, hiring, intent).
+    // Sample enrichment as it comes back from the enrichment pull: firmographics
+    // + a scored segment + signal columns (tech stack, hiring, intent).
     return {
       name: 'Mid-market Ops leaders',
-      segment: 'Tier 1 — Enterprise-ready · Clay fit score 87',
+      segment: 'Tier 1, Enterprise-ready · fit score 87',
       summary:
-        'Pulled from Clay (842 accounts, 312 enriched). VPs and Directors of Operations at mid-market B2B SaaS companies (200–2,000 employees, $20M–$200M ARR, Series B–D) drowning in manual, fragmented workflows. Strong intent signal on "workflow automation" and "time-to-value"; most run Slack + Jira + Snowflake and are actively hiring RevOps. Skeptical of hype, they want proof and fast time-to-value.',
+        'Enriched from 842 accounts (312 scored). VPs and Directors of Operations at mid-market B2B SaaS companies (200–2,000 employees, $20M–$200M ARR, Series B–D) drowning in manual, fragmented workflows. Strong intent signal on "workflow automation" and "time-to-value"; most run Slack + Jira + Snowflake and are actively hiring RevOps. Skeptical of hype, they want proof and fast time-to-value.',
       firmographics: [
         { label: 'Industry', value: 'B2B SaaS (Ops / DevTools)' },
         { label: 'Company size', value: '200–2,000 employees' },
