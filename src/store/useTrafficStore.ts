@@ -23,6 +23,15 @@ import { sampleRows } from '../domain/sampleData'
 import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { ClaudeCopyWriter, HeuristicCopyWriter, type CopyWriter } from '../adapters/copy/draftWriter'
+import {
+  ClaudeSetupGenerator,
+  HeuristicSetupGenerator,
+  type SetupGenerator,
+  type SetupInput,
+  type WorkspaceSetup,
+} from '../adapters/setup/setupGenerator'
+import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
+import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { messagingFields, messagingAllText } from '../domain/messaging'
 import { registerCampaignRtbs, rtbsForCampaign, type Rtb } from '../domain/rtb'
 import { rowInScope } from '../lib/scope'
@@ -42,6 +51,8 @@ const icpSource: IcpSource = new MockIcpSource()
 const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
 // Real Claude starter-copy drafting when a backend + key are present; heuristic otherwise.
 const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
+// Real Claude workspace setup (reads the site) when a backend + key are present; heuristic otherwise.
+const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSetupGenerator())
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
@@ -189,6 +200,14 @@ interface TrafficState {
   openClientWizard: () => void
   openCampaignWizard: (client: string) => void
   closeWizard: () => void
+  /** "Claude sets up the workspace" flow. */
+  setupOpen: boolean
+  openSetup: () => void
+  closeSetup: () => void
+  /** Generate a proposed workspace setup from a URL (Claude, heuristic fallback). */
+  generateSetup: (input: SetupInput) => Promise<WorkspaceSetup>
+  /** Commit a confirmed setup: client + profile + ICP + proof + first campaign. */
+  provisionWorkspace: (setup: WorkspaceSetup) => Promise<void>
   /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
    *  across the flight at each asset's monthly cadence, optionally splitting a
    *  media budget across the paid rows. */
@@ -249,6 +268,8 @@ interface TrafficState {
   /** True once the user has accepted the review — unlocks scheduling. */
   gateCleared: boolean
   loadIcp: () => Promise<void>
+  /** Set a specific ICP (e.g. one proposed by the setup flow). */
+  setIcp: (icp: Icp) => void
   runBatchReview: () => Promise<void>
   acceptReview: () => void
   /** True when the ICP was refined from Attio closed-won data (feedback loop). */
@@ -320,6 +341,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   campaignList: loadCampaigns(),
   wizardOpen: false,
   wizardClient: null,
+  setupOpen: false,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -477,6 +499,61 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openClientWizard: () => set({ wizardOpen: true, wizardClient: null }),
   openCampaignWizard: (client) => set({ wizardOpen: true, wizardClient: client }),
   closeWizard: () => set({ wizardOpen: false, wizardClient: null }),
+
+  openSetup: () => set({ setupOpen: true }),
+  closeSetup: () => set({ setupOpen: false }),
+  generateSetup: (input) => setupGenerator.generate(input),
+
+  provisionWorkspace: async (setup) => {
+    const client = setup.brand.name.trim()
+    if (!client) return
+    get().addClient(client)
+    get().setClientProfile(client, {
+      website: setup.brand.website?.trim() || undefined,
+      industry: setup.brand.industry?.trim() || undefined,
+      voice: setup.brand.voice?.trim() || undefined,
+    })
+    get().setIcp(setup.icp)
+
+    const strat = GTM_STRATEGIES.find((s) => s.key === setup.strategy)
+    const strategyName = strat?.name ?? setup.strategy
+    const campaign = setup.campaign.name?.trim() || `${client} — Campaign`
+    const weeks = setup.campaign.durationWeeks > 0 ? setup.campaign.durationWeeks : 8
+    const deliverables = STRATEGY_ASSETS[setup.strategy] ?? STRATEGY_ASSETS['demand-gen']
+    const contentPerMonth = deliverables
+      .filter((d) => CHANNELS[d.channel].kind !== 'paid' && !d.brand)
+      .reduce((n, d) => n + d.perMonth, 0)
+    const oneTimeAssets = deliverables.filter((d) => d.brand).length
+    const mediaShare = (strat ? mediaSharePct(strat) : null) ?? 50
+    const mediaBudget = Math.round(((setup.campaign.overallBudget || 0) * mediaShare) / 100)
+    const endDate = new Date(Date.now() + weeks * 7 * 86_400_000).toISOString().slice(0, 10)
+
+    get().addCampaign({
+      name: campaign,
+      client,
+      strategy: strategyName,
+      durationWeeks: weeks,
+      overallBudget: setup.campaign.overallBudget || undefined,
+      mediaBudget: mediaBudget || undefined,
+      contentPerMonth: contentPerMonth || undefined,
+      oneTimeAssets: oneTimeAssets || undefined,
+    })
+
+    // Register + persist the proposed proof so it resolves across the workspace.
+    if (setup.rtbs.length) {
+      registerCampaignRtbs(campaign, setup.rtbs)
+      const store = loadCampaignRtbs()
+      store[campaign] = setup.rtbs
+      saveCampaignRtbs(store)
+    }
+
+    await get().seedCampaignAssets(campaign, deliverables, {
+      mediaBudget,
+      flightWeeks: weeks,
+      endDate,
+    })
+    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all' })
+  },
   seedCampaignAssets: async (campaign, deliverables, opts) => {
     if (!deliverables.length) return
     const flightWeeks = opts?.flightWeeks && opts.flightWeeks > 0 ? opts.flightWeeks : 4
@@ -891,6 +968,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const icp = await icpSource.fetch()
     set({ icp, icpFromClosedWon: false })
   },
+
+  setIcp: (icp) => set({ icp, icpFromClosedWon: false, batchReview: null, gateCleared: false }),
 
   refreshIcpFromClosedWon: () => {
     // Feedback loop: real closed-won buyers sharpen the ICP that drives the gate.

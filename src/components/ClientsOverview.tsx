@@ -44,6 +44,7 @@ export function ClientsOverview() {
   const clientList = useTrafficStore((s) => s.clientList)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
   const openClientWizard = useTrafficStore((s) => s.openClientWizard)
+  const openSetup = useTrafficStore((s) => s.openSetup)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
@@ -81,6 +82,18 @@ export function ClientsOverview() {
     <div className="home">
       <h1 className="home-greeting">Your clients</h1>
       <p className="home-sub">Add a client, then bring their creative in from Drive or upload inside their workspace.</p>
+
+      <button className="home-setup" onClick={openSetup}>
+        <span className="home-setup-ico">✦</span>
+        <span className="home-setup-text">
+          <span className="home-setup-title">Set up with Claude</span>
+          <span className="home-setup-sub">
+            Point Claude at your site. It provisions brand, ICP, proof, channel mix, and a first campaign
+            for you to confirm.
+          </span>
+        </span>
+        <span className="home-setup-go">→</span>
+      </button>
 
       <div className="home-newclient-cta">
         <button className="home-addclient" onClick={openClientWizard}>

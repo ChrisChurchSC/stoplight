@@ -20,6 +20,7 @@ import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
 import { NewClientWizard } from './NewClientWizard'
+import { SetupWizard } from './SetupWizard'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -110,6 +111,7 @@ export function Workbench() {
       <CommentDrawer />
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
+      <SetupWizard />
     </div>
   )
 }
