@@ -1,4 +1,4 @@
-import { KIND_ORDER, channelsByKind } from '../domain/channels'
+import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { rowInScope } from '../lib/scope'
@@ -21,6 +21,16 @@ export function Sidebar() {
   )
   const countFor = (id: string) => scopedRows.filter((r) => r.channel === id).length
 
+  // Aggregate tracking readiness across every channel, for the "All channels" row.
+  const allTracking = CHANNEL_LIST.map((c) => channelTracking(c.id))
+  const trReady = allTracking.reduce((n, t) => n + t.ready, 0)
+  const trTotal = allTracking.reduce((n, t) => n + t.total, 0)
+  const trChannelsNeeding = allTracking.filter((t) => t.ready < t.total).length
+  const allTrCls = trReady === trTotal ? 'ok' : trReady === 0 ? 'none' : 'partial'
+  const allTrTitle = `Tracking ${trReady}/${trTotal} set up across all channels${
+    trChannelsNeeding ? ` — ${trChannelsNeeding} channel${trChannelsNeeding === 1 ? '' : 's'} need setup` : ''
+  }`
+
   return (
     <aside className="sidebar">
       <nav className="sidebar-nav">
@@ -30,6 +40,7 @@ export function Sidebar() {
         >
           <span className="nav-ico">▦</span>
           <span className="nav-label">All channels</span>
+          <span className={`nav-track ${allTrCls}`} title={allTrTitle} />
           <span className="nav-count">{scopedRows.length}</span>
         </button>
 
