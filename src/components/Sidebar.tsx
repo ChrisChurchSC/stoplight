@@ -1,5 +1,6 @@
 import { KIND_ORDER, channelsByKind } from '../domain/channels'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
+import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -7,9 +8,17 @@ export function Sidebar() {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const setFilter = useTrafficStore((s) => s.setFilter)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const query = useTrafficStore((s) => s.query)
   const clearSheet = useTrafficStore((s) => s.clearSheet)
 
-  const countFor = (id: string) => rows.filter((r) => r.channel === id).length
+  // Counts reflect the current client / campaign (and search) scope — NOT the
+  // channel filter itself — so each count matches what selecting it actually shows.
+  const scopedRows = rows.filter((r) =>
+    rowInScope(r, { filter: 'all', query, clientFilter, campaignFilter }),
+  )
+  const countFor = (id: string) => scopedRows.filter((r) => r.channel === id).length
 
   return (
     <aside className="sidebar">
@@ -20,7 +29,7 @@ export function Sidebar() {
         >
           <span className="nav-ico">▦</span>
           <span className="nav-label">All channels</span>
-          <span className="nav-count">{rows.length}</span>
+          <span className="nav-count">{scopedRows.length}</span>
         </button>
 
         {KIND_ORDER.map((section) => (
