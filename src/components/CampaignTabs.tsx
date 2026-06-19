@@ -34,6 +34,7 @@ export function CampaignTabs() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const campaignList = useTrafficStore((s) => s.campaignList)
+  const openCampaignWizard = useTrafficStore((s) => s.openCampaignWizard)
 
   const clientRows = rows.filter((r) => clientForCampaign(r.campaign) === clientFilter)
   // Campaigns from existing rows + ones created in the wizard (which may have no rows yet).
@@ -98,6 +99,13 @@ export function CampaignTabs() {
           </button>
         )
       })}
+      <button
+        className="client-tab client-tab-add"
+        onClick={() => openCampaignWizard(clientFilter)}
+        title={`Add a campaign to ${clientFilter}`}
+      >
+        ＋ Add campaign
+      </button>
     </div>
   )
 }

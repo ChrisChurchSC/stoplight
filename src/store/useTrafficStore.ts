@@ -181,6 +181,13 @@ interface TrafficState {
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
+  /** New-client / add-campaign wizard UI state. wizardClient = the client to add
+   *  a campaign to (campaign-only mode), or null for the full new-client flow. */
+  wizardOpen: boolean
+  wizardClient: string | null
+  openClientWizard: () => void
+  openCampaignWizard: (client: string) => void
+  closeWizard: () => void
   /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
    *  across the flight at each asset's monthly cadence, optionally splitting a
    *  media budget across the paid rows. */
@@ -308,6 +315,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
   campaignList: loadCampaigns(),
+  wizardOpen: false,
+  wizardClient: null,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -462,6 +471,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
+  openClientWizard: () => set({ wizardOpen: true, wizardClient: null }),
+  openCampaignWizard: (client) => set({ wizardOpen: true, wizardClient: client }),
+  closeWizard: () => set({ wizardOpen: false, wizardClient: null }),
   seedCampaignAssets: async (campaign, deliverables, opts) => {
     if (!deliverables.length) return
     const flightWeeks = opts?.flightWeeks && opts.flightWeeks > 0 ? opts.flightWeeks : 4

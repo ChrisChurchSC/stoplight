@@ -37,9 +37,12 @@ function apportion(weights: number[], target: number): number[] {
 
 interface Props {
   onClose: () => void
+  /** When set, the wizard adds a campaign to this existing client: the Profile
+   *  step is skipped and the flow is just Strategy → Plan. */
+  client?: string
 }
 
-export function NewClientWizard({ onClose }: Props) {
+export function NewClientWizard({ onClose, client }: Props) {
   const icp = useTrafficStore((s) => s.icp)
   const loadIcp = useTrafficStore((s) => s.loadIcp)
   const addClient = useTrafficStore((s) => s.addClient)
@@ -49,8 +52,9 @@ export function NewClientWizard({ onClose }: Props) {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
 
-  const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [name, setName] = useState('')
+  const campaignOnly = !!client
+  const [step, setStep] = useState<1 | 2 | 3>(campaignOnly ? 2 : 1)
+  const [name, setName] = useState(client ?? '')
   const [website, setWebsite] = useState('')
   const [industry, setIndustry] = useState('')
   const [voice, setVoice] = useState('')
@@ -178,14 +182,26 @@ export function NewClientWizard({ onClose }: Props) {
   return (
     <>
       <div className="drawer-scrim" onClick={onClose} />
-      <div className="wiz" role="dialog" aria-label="Add new client">
+      <div className="wiz" role="dialog" aria-label={campaignOnly ? `Add campaign to ${client}` : 'Add new client'}>
         <div className="wiz-head">
           <div className="wiz-steps">
-            <span className={`wiz-step${step === 1 ? ' active' : ' done'}`}>1 · Profile</span>
-            <span className="wiz-step-sep">›</span>
-            <span className={`wiz-step${step === 2 ? ' active' : step > 2 ? ' done' : ''}`}>2 · Strategy</span>
-            <span className="wiz-step-sep">›</span>
-            <span className={`wiz-step${step === 3 ? ' active' : ''}`}>3 · Plan</span>
+            {campaignOnly ? (
+              <>
+                <span className="wiz-step wiz-step-client">{client}</span>
+                <span className="wiz-step-sep">›</span>
+                <span className={`wiz-step${step === 2 ? ' active' : ' done'}`}>1 · Strategy</span>
+                <span className="wiz-step-sep">›</span>
+                <span className={`wiz-step${step === 3 ? ' active' : ''}`}>2 · Plan</span>
+              </>
+            ) : (
+              <>
+                <span className={`wiz-step${step === 1 ? ' active' : ' done'}`}>1 · Profile</span>
+                <span className="wiz-step-sep">›</span>
+                <span className={`wiz-step${step === 2 ? ' active' : step > 2 ? ' done' : ''}`}>2 · Strategy</span>
+                <span className="wiz-step-sep">›</span>
+                <span className={`wiz-step${step === 3 ? ' active' : ''}`}>3 · Plan</span>
+              </>
+            )}
           </div>
           <button className="btn ghost sm" onClick={onClose}>
             Close
@@ -309,9 +325,11 @@ export function NewClientWizard({ onClose }: Props) {
             />
 
             <div className="wiz-foot">
-              <button className="btn sm" onClick={() => setStep(1)}>
-                ← Back
-              </button>
+              {!campaignOnly && (
+                <button className="btn sm" onClick={() => setStep(1)}>
+                  ← Back
+                </button>
+              )}
               <span className="spacer" />
               <button
                 className="btn primary"
