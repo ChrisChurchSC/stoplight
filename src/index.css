@@ -679,6 +679,13 @@ button {
   border-radius: 50%;
   background: #1a7f37;
 }
+.cat-review {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  cursor: help;
+  color: #d9a300;
+}
 
 /* ---------- Drive import picker ---------- */
 .drive-modal {

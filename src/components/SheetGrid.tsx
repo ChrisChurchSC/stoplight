@@ -424,7 +424,8 @@ export function SheetGrid() {
                           const channel = e.target.value as ChannelId
                           // Keep the type only if still valid for the new channel; else clear & prompt.
                           const assetType = isValidType(channel, row.assetType) ? row.assetType : ''
-                          updateRow(row.id, { channel, assetType })
+                          // A human pick clears the inferred-categorization flag.
+                          updateRow(row.id, { channel, assetType, classifyConfidence: undefined, classifySource: undefined })
                         }}
                       >
                         {KIND_ORDER.map((section) => (
@@ -442,18 +443,25 @@ export function SheetGrid() {
 
                   <td>
                     <div className="type-cell">
-                      {(row.classifySource === 'path' || row.classifySource === 'ai') && (
+                      {row.classifyConfidence != null && row.classifyConfidence < 0.7 ? (
+                        <span
+                          className="cat-review"
+                          title="Low-confidence categorization. Claude was not sure of the channel/type; check it."
+                        >
+                          ⛑
+                        </span>
+                      ) : row.classifySource === 'path' || row.classifySource === 'ai' ? (
                         <span
                           className="auto-dot"
                           title={`Channel auto-organized from ${
                             row.classifySource === 'ai' ? 'Claude' : 'folder & name'
                           }`}
                         />
-                      )}
+                      ) : null}
                       <select
                         className={`cell-select${typeValid ? '' : ' unset'}`}
                         value={typeValid ? row.assetType : ''}
-                        onChange={(e) => updateRow(row.id, { assetType: e.target.value })}
+                        onChange={(e) => updateRow(row.id, { assetType: e.target.value, classifyConfidence: undefined, classifySource: undefined })}
                       >
                         {!typeValid && <option value="">Select…</option>}
                         {typesFor(row.channel).map((x) => (
