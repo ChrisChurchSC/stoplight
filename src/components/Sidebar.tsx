@@ -1,4 +1,5 @@
 import { KIND_ORDER, channelsByKind } from '../domain/channels'
+import { channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -35,19 +36,28 @@ export function Sidebar() {
         {KIND_ORDER.map((section) => (
           <div key={section.kind}>
             <div className="nav-section">{section.label}</div>
-            {channelsByKind(section.kind).map((c) => (
-              <button
-                key={c.id}
-                className={`nav-item${filter === c.id ? ' active' : ''}`}
-                onClick={() => setFilter(c.id)}
-              >
-                <span className="nav-logo">
-                  <ChannelIcon channel={c.id} size={15} />
-                </span>
-                <span className="nav-label">{c.label}</span>
-                <span className="nav-count">{countFor(c.id)}</span>
-              </button>
-            ))}
+            {channelsByKind(section.kind).map((c) => {
+              const tr = channelTracking(c.id)
+              const missing = tr.items.filter((x) => !x.installed).map((x) => x.item.label)
+              const trCls = tr.ready === tr.total ? 'ok' : tr.ready === 0 ? 'none' : 'partial'
+              return (
+                <button
+                  key={c.id}
+                  className={`nav-item${filter === c.id ? ' active' : ''}`}
+                  onClick={() => setFilter(c.id)}
+                >
+                  <span className="nav-logo">
+                    <ChannelIcon channel={c.id} size={15} />
+                  </span>
+                  <span className="nav-label">{c.label}</span>
+                  <span
+                    className={`nav-track ${trCls}`}
+                    title={`Tracking ${tr.ready}/${tr.total} set up${missing.length ? ` — needs ${missing.join(', ')}` : ''}`}
+                  />
+                  <span className="nav-count">{countFor(c.id)}</span>
+                </button>
+              )
+            })}
           </div>
         ))}
       </nav>

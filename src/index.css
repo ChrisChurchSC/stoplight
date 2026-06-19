@@ -1559,6 +1559,24 @@ button {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+/* Per-channel tracking-infrastructure readiness (detail on the Connectors page). */
+.nav-track {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  cursor: help;
+}
+.nav-track.ok {
+  background: #1a7f37;
+}
+.nav-track.partial {
+  background: #d9a300;
+}
+.nav-track.none {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+}
 .sidebar-foot {
   border-top: 1px solid var(--border);
   padding-top: 8px;
