@@ -32,6 +32,7 @@ export function CopyReview() {
   const icp = useTrafficStore((s) => s.icp)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const drafting = useTrafficStore((s) => s.drafting)
+  const fillRowMedia = useTrafficStore((s) => s.fillRowMedia)
 
   const row = rows.find((r) => r.id === reviewRowId)
   if (!row) return null
@@ -93,7 +94,23 @@ export function CopyReview() {
 
         <div className="drawer-asset">
           <div className="drawer-thumb">
-            <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+            {row.mediaRef ? (
+              <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+            ) : (
+              <label className="drawer-thumb-upload" title="Upload creative for this slot">
+                <span className="drawer-thumb-up-ico">⬆</span>
+                <span>Upload</span>
+                <input
+                  type="file"
+                  accept="image/*,video/*,.pdf,.txt,.md,.html,.json"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) fillRowMedia(row.id, f)
+                    e.currentTarget.value = ''
+                  }}
+                />
+              </label>
+            )}
           </div>
           <div>
             <div className="drawer-name">{row.assetName}</div>

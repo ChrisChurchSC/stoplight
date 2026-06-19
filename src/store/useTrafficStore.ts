@@ -10,6 +10,7 @@ import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile 
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
+import { filesToAssets } from '../lib/files'
 import {
   pickFromGoogleDrive,
   pickFolderFromGoogleDrive,
@@ -292,6 +293,8 @@ interface TrafficState {
   /** Row whose copy-review drawer is open, or null. */
   reviewRowId: string | null
   openReview: (id: string | null) => void
+  /** Attach a real creative file to a planned slot (fills its media). */
+  fillRowMedia: (id: string, file: File) => Promise<void>
   /** Extract the in-creative copy for a row (text body real; vision stubbed). */
   extractCopy: (id: string) => Promise<void>
   /** Toggle the "copy reviewed" sign-off for a row. */
@@ -793,6 +796,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   openReview: (id) => set({ reviewRowId: id }),
+
+  fillRowMedia: async (id, file) => {
+    const [asset] = await filesToAssets([file])
+    if (!asset) return
+    const patch: Partial<TrafficRow> = { mediaRef: asset.previewUrl, mediaType: asset.mediaType }
+    if (asset.body !== undefined) patch.body = asset.body
+    await sheet.update(id, patch)
+    await get().refresh()
+  },
 
   extractCopy: async (id) => {
     const row = get().rows.find((r) => r.id === id)

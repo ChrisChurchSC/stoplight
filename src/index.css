@@ -3041,6 +3041,52 @@ button {
   height: 100%;
   object-fit: cover;
 }
+/* Upload affordance for an unfilled slot (grid mini + drawer thumb). */
+.sheet-asset .mini-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px dashed var(--border-strong);
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.sheet-asset .mini-upload:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drawer-thumb-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.drawer-thumb-upload:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drawer-thumb-up-ico {
+  font-size: 14px;
+}
+.mini-upload input,
+.drawer-thumb-upload input {
+  display: none;
+}
 .drawer-name {
   font-weight: 600;
 }
