@@ -1543,15 +1543,27 @@ button {
 /* ---- Client tabs (quick snapshot per client) ---- */
 .client-tabs {
   display: flex;
+  flex-wrap: nowrap;
   align-items: stretch;
   gap: 8px;
   padding: 8px 18px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
+  /* When there are more tabs than fit, let them run off the right edge and
+     scroll, with a fade so the bleed reads as "there's more". */
   overflow-x: auto;
+  scroll-padding-left: 18px;
+  -webkit-overflow-scrolling: touch;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
+}
+/* Hide the scrollbar; the edge fade is the affordance. */
+.client-tabs::-webkit-scrollbar {
+  display: none;
 }
 .client-tab {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
