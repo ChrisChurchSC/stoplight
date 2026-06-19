@@ -4233,6 +4233,108 @@ button {
   flex-direction: column;
   gap: 5px;
 }
+/* Audience types (personas under the ICP) */
+.aud-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.aud-sub {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.aud-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 10px 11px;
+  margin-bottom: 8px;
+}
+.aud-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.aud-name {
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 2px 0;
+  background: transparent;
+}
+.aud-name:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+.aud-del {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+}
+.aud-del:hover {
+  color: #b42318;
+}
+.aud-angle {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+  min-height: 40px;
+  background: var(--surface-2);
+}
+.aud-rtbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+.aud-rtb-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+.aud-strategy {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  background: var(--surface);
+}
+.aud-add {
+  width: 100%;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.aud-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .icp-rtb {
   display: flex;
   flex-direction: column;
