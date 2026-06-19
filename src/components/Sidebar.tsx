@@ -1,4 +1,5 @@
-import { KIND_ORDER, channelsByKind } from '../domain/channels'
+import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
+import { channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -20,6 +21,16 @@ export function Sidebar() {
   )
   const countFor = (id: string) => scopedRows.filter((r) => r.channel === id).length
 
+  // Aggregate tracking readiness across every channel, for the "All channels" row.
+  const allTracking = CHANNEL_LIST.map((c) => channelTracking(c.id))
+  const trReady = allTracking.reduce((n, t) => n + t.ready, 0)
+  const trTotal = allTracking.reduce((n, t) => n + t.total, 0)
+  const trChannelsNeeding = allTracking.filter((t) => t.ready < t.total).length
+  const allTrCls = trReady === trTotal ? 'ok' : trReady === 0 ? 'none' : 'partial'
+  const allTrTitle = `Tracking ${trReady}/${trTotal} set up across all channels${
+    trChannelsNeeding ? ` — ${trChannelsNeeding} channel${trChannelsNeeding === 1 ? '' : 's'} need setup` : ''
+  }`
+
   return (
     <aside className="sidebar">
       <nav className="sidebar-nav">
@@ -29,25 +40,35 @@ export function Sidebar() {
         >
           <span className="nav-ico">▦</span>
           <span className="nav-label">All channels</span>
+          <span className={`nav-track ${allTrCls}`} title={allTrTitle} />
           <span className="nav-count">{scopedRows.length}</span>
         </button>
 
         {KIND_ORDER.map((section) => (
           <div key={section.kind}>
             <div className="nav-section">{section.label}</div>
-            {channelsByKind(section.kind).map((c) => (
-              <button
-                key={c.id}
-                className={`nav-item${filter === c.id ? ' active' : ''}`}
-                onClick={() => setFilter(c.id)}
-              >
-                <span className="nav-logo">
-                  <ChannelIcon channel={c.id} size={15} />
-                </span>
-                <span className="nav-label">{c.label}</span>
-                <span className="nav-count">{countFor(c.id)}</span>
-              </button>
-            ))}
+            {channelsByKind(section.kind).map((c) => {
+              const tr = channelTracking(c.id)
+              const missing = tr.items.filter((x) => !x.installed).map((x) => x.item.label)
+              const trCls = tr.ready === tr.total ? 'ok' : tr.ready === 0 ? 'none' : 'partial'
+              return (
+                <button
+                  key={c.id}
+                  className={`nav-item${filter === c.id ? ' active' : ''}`}
+                  onClick={() => setFilter(c.id)}
+                >
+                  <span className="nav-logo">
+                    <ChannelIcon channel={c.id} size={15} />
+                  </span>
+                  <span className="nav-label">{c.label}</span>
+                  <span
+                    className={`nav-track ${trCls}`}
+                    title={`Tracking ${tr.ready}/${tr.total} set up${missing.length ? ` — needs ${missing.join(', ')}` : ''}`}
+                  />
+                  <span className="nav-count">{countFor(c.id)}</span>
+                </button>
+              )
+            })}
           </div>
         ))}
       </nav>
