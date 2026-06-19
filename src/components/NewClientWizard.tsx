@@ -43,13 +43,17 @@ export function NewClientWizard({ onClose }: Props) {
   const icp = useTrafficStore((s) => s.icp)
   const loadIcp = useTrafficStore((s) => s.loadIcp)
   const addClient = useTrafficStore((s) => s.addClient)
+  const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
 
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [name, setName] = useState('')
+  const [website, setWebsite] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [voice, setVoice] = useState('')
   const [pullingIcp, setPullingIcp] = useState(false)
   const [icpPulled, setIcpPulled] = useState(false)
   const [strategy, setStrategy] = useState('')
@@ -144,6 +148,12 @@ export function NewClientWizard({ onClose }: Props) {
         : undefined
     const oneTimeAssets = chosen.filter((d) => d.brand).length
     addClient(client)
+    if (website.trim() || industry.trim() || voice.trim())
+      setClientProfile(client, {
+        website: website.trim() || undefined,
+        industry: industry.trim() || undefined,
+        voice: voice.trim() || undefined,
+      })
     addCampaign({
       name: campaign,
       client,
@@ -171,9 +181,11 @@ export function NewClientWizard({ onClose }: Props) {
       <div className="wiz" role="dialog" aria-label="Add new client">
         <div className="wiz-head">
           <div className="wiz-steps">
-            <span className={`wiz-step${step === 1 ? ' active' : ' done'}`}>1 · Client</span>
+            <span className={`wiz-step${step === 1 ? ' active' : ' done'}`}>1 · Profile</span>
             <span className="wiz-step-sep">›</span>
-            <span className={`wiz-step${step === 2 ? ' active' : ''}`}>2 · Campaign</span>
+            <span className={`wiz-step${step === 2 ? ' active' : step > 2 ? ' done' : ''}`}>2 · Strategy</span>
+            <span className="wiz-step-sep">›</span>
+            <span className={`wiz-step${step === 3 ? ' active' : ''}`}>3 · Plan</span>
           </div>
           <button className="btn ghost sm" onClick={onClose}>
             Close
@@ -190,6 +202,35 @@ export function NewClientWizard({ onClose }: Props) {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && name.trim() && setStep(2)}
               autoFocus
+            />
+
+            <div className="wiz-grid2">
+              <label className="wiz-field">
+                <span className="wiz-label">Website</span>
+                <input
+                  className="wiz-input"
+                  value={website}
+                  placeholder="initech.com"
+                  onChange={(e) => setWebsite(e.target.value)}
+                />
+              </label>
+              <label className="wiz-field">
+                <span className="wiz-label">Industry</span>
+                <input
+                  className="wiz-input"
+                  value={industry}
+                  placeholder="e.g. B2B SaaS"
+                  onChange={(e) => setIndustry(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="wiz-label">Brand voice</label>
+            <textarea
+              className="wiz-input wiz-textarea"
+              value={voice}
+              placeholder="How should the copy sound? e.g. Plain, technical, no hype."
+              onChange={(e) => setVoice(e.target.value)}
             />
 
             <label className="wiz-label">ICP</label>
@@ -215,14 +256,14 @@ export function NewClientWizard({ onClose }: Props) {
             )}
 
             <div className="wiz-foot">
-              <span className="wiz-hint">ICP is optional — you can add it later.</span>
+              <span className="wiz-hint">Website, industry, voice, and ICP are optional.</span>
               <span className="spacer" />
               <button className="btn primary" disabled={!name.trim()} onClick={() => setStep(2)}>
-                Next: Campaign →
+                Next: Strategy →
               </button>
             </div>
           </div>
-        ) : (
+        ) : step === 2 ? (
           <div className="wiz-body">
             <label className="wiz-label">Select campaign strategy</label>
             <div className="wiz-strategies">
@@ -259,6 +300,30 @@ export function NewClientWizard({ onClose }: Props) {
               onChange={(e) => setCampaignName(e.target.value)}
             />
 
+            <label className="wiz-label">Objective (optional)</label>
+            <textarea
+              className="wiz-input wiz-textarea"
+              value={objective}
+              placeholder="What should this campaign achieve?"
+              onChange={(e) => setObjective(e.target.value)}
+            />
+
+            <div className="wiz-foot">
+              <button className="btn sm" onClick={() => setStep(1)}>
+                ← Back
+              </button>
+              <span className="spacer" />
+              <button
+                className="btn primary"
+                disabled={!strategy || !campaignName.trim()}
+                onClick={() => setStep(3)}
+              >
+                Next: Plan →
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="wiz-body">
             <label className="wiz-label">Duration</label>
             <select
               className="wiz-input"
@@ -272,14 +337,6 @@ export function NewClientWizard({ onClose }: Props) {
               <option value={26}>6 months</option>
               <option value={0}>Ongoing</option>
             </select>
-
-            <label className="wiz-label">Objective (optional)</label>
-            <textarea
-              className="wiz-input wiz-textarea"
-              value={objective}
-              placeholder="What should this campaign achieve?"
-              onChange={(e) => setObjective(e.target.value)}
-            />
 
             {contentChosen.length > 0 && (
               <>
@@ -371,7 +428,7 @@ export function NewClientWizard({ onClose }: Props) {
             )}
 
             <div className="wiz-foot">
-              <button className="btn sm" onClick={() => setStep(1)}>
+              <button className="btn sm" onClick={() => setStep(2)}>
                 ← Back
               </button>
               <span className="wiz-hint">

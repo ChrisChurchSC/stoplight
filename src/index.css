@@ -1937,6 +1937,16 @@ button {
   resize: vertical;
   min-height: 56px;
 }
+.wiz-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.wiz-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .wiz-icp-btn {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-sm);
