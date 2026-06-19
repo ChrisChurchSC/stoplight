@@ -20,8 +20,8 @@ export function TrackingDrawer() {
       <aside className="drawer track-drawer">
         <div className="drawer-head">
           {channel !== 'all' && <ChannelIcon channel={channel} size={15} />}
-          <strong>{channel === 'all' ? 'Channel tracking' : CHANNELS[channel].label}</strong>
-          <span className="track-drawer-sub">tracking setup</span>
+          <strong>{channel === 'all' ? 'Channel infrastructure' : CHANNELS[channel].label}</strong>
+          <span className="track-drawer-sub">infrastructure</span>
           <span className="spacer" />
           <button className="btn ghost sm" onClick={close}>
             ✕

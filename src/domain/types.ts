@@ -34,6 +34,7 @@ export type ChannelId =
   | 'email'
   | 'sms'
   | 'push'
+  | 'website'
   | 'blog'
   | 'landing-page'
   | 'lead-magnet'

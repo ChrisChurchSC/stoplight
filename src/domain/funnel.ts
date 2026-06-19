@@ -34,6 +34,7 @@ const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
   'google-demand': 'consideration',
   linkedin: 'consideration',
   blog: 'consideration',
+  website: 'consideration',
   'lead-magnet': 'consideration',
   // Bottom funnel — high intent, conversion.
   'google-search': 'conversion',

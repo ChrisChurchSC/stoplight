@@ -28,7 +28,7 @@ export function Sidebar() {
   const trTotal = allTracking.reduce((n, t) => n + t.total, 0)
   const trChannelsNeeding = allTracking.filter((t) => t.ready < t.total).length
   const allTrCls = trReady === trTotal ? 'ok' : trReady === 0 ? 'none' : 'partial'
-  const allTrTitle = `Tracking ${trReady}/${trTotal} set up across all channels${
+  const allTrTitle = `Infrastructure ${trReady}/${trTotal} set up across all channels${
     trChannelsNeeding ? ` — ${trChannelsNeeding} channel${trChannelsNeeding === 1 ? '' : 's'} need setup` : ''
   }`
 
@@ -83,7 +83,7 @@ export function Sidebar() {
                     className="nav-track"
                     role="button"
                     tabIndex={0}
-                    title={`Tracking ${tr.ready}/${tr.total} set up${missing.length ? ` — needs ${missing.join(', ')}` : ''} — click for detail`}
+                    title={`Infrastructure ${tr.ready}/${tr.total} set up${missing.length ? ` — needs ${missing.join(', ')}` : ''} — click for detail`}
                     onClick={(e) => {
                       e.stopPropagation()
                       openTracking(c.id)

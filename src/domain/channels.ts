@@ -119,6 +119,10 @@ export const CHANNELS: Record<ChannelId, ChannelConfig> = {
     id: 'push', label: 'Push', short: 'PUSH', kind: 'owned', platform: 'Push',
     color: '#7c3aed', accepts: ['text', 'image', 'link'], bestTimes: [t(10), t(18)],
   },
+  website: {
+    id: 'website', label: 'Website', short: 'WEB', kind: 'owned', platform: 'Web',
+    color: '#0284c7', accepts: ['link', 'text', 'image'], bestTimes: [t(10)],
+  },
   blog: {
     id: 'blog', label: 'Blog article', short: 'BLOG', kind: 'owned', platform: 'Web',
     color: '#8b5cf6', accepts: ['text', 'image', 'link'], bestTimes: [t(8), t(11)],
