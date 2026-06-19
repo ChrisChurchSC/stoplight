@@ -1,4 +1,4 @@
-import { clientForCampaign } from '../../domain/clients'
+import { clientForCampaign, type ClientProfile } from '../../domain/clients'
 import type { MessagingField } from '../../domain/messaging'
 import type { Rtb } from '../../domain/rtb'
 import type { ChannelId } from '../../domain/types'
@@ -21,6 +21,8 @@ export interface DraftAsset {
 export interface DraftRequest {
   icp: Icp | null
   campaign: string
+  /** The client's brand profile (website / industry / voice), if captured. */
+  brand?: ClientProfile
   assets: DraftAsset[]
 }
 export interface DraftComponent {

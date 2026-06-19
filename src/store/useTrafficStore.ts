@@ -6,7 +6,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
-import { registerCampaign, clientForCampaign, type Campaign } from '../domain/clients'
+import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
@@ -83,6 +83,25 @@ function saveClients(list: string[]): void {
   }
 }
 
+// Client identity captured in the intake wizard (website, industry, voice),
+// persisted by client name. Feeds the copy drafter so copy matches the brand.
+const CLIENT_PROFILES_KEY = 'stoplight.clientProfiles.v1'
+function loadClientProfiles(): Record<string, ClientProfile> {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLIENT_PROFILES_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveClientProfiles(map: Record<string, ClientProfile>): void {
+  try {
+    localStorage.setItem(CLIENT_PROFILES_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
 // Campaigns created in the new-client wizard, persisted. Registered into
 // clientForCampaign on load so they resolve to their client before any rows exist.
 const CAMPAIGNS_KEY = 'stoplight.campaigns.v1'
@@ -153,7 +172,11 @@ interface TrafficState {
   /** Explicitly-added clients (persisted), merged with clients derived from rows. */
   clientList: string[]
   addClient: (name: string) => void
-  /** Remove a client: its rows, campaigns, saved Drive link, and list entry. */
+  /** Client profiles (website / industry / voice) captured in intake, persisted. */
+  clientProfiles: Record<string, ClientProfile>
+  /** Save (merge) a client's profile. */
+  setClientProfile: (name: string, profile: ClientProfile) => void
+  /** Remove a client: its rows, campaigns, saved Drive link, profile, and list entry. */
   deleteClient: (name: string) => Promise<void>
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
@@ -283,6 +306,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   driveConnected: false,
   driveLinks: loadDriveLinks(),
   clientList: loadClients(),
+  clientProfiles: loadClientProfiles(),
   campaignList: loadCampaigns(),
   reviewRowId: null,
   comments: {},
@@ -394,6 +418,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveClients(clientList)
       return { clientList }
     }),
+  setClientProfile: (name, profile) =>
+    set((s) => {
+      const n = name.trim()
+      if (!n) return {}
+      const clientProfiles = { ...s.clientProfiles, [n]: { ...s.clientProfiles[n], ...profile } }
+      saveClientProfiles(clientProfiles)
+      return { clientProfiles }
+    }),
   deleteClient: async (name) => {
     // Remove the client's rows from the sheet.
     const ids = get()
@@ -406,10 +438,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const campaignList = s.campaignList.filter((c) => c.client !== name)
       const driveLinks = { ...s.driveLinks }
       delete driveLinks[name]
+      const clientProfiles = { ...s.clientProfiles }
+      delete clientProfiles[name]
       saveClients(clientList)
       saveCampaigns(campaignList)
       saveDriveLinks(driveLinks)
-      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks }
+      saveClientProfiles(clientProfiles)
+      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks, clientProfiles }
       // If we're scoped into the client being deleted, pop back to the overview.
       if (s.clientFilter === name) {
         next.clientFilter = 'all'
@@ -787,7 +822,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           type: r.assetType,
           fields: messagingFields(r.channel, r.assetType),
         }))
-        const result = await copyWriter.draft({ icp, campaign, assets })
+        const brand = get().clientProfiles[clientForCampaign(campaign)]
+        const result = await copyWriter.draft({ icp, campaign, brand, assets })
         // Register + persist the campaign's drafted proof (merged with any authored).
         if (campaign && result.rtbs.length) {
           const existing = rtbsForCampaign(campaign)

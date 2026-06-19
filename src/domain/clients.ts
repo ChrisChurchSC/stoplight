@@ -12,6 +12,14 @@ export const CAMPAIGN_CLIENTS: Record<string, string> = {
 export const UNASSIGNED = 'Unassigned'
 
 /** A campaign created through the new-client wizard. */
+/** Client identity captured in the intake wizard. Feeds the ICP + copy drafting. */
+export interface ClientProfile {
+  website?: string
+  industry?: string
+  /** Short brand-voice note, e.g. "Plain, technical, no hype." */
+  voice?: string
+}
+
 export interface Campaign {
   name: string
   client: string
