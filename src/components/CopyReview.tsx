@@ -30,6 +30,8 @@ export function CopyReview() {
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
+  const draftCopy = useTrafficStore((s) => s.draftCopy)
+  const drafting = useTrafficStore((s) => s.drafting)
 
   const row = rows.find((r) => r.id === reviewRowId)
   if (!row) return null
@@ -216,7 +218,18 @@ export function CopyReview() {
           </div>
 
           {/* ---- Messaging ---- */}
-          <div className="drawer-section">Messaging</div>
+          <div className="drawer-section">
+            Messaging
+            <span className="spacer" />
+            <button
+              className="btn ghost sm"
+              onClick={() => draftCopy([row.id])}
+              disabled={drafting}
+              title="Draft starter copy for this asset from the ICP"
+            >
+              {drafting ? '✦ Drafting…' : '✦ Draft'}
+            </button>
+          </div>
 
           {assetFlag && (
             <div className="msg-flag asset-flag">

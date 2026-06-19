@@ -42,6 +42,13 @@ export function FlowView() {
 
   const view = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
 
+  // Resolve a linksTo asset name to a row, preferring the SAME campaign — names
+  // like "Lead-capture landing page" repeat across campaigns, so a global match
+  // would point a campaign's email at another campaign's page.
+  const resolveTarget = (name: string, campaign?: string) =>
+    rows.find((x) => x.assetName === name && x.campaign === campaign) ??
+    rows.find((x) => x.assetName === name)
+
   const graphRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState<Edge[]>([])
   const [hover, setHover] = useState<{ id: string; name: string } | null>(null)
@@ -72,7 +79,7 @@ export function FlowView() {
         // Backward link (destination is an earlier stage / to the left): attach
         // to the RIGHT side of both cards. Forward: source-right → target-left.
         const back = t.right <= s.left + 1
-        const targetRow = rows.find((x) => x.assetName === r.linksTo)
+        const targetRow = resolveTarget(r.linksTo, r.campaign)
         const h = targetRow ? handoffFor(r, targetRow) : { level: 'weak' as const, reason: '' }
         linked.add(r.id)
         next.push({
@@ -149,13 +156,13 @@ export function FlowView() {
     return () => cancelAnimationFrame(id)
   }, [linkKey])
 
-  const targetId = (name: string) => rows.find((r) => r.assetName === name)?.id
+  const targetId = (name: string, campaign?: string) => resolveTarget(name, campaign)?.id
 
   // Handoff health across all linked units (CTA + message continuity).
   const handoffs = view
     .filter((r) => r.linksTo)
     .map((r) => {
-      const t = rows.find((x) => x.assetName === r.linksTo)
+      const t = resolveTarget(r.linksTo!, r.campaign)
       return t ? handoffFor(r, t) : null
     })
     .filter((h): h is NonNullable<typeof h> => !!h)
@@ -163,7 +170,7 @@ export function FlowView() {
   const breakN = handoffs.filter((h) => h.level !== 'coherent').length
 
   const Card = ({ row }: { row: TrafficRow }) => {
-    const linkId = row.linksTo ? targetId(row.linksTo) : undefined
+    const linkId = row.linksTo ? targetId(row.linksTo, row.campaign) : undefined
     return (
       <button
         className="flow-card"

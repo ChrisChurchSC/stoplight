@@ -29,7 +29,17 @@ export const CAMPAIGN_RTBS: Record<string, Rtb[]> = {
   ],
 }
 
-export const rtbsForCampaign = (campaign?: string): Rtb[] => CAMPAIGN_RTBS[campaign ?? ''] ?? []
+/**
+ * Campaign RTBs registered at runtime (e.g. drafted from the ICP for a
+ * wizard-seeded campaign that has no authored set above). Overrides CAMPAIGN_RTBS.
+ */
+const runtimeRtbs = new Map<string, Rtb[]>()
+export function registerCampaignRtbs(campaign: string, rtbs: Rtb[]): void {
+  if (campaign) runtimeRtbs.set(campaign, rtbs)
+}
+
+export const rtbsForCampaign = (campaign?: string): Rtb[] =>
+  (campaign ? runtimeRtbs.get(campaign) : undefined) ?? CAMPAIGN_RTBS[campaign ?? ''] ?? []
 
 export const rtbById = (campaign: string | undefined, id: string): Rtb | undefined =>
   rtbsForCampaign(campaign).find((r) => r.id === id)

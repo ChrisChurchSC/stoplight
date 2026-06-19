@@ -124,6 +124,8 @@ export function SheetGrid() {
   const acceptBudget = useTrafficStore((s) => s.acceptBudget)
   const syncSpend = useTrafficStore((s) => s.syncSpend)
   const syncComments = useTrafficStore((s) => s.syncComments)
+  const draftCopy = useTrafficStore((s) => s.draftCopy)
+  const drafting = useTrafficStore((s) => s.drafting)
 
   const pains = icp?.pains ?? []
   const unresolvedFlags = (row: TrafficRow) =>
@@ -204,6 +206,7 @@ export function SheetGrid() {
   const paidReviewable = reviewable.filter(isPaidRow)
   const missingBudgetN = paidReviewable.filter((r) => !hasBudget(r)).length
   const paidWithBudget = paidReviewable.some((r) => hasBudget(r))
+  const emptyMsgN = reviewable.filter((r) => !messagingAllText(r).trim()).length
   const hasPosted = view.some((r) => r.status === 'posted')
   const needsReplyN = view
     .flatMap((r) => commentMap[r.id] ?? [])
@@ -267,7 +270,19 @@ export function SheetGrid() {
               <th />
               <th />
               <th />
-              <th />
+              <th>
+                {drafting ? (
+                  <span className="cov-ok">✦ Drafting…</span>
+                ) : emptyMsgN > 0 ? (
+                  <button
+                    className="cov-btn"
+                    onClick={() => draftCopy()}
+                    title="Draft starter copy + proof for every empty asset, from the ICP"
+                  >
+                    ✦ Draft ({emptyMsgN})
+                  </button>
+                ) : null}
+              </th>
               <th />
               <th />
               <th />
