@@ -16,6 +16,7 @@ import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
 import { BillingPage } from './BillingPage'
 import { IcpDrawer } from './IcpDrawer'
+import { TrackingDrawer } from './TrackingDrawer'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
@@ -106,6 +107,7 @@ export function Workbench() {
       )}
 
       <IcpDrawer />
+      <TrackingDrawer />
       <CopyReview />
       <CommentDrawer />
       <DrivePicker />

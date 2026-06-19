@@ -142,6 +142,19 @@ export interface TrackingItem {
   kind: TrackingKind
 }
 
+/** Human label for each infrastructure kind (shown in the tracking drawer). */
+export const TRACKING_KIND_LABEL: Record<TrackingKind, string> = {
+  pixel: 'Client pixel / tag',
+  server: 'Server-side conversions',
+  event: 'Conversion event',
+  analytics: 'Web analytics',
+  tagmanager: 'Tag manager',
+  verification: 'Verification',
+  utm: 'UTM tagging',
+  esp: 'Link tracking',
+  compliance: 'Compliance',
+}
+
 const ti = (label: string, kind: TrackingKind): TrackingItem => ({ label, kind })
 /** UTM tagging is universal — Rushhour builds it for every row. */
 const UTM = ti('UTM tagging', 'utm')
