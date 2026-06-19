@@ -52,8 +52,9 @@ export function CampaignTabs() {
   ]
 
   return (
-    <div className="client-tabs" role="tablist" aria-label="Campaigns">
-      {tabs.map((t) => {
+    <div className="client-tabs-wrap">
+      <div className="client-tabs" role="tablist" aria-label="Campaigns">
+        {tabs.map((t) => {
         const meta = t.key === 'all' ? undefined : campMeta.get(t.key)
         const duration = meta
           ? meta.durationWeeks
@@ -99,8 +100,9 @@ export function CampaignTabs() {
           </button>
         )
       })}
+      </div>
       <button
-        className="client-tab client-tab-add"
+        className="client-tab-add"
         onClick={() => openCampaignWizard(clientFilter)}
         title={`Add a campaign to ${clientFilter}`}
       >
