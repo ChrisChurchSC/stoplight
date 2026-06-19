@@ -19,7 +19,9 @@ export interface Campaign {
   objective?: string
   /** Flight length in weeks; omitted/0 = ongoing. */
   durationWeeks?: number
-  /** Total paid-media budget for the flight (omitted when organic-only). */
+  /** Overall campaign budget (media + content/production). Drives mediaBudget. */
+  overallBudget?: number
+  /** Paid-media budget for the flight: the strategy's media share of overallBudget. */
   mediaBudget?: number
   /** Content pieces produced per month (monthly cadence total). */
   contentPerMonth?: number
