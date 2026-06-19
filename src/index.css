@@ -1541,24 +1541,26 @@ button {
 }
 
 /* ---- Client tabs (quick snapshot per client) ---- */
+.client-tabs-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
 .client-tabs {
   display: flex;
   flex-wrap: nowrap;
   align-items: stretch;
   gap: 8px;
-  padding: 8px 18px;
+  /* Right padding clears the pinned "Add campaign" button so the last tab can
+     scroll out from behind it; tabs bleed under the button as they scroll. */
+  padding: 8px 160px 8px 18px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
-  /* When there are more tabs than fit, let them run off the right edge and
-     scroll, with a fade so the bleed reads as "there's more". */
   overflow-x: auto;
   scroll-padding-left: 18px;
   -webkit-overflow-scrolling: touch;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
 }
-/* Hide the scrollbar; the edge fade is the affordance. */
+/* Hide the scrollbar; the pinned button + scroll is the affordance. */
 .client-tabs::-webkit-scrollbar {
   display: none;
 }
@@ -1605,17 +1607,29 @@ button {
   font-weight: 600;
   color: var(--accent);
 }
+/* Pinned over the right of the tab bar: stays put while the tabs scroll under it. */
 .client-tab-add {
-  flex-direction: row;
+  position: absolute;
+  top: 8px;
+  bottom: 9px;
+  right: 18px;
+  z-index: 2;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  border-style: dashed;
-  border-color: var(--border-strong);
+  gap: 6px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text-muted);
+  font: inherit;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  /* Soft surface halo so tabs scrolling under it dissolve into the button. */
+  box-shadow: -20px 0 16px -8px var(--surface);
 }
 .client-tab-add:hover {
   border-color: var(--accent);
