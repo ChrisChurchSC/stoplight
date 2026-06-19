@@ -57,6 +57,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   ],
   // 20:80 content/product-heavy
   plg: [
+    d('Acquisition / retargeting ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
     d('Welcome / onboarding email', 'email', 'welcome', 'text', 1, 'always-on'),
     d('Trial → paid upgrade email', 'email', 'nurture', 'text', 1, 'always-on'),
     d('Feature announcement email', 'email', 'announcement', 'text', 2, 'always-on'),
@@ -68,6 +69,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   ],
   // 30:70 enablement over media
   'sales-led': [
+    d('LinkedIn ad', 'linkedin-ads', 'single-image', 'image', 1, 'flight'),
     d('Outbound nurture email', 'email', 'nurture', 'text', 1, 'always-on'),
     d('Thought-leadership LinkedIn post', 'linkedin', 'text', 'text', 4, 'always-on'),
     d('Sales insight blog article', 'blog', 'article', 'text', 2, 'always-on'),
@@ -79,6 +81,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   ],
   // 10:90 almost all content / CS
   lifecycle: [
+    d('Retargeting / win-back ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
     d('Onboarding email series', 'email', 'welcome', 'text', 1, 'always-on'),
     d('Product update newsletter', 'email', 'newsletter', 'text', 4, 'always-on'),
     d('How-to tutorial article', 'blog', 'article', 'text', 4, 'always-on'),
@@ -123,6 +126,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   ],
   // 15:85 mostly content
   'content-seo': [
+    d('Paid search ad', 'google-search', 'rsa', 'text', 1, 'flight'),
     d('SEO article', 'blog', 'article', 'text', 4, 'always-on'),
     d('Comparison / BOFU listicle', 'blog', 'listicle', 'text', 2, 'always-on'),
     d('Social distribution post', 'linkedin', 'text', 'text', 4, 'always-on'),
@@ -133,6 +137,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   ],
   // 10:90 people/content, little paid
   outbound: [
+    d('LinkedIn account ad', 'linkedin-ads', 'single-image', 'image', 1, 'flight'),
     d('Cold email sequence', 'email', 'nurture', 'text', 1, 'always-on'),
     d('LinkedIn outreach post', 'linkedin', 'text', 'text', 4, 'always-on'),
     d('Follow-up email', 'email', 'nurture', 'text', 1, 'always-on'),
@@ -142,6 +147,7 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
   ],
   // 15:85 content / programming heavy
   community: [
+    d('Event promotion ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
     d('Event promo (social)', 'instagram', 'feed', 'image', 2, 'always-on'),
     d('Community LinkedIn post', 'linkedin', 'text', 'text', 4, 'always-on'),
     d('Member newsletter', 'email', 'newsletter', 'text', 4, 'always-on'),
