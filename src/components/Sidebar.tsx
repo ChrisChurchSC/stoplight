@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
@@ -24,6 +25,14 @@ export function Sidebar() {
   const clearSheet = useTrafficStore((s) => s.clearSheet)
   const openTracking = useTrafficStore((s) => s.openTracking)
   const profile = useTrafficStore((s) => s.clientProfiles[clientFilter])
+  const icp = useTrafficStore((s) => s.icp)
+  const loadIcp = useTrafficStore((s) => s.loadIcp)
+
+  // Surface the ICP in the profile card (not behind a button) — pull it if a
+  // client is in view and we don't have one yet.
+  useEffect(() => {
+    if (clientFilter !== 'all' && !icp) loadIcp()
+  }, [clientFilter, icp, loadIcp])
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -65,6 +74,23 @@ export function Sidebar() {
           </a>
         )}
         {profile?.voice && <div className="sidebar-client-voice">“{profile.voice}”</div>}
+
+        {icp && (
+          <div className="sidebar-icp">
+            <div className="sidebar-icp-label">ICP · via Clay</div>
+            <div className="sidebar-icp-name">{icp.name}</div>
+            {icp.segment && <div className="sidebar-icp-seg">{icp.segment}</div>}
+            {icp.pains?.length > 0 && (
+              <div className="sidebar-icp-pains">
+                {icp.pains.slice(0, 4).map((p) => (
+                  <span key={p} className="sidebar-icp-pain">
+                    {p}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <nav className="sidebar-nav">
