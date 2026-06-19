@@ -109,6 +109,7 @@ export function SheetGrid() {
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const publishRow = useTrafficStore((s) => s.publishRow)
   const openReview = useTrafficStore((s) => s.openReview)
+  const fillRowMedia = useTrafficStore((s) => s.fillRowMedia)
   const openComments = useTrafficStore((s) => s.openComments)
   const commentMap = useTrafficStore((s) => s.comments)
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
@@ -385,7 +386,26 @@ export function SheetGrid() {
                   <td>
                     <div className="sheet-asset">
                       <div className="mini">
-                        <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+                        {row.mediaRef ? (
+                          <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+                        ) : (
+                          <label
+                            className="mini-upload"
+                            title="Upload creative for this slot"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            ⬆
+                            <input
+                              type="file"
+                              accept="image/*,video/*,.pdf,.txt,.md,.html,.json"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0]
+                                if (f) fillRowMedia(row.id, f)
+                                e.currentTarget.value = ''
+                              }}
+                            />
+                          </label>
+                        )}
                       </div>
                       <span className="nm" title={row.assetName}>
                         {row.assetName}
