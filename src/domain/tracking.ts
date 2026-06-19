@@ -1,3 +1,4 @@
+import { CHANNELS } from './channels'
 import type { ChannelId, TrafficRow } from './types'
 
 export interface Utm {
@@ -34,6 +35,7 @@ export const TRACKING_CONVENTION: Record<ChannelId, { source: string; medium: st
   email: { source: 'email', medium: 'email' },
   sms: { source: 'sms', medium: 'sms' },
   push: { source: 'push', medium: 'push' },
+  website: { source: 'website', medium: 'web' },
   blog: { source: 'blog', medium: 'organic' },
   'landing-page': { source: 'site', medium: 'web' },
   'lead-magnet': { source: 'leadmagnet', medium: 'content' },
@@ -127,6 +129,7 @@ export const isTrackingClean = (row: TrafficRow): boolean => trackingChecks(row)
 // ---------------------------------------------------------------------------
 
 export type TrackingKind =
+  | 'channel'
   | 'pixel'
   | 'server'
   | 'event'
@@ -142,36 +145,54 @@ export interface TrackingItem {
   kind: TrackingKind
 }
 
+/** Human label for each infrastructure kind (shown in the tracking drawer). */
+export const TRACKING_KIND_LABEL: Record<TrackingKind, string> = {
+  channel: 'Channel / account',
+  pixel: 'Client pixel / tag',
+  server: 'Server-side conversions',
+  event: 'Conversion event',
+  analytics: 'Web analytics',
+  tagmanager: 'Tag manager',
+  verification: 'Verification',
+  utm: 'UTM tagging',
+  esp: 'Link tracking',
+  compliance: 'Compliance',
+}
+
 const ti = (label: string, kind: TrackingKind): TrackingItem => ({ label, kind })
 /** UTM tagging is universal — Rushhour builds it for every row. */
 const UTM = ti('UTM tagging', 'utm')
 
 export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
-  // paid — social
+  // paid — social (client pixel, server-side conversions API, the event, UTM)
   'meta-ads': [ti('Meta Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), ti('Domain verification', 'verification'), UTM],
   'tiktok-ads': [ti('TikTok Pixel', 'pixel'), ti('Events API', 'server'), ti('Registration event', 'event'), UTM],
   'linkedin-ads': [ti('LinkedIn Insight Tag', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), UTM],
-  'x-ads': [ti('X Pixel', 'pixel'), ti('Sign-up event', 'event'), UTM],
+  'x-ads': [ti('X Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Sign-up event', 'event'), UTM],
   'pinterest-ads': [ti('Pinterest Tag', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), UTM],
-  'snapchat-ads': [ti('Snap Pixel', 'pixel'), ti('Sign-up event', 'event'), UTM],
-  'reddit-ads': [ti('Reddit Pixel', 'pixel'), ti('Lead event', 'event'), UTM],
-  'youtube-ads': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), UTM],
-  // paid — search / shopping
+  'snapchat-ads': [ti('Snap Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Sign-up event', 'event'), UTM],
+  'reddit-ads': [ti('Reddit Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), UTM],
+  'youtube-ads': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
+  // paid — search / shopping (enhanced conversions apply across Google Ads)
   'google-search': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
-  'google-demand': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), UTM],
+  'google-demand': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
   pmax: [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
-  // organic — social (pixel for retargeting + attribution, plus UTM)
-  instagram: [ti('Meta Pixel', 'pixel'), UTM],
-  facebook: [ti('Meta Pixel', 'pixel'), UTM],
-  linkedin: [ti('LinkedIn Insight Tag', 'pixel'), UTM],
-  x: [ti('X Pixel', 'pixel'), UTM],
-  tiktok: [ti('TikTok Pixel', 'pixel'), UTM],
-  youtube: [ti('GA4', 'analytics'), UTM],
-  pinterest: [ti('Pinterest Tag', 'pixel'), UTM],
+  // organic — social: attribution is UTM tags + the platform's native analytics.
+  // A pixel only matters for site retargeting, which lives on the website, not
+  // the organic post — so it's tracked under Website, not here.
+  instagram: [UTM, ti('Native analytics', 'analytics')],
+  facebook: [UTM, ti('Native analytics', 'analytics')],
+  linkedin: [UTM, ti('Native analytics', 'analytics')],
+  x: [UTM, ti('Native analytics', 'analytics')],
+  tiktok: [UTM, ti('Native analytics', 'analytics')],
+  youtube: [UTM, ti('Native analytics', 'analytics')],
+  pinterest: [UTM, ti('Native analytics', 'analytics')],
   // owned / lifecycle
   email: [ti('ESP link tracking', 'esp'), UTM, ti('Suppression / unsubscribe', 'compliance')],
   sms: [ti('Link tracking', 'esp'), UTM, ti('Opt-out compliance', 'compliance')],
   push: [ti('Delivery + click tracking', 'analytics'), UTM],
+  // The website hosts the analytics + tag manager + every ad platform's pixel.
+  website: [ti('GA4', 'analytics'), ti('GTM container', 'tagmanager'), ti('Ad platform pixels', 'pixel'), ti('Conversion event', 'event'), UTM],
   blog: [ti('GA4', 'analytics'), UTM],
   'landing-page': [ti('GA4', 'analytics'), ti('GTM container', 'tagmanager'), ti('Conversion event', 'event'), UTM],
   'lead-magnet': [ti('GA4', 'analytics'), ti('Form conversion event', 'event'), UTM],
@@ -184,13 +205,23 @@ export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
  */
 export const INSTALLED_TRACKING = new Set<string>([
   'UTM tagging',
+  'Native analytics',
   'Meta Pixel', 'TikTok Pixel', 'Pinterest Tag', 'GA4', 'Google Ads tag', 'LinkedIn Insight Tag',
   'Lead event', 'Conversion action', 'Registration event', 'Sign-up event', 'Conversion event', 'Form conversion event',
   'ESP link tracking', 'Link tracking', 'Delivery + click tracking',
   // not yet set up: Conversions API, Events API, Enhanced conversions, Domain
-  // verification, GTM container, X Pixel, Snap Pixel, Reddit Pixel, Suppression
-  // / unsubscribe, Opt-out compliance.
+  // verification, GTM container, Ad platform pixels, X Pixel, Snap Pixel, Reddit
+  // Pixel, Suppression / unsubscribe, Opt-out compliance.
 ])
+
+/** The "is the channel itself connected" item — always first, marked set up
+ *  (a real adapter would read the platform/account connection). */
+function channelSetupItem(channel: ChannelId): TrackingItem {
+  const c = CHANNELS[channel]
+  if (c.kind === 'paid') return ti(`${c.platform} Ads account`, 'channel')
+  if (c.kind === 'organic') return ti(`${c.platform} profile`, 'channel')
+  return ti('Account connected', 'channel')
+}
 
 export interface ChannelTrackingStatus {
   items: { item: TrackingItem; installed: boolean }[]
@@ -198,11 +229,16 @@ export interface ChannelTrackingStatus {
   total: number
 }
 
-/** Tracking infrastructure + per-item setup status for a channel. */
+/** Tracking infrastructure + per-item setup status for a channel. The channel
+ *  connection itself is the first item, then the measurement stack. */
 export function channelTracking(channel: ChannelId): ChannelTrackingStatus {
-  const items = (CHANNEL_TRACKING[channel] ?? [UTM]).map((item) => ({
-    item,
-    installed: INSTALLED_TRACKING.has(item.label),
-  }))
+  const setup = { item: channelSetupItem(channel), installed: true }
+  const items = [
+    setup,
+    ...(CHANNEL_TRACKING[channel] ?? [UTM]).map((item) => ({
+      item,
+      installed: INSTALLED_TRACKING.has(item.label),
+    })),
+  ]
   return { items, ready: items.filter((x) => x.installed).length, total: items.length }
 }

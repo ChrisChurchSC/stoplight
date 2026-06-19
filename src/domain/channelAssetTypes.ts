@@ -50,6 +50,7 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   email: [t('newsletter', 'Newsletter'), t('nurture', 'Nurture/drip email'), t('promotional', 'Promotional email'), t('announcement', 'Announcement'), t('welcome', 'Welcome email'), t('re-engagement', 'Re-engagement email')],
   sms: [t('promotional', 'Promotional SMS'), t('transactional', 'Transactional SMS'), t('reminder', 'Reminder'), t('alert', 'Alert')],
   push: [t('promotional', 'Promotional push'), t('transactional', 'Transactional push'), t('reminder', 'Reminder')],
+  website: [t('homepage', 'Homepage'), t('page', 'Web page'), t('pricing', 'Pricing page'), t('about', 'About page')],
   blog: [t('article', 'Article'), t('pillar', 'Long-form guide/pillar'), t('listicle', 'Listicle'), t('case-study', 'Case study')],
   'landing-page': [t('lead-capture', 'Lead capture page'), t('sales', 'Sales/offer page'), t('webinar-reg', 'Webinar/event registration'), t('waitlist', 'Waitlist/coming soon')],
   'lead-magnet': [t('ebook', 'Ebook'), t('whitepaper', 'Whitepaper'), t('checklist', 'Checklist'), t('template', 'Template'), t('webinar', 'Webinar'), t('cheat-sheet', 'Cheat sheet')],

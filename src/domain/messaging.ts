@@ -62,6 +62,7 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   email: [subject(), preview(), headline(60), body(), cta(30)],
   sms: [f('message', 'Message', 160, 160, true), f('link', 'Link / CTA', undefined, 60)],
   push: [f('title', 'Title', 50, 65), f('body', 'Body', 150, 240, true), cta(25)],
+  website: [f('headline', 'Headline', undefined, 60), subhead(), body(), cta(30)],
   blog: [f('title', 'SEO title', 60, 70), f('meta-description', 'Meta description', 155, 160, true), body()],
   'landing-page': [f('headline', 'Headline', undefined, 60), subhead(), body(), cta(30)],
   'lead-magnet': [title(80), f('description', 'Description', 300, undefined, true), cta(30)],

@@ -13,6 +13,7 @@ export function Sidebar() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const query = useTrafficStore((s) => s.query)
   const clearSheet = useTrafficStore((s) => s.clearSheet)
+  const openTracking = useTrafficStore((s) => s.openTracking)
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -27,7 +28,7 @@ export function Sidebar() {
   const trTotal = allTracking.reduce((n, t) => n + t.total, 0)
   const trChannelsNeeding = allTracking.filter((t) => t.ready < t.total).length
   const allTrCls = trReady === trTotal ? 'ok' : trReady === 0 ? 'none' : 'partial'
-  const allTrTitle = `Tracking ${trReady}/${trTotal} set up across all channels${
+  const allTrTitle = `Infrastructure ${trReady}/${trTotal} set up across all channels${
     trChannelsNeeding ? ` — ${trChannelsNeeding} channel${trChannelsNeeding === 1 ? '' : 's'} need setup` : ''
   }`
 
@@ -40,7 +41,24 @@ export function Sidebar() {
         >
           <span className="nav-ico">▦</span>
           <span className="nav-label">All channels</span>
-          <span className={`nav-track ${allTrCls}`} title={allTrTitle} />
+          <span
+            className="nav-track"
+            role="button"
+            tabIndex={0}
+            title={`${allTrTitle} — click for detail`}
+            onClick={(e) => {
+              e.stopPropagation()
+              openTracking('all')
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation()
+                openTracking('all')
+              }
+            }}
+          >
+            <span className={`nav-track-dot ${allTrCls}`} />
+          </span>
           <span className="nav-count">{scopedRows.length}</span>
         </button>
 
@@ -62,9 +80,23 @@ export function Sidebar() {
                   </span>
                   <span className="nav-label">{c.label}</span>
                   <span
-                    className={`nav-track ${trCls}`}
-                    title={`Tracking ${tr.ready}/${tr.total} set up${missing.length ? ` — needs ${missing.join(', ')}` : ''}`}
-                  />
+                    className="nav-track"
+                    role="button"
+                    tabIndex={0}
+                    title={`Infrastructure ${tr.ready}/${tr.total} set up${missing.length ? ` — needs ${missing.join(', ')}` : ''} — click for detail`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openTracking(c.id)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation()
+                        openTracking(c.id)
+                      }
+                    }}
+                  >
+                    <span className={`nav-track-dot ${trCls}`} />
+                  </span>
                   <span className="nav-count">{countFor(c.id)}</span>
                 </button>
               )

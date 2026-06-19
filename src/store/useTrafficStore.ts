@@ -164,6 +164,10 @@ interface TrafficState {
   page: 'clients' | 'connectors' | 'billing'
   /** ICP & proof side drawer. */
   icpOpen: boolean
+  /** Channel whose tracking-setup drawer is open ('all' = overview), or null. */
+  trackingChannel: ChannelId | 'all' | null
+  openTracking: (channel: ChannelId | 'all') => void
+  closeTracking: () => void
   /** Google Drive / Demo Drive import picker. */
   drivePickerOpen: boolean
   /** True once the Drive account is connected (real sign-in, or demo). */
@@ -312,6 +316,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   view: 'grid',
   page: 'clients',
   icpOpen: false,
+  trackingChannel: null,
   drivePickerOpen: false,
   driveConnected: false,
   driveLinks: loadDriveLinks(),
@@ -341,6 +346,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setView: (view) => set({ view }),
   setPage: (page) => set({ page }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
+  openTracking: (channel) => set({ trackingChannel: channel }),
+  closeTracking: () => set({ trackingChannel: null }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
   connectDrive: async () => {
     // Demo (no creds): simulate a connected account so the flow is visible.

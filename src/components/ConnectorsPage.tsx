@@ -86,7 +86,7 @@ export function ConnectorsPage() {
 
         <div className="track-setup">
           <div className="track-setup-head">
-            <h2>Channel tracking setup</h2>
+            <h2>Channel infrastructure</h2>
             <span className="page-sub">
               The infrastructure each channel needs to measure conversions properly.
               <span className="track-key"><span className="track-dot on" /> set up</span>
