@@ -2125,6 +2125,226 @@ button {
   margin-top: 1px;
 }
 
+/* "Set up with Claude" hero CTA */
+.home-setup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  background: var(--accent-soft);
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.home-setup:hover {
+  filter: brightness(0.98);
+}
+.home-setup-ico {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 18px;
+}
+.home-setup-text {
+  flex: 1;
+  min-width: 0;
+}
+.home-setup-title {
+  display: block;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent);
+}
+.home-setup-sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 1px;
+}
+.home-setup-go {
+  flex: none;
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* "Set up with Claude" wizard */
+.setup-wiz {
+  width: min(640px, calc(100vw - 32px));
+}
+.setup-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.setup-intro h3 {
+  margin: 4px 0 6px;
+  font-size: 17px;
+}
+.setup-sources {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.setup-generating {
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+}
+.setup-spinner {
+  font-size: 36px;
+  color: var(--accent);
+  animation: cpv-spin 1.4s linear infinite;
+}
+.setup-gen-title {
+  margin: 14px 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.setup-review-intro {
+  margin: 0 0 4px;
+}
+.setup-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+.setup-section-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.setup-section-plain {
+  margin-top: 18px;
+}
+.setup-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+.setup-confirm.on {
+  color: #1a7f37;
+  border-color: #b7e0c4;
+  background: #f0f9f3;
+}
+.setup-confirm input {
+  display: none;
+}
+.setup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.setup-chip {
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+.setup-chip-k {
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.setup-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.setup-channel-kind {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-bottom: 5px;
+}
+.setup-channel-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.setup-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.setup-channel.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.setup-rtbs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.setup-rtb {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  background: var(--surface);
+}
+.setup-rtb-label {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.setup-rtb-detail {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.setup-budget-split {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.setup-autoset {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 10px 12px;
+  border: 1px solid #b7e0c4;
+  border-radius: var(--radius-sm);
+  background: #f0f9f3;
+  font-size: 12.5px;
+  color: #1a7f37;
+}
+.setup-autoset-ico {
+  font-weight: 800;
+}
+
 /* new-client wizard */
 .wiz {
   position: fixed;

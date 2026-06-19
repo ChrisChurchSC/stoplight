@@ -101,6 +101,40 @@ function draftCopyApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server endpoint for "Claude sets up the workspace". Reads the team's site
+ * server-side and generates a proposed config. Keeps the key private; mirrors
+ * /api/icp-review. Moves to a serverless function for prod.
+ */
+function setupApi(): PluginOption {
+  return {
+    name: 'setup-api',
+    configureServer(server) {
+      server.middlewares.use('/api/setup', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runSetup } = await import('./server/setupHandler')
+            const result = await runSetup(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi()],
+  plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi(), setupApi()],
 })
