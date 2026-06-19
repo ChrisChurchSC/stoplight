@@ -68,6 +68,39 @@ function publishApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server endpoint for real starter-copy drafting. Keeps the Anthropic key
+ * server-side; mirrors /api/icp-review. Moves to a serverless function for prod.
+ */
+function draftCopyApi(): PluginOption {
+  return {
+    name: 'draft-copy-api',
+    configureServer(server) {
+      server.middlewares.use('/api/draft-copy', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runCopyDraft } = await import('./server/copyDraftHandler')
+            const result = await runCopyDraft(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), icpReviewApi(), publishApi()],
+  plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi()],
 })

@@ -21,6 +21,10 @@ import {
 import { sampleRows } from '../domain/sampleData'
 import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
+import { ClaudeCopyWriter, HeuristicCopyWriter, type CopyWriter } from '../adapters/copy/draftWriter'
+import { messagingFields, messagingAllText } from '../domain/messaging'
+import { registerCampaignRtbs, rtbsForCampaign, type Rtb } from '../domain/rtb'
+import { rowInScope } from '../lib/scope'
 import { MockIcpSource, MockIcpReviewer } from '../adapters/icp/mockIcp'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
@@ -35,6 +39,8 @@ const publishers: PublisherRegistry = channelPublishers
 const icpSource: IcpSource = new MockIcpSource()
 // Real Claude batch review when a backend + key are present; heuristic otherwise.
 const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
+// Real Claude starter-copy drafting when a backend + key are present; heuristic otherwise.
+const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
@@ -97,6 +103,26 @@ function saveCampaigns(list: Campaign[]): void {
     /* ignore */
   }
 }
+
+// RTBs drafted from the ICP per campaign, persisted. Re-registered on load so
+// their labels resolve in the grid / drawer / flow after a reload.
+const CAMPAIGN_RTBS_KEY = 'stoplight.campaignRtbs.v1'
+function loadCampaignRtbs(): Record<string, Rtb[]> {
+  try {
+    const v = JSON.parse(localStorage.getItem(CAMPAIGN_RTBS_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveCampaignRtbs(map: Record<string, Rtb[]>): void {
+  try {
+    localStorage.setItem(CAMPAIGN_RTBS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+for (const [c, list] of Object.entries(loadCampaignRtbs())) registerCampaignRtbs(c, list)
 
 interface TrafficState {
   /** Assets dropped into the tray, not yet trafficked into the sheet. */
@@ -199,6 +225,13 @@ interface TrafficState {
   /** Refresh the ICP from actual closed-won customers in Attio. */
   refreshIcpFromClosedWon: () => void
 
+  // starter-copy drafting (ICP-aware, real Claude with heuristic fallback)
+  /** True while a draft run is in flight (drives the button states). */
+  drafting: boolean
+  /** Draft starter copy + proof into empty messaging fields. Pass specific row
+   *  ids, or omit to draft every in-scope reviewable row that has no copy yet. */
+  draftCopy: (rowIds?: string[]) => Promise<void>
+
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
   trackingCleared: boolean
@@ -257,6 +290,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   icp: null,
   batchReview: null,
   reviewing: false,
+  drafting: false,
   gateCleared: false,
   icpFromClosedWon: false,
   trackingRan: false,
@@ -719,6 +753,73 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const result = await extractInCreativeCopy(row)
     await sheet.update(id, { extractedCopy: result.text })
     await get().refresh()
+  },
+
+  draftCopy: async (rowIds) => {
+    const { rows, icp, filter, query, clientFilter, campaignFilter } = get()
+    // Targets: explicit ids, else every in-scope reviewable row with no copy yet.
+    const targets = rowIds
+      ? rows.filter((r) => rowIds.includes(r.id))
+      : rows.filter(
+          (r) =>
+            rowInScope(r, { filter, query, clientFilter, campaignFilter }) &&
+            r.status !== 'posted' &&
+            r.status !== 'failed' &&
+            !messagingAllText(r).trim(),
+        )
+    if (targets.length === 0) return
+    set({ drafting: true })
+    try {
+      // Group by campaign so RTBs (proof) stay scoped and shared within a story.
+      const byCampaign = new Map<string, TrafficRow[]>()
+      for (const r of targets) {
+        const k = r.campaign ?? ''
+        const list = byCampaign.get(k)
+        if (list) list.push(r)
+        else byCampaign.set(k, [r])
+      }
+      const rtbStore = loadCampaignRtbs()
+      for (const [campaign, crows] of byCampaign) {
+        const assets = crows.map((r) => ({
+          rowId: r.id,
+          assetName: r.assetName,
+          channel: r.channel,
+          type: r.assetType,
+          fields: messagingFields(r.channel, r.assetType),
+        }))
+        const result = await copyWriter.draft({ icp, campaign, assets })
+        // Register + persist the campaign's drafted proof (merged with any authored).
+        if (campaign && result.rtbs.length) {
+          const existing = rtbsForCampaign(campaign)
+          const seen = new Set(existing.map((r) => r.id))
+          const merged = [...existing, ...result.rtbs.filter((r) => !seen.has(r.id))]
+          registerCampaignRtbs(campaign, merged)
+          rtbStore[campaign] = merged
+        }
+        // Fill ONLY empty fields (never overwrite a human edit); attach proof to
+        // the primary + CTA components so the handoff carries through.
+        for (const d of result.drafts) {
+          const row = crows.find((r) => r.id === d.rowId)
+          if (!row) continue
+          const map: Record<string, string> = { ...(row.messaging ?? {}) }
+          for (const c of d.components) if (!map[c.key]?.trim()) map[c.key] = c.value
+          const fields = messagingFields(row.channel, row.assetType)
+          const primaryKey = fields[0]?.key
+          const ctaKey = fields.find((f) => /cta/i.test(f.key))?.key
+          const ids = d.rtbIds.length ? d.rtbIds : result.rtbs[0] ? [result.rtbs[0].id] : []
+          const rmap: Record<string, string[]> = { ...(row.rtbMap ?? {}) }
+          if (ids.length) {
+            if (primaryKey && !(rmap[primaryKey]?.length)) rmap[primaryKey] = ids
+            if (ctaKey && !(rmap[ctaKey]?.length)) rmap[ctaKey] = ids
+          }
+          await sheet.update(row.id, { messaging: map, rtbMap: rmap })
+        }
+      }
+      saveCampaignRtbs(rtbStore)
+    } finally {
+      set({ drafting: false })
+      await get().refresh()
+    }
   },
 
   toggleReviewed: async (id, value) => {
