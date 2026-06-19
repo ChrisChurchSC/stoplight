@@ -9,6 +9,8 @@ interface Connector {
   purpose: string
   status: 'connected' | 'mock' | 'config'
   detail: string
+  /** Reached through Claude over MCP — not a separate app OAuth connector. */
+  viaClaude?: boolean
 }
 
 const CONNECTORS: Connector[] = [
@@ -20,9 +22,9 @@ const CONNECTORS: Connector[] = [
       ? 'Connected via OAuth (drive.file scope, no key stored). Folders → channel + type through the same classifier as local uploads.'
       : 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY to connect a real Drive (drive.file scope, no app secret).',
   },
-  { name: 'Clay', purpose: 'ICP enrichment', status: 'mock', detail: 'Sample ICP pull. Swap MockIcpSource for the Clay MCP.' },
-  { name: 'Anthropic (Claude)', purpose: 'ICP messaging review', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real review; heuristic fallback otherwise.' },
-  { name: 'Attio', purpose: 'Attribution & closed-won', status: 'mock', detail: 'MockAttioAdapter. Swap for the Attio MCP (contacts + deals).' },
+  { name: 'Anthropic (Claude)', purpose: 'Setup, ICP review, copy drafting', status: 'config', detail: 'Set ANTHROPIC_API_KEY to enable real generation; heuristic fallback otherwise. Connecting Claude also brings its MCP tools (Clay, Attio) — no separate OAuth for those.' },
+  { name: 'Clay', purpose: 'ICP enrichment', status: 'mock', viaClaude: true, detail: 'Reached through Claude over MCP — connecting Claude is the connection. No separate Clay OAuth.' },
+  { name: 'Attio', purpose: 'Attribution & closed-won', status: 'mock', viaClaude: true, detail: 'Reached through Claude over MCP (contacts + deals). No separate Attio OAuth.' },
   { name: 'Buffer', purpose: 'Publishing (social)', status: 'mock', detail: 'Mock publisher. Wire BufferPublisher (MCP) behind the registry.' },
   { name: 'HubSpot', purpose: 'Publishing (owned)', status: 'mock', detail: 'Mock publisher for email / landing pages.' },
   { name: 'Channels', purpose: 'Channel roster', status: 'config', detail: '24 channels with kind, platform, best-times.' },
@@ -53,11 +55,15 @@ export function ConnectorsPage() {
             <div key={c.name} className="settings-card">
               <div className="settings-card-head">
                 <span className="settings-card-name">{c.name}</span>
-                <span className={`settings-badge s-${c.status}`}>{STATUS_LABEL[c.status]}</span>
+                <span className={`settings-badge${c.viaClaude ? ' s-via' : ` s-${c.status}`}`}>
+                  {c.viaClaude ? 'via Claude' : STATUS_LABEL[c.status]}
+                </span>
               </div>
               <div className="settings-card-purpose">{c.purpose}</div>
               <div className="settings-card-detail">{c.detail}</div>
-              {c.name === 'Google Drive' ? (
+              {c.viaClaude ? (
+                <span className="settings-card-via">↳ Connected through Claude</span>
+              ) : c.name === 'Google Drive' ? (
                 <div className="settings-card-actions">
                   {driveConnected ? (
                     <span className="drive-connected">

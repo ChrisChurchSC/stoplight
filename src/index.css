@@ -1467,6 +1467,14 @@ button {
 .settings-badge.s-connected { background: #e3f4ea; color: #1a7a47; }
 .settings-badge.s-mock { background: var(--surface-2); color: var(--text-muted); }
 .settings-badge.s-config { background: var(--accent-soft); color: var(--accent); }
+.settings-badge.s-via { background: var(--accent-soft); color: var(--accent); }
+.settings-card-via {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
 .settings-card-purpose {
   font-size: 12px;
   color: var(--text-muted);
