@@ -5,6 +5,15 @@ import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
+const initials = (s: string) =>
+  s
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+const webHref = (w: string) => (/^https?:\/\//.test(w) ? w : `https://${w}`)
+
 export function Sidebar() {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
@@ -13,6 +22,7 @@ export function Sidebar() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const query = useTrafficStore((s) => s.query)
   const clearSheet = useTrafficStore((s) => s.clearSheet)
+  const profile = useTrafficStore((s) => s.clientProfiles[clientFilter])
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -33,6 +43,29 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-client">
+        <div className="sidebar-client-head">
+          <span className="sidebar-client-avatar">{initials(clientFilter)}</span>
+          <div className="sidebar-client-id">
+            <div className="sidebar-client-name" title={clientFilter}>
+              {clientFilter}
+            </div>
+            {profile?.industry && <div className="sidebar-client-industry">{profile.industry}</div>}
+          </div>
+        </div>
+        {profile?.website && (
+          <a
+            className="sidebar-client-row sidebar-client-web"
+            href={webHref(profile.website)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            ↗ {profile.website}
+          </a>
+        )}
+        {profile?.voice && <div className="sidebar-client-voice">“{profile.voice}”</div>}
+      </div>
+
       <nav className="sidebar-nav">
         <button
           className={`nav-item${filter === 'all' ? ' active' : ''}`}
