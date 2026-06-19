@@ -202,7 +202,7 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
                         ).toLocaleDateString()}`}
                       >
                         <ChannelIcon channel={h.r.channel} size={11} color="#fff" />
-                        <span className="cal-span-name">{h.r.assetName}</span>
+                        {!h.contL && <span className="cal-span-name">{h.r.assetName}</span>}
                       </button>
                     ))}
                   </div>
