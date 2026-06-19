@@ -57,7 +57,7 @@ export function NewClientWizard({ onClose }: Props) {
   const [objective, setObjective] = useState('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [durationWeeks, setDurationWeeks] = useState(8)
-  const [budget, setBudget] = useState('')
+  const [overallBudget, setOverallBudget] = useState('')
   const [monthlyVolume, setMonthlyVolume] = useState(30)
 
   const isContent = (d: Deliverable) => CHANNELS[d.channel].kind !== 'paid' && !d.brand
@@ -96,6 +96,12 @@ export function NewClientWizard({ onClose }: Props) {
   const needsBudget = paidChosen.length > 0
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
   const mediaPct = selectedStrategy ? mediaSharePct(selectedStrategy) : null
+  // The strategy's media share splits the overall budget into media vs content.
+  const mediaShare = mediaPct ?? 50
+  const overallNum = needsBudget ? Number(overallBudget) || 0 : 0
+  const mediaBudgetNum = Math.round((overallNum * mediaShare) / 100)
+  const contentBudgetNum = overallNum - mediaBudgetNum
+  const dollars = (n: number) => `$${n.toLocaleString()}`
   const toggleAsset = (i: number) =>
     setSelected((prev) => {
       const next = new Set(prev)
@@ -131,7 +137,7 @@ export function NewClientWizard({ onClose }: Props) {
     if (!client || !strategy || !campaignName.trim()) return
     const strategyName = selectedStrategy?.name ?? strategy
     const campaign = campaignName.trim()
-    const budgetNum = needsBudget ? Number(budget) || 0 : 0
+    const budgetNum = mediaBudgetNum
     const endDate =
       durationWeeks > 0
         ? new Date(Date.now() + durationWeeks * 7 * 86_400_000).toISOString().slice(0, 10)
@@ -144,6 +150,7 @@ export function NewClientWizard({ onClose }: Props) {
       strategy: strategyName,
       objective: objective.trim() || undefined,
       durationWeeks: durationWeeks || undefined,
+      overallBudget: overallNum || undefined,
       mediaBudget: budgetNum || undefined,
       contentPerMonth: contentPerMonth || undefined,
       oneTimeAssets: oneTimeAssets || undefined,
@@ -322,25 +329,32 @@ export function NewClientWizard({ onClose }: Props) {
 
             {selectedStrategy && (
               <>
-                <label className="wiz-label">Media budget</label>
+                <label className="wiz-label">Overall budget</label>
                 {needsBudget ? (
                   <div className="wiz-budget on">
                     <div className="wiz-budget-rec">
-                      ✓ Recommended —{' '}
-                      {mediaPct != null
-                        ? `${selectedStrategy.name} runs ~${mediaPct}% paid media`
-                        : `${selectedStrategy.name} runs paid media`}
-                      . Paid channels here: {paidChosen.map((d) => CHANNELS[d.channel].label).join(', ')}.
+                      ✓ Enter the overall campaign budget — {selectedStrategy.name} runs ~{mediaShare}%
+                      paid media, so we split it into media vs. content/production.
                     </div>
                     <div className="wiz-budget-input">
                       <span>$</span>
                       <input
-                        value={budget}
+                        value={overallBudget}
                         inputMode="numeric"
-                        placeholder={`Total media budget${durationWeeks ? ` over ${durationWeeks} wks` : ''} (optional)`}
-                        onChange={(e) => setBudget(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder={`Overall budget${durationWeeks ? ` over ${durationWeeks} wks` : ''} (optional)`}
+                        onChange={(e) => setOverallBudget(e.target.value.replace(/[^0-9]/g, ''))}
                       />
                     </div>
+                    {overallNum > 0 && (
+                      <div className="wiz-budget-split">
+                        <span className="wiz-budget-part media">
+                          {dollars(mediaBudgetNum)} media <em>{mediaShare}%</em>
+                        </span>
+                        <span className="wiz-budget-part content">
+                          {dollars(contentBudgetNum)} content &amp; production <em>{100 - mediaShare}%</em>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="wiz-budget">
