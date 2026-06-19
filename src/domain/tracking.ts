@@ -117,3 +117,92 @@ export function trackingChecks(row: TrafficRow): TrackingCheck[] {
 }
 
 export const isTrackingClean = (row: TrafficRow): boolean => trackingChecks(row).every((c) => c.ok)
+
+// ---------------------------------------------------------------------------
+// Per-channel tracking infrastructure: the full setup stack a channel needs to
+// measure conversions properly (not just a pixel) — client pixel/tag,
+// server-side conversions API, the conversion event, web analytics, a tag
+// manager, domain verification, ESP link tracking, UTM tagging, compliance.
+// Surfaced on the Connectors page so you can see what's set up vs. still needed.
+// ---------------------------------------------------------------------------
+
+export type TrackingKind =
+  | 'pixel'
+  | 'server'
+  | 'event'
+  | 'analytics'
+  | 'tagmanager'
+  | 'verification'
+  | 'utm'
+  | 'esp'
+  | 'compliance'
+
+export interface TrackingItem {
+  label: string
+  kind: TrackingKind
+}
+
+const ti = (label: string, kind: TrackingKind): TrackingItem => ({ label, kind })
+/** UTM tagging is universal — Rushhour builds it for every row. */
+const UTM = ti('UTM tagging', 'utm')
+
+export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
+  // paid — social
+  'meta-ads': [ti('Meta Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), ti('Domain verification', 'verification'), UTM],
+  'tiktok-ads': [ti('TikTok Pixel', 'pixel'), ti('Events API', 'server'), ti('Registration event', 'event'), UTM],
+  'linkedin-ads': [ti('LinkedIn Insight Tag', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), UTM],
+  'x-ads': [ti('X Pixel', 'pixel'), ti('Sign-up event', 'event'), UTM],
+  'pinterest-ads': [ti('Pinterest Tag', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), UTM],
+  'snapchat-ads': [ti('Snap Pixel', 'pixel'), ti('Sign-up event', 'event'), UTM],
+  'reddit-ads': [ti('Reddit Pixel', 'pixel'), ti('Lead event', 'event'), UTM],
+  'youtube-ads': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), UTM],
+  // paid — search / shopping
+  'google-search': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
+  'google-demand': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), UTM],
+  pmax: [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
+  // organic — social (pixel for retargeting + attribution, plus UTM)
+  instagram: [ti('Meta Pixel', 'pixel'), UTM],
+  facebook: [ti('Meta Pixel', 'pixel'), UTM],
+  linkedin: [ti('LinkedIn Insight Tag', 'pixel'), UTM],
+  x: [ti('X Pixel', 'pixel'), UTM],
+  tiktok: [ti('TikTok Pixel', 'pixel'), UTM],
+  youtube: [ti('GA4', 'analytics'), UTM],
+  pinterest: [ti('Pinterest Tag', 'pixel'), UTM],
+  // owned / lifecycle
+  email: [ti('ESP link tracking', 'esp'), UTM, ti('Suppression / unsubscribe', 'compliance')],
+  sms: [ti('Link tracking', 'esp'), UTM, ti('Opt-out compliance', 'compliance')],
+  push: [ti('Delivery + click tracking', 'analytics'), UTM],
+  blog: [ti('GA4', 'analytics'), UTM],
+  'landing-page': [ti('GA4', 'analytics'), ti('GTM container', 'tagmanager'), ti('Conversion event', 'event'), UTM],
+  'lead-magnet': [ti('GA4', 'analytics'), ti('Form conversion event', 'event'), UTM],
+}
+
+/**
+ * What's actually set up in the workspace (mock stand-in). Swap for a real
+ * adapter that confirms each piece is live (pixel firing, API receiving, event
+ * mapped). The gaps are the "still needed" items in the Connectors view.
+ */
+export const INSTALLED_TRACKING = new Set<string>([
+  'UTM tagging',
+  'Meta Pixel', 'TikTok Pixel', 'Pinterest Tag', 'GA4', 'Google Ads tag', 'LinkedIn Insight Tag',
+  'Lead event', 'Conversion action', 'Registration event', 'Sign-up event', 'Conversion event', 'Form conversion event',
+  'ESP link tracking', 'Link tracking', 'Delivery + click tracking',
+  // not yet set up: Conversions API, Events API, Enhanced conversions, Domain
+  // verification, GTM container, X Pixel, Snap Pixel, Reddit Pixel, Suppression
+  // / unsubscribe, Opt-out compliance.
+])
+
+export interface ChannelTrackingStatus {
+  items: { item: TrackingItem; installed: boolean }[]
+  ready: number
+  total: number
+}
+
+/** Tracking infrastructure + per-item setup status for a channel. */
+export function channelTracking(channel: ChannelId): ChannelTrackingStatus {
+  const items = (CHANNEL_TRACKING[channel] ?? [UTM]).map((item) => ({
+    item,
+    installed: INSTALLED_TRACKING.has(item.label),
+  }))
+  return { items, ready: items.filter((x) => x.installed).length, total: items.length }
+}
