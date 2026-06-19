@@ -1,5 +1,8 @@
 import { isGoogleDriveConfigured } from '../adapters/drive'
+import { KIND_ORDER, channelsByKind } from '../domain/channels'
+import { channelTracking } from '../domain/tracking'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { ChannelIcon } from './ChannelIcon'
 
 interface Connector {
   name: string
@@ -77,6 +80,50 @@ export function ConnectorsPage() {
                   {c.status === 'connected' ? 'Manage' : 'Connect'}
                 </button>
               )}
+            </div>
+          ))}
+        </div>
+
+        <div className="track-setup">
+          <div className="track-setup-head">
+            <h2>Channel tracking setup</h2>
+            <span className="page-sub">
+              The infrastructure each channel needs to measure conversions properly.
+              <span className="track-key"><span className="track-dot on" /> set up</span>
+              <span className="track-key"><span className="track-dot" /> needed</span>
+            </span>
+          </div>
+
+          {KIND_ORDER.map((section) => (
+            <div key={section.kind} className="track-group">
+              <div className="track-group-label">{section.label}</div>
+              {channelsByKind(section.kind).map((c) => {
+                const st = channelTracking(c.id)
+                const done = st.ready === st.total
+                return (
+                  <div key={c.id} className="track-row">
+                    <div className="track-chan">
+                      <ChannelIcon channel={c.id} size={15} />
+                      <span>{c.label}</span>
+                    </div>
+                    <div className="track-items">
+                      {st.items.map(({ item, installed }) => (
+                        <span
+                          key={item.label}
+                          className={`track-item${installed ? ' on' : ''}`}
+                          title={`${item.kind} · ${installed ? 'set up' : 'needs setup'}`}
+                        >
+                          <span className={`track-dot${installed ? ' on' : ''}`} />
+                          {item.label}
+                        </span>
+                      ))}
+                    </div>
+                    <span className={`track-ready${done ? ' done' : ''}`}>
+                      {st.ready}/{st.total} ready
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           ))}
         </div>
