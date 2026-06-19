@@ -1,9 +1,39 @@
 import { useState } from 'react'
 import { GTM_STRATEGIES, mediaSharePct, type GtmStrategy } from '../domain/strategies'
-import { STRATEGY_ASSETS } from '../domain/strategyAssets'
+import { STRATEGY_ASSETS, type Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { typeLabel } from '../domain/channelAssetTypes'
 import { useTrafficStore } from '../store/useTrafficStore'
+
+/** Monthly content production tiers we sell against. */
+const VOLUME_TIERS = [15, 30, 45]
+
+/** Spread a monthly target across content pieces, weighted by each piece's
+ *  natural cadence, using largest-remainder rounding so the parts sum to the
+ *  target. Every selected piece keeps at least 1/mo. */
+function apportion(weights: number[], target: number): number[] {
+  const n = weights.length
+  if (n === 0) return []
+  const sum = weights.reduce((a, b) => a + b, 0) || n
+  const ideal = weights.map((w) => ((w || 1) / sum) * target)
+  const out = ideal.map((x) => Math.max(1, Math.floor(x)))
+  const frac = ideal.map((x, i) => ({ i, f: x - Math.floor(x) })).sort((a, b) => b.f - a.f)
+  let used = out.reduce((a, b) => a + b, 0)
+  for (let g = 0; used < target; g++) {
+    out[frac[g % n].i]++
+    used++
+  }
+  // Trim any overshoot from the min-1 floor, taking from the largest first.
+  const byVal = out.map((v, i) => ({ i, v })).sort((a, b) => b.v - a.v)
+  for (let h = 0; used > target && h < n * 8; h++) {
+    const idx = byVal[h % n].i
+    if (out[idx] > 1) {
+      out[idx]--
+      used--
+    }
+  }
+  return out
+}
 
 interface Props {
   onClose: () => void
@@ -28,22 +58,41 @@ export function NewClientWizard({ onClose }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [durationWeeks, setDurationWeeks] = useState(8)
   const [budget, setBudget] = useState('')
+  const [monthlyVolume, setMonthlyVolume] = useState(30)
+
+  const isContent = (d: Deliverable) => CHANNELS[d.channel].kind !== 'paid' && !d.brand
 
   const deliverables = strategy ? STRATEGY_ASSETS[strategy] ?? [] : []
   const chosen = deliverables.filter((_, i) => selected.has(i))
   const months = durationWeeks > 0 ? Math.max(1, Math.round(durationWeeks / 4)) : 1
   const paidChosen = chosen.filter((d) => CHANNELS[d.channel].kind === 'paid')
+
+  // We produce a fixed monthly volume (15 / 30 / 45). Spread that target across
+  // the selected content pieces, weighted by each piece's natural cadence — so
+  // toggling pieces redistributes the volume but keeps the monthly total fixed.
+  const contentChosen = chosen.filter(isContent)
+  const effPerMonth = new Map<Deliverable, number>()
+  {
+    const counts = apportion(contentChosen.map((d) => d.perMonth), monthlyVolume)
+    contentChosen.forEach((d, i) => effPerMonth.set(d, counts[i]))
+  }
+  const pmOf = (d: Deliverable) => effPerMonth.get(d) ?? d.perMonth
+  const scaledChosen = chosen.map((d) =>
+    effPerMonth.has(d) ? { ...d, perMonth: effPerMonth.get(d)! } : d,
+  )
+  const contentPerMonth = [...effPerMonth.values()].reduce((a, b) => a + b, 0)
+
   // Paid = one flight each; brand assets built once; content repeats monthly.
-  const totalPieces = chosen.reduce((n, d) => {
+  const totalPieces = scaledChosen.reduce((n, d) => {
     if (CHANNELS[d.channel].kind === 'paid' || d.brand) return n + 1
     return n + d.perMonth * months
   }, 0)
-  const cadenceOf = (d: (typeof chosen)[number]) =>
+  const cadenceOf = (d: Deliverable) =>
     CHANNELS[d.channel].kind === 'paid'
       ? { count: 'Flight', sub: 'for the flight' }
       : d.brand
         ? { count: '1', sub: 'brand asset' }
-        : { count: `${d.perMonth}/mo`, sub: 'monthly' }
+        : { count: `${pmOf(d)}/mo`, sub: 'monthly' }
   const needsBudget = paidChosen.length > 0
   const selectedStrategy = GTM_STRATEGIES.find((x) => x.key === strategy)
   const mediaPct = selectedStrategy ? mediaSharePct(selectedStrategy) : null
@@ -88,9 +137,6 @@ export function NewClientWizard({ onClose }: Props) {
         ? new Date(Date.now() + durationWeeks * 7 * 86_400_000).toISOString().slice(0, 10)
         : undefined
     const oneTimeAssets = chosen.filter((d) => d.brand).length
-    const contentPerMonth = chosen
-      .filter((d) => CHANNELS[d.channel].kind !== 'paid' && !d.brand)
-      .reduce((n, d) => n + d.perMonth, 0)
     addClient(client)
     addCampaign({
       name: campaign,
@@ -102,7 +148,11 @@ export function NewClientWizard({ onClose }: Props) {
       contentPerMonth: contentPerMonth || undefined,
       oneTimeAssets: oneTimeAssets || undefined,
     })
-    void seedCampaignAssets(campaign, chosen, { mediaBudget: budgetNum, flightWeeks: durationWeeks, endDate })
+    void seedCampaignAssets(campaign, scaledChosen, {
+      mediaBudget: budgetNum,
+      flightWeeks: durationWeeks,
+      endDate,
+    })
     setClientFilter(client)
     setCampaignFilter(campaign)
     onClose()
@@ -223,6 +273,29 @@ export function NewClientWizard({ onClose }: Props) {
               placeholder="What should this campaign achieve?"
               onChange={(e) => setObjective(e.target.value)}
             />
+
+            {contentChosen.length > 0 && (
+              <>
+                <label className="wiz-label">Monthly content volume</label>
+                <div className="wiz-volume">
+                  {VOLUME_TIERS.map((t) => (
+                    <button
+                      key={t}
+                      className={`wiz-volume-tier${monthlyVolume === t ? ' on' : ''}`}
+                      onClick={() => setMonthlyVolume(t)}
+                    >
+                      <b>{t}</b>
+                      <span>assets / mo</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="wiz-volume-note">
+                  {contentPerMonth}/mo across {contentChosen.length} content piece
+                  {contentChosen.length === 1 ? '' : 's'}, spread over {months} month
+                  {months === 1 ? '' : 's'}.
+                </div>
+              </>
+            )}
 
             {deliverables.length > 0 && (
               <>
