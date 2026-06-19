@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { freshAudienceId } from '../domain/audiences'
 import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
@@ -27,12 +28,37 @@ export function Sidebar() {
   const profile = useTrafficStore((s) => s.clientProfiles[clientFilter])
   const icp = useTrafficStore((s) => s.icp)
   const loadIcp = useTrafficStore((s) => s.loadIcp)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
+
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
 
   // Surface the ICP in the profile card (not behind a button) — pull it if a
   // client is in view and we don't have one yet.
   useEffect(() => {
     if (clientFilter !== 'all' && !icp) loadIcp()
   }, [clientFilter, icp, loadIcp])
+
+  // Audiences (personas under the ICP) live in the profile card. The card lists
+  // them and adds new ones; full editing (angle, proof, strategy) opens the ICP
+  // drawer where there's room for it.
+  const audiences = clientFilter !== 'all' ? clientAudiences[clientFilter] ?? [] : []
+  const addAudience = () => {
+    const name = newName.trim()
+    if (!name) {
+      setAdding(false)
+      return
+    }
+    setClientAudiences(clientFilter, [
+      ...audiences,
+      { id: freshAudienceId(), name, messageAngle: '', rtbEmphasis: [], strategy: '' },
+    ])
+    setNewName('')
+    setAdding(false)
+    setIcpOpen(true)
+  }
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -88,6 +114,50 @@ export function Sidebar() {
                   </span>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {clientFilter !== 'all' && (
+          <div className="sidebar-aud">
+            <div className="sidebar-aud-label">
+              Audiences
+              {audiences.length > 0 && <span className="sidebar-aud-count">{audiences.length}</span>}
+            </div>
+            {audiences.length > 0 && (
+              <div className="sidebar-aud-list">
+                {audiences.map((a) => (
+                  <button
+                    key={a.id}
+                    className="sidebar-aud-chip"
+                    title={a.messageAngle || 'Edit audience in ICP drawer'}
+                    onClick={() => setIcpOpen(true)}
+                  >
+                    {a.name || 'Untitled audience'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {adding ? (
+              <input
+                className="sidebar-aud-input"
+                autoFocus
+                value={newName}
+                placeholder="Audience name"
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') addAudience()
+                  if (e.key === 'Escape') {
+                    setNewName('')
+                    setAdding(false)
+                  }
+                }}
+                onBlur={addAudience}
+              />
+            ) : (
+              <button className="sidebar-aud-add" onClick={() => setAdding(true)}>
+                ＋ Add audience
+              </button>
             )}
           </div>
         )}
