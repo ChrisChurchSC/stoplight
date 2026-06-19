@@ -7,6 +7,7 @@ import type { Asset, ChannelId, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
+import type { AudienceType } from '../domain/audiences'
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
@@ -114,6 +115,24 @@ function saveClientProfiles(map: Record<string, ClientProfile>): void {
   }
 }
 
+// Audience types per client (personas under the ICP), persisted by client name.
+const CLIENT_AUDIENCES_KEY = 'stoplight.clientAudiences.v1'
+function loadClientAudiences(): Record<string, AudienceType[]> {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLIENT_AUDIENCES_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveClientAudiences(map: Record<string, AudienceType[]>): void {
+  try {
+    localStorage.setItem(CLIENT_AUDIENCES_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
 // Campaigns created in the new-client wizard, persisted. Registered into
 // clientForCampaign on load so they resolve to their client before any rows exist.
 const CAMPAIGNS_KEY = 'stoplight.campaigns.v1'
@@ -192,6 +211,10 @@ interface TrafficState {
   clientProfiles: Record<string, ClientProfile>
   /** Save (merge) a client's profile. */
   setClientProfile: (name: string, profile: ClientProfile) => void
+  /** Audience types per client (personas under the ICP), persisted. */
+  clientAudiences: Record<string, AudienceType[]>
+  /** Replace a client's audience-type list. */
+  setClientAudiences: (name: string, audiences: AudienceType[]) => void
   /** Remove a client: its rows, campaigns, saved Drive link, profile, and list entry. */
   deleteClient: (name: string) => Promise<void>
   /** Campaigns created via the new-client wizard (persisted). */
@@ -343,6 +366,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   driveLinks: loadDriveLinks(),
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
+  clientAudiences: loadClientAudiences(),
   campaignList: loadCampaigns(),
   wizardOpen: false,
   wizardClient: null,
@@ -467,6 +491,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveClientProfiles(clientProfiles)
       return { clientProfiles }
     }),
+  setClientAudiences: (name, audiences) =>
+    set((s) => {
+      const n = name.trim()
+      if (!n) return {}
+      const clientAudiences = { ...s.clientAudiences, [n]: audiences }
+      saveClientAudiences(clientAudiences)
+      return { clientAudiences }
+    }),
   deleteClient: async (name) => {
     // Remove the client's rows from the sheet.
     const ids = get()
@@ -481,11 +513,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       delete driveLinks[name]
       const clientProfiles = { ...s.clientProfiles }
       delete clientProfiles[name]
+      const clientAudiences = { ...s.clientAudiences }
+      delete clientAudiences[name]
       saveClients(clientList)
       saveCampaigns(campaignList)
       saveDriveLinks(driveLinks)
       saveClientProfiles(clientProfiles)
-      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks, clientProfiles }
+      saveClientAudiences(clientAudiences)
+      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks, clientProfiles, clientAudiences }
       // If we're scoped into the client being deleted, pop back to the overview.
       if (s.clientFilter === name) {
         next.clientFilter = 'all'
