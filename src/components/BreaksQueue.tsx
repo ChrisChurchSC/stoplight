@@ -2,7 +2,7 @@ import {
   AUDIT_LABEL,
   SEVERITY_RANK,
   applyBreakStatus,
-  detectAcmeBreaks,
+  detectBreaks,
 } from '../domain/breaks'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -32,7 +32,7 @@ export function BreaksQueue() {
   const scoped = rows.filter((r) =>
     rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
   )
-  const breaks = applyBreakStatus(detectAcmeBreaks(scoped), breakStatus)
+  const breaks = applyBreakStatus(detectBreaks(scoped), breakStatus)
   // Open breaks first, then by severity; dismissed/in-review settle to the bottom.
   const ordered = [...breaks].sort(
     (a, b) =>

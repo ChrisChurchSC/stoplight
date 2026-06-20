@@ -45,7 +45,7 @@ import {
   type AuditAction,
   type AuditEntry,
   type BreakStatus,
-  detectAcmeBreaks,
+  detectBreaks,
   freshAuditId,
 } from '../domain/breaks'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
@@ -1118,7 +1118,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await get().refresh()
     // The connection check runs over the fresh sample — record the result so the
     // audit trail opens with the check, not just the human actions on it.
-    const found = detectAcmeBreaks(get().rows).length
+    const found = detectBreaks(get().rows).length
     pushAudit(get, set, {
       breakId: 'check',
       action: 'check',
@@ -1347,7 +1347,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeBreaks: () => set({ breaksOpen: false, activeBreakId: null }),
 
   applyBreakFix: async (breakId) => {
-    const brk = detectAcmeBreaks(get().rows).find((b) => b.id === breakId)
+    const brk = detectBreaks(get().rows).find((b) => b.id === breakId)
     if (!brk) return
     const { assetName, channel, field, after, attachRtb } = brk.suggestedFix
     const row = get().rows.find((r) => r.assetName === assetName && r.channel === channel)
@@ -1367,7 +1367,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   reassignBreakProof: async (breakId) => {
-    const brk = detectAcmeBreaks(get().rows).find((b) => b.id === breakId)
+    const brk = detectBreaks(get().rows).find((b) => b.id === breakId)
     if (!brk?.suggestedFix.attachRtb) return
     const { assetName, channel, field, attachRtb } = brk.suggestedFix
     const row = get().rows.find((r) => r.assetName === assetName && r.channel === channel)
@@ -1383,7 +1383,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   markBreakIntended: (breakId) => {
-    const brk = detectAcmeBreaks(get().rows).find((b) => b.id === breakId)
+    const brk = detectBreaks(get().rows).find((b) => b.id === breakId)
     const breakStatus = { ...get().breakStatus, [breakId]: 'intended' as BreakStatus }
     saveBreakStatus(breakStatus)
     set({ breakStatus })
@@ -1395,7 +1395,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   sendBreakToReview: (breakId) => {
-    const brk = detectAcmeBreaks(get().rows).find((b) => b.id === breakId)
+    const brk = detectBreaks(get().rows).find((b) => b.id === breakId)
     const breakStatus = { ...get().breakStatus, [breakId]: 'in-review' as BreakStatus }
     saveBreakStatus(breakStatus)
     set({ breakStatus })

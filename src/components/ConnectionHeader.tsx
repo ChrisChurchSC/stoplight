@@ -1,4 +1,4 @@
-import { applyBreakStatus, detectAcmeBreaks, threadHealth } from '../domain/breaks'
+import { applyBreakStatus, detectBreaks, threadHealth } from '../domain/breaks'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -20,7 +20,7 @@ export function ConnectionHeader() {
   )
   if (scoped.length === 0) return null
 
-  const breaks = applyBreakStatus(detectAcmeBreaks(scoped), breakStatus)
+  const breaks = applyBreakStatus(detectBreaks(scoped), breakStatus)
   const assetNames = new Set(scoped.map((r) => r.assetName))
   const health = threadHealth(assetNames, breaks)
   const openHeadlines = breaks

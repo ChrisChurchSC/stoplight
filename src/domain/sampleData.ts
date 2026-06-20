@@ -45,7 +45,7 @@ const SEEDS: Seed[] = [
   {
     asset: 'spring-promo-1x1.jpg', mediaType: 'image', channel: 'instagram', campaign: 'Spring Launch 2026',
     status: 'scheduled', at: 6, links: 'spring-launch-lp',
-    messaging: { caption: 'Spring 2026 is here — ship faster, leave the busywork behind. Tap to see what’s new.' },
+    messaging: { caption: 'Spring 2026 is here. Ship faster, leave the busywork behind. Tap to see what’s new.' },
     rtbs: { caption: ['speed'] },
   },
   {
@@ -54,7 +54,7 @@ const SEEDS: Seed[] = [
     messaging: {
       subject: 'The Spring release is live',
       preview: '2x faster builds, one-click rollback, redesigned dashboard',
-      body: 'Everything you told us slowed you down — manual steps, slow tools — is gone. Builds are 2x faster, rollback is one click, and the dashboard is redesigned for faster time-to-value.',
+      body: 'Everything that slowed you down is gone: manual steps, slow tools, all of it. Builds are 2x faster, rollback is one click, and the dashboard is redesigned for faster time-to-value.',
       // SEEDED BREAK #4 (weak CTA): a soft "Learn more" that doesn't cash the
       // "2x faster" promise the email just made into a conversion action.
       cta: 'Learn more',
@@ -65,13 +65,13 @@ const SEEDS: Seed[] = [
     asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'youtube-ads', campaign: 'Spring Launch 2026',
     audience: 'Retargeting – Site Visitors', status: 'approved', at: 26, links: 'spring-launch-lp',
     // SEEDED BREAK #3 (proof gap): the CTA claims "live now" with no RTB backing it.
-    messaging: { headline: 'Ship 2x faster', description: 'One-click rollback', cta: 'Watch — live now' },
+    messaging: { headline: 'Ship 2x faster', description: 'One-click rollback', cta: 'Watch: live now' },
     rtbs: { headline: ['speed'], description: ['rollback'] },
   },
   {
     asset: 'launch-story.md', mediaType: 'text', channel: 'linkedin', campaign: 'Spring Launch 2026',
     status: 'scheduled', at: 8, links: 'spring-launch-lp',
-    messaging: { body: 'We just shipped our biggest release yet. Builds run 2x faster and rollback is one click — less busywork, faster time-to-value for ops teams. Here’s the story 🧵' },
+    messaging: { body: 'We just shipped our biggest release yet. Builds run 2x faster and rollback is one click, less busywork, faster time-to-value for ops teams. Here’s the story 🧵' },
     rtbs: { body: ['speed', 'rollback'] },
   },
   {
@@ -82,7 +82,7 @@ const SEEDS: Seed[] = [
       // but this hero drops the number — "faster than ever" — snapping the thread.
       headline: 'Ship faster than ever',
       subhead: 'Cut the manual busywork. Roll back any deploy in one click.',
-      body: 'Spring 2026 brings 2x faster builds, one-click rollback, and a redesigned dashboard — built for faster time-to-value for mid-market ops teams.',
+      body: 'Spring 2026 brings 2x faster builds, one-click rollback, and a redesigned dashboard, built for faster time-to-value for mid-market ops teams.',
       cta: 'Explore the launch',
     },
     rtbs: { headline: ['speed'], subhead: ['rollback'], body: ['speed', 'rollback', 'redesign'] },
@@ -112,7 +112,7 @@ const SEEDS: Seed[] = [
   {
     asset: 'founder-story-60s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Q2 Demand Gen',
     audience: 'Lookalike – Newsletter', status: 'draft', at: 40, extracted: 'We were tired of slow tools.\nSo we built our own.', links: 'acme-case-study.pdf',
-    messaging: { primary: 'Why we started — we were tired of slow tools and manual busywork.', headline: 'Founder story', description: 'Live in a week', cta: 'Watch' },
+    messaging: { primary: 'Why we started: we were tired of slow tools and manual busywork.', headline: 'Founder story', description: 'Live in a week', cta: 'Watch' },
     rtbs: { description: ['ttv'] }, // primary on-message but unbacked; headline drift
   },
   {
@@ -155,7 +155,7 @@ const SEEDS: Seed[] = [
     messaging: {
       subject: 'You’re invited: Scaling Ops live',
       preview: 'VPs of Ops share their playbook',
-      body: 'Join VPs of Ops from Series B+ companies live next Thursday. Walk away with the scaling-ops playbook — less busywork, faster time-to-value.',
+      body: 'Join VPs of Ops from Series B+ companies live next Thursday. Walk away with the scaling-ops playbook, less busywork, faster time-to-value.',
       cta: 'Save your seat',
     },
     rtbs: { preview: ['panel'], body: ['panel', 'playbook'] },

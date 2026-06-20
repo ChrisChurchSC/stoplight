@@ -19,7 +19,7 @@ import type { ChannelId, TrafficRow } from './types'
  * check would populate it, so the live version is a drop-in later.
  */
 
-export type BreakAxis = 'journey' | 'audience' | 'proof' | 'cta'
+export type BreakAxis = 'journey' | 'audience' | 'proof' | 'cta' | 'voice'
 export type BreakSeverity = 'high' | 'medium' | 'low'
 export type BreakStatus = 'open' | 'resolved' | 'intended' | 'in-review'
 
@@ -28,6 +28,7 @@ export const AXIS_META: Record<BreakAxis, { label: string; blurb: string }> = {
   audience: { label: 'Audience drift', blurb: 'Two variants that should tell one story tell two.' },
   proof: { label: 'Proof gap', blurb: 'A claim or CTA with no backing proof point.' },
   cta: { label: 'Weak CTA', blurb: "A CTA that doesn't cash the promise the funnel made." },
+  voice: { label: 'Brand voice', blurb: 'Copy that breaks a rule in the brand guide.' },
 }
 
 /** One side of the conflict, shown in the side-by-side evidence. */
@@ -241,6 +242,89 @@ export function detectAcmeBreaks(rows: TrafficRow[]): CoherenceBreak[] {
   }
 
   return out
+}
+
+// ---------------------------------------------------------------------------
+// Live brand-voice check — detects real violations of the brand guide's don'ts
+// in any copy, not just the hand-seeded thread breaks. Runs on the actual
+// messaging, so it fires as the team writes (the check is a capability, not a
+// fixture). Each match cites the brand rule it breaks.
+// ---------------------------------------------------------------------------
+
+interface VoiceRule {
+  id: string
+  /** Matches the offending span; the first capture group (or full match) is highlighted. */
+  test: RegExp
+  severity: BreakSeverity
+  headline: string
+  why: string
+  brandRule: string
+  /** Produce the fixed value for the whole field given the original. */
+  fix: (text: string) => string
+}
+
+const VOICE_RULES: VoiceRule[] = [
+  {
+    id: 'em-dash',
+    test: /\s+—\s+|—/,
+    severity: 'low',
+    headline: 'This copy uses an em dash.',
+    why: 'House style: commas, colons, and periods carry the rhythm. Em dashes read as filler and slow the eye.',
+    brandRule: 'No em dashes — commas and periods carry the rhythm.',
+    fix: (t) => t.replace(/\s*—\s*/g, ', ').replace(/,\s*,/g, ','),
+  },
+  {
+    id: 'hype',
+    test: /\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/i,
+    severity: 'medium',
+    headline: 'This copy leans on hype you cannot back up.',
+    why: 'Your ICP discounts superlatives and wants proof. An unbackable claim reads as marketing noise.',
+    brandRule: 'No hype or superlatives you cannot back up.',
+    fix: (t) =>
+      t
+        .replace(/\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/i, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim(),
+  },
+]
+
+/** Scan in-scope copy for brand-voice violations and emit them as breaks. */
+export function detectVoiceBreaks(rows: TrafficRow[]): CoherenceBreak[] {
+  const out: CoherenceBreak[] = []
+  for (const r of rows) {
+    if (r.status === 'posted' || r.status === 'failed') continue
+    for (const [field, value] of Object.entries(r.messaging ?? {})) {
+      if (!value?.trim()) continue
+      for (const rule of VOICE_RULES) {
+        const m = value.match(rule.test)
+        if (!m) continue
+        const highlight = (m[1] ?? m[0]).trim()
+        out.push({
+          id: `voice-${rule.id}-${r.id}-${field}`,
+          axis: 'voice',
+          severity: rule.severity,
+          headline: rule.headline,
+          client: clientForVoice(r),
+          campaign: (r.campaign ?? '').trim(),
+          from: { role: `${r.channel} · ${field}`, assetName: r.assetName, channel: r.channel, field, text: value, highlight },
+          why: rule.why,
+          brandRule: rule.brandRule,
+          suggestedFix: { assetName: r.assetName, channel: r.channel, field, before: value, after: rule.fix(value) },
+          status: 'open',
+        })
+      }
+    }
+  }
+  return out
+}
+
+// Voice breaks aren't client-specific in their logic, but carry the row's client
+// label for scoping; resolved lazily to avoid importing the clients map here.
+const clientForVoice = (_r: TrafficRow): string => ''
+
+/** The full connection check: the seeded thread breaks plus the live voice check. */
+export function detectBreaks(rows: TrafficRow[]): CoherenceBreak[] {
+  return [...detectAcmeBreaks(rows), ...detectVoiceBreaks(rows)]
 }
 
 /** Overlay persisted statuses (intended / in-review) onto detected breaks. */

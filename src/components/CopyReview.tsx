@@ -1,7 +1,7 @@
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typeLabel, typesFor } from '../domain/channelAssetTypes'
 import { messagingFields, messagingMap } from '../domain/messaging'
-import { applyBreakStatus, detectAcmeBreaks } from '../domain/breaks'
+import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rtbsForCampaign } from '../domain/rtb'
 import { isTrackingClean, trackingChecks, utmQuery, type Utm } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
@@ -42,7 +42,7 @@ export function CopyReview() {
 
   // Open connection breaks this asset is on either side of — surfaced inline so
   // the buyer meets the break while editing one asset, not only campaign-wide.
-  const rowBreaks = applyBreakStatus(detectAcmeBreaks(rows), breakStatus).filter(
+  const rowBreaks = applyBreakStatus(detectBreaks(rows), breakStatus).filter(
     (b) =>
       b.status === 'open' &&
       ((b.from.assetName === row.assetName && b.from.channel === row.channel) ||
