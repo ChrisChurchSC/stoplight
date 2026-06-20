@@ -59,6 +59,7 @@ Write copy for EVERY component of EVERY asset:
 - Hold ONE voice and ONE core promise across the whole campaign so the assets tell a single story to one buyer.
 Also author 3 to 4 campaign RTBs (reasons to believe / proof points) grounded in the ICP. For each asset, choose which RTB ids it leans on (1 to 2 per asset; a landing page may carry all). Choose proof so that an asset and the page it drives to SHARE at least one RTB.
 If a brand profile is provided, write in its voice and reflect its industry.
+If a BRAND GUIDE is provided, treat it as the contract: write in its voice and tone, follow every "do", and never break a "don't". Generation is the commodity; staying on-brand is the point, so the copy you return must already pass a brand-coherence check.
 Use the exact component "key" values given for each asset. Do not use em dashes anywhere in the copy. Return ONLY the structured object.`
 
 export class NoKeyError extends Error {
@@ -70,10 +71,11 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
-  const { icp, campaign, brand, assets } = (body ?? {}) as {
+  const { icp, campaign, brand, brandGuide, assets } = (body ?? {}) as {
     icp?: unknown
     campaign?: unknown
     brand?: unknown
+    brandGuide?: unknown
     assets?: unknown
   }
 
@@ -86,7 +88,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
     messages: [
       {
         role: 'user',
-        content: `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nAssets to write (each with its components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nReturn the drafted copy and the campaign RTBs.`,
+        content: `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract — write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nAssets to write (each with its components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nReturn the drafted copy and the campaign RTBs.`,
       },
     ],
   })
