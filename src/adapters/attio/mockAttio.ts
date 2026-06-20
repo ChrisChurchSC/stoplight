@@ -24,7 +24,7 @@ export class MockAttioAdapter implements AttioAdapter {
   private deals = [...DEALS]
 
   async pushContact(contact: AttioContact): Promise<void> {
-    // Dedup on email (reconciled with Clay's upstream sync by the same key).
+    // Dedup on email (reconciled with the upstream enrichment sync by the same key).
     const existing = this.contacts.find((c) => c.email === contact.email)
     if (existing) Object.assign(existing, contact)
     else this.contacts.push(contact)

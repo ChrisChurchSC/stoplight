@@ -1,6 +1,7 @@
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typeLabel, typesFor } from '../domain/channelAssetTypes'
 import { messagingFields, messagingMap } from '../domain/messaging'
+import { applyBreakStatus, detectAcmeBreaks } from '../domain/breaks'
 import { rtbsForCampaign } from '../domain/rtb'
 import { isTrackingClean, trackingChecks, utmQuery, type Utm } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
@@ -33,9 +34,20 @@ export function CopyReview() {
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const drafting = useTrafficStore((s) => s.drafting)
   const fillRowMedia = useTrafficStore((s) => s.fillRowMedia)
+  const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const openBreaks = useTrafficStore((s) => s.openBreaks)
 
   const row = rows.find((r) => r.id === reviewRowId)
   if (!row) return null
+
+  // Open connection breaks this asset is on either side of — surfaced inline so
+  // the buyer meets the break while editing one asset, not only campaign-wide.
+  const rowBreaks = applyBreakStatus(detectAcmeBreaks(rows), breakStatus).filter(
+    (b) =>
+      b.status === 'open' &&
+      ((b.from.assetName === row.assetName && b.from.channel === row.channel) ||
+        (b.to?.assetName === row.assetName && b.to?.channel === row.channel)),
+  )
 
   const fields = messagingFields(row.channel, row.assetType)
   const map = messagingMap(row)
@@ -427,11 +439,21 @@ export function CopyReview() {
         </div>
 
         <div className="drawer-foot">
-          <span className="copy-pieces-count">
-            {liveFlags.length > 0
-              ? `${liveFlags.length} unresolved ICP flag${liveFlags.length === 1 ? '' : 's'}`
-              : '✓ On-message'}
-          </span>
+          {rowBreaks.length > 0 ? (
+            <button
+              className="copy-break-link"
+              onClick={() => openBreaks(rowBreaks[0].id)}
+              title="This asset breaks the thread — view the break"
+            >
+              ⚠ {rowBreaks.length} break{rowBreaks.length === 1 ? '' : 's'} — view
+            </button>
+          ) : (
+            <span className="copy-pieces-count">
+              {liveFlags.length > 0
+                ? `${liveFlags.length} unresolved ICP flag${liveFlags.length === 1 ? '' : 's'}`
+                : '✓ On-message'}
+            </span>
+          )}
           <span className="spacer" />
           <button
             className={`btn ${row.copyReviewed ? '' : 'green'}`}

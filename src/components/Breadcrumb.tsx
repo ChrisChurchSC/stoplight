@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { filesToAssets } from '../lib/files'
+import { TIMING_BY_KEY } from '../domain/timing'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 export function Breadcrumb() {
@@ -15,6 +16,14 @@ export function Breadcrumb() {
   const ingestDriveFolderUrl = useTrafficStore((s) => s.ingestDriveFolderUrl)
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  const rerunSeasonalCampaign = useTrafficStore((s) => s.rerunSeasonalCampaign)
+  const rotateAlwaysOn = useTrafficStore((s) => s.rotateAlwaysOn)
+
+  const activeCampaign =
+    campaignFilter !== 'all' ? campaignList.find((c) => c.name === campaignFilter) : undefined
+  const timing = activeCampaign?.timing
+  const timingDef = timing ? TIMING_BY_KEY[timing] : undefined
 
   const inputRef = useRef<HTMLInputElement>(null)
   const overview = clientFilter === 'all'
@@ -50,6 +59,14 @@ export function Breadcrumb() {
             <span className="crumb active">{clientFilter}</span>
             <span className="crumb-sep">/</span>
             <span className="crumb">{campaignFilter === 'all' ? 'All campaigns' : campaignFilter}</span>
+            {timingDef && (
+              <span className={`crumb-timing t-${timingDef.key}`} title={timingDef.scheduling}>
+                {timingDef.icon} {timingDef.label}
+                {timing === 'seasonal' && activeCampaign?.seasonalWindow ? ` · ${activeCampaign.seasonalWindow}` : ''}
+                {timing === 'seasonal' && (activeCampaign?.seasonalCycle ?? 1) > 1 ? ` · Cycle ${activeCampaign?.seasonalCycle}` : ''}
+                {timing === 'always-on' && activeCampaign?.refreshWeeks ? ` · every ${activeCampaign.refreshWeeks}w` : ''}
+              </span>
+            )}
           </>
         )}
       </div>
@@ -68,6 +85,24 @@ export function Breadcrumb() {
       )}
 
       <div className="bc-right">
+        {timing === 'seasonal' && (
+          <button
+            className="btn sm"
+            onClick={() => rerunSeasonalCampaign(campaignFilter)}
+            title="Clone this campaign's assets + structure into a new editable cycle"
+          >
+            ↻ Re-run next cycle
+          </button>
+        )}
+        {timing === 'always-on' && (
+          <button
+            className="btn sm"
+            onClick={() => rotateAlwaysOn(campaignFilter)}
+            title="Rotate creative now — reschedule forward and reset to draft for review"
+          >
+            ∞ Rotate creative
+          </button>
+        )}
         {!overview && (
           <button
             className={`btn sm${view === 'insights' ? ' primary' : ''}`}

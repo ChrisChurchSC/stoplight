@@ -28,9 +28,9 @@ export interface Attribution {
 }
 
 /**
- * Attio = system of record (contacts, deals, attribution). Clay enriches/scores
- * upstream and syncs in; the tool reads ICP context from Clay and reads/writes
- * contacts + attribution here. Email is the dedup key.
+ * Attio = system of record (contacts, deals, attribution). ICP enrichment/scoring
+ * happens upstream via Claude (MCP) and syncs in; the tool reads ICP context from
+ * there and reads/writes contacts + attribution here. Email is the dedup key.
  */
 export interface AttioAdapter {
   /** Capture a lead (lead magnet / landing page / intent commenter) into Attio. */

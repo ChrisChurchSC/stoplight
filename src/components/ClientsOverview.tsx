@@ -100,7 +100,7 @@ export function ClientsOverview() {
           <span className="home-addclient-ico">＋</span>
           <span>
             <span className="home-addclient-title">Add new client</span>
-            <span className="home-addclient-sub">Name, ICP via Clay, then a first campaign.</span>
+            <span className="home-addclient-sub">Name, ICP via Claude, then a first campaign.</span>
           </span>
         </button>
         {all.length === 0 && (

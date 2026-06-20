@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { freshAudienceId } from '../domain/audiences'
+import { useEffect } from 'react'
 import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
-import { channelTracking } from '../domain/tracking'
+import { auditReadiness, readinessSummary } from '../domain/readiness'
+import { rtbsForCampaign } from '../domain/rtb'
+import { INSTALLED_TRACKING, channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -29,11 +30,12 @@ export function Sidebar() {
   const icp = useTrafficStore((s) => s.icp)
   const loadIcp = useTrafficStore((s) => s.loadIcp)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
-
-  const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState('')
+  const openAudienceWizard = useTrafficStore((s) => s.openAudienceWizard)
+  const brandGuides = useTrafficStore((s) => s.brandGuides)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  const driveConnected = useTrafficStore((s) => s.driveConnected)
+  const openReadiness = useTrafficStore((s) => s.openReadiness)
 
   // Surface the ICP in the profile card (not behind a button) — pull it if a
   // client is in view and we don't have one yet.
@@ -42,23 +44,29 @@ export function Sidebar() {
   }, [clientFilter, icp, loadIcp])
 
   // Audiences (personas under the ICP) live in the profile card. The card lists
-  // them and adds new ones; full editing (angle, proof, strategy) opens the ICP
-  // drawer where there's room for it.
+  // them; "+ Add audience" opens the guided flow, and a chip opens the ICP drawer
+  // where there's room for full editing (angle, proof, strategy).
   const audiences = clientFilter !== 'all' ? clientAudiences[clientFilter] ?? [] : []
-  const addAudience = () => {
-    const name = newName.trim()
-    if (!name) {
-      setAdding(false)
-      return
-    }
-    setClientAudiences(clientFilter, [
-      ...audiences,
-      { id: freshAudienceId(), name, messageAngle: '', rtbEmphasis: [], strategy: '' },
-    ])
-    setNewName('')
-    setAdding(false)
-    setIcpOpen(true)
-  }
+
+  // Onboarding readiness summary for the profile card chip.
+  const readiness =
+    clientFilter !== 'all'
+      ? readinessSummary(
+          auditReadiness({
+            hasWebsite: !!profile?.website,
+            brandGuide: brandGuides[clientFilter]
+              ? { confirmed: brandGuides[clientFilter].confirmed }
+              : undefined,
+            audienceCount: audiences.length,
+            channelConnected: driveConnected,
+            rtbCount: campaignList
+              .filter((c) => c.client === clientFilter)
+              .reduce((n, c) => n + rtbsForCampaign(c.name).length, 0),
+            trackingReady: INSTALLED_TRACKING.size > 0,
+            crmConnected: false,
+          }),
+        )
+      : null
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -101,9 +109,24 @@ export function Sidebar() {
         )}
         {profile?.voice && <div className="sidebar-client-voice">“{profile.voice}”</div>}
 
+        {readiness && (
+          <button
+            className={`sidebar-readiness${readiness.tier1Gaps > 0 ? ' warn' : ' ok'}`}
+            onClick={openReadiness}
+            title="Onboarding readiness — what the product needs to do its job"
+          >
+            <span className="sidebar-readiness-dot" />
+            <span className="sidebar-readiness-label">Readiness</span>
+            <span className="sidebar-readiness-count">
+              {readiness.ready}/{readiness.total}
+              {readiness.tier1Gaps > 0 ? ` · ${readiness.tier1Gaps} to set up` : ' · ready'}
+            </span>
+          </button>
+        )}
+
         {icp && (
           <div className="sidebar-icp">
-            <div className="sidebar-icp-label">ICP · via Clay</div>
+            <div className="sidebar-icp-label">ICP · via Claude</div>
             <div className="sidebar-icp-name">{icp.name}</div>
             {icp.segment && <div className="sidebar-icp-seg">{icp.segment}</div>}
             {icp.pains?.length > 0 && (
@@ -138,27 +161,9 @@ export function Sidebar() {
                 ))}
               </div>
             )}
-            {adding ? (
-              <input
-                className="sidebar-aud-input"
-                autoFocus
-                value={newName}
-                placeholder="Audience name"
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') addAudience()
-                  if (e.key === 'Escape') {
-                    setNewName('')
-                    setAdding(false)
-                  }
-                }}
-                onBlur={addAudience}
-              />
-            ) : (
-              <button className="sidebar-aud-add" onClick={() => setAdding(true)}>
-                ＋ Add audience
-              </button>
-            )}
+            <button className="sidebar-aud-add" onClick={openAudienceWizard}>
+              ＋ Add audience
+            </button>
           </div>
         )}
       </div>

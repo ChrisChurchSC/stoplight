@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { CampaignVerdict } from '../adapters/icp/types'
-import { freshAudienceId, type AudienceType } from '../domain/audiences'
-import { GTM_STRATEGIES } from '../domain/strategies'
+import { newAudience, normalizeAudience, type AudienceType } from '../domain/audiences'
 import { rtbCoverage, rtbsForCampaign } from '../domain/rtb'
 import { rowInScope } from '../lib/scope'
+import { AudienceFields } from './AudienceFields'
 
 const VERDICT_LABEL: Record<CampaignVerdict, string> = {
   coherent: 'Coherent',
@@ -31,8 +31,9 @@ export function IcpDrawer() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
 
-  // Pull from Clay when the drawer opens, no click needed.
+  // Pull the ICP when the drawer opens, no click needed.
   useEffect(() => {
     if (open && !icp) loadIcp()
   }, [open, icp, loadIcp])
@@ -44,9 +45,11 @@ export function IcpDrawer() {
   const cov = rtbCoverage(scoped)
   const status = gateCleared ? 'cleared' : review ? review.verdict : 'not-reviewed'
 
-  // Audience types (personas under the ICP) for the active client.
+  // Audience types (personas under the ICP) for the active client. Normalize on
+  // read so audiences saved under the older (fewer-field) shape edit cleanly.
   const client = clientFilter !== 'all' ? clientFilter : ''
-  const audiences = client ? clientAudiences[client] ?? [] : []
+  const businessModel = client ? clientProfiles[client]?.businessModel : undefined
+  const audiences = client ? (clientAudiences[client] ?? []).map(normalizeAudience) : []
   // Proof pool to emphasize per audience: RTBs across the client's campaigns.
   const rtbPool = [
     ...new Map(campaigns.flatMap((c) => rtbsForCampaign(c)).map((r) => [r.id, r])).values(),
@@ -54,19 +57,7 @@ export function IcpDrawer() {
   const saveAudiences = (next: AudienceType[]) => setClientAudiences(client, next)
   const patchAudience = (id: string, patch: Partial<AudienceType>) =>
     saveAudiences(audiences.map((a) => (a.id === id ? { ...a, ...patch } : a)))
-  const toggleAudienceRtb = (id: string, rtbId: string) => {
-    const a = audiences.find((x) => x.id === id)
-    if (!a) return
-    const next = a.rtbEmphasis.includes(rtbId)
-      ? a.rtbEmphasis.filter((x) => x !== rtbId)
-      : [...a.rtbEmphasis, rtbId]
-    patchAudience(id, { rtbEmphasis: next })
-  }
-  const addAudience = () =>
-    saveAudiences([
-      ...audiences,
-      { id: freshAudienceId(), name: '', messageAngle: '', rtbEmphasis: [], strategy: '' },
-    ])
+  const addAudience = () => saveAudiences([...audiences, newAudience()])
 
   return (
     <>
@@ -77,7 +68,7 @@ export function IcpDrawer() {
           <span className={`gate-status s-${status}`}>
             {gateCleared ? '✓ Cleared' : review ? VERDICT_LABEL[review.verdict] : 'Not reviewed'}
           </span>
-          <span className="icp-source" title="ICP pulled from Clay">via Clay</span>
+          <span className="icp-source" title="ICP pulled via Claude">via Claude</span>
           <span className="spacer" />
           <button className="btn ghost sm" onClick={() => setIcpOpen(false)}>
             ✕
@@ -175,39 +166,9 @@ export function IcpDrawer() {
                       ✕
                     </button>
                   </div>
-                  <textarea
-                    className="aud-angle"
-                    value={a.messageAngle}
-                    placeholder="Message angle — how the promise is framed for this buyer's pains and language."
-                    onChange={(e) => patchAudience(a.id, { messageAngle: e.target.value })}
-                  />
-                  {rtbPool.length > 0 && (
-                    <div className="aud-rtbs">
-                      <span className="aud-rtb-label">Proof emphasis</span>
-                      {rtbPool.map((rtb) => (
-                        <button
-                          key={rtb.id}
-                          className={`rtb-chip${a.rtbEmphasis.includes(rtb.id) ? ' on' : ''}`}
-                          title={rtb.detail}
-                          onClick={() => toggleAudienceRtb(a.id, rtb.id)}
-                        >
-                          {rtb.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <select
-                    className="aud-strategy"
-                    value={a.strategy}
-                    onChange={(e) => patchAudience(a.id, { strategy: e.target.value })}
-                  >
-                    <option value="">Strategy…</option>
-                    {GTM_STRATEGIES.map((g) => (
-                      <option key={g.key} value={g.key}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
+                  <AudienceFields value={a} patch={(p) => patchAudience(a.id, p)} section="identity" businessModel={businessModel} />
+                  <AudienceFields value={a} patch={(p) => patchAudience(a.id, p)} section="needs" icpPains={icp?.pains} />
+                  <AudienceFields value={a} patch={(p) => patchAudience(a.id, p)} section="reach" rtbPool={rtbPool} />
                 </div>
               ))}
               <button className="aud-add" onClick={addAudience}>

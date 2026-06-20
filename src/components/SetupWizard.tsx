@@ -116,7 +116,7 @@ export function SetupWizard() {
             />
 
             <div className="setup-sources">
-              Connect Clay, Attio, and your ad platforms on{' '}
+              Connect Claude, Attio, and your ad platforms on{' '}
               <button
                 className="wiz-link"
                 onClick={() => {
