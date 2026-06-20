@@ -32,8 +32,9 @@ const SEEDS: Seed[] = [
   {
     asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'meta-ads', campaign: 'Spring Launch 2026',
     audience: 'Lookalike – Customers', status: 'posted', at: -48, extracted: 'SPRING 2026\nBuilt for speed\nShip 2x faster →', copyReviewed: true, links: 'spring-launch-lp',
-    messaging: { primary: 'Spring is here. Ship 2x faster and cut the busywork your team hates.', headline: 'Build 2x faster', description: 'One-click rollback', cta: 'Shop now' },
-    rtbs: { primary: ['speed'], headline: ['speed'], description: ['rollback'] },
+    // description leans on the "redesigned dashboard" proof — fine for a broad lookalike.
+    messaging: { primary: 'Spring is here. Ship 2x faster and cut the busywork your team hates.', headline: 'Build 2x faster', description: 'A redesigned dashboard', cta: 'Shop now' },
+    rtbs: { primary: ['speed'], headline: ['speed'], description: ['redesign'] },
   },
   {
     asset: 'spring-promo-9x16.jpg', mediaType: 'image', channel: 'tiktok-ads', campaign: 'Spring Launch 2026',
@@ -54,14 +55,17 @@ const SEEDS: Seed[] = [
       subject: 'The Spring release is live',
       preview: '2x faster builds, one-click rollback, redesigned dashboard',
       body: 'Everything you told us slowed you down — manual steps, slow tools — is gone. Builds are 2x faster, rollback is one click, and the dashboard is redesigned for faster time-to-value.',
-      cta: 'See what’s new',
+      // SEEDED BREAK #4 (weak CTA): a soft "Learn more" that doesn't cash the
+      // "2x faster" promise the email just made into a conversion action.
+      cta: 'Learn more',
     },
     rtbs: { preview: ['speed', 'rollback', 'redesign'], body: ['speed', 'rollback', 'redesign'] }, // subject left unmapped → drift flag
   },
   {
     asset: 'spring-hero-30s.mp4', mediaType: 'video', channel: 'youtube-ads', campaign: 'Spring Launch 2026',
     audience: 'Retargeting – Site Visitors', status: 'approved', at: 26, links: 'spring-launch-lp',
-    messaging: { headline: 'Ship 2x faster', description: 'One-click rollback. Live now.', cta: 'Watch' },
+    // SEEDED BREAK #3 (proof gap): the CTA claims "live now" with no RTB backing it.
+    messaging: { headline: 'Ship 2x faster', description: 'One-click rollback', cta: 'Watch — live now' },
     rtbs: { headline: ['speed'], description: ['rollback'] },
   },
   {
@@ -74,7 +78,9 @@ const SEEDS: Seed[] = [
     asset: 'spring-launch-lp', mediaType: 'link', channel: 'landing-page', campaign: 'Spring Launch 2026',
     status: 'approved', at: 4,
     messaging: {
-      headline: 'Ship 2x faster',
+      // SEEDED BREAK #1 (journey handoff): the Meta ad promises "Build 2x faster",
+      // but this hero drops the number — "faster than ever" — snapping the thread.
+      headline: 'Ship faster than ever',
       subhead: 'Cut the manual busywork. Roll back any deploy in one click.',
       body: 'Spring 2026 brings 2x faster builds, one-click rollback, and a redesigned dashboard — built for faster time-to-value for mid-market ops teams.',
       cta: 'Explore the launch',
@@ -84,8 +90,11 @@ const SEEDS: Seed[] = [
   {
     asset: 'spring-promo-1x1.jpg', mediaType: 'image', channel: 'linkedin-ads', campaign: 'Spring Launch 2026',
     audience: 'ABM – Enterprise', status: 'draft', at: 30, links: 'spring-launch-lp',
-    messaging: { intro: 'Enterprise-ready and now 2x faster.', headline: 'Built for ops at scale', description: 'Less busywork, faster results.', cta: 'Request a demo' },
-    rtbs: { intro: ['speed'], description: ['speed'] }, // headline off-message + unmapped → drift flag
+    // SEEDED BREAK #2 (audience drift): reuses the SAME "redesigned dashboard" proof
+    // as the Lookalike variant — but Enterprise intent is "workflow automation", so
+    // dashboard polish is off-ICP for this audience.
+    messaging: { intro: 'Enterprise-ready and now 2x faster.', headline: 'Built for ops at scale', description: 'A redesigned dashboard', cta: 'Request a demo' },
+    rtbs: { intro: ['speed'], description: ['redesign'] },
   },
 
   // ---- Q2 Demand Gen (RTBs: acme, integrations, ttv) ----
@@ -161,8 +170,14 @@ const SEEDS: Seed[] = [
 
 /** Build a fresh set of sample rows scheduled relative to `now`. */
 export function sampleRows(now: number = Date.now()): TrafficRow[] {
+  // Spread upcoming content across a ~6-week horizon so the week / month / 3-month
+  // views are meaningful; posted & failed keep their recent-past time (`s.at`).
+  const UPCOMING_DAYS = [2, 10, 16, 5, 22, 30, 13, 1, 42, 21, 24, 3, 7, 18, 35, 9]
+  let up = 0
   return SEEDS.map((s, i) => {
-    const scheduledMs = now + s.at * 3_600_000
+    const past = s.status === 'posted' || s.status === 'failed'
+    const offsetHours = past ? s.at : UPCOMING_DAYS[up++ % UPCOMING_DAYS.length] * 24
+    const scheduledMs = now + offsetHours * 3_600_000
     const posted = s.status === 'posted'
     const approved = posted || s.status === 'approved' || s.status === 'scheduled'
     return {

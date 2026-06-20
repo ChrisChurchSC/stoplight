@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { CHANNEL_LIST, KIND_ORDER, channelsByKind } from '../domain/channels'
-import { channelTracking } from '../domain/tracking'
+import { auditReadiness, readinessSummary } from '../domain/readiness'
+import { rtbsForCampaign } from '../domain/rtb'
+import { INSTALLED_TRACKING, channelTracking } from '../domain/tracking'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -30,6 +32,10 @@ export function Sidebar() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
   const openAudienceWizard = useTrafficStore((s) => s.openAudienceWizard)
+  const brandGuides = useTrafficStore((s) => s.brandGuides)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  const driveConnected = useTrafficStore((s) => s.driveConnected)
+  const openReadiness = useTrafficStore((s) => s.openReadiness)
 
   // Surface the ICP in the profile card (not behind a button) — pull it if a
   // client is in view and we don't have one yet.
@@ -41,6 +47,26 @@ export function Sidebar() {
   // them; "+ Add audience" opens the guided flow, and a chip opens the ICP drawer
   // where there's room for full editing (angle, proof, strategy).
   const audiences = clientFilter !== 'all' ? clientAudiences[clientFilter] ?? [] : []
+
+  // Onboarding readiness summary for the profile card chip.
+  const readiness =
+    clientFilter !== 'all'
+      ? readinessSummary(
+          auditReadiness({
+            hasWebsite: !!profile?.website,
+            brandGuide: brandGuides[clientFilter]
+              ? { confirmed: brandGuides[clientFilter].confirmed }
+              : undefined,
+            audienceCount: audiences.length,
+            channelConnected: driveConnected,
+            rtbCount: campaignList
+              .filter((c) => c.client === clientFilter)
+              .reduce((n, c) => n + rtbsForCampaign(c.name).length, 0),
+            trackingReady: INSTALLED_TRACKING.size > 0,
+            crmConnected: false,
+          }),
+        )
+      : null
 
   // Counts reflect the current client / campaign (and search) scope — NOT the
   // channel filter itself — so each count matches what selecting it actually shows.
@@ -82,6 +108,21 @@ export function Sidebar() {
           </a>
         )}
         {profile?.voice && <div className="sidebar-client-voice">“{profile.voice}”</div>}
+
+        {readiness && (
+          <button
+            className={`sidebar-readiness${readiness.tier1Gaps > 0 ? ' warn' : ' ok'}`}
+            onClick={openReadiness}
+            title="Onboarding readiness — what the product needs to do its job"
+          >
+            <span className="sidebar-readiness-dot" />
+            <span className="sidebar-readiness-label">Readiness</span>
+            <span className="sidebar-readiness-count">
+              {readiness.ready}/{readiness.total}
+              {readiness.tier1Gaps > 0 ? ` · ${readiness.tier1Gaps} to set up` : ' · ready'}
+            </span>
+          </button>
+        )}
 
         {icp && (
           <div className="sidebar-icp">

@@ -1,8 +1,23 @@
 import { money } from '../domain/budget'
+import { CHANNELS } from '../domain/channels'
 import { computeInsights } from '../domain/insights'
+import { buildOutcomeMap, summarizeByAudience } from '../domain/outcomeMap'
+import { aggregatePatterns, type PatternDimension } from '../domain/outcomePatterns'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
+
+/** Distinct customers before an anonymized cross-customer pattern is surfaced. */
+const AGGREGATE_FLOOR = 10
+
+const DIMENSION_LABEL: Record<PatternDimension, string> = {
+  rtb: 'Proof',
+  channel: 'Channel',
+  stage: 'Stage',
+  strategy: 'Strategy',
+}
+
+const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 
 function Bar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0
@@ -22,10 +37,26 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   const comments = useTrafficStore((s) => s.comments)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  const coherenceDecisions = useTrafficStore((s) => s.coherenceDecisions)
+  const aggregateContributing = useTrafficStore((s) => s.aggregateContributing)
+  const setAggregateContributing = useTrafficStore((s) => s.setAggregateContributing)
 
   const view = allClients
     ? rows
     : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+
+  // The proprietary outcome map. Operational (per-customer) slice = the rows in
+  // view; the aggregate (cross-customer) layer is always computed over ALL rows,
+  // anonymized, and gated by the customer floor.
+  const outcomeMap = buildOutcomeMap(view, { clientAudiences, campaigns: campaignList })
+  const byAudience = summarizeByAudience(outcomeMap)
+  const allOutcomeMap = buildOutcomeMap(rows, { clientAudiences, campaigns: campaignList })
+  const aggregate = aggregatePatterns(allOutcomeMap, {
+    floor: AGGREGATE_FLOOR,
+    contributing: aggregateContributing,
+  })
 
   const pains = icp?.pains ?? []
   const flaggedRowIds = new Set(
@@ -86,6 +117,120 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
         </div>
 
         <div className="ins-cols">
+          {/* Outcome map — attributes → outcomes, sliced by audience type */}
+          <section className="ins-card ins-wide">
+            <div className="ins-card-head">
+              <h3>Outcome map by audience</h3>
+              <span className="ins-card-hint">
+                What each variant was → what it did, keyed by tracking id (multi-touch revenue)
+              </span>
+            </div>
+            <div className="omap">
+              <div className="omap-row omap-head">
+                <span>Audience type</span>
+                <span>Variants</span>
+                <span>Eng. rate</span>
+                <span>Leads</span>
+                <span>Revenue</span>
+                <span>Top proof / channel</span>
+              </div>
+              {byAudience.map((a) => (
+                <div className="omap-row" key={a.audienceType}>
+                  <span className="omap-aud">{a.audienceType}</span>
+                  <span>{a.variants}</span>
+                  <span>{a.impressions > 0 ? pct(a.engagementRate) : '—'}</span>
+                  <span>{a.leads ? a.leads.toFixed(a.leads % 1 ? 1 : 0) : '—'}</span>
+                  <span className={a.revenue > 0 ? 'omap-rev' : 'omap-zero'}>
+                    {a.revenue > 0 ? money(a.revenue) : '—'}
+                  </span>
+                  <span className="omap-top">
+                    {a.topRtb ?? '—'}
+                    {a.topChannel ? ` · ${CHANNELS[a.topChannel].label}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Aggregate learning layer — anonymized, cross-customer, floor-gated */}
+          <section className="ins-card ins-wide agg">
+            <div className="ins-card-head">
+              <h3>Aggregate patterns (cross-customer)</h3>
+              <span className="ins-card-hint">
+                Anonymized learnings: which attributes drive outcomes by audience, across customers
+              </span>
+            </div>
+
+            {!aggregate.contributing ? (
+              <div className="ins-note">
+                This account is opted out of the aggregate layer. It neither contributes data nor
+                reads cross-customer patterns. Per-customer data above is unaffected.
+              </div>
+            ) : aggregate.unlocked.length > 0 ? (
+              <div className="ins-rows">
+                {aggregate.unlocked.slice(0, 8).map((p) => (
+                  <div className="ins-row" key={`${p.dimension}:${p.audienceType}:${p.attribute}`}>
+                    <div className="ins-row-label">
+                      <span className="ins-row-name">
+                        {p.attribute} → {p.audienceType}
+                      </span>
+                      <span className="ins-row-meta">
+                        {DIMENSION_LABEL[p.dimension]} · {p.customers} customers · {p.variants} variants
+                      </span>
+                    </div>
+                    <span className="ins-row-value">{money(p.revenuePerVariant)}/variant</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="agg-locked">
+                <div className="agg-progress">
+                  <div className="agg-progress-bar">
+                    <div
+                      className="agg-progress-fill"
+                      style={{ width: `${Math.min(100, (aggregate.bestPatternCustomers / aggregate.floor) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="agg-progress-label">
+                    {aggregate.bestPatternCustomers} of {aggregate.floor} customers (strongest pattern)
+                  </span>
+                </div>
+                <p className="ins-note">
+                  Patterns unlock at {aggregate.floor} distinct customers so nothing is
+                  re-identifiable. {aggregate.lockedCount} pattern
+                  {aggregate.lockedCount === 1 ? '' : 's'} held back
+                  {aggregate.customersNeeded > 0
+                    ? ` — ${aggregate.customersNeeded} more customer${aggregate.customersNeeded === 1 ? '' : 's'} to start surfacing.`
+                    : '.'}
+                </p>
+              </div>
+            )}
+
+            <div className="agg-foot">
+              <div className="agg-privacy">
+                <strong>Privacy boundary.</strong> Per-customer assets, results, and coherence
+                decisions stay the customer's, never exposed to another. Only anonymized aggregate
+                patterns (≥{aggregate.floor} customers) leave the operational layer.
+              </div>
+              <label className="agg-toggle">
+                <input
+                  type="checkbox"
+                  checked={aggregateContributing}
+                  onChange={(e) => setAggregateContributing(e.target.checked)}
+                />
+                <span>Contribute to the anonymized aggregate (account-wide)</span>
+              </label>
+            </div>
+
+            <div className="agg-coh">
+              <span className="agg-coh-n">{coherenceDecisions.length}</span>
+              coherence decision{coherenceDecisions.length === 1 ? '' : 's'} captured
+              <span className="agg-coh-hint">
+                (accept/override calls on the cross-variant check — a dataset only the gate produces)
+              </span>
+            </div>
+          </section>
+
           {/* Proof-point ROI */}
           <section className="ins-card ins-wide">
             <div className="ins-card-head">

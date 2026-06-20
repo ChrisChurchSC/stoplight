@@ -4,10 +4,26 @@ import { money } from '../domain/budget'
 import { CHANNELS } from '../domain/channels'
 import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from '../domain/funnel'
 import { handoffFor, type HandoffLevel } from '../domain/flowReview'
+import { applyBreakStatus, detectAcmeBreaks, AXIS_META, type CoherenceBreak } from '../domain/breaks'
+import { messagingFields, messagingMap } from '../domain/messaging'
+import { inTimeRange } from '../domain/timeRange'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+
+/** Render text with the conflicting span emphasized in place. */
+function Hl({ text, highlight }: { text: string; highlight: string }) {
+  const i = highlight ? text.toLowerCase().indexOf(highlight.toLowerCase()) : -1
+  if (i < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="brk-mark">{text.slice(i, i + highlight.length)}</mark>
+      {text.slice(i + highlight.length)}
+    </>
+  )
+}
 
 const STATUS_COLOR: Record<RowStatus, string> = {
   draft: '#9aa0aa',
@@ -39,8 +55,53 @@ export function FlowView() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const openReview = useTrafficStore((s) => s.openReview)
+  const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
+  const timeRange = useTrafficStore((s) => s.timeRange)
+  const rangeNow = Date.now()
 
-  const view = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+  const view = rows.filter(
+    (r) =>
+      rowInScope(r, { filter, query, clientFilter, campaignFilter }) &&
+      inTimeRange(r, timeRange, rangeNow),
+  )
+
+  // The connection breaks for this campaign (detected over the whole campaign,
+  // not the channel-filtered view). The Connection view IS the storefront, so the
+  // breaks surface here: on the count and on the assets that break the thread.
+  const scopedAll = rows.filter((r) =>
+    rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
+  )
+  const breaks = applyBreakStatus(detectAcmeBreaks(scopedAll), breakStatus)
+  const openB = breaks.filter((b) => b.status === 'open')
+  const breakForRow = (r: TrafficRow): CoherenceBreak | undefined =>
+    openB.find(
+      (b) =>
+        (b.from.assetName === r.assetName && b.from.channel === r.channel) ||
+        (b.to?.assetName === r.assetName && b.to?.channel === r.channel),
+    )
+  // The flagged messaging components for a row (which field, the conflicting span,
+  // and why) — drives the inline highlighting in review mode.
+  interface RowFlag {
+    field: string
+    highlight: string
+    axis: CoherenceBreak['axis']
+    severity: CoherenceBreak['severity']
+    why: string
+    breakId: string
+  }
+  const flagsForRow = (r: TrafficRow): RowFlag[] => {
+    const out: RowFlag[] = []
+    for (const b of openB) {
+      const sides = [b.from, b.to].filter(Boolean) as NonNullable<typeof b.to>[]
+      for (const side of sides) {
+        if (side.assetName === r.assetName && side.channel === r.channel) {
+          out.push({ field: side.field, highlight: side.highlight, axis: b.axis, severity: b.severity, why: b.why, breakId: b.id })
+        }
+      }
+    }
+    return out
+  }
 
   // Resolve a linksTo asset name to a row, preferring the SAME campaign — names
   // like "Lead-capture landing page" repeat across campaigns, so a global match
@@ -52,6 +113,9 @@ export function FlowView() {
   const graphRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState<Edge[]>([])
   const [hover, setHover] = useState<{ id: string; name: string } | null>(null)
+  // Review mode (default) expands every card to show its messaging with flags
+  // highlighted in place. Toggle off for the compact map.
+  const [reviewMode, setReviewMode] = useState(true)
 
   // Recompute connector geometry when the data or layout changes.
   const linkKey = view.map((r) => `${r.id}:${r.linksTo ?? ''}`).join('|')
@@ -167,25 +231,75 @@ export function FlowView() {
     })
     .filter((h): h is NonNullable<typeof h> => !!h)
   const cleanN = handoffs.filter((h) => h.level === 'coherent').length
-  const breakN = handoffs.filter((h) => h.level !== 'coherent').length
 
   const Card = ({ row }: { row: TrafficRow }) => {
     const linkId = row.linksTo ? targetId(row.linksTo, row.campaign) : undefined
+    const brk = breakForRow(row)
+    const rowFlags = reviewMode ? flagsForRow(row) : []
+    const map = messagingMap(row)
+    const labelFor = (key: string) =>
+      messagingFields(row.channel, row.assetType).find((f) => f.key === key)?.label ?? key
+    const filled = Object.entries(map).filter(([, v]) => v && v.trim())
     return (
       <button
-        className="flow-card"
+        className={`flow-card${brk ? ' broke' : ''}${reviewMode ? ' review' : ''}`}
         data-id={row.id}
         data-name={row.assetName}
-        style={{ borderLeftColor: STATUS_COLOR[row.status] }}
+        style={{ borderLeftColor: brk ? '#b42318' : STATUS_COLOR[row.status] }}
         onClick={() => openReview(row.id)}
         onMouseEnter={() => setHover({ id: row.id, name: row.assetName })}
         onMouseLeave={() => setHover(null)}
-        title={`${CHANNELS[row.channel].label} · ${row.assetName}`}
+        title={brk ? brk.headline : `${CHANNELS[row.channel].label} · ${row.assetName}`}
       >
         <div className="flow-card-head">
           <ChannelIcon channel={row.channel} size={13} />
           <span className="flow-card-name">{row.assetName}</span>
+          {brk && (
+            <span
+              className="flow-card-break"
+              title="Breaks the thread — view"
+              onClick={(e) => {
+                e.stopPropagation()
+                openBreaksQueue(brk.id)
+              }}
+            >
+              ⚠
+            </span>
+          )}
         </div>
+
+        {reviewMode && (
+          <div className="flow-msg">
+            {filled.length === 0 ? (
+              <div className="flow-msg-empty">No copy yet</div>
+            ) : (
+              filled.map(([key, val]) => {
+                const flag = rowFlags.find((f) => f.field === key)
+                return (
+                  <div key={key} className={`flow-msg-row${flag ? ' flagged' : ''}`}>
+                    <span className="flow-msg-key">{labelFor(key)}</span>
+                    <span className="flow-msg-val">
+                      {flag ? <Hl text={val} highlight={flag.highlight} /> : val}
+                    </span>
+                    {flag && (
+                      <span
+                        className={`flow-msg-flag a-${flag.axis}`}
+                        title={flag.why}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openBreaksQueue(flag.breakId)
+                        }}
+                      >
+                        ⚠ {AXIS_META[flag.axis].label}
+                      </span>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )}
+
         {row.linksTo && (
           <span
             className="flow-card-link"
@@ -225,12 +339,27 @@ export function FlowView() {
           The path a prospect travels — lines show how each unit drives to the next.
           {handoffs.length > 0 && (
             <span className="journey-handoffs">
-              <span className="journey-handoff-ok">{cleanN} clean</span>
-              {breakN > 0 && (
-                <span className="journey-handoff-bad">· {breakN} need a tighter CTA / message</span>
+              <span className="journey-handoff-ok">{cleanN} clean handoffs</span>
+              {openB.length > 0 ? (
+                <button
+                  className="journey-breaks-btn"
+                  onClick={() => openBreaksQueue()}
+                  title={`The thread breaks in ${openB.length} place${openB.length === 1 ? '' : 's'}:\n${openB.map((b) => `• ${b.headline}`).join('\n')}`}
+                >
+                  · ⚠ {openB.length} break{openB.length === 1 ? '' : 's'} — view
+                </button>
+              ) : (
+                <span className="journey-handoff-ok">· ✓ thread intact</span>
               )}
             </span>
           )}
+          <button
+            className={`journey-review-toggle${reviewMode ? ' on' : ''}`}
+            onClick={() => setReviewMode((v) => !v)}
+            title="Toggle between reviewing the copy inline (with flags) and the compact map"
+          >
+            {reviewMode ? '✓ Reviewing messaging' : '▦ Compact map'}
+          </button>
         </div>
 
         <div className="journey-graph" ref={graphRef}>

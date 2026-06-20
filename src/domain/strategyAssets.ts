@@ -155,4 +155,16 @@ export const STRATEGY_ASSETS: Record<string, Deliverable[]> = {
     d('Member spotlight article', 'blog', 'article', 'text', 2, 'always-on'),
     d('AMA / event landing page', 'landing-page', 'webinar-reg', 'link', 1, 'one-off', true),
   ],
+  // 55:45 geo-paid + local content — saturate a radius across paid, social, search & owned
+  'local-takeover': [
+    d('Geo-targeted search ad', 'google-search', 'rsa', 'text', 1, 'flight'),
+    d('Local discovery / display ad', 'google-demand', 'image', 'image', 1, 'flight'),
+    d('Geo-fenced Meta ad', 'meta-ads', 'single-image', 'image', 1, 'flight'),
+    d('Local Instagram post', 'instagram', 'feed', 'image', 4, 'always-on'),
+    d('Community LinkedIn post', 'linkedin', 'single-image', 'image', 2, 'always-on'),
+    d('“Near me” local SEO article', 'blog', 'article', 'text', 4, 'always-on'),
+    d('Location landing page', 'landing-page', 'lead-capture', 'link', 1, 'one-off', true),
+    d('Local offers newsletter', 'email', 'newsletter', 'text', 4, 'always-on'),
+    d('Local promo / coupon lead magnet', 'lead-magnet', 'ebook', 'link', 1, 'one-off', true),
+  ],
 }

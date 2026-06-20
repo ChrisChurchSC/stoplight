@@ -17,12 +17,28 @@ export interface AudienceType {
   name: string
   /** The specific buyer/role inside the ICP (e.g. "VP of RevOps", "Founder"). */
   role: string
+  // ---- Demographics (matter most for B2C) ----
+  ageRanges: string[]
+  incomeRanges: string[]
+  gender: string
+  geos: string[]
+  // ---- Firmographics (matter most for B2B) ----
+  /** Job functions / titles this persona holds. */
+  functions: string[]
+  seniority: string
+  industry: string
+  companySize: string
+  // ---- Psychographics & intent ----
   /** This persona's pains — a subset of the ICP's, plus any persona-specific ones. */
   pains: string[]
-  /** What this persona is trying to achieve (the outcome they're buying). */
+  /** Outcomes this persona wants (selected from the goal library). */
+  goalTags: string[]
+  /** Free-text elaboration of goals (optional). */
   goals: string
   /** What makes them hesitate — objections to disarm in the messaging. */
   objections: string
+  /** Buying triggers / intent signals worth targeting. */
+  triggers: string[]
   /** How the promise is framed for this buyer's pains, language, and context. */
   messageAngle: string
   /** Channels where this persona actually pays attention (where to reach them). */
@@ -39,9 +55,19 @@ export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
     id: freshAudienceId(),
     name: '',
     role: '',
+    ageRanges: [],
+    incomeRanges: [],
+    gender: '',
+    geos: [],
+    functions: [],
+    seniority: '',
+    industry: '',
+    companySize: '',
     pains: [],
+    goalTags: [],
     goals: '',
     objections: '',
+    triggers: [],
     messageAngle: '',
     channels: [],
     rtbEmphasis: [],

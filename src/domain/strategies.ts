@@ -105,4 +105,12 @@ export const GTM_STRATEGIES: GtmStrategy[] = [
     coreMetrics: 'Engagement rate · DAU/MAU · community-influenced revenue · CAC',
     mediaContent: '~15 : 85 (content/programming heavy)',
   },
+  {
+    key: 'local-takeover',
+    name: 'Local Takeover',
+    sequence: 'Discover → Visit → Convert → Repeat → Refer',
+    bestFor: 'Local & multi-location businesses saturating a geographic market across every nearby touchpoint',
+    coreMetrics: 'Local-pack rank · store/site visits · cost per walk-in · review velocity · radius reach',
+    mediaContent: '~55 : 45 (geo-paid + local content)',
+  },
 ]

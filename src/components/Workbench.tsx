@@ -23,6 +23,9 @@ import { DrivePicker } from './DrivePicker'
 import { NewClientWizard } from './NewClientWizard'
 import { SetupWizard } from './SetupWizard'
 import { AudienceWizard } from './AudienceWizard'
+import { ConnectionHeader } from './ConnectionHeader'
+import { BreaksQueue } from './BreaksQueue'
+import { ReadinessPanel } from './ReadinessPanel'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -74,6 +77,7 @@ export function Workbench() {
             {!overview && <Sidebar />}
             <div className="main">
               {!overview && <CampaignTabs />}
+              {!overview && <ConnectionHeader />}
 
               {overview ? (
                 <>
@@ -108,6 +112,8 @@ export function Workbench() {
         </div>
       )}
 
+      <BreaksQueue />
+      <ReadinessPanel />
       <IcpDrawer />
       <TrackingDrawer />
       <CopyReview />

@@ -10,6 +10,7 @@ import { assetRtbIds, rtbById } from '../domain/rtb'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
+import { inTimeRange } from '../domain/timeRange'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
@@ -104,6 +105,8 @@ export function SheetGrid() {
   const query = useTrafficStore((s) => s.query)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const timeRange = useTrafficStore((s) => s.timeRange)
+  const rangeNow = Date.now()
   const updateRow = useTrafficStore((s) => s.updateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
@@ -174,8 +177,10 @@ export function SheetGrid() {
     document.body.style.userSelect = 'none'
   }
 
-  const view = rows.filter((r) =>
-    rowInScope(r, { filter, query, clientFilter, campaignFilter }),
+  const view = rows.filter(
+    (r) =>
+      rowInScope(r, { filter, query, clientFilter, campaignFilter }) &&
+      inTimeRange(r, timeRange, rangeNow),
   )
 
   const totalRows = view.length

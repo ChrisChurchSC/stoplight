@@ -1,18 +1,39 @@
+import { TIME_RANGES } from '../domain/timeRange'
 import { useTrafficStore } from '../store/useTrafficStore'
 
+// Connection leads — it's the storefront (the thesis). Grid is the workbench.
 const VIEWS = [
+  { key: 'flow', label: '⇄ Connection' },
   { key: 'grid', label: '▦ Grid' },
   { key: 'calendar', label: '◷ Calendar' },
-  { key: 'flow', label: '⇄ Flow' },
 ] as const
 
 export function ViewToggle() {
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
   const loadSample = useTrafficStore((s) => s.loadSample)
+  const timeRange = useTrafficStore((s) => s.timeRange)
+  const setTimeRange = useTrafficStore((s) => s.setTimeRange)
+  // Time-range horizon applies to the Connection + Grid views (Calendar has its own).
+  const showRange = view === 'flow' || view === 'grid'
 
   return (
     <div className="view-bar">
+      {showRange ? (
+        <div className="range-toggle" role="group" aria-label="Time range">
+          {TIME_RANGES.map((r) => (
+            <button
+              key={r.key}
+              className={`range-btn${timeRange === r.key ? ' active' : ''}`}
+              onClick={() => setTimeRange(r.key)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <span className="view-bar-spacer" />
+      )}
       <span className="view-bar-spacer" />
       <div className="view-toggle" role="group" aria-label="View">
         {VIEWS.map((v) => (

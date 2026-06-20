@@ -1,12 +1,57 @@
 import { useState } from 'react'
+import { newAudience, type AudienceType } from '../domain/audiences'
 import { GTM_STRATEGIES, mediaSharePct, type GtmStrategy } from '../domain/strategies'
 import { STRATEGY_ASSETS, type Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { typeLabel } from '../domain/channelAssetTypes'
+import {
+  BRAND_VOICES,
+  BUSINESS_MODELS,
+  COMPANY_SIZES,
+  FUNDING_STAGES,
+  INDUSTRIES,
+  REGIONS,
+  REVENUE_RANGES,
+} from '../domain/taxonomy'
+import {
+  REFRESH_CADENCES,
+  SEASONAL_WINDOWS,
+  TIMINGS,
+  TIMING_BY_KEY,
+  TRIGGER_EVENTS,
+  TRIGGER_KINDS,
+  type CampaignTiming,
+  type TriggerKind,
+} from '../domain/timing'
+import {
+  BUDGET_TIERS,
+  OBJECTIVES,
+  recommendStrategy,
+  type BudgetTier,
+  type Objective,
+} from '../domain/guidedStrategy'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { AudienceFields } from './AudienceFields'
+import { Dropdown, Segmented } from './forms'
 
-/** Monthly content production tiers we sell against. */
-const VOLUME_TIERS = [15, 30, 45]
+/** Monthly content production tiers we sell against, with guidance on when each fits. */
+const VOLUME_TIERS = [
+  {
+    n: 15,
+    tag: 'Starter',
+    desc: 'One or two core channels, steady always-on presence. Best for lean teams, a tight budget, or testing a new motion before scaling.',
+  },
+  {
+    n: 30,
+    tag: 'Growth',
+    desc: 'Balanced multi-channel cadence with room to nurture and retarget. The default for most campaigns building consistent pipeline.',
+  },
+  {
+    n: 45,
+    tag: 'Saturation',
+    desc: 'High-tempo, full-funnel output across many channels and audiences. For aggressive growth, competitive markets, or a category push.',
+  },
+]
 
 /** Spread a monthly target across content pieces, weighted by each piece's
  *  natural cadence, using largest-remainder rounding so the parts sum to the
@@ -44,29 +89,54 @@ interface Props {
 
 export function NewClientWizard({ onClose, client }: Props) {
   const icp = useTrafficStore((s) => s.icp)
-  const loadIcp = useTrafficStore((s) => s.loadIcp)
   const addClient = useTrafficStore((s) => s.addClient)
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
 
   const campaignOnly = !!client
-  const [step, setStep] = useState<1 | 2 | 3>(campaignOnly ? 2 : 1)
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(campaignOnly ? 2 : 1)
   const [name, setName] = useState(client ?? '')
   const [website, setWebsite] = useState('')
   const [industry, setIndustry] = useState('')
   const [voice, setVoice] = useState('')
-  const [pullingIcp, setPullingIcp] = useState(false)
-  const [icpPulled, setIcpPulled] = useState(false)
+  const [businessModel, setBusinessModel] = useState('')
+  const [companySize, setCompanySize] = useState('')
+  const [revenue, setRevenue] = useState('')
+  const [funding, setFunding] = useState('')
+  const [region, setRegion] = useState('')
   const [strategy, setStrategy] = useState('')
   const [campaignName, setCampaignName] = useState('')
   const [objective, setObjective] = useState('')
+  // Guided strategy selection (plain-language, budget-aware). Manual picker is the escape hatch.
+  const [guidedObjective, setGuidedObjective] = useState<Objective | ''>('')
+  const [budgetTier, setBudgetTier] = useState<BudgetTier | ''>('')
+  const [manualStrategy, setManualStrategy] = useState(false)
+  // Target audience for the campaign — required before the plan.
+  const [audienceDraft, setAudienceDraft] = useState<AudienceType>(() => newAudience())
+  const patchAudience = (p: Partial<AudienceType>) => setAudienceDraft((d) => ({ ...d, ...p }))
+  const audienceName = audienceDraft.name
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [durationWeeks, setDurationWeeks] = useState(8)
   const [overallBudget, setOverallBudget] = useState('')
   const [monthlyVolume, setMonthlyVolume] = useState(30)
+  // Timing dimension — drives when/how the campaign ships.
+  const [timing, setTiming] = useState<CampaignTiming>('one-off')
+  const [seasonalWindow, setSeasonalWindow] = useState('')
+  const [refreshWeeks, setRefreshWeeks] = useState(4)
+  const [triggerKind, setTriggerKind] = useState<TriggerKind>('behavior')
+  const [triggerEvent, setTriggerEvent] = useState('')
+  const chooseTiming = (t: CampaignTiming) => {
+    setTiming(t)
+    // Always-on / triggered have no fixed flight; one-off / seasonal do.
+    if (t === 'always-on' || t === 'triggered') setDurationWeeks(0)
+    else if (durationWeeks === 0) setDurationWeeks(8)
+  }
+  const datedTiming = timing === 'one-off' || timing === 'seasonal'
 
   const isContent = (d: Deliverable) => CHANNELS[d.channel].kind !== 'paid' && !d.brand
 
@@ -118,18 +188,8 @@ export function NewClientWizard({ onClose, client }: Props) {
       return next
     })
 
-  const pullIcp = async () => {
-    setPullingIcp(true)
-    try {
-      await loadIcp()
-      setIcpPulled(true)
-    } finally {
-      setPullingIcp(false)
-    }
-  }
-
   // Content/people-led motions run longer; set a sensible default flight.
-  const LONG_HORIZON = new Set(['content-seo', 'community', 'lifecycle', 'bowtie'])
+  const LONG_HORIZON = new Set(['content-seo', 'community', 'lifecycle', 'bowtie', 'local-takeover'])
 
   const chooseStrategy = (s: GtmStrategy) => {
     setStrategy(s.key)
@@ -140,9 +200,22 @@ export function NewClientWizard({ onClose, client }: Props) {
     setDurationWeeks(LONG_HORIZON.has(s.key) ? 12 : 8)
   }
 
+  // The budget-aware recommendation from the plain-language answers, and the
+  // one-click confirm that translates it into the strategy + timing model.
+  const guidedRec =
+    guidedObjective && budgetTier
+      ? recommendStrategy({ objective: guidedObjective, budgetTier, businessModel })
+      : null
+  const useRecommendation = () => {
+    if (!guidedRec) return
+    const s = GTM_STRATEGIES.find((x) => x.key === guidedRec.strategyKey)
+    if (s) chooseStrategy(s)
+    chooseTiming(guidedRec.timing)
+  }
+
   const create = () => {
     const client = name.trim()
-    if (!client || !strategy || !campaignName.trim()) return
+    if (!client || !strategy || !campaignName.trim() || !audienceName.trim()) return
     const strategyName = selectedStrategy?.name ?? strategy
     const campaign = campaignName.trim()
     const budgetNum = mediaBudgetNum
@@ -152,11 +225,16 @@ export function NewClientWizard({ onClose, client }: Props) {
         : undefined
     const oneTimeAssets = chosen.filter((d) => d.brand).length
     addClient(client)
-    if (website.trim() || industry.trim() || voice.trim())
+    if (website.trim() || industry || voice || businessModel || companySize || revenue || funding || region)
       setClientProfile(client, {
         website: website.trim() || undefined,
-        industry: industry.trim() || undefined,
-        voice: voice.trim() || undefined,
+        industry: industry || undefined,
+        voice: voice || undefined,
+        businessModel: businessModel || undefined,
+        companySize: companySize || undefined,
+        revenue: revenue || undefined,
+        funding: funding || undefined,
+        region: region || undefined,
       })
     addCampaign({
       name: campaign,
@@ -168,7 +246,20 @@ export function NewClientWizard({ onClose, client }: Props) {
       mediaBudget: budgetNum || undefined,
       contentPerMonth: contentPerMonth || undefined,
       oneTimeAssets: oneTimeAssets || undefined,
+      timing,
+      seasonalWindow: timing === 'seasonal' ? seasonalWindow || undefined : undefined,
+      seasonalCycle: timing === 'seasonal' ? 1 : undefined,
+      refreshWeeks: timing === 'always-on' ? refreshWeeks : undefined,
+      triggerKind: timing === 'triggered' ? triggerKind : undefined,
+      triggerEvent: timing === 'triggered' ? triggerEvent || undefined : undefined,
     })
+    // Save the campaign's target audience. It inherits the campaign strategy and
+    // flows into the messaging + outcome map as the "who" this campaign targets.
+    const existingAudiences = clientAudiences[client] ?? []
+    setClientAudiences(client, [
+      ...existingAudiences,
+      { ...audienceDraft, name: audienceName.trim(), strategy: audienceDraft.strategy || strategy },
+    ])
     void seedCampaignAssets(campaign, scaledChosen, {
       mediaBudget: budgetNum,
       flightWeeks: durationWeeks,
@@ -191,7 +282,9 @@ export function NewClientWizard({ onClose, client }: Props) {
                 <span className="wiz-step-sep">›</span>
                 <span className={`wiz-step${step === 2 ? ' active' : ' done'}`}>1 · Strategy</span>
                 <span className="wiz-step-sep">›</span>
-                <span className={`wiz-step${step === 3 ? ' active' : ''}`}>2 · Plan</span>
+                <span className={`wiz-step${step === 3 ? ' active' : step > 3 ? ' done' : ''}`}>2 · Audience</span>
+                <span className="wiz-step-sep">›</span>
+                <span className={`wiz-step${step === 4 ? ' active' : ''}`}>3 · Plan</span>
               </>
             ) : (
               <>
@@ -199,7 +292,9 @@ export function NewClientWizard({ onClose, client }: Props) {
                 <span className="wiz-step-sep">›</span>
                 <span className={`wiz-step${step === 2 ? ' active' : step > 2 ? ' done' : ''}`}>2 · Strategy</span>
                 <span className="wiz-step-sep">›</span>
-                <span className={`wiz-step${step === 3 ? ' active' : ''}`}>3 · Plan</span>
+                <span className={`wiz-step${step === 3 ? ' active' : step > 3 ? ' done' : ''}`}>3 · Audience</span>
+                <span className="wiz-step-sep">›</span>
+                <span className={`wiz-step${step === 4 ? ' active' : ''}`}>4 · Plan</span>
               </>
             )}
           </div>
@@ -220,6 +315,9 @@ export function NewClientWizard({ onClose, client }: Props) {
               autoFocus
             />
 
+            <label className="wiz-label">Business model</label>
+            <Segmented options={BUSINESS_MODELS} value={businessModel} onChange={setBusinessModel} />
+
             <div className="wiz-grid2">
               <label className="wiz-field">
                 <span className="wiz-label">Website</span>
@@ -232,44 +330,34 @@ export function NewClientWizard({ onClose, client }: Props) {
               </label>
               <label className="wiz-field">
                 <span className="wiz-label">Industry</span>
-                <input
-                  className="wiz-input"
-                  value={industry}
-                  placeholder="e.g. B2B SaaS"
-                  onChange={(e) => setIndustry(e.target.value)}
-                />
+                <Dropdown options={INDUSTRIES} value={industry} onChange={setIndustry} />
+              </label>
+            </div>
+
+            <div className="wiz-grid2">
+              <label className="wiz-field">
+                <span className="wiz-label">Company size</span>
+                <Dropdown options={COMPANY_SIZES} value={companySize} onChange={setCompanySize} placeholder="Employees" />
+              </label>
+              <label className="wiz-field">
+                <span className="wiz-label">Annual revenue</span>
+                <Dropdown options={REVENUE_RANGES} value={revenue} onChange={setRevenue} />
+              </label>
+            </div>
+
+            <div className="wiz-grid2">
+              <label className="wiz-field">
+                <span className="wiz-label">Funding stage</span>
+                <Dropdown options={FUNDING_STAGES} value={funding} onChange={setFunding} />
+              </label>
+              <label className="wiz-field">
+                <span className="wiz-label">Primary region</span>
+                <Dropdown options={REGIONS} value={region} onChange={setRegion} />
               </label>
             </div>
 
             <label className="wiz-label">Brand voice</label>
-            <textarea
-              className="wiz-input wiz-textarea"
-              value={voice}
-              placeholder="How should the copy sound? e.g. Plain, technical, no hype."
-              onChange={(e) => setVoice(e.target.value)}
-            />
-
-            <label className="wiz-label">ICP</label>
-            {icpPulled && icp ? (
-              <div className="wiz-icp">
-                <div className="wiz-icp-name">✓ {icp.name}</div>
-                {icp.segment && <div className="wiz-icp-seg">{icp.segment}</div>}
-                {icp.pains?.length > 0 && (
-                  <ul className="wiz-icp-pains">
-                    {icp.pains.slice(0, 3).map((p) => (
-                      <li key={p}>{p}</li>
-                    ))}
-                  </ul>
-                )}
-                <button className="wiz-link" onClick={pullIcp} disabled={pullingIcp}>
-                  Re-pull from Claude
-                </button>
-              </div>
-            ) : (
-              <button className="wiz-icp-btn" onClick={pullIcp} disabled={pullingIcp}>
-                {pullingIcp ? 'Pulling…' : '⊕ Add ICP via Claude'}
-              </button>
-            )}
+            <Dropdown options={BRAND_VOICES} value={voice} onChange={setVoice} placeholder="Pick a tone" />
 
             <div className="wiz-foot">
               <span className="wiz-hint">Website, industry, voice, and ICP are optional.</span>
@@ -281,19 +369,76 @@ export function NewClientWizard({ onClose, client }: Props) {
           </div>
         ) : step === 2 ? (
           <div className="wiz-body">
-            <label className="wiz-label">Select campaign strategy</label>
-            <div className="wiz-strategies">
-              {GTM_STRATEGIES.map((s) => (
-                <button
-                  key={s.key}
-                  className={`wiz-strategy${strategy === s.key ? ' on' : ''}`}
-                  onClick={() => chooseStrategy(s)}
-                >
-                  <span className="wiz-strategy-name">{s.name}</span>
-                  <span className="wiz-strategy-desc">{s.bestFor}</span>
+            {!manualStrategy ? (
+              <>
+                <label className="wiz-label">What are you trying to do?</label>
+                <div className="gs-options">
+                  {OBJECTIVES.map((o) => (
+                    <button
+                      key={o.key}
+                      className={`gs-opt${guidedObjective === o.key ? ' on' : ''}`}
+                      onClick={() => setGuidedObjective(o.key)}
+                    >
+                      <span className="gs-opt-label">{o.label}</span>
+                      <span className="gs-opt-sub">{o.sub}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <label className="wiz-label">What's your monthly budget range?</label>
+                <div className="gs-budget">
+                  {BUDGET_TIERS.map((t) => (
+                    <button
+                      key={t.key}
+                      className={`gs-budget-opt${budgetTier === t.key ? ' on' : ''}`}
+                      onClick={() => setBudgetTier(t.key)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {guidedRec && (
+                  <div className="gs-rec">
+                    <div className="gs-rec-tag">✦ Recommended</div>
+                    <div className="gs-rec-name">{guidedRec.strategyName}</div>
+                    <p className="gs-rec-why">{guidedRec.rationale}</p>
+                    {guidedRec.steer && <p className="gs-rec-steer">↳ {guidedRec.steer}</p>}
+                    <button
+                      className={`gs-rec-use${strategy === guidedRec.strategyKey ? ' done' : ''}`}
+                      onClick={useRecommendation}
+                    >
+                      {strategy === guidedRec.strategyKey ? '✓ Using this' : '✓ Use this recommendation'}
+                    </button>
+                  </div>
+                )}
+
+                <button className="wiz-link gs-manual-link" onClick={() => setManualStrategy(true)}>
+                  Prefer to choose yourself? Set the strategy manually →
                 </button>
-              ))}
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="gs-manual-head">
+                  <label className="wiz-label">Select campaign strategy</label>
+                  <button className="wiz-link" onClick={() => setManualStrategy(false)}>
+                    ← Back to guided
+                  </button>
+                </div>
+                <div className="wiz-strategies">
+                  {GTM_STRATEGIES.map((s) => (
+                    <button
+                      key={s.key}
+                      className={`wiz-strategy${strategy === s.key ? ' on' : ''}`}
+                      onClick={() => chooseStrategy(s)}
+                    >
+                      <span className="wiz-strategy-name">{s.name}</span>
+                      <span className="wiz-strategy-desc">{s.bestFor}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             {selectedStrategy && (
               <div className="wiz-strategy-detail">
                 <span>
@@ -308,21 +453,25 @@ export function NewClientWizard({ onClose, client }: Props) {
               </div>
             )}
 
-            <label className="wiz-label">Campaign name</label>
-            <input
-              className="wiz-input"
-              value={campaignName}
-              placeholder="Campaign name"
-              onChange={(e) => setCampaignName(e.target.value)}
-            />
+            {selectedStrategy && (
+              <>
+                <label className="wiz-label">Campaign name</label>
+                <input
+                  className="wiz-input"
+                  value={campaignName}
+                  placeholder="Campaign name"
+                  onChange={(e) => setCampaignName(e.target.value)}
+                />
 
-            <label className="wiz-label">Objective (optional)</label>
-            <textarea
-              className="wiz-input wiz-textarea"
-              value={objective}
-              placeholder="What should this campaign achieve?"
-              onChange={(e) => setObjective(e.target.value)}
-            />
+                <label className="wiz-label">Objective (optional)</label>
+                <textarea
+                  className="wiz-input wiz-textarea"
+                  value={objective}
+                  placeholder="What should this campaign achieve?"
+                  onChange={(e) => setObjective(e.target.value)}
+                />
+              </>
+            )}
 
             <div className="wiz-foot">
               {!campaignOnly && (
@@ -336,25 +485,146 @@ export function NewClientWizard({ onClose, client }: Props) {
                 disabled={!strategy || !campaignName.trim()}
                 onClick={() => setStep(3)}
               >
+                Next: Audience →
+              </button>
+            </div>
+          </div>
+        ) : step === 3 ? (
+          <div className="wiz-body">
+            <label className="wiz-label">Target audience</label>
+            <span className="wiz-hint">
+              Who is this campaign for? Every campaign targets a specific buyer — define them so the
+              messaging, proof, and outcome tracking all line up behind one persona.
+            </span>
+            <input
+              className="wiz-input"
+              value={audienceName}
+              placeholder="Audience name — e.g. Enterprise Ops leaders"
+              onChange={(e) => patchAudience({ name: e.target.value })}
+              autoFocus
+            />
+            <AudienceFields
+              value={audienceDraft}
+              patch={patchAudience}
+              section="identity"
+              businessModel={businessModel}
+            />
+            <AudienceFields
+              value={audienceDraft}
+              patch={patchAudience}
+              section="needs"
+              icpPains={icp?.pains}
+            />
+
+            <div className="wiz-foot">
+              <button className="btn sm" onClick={() => setStep(2)}>
+                ← Back
+              </button>
+              <span className="wiz-hint">Channels, proof, and strategy come from the plan + ICP drawer.</span>
+              <span className="spacer" />
+              <button
+                className="btn primary"
+                disabled={!audienceName.trim()}
+                onClick={() => setStep(4)}
+              >
                 Next: Plan →
               </button>
             </div>
           </div>
         ) : (
           <div className="wiz-body">
-            <label className="wiz-label">Duration</label>
-            <select
-              className="wiz-input"
-              value={durationWeeks}
-              onChange={(e) => setDurationWeeks(Number(e.target.value))}
-            >
-              <option value={2}>2 weeks</option>
-              <option value={4}>4 weeks</option>
-              <option value={8}>8 weeks</option>
-              <option value={12}>12 weeks</option>
-              <option value={26}>6 months</option>
-              <option value={0}>Ongoing</option>
-            </select>
+            <label className="wiz-label">Timing</label>
+            <div className="wiz-timing">
+              {TIMINGS.map((t) => (
+                <button
+                  key={t.key}
+                  className={`wiz-timing-opt${timing === t.key ? ' on' : ''}`}
+                  onClick={() => chooseTiming(t.key)}
+                >
+                  <span className="wiz-timing-ico">{t.icon}</span>
+                  <span className="wiz-timing-name">
+                    {t.label}
+                    {!t.built && <em> · scaffold</em>}
+                  </span>
+                  <span className="wiz-timing-blurb">{t.blurb}</span>
+                </button>
+              ))}
+            </div>
+            <div className="wiz-volume-note">{TIMING_BY_KEY[timing].scheduling}</div>
+
+            {timing === 'seasonal' && (
+              <>
+                <label className="wiz-label">Seasonal window</label>
+                <Dropdown
+                  options={SEASONAL_WINDOWS}
+                  value={seasonalWindow}
+                  onChange={setSeasonalWindow}
+                  placeholder="Pick a recurring window"
+                />
+              </>
+            )}
+            {timing === 'always-on' && (
+              <>
+                <label className="wiz-label">Creative refresh cadence</label>
+                <select
+                  className="wiz-input"
+                  value={refreshWeeks}
+                  onChange={(e) => setRefreshWeeks(Number(e.target.value))}
+                >
+                  {REFRESH_CADENCES.map((c) => (
+                    <option key={c.weeks} value={c.weeks}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="wiz-volume-note">
+                  Creative auto-rotates on this cadence so the campaign never goes stale.
+                </div>
+              </>
+            )}
+            {timing === 'triggered' && (
+              <>
+                <label className="wiz-label">Trigger kind</label>
+                <Segmented
+                  options={TRIGGER_KINDS.map((k) => k.label)}
+                  value={TRIGGER_KINDS.find((k) => k.key === triggerKind)?.label ?? ''}
+                  onChange={(label) => {
+                    const k = TRIGGER_KINDS.find((x) => x.label === label)
+                    if (k) setTriggerKind(k.key)
+                    setTriggerEvent('')
+                  }}
+                />
+                <label className="wiz-label">Event</label>
+                <Dropdown
+                  options={TRIGGER_EVENTS[triggerKind]}
+                  value={triggerEvent}
+                  onChange={setTriggerEvent}
+                  placeholder="Pick an event"
+                />
+                <div className="wiz-volume-note">
+                  ⚡ Triggered is scaffolded — selectable now; event wiring lands later. Assets get built
+                  and coherence-checked, then held until the trigger is connected.
+                </div>
+              </>
+            )}
+
+            {datedTiming && (
+              <>
+                <label className="wiz-label">Duration</label>
+                <select
+                  className="wiz-input"
+                  value={durationWeeks}
+                  onChange={(e) => setDurationWeeks(Number(e.target.value))}
+                >
+                  <option value={2}>2 weeks</option>
+                  <option value={4}>4 weeks</option>
+                  <option value={8}>8 weeks</option>
+                  <option value={12}>12 weeks</option>
+                  <option value={26}>6 months</option>
+                  <option value={0}>Ongoing</option>
+                </select>
+              </>
+            )}
 
             {contentChosen.length > 0 && (
               <>
@@ -362,12 +632,16 @@ export function NewClientWizard({ onClose, client }: Props) {
                 <div className="wiz-volume">
                   {VOLUME_TIERS.map((t) => (
                     <button
-                      key={t}
-                      className={`wiz-volume-tier${monthlyVolume === t ? ' on' : ''}`}
-                      onClick={() => setMonthlyVolume(t)}
+                      key={t.n}
+                      className={`wiz-volume-tier${monthlyVolume === t.n ? ' on' : ''}`}
+                      onClick={() => setMonthlyVolume(t.n)}
                     >
-                      <b>{t}</b>
-                      <span>assets / mo</span>
+                      <span className="wiz-volume-top">
+                        <b>{t.n}</b>
+                        <span className="wiz-volume-unit">assets / mo</span>
+                        <span className="wiz-volume-tag">{t.tag}</span>
+                      </span>
+                      <span className="wiz-volume-desc">{t.desc}</span>
                     </button>
                   ))}
                 </div>
@@ -446,7 +720,7 @@ export function NewClientWizard({ onClose, client }: Props) {
             )}
 
             <div className="wiz-foot">
-              <button className="btn sm" onClick={() => setStep(2)}>
+              <button className="btn sm" onClick={() => setStep(3)}>
                 ← Back
               </button>
               <span className="wiz-hint">
@@ -456,7 +730,7 @@ export function NewClientWizard({ onClose, client }: Props) {
               <span className="spacer" />
               <button
                 className="btn primary"
-                disabled={!strategy || !campaignName.trim()}
+                disabled={!strategy || !campaignName.trim() || !audienceName.trim()}
                 onClick={create}
               >
                 Create campaign ↓

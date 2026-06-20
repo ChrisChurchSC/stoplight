@@ -2,12 +2,9 @@ import { useEffect } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { CampaignVerdict } from '../adapters/icp/types'
 import { newAudience, normalizeAudience, type AudienceType } from '../domain/audiences'
-import { CHANNEL_LIST } from '../domain/channels'
-import type { ChannelId } from '../domain/types'
-import { GTM_STRATEGIES } from '../domain/strategies'
 import { rtbCoverage, rtbsForCampaign } from '../domain/rtb'
 import { rowInScope } from '../lib/scope'
-import { ChannelIcon } from './ChannelIcon'
+import { AudienceFields } from './AudienceFields'
 
 const VERDICT_LABEL: Record<CampaignVerdict, string> = {
   coherent: 'Coherent',
@@ -34,6 +31,7 @@ export function IcpDrawer() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
 
   // Pull the ICP when the drawer opens, no click needed.
   useEffect(() => {
@@ -50,30 +48,15 @@ export function IcpDrawer() {
   // Audience types (personas under the ICP) for the active client. Normalize on
   // read so audiences saved under the older (fewer-field) shape edit cleanly.
   const client = clientFilter !== 'all' ? clientFilter : ''
+  const businessModel = client ? clientProfiles[client]?.businessModel : undefined
   const audiences = client ? (clientAudiences[client] ?? []).map(normalizeAudience) : []
   // Proof pool to emphasize per audience: RTBs across the client's campaigns.
   const rtbPool = [
     ...new Map(campaigns.flatMap((c) => rtbsForCampaign(c)).map((r) => [r.id, r])).values(),
   ]
-  const painSuggestions = (id: string) =>
-    [...new Set([...(icp?.pains ?? []), ...(audiences.find((a) => a.id === id)?.pains ?? [])])]
   const saveAudiences = (next: AudienceType[]) => setClientAudiences(client, next)
   const patchAudience = (id: string, patch: Partial<AudienceType>) =>
     saveAudiences(audiences.map((a) => (a.id === id ? { ...a, ...patch } : a)))
-  const toggleInList = <T,>(list: T[], v: T) =>
-    list.includes(v) ? list.filter((x) => x !== v) : [...list, v]
-  const toggleAudienceRtb = (id: string, rtbId: string) => {
-    const a = audiences.find((x) => x.id === id)
-    if (a) patchAudience(id, { rtbEmphasis: toggleInList(a.rtbEmphasis, rtbId) })
-  }
-  const toggleAudiencePain = (id: string, pain: string) => {
-    const a = audiences.find((x) => x.id === id)
-    if (a) patchAudience(id, { pains: toggleInList(a.pains, pain) })
-  }
-  const toggleAudienceChannel = (id: string, ch: ChannelId) => {
-    const a = audiences.find((x) => x.id === id)
-    if (a) patchAudience(id, { channels: toggleInList(a.channels, ch) })
-  }
   const addAudience = () => saveAudiences([...audiences, newAudience()])
 
   return (
@@ -183,85 +166,9 @@ export function IcpDrawer() {
                       ✕
                     </button>
                   </div>
-                  <input
-                    className="aud-role"
-                    value={a.role}
-                    placeholder="Role / title (e.g. VP of Operations)"
-                    onChange={(e) => patchAudience(a.id, { role: e.target.value })}
-                  />
-                  <textarea
-                    className="aud-angle"
-                    value={a.messageAngle}
-                    placeholder="Message angle — how the promise is framed for this buyer's pains and language."
-                    onChange={(e) => patchAudience(a.id, { messageAngle: e.target.value })}
-                  />
-                  {painSuggestions(a.id).length > 0 && (
-                    <div className="aud-rtbs">
-                      <span className="aud-rtb-label">Pains</span>
-                      {painSuggestions(a.id).map((p) => (
-                        <button
-                          key={p}
-                          className={`rtb-chip${a.pains.includes(p) ? ' on' : ''}`}
-                          onClick={() => toggleAudiencePain(a.id, p)}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <textarea
-                    className="aud-angle"
-                    value={a.goals}
-                    placeholder="Goals — what this persona is trying to achieve."
-                    onChange={(e) => patchAudience(a.id, { goals: e.target.value })}
-                  />
-                  <textarea
-                    className="aud-angle"
-                    value={a.objections}
-                    placeholder="Objections — what makes them hesitate."
-                    onChange={(e) => patchAudience(a.id, { objections: e.target.value })}
-                  />
-                  <div className="aud-rtbs">
-                    <span className="aud-rtb-label">Channels</span>
-                    {CHANNEL_LIST.map((c) => (
-                      <button
-                        key={c.id}
-                        className={`rtb-chip${a.channels.includes(c.id) ? ' on' : ''}`}
-                        title={c.label}
-                        onClick={() => toggleAudienceChannel(a.id, c.id)}
-                      >
-                        <ChannelIcon channel={c.id} size={12} />
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                  {rtbPool.length > 0 && (
-                    <div className="aud-rtbs">
-                      <span className="aud-rtb-label">Proof emphasis</span>
-                      {rtbPool.map((rtb) => (
-                        <button
-                          key={rtb.id}
-                          className={`rtb-chip${a.rtbEmphasis.includes(rtb.id) ? ' on' : ''}`}
-                          title={rtb.detail}
-                          onClick={() => toggleAudienceRtb(a.id, rtb.id)}
-                        >
-                          {rtb.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <select
-                    className="aud-strategy"
-                    value={a.strategy}
-                    onChange={(e) => patchAudience(a.id, { strategy: e.target.value })}
-                  >
-                    <option value="">Strategy…</option>
-                    {GTM_STRATEGIES.map((g) => (
-                      <option key={g.key} value={g.key}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
+                  <AudienceFields value={a} patch={(p) => patchAudience(a.id, p)} section="identity" businessModel={businessModel} />
+                  <AudienceFields value={a} patch={(p) => patchAudience(a.id, p)} section="needs" icpPains={icp?.pains} />
+                  <AudienceFields value={a} patch={(p) => patchAudience(a.id, p)} section="reach" rtbPool={rtbPool} />
                 </div>
               ))}
               <button className="aud-add" onClick={addAudience}>
