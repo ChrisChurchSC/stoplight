@@ -1,5 +1,6 @@
 import { clientForCampaign, type ClientProfile } from '../../domain/clients'
 import type { MessagingField } from '../../domain/messaging'
+import type { BrandGuide } from '../../domain/readiness'
 import type { Rtb } from '../../domain/rtb'
 import type { ChannelId } from '../../domain/types'
 import type { Icp } from '../icp/types'
@@ -23,6 +24,8 @@ export interface DraftRequest {
   campaign: string
   /** The client's brand profile (website / industry / voice), if captured. */
   brand?: ClientProfile
+  /** The confirmed brand guide — generation writes in its voice and honors its don'ts. */
+  brandGuide?: BrandGuide
   assets: DraftAsset[]
 }
 export interface DraftComponent {
@@ -79,9 +82,45 @@ const slug = (s: string) =>
 
 const CTAS = ['Get started', 'Learn more', 'See how it works', 'Book a demo', 'Get the guide']
 
+// ---- Generation honors the contract: write in the brand voice, never break a don't ----
+
+type Tone = 'bold' | 'warm' | 'proof' | 'premium' | 'default'
+
+/** Read a tone profile from the brand guide so generated copy adopts its voice. */
+function toneFor(guide?: BrandGuide): Tone {
+  const t = `${guide?.voice ?? ''} ${guide?.tone ?? ''} ${(guide?.donts ?? []).join(' ')} ${(guide?.dos ?? []).join(' ')}`.toLowerCase()
+  if (/\bbold|punchy|edgy\b/.test(t)) return 'bold'
+  if (/\bwarm|human|friendly|approachable\b/.test(t)) return 'warm'
+  if (/\bproof|no hype|technical|plain|evidence\b/.test(t)) return 'proof'
+  if (/\bpremium|aspirational|luxur|elevated\b/.test(t)) return 'premium'
+  return 'default'
+}
+
+const CTA_BY_TONE: Record<Tone, string[]> = {
+  bold: ['Start now', 'Get it', 'Jump in', 'Try it free'],
+  warm: ['Come take a look', "Let's talk", 'See for yourself', 'Say hello'],
+  proof: ['See the proof', 'Read the case study', 'See the numbers', 'Get the data'],
+  premium: ['Request access', 'Explore', 'Discover more', 'Begin'],
+  default: CTAS,
+}
+
+const HYPE = /\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/gi
+
+/** Enforce the brand don'ts on any generated string: no em dashes, no hype. */
+function sanitizeToBrand(text: string): string {
+  return text
+    .replace(/\s*—\s*/g, ', ')
+    .replace(HYPE, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,!?])/g, '$1')
+    .replace(/,\s*,/g, ',')
+    .trim()
+}
+
 export class HeuristicCopyWriter implements CopyWriter {
   async draft(req: DraftRequest): Promise<DraftResult> {
-    const { icp, campaign, assets } = req
+    const { icp, campaign, assets, brandGuide } = req
+    const tone = toneFor(brandGuide)
     const pains = icp?.pains?.length ? icp.pains : ['manual work', 'slow tools', 'wasted time']
     const buyer = icp?.firmographics?.find((f) => f.label === 'Buyer')?.value ?? icp?.name ?? 'your team'
     const client = clientForCampaign(campaign) ?? campaign.split('—').pop()?.trim() ?? 'We'
@@ -96,10 +135,12 @@ export class HeuristicCopyWriter implements CopyWriter {
       rtbs.push({ id: 'proof-1', label: 'Proven results', detail: 'Add your proof point.' })
 
     const drafts: AssetDraft[] = assets.map((a, i) => {
-      const ctx = { pain: pains[i % pains.length], pain2: pains[(i + 1) % pains.length], buyer, client, asset: a }
+      const ctx = { pain: pains[i % pains.length], pain2: pains[(i + 1) % pains.length], buyer, client, asset: a, tone }
       const components: DraftComponent[] = a.fields.map((fl, fi) => ({
         key: fl.key,
-        value: clip(componentCopy(fl, { ...ctx, ctaIdx: i + fi }), fl.hardLimit),
+        // Write the line, then enforce the brand don'ts so generation never ships
+        // copy the connection check would flag.
+        value: clip(sanitizeToBrand(componentCopy(fl, { ...ctx, ctaIdx: i + fi })), fl.hardLimit),
       }))
       // Landing pages are the proof hub (carry all RTBs); other assets lean on a
       // rotating one, so an asset and the page it drives to always share proof.
@@ -112,11 +153,14 @@ export class HeuristicCopyWriter implements CopyWriter {
 
 function componentCopy(
   fl: MessagingField,
-  ctx: { pain: string; pain2: string; buyer: string; client: string; asset: DraftAsset; ctaIdx: number },
+  ctx: { pain: string; pain2: string; buyer: string; client: string; asset: DraftAsset; ctaIdx: number; tone: Tone },
 ): string {
   const k = fl.key.toLowerCase()
   const { pain, pain2, buyer, client, asset } = ctx
-  if (/cta/.test(k) || fl.label.toLowerCase() === 'cta') return CTAS[ctx.ctaIdx % CTAS.length]
+  if (/cta/.test(k) || fl.label.toLowerCase() === 'cta') {
+    const set = CTA_BY_TONE[ctx.tone]
+    return set[ctx.ctaIdx % set.length]
+  }
   if (/^path$/.test(k)) return slug(asset.assetName)
   if (/business|brand/.test(k)) return client
   if (/subject/.test(k)) return `${cap(buyer)}: end ${pain} for good`

@@ -1236,8 +1236,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           type: r.assetType,
           fields: messagingFields(r.channel, r.assetType),
         }))
-        const brand = get().clientProfiles[clientForCampaign(campaign)]
-        const result = await copyWriter.draft({ icp, campaign, brand, assets })
+        const client = clientForCampaign(campaign)
+        const brand = get().clientProfiles[client]
+        const bg = get().brandGuides[client]
+        const brandGuide = bg?.confirmed ? bg.guide : undefined
+        const result = await copyWriter.draft({ icp, campaign, brand, brandGuide, assets })
         // Register + persist the campaign's drafted proof (merged with any authored).
         if (campaign && result.rtbs.length) {
           const existing = rtbsForCampaign(campaign)
