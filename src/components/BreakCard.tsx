@@ -70,6 +70,14 @@ export function BreakCard({ brk, active }: { brk: CoherenceBreak; active: boolea
         {brk.why}
       </div>
 
+      {/* the brand-guide rule this break measures against */}
+      {brk.brandRule && (
+        <div className="brk-rule">
+          <span className="brk-rule-tag">⊘ Brand rule</span>
+          {brk.brandRule}
+        </div>
+      )}
+
       {/* fix preview */}
       <div className="brk-fix">
         <span className="brk-fix-tag">Suggested fix</span>

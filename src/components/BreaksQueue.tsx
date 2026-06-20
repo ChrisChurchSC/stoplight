@@ -18,8 +18,16 @@ export function BreaksQueue() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const auditLog = useTrafficStore((s) => s.auditLog)
+  const brandGuides = useTrafficStore((s) => s.brandGuides)
+  const openReadiness = useTrafficStore((s) => s.openReadiness)
 
   if (!open) return null
+
+  // The check measures against the client's brand guide — surface which standard,
+  // or nudge to confirm one so the check has something to evaluate against.
+  const client = clientFilter !== 'all' ? clientFilter : ''
+  const brand = client ? brandGuides[client] : undefined
+  const brandReady = !!brand?.confirmed
 
   const scoped = rows.filter((r) =>
     rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
@@ -50,6 +58,17 @@ export function BreaksQueue() {
         </div>
 
         <div className="drawer-body">
+          {client && (
+            brandReady ? (
+              <div className="breaks-brand ok" title={brand!.guide.voice}>
+                ⊘ Checked against {client}'s brand guide
+              </div>
+            ) : (
+              <button className="breaks-brand warn" onClick={() => { close(); openReadiness() }}>
+                ⚠ No confirmed brand guide — the check has no standard to measure against. Confirm one →
+              </button>
+            )
+          )}
           {ordered.length === 0 ? (
             <div className="breaks-empty">
               ✓ Every asset in scope tells one story. No breaks in the thread.
