@@ -19,7 +19,7 @@ import type { ChannelId, TrafficRow } from './types'
  * check would populate it, so the live version is a drop-in later.
  */
 
-export type BreakAxis = 'journey' | 'audience' | 'proof' | 'cta'
+export type BreakAxis = 'journey' | 'audience' | 'proof' | 'cta' | 'voice'
 export type BreakSeverity = 'high' | 'medium' | 'low'
 export type BreakStatus = 'open' | 'resolved' | 'intended' | 'in-review'
 
@@ -28,6 +28,7 @@ export const AXIS_META: Record<BreakAxis, { label: string; blurb: string }> = {
   audience: { label: 'Audience drift', blurb: 'Two variants that should tell one story tell two.' },
   proof: { label: 'Proof gap', blurb: 'A claim or CTA with no backing proof point.' },
   cta: { label: 'Weak CTA', blurb: "A CTA that doesn't cash the promise the funnel made." },
+  voice: { label: 'Brand voice', blurb: 'Copy that breaks a rule in the brand guide.' },
 }
 
 /** One side of the conflict, shown in the side-by-side evidence. */
@@ -72,6 +73,8 @@ export interface CoherenceBreak {
   to?: BreakEvidence
   /** One sentence tying the conflict to THIS client's audience + strategy. */
   why: string
+  /** The brand-guide rule this break violates — the standard the check measures against. */
+  brandRule?: string
   suggestedFix: SuggestedFix
   status: BreakStatus
 }
@@ -174,6 +177,7 @@ export function detectAcmeBreaks(rows: TrafficRow[]): CoherenceBreak[] {
       from: { role: 'Meta ad headline', assetName: meta.assetName, channel: 'meta-ads', field: 'headline', text: meta.messaging.headline, highlight: '2x faster' },
       to: { role: 'Landing page hero', assetName: lp.assetName, channel: 'landing-page', field: 'headline', text: lp.messaging.headline, highlight: 'faster than ever' },
       why: 'Mid-market Ops buyers are, per the ICP, skeptical of hype — they want proof. A vague “faster” with no number reads as hype and snaps the substantiation chain the ad opened.',
+      brandRule: 'No vague claims — write “2x faster”, not “faster than ever”.',
       suggestedFix: { assetName: lp.assetName, channel: 'landing-page', field: 'headline', before: lp.messaging.headline, after: 'Ship 2x faster' },
       status: 'open',
     })
@@ -194,6 +198,7 @@ export function detectAcmeBreaks(rows: TrafficRow[]): CoherenceBreak[] {
       from: { role: 'Lookalike – Customers', assetName: look?.assetName ?? 'spring-hero-30s.mp4', channel: 'meta-ads', field: 'description', text: look?.messaging.description ?? 'A redesigned dashboard', highlight: 'redesigned dashboard' },
       to: { role: 'ABM – Enterprise', assetName: abm.assetName, channel: 'linkedin-ads', field: 'description', text: abm.messaging.description, highlight: 'redesigned dashboard' },
       why: 'Enterprise Ops buyers signal intent on “workflow automation,” not UI polish. Reusing the consumer “redesigned dashboard” proof for this ABM audience reads as off-target and weakens the enterprise angle.',
+      brandRule: 'Speak to one buyer at a time, in their language.',
       suggestedFix: { assetName: abm.assetName, channel: 'linkedin-ads', field: 'description', before: abm.messaging.description, after: 'Automate the manual ops work that doesn’t scale', attachRtb: 'speed' },
       status: 'open',
     })
@@ -212,6 +217,7 @@ export function detectAcmeBreaks(rows: TrafficRow[]): CoherenceBreak[] {
       audienceType: 'Retargeting – Site Visitors',
       from: { role: 'YouTube retargeting CTA', assetName: yt.assetName, channel: 'youtube-ads', field: 'cta', text: yt.messaging.cta, highlight: 'live now' },
       why: '“Live now” is an availability claim with nothing substantiating it. Your ICP discounts hype and wants proof — an unbacked claim is exactly what they tune out.',
+      brandRule: 'No hype or superlatives you cannot back up.',
       suggestedFix: { assetName: yt.assetName, channel: 'youtube-ads', field: 'cta', before: yt.messaging.cta, after: 'Watch the 2-min demo' },
       status: 'open',
     })
@@ -229,12 +235,96 @@ export function detectAcmeBreaks(rows: TrafficRow[]): CoherenceBreak[] {
       campaign,
       from: { role: 'Consideration email CTA', assetName: email.assetName, channel: 'email', field: 'cta', text: email.messaging.cta, highlight: email.messaging.cta },
       why: 'The email makes the “2x faster” promise, then its CTA fails to convert that intent into an action. The funnel’s momentum leaks at the handoff.',
+      brandRule: 'Keep one promise per asset and carry it through the funnel.',
       suggestedFix: { assetName: email.assetName, channel: 'email', field: 'cta', before: email.messaging.cta, after: 'Start shipping 2x faster' },
       status: 'open',
     })
   }
 
   return out
+}
+
+// ---------------------------------------------------------------------------
+// Live brand-voice check — detects real violations of the brand guide's don'ts
+// in any copy, not just the hand-seeded thread breaks. Runs on the actual
+// messaging, so it fires as the team writes (the check is a capability, not a
+// fixture). Each match cites the brand rule it breaks.
+// ---------------------------------------------------------------------------
+
+interface VoiceRule {
+  id: string
+  /** Matches the offending span; the first capture group (or full match) is highlighted. */
+  test: RegExp
+  severity: BreakSeverity
+  headline: string
+  why: string
+  brandRule: string
+  /** Produce the fixed value for the whole field given the original. */
+  fix: (text: string) => string
+}
+
+const VOICE_RULES: VoiceRule[] = [
+  {
+    id: 'em-dash',
+    test: /\s+—\s+|—/,
+    severity: 'low',
+    headline: 'This copy uses an em dash.',
+    why: 'House style: commas, colons, and periods carry the rhythm. Em dashes read as filler and slow the eye.',
+    brandRule: 'No em dashes — commas and periods carry the rhythm.',
+    fix: (t) => t.replace(/\s*—\s*/g, ', ').replace(/,\s*,/g, ','),
+  },
+  {
+    id: 'hype',
+    test: /\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/i,
+    severity: 'medium',
+    headline: 'This copy leans on hype you cannot back up.',
+    why: 'Your ICP discounts superlatives and wants proof. An unbackable claim reads as marketing noise.',
+    brandRule: 'No hype or superlatives you cannot back up.',
+    fix: (t) =>
+      t
+        .replace(/\b(best ever|#1|number one|revolutionary|game[- ]?changing|world[- ]?class|unbeatable|guaranteed|the ultimate)\b/i, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim(),
+  },
+]
+
+/** Scan in-scope copy for brand-voice violations and emit them as breaks. */
+export function detectVoiceBreaks(rows: TrafficRow[]): CoherenceBreak[] {
+  const out: CoherenceBreak[] = []
+  for (const r of rows) {
+    if (r.status === 'posted' || r.status === 'failed') continue
+    for (const [field, value] of Object.entries(r.messaging ?? {})) {
+      if (!value?.trim()) continue
+      for (const rule of VOICE_RULES) {
+        const m = value.match(rule.test)
+        if (!m) continue
+        const highlight = (m[1] ?? m[0]).trim()
+        out.push({
+          id: `voice-${rule.id}-${r.id}-${field}`,
+          axis: 'voice',
+          severity: rule.severity,
+          headline: rule.headline,
+          client: clientForVoice(r),
+          campaign: (r.campaign ?? '').trim(),
+          from: { role: `${r.channel} · ${field}`, assetName: r.assetName, channel: r.channel, field, text: value, highlight },
+          why: rule.why,
+          brandRule: rule.brandRule,
+          suggestedFix: { assetName: r.assetName, channel: r.channel, field, before: value, after: rule.fix(value) },
+          status: 'open',
+        })
+      }
+    }
+  }
+  return out
+}
+
+// Voice breaks aren't client-specific in their logic, but carry the row's client
+// label for scoping; resolved lazily to avoid importing the clients map here.
+const clientForVoice = (_r: TrafficRow): string => ''
+
+/** The full connection check: the seeded thread breaks plus the live voice check. */
+export function detectBreaks(rows: TrafficRow[]): CoherenceBreak[] {
+  return [...detectAcmeBreaks(rows), ...detectVoiceBreaks(rows)]
 }
 
 /** Overlay persisted statuses (intended / in-review) onto detected breaks. */

@@ -4,7 +4,7 @@ import { money } from '../domain/budget'
 import { CHANNELS } from '../domain/channels'
 import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from '../domain/funnel'
 import { handoffFor, type HandoffLevel } from '../domain/flowReview'
-import { applyBreakStatus, detectAcmeBreaks, AXIS_META, type CoherenceBreak } from '../domain/breaks'
+import { applyBreakStatus, detectBreaks, AXIS_META, type CoherenceBreak } from '../domain/breaks'
 import { messagingFields, messagingMap } from '../domain/messaging'
 import { inTimeRange } from '../domain/timeRange'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
@@ -72,7 +72,7 @@ export function FlowView() {
   const scopedAll = rows.filter((r) =>
     rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
   )
-  const breaks = applyBreakStatus(detectAcmeBreaks(scopedAll), breakStatus)
+  const breaks = applyBreakStatus(detectBreaks(scopedAll), breakStatus)
   const openB = breaks.filter((b) => b.status === 'open')
   const breakForRow = (r: TrafficRow): CoherenceBreak | undefined =>
     openB.find(
