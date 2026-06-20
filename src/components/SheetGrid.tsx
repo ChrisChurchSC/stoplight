@@ -11,6 +11,7 @@ import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
+import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
@@ -123,6 +124,8 @@ export function SheetGrid() {
   const gateCleared = useTrafficStore((s) => s.gateCleared)
   const trackingCleared = useTrafficStore((s) => s.trackingCleared)
   const budgetCleared = useTrafficStore((s) => s.budgetCleared)
+  const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const generateTracking = useTrafficStore((s) => s.generateTracking)
   const acceptTracking = useTrafficStore((s) => s.acceptTracking)
   const acceptBudget = useTrafficStore((s) => s.acceptBudget)
@@ -206,7 +209,16 @@ export function SheetGrid() {
   // ---- Batch-action states for the column headers ----
   const reviewable = view.filter((r) => r.status !== 'posted' && r.status !== 'failed')
   const draftN = view.filter((r) => r.status === 'draft').length
-  const allGatesCleared = gateCleared && trackingCleared && budgetCleared
+  // Connection gate: the thread must be intact (no open breaks in scope) before
+  // anything ships. "Review connections" actually gates "Publish."
+  const scopedForBreaks = rows.filter((r) =>
+    rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
+  )
+  const openBreakN = applyBreakStatus(detectBreaks(scopedForBreaks), breakStatus).filter(
+    (b) => b.status === 'open',
+  ).length
+  const connectionCleared = openBreakN === 0
+  const allGatesCleared = gateCleared && trackingCleared && budgetCleared && connectionCleared
   const missingUtmN = reviewable.filter((r) => !r.utm).length
   const dirtyTrackingN = reviewable.filter((r) => r.utm && !isTrackingClean(r)).length
   const paidReviewable = reviewable.filter(isPaidRow)
@@ -291,7 +303,19 @@ export function SheetGrid() {
               </th>
               <th />
               <th />
-              <th />
+              <th className="gate-conn">
+                {reviewable.length === 0 ? null : connectionCleared ? (
+                  <span className="cov-ok">✓ Connected</span>
+                ) : (
+                  <button
+                    className="cov-btn warn"
+                    onClick={() => openBreaksQueue()}
+                    title="Resolve the thread before you ship: the connection check gates publish"
+                  >
+                    ⚠ {openBreakN} break{openBreakN === 1 ? '' : 's'}
+                  </button>
+                )}
+              </th>
               <th>
                 {draftN > 0 ? (
                   <button
@@ -301,7 +325,9 @@ export function SheetGrid() {
                     title={
                       allGatesCleared
                         ? 'Approve all draft rows'
-                        : 'Clear ICP, tracking, and budget gates to unlock'
+                        : !connectionCleared
+                          ? `Resolve ${openBreakN} connection break${openBreakN === 1 ? '' : 's'} to unlock`
+                          : 'Clear ICP, tracking, and budget gates to unlock'
                     }
                   >
                     Approve {draftN}
