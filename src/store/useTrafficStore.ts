@@ -45,6 +45,7 @@ import {
   type AuditAction,
   type AuditEntry,
   type BreakStatus,
+  applyBreakStatus,
   detectBreaks,
   freshAuditId,
 } from '../domain/breaks'
@@ -1076,11 +1077,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   approveAll: async () => {
     // All gates must clear: messaging on-ICP, tracking clean, budgets set.
     if (!get().gateCleared || !get().trackingCleared || !get().budgetCleared) return
-    const draftIds = get()
-      .rows.filter((r) => r.status === 'draft')
-      .map((r) => r.id)
-    if (draftIds.length === 0) return
-    await sheet.setStatus(draftIds, 'approved')
+    const drafts = get().rows.filter((r) => r.status === 'draft')
+    if (drafts.length === 0) return
+    // Connection gate: don't ship a broken thread. Block if any open break sits in
+    // a campaign whose drafts we're about to approve.
+    const draftCampaigns = new Set(drafts.map((r) => (r.campaign ?? '').trim()))
+    const openInScope = applyBreakStatus(detectBreaks(get().rows), get().breakStatus).filter(
+      (b) => b.status === 'open' && draftCampaigns.has(b.campaign),
+    )
+    if (openInScope.length > 0) return
+    await sheet.setStatus(
+      drafts.map((r) => r.id),
+      'approved',
+    )
     await get().refresh()
   },
 

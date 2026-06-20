@@ -37,13 +37,16 @@ export function ConnectionHeader() {
         {health.breaks} break{health.breaks === 1 ? '' : 's'}
       </span>
       {health.breaks > 0 ? (
-        <button
-          className="conn-cta"
-          onClick={() => openBreaks()}
-          title={`The thread breaks in ${health.breaks} place${health.breaks === 1 ? '' : 's'}:\n${openHeadlines}`}
-        >
-          View breaks →
-        </button>
+        <>
+          <button
+            className="conn-cta"
+            onClick={() => openBreaks()}
+            title={`The thread breaks in ${health.breaks} place${health.breaks === 1 ? '' : 's'}:\n${openHeadlines}`}
+          >
+            View breaks →
+          </button>
+          <span className="conn-gate-note">Resolve to publish</span>
+        </>
       ) : (
         <span className="conn-allclear">✓ every asset tells one story</span>
       )}
