@@ -26,6 +26,7 @@ import { AudienceWizard } from './AudienceWizard'
 import { ConnectionHeader } from './ConnectionHeader'
 import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
+import { DiagnosisOverlay } from './DiagnosisOverlay'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -114,6 +115,7 @@ export function Workbench() {
 
       <BreaksQueue />
       <ReadinessPanel />
+      <DiagnosisOverlay />
       <IcpDrawer />
       <TrackingDrawer />
       <CopyReview />
