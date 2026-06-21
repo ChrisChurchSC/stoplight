@@ -1,4 +1,4 @@
-import { defineConfig, type PluginOption } from 'vite'
+import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 
 /**
@@ -169,6 +169,19 @@ function askApi(): PluginOption {
   }
 }
 
-export default defineConfig({
-  plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi(), setupApi(), askApi()],
+// Server-side secrets read by the /api middleware. These are NOT VITE_-prefixed,
+// so Vite won't expose them to the browser; we load them from .env into
+// process.env here so the handlers (icp-review, draft-copy, setup, claude-ask,
+// publish) can read them in dev. In production each handler reads the platform's
+// own env vars. A real key flips every Claude feature from heuristic to live.
+const SERVER_SECRETS = ['ANTHROPIC_API_KEY', 'BUFFER_ACCESS_TOKEN', 'BUFFER_PROFILE_IDS']
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  for (const key of SERVER_SECRETS) {
+    if (env[key] && !process.env[key]) process.env[key] = env[key]
+  }
+  return {
+    plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi(), setupApi(), askApi()],
+  }
 })
