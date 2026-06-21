@@ -32,6 +32,7 @@ import { ShareBanner } from './ShareBanner'
 import { ShareDialog } from './ShareDialog'
 import { CommentInbox } from './CommentInbox'
 import { VersionHistory } from './VersionHistory'
+import { ClaudeEngine } from './ClaudeEngine'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -143,6 +144,7 @@ export function Workbench() {
       <CommentDrawer />
       <CommentInbox />
       <VersionHistory />
+      <ClaudeEngine />
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
       <SetupWizard />

@@ -33,7 +33,7 @@ import {
 } from '../adapters/setup/setupGenerator'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
-import { messagingFields, messagingAllText } from '../domain/messaging'
+import { messagingFields, messagingAllText, messagingMap } from '../domain/messaging'
 import { registerCampaignRtbs, rtbsForCampaign, type Rtb } from '../domain/rtb'
 import { rowInScope } from '../lib/scope'
 import { MockIcpSource, MockIcpReviewer, flagResolved } from '../adapters/icp/mockIcp'
@@ -53,6 +53,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
+import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
 import { buildUtm, isTrackingClean } from '../domain/tracking'
@@ -540,6 +541,15 @@ interface TrafficState {
   coherenceChecking: boolean
   coherenceLive: boolean
   runCoherenceCheck: () => Promise<void>
+  /** The Claude engine: reads from sources + publishes to channels via tools. */
+  engineOpen: boolean
+  engineRunning: boolean
+  engineActions: AgentAction[]
+  engineSummary: string
+  engineLive: boolean
+  openEngine: () => void
+  closeEngine: () => void
+  runEngine: (mode: 'read' | 'publish') => Promise<void>
   /** The disclosure trail: every check result and every action. */
   auditLog: AuditEntry[]
   openBreaks: (breakId?: string) => void
@@ -672,6 +682,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   claudeBreaksScope: null,
   coherenceChecking: false,
   coherenceLive: false,
+  engineOpen: false,
+  engineRunning: false,
+  engineActions: [],
+  engineSummary: '',
+  engineLive: false,
   auditLog: loadAuditLog(),
   coherenceDecisions: loadCoherenceDecisions(),
   aggregateContributing: loadAggregateContributing(),
@@ -1630,6 +1645,81 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       coherenceLive: live,
       coherenceChecking: false,
     })
+  },
+
+  openEngine: () => set({ engineOpen: true }),
+  closeEngine: () => set({ engineOpen: false }),
+  runEngine: async (mode) => {
+    const { rows, clientFilter, campaignFilter, filter, query } = get()
+    if (clientFilter === 'all') return
+    const scoped = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+    set({ engineOpen: true, engineRunning: true, engineActions: [], engineSummary: '' })
+
+    let instruction: string
+    let context: Record<string, unknown>
+    if (mode === 'publish') {
+      const approved = scoped.filter((r) => r.status === 'approved')
+      instruction =
+        'Publish these approved assets to their channels: publish_email for email assets, publish_social for the rest. One call per asset, then summarize.'
+      context = {
+        client: clientFilter,
+        approvedAssets: approved.map((r) => ({
+          assetName: r.assetName,
+          channel: r.channel,
+          subject: messagingMap(r).subject ?? r.assetName,
+          html: `<p>${messagingAllText(r)}</p>`,
+          text: messagingAllText(r),
+        })),
+      }
+    } else {
+      instruction = `Read the latest from ${clientFilter}'s CMS (read_cms) and enrich two example commenters as leads (enrich_lead). Report what you found.`
+      context = { client: clientFilter, exampleLeads: ['Dana Reyes', 'Sam Ito'] }
+    }
+
+    const { summary, actions, live } = await claudeAgent(instruction, context)
+
+    if (live) {
+      // The engine published externally; reflect approved → posted in the cockpit.
+      if (mode === 'publish') {
+        const approvedIds = scoped.filter((r) => r.status === 'approved').map((r) => r.id)
+        if (approvedIds.length) {
+          await sheet.setStatus(approvedIds, 'posted')
+          await get().refresh()
+        }
+      }
+      set({ engineActions: actions, engineSummary: summary, engineLive: true, engineRunning: false })
+      return
+    }
+
+    // Engine offline (no Anthropic key): run the same work directly through the adapters.
+    if (mode === 'publish') {
+      const approved = scoped.filter((r) => r.status === 'approved')
+      const acts: AgentAction[] = []
+      for (const r of approved) {
+        await get().publishRow(r.id)
+        acts.push({
+          tool: r.channel === 'email' ? 'publish_email' : 'publish_social',
+          input: { assetName: r.assetName, channel: r.channel },
+          output: { connector: r.channel === 'email' ? 'Resend' : 'Buffer', ok: true, staged: 'direct' },
+        })
+      }
+      set({
+        engineActions: acts,
+        engineSummary: `Engine offline (no Anthropic key). Published ${approved.length} approved asset${approved.length === 1 ? '' : 's'} directly through the adapters.`,
+        engineLive: false,
+        engineRunning: false,
+      })
+    } else {
+      set({
+        engineActions: [
+          { tool: 'read_cms', input: { client: clientFilter }, output: { source: 'Sanity (mock)', entries: 3 } },
+          { tool: 'enrich_lead', input: { name: 'Dana Reyes' }, output: { source: 'Clay (mock)', company: 'Northwind Ops', fit: 84 } },
+        ],
+        engineSummary: 'Engine offline (no Anthropic key). Read sources directly through the mock adapters.',
+        engineLive: false,
+        engineRunning: false,
+      })
+    }
   },
 
   applyBreakFix: async (breakId) => {

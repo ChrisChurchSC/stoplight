@@ -15,6 +15,7 @@ export function GlobalNav() {
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const role = useTrafficStore((s) => s.role)
+  const openEngine = useTrafficStore((s) => s.openEngine)
 
   // Billing and Connectors are owner-only; a shared editor/stakeholder sees Home only.
   const pages = PAGES.filter(
@@ -50,6 +51,10 @@ export function GlobalNav() {
             <span className="global-nav-label">{p.label}</span>
           </button>
         ))}
+        <button className="global-nav-item global-nav-engine" onClick={openEngine} title="Claude engine">
+          <span className="global-nav-ico">✦</span>
+          <span className="global-nav-label">Engine</span>
+        </button>
       </div>
     </nav>
   )
