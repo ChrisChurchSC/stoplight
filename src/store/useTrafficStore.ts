@@ -326,6 +326,10 @@ interface TrafficState {
   brandGuides: Record<string, BrandGuideEntry>
   readinessOpen: boolean
   openReadiness: () => void
+  /** Onboarding-as-diagnosis: the before→after reveal on the brand's own data. */
+  diagnosisOpen: boolean
+  openDiagnosis: () => void
+  closeDiagnosis: () => void
   closeReadiness: () => void
   generateBrandGuide: (client: string) => void
   updateBrandGuide: (client: string, patch: Partial<BrandGuide>) => void
@@ -519,6 +523,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   page: 'clients',
   brandGuides: loadBrandGuides(),
   readinessOpen: false,
+  diagnosisOpen: false,
   icpOpen: false,
   trackingChannel: null,
   drivePickerOpen: false,
@@ -662,6 +667,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   openReadiness: () => set({ readinessOpen: true }),
   closeReadiness: () => set({ readinessOpen: false }),
+  openDiagnosis: () => set({ diagnosisOpen: true }),
+  closeDiagnosis: () => set({ diagnosisOpen: false }),
   generateBrandGuide: (client) =>
     set((s) => {
       const n = client.trim()

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { applyBreakStatus, detectBreaks, type CoherenceBreak } from '../domain/breaks'
 import { CHANNELS } from '../domain/channels'
 import { FUNNEL_STAGES, funnelStageFor } from '../domain/funnel'
-import { messagingSummary } from '../domain/messaging'
+import { messagingFields, messagingMap, messagingSummary } from '../domain/messaging'
 import { inTimeRange } from '../domain/timeRange'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -22,6 +22,14 @@ const MSG_H = 62
 const MSG_GAP = 24
 const COL_GAP = 80
 const BAND_PAD = 72
+// How far the first/last funnel band overshoot the top/bottom of the viewport (in
+// screen px) so the stripes always fill the whole canvas regardless of pan/zoom.
+const BAND_OVERFLOW = 4000
+// Zoom past this and message cards reveal their full messaging breakdown (every
+// component), not just the one-line summary — read everything without leaving the map.
+const DETAIL_ZOOM = 1.15
+// Breathing room below the last row in a band.
+const BAND_BOTTOM_PAD = 24
 const ROOT_Y = 0
 const AUD_Y = 160
 const MSG_Y = 340
@@ -63,6 +71,7 @@ export function CanvasView() {
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const openReview = useTrafficStore((s) => s.openReview)
+  const openDiagnosis = useTrafficStore((s) => s.openDiagnosis)
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
 
@@ -88,6 +97,10 @@ export function CanvasView() {
         (b.from.assetName === r.assetName && b.from.channel === r.channel) ||
         (b.to?.assetName === r.assetName && b.to?.channel === r.channel),
     )
+
+  // Reveal the full per-component copy once the user has zoomed in to read. Drives
+  // both what each card renders and how much vertical room the layout reserves.
+  const detail = vp.s >= DETAIL_ZOOM
 
   const { nodes, edges, bands, bounds } = useMemo(() => {
     const client = clientFilter !== 'all' ? clientFilter : ''
@@ -116,21 +129,47 @@ export function CanvasView() {
     ns.push({ id: 'root', kind: 'root', x: root.x, y: root.y, w: NODE_W, h: 64, label: rootLabel, sub: `Strategy · ${strat}` })
 
     // Funnel-stage bands: each message drops into the band for its journey stage.
+    // When zoomed in (detail), cards expand to their full copy, so a card's height
+    // varies; each column stacks by real height and the bands grow to fit so the
+    // copy never overlaps. Columns sit at distinct X, so only within-column
+    // stacking matters.
     const stageIdx: Record<string, number> = {}
     FUNNEL_STAGES.forEach((st, i) => (stageIdx[st.stage] = i))
+    const stageOf = (r: TrafficRow) => stageIdx[funnelStageFor(r.channel, r.assetType)] ?? 0
+    // Estimated rendered height of a card. Slightly generous so the reserved row is
+    // never shorter than the real (min-height) card — that would let copy overlap.
+    const cardHeight = (r: TrafficRow) => {
+      if (!detail) return MSG_H
+      const fields = messageBreakdown(r)
+      if (!fields.length) return MSG_H
+      let h = 18 + 18 + 5 // padding + label line + breakdown margin
+      fields.forEach((f, idx) => {
+        if (idx) h += 6 // gap between components
+        h += 12 // component label + gap
+        h += Math.max(1, Math.ceil(f.value.length / 21)) * 15 // wrapped value lines
+      })
+      return Math.max(MSG_H, Math.round(h + 6))
+    }
+
+    const nStages = FUNNEL_STAGES.length
+    // The tallest column's stack in each stage decides that band's content height.
+    const bandContent = new Array<number>(nStages).fill(0)
+    audiences.forEach(([name, msgs]) => {
+      if (collapsed.has(name)) return
+      const perStage = new Array<number>(nStages).fill(0)
+      msgs.forEach((r) => (perStage[stageOf(r)] += cardHeight(r) + MSG_GAP))
+      perStage.forEach((h, si) => (bandContent[si] = Math.max(bandContent[si], h)))
+    })
+
+    const MIN_CONTENT = 2 * (MSG_H + MSG_GAP)
     const bandTop: number[] = []
     const bandH: number[] = []
     let acc = MSG_Y
-    FUNNEL_STAGES.forEach((st, i) => {
-      let max = 0
-      audiences.forEach(([name, msgs]) => {
-        if (collapsed.has(name)) return
-        max = Math.max(max, msgs.filter((r) => funnelStageFor(r.channel, r.assetType) === st.stage).length)
-      })
-      bandTop[i] = acc
-      bandH[i] = Math.max(max, 2) * (MSG_H + MSG_GAP) + BAND_PAD
-      acc += bandH[i]
-    })
+    for (let si = 0; si < nStages; si++) {
+      bandTop[si] = acc
+      bandH[si] = BAND_PAD + Math.max(bandContent[si], MIN_CONTENT) + BAND_BOTTOM_PAD
+      acc += bandH[si]
+    }
 
     audiences.forEach(([name, msgs], i) => {
       const cx = colX[i]
@@ -149,12 +188,14 @@ export function CanvasView() {
       })
       et.push({ fromId: 'root', toId: `aud-${name}`, broken: false })
       if (collapsed.has(name)) return
-      const run: Record<number, number> = {}
+      // Running Y offset within each stage band, so taller cards push the next down.
+      const cursor: Record<number, number> = {}
       msgs.forEach((r) => {
-        const si = stageIdx[funnelStageFor(r.channel, r.assetType)] ?? 0
-        const k = run[si] ?? 0
-        run[si] = k + 1
-        const mPos = at(r.id, cx + (colW - MSG_W) / 2, bandTop[si] + BAND_PAD - 8 + k * (MSG_H + MSG_GAP))
+        const si = stageOf(r)
+        const h = cardHeight(r)
+        const off = cursor[si] ?? 0
+        cursor[si] = off + h + MSG_GAP
+        const mPos = at(r.id, cx + (colW - MSG_W) / 2, bandTop[si] + BAND_PAD + off)
         const brk = breakFor(r)
         ns.push({
           id: r.id,
@@ -162,7 +203,7 @@ export function CanvasView() {
           x: mPos.x,
           y: mPos.y,
           w: MSG_W,
-          h: MSG_H,
+          h,
           label: r.assetName,
           sub: messagingSummary(r) || CHANNELS[r.channel].label,
           row: r,
@@ -181,11 +222,20 @@ export function CanvasView() {
       return [{ x1: f.x + f.w / 2, y1: f.y + f.h, x2: t.x + t.w / 2, y2: t.y, broken }]
     })
 
-    const bands: Band[] = FUNNEL_STAGES.map((st, i) => ({ stage: st.stage, label: st.label, y: bandTop[i], h: bandH[i] }))
+    // Bands tile the whole canvas: the first stage reaches the top (under the
+    // strategy + audiences), the last reaches the bottom, so every node sits on a
+    // funnel band with no band-less gaps. Message rows keep their positions — only
+    // the painted rectangles grow to fill the canvas.
+    const lastIdx = FUNNEL_STAGES.length - 1
+    const bandBottom = Math.max(acc, ...ns.map((n) => n.y + n.h)) + BAND_PAD
+    const bands: Band[] = FUNNEL_STAGES.map((st, i) => {
+      const top = i === 0 ? 0 : bandTop[i]
+      const bot = i === lastIdx ? bandBottom : bandTop[i + 1]
+      return { stage: st.stage, label: st.label, y: top, h: bot - top }
+    })
     const maxX = Math.max(totalW, ...ns.map((n) => n.x + n.w))
-    const maxY = Math.max(acc, ...ns.map((n) => n.y + n.h))
-    return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: maxY } }
-  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved])
+    return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: bandBottom } }
+  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved, detail])
 
   // ---- pan / zoom / node-drag ----
   const onWheel = (e: React.WheelEvent) => {
@@ -216,8 +266,10 @@ export function CanvasView() {
       setMoved((prev) => ({ ...prev, [d.id]: { x: d.sx + dx, y: d.sy + dy } }))
       return
     }
-    if (pan.current)
-      setVp((v) => ({ ...v, tx: pan.current!.tx + (e.clientX - pan.current!.x), ty: pan.current!.ty + (e.clientY - pan.current!.y) }))
+    // Capture the pan origin: the setVp updater runs later, and a mouseup could
+    // null pan.current before it does (which would throw).
+    const p = pan.current
+    if (p) setVp((v) => ({ ...v, tx: p.tx + (e.clientX - p.x), ty: p.ty + (e.clientY - p.y) }))
   }
   const endAll = () => {
     if (drag.current?.far) {
@@ -257,6 +309,9 @@ export function CanvasView() {
         <span className="cv-title">Campaign canvas</span>
         <span className="cv-hint">drag a card to move it · the connections follow · scroll to zoom</span>
         <span className="spacer" />
+        <button className="cv-diagnose" onClick={openDiagnosis} title="See the live mess, then the same map connected">
+          ✦ Diagnosis
+        </button>
         {Object.keys(moved).length > 0 && (
           <button className="cv-reset" onClick={resetLayout} title="Snap nodes back to auto-layout">
             ↺ Reset layout
@@ -289,16 +344,27 @@ export function CanvasView() {
         onMouseUp={endAll}
         onMouseLeave={endAll}
       >
+        {/* Funnel bands live in screen space, pinned to the full viewport width, with
+            their vertical extent tracking the pan/zoom. The first and last stages
+            overshoot top and bottom so the stripes always fill the whole canvas, not
+            just the content's bounding box. */}
+        <div className="cv-bands">
+          {bands.map((b, i) => {
+            const first = i === 0
+            const last = i === bands.length - 1
+            const realTop = vp.ty + b.y * vp.s
+            const top = first ? realTop - BAND_OVERFLOW : realTop
+            const height = b.h * vp.s + (first ? BAND_OVERFLOW : 0) + (last ? BAND_OVERFLOW : 0)
+            return (
+              <div key={b.stage} className={`cv-band${i % 2 ? ' alt' : ''}`} style={{ top, height }}>
+                <span className="cv-band-label" style={{ top: (first ? BAND_OVERFLOW : 0) + 9 }}>
+                  {b.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
         <div className="cv-world" style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}>
-          {bands.map((b, i) => (
-            <div
-              key={b.stage}
-              className={`cv-band${i % 2 ? ' alt' : ''}`}
-              style={{ left: -180, top: b.y, width: bounds.w + 180, height: b.h }}
-            >
-              <span className="cv-band-label">{b.label}</span>
-            </div>
-          ))}
           <svg className="cv-edges" width={bounds.w + 60} height={bounds.h + 60}>
             {edges.map((e, i) => (
               <path
@@ -328,7 +394,23 @@ export function CanvasView() {
               )}
               <div className="cv-node-body">
                 <div className="cv-node-label">{n.label}</div>
-                {n.sub && <div className="cv-node-sub">{n.sub}</div>}
+                {(() => {
+                  if (n.kind === 'message' && detail && n.row) {
+                    const bd = messageBreakdown(n.row)
+                    if (bd.length)
+                      return (
+                        <div className="cv-node-full">
+                          {bd.map((fld) => (
+                            <div className="cv-node-field" key={fld.label}>
+                              <span className="cv-node-fkey">{fld.label}</span>
+                              <span className="cv-node-fval">{fld.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                  }
+                  return n.sub ? <div className="cv-node-sub">{n.sub}</div> : null
+                })()}
               </div>
               {n.kind === 'audience' && (
                 <span className="cv-node-collapse">{collapsed.has(n.label) ? '＋' : '−'}</span>
@@ -360,4 +442,13 @@ export function CanvasView() {
 /** A cheap dependency key so the layout recomputes when the audience grouping changes. */
 function audiencesKey(rows: TrafficRow[]): string {
   return rows.map((r) => `${r.id}:${(r.audience ?? '').trim()}`).join('|')
+}
+
+/** Every non-empty messaging component for an asset, in schema order — the full
+ *  copy shown on a card once you zoom in. */
+function messageBreakdown(row: TrafficRow): { label: string; value: string }[] {
+  const map = messagingMap(row)
+  return messagingFields(row.channel, row.assetType)
+    .map((f) => ({ label: f.label, value: (map[f.key] ?? '').trim() }))
+    .filter((x) => x.value)
 }
