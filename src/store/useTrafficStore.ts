@@ -1378,9 +1378,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   syncComments: async () => {
     const posted = get().rows.filter((r) => r.status === 'posted')
+    const prev = get().comments
     const comments: Record<string, Comment[]> = {}
     for (const r of posted) {
-      comments[r.id] = await mockCommentSource.fetch(r)
+      const fetched = await mockCommentSource.fetch(r)
+      // Carry over routing state (Clay enrichment, routed-to-Attio) so a re-sync
+      // doesn't reset already-routed leads back to unrouted.
+      const byId = new Map((prev[r.id] ?? []).map((c) => [c.id, c]))
+      comments[r.id] = fetched.map((c) => {
+        const was = byId.get(c.id)
+        return was
+          ? { ...c, clayRouted: was.clayRouted, enrichment: was.enrichment, routed: was.routed }
+          : c
+      })
     }
     set({ comments })
   },

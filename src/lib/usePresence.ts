@@ -90,6 +90,10 @@ export function usePresence(opts: Opts): {
   const selfRef = useRef<Peer | null>(null)
   const chanRef = useRef<BroadcastChannel | null>(null)
   const remotesRef = useRef<Map<string, Peer>>(new Map())
+  // Count of live peers on the current client — drives the ambient "am I alone?"
+  // check off the pruned, client-scoped set (not the raw map).
+  const liveCountRef = useRef(0)
+  const peersSig = useRef('')
   const lastCursorSent = useRef(0)
   const onMoveRef = useRef(onRemoteMove)
   onMoveRef.current = onRemoteMove
@@ -118,7 +122,19 @@ export function usePresence(opts: Opts): {
 
     const recompute = () => {
       const now = Date.now()
-      const live = [...remotesRef.current.values()].filter((p) => p.client === client && now - p.ts < STALE_MS)
+      // Actually delete stale peers so the map can't grow unbounded and the
+      // ambient "alone?" check stays accurate after an unclean leave.
+      for (const [id, p] of remotesRef.current) {
+        if (now - p.ts >= STALE_MS) remotesRef.current.delete(id)
+      }
+      const live = [...remotesRef.current.values()].filter((p) => p.client === client)
+      liveCountRef.current = live.length
+      // Skip the re-render when nothing visible changed (e.g. a bare heartbeat).
+      const sig = live
+        .map((p) => `${p.id}:${p.cursor ? `${Math.round(p.cursor.x)},${Math.round(p.cursor.y)}` : '-'}:${p.nodeId ?? '-'}`)
+        .join('|')
+      if (sig === peersSig.current) return
+      peersSig.current = sig
       setPeers(live)
     }
 
@@ -183,8 +199,9 @@ export function usePresence(opts: Opts): {
     let cur = { ...ghost.cursor! }
     let tick = 0
     const iv = setInterval(() => {
-      // Only haunt the canvas while the tab is genuinely alone.
-      if (remotesRef.current.size > 0) {
+      // Only haunt the canvas while the tab is genuinely alone — keyed off the
+      // pruned, client-scoped live count, not the raw (possibly stale) map.
+      if (liveCountRef.current > 0) {
         setAmbient(null)
         return
       }
