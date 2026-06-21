@@ -13,6 +13,7 @@ export function ConnectionHeader() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const openBreaks = useTrafficStore((s) => s.openBreaks)
+  const openAsk = useTrafficStore((s) => s.openAsk)
 
   if (clientFilter === 'all') return null
   const scoped = rows.filter((r) =>
@@ -50,6 +51,10 @@ export function ConnectionHeader() {
       ) : (
         <span className="conn-allclear">✓ every asset tells one story</span>
       )}
+      <span className="spacer" />
+      <button className="conn-ask" onClick={openAsk} title="Ask Claude about this campaign (⌘K)">
+        ✦ Ask Claude
+      </button>
     </div>
   )
 }

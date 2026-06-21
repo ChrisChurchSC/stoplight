@@ -5216,6 +5216,167 @@ button {
   letter-spacing: 0.04em;
   color: #b42318;
 }
+.conn-header .spacer {
+  flex: 1;
+}
+.conn-ask {
+  border: 1px solid #6b3fb8;
+  background: #f3e8fd;
+  color: #6b3fb8;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 4px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.conn-ask:hover {
+  background: #6b3fb8;
+  color: #fff;
+}
+
+/* Ask Claude palette */
+.ask-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 25, 0.45);
+  z-index: 90;
+}
+.ask {
+  position: fixed;
+  z-index: 91;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, 94vw);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.ask-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ask-spark {
+  color: #6b3fb8;
+  font-size: 16px;
+}
+.ask-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  color: var(--text);
+}
+.ask-scope {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.ask-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px;
+}
+.ask-ex {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ask-ex:hover {
+  border-color: #6b3fb8;
+  color: #6b3fb8;
+}
+.ask-busy {
+  padding: 22px 16px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.ask-answer {
+  padding: 16px;
+}
+.ask-answer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ask-intent {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.ask-intent.i-connection {
+  background: #eef0fe;
+  color: #4f46e5;
+}
+.ask-intent.i-what-worked {
+  background: #e7f5ee;
+  color: #1a7f53;
+}
+.ask-source {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.ask-text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.ask-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ask-actions .spacer {
+  flex: 1;
+}
+.ask-action {
+  border: 1px solid #6b3fb8;
+  background: #6b3fb8;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.ask-action:hover {
+  filter: brightness(1.07);
+}
+.ask-again {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.ask-again:hover {
+  color: var(--text);
+}
 
 /* Breaks queue drawer */
 .breaks-queue {
