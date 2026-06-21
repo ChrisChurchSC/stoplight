@@ -22,9 +22,9 @@ const MSG_H = 62
 const MSG_GAP = 24
 const COL_GAP = 80
 const BAND_PAD = 72
-// How far each funnel band bleeds past the content on the left and right, so the
-// stripes run edge to edge instead of stopping at the outermost node.
-const BAND_BLEED = 240
+// How far the first/last funnel band overshoot the top/bottom of the viewport (in
+// screen px) so the stripes always fill the whole canvas regardless of pan/zoom.
+const BAND_OVERFLOW = 4000
 // Zoom past this and message cards reveal their full messaging breakdown (every
 // component), not just the one-line summary — read everything without leaving the map.
 const DETAIL_ZOOM = 1.15
@@ -312,16 +312,27 @@ export function CanvasView() {
         onMouseUp={endAll}
         onMouseLeave={endAll}
       >
+        {/* Funnel bands live in screen space, pinned to the full viewport width, with
+            their vertical extent tracking the pan/zoom. The first and last stages
+            overshoot top and bottom so the stripes always fill the whole canvas, not
+            just the content's bounding box. */}
+        <div className="cv-bands">
+          {bands.map((b, i) => {
+            const first = i === 0
+            const last = i === bands.length - 1
+            const realTop = vp.ty + b.y * vp.s
+            const top = first ? realTop - BAND_OVERFLOW : realTop
+            const height = b.h * vp.s + (first ? BAND_OVERFLOW : 0) + (last ? BAND_OVERFLOW : 0)
+            return (
+              <div key={b.stage} className={`cv-band${i % 2 ? ' alt' : ''}`} style={{ top, height }}>
+                <span className="cv-band-label" style={{ top: (first ? BAND_OVERFLOW : 0) + 9 }}>
+                  {b.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
         <div className="cv-world" style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}>
-          {bands.map((b, i) => (
-            <div
-              key={b.stage}
-              className={`cv-band${i % 2 ? ' alt' : ''}`}
-              style={{ left: -BAND_BLEED, top: b.y, width: bounds.w + BAND_BLEED * 2, height: b.h }}
-            >
-              <span className="cv-band-label">{b.label}</span>
-            </div>
-          ))}
           <svg className="cv-edges" width={bounds.w + 60} height={bounds.h + 60}>
             {edges.map((e, i) => (
               <path

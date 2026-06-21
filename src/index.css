@@ -4558,8 +4558,16 @@ button {
   color: var(--text-faint);
 }
 
+.cv-bands {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 .cv-band {
   position: absolute;
+  left: 0;
+  right: 0;
   pointer-events: none;
   border-top: 1px dashed var(--border);
   background: rgba(20, 30, 60, 0.018);
