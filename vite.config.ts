@@ -249,6 +249,39 @@ function coherenceApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server endpoint for the Claude engine — the agent that reads from sources
+ * and publishes to channels by calling tools. Keeps the Anthropic key server-side.
+ */
+function agentApi(): PluginOption {
+  return {
+    name: 'agent-api',
+    configureServer(server) {
+      server.middlewares.use('/api/claude-agent', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runAgent } = await import('./server/agentHandler')
+            const result = await runAgent(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   for (const key of SERVER_SECRETS) {
@@ -264,6 +297,7 @@ export default defineConfig(({ mode }) => {
       setupApi(),
       askApi(),
       coherenceApi(),
+      agentApi(),
     ],
   }
 })
