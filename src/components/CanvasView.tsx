@@ -11,19 +11,20 @@ import { ChannelIcon } from './ChannelIcon'
 
 /**
  * The campaign canvas — a structured, zoomable map that makes connection the
- * native visual language. Not a freeform whiteboard: an enforced hierarchy
- * (strategy → audiences → messages) the auto-layout owns, with pan/zoom, fit,
- * and coherence flags rendered in place on the node where the drift is.
+ * native visual language. An enforced hierarchy (strategy → audiences →
+ * messages) the auto-layout owns, laid over funnel-stage bands, with coherence
+ * flags in place. Nodes can be nudged by hand and the connections follow.
  */
 
 const NODE_W = 200
-const MSG_W = 184
-const MSG_H = 56
-const MSG_GAP = 14
-const COL_GAP = 70
+const MSG_W = 186
+const MSG_H = 62
+const MSG_GAP = 24
+const COL_GAP = 80
+const BAND_PAD = 72
 const ROOT_Y = 0
-const AUD_Y = 150
-const MSG_Y = 300
+const AUD_Y = 160
+const MSG_Y = 340
 
 interface Node {
   id: string
@@ -66,9 +67,14 @@ export function CanvasView() {
   const rangeNow = Date.now()
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const [vp, setVp] = useState({ tx: 60, ty: 40, s: 0.8 })
+  // Hand-nudged node positions (id → absolute world position); the engine owns
+  // the rest of the layout and the connections re-route to whatever you move.
+  const [moved, setMoved] = useState<Record<string, { x: number; y: number }>>({})
+  const [vp, setVp] = useState({ tx: 60, ty: 40, s: 0.7 })
   const wrapRef = useRef<HTMLDivElement>(null)
   const pan = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
+  const drag = useRef<{ id: string; sx: number; sy: number; mx: number; my: number; far: boolean } | null>(null)
+  const suppressClick = useRef(false)
 
   const scoped = rows.filter(
     (r) =>
@@ -84,11 +90,9 @@ export function CanvasView() {
     )
 
   const { nodes, edges, bands, bounds } = useMemo(() => {
-    // Hierarchy: a strategy root → audience nodes → message nodes under each.
     const client = clientFilter !== 'all' ? clientFilter : ''
     const campaignNames = [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))]
-    const strat =
-      campaignList.find((c) => campaignNames.includes(c.name))?.strategy ?? 'Campaign'
+    const strat = campaignList.find((c) => campaignNames.includes(c.name))?.strategy ?? 'Campaign'
     const rootLabel = client || (campaignNames[0] ?? 'Campaign')
 
     const byAud = new Map<string, TrafficRow[]>()
@@ -99,36 +103,19 @@ export function CanvasView() {
     const audiences = [...byAud.entries()].sort((a, b) => b[1].length - a[1].length)
 
     const ns: Node[] = []
-    const es: Edge[] = []
-    // Column widths come from each audience's message count (or 1 when collapsed).
-    let cursorX = 0
-    const colX: number[] = []
-    audiences.forEach(([name, msgs]) => {
-      colX.push(cursorX)
-      const open = !collapsed.has(name)
-      const colW = Math.max(NODE_W, MSG_W)
-      cursorX += colW + COL_GAP
-      void open
-      void msgs
-    })
-    const totalW = Math.max(cursorX - COL_GAP, NODE_W)
+    const et: { fromId: string; toId: string; broken: boolean }[] = []
+    // Apply any hand-nudge to a node's auto position.
+    const at = (id: string, x: number, y: number) => ({ x: moved[id]?.x ?? x, y: moved[id]?.y ?? y })
+
+    const colW = Math.max(NODE_W, MSG_W)
+    const colX = audiences.map((_, i) => i * (colW + COL_GAP))
+    const totalW = Math.max(colX.length * (colW + COL_GAP) - COL_GAP, NODE_W)
     const rootX = totalW / 2 - NODE_W / 2
 
-    ns.push({
-      id: 'root',
-      kind: 'root',
-      x: rootX,
-      y: ROOT_Y,
-      w: NODE_W,
-      h: 64,
-      label: rootLabel,
-      sub: `Strategy · ${strat}`,
-    })
+    const root = at('root', rootX, ROOT_Y)
+    ns.push({ id: 'root', kind: 'root', x: root.x, y: root.y, w: NODE_W, h: 64, label: rootLabel, sub: `Strategy · ${strat}` })
 
-    // Funnel-stage bands behind the messages: each message drops into the band for
-    // its journey stage, so the canvas shows the hierarchy (audience columns) and
-    // the funnel (stage rows) at once. Band height = the busiest (audience × stage).
-    const BAND_PAD = 30
+    // Funnel-stage bands: each message drops into the band for its journey stage.
     const stageIdx: Record<string, number> = {}
     FUNNEL_STAGES.forEach((st, i) => (stageIdx[st.stage] = i))
     const bandTop: number[] = []
@@ -138,51 +125,42 @@ export function CanvasView() {
       let max = 0
       audiences.forEach(([name, msgs]) => {
         if (collapsed.has(name)) return
-        const c = msgs.filter((r) => funnelStageFor(r.channel, r.assetType) === st.stage).length
-        max = Math.max(max, c)
+        max = Math.max(max, msgs.filter((r) => funnelStageFor(r.channel, r.assetType) === st.stage).length)
       })
       bandTop[i] = acc
-      bandH[i] = Math.max(max, 1) * (MSG_H + MSG_GAP) + BAND_PAD
+      bandH[i] = Math.max(max, 2) * (MSG_H + MSG_GAP) + BAND_PAD
       acc += bandH[i]
     })
 
     audiences.forEach(([name, msgs], i) => {
       const cx = colX[i]
-      const ax = cx + (Math.max(NODE_W, MSG_W) - NODE_W) / 2
+      const aPos = at(`aud-${name}`, cx + (colW - NODE_W) / 2, AUD_Y)
       const flagged = msgs.filter((r) => breakFor(r)).length
       ns.push({
         id: `aud-${name}`,
         kind: 'audience',
-        x: ax,
-        y: AUD_Y,
+        x: aPos.x,
+        y: aPos.y,
         w: NODE_W,
         h: 52,
         label: name,
         sub: `${msgs.length} message${msgs.length === 1 ? '' : 's'}`,
         flaggedCount: flagged,
       })
-      // root → audience
-      es.push({
-        x1: rootX + NODE_W / 2,
-        y1: ROOT_Y + 64,
-        x2: ax + NODE_W / 2,
-        y2: AUD_Y,
-        broken: false,
-      })
+      et.push({ fromId: 'root', toId: `aud-${name}`, broken: false })
       if (collapsed.has(name)) return
-      const mx = cx + (Math.max(NODE_W, MSG_W) - MSG_W) / 2
       const run: Record<number, number> = {}
       msgs.forEach((r) => {
         const si = stageIdx[funnelStageFor(r.channel, r.assetType)] ?? 0
         const k = run[si] ?? 0
         run[si] = k + 1
-        const my = bandTop[si] + BAND_PAD - 6 + k * (MSG_H + MSG_GAP)
+        const mPos = at(r.id, cx + (colW - MSG_W) / 2, bandTop[si] + BAND_PAD - 8 + k * (MSG_H + MSG_GAP))
         const brk = breakFor(r)
         ns.push({
           id: r.id,
           kind: 'message',
-          x: mx,
-          y: my,
+          x: mPos.x,
+          y: mPos.y,
           w: MSG_W,
           h: MSG_H,
           label: r.assetName,
@@ -190,26 +168,26 @@ export function CanvasView() {
           row: r,
           brk,
         })
-        // audience → message
-        es.push({
-          x1: ax + NODE_W / 2,
-          y1: AUD_Y + 52,
-          x2: mx + MSG_W / 2,
-          y2: my,
-          broken: !!brk,
-        })
+        et.push({ fromId: `aud-${name}`, toId: r.id, broken: !!brk })
       })
     })
 
-    const bands: Band[] = FUNNEL_STAGES.map((st, i) => ({
-      stage: st.stage,
-      label: st.label,
-      y: bandTop[i],
-      h: bandH[i],
-    }))
-    return { nodes: ns, edges: es, bands, bounds: { w: totalW, h: acc } }
-  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter])
+    // Resolve edges from the (possibly nudged) node positions so connections follow.
+    const byId = new Map(ns.map((n) => [n.id, n]))
+    const es: Edge[] = et.flatMap(({ fromId, toId, broken }) => {
+      const f = byId.get(fromId)
+      const t = byId.get(toId)
+      if (!f || !t) return []
+      return [{ x1: f.x + f.w / 2, y1: f.y + f.h, x2: t.x + t.w / 2, y2: t.y, broken }]
+    })
 
+    const bands: Band[] = FUNNEL_STAGES.map((st, i) => ({ stage: st.stage, label: st.label, y: bandTop[i], h: bandH[i] }))
+    const maxX = Math.max(totalW, ...ns.map((n) => n.x + n.w))
+    const maxY = Math.max(acc, ...ns.map((n) => n.y + n.h))
+    return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: maxY } }
+  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved])
+
+  // ---- pan / zoom / node-drag ----
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const rect = wrapRef.current?.getBoundingClientRect()
@@ -217,39 +195,53 @@ export function CanvasView() {
     const py = e.clientY - (rect?.top ?? 0)
     setVp((v) => {
       const ds = e.deltaY < 0 ? 1.1 : 1 / 1.1
-      const s = Math.min(2.2, Math.max(0.25, v.s * ds))
-      // Zoom toward the cursor.
-      const tx = px - (px - v.tx) * (s / v.s)
-      const ty = py - (py - v.ty) * (s / v.s)
-      return { tx, ty, s }
+      const s = Math.min(2.2, Math.max(0.2, v.s * ds))
+      return { tx: px - (px - v.tx) * (s / v.s), ty: py - (py - v.ty) * (s / v.s), s }
     })
+  }
+  const startDrag = (e: React.MouseEvent, n: Node) => {
+    e.stopPropagation()
+    drag.current = { id: n.id, sx: n.x, sy: n.y, mx: e.clientX, my: e.clientY, far: false }
   }
   const onDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.cv-node')) return
     pan.current = { x: e.clientX, y: e.clientY, tx: vp.tx, ty: vp.ty }
   }
   const onMove = (e: React.MouseEvent) => {
-    if (!pan.current) return
-    setVp((v) => ({ ...v, tx: pan.current!.tx + (e.clientX - pan.current!.x), ty: pan.current!.ty + (e.clientY - pan.current!.y) }))
+    if (drag.current) {
+      const d = drag.current
+      const dx = (e.clientX - d.mx) / vp.s
+      const dy = (e.clientY - d.my) / vp.s
+      if (Math.abs(dx) + Math.abs(dy) > 3) d.far = true
+      setMoved((prev) => ({ ...prev, [d.id]: { x: d.sx + dx, y: d.sy + dy } }))
+      return
+    }
+    if (pan.current)
+      setVp((v) => ({ ...v, tx: pan.current!.tx + (e.clientX - pan.current!.x), ty: pan.current!.ty + (e.clientY - pan.current!.y) }))
   }
-  const endPan = () => {
+  const endAll = () => {
+    if (drag.current?.far) {
+      suppressClick.current = true
+      setTimeout(() => (suppressClick.current = false), 0)
+    }
+    drag.current = null
     pan.current = null
   }
   const fit = () => {
     const rect = wrapRef.current?.getBoundingClientRect()
     if (!rect || bounds.w === 0) return
-    const s = Math.min(1.4, Math.max(0.25, Math.min((rect.width - 80) / bounds.w, (rect.height - 80) / Math.max(bounds.h, 1))))
-    setVp({ s, tx: (rect.width - bounds.w * s) / 2, ty: 40 })
+    const s = Math.min(1.2, Math.max(0.2, Math.min((rect.width - 100) / bounds.w, (rect.height - 100) / Math.max(bounds.h, 1))))
+    setVp({ s, tx: (rect.width - bounds.w * s) / 2, ty: 30 })
   }
   const zoom = (dir: 1 | -1) =>
-    setVp((v) => ({ ...v, s: Math.min(2.2, Math.max(0.25, v.s * (dir > 0 ? 1.2 : 1 / 1.2))) }))
+    setVp((v) => ({ ...v, s: Math.min(2.2, Math.max(0.2, v.s * (dir > 0 ? 1.2 : 1 / 1.2))) }))
   const toggleAud = (name: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev)
-      const key = name
-      next.has(key) ? next.delete(key) : next.add(key)
+      next.has(name) ? next.delete(name) : next.add(name)
       return next
     })
+  const resetLayout = () => setMoved({})
 
   if (scoped.length === 0) {
     return (
@@ -263,8 +255,13 @@ export function CanvasView() {
     <div className="sheet-grid">
       <div className="cv-bar">
         <span className="cv-title">Campaign canvas</span>
-        <span className="cv-hint">strategy → audiences → messages · drag to pan, scroll to zoom</span>
+        <span className="cv-hint">drag a card to move it · the connections follow · scroll to zoom</span>
         <span className="spacer" />
+        {Object.keys(moved).length > 0 && (
+          <button className="cv-reset" onClick={resetLayout} title="Snap nodes back to auto-layout">
+            ↺ Reset layout
+          </button>
+        )}
         {breaks.length > 0 && (
           <button className="cv-flagjump" onClick={() => openBreaksQueue()}>
             ⚠ {breaks.length} flag{breaks.length === 1 ? '' : 's'} — jump to
@@ -289,23 +286,20 @@ export function CanvasView() {
         onWheel={onWheel}
         onMouseDown={onDown}
         onMouseMove={onMove}
-        onMouseUp={endPan}
-        onMouseLeave={endPan}
+        onMouseUp={endAll}
+        onMouseLeave={endAll}
       >
-        <div
-          className="cv-world"
-          style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}
-        >
+        <div className="cv-world" style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}>
           {bands.map((b, i) => (
             <div
               key={b.stage}
               className={`cv-band${i % 2 ? ' alt' : ''}`}
-              style={{ left: -160, top: b.y, width: bounds.w + 160, height: b.h }}
+              style={{ left: -180, top: b.y, width: bounds.w + 180, height: b.h }}
             >
               <span className="cv-band-label">{b.label}</span>
             </div>
           ))}
-          <svg className="cv-edges" width={bounds.w + 40} height={bounds.h + 40}>
+          <svg className="cv-edges" width={bounds.w + 60} height={bounds.h + 60}>
             {edges.map((e, i) => (
               <path
                 key={i}
@@ -320,7 +314,9 @@ export function CanvasView() {
               key={n.id}
               className={`cv-node k-${n.kind}${n.brk ? ' broke' : ''}`}
               style={{ left: n.x, top: n.y, width: n.w, minHeight: n.h }}
+              onMouseDown={(e) => startDrag(e, n)}
               onClick={() => {
+                if (suppressClick.current) return
                 if (n.kind === 'audience') toggleAud(n.label)
                 else if (n.kind === 'message' && n.row) openReview(n.row.id)
               }}
@@ -344,6 +340,7 @@ export function CanvasView() {
                 <span
                   className="cv-node-flag"
                   title={n.brk.headline}
+                  onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation()
                     openBreaksQueue(n.brk!.id)
