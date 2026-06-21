@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { filesToAssets } from '../lib/files'
 import { TIMING_BY_KEY } from '../domain/timing'
 import { can } from '../domain/access'
+import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -27,6 +28,8 @@ export function Breadcrumb() {
   const campaignList = useTrafficStore((s) => s.campaignList)
   const rerunSeasonalCampaign = useTrafficStore((s) => s.rerunSeasonalCampaign)
   const rotateAlwaysOn = useTrafficStore((s) => s.rotateAlwaysOn)
+  const fireTrigger = useTrafficStore((s) => s.fireTrigger)
+  const breakStatus = useTrafficStore((s) => s.breakStatus)
 
   const activeCampaign =
     campaignFilter !== 'all' ? campaignList.find((c) => c.name === campaignFilter) : undefined
@@ -86,6 +89,7 @@ export function Breadcrumb() {
                 {timing === 'seasonal' && activeCampaign?.seasonalWindow ? ` · ${activeCampaign.seasonalWindow}` : ''}
                 {timing === 'seasonal' && (activeCampaign?.seasonalCycle ?? 1) > 1 ? ` · Cycle ${activeCampaign?.seasonalCycle}` : ''}
                 {timing === 'always-on' && activeCampaign?.refreshWeeks ? ` · every ${activeCampaign.refreshWeeks}w` : ''}
+                {timing === 'triggered' && activeCampaign?.triggerEvent ? ` · ${activeCampaign.triggerEvent}` : ''}
               </span>
             )}
           </>
@@ -124,6 +128,35 @@ export function Breadcrumb() {
             ∞ Rotate creative
           </button>
         )}
+        {timing === 'triggered' &&
+          (() => {
+            // The trigger only fires once the connection check is clean — a fast
+            // triggered piece still gets checked before it goes.
+            const campRows = rows.filter((r) =>
+              rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
+            )
+            const openBreaks = applyBreakStatus(detectBreaks(campRows), breakStatus).filter(
+              (b) => b.status === 'open',
+            ).length
+            const draftN = campRows.filter((r) => r.status === 'draft').length
+            const blocked = openBreaks > 0 || draftN === 0
+            return (
+              <button
+                className="btn sm"
+                disabled={blocked}
+                onClick={() => fireTrigger(campaignFilter)}
+                title={
+                  openBreaks > 0
+                    ? `Resolve ${openBreaks} connection break${openBreaks === 1 ? '' : 's'} before firing`
+                    : draftN === 0
+                      ? 'No draft assets to ship'
+                      : `Fire the trigger — ships ${draftN} checked asset${draftN === 1 ? '' : 's'} on “${activeCampaign?.triggerEvent ?? 'the event'}”`
+                }
+              >
+                ⚡ Fire trigger{openBreaks > 0 ? ' 🔒' : ''}
+              </button>
+            )
+          })()}
         {!overview && (
           <button
             className={`btn sm${view === 'insights' ? ' primary' : ''}`}
