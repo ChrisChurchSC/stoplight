@@ -135,6 +135,40 @@ function setupApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server endpoint for "Ask Claude" (conversational connection / what-worked).
+ * Keeps the Anthropic key server-side; mirrors /api/icp-review. Moves to a
+ * serverless function for prod.
+ */
+function askApi(): PluginOption {
+  return {
+    name: 'ask-api',
+    configureServer(server) {
+      server.middlewares.use('/api/claude-ask', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runAsk } = await import('./server/askHandler')
+            const result = await runAsk(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi(), setupApi()],
+  plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi(), setupApi(), askApi()],
 })

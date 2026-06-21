@@ -27,6 +27,7 @@ import { ConnectionHeader } from './ConnectionHeader'
 import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
 import { DiagnosisOverlay } from './DiagnosisOverlay'
+import { AskClaude } from './AskClaude'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -37,12 +38,25 @@ export function Workbench() {
   const wizardOpen = useTrafficStore((s) => s.wizardOpen)
   const wizardClient = useTrafficStore((s) => s.wizardClient)
   const closeWizard = useTrafficStore((s) => s.closeWizard)
+  const openAsk = useTrafficStore((s) => s.openAsk)
   const [over, setOver] = useState(false)
   const overview = clientFilter === 'all'
 
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // Cmd/Ctrl+K opens Ask Claude from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        openAsk()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openAsk])
 
   async function onDrop(e: DragEvent) {
     e.preventDefault()
@@ -116,6 +130,7 @@ export function Workbench() {
       <BreaksQueue />
       <ReadinessPanel />
       <DiagnosisOverlay />
+      <AskClaude />
       <IcpDrawer />
       <TrackingDrawer />
       <CopyReview />

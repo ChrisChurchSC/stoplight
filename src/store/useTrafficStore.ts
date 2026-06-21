@@ -330,6 +330,10 @@ interface TrafficState {
   diagnosisOpen: boolean
   openDiagnosis: () => void
   closeDiagnosis: () => void
+  /** Ask Claude: the conversational connection / what-worked palette. */
+  askOpen: boolean
+  openAsk: () => void
+  closeAsk: () => void
   closeReadiness: () => void
   generateBrandGuide: (client: string) => void
   updateBrandGuide: (client: string, patch: Partial<BrandGuide>) => void
@@ -524,6 +528,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandGuides: loadBrandGuides(),
   readinessOpen: false,
   diagnosisOpen: false,
+  askOpen: false,
   icpOpen: false,
   trackingChannel: null,
   drivePickerOpen: false,
@@ -669,6 +674,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeReadiness: () => set({ readinessOpen: false }),
   openDiagnosis: () => set({ diagnosisOpen: true }),
   closeDiagnosis: () => set({ diagnosisOpen: false }),
+  openAsk: () => set({ askOpen: true }),
+  closeAsk: () => set({ askOpen: false }),
   generateBrandGuide: (client) =>
     set((s) => {
       const n = client.trim()
