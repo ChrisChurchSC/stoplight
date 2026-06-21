@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { filesToAssets } from '../lib/files'
 import { TIMING_BY_KEY } from '../domain/timing'
+import { can } from '../domain/access'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 export function Breadcrumb() {
@@ -8,6 +9,9 @@ export function Breadcrumb() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const addAssets = useTrafficStore((s) => s.addAssets)
+  const role = useTrafficStore((s) => s.role)
+  const sharedSession = useTrafficStore((s) => s.sharedSession)
+  const openShareDialog = useTrafficStore((s) => s.openShareDialog)
   const query = useTrafficStore((s) => s.query)
   const setQuery = useTrafficStore((s) => s.setQuery)
   const icpOpen = useTrafficStore((s) => s.icpOpen)
@@ -48,6 +52,9 @@ export function Breadcrumb() {
       <div className="bc-left">
         {overview ? (
           <span className="crumb active">All clients</span>
+        ) : sharedSession ? (
+          // In a shared session the recipient is locked to this one client.
+          <span className="crumb">All clients</span>
         ) : (
           <button className="crumb crumb-link" onClick={() => setClientFilter('all')}>
             All clients
@@ -121,6 +128,12 @@ export function Breadcrumb() {
             ◎ ICP
           </button>
         )}
+        {!overview && can(role, 'share') && (
+          <button className="btn sm" onClick={openShareDialog} title="Share this client's workspace">
+            ⤴ Share
+          </button>
+        )}
+        {can(role, 'edit') && (
         <div className="bc-add">
           <button className="btn sm primary" onClick={() => setAddOpen((o) => !o)}>
             + Add assets
@@ -175,6 +188,7 @@ export function Breadcrumb() {
             }}
           />
         </div>
+        )}
       </div>
     </div>
   )

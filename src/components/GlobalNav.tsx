@@ -1,3 +1,4 @@
+import { can } from '../domain/access'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 const CAR =
@@ -13,6 +14,12 @@ export function GlobalNav() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const role = useTrafficStore((s) => s.role)
+
+  // Billing and Connectors are owner-only; a shared editor/stakeholder sees Home only.
+  const pages = PAGES.filter(
+    (p) => p.key === 'clients' || (p.key === 'billing' ? can(role, 'billing') : role === 'owner'),
+  )
 
   const go = (key: (typeof PAGES)[number]['key']) => {
     setPage(key)
@@ -32,7 +39,7 @@ export function GlobalNav() {
       </div>
 
       <div className="global-nav-items">
-        {PAGES.map((p) => (
+        {pages.map((p) => (
           <button
             key={p.key}
             className={`global-nav-item${page === p.key ? ' active' : ''}`}

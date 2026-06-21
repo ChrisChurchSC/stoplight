@@ -28,6 +28,8 @@ import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
 import { DiagnosisOverlay } from './DiagnosisOverlay'
 import { AskClaude } from './AskClaude'
+import { ShareBanner } from './ShareBanner'
+import { ShareDialog } from './ShareDialog'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -77,6 +79,7 @@ export function Workbench() {
 
       {page === 'clients' ? (
         <div className="work-col">
+          <ShareBanner />
           <Breadcrumb />
           <div
             className={`work-body${over ? ' drop-over' : ''}`}
@@ -131,6 +134,7 @@ export function Workbench() {
       <ReadinessPanel />
       <DiagnosisOverlay />
       <AskClaude />
+      <ShareDialog />
       <IcpDrawer />
       <TrackingDrawer />
       <CopyReview />
