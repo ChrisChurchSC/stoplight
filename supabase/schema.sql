@@ -96,6 +96,41 @@ drop policy if exists assets_write on public.assets;
 create policy assets_write on public.assets
   for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
 
--- Further tables (clients, campaigns, comments, versions, shares, break_status,
--- audit_log) follow the same workspace_id + RLS pattern; added as their adapters
--- are wired off the mock localStorage helpers.
+-- ── Messages (all inbound engagement ingested from every channel) ───────────
+-- One row per inbound message (comment / reply / mention) pulled back from a
+-- channel, linked to the asset it's on. This is the durable, shared store for
+-- everything that comes BACK from the channels (the inbound counterpart to the
+-- outbound copy in `assets`), and the "memory" the performance loop reads from.
+create table if not exists public.messages (
+  id             text primary key,
+  workspace_id   uuid not null references public.workspaces on delete cascade,
+  asset_id       text not null,
+  campaign       text,
+  platform       text,
+  author         text,
+  text           text,
+  ts             bigint,
+  likes          int,
+  replies        int,
+  sentiment      text,
+  needs_response boolean,
+  intent         boolean,
+  clay_routed    boolean default false,
+  enrichment     jsonb,
+  routed         boolean default false,
+  created_at     timestamptz not null default now()
+);
+create index if not exists messages_workspace_idx on public.messages (workspace_id);
+create index if not exists messages_asset_idx on public.messages (asset_id);
+
+alter table public.messages enable row level security;
+drop policy if exists messages_select on public.messages;
+create policy messages_select on public.messages
+  for select using (public.is_member(workspace_id));
+drop policy if exists messages_write on public.messages;
+create policy messages_write on public.messages
+  for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
+
+-- Further tables (clients, campaigns, versions, shares, break_status, audit_log)
+-- follow the same workspace_id + RLS pattern; added as their adapters are wired
+-- off the mock localStorage helpers.
