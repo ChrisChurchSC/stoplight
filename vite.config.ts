@@ -69,6 +69,39 @@ function publishApi(): PluginOption {
 }
 
 /**
+ * Dev-server endpoint for real email publishing (Resend). Keeps the Resend key
+ * server-side; mirrors /api/publish. Moves to a serverless function for prod.
+ */
+function publishEmailApi(): PluginOption {
+  return {
+    name: 'publish-email-api',
+    configureServer(server) {
+      server.middlewares.use('/api/publish-email', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runPublishEmail } = await import('./server/resendHandler')
+            const result = await runPublishEmail(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for real starter-copy drafting. Keeps the Anthropic key
  * server-side; mirrors /api/icp-review. Moves to a serverless function for prod.
  */
@@ -174,7 +207,14 @@ function askApi(): PluginOption {
 // process.env here so the handlers (icp-review, draft-copy, setup, claude-ask,
 // publish) can read them in dev. In production each handler reads the platform's
 // own env vars. A real key flips every Claude feature from heuristic to live.
-const SERVER_SECRETS = ['ANTHROPIC_API_KEY', 'BUFFER_ACCESS_TOKEN', 'BUFFER_PROFILE_IDS']
+const SERVER_SECRETS = [
+  'ANTHROPIC_API_KEY',
+  'BUFFER_ACCESS_TOKEN',
+  'BUFFER_PROFILE_IDS',
+  'RESEND_API_KEY',
+  'RESEND_AUDIENCE_ID',
+  'RESEND_FROM_EMAIL',
+]
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -182,6 +222,14 @@ export default defineConfig(({ mode }) => {
     if (env[key] && !process.env[key]) process.env[key] = env[key]
   }
   return {
-    plugins: [react(), icpReviewApi(), publishApi(), draftCopyApi(), setupApi(), askApi()],
+    plugins: [
+      react(),
+      icpReviewApi(),
+      publishApi(),
+      publishEmailApi(),
+      draftCopyApi(),
+      setupApi(),
+      askApi(),
+    ],
   }
 })
