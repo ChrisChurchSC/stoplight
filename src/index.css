@@ -4363,6 +4363,25 @@ button {
   left: 0;
   transform-origin: 0 0;
 }
+.cv-band {
+  position: absolute;
+  pointer-events: none;
+  border-top: 1px dashed var(--border);
+  background: rgba(20, 30, 60, 0.018);
+}
+.cv-band.alt {
+  background: rgba(20, 30, 60, 0.045);
+}
+.cv-band-label {
+  position: absolute;
+  left: 16px;
+  top: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
 .cv-edges {
   position: absolute;
   top: 0;

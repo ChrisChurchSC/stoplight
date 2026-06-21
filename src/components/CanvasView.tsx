@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { applyBreakStatus, detectBreaks, type CoherenceBreak } from '../domain/breaks'
 import { CHANNELS } from '../domain/channels'
+import { FUNNEL_STAGES, funnelStageFor } from '../domain/funnel'
 import { messagingSummary } from '../domain/messaging'
 import { inTimeRange } from '../domain/timeRange'
 import { rowInScope } from '../lib/scope'
@@ -44,6 +45,12 @@ interface Edge {
   y2: number
   broken: boolean
 }
+interface Band {
+  stage: string
+  label: string
+  y: number
+  h: number
+}
 
 export function CanvasView() {
   const rows = useTrafficStore((s) => s.rows)
@@ -76,7 +83,7 @@ export function CanvasView() {
         (b.to?.assetName === r.assetName && b.to?.channel === r.channel),
     )
 
-  const { nodes, edges, bounds } = useMemo(() => {
+  const { nodes, edges, bands, bounds } = useMemo(() => {
     // Hierarchy: a strategy root → audience nodes → message nodes under each.
     const client = clientFilter !== 'all' ? clientFilter : ''
     const campaignNames = [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))]
@@ -118,6 +125,27 @@ export function CanvasView() {
       sub: `Strategy · ${strat}`,
     })
 
+    // Funnel-stage bands behind the messages: each message drops into the band for
+    // its journey stage, so the canvas shows the hierarchy (audience columns) and
+    // the funnel (stage rows) at once. Band height = the busiest (audience × stage).
+    const BAND_PAD = 30
+    const stageIdx: Record<string, number> = {}
+    FUNNEL_STAGES.forEach((st, i) => (stageIdx[st.stage] = i))
+    const bandTop: number[] = []
+    const bandH: number[] = []
+    let acc = MSG_Y
+    FUNNEL_STAGES.forEach((st, i) => {
+      let max = 0
+      audiences.forEach(([name, msgs]) => {
+        if (collapsed.has(name)) return
+        const c = msgs.filter((r) => funnelStageFor(r.channel, r.assetType) === st.stage).length
+        max = Math.max(max, c)
+      })
+      bandTop[i] = acc
+      bandH[i] = Math.max(max, 1) * (MSG_H + MSG_GAP) + BAND_PAD
+      acc += bandH[i]
+    })
+
     audiences.forEach(([name, msgs], i) => {
       const cx = colX[i]
       const ax = cx + (Math.max(NODE_W, MSG_W) - NODE_W) / 2
@@ -143,8 +171,12 @@ export function CanvasView() {
       })
       if (collapsed.has(name)) return
       const mx = cx + (Math.max(NODE_W, MSG_W) - MSG_W) / 2
-      msgs.forEach((r, j) => {
-        const my = MSG_Y + j * (MSG_H + MSG_GAP)
+      const run: Record<number, number> = {}
+      msgs.forEach((r) => {
+        const si = stageIdx[funnelStageFor(r.channel, r.assetType)] ?? 0
+        const k = run[si] ?? 0
+        run[si] = k + 1
+        const my = bandTop[si] + BAND_PAD - 6 + k * (MSG_H + MSG_GAP)
         const brk = breakFor(r)
         ns.push({
           id: r.id,
@@ -169,8 +201,13 @@ export function CanvasView() {
       })
     })
 
-    const maxY = ns.reduce((m, n) => Math.max(m, n.y + n.h), 0)
-    return { nodes: ns, edges: es, bounds: { w: totalW, h: maxY } }
+    const bands: Band[] = FUNNEL_STAGES.map((st, i) => ({
+      stage: st.stage,
+      label: st.label,
+      y: bandTop[i],
+      h: bandH[i],
+    }))
+    return { nodes: ns, edges: es, bands, bounds: { w: totalW, h: acc } }
   }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter])
 
   const onWheel = (e: React.WheelEvent) => {
@@ -259,6 +296,15 @@ export function CanvasView() {
           className="cv-world"
           style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}
         >
+          {bands.map((b, i) => (
+            <div
+              key={b.stage}
+              className={`cv-band${i % 2 ? ' alt' : ''}`}
+              style={{ left: -160, top: b.y, width: bounds.w + 160, height: b.h }}
+            >
+              <span className="cv-band-label">{b.label}</span>
+            </div>
+          ))}
           <svg className="cv-edges" width={bounds.w + 40} height={bounds.h + 40}>
             {edges.map((e, i) => (
               <path
