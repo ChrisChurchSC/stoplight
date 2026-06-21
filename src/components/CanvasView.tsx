@@ -5,6 +5,7 @@ import { FUNNEL_STAGES, funnelStageFor } from '../domain/funnel'
 import { messagingFields, messagingMap, messagingSummary } from '../domain/messaging'
 import { inTimeRange } from '../domain/timeRange'
 import { rowInScope } from '../lib/scope'
+import { usePresence, type Peer } from '../lib/usePresence'
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { TrafficRow } from '../domain/types'
 import { ChannelIcon } from './ChannelIcon'
@@ -237,6 +238,18 @@ export function CanvasView() {
     return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: bandBottom } }
   }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved, detail])
 
+  // ---- multiplayer presence (cross-tab + ambient) ----
+  const { peers, publishCursor, publishNode, publishMove, clearCursor } = usePresence({
+    client: clientFilter,
+    enabled: clientFilter !== 'all',
+    bounds,
+    nodeIds: nodes.map((n) => n.id),
+    // A peer's drag is applied as a local nudge — last write wins.
+    onRemoteMove: (id, x, y) => setMoved((prev) => ({ ...prev, [id]: { x, y } })),
+  })
+  const peerByNode = new Map<string, Peer>()
+  for (const p of peers) if (p.nodeId) peerByNode.set(p.nodeId, p)
+
   // ---- pan / zoom / node-drag ----
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
@@ -252,18 +265,26 @@ export function CanvasView() {
   const startDrag = (e: React.MouseEvent, n: Node) => {
     e.stopPropagation()
     drag.current = { id: n.id, sx: n.x, sy: n.y, mx: e.clientX, my: e.clientY, far: false }
+    publishNode(n.id)
   }
   const onDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.cv-node')) return
     pan.current = { x: e.clientX, y: e.clientY, tx: vp.tx, ty: vp.ty }
   }
   const onMove = (e: React.MouseEvent) => {
+    // Broadcast the cursor in world coordinates so it lands over the same node on
+    // every peer's screen, whatever their pan/zoom.
+    const rect = wrapRef.current?.getBoundingClientRect()
+    if (rect) publishCursor((e.clientX - rect.left - vp.tx) / vp.s, (e.clientY - rect.top - vp.ty) / vp.s)
     if (drag.current) {
       const d = drag.current
       const dx = (e.clientX - d.mx) / vp.s
       const dy = (e.clientY - d.my) / vp.s
       if (Math.abs(dx) + Math.abs(dy) > 3) d.far = true
-      setMoved((prev) => ({ ...prev, [d.id]: { x: d.sx + dx, y: d.sy + dy } }))
+      const nx = d.sx + dx
+      const ny = d.sy + dy
+      setMoved((prev) => ({ ...prev, [d.id]: { x: nx, y: ny } }))
+      publishMove(d.id, nx, ny)
       return
     }
     // Capture the pan origin: the setVp updater runs later, and a mouseup could
@@ -276,8 +297,13 @@ export function CanvasView() {
       suppressClick.current = true
       setTimeout(() => (suppressClick.current = false), 0)
     }
+    if (drag.current) publishNode(null)
     drag.current = null
     pan.current = null
+  }
+  const onLeave = () => {
+    clearCursor()
+    endAll()
   }
   const fit = () => {
     const rect = wrapRef.current?.getBoundingClientRect()
@@ -308,6 +334,21 @@ export function CanvasView() {
       <div className="cv-bar">
         <span className="cv-title">Campaign canvas</span>
         <span className="cv-hint">drag a card to move it · the connections follow · scroll to zoom</span>
+        {peers.length > 0 && (
+          <div className="cv-presence" title="Who's on this canvas">
+            {peers.map((p) => (
+              <span
+                key={p.id}
+                className="cv-avatar"
+                style={{ background: p.color }}
+                title={`${p.name}${p.ambient ? '' : ` · ${p.role}`}`}
+              >
+                {p.name.charAt(0)}
+              </span>
+            ))}
+            <span className="cv-presence-n">{peers.length} here</span>
+          </div>
+        )}
         <span className="spacer" />
         <button className="cv-diagnose" onClick={openDiagnosis} title="See the live mess, then the same map connected">
           ✦ Diagnosis
@@ -342,7 +383,7 @@ export function CanvasView() {
         onMouseDown={onDown}
         onMouseMove={onMove}
         onMouseUp={endAll}
-        onMouseLeave={endAll}
+        onMouseLeave={onLeave}
       >
         {/* Funnel bands live in screen space, pinned to the full viewport width, with
             their vertical extent tracking the pan/zoom. The first and last stages
@@ -375,18 +416,37 @@ export function CanvasView() {
               />
             ))}
           </svg>
-          {nodes.map((n) => (
+          {nodes.map((n) => {
+            const pres = peerByNode.get(n.id)
+            return (
             <div
               key={n.id}
               className={`cv-node k-${n.kind}${n.brk ? ' broke' : ''}`}
-              style={{ left: n.x, top: n.y, width: n.w, minHeight: n.h }}
+              style={{
+                left: n.x,
+                top: n.y,
+                width: n.w,
+                minHeight: n.h,
+                boxShadow: pres ? `0 0 0 2px ${pres.color}` : undefined,
+              }}
               onMouseDown={(e) => startDrag(e, n)}
+              onMouseEnter={() => {
+                if (!drag.current) publishNode(n.id)
+              }}
+              onMouseLeave={() => {
+                if (!drag.current) publishNode(null)
+              }}
               onClick={() => {
                 if (suppressClick.current) return
                 if (n.kind === 'audience') toggleAud(n.label)
                 else if (n.kind === 'message' && n.row) openReview(n.row.id)
               }}
             >
+              {pres && (
+                <span className="cv-node-presence" style={{ background: pres.color }}>
+                  {pres.name}
+                </span>
+              )}
               {n.kind === 'message' && n.row && (
                 <span className="cv-node-ico">
                   <ChannelIcon channel={n.row.channel} size={13} />
@@ -432,8 +492,27 @@ export function CanvasView() {
                 </span>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
+
+        {/* Live cursors (screen space, computed from world coords + the local viewport). */}
+        {peers.map((p) =>
+          p.cursor ? (
+            <div
+              key={`cur-${p.id}`}
+              className="cv-cursor"
+              style={{ left: vp.tx + p.cursor.x * vp.s, top: vp.ty + p.cursor.y * vp.s }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M1 1 L1 12 L4 9 L6.5 14 L8.5 13 L6 8 L10 8 Z" fill={p.color} stroke="#fff" strokeWidth="1" />
+              </svg>
+              <span className="cv-cursor-label" style={{ background: p.color }}>
+                {p.name}
+              </span>
+            </div>
+          ) : null,
+        )}
       </div>
     </div>
   )
