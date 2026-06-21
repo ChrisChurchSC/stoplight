@@ -62,6 +62,7 @@ import { buildUtm, isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
 import { mockAttio } from '../adapters/attio/mockAttio'
 import { enrichCommenter, type Comment } from '../adapters/comments/mockComments'
+import { ingestCommentsViaClaude } from '../adapters/comments/claudeCommentSource'
 import { messageStore } from '../adapters/messages/messageStore'
 import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
@@ -1420,9 +1421,26 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   syncComments: async () => {
     const posted = get().rows.filter((r) => r.status === 'posted')
-    // Ingest through the unified message store (persisted to Supabase when
-    // configured, in-memory via the mock otherwise). Routing state is carried.
-    const comments = await messageStore.sync(posted, get().comments)
+    const prev = get().comments
+    // Ingest VIA CLAUDE: the engine calls ingest_comments per channel. The mock
+    // message store is the fallback when there's no Anthropic key. Either way the
+    // result lands in the unified messages store.
+    const { map, live } = await ingestCommentsViaClaude(posted)
+    if (live) {
+      // Carry prior routing state (Clay enrichment, routed-to-Attio) forward.
+      const merged: Record<string, Comment[]> = {}
+      for (const [rowId, comments] of Object.entries(map)) {
+        const byId = new Map((prev[rowId] ?? []).map((c) => [c.id, c]))
+        merged[rowId] = comments.map((c) => {
+          const was = byId.get(c.id)
+          return was ? { ...c, clayRouted: was.clayRouted, enrichment: was.enrichment, routed: was.routed } : c
+        })
+      }
+      await messageStore.persist(posted, merged)
+      set({ comments: merged })
+      return
+    }
+    const comments = await messageStore.sync(posted, prev)
     set({ comments })
   },
 

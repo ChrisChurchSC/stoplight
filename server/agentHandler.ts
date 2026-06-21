@@ -35,6 +35,16 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'ingest_comments',
+    description:
+      'Pull the latest comments / engagement for one posted asset from its channel (Meta/TikTok/LinkedIn/etc). Returns the comments to land in the inbox.',
+    input_schema: {
+      type: 'object',
+      properties: { assetId: { type: 'string' }, assetName: { type: 'string' }, platform: { type: 'string' } },
+      required: ['assetId', 'platform'],
+    },
+  },
+  {
     name: 'publish_email',
     description: 'Publish an email asset via Resend (creates a broadcast). Only for approved assets.',
     input_schema: {
@@ -63,6 +73,38 @@ const COMPANIES = ['Northwind Ops', 'Vertex Labs', 'Cedar Systems', 'Atlas Freig
 const TITLES = ['VP Operations', 'Head of RevOps', 'COO', 'Director of Ops']
 const hash = (s: string) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0)
 
+const NAMES = ['Dana Reyes', 'Sam Ito', 'Priya Shah', 'Marco Diaz', 'Lee Park', 'Ana Costa', 'Tom Vance', 'Riya Nair']
+const COMMENT_POOL = [
+  { text: 'This looks great, exactly what our ops team has been missing.', sentiment: 'positive', intent: false, needsResponse: false },
+  { text: 'How much is this for a 500-person team? Looking for pricing.', sentiment: 'neutral', intent: true, needsResponse: true },
+  { text: 'Can we get a demo? Evaluating tools this quarter.', sentiment: 'positive', intent: true, needsResponse: true },
+  { text: 'Tried it and it kept crashing for me. Not impressed.', sentiment: 'negative', intent: false, needsResponse: true },
+  { text: 'Does this integrate with Salesforce?', sentiment: 'neutral', intent: false, needsResponse: true },
+  { text: 'Sharing this with my whole team.', sentiment: 'positive', intent: false, needsResponse: false },
+  { text: 'Is there a free trial? Keen to test with my team.', sentiment: 'positive', intent: true, needsResponse: true },
+]
+
+/** Stand-in for the platform's comments API for one posted asset. A real Meta /
+ *  TikTok / LinkedIn connector replaces this; the engine calls it as a tool. */
+function fetchComments(assetId: string, platform: string) {
+  const seed = hash(assetId)
+  const count = 3 + (seed % 2)
+  return Array.from({ length: count }, (_, i) => {
+    const t = COMMENT_POOL[(seed + i * 3) % COMMENT_POOL.length]
+    return {
+      id: `${assetId}_c${i}`,
+      author: NAMES[(seed + i) % NAMES.length],
+      text: t.text,
+      platform,
+      likes: (seed * 7 + i * 5) % 42,
+      replies: (seed + i) % 4,
+      sentiment: t.sentiment,
+      intent: t.intent,
+      needsResponse: t.needsResponse,
+    }
+  })
+}
+
 const isNoKey = (e: unknown) => (e as { code?: string })?.code === 'NO_KEY'
 
 /** Execute one tool call. Publish tools wrap the real connectors with a mock
@@ -74,6 +116,11 @@ async function execTool(name: string, input: Record<string, unknown>): Promise<u
   if (name === 'enrich_lead') {
     const seed = hash(String(input.name ?? ''))
     return { source: 'Clay', company: COMPANIES[seed % COMPANIES.length], title: TITLES[(seed >> 2) % TITLES.length], fit: 60 + (seed % 40) }
+  }
+  if (name === 'ingest_comments') {
+    const assetId = String(input.assetId ?? '')
+    const platform = String(input.platform ?? 'Other')
+    return { assetId, assetName: input.assetName, platform, comments: fetchComments(assetId, platform) }
   }
   if (name === 'publish_email') {
     try {
@@ -96,7 +143,7 @@ async function execTool(name: string, input: Record<string, unknown>): Promise<u
 
 const SYSTEM = `You are the engine inside Rushhour (the product is called Hyperfocus). The human steers from the cockpit and has already approved the work; you carry it out by CALLING TOOLS — you are the connector to every source and channel.
 
-- READ from the sources with read_cms (the client's CMS) and enrich_lead (Clay).
+- READ from the sources with read_cms (the client's CMS), enrich_lead (Clay), and ingest_comments (pull engagement back from a posted asset's channel, one call per asset).
 - PUBLISH to the channels with publish_email (Resend) and publish_social (Buffer), one call per asset.
 
 Only act on what the instruction asks and only on assets it lists as approved. Never fabricate a tool result; if you need data, call the tool. When you are finished, write a 2 to 3 sentence summary of exactly what you read and what you published (name the connectors and assets). Do not use em dashes.`
