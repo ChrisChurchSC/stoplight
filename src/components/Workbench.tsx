@@ -10,7 +10,7 @@ import { ClientsOverview } from './ClientsOverview'
 import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
-import { FlowView } from './FlowView'
+import { CanvasView } from './CanvasView'
 import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
@@ -91,8 +91,8 @@ export function Workbench() {
                   <IngestTray />
                   {view === 'calendar' ? (
                     <CalendarView />
-                  ) : view === 'flow' ? (
-                    <FlowView />
+                  ) : view === 'flow' || view === 'canvas' ? (
+                    <CanvasView />
                   ) : view === 'insights' ? (
                     <InsightsView />
                   ) : (
