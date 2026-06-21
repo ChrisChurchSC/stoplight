@@ -28,6 +28,8 @@ const BAND_OVERFLOW = 4000
 // Zoom past this and message cards reveal their full messaging breakdown (every
 // component), not just the one-line summary — read everything without leaving the map.
 const DETAIL_ZOOM = 1.15
+// Breathing room below the last row in a band.
+const BAND_BOTTOM_PAD = 24
 const ROOT_Y = 0
 const AUD_Y = 160
 const MSG_Y = 340
@@ -96,6 +98,10 @@ export function CanvasView() {
         (b.to?.assetName === r.assetName && b.to?.channel === r.channel),
     )
 
+  // Reveal the full per-component copy once the user has zoomed in to read. Drives
+  // both what each card renders and how much vertical room the layout reserves.
+  const detail = vp.s >= DETAIL_ZOOM
+
   const { nodes, edges, bands, bounds } = useMemo(() => {
     const client = clientFilter !== 'all' ? clientFilter : ''
     const campaignNames = [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))]
@@ -123,21 +129,47 @@ export function CanvasView() {
     ns.push({ id: 'root', kind: 'root', x: root.x, y: root.y, w: NODE_W, h: 64, label: rootLabel, sub: `Strategy · ${strat}` })
 
     // Funnel-stage bands: each message drops into the band for its journey stage.
+    // When zoomed in (detail), cards expand to their full copy, so a card's height
+    // varies; each column stacks by real height and the bands grow to fit so the
+    // copy never overlaps. Columns sit at distinct X, so only within-column
+    // stacking matters.
     const stageIdx: Record<string, number> = {}
     FUNNEL_STAGES.forEach((st, i) => (stageIdx[st.stage] = i))
+    const stageOf = (r: TrafficRow) => stageIdx[funnelStageFor(r.channel, r.assetType)] ?? 0
+    // Estimated rendered height of a card. Slightly generous so the reserved row is
+    // never shorter than the real (min-height) card — that would let copy overlap.
+    const cardHeight = (r: TrafficRow) => {
+      if (!detail) return MSG_H
+      const fields = messageBreakdown(r)
+      if (!fields.length) return MSG_H
+      let h = 18 + 18 + 5 // padding + label line + breakdown margin
+      fields.forEach((f, idx) => {
+        if (idx) h += 6 // gap between components
+        h += 12 // component label + gap
+        h += Math.max(1, Math.ceil(f.value.length / 21)) * 15 // wrapped value lines
+      })
+      return Math.max(MSG_H, Math.round(h + 6))
+    }
+
+    const nStages = FUNNEL_STAGES.length
+    // The tallest column's stack in each stage decides that band's content height.
+    const bandContent = new Array<number>(nStages).fill(0)
+    audiences.forEach(([name, msgs]) => {
+      if (collapsed.has(name)) return
+      const perStage = new Array<number>(nStages).fill(0)
+      msgs.forEach((r) => (perStage[stageOf(r)] += cardHeight(r) + MSG_GAP))
+      perStage.forEach((h, si) => (bandContent[si] = Math.max(bandContent[si], h)))
+    })
+
+    const MIN_CONTENT = 2 * (MSG_H + MSG_GAP)
     const bandTop: number[] = []
     const bandH: number[] = []
     let acc = MSG_Y
-    FUNNEL_STAGES.forEach((st, i) => {
-      let max = 0
-      audiences.forEach(([name, msgs]) => {
-        if (collapsed.has(name)) return
-        max = Math.max(max, msgs.filter((r) => funnelStageFor(r.channel, r.assetType) === st.stage).length)
-      })
-      bandTop[i] = acc
-      bandH[i] = Math.max(max, 2) * (MSG_H + MSG_GAP) + BAND_PAD
-      acc += bandH[i]
-    })
+    for (let si = 0; si < nStages; si++) {
+      bandTop[si] = acc
+      bandH[si] = BAND_PAD + Math.max(bandContent[si], MIN_CONTENT) + BAND_BOTTOM_PAD
+      acc += bandH[si]
+    }
 
     audiences.forEach(([name, msgs], i) => {
       const cx = colX[i]
@@ -156,12 +188,14 @@ export function CanvasView() {
       })
       et.push({ fromId: 'root', toId: `aud-${name}`, broken: false })
       if (collapsed.has(name)) return
-      const run: Record<number, number> = {}
+      // Running Y offset within each stage band, so taller cards push the next down.
+      const cursor: Record<number, number> = {}
       msgs.forEach((r) => {
-        const si = stageIdx[funnelStageFor(r.channel, r.assetType)] ?? 0
-        const k = run[si] ?? 0
-        run[si] = k + 1
-        const mPos = at(r.id, cx + (colW - MSG_W) / 2, bandTop[si] + BAND_PAD - 8 + k * (MSG_H + MSG_GAP))
+        const si = stageOf(r)
+        const h = cardHeight(r)
+        const off = cursor[si] ?? 0
+        cursor[si] = off + h + MSG_GAP
+        const mPos = at(r.id, cx + (colW - MSG_W) / 2, bandTop[si] + BAND_PAD + off)
         const brk = breakFor(r)
         ns.push({
           id: r.id,
@@ -169,7 +203,7 @@ export function CanvasView() {
           x: mPos.x,
           y: mPos.y,
           w: MSG_W,
-          h: MSG_H,
+          h,
           label: r.assetName,
           sub: messagingSummary(r) || CHANNELS[r.channel].label,
           row: r,
@@ -201,7 +235,7 @@ export function CanvasView() {
     })
     const maxX = Math.max(totalW, ...ns.map((n) => n.x + n.w))
     return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: bandBottom } }
-  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved])
+  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved, detail])
 
   // ---- pan / zoom / node-drag ----
   const onWheel = (e: React.WheelEvent) => {
@@ -260,8 +294,6 @@ export function CanvasView() {
       return next
     })
   const resetLayout = () => setMoved({})
-  // Reveal the full per-component copy once the user has zoomed in to read.
-  const detail = vp.s >= DETAIL_ZOOM
 
   if (scoped.length === 0) {
     return (
