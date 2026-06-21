@@ -45,10 +45,14 @@ import {
   type AuditAction,
   type AuditEntry,
   type BreakStatus,
+  type CoherenceBreak,
   applyBreakStatus,
+  breakScopeKey,
   detectBreaks,
   freshAuditId,
+  resolveBreaks,
 } from '../domain/breaks'
+import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
 import { buildUtm, isTrackingClean } from '../domain/tracking'
@@ -529,6 +533,13 @@ interface TrafficState {
   activeBreakId: string | null
   /** Human overlay on derived breaks (intended / in-review), keyed by break id. */
   breakStatus: Record<string, BreakStatus>
+  /** Claude-powered coherence check: the last run's breaks + which scope it covers.
+   *  Null until a recheck is requested, so the heuristic is the default everywhere. */
+  claudeBreaks: CoherenceBreak[] | null
+  claudeBreaksScope: string | null
+  coherenceChecking: boolean
+  coherenceLive: boolean
+  runCoherenceCheck: () => Promise<void>
   /** The disclosure trail: every check result and every action. */
   auditLog: AuditEntry[]
   openBreaks: (breakId?: string) => void
@@ -657,6 +668,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   breaksOpen: false,
   activeBreakId: null,
   breakStatus: loadBreakStatus(),
+  claudeBreaks: null,
+  claudeBreaksScope: null,
+  coherenceChecking: false,
+  coherenceLive: false,
   auditLog: loadAuditLog(),
   coherenceDecisions: loadCoherenceDecisions(),
   aggregateContributing: loadAggregateContributing(),
@@ -1291,7 +1306,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Connection gate: don't ship a broken thread. Block if any open break sits in
     // a campaign whose drafts we're about to approve.
     const draftCampaigns = new Set(drafts.map((r) => (r.campaign ?? '').trim()))
-    const openInScope = applyBreakStatus(detectBreaks(get().rows), get().breakStatus).filter(
+    // Honor a Claude recheck of the current scope; otherwise the heuristic.
+    const resolved = resolveBreaks(
+      get().rows,
+      get().claudeBreaks,
+      get().claudeBreaksScope,
+      breakScopeKey(get().clientFilter, get().campaignFilter),
+    )
+    const openInScope = applyBreakStatus(resolved, get().breakStatus).filter(
       (b) => b.status === 'open' && draftCampaigns.has(b.campaign),
     )
     if (openInScope.length > 0) return
@@ -1592,6 +1614,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   openBreaks: (breakId) => set({ breaksOpen: true, activeBreakId: breakId ?? null }),
   closeBreaks: () => set({ breaksOpen: false, activeBreakId: null }),
+
+  runCoherenceCheck: async () => {
+    const { rows, clientFilter, campaignFilter, filter, query, icp, brandGuides } = get()
+    if (clientFilter === 'all') return
+    const scoped = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+    if (scoped.length === 0) return
+    set({ coherenceChecking: true })
+    const campaign = campaignFilter === 'all' ? 'All campaigns' : campaignFilter
+    const brandGuide = brandGuides[clientFilter]?.confirmed ? brandGuides[clientFilter]?.guide : undefined
+    const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide })
+    set({
+      claudeBreaks: breaks,
+      claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
+      coherenceLive: live,
+      coherenceChecking: false,
+    })
+  },
 
   applyBreakFix: async (breakId) => {
     const brk = detectBreaks(get().rows).find((b) => b.id === breakId)

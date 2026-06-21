@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { applyBreakStatus, detectBreaks, type CoherenceBreak } from '../domain/breaks'
+import { applyBreakStatus, breakScopeKey, resolveBreaks, type CoherenceBreak } from '../domain/breaks'
 import { CHANNELS } from '../domain/channels'
 import { FUNNEL_STAGES, funnelStageFor } from '../domain/funnel'
 import { messagingFields, messagingMap, messagingSummary } from '../domain/messaging'
@@ -70,6 +70,8 @@ export function CanvasView() {
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const claudeBreaks = useTrafficStore((s) => s.claudeBreaks)
+  const claudeBreaksScope = useTrafficStore((s) => s.claudeBreaksScope)
   const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const openReview = useTrafficStore((s) => s.openReview)
   const openDiagnosis = useTrafficStore((s) => s.openDiagnosis)
@@ -92,7 +94,10 @@ export function CanvasView() {
       rowInScope(r, { filter, query, clientFilter, campaignFilter }) &&
       inTimeRange(r, timeRange, rangeNow),
   )
-  const breaks = applyBreakStatus(detectBreaks(scoped), breakStatus).filter((b) => b.status === 'open')
+  const breaks = applyBreakStatus(
+    resolveBreaks(scoped, claudeBreaks, claudeBreaksScope, breakScopeKey(clientFilter, campaignFilter)),
+    breakStatus,
+  ).filter((b) => b.status === 'open')
   const breakFor = (r: TrafficRow) =>
     breaks.find(
       (b) =>
