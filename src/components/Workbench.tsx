@@ -11,6 +11,7 @@ import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowView } from './FlowView'
+import { CanvasView } from './CanvasView'
 import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
@@ -89,7 +90,9 @@ export function Workbench() {
               ) : (
                 <>
                   <IngestTray />
-                  {view === 'calendar' ? (
+                  {view === 'canvas' ? (
+                    <CanvasView />
+                  ) : view === 'calendar' ? (
                     <CalendarView />
                   ) : view === 'flow' ? (
                     <FlowView />

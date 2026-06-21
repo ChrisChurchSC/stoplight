@@ -1,8 +1,9 @@
 import { TIME_RANGES } from '../domain/timeRange'
 import { useTrafficStore } from '../store/useTrafficStore'
 
-// Connection leads — it's the storefront (the thesis). Grid is the workbench.
+// Canvas + Connection lead — they're the storefront (the thesis). Grid is the workbench.
 const VIEWS = [
+  { key: 'canvas', label: '⬡ Canvas' },
   { key: 'flow', label: '⇄ Connection' },
   { key: 'grid', label: '▦ Grid' },
   { key: 'calendar', label: '◷ Calendar' },

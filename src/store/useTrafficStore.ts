@@ -297,7 +297,7 @@ interface TrafficState {
   clientFilter: string
   campaignFilter: string
   /** Per-client workspace view. */
-  view: 'grid' | 'calendar' | 'flow' | 'insights'
+  view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas'
   /** Forward time horizon for the Connection + Grid views. */
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
@@ -374,7 +374,7 @@ interface TrafficState {
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
-  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights') => void
+  setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
   setPage: (page: 'clients' | 'connectors' | 'billing') => void
   setIcpOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
