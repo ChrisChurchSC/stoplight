@@ -4363,6 +4363,201 @@ button {
   left: 0;
   transform-origin: 0 0;
 }
+.cv-diagnose {
+  border: 1px solid #6b3fb8;
+  background: #f3e8fd;
+  color: #6b3fb8;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 3px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.cv-diagnose:hover {
+  background: #6b3fb8;
+  color: #fff;
+}
+.cv-reset {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.cv-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Onboarding-as-diagnosis overlay */
+.dg-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 25, 0.55);
+  z-index: 80;
+}
+.dg {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 32px));
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  padding: 26px 30px;
+}
+.dg-x {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  border: none;
+  background: none;
+  font-size: 15px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.dg-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #b42318;
+}
+.dg-kicker.ok {
+  color: #1a7f53;
+}
+.dg-head {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 6px 0 0;
+  color: var(--text);
+}
+.dg-frame {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin: 10px 0 16px;
+  max-width: 64ch;
+}
+.dg-map-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.dg-map {
+  background:
+    radial-gradient(circle, var(--border) 1px, transparent 1px) 0 0 / 20px 20px,
+    var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  max-width: 640px;
+}
+.dg-dot {
+  fill: var(--text-muted);
+  opacity: 0.55;
+}
+.dg-dot.flagged {
+  fill: #b42318;
+  opacity: 1;
+}
+.dg-dot.connected {
+  fill: #1a7f53;
+  opacity: 0.9;
+}
+.dg-dot.connected.flagged {
+  fill: #b42318;
+  opacity: 1;
+}
+.dg-link {
+  stroke: #c9ddc9;
+  stroke-width: 1;
+}
+.dg-link.flagged {
+  stroke: #e6b3ac;
+  stroke-dasharray: 4 3;
+}
+.dg-hub {
+  fill: var(--text);
+}
+.dg-hub-label {
+  fill: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+.dg-stage-label {
+  fill: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+}
+.dg-map-cap {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.dg-map-cap.ok {
+  color: #1a7f53;
+}
+.dg-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+.dg-stat {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+}
+.dg-stat.bad {
+  border-color: #f0c8c2;
+  background: #fdf4f3;
+}
+.dg-stat-n {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+.dg-stat.bad .dg-stat-n {
+  color: #b42318;
+}
+.dg-punch {
+  font-size: 14px;
+  line-height: 1.55;
+  font-weight: 600;
+  color: var(--text);
+  margin: 16px 0 4px;
+}
+.dg-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.dg-foot .spacer {
+  flex: 1;
+}
+.dg-foot-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
 .cv-band {
   position: absolute;
   pointer-events: none;

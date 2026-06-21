@@ -63,6 +63,7 @@ export function CanvasView() {
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const openReview = useTrafficStore((s) => s.openReview)
+  const openDiagnosis = useTrafficStore((s) => s.openDiagnosis)
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
 
@@ -257,6 +258,9 @@ export function CanvasView() {
         <span className="cv-title">Campaign canvas</span>
         <span className="cv-hint">drag a card to move it · the connections follow · scroll to zoom</span>
         <span className="spacer" />
+        <button className="cv-diagnose" onClick={openDiagnosis} title="See the live mess, then the same map connected">
+          ✦ Diagnosis
+        </button>
         {Object.keys(moved).length > 0 && (
           <button className="cv-reset" onClick={resetLayout} title="Snap nodes back to auto-layout">
             ↺ Reset layout
