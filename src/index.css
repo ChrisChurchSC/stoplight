@@ -5570,6 +5570,135 @@ button {
   background: #fdf4f3;
 }
 
+/* Comment inbox (campaign-level ingest) */
+.bc-comment-badge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #b42318;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+.ci-drawer {
+  width: min(540px, 96vw);
+}
+.ci-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ci-toolbar .spacer {
+  flex: 1;
+}
+.ci-filters {
+  display: flex;
+  gap: 6px;
+}
+.ci-chip {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ci-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ci-sort {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.ci-sort-btn {
+  border: none;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.ci-sort-btn.on {
+  background: var(--text);
+  color: #fff;
+}
+.ci-comment .comment-head {
+  flex-wrap: wrap;
+}
+.ci-platform {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.ci-platform.p-meta {
+  background: #e7eefc;
+  color: #1d4ed8;
+}
+.ci-platform.p-tiktok {
+  background: #f0f0f0;
+  color: #111;
+}
+.ci-platform.p-linkedin {
+  background: #e3eefb;
+  color: #0a66c2;
+}
+.ci-platform.p-youtube {
+  background: #fde8e8;
+  color: #c4302b;
+}
+.ci-platform.p-x {
+  background: #eef0f2;
+  color: #111;
+}
+.ci-asset {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.ci-asset strong {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+.ci-enrich {
+  margin-top: 7px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: #f3e8fd;
+  border: 1px solid #d9bef5;
+  font-size: 11.5px;
+  color: #6b3fb8;
+}
+.ci-enrich strong {
+  font-weight: 800;
+}
+.ci-clay {
+  border-color: #6b3fb8;
+  color: #6b3fb8;
+  font-weight: 700;
+}
+.ci-clay:hover {
+  background: #6b3fb8;
+  color: #fff;
+}
+
 /* Breaks queue drawer */
 .breaks-queue {
   width: min(560px, 96vw);

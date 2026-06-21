@@ -30,6 +30,7 @@ import { DiagnosisOverlay } from './DiagnosisOverlay'
 import { AskClaude } from './AskClaude'
 import { ShareBanner } from './ShareBanner'
 import { ShareDialog } from './ShareDialog'
+import { CommentInbox } from './CommentInbox'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -139,6 +140,7 @@ export function Workbench() {
       <TrackingDrawer />
       <CopyReview />
       <CommentDrawer />
+      <CommentInbox />
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
       <SetupWizard />

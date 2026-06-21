@@ -1,6 +1,25 @@
-import type { TrafficRow } from '../../domain/types'
+import type { ChannelId, TrafficRow } from '../../domain/types'
 
 export type Sentiment = 'positive' | 'neutral' | 'negative'
+
+/** The social surface a comment was ingested from. */
+export type Platform =
+  | 'Meta'
+  | 'TikTok'
+  | 'LinkedIn'
+  | 'YouTube'
+  | 'X'
+  | 'Pinterest'
+  | 'Reddit'
+  | 'Snapchat'
+  | 'Other'
+
+/** What Clay returns when an intent comment is routed for enrichment. */
+export interface Enrichment {
+  company: string
+  title: string
+  fit: number
+}
 
 export interface Comment {
   id: string
@@ -10,12 +29,52 @@ export interface Comment {
   likes: number
   replies: number
   sentiment: Sentiment
+  /** Which platform this was ingested from. */
+  platform: Platform
   /** Likely needs a reply — a question, a complaint, or high engagement. */
   needsResponse: boolean
-  /** Shows buying intent — a candidate to route to Attio. */
+  /** Shows buying intent — a candidate to route to Clay, then Attio. */
   intent: boolean
+  /** Enriched via Clay (company / title / fit). */
+  clayRouted?: boolean
+  enrichment?: Enrichment
   /** Has been routed to Attio as a contact. */
   routed?: boolean
+}
+
+/** Map a channel to the platform its comments come from. */
+export function commentPlatform(channel: ChannelId): Platform {
+  if (channel === 'meta-ads' || channel === 'instagram' || channel === 'facebook') return 'Meta'
+  if (channel === 'tiktok-ads' || channel === 'tiktok') return 'TikTok'
+  if (channel === 'linkedin-ads' || channel === 'linkedin') return 'LinkedIn'
+  if (channel === 'youtube-ads' || channel === 'youtube') return 'YouTube'
+  if (channel === 'x-ads' || channel === 'x') return 'X'
+  if (channel === 'pinterest-ads' || channel === 'pinterest') return 'Pinterest'
+  if (channel === 'reddit-ads') return 'Reddit'
+  if (channel === 'snapchat-ads') return 'Snapchat'
+  return 'Other'
+}
+
+const COMPANIES = [
+  'Northwind Ops',
+  'Vertex Labs',
+  'Cedar Systems',
+  'Lumen Retail',
+  'Atlas Freight',
+  'Bright Health Co',
+  'Orbit Software',
+  'Mason Industrial',
+]
+const TITLES = ['VP Operations', 'Head of RevOps', 'Director of Ops', 'COO', 'Ops Manager', 'Head of Growth']
+
+/** Deterministic mock enrichment — stands in for a Clay lookup on the commenter. */
+export function enrichCommenter(comment: Comment): Enrichment {
+  const seed = [...comment.id].reduce((a, c) => a + c.charCodeAt(0), 0)
+  return {
+    company: COMPANIES[seed % COMPANIES.length],
+    title: TITLES[(seed >> 2) % TITLES.length],
+    fit: 60 + (seed % 40),
+  }
 }
 
 /** Read-only ingest from a platform. Mock; swap for Meta/TikTok/LinkedIn APIs. */
@@ -54,6 +113,7 @@ export function mockComments(row: TrafficRow, now: number): Comment[] {
       likes: (seed * 7 + i * 5) % 42,
       replies: (seed + i) % 4,
       sentiment: t.sentiment,
+      platform: commentPlatform(row.channel),
       intent: t.intent,
       needsResponse: t.needsResponse,
     })
