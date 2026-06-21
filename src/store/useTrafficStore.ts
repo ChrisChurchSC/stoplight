@@ -61,7 +61,8 @@ import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/t
 import { buildUtm, isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
 import { mockAttio } from '../adapters/attio/mockAttio'
-import { mockCommentSource, enrichCommenter, type Comment } from '../adapters/comments/mockComments'
+import { enrichCommenter, type Comment } from '../adapters/comments/mockComments'
+import { messageStore } from '../adapters/messages/messageStore'
 import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
 import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
@@ -1419,20 +1420,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   syncComments: async () => {
     const posted = get().rows.filter((r) => r.status === 'posted')
-    const prev = get().comments
-    const comments: Record<string, Comment[]> = {}
-    for (const r of posted) {
-      const fetched = await mockCommentSource.fetch(r)
-      // Carry over routing state (Clay enrichment, routed-to-Attio) so a re-sync
-      // doesn't reset already-routed leads back to unrouted.
-      const byId = new Map((prev[r.id] ?? []).map((c) => [c.id, c]))
-      comments[r.id] = fetched.map((c) => {
-        const was = byId.get(c.id)
-        return was
-          ? { ...c, clayRouted: was.clayRouted, enrichment: was.enrichment, routed: was.routed }
-          : c
-      })
-    }
+    // Ingest through the unified message store (persisted to Supabase when
+    // configured, in-memory via the mock otherwise). Routing state is carried.
+    const comments = await messageStore.sync(posted, get().comments)
     set({ comments })
   },
 
@@ -1448,6 +1438,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         ),
       },
     }))
+    // Persist the enrichment to the message store (durable when on a backend).
+    void messageStore.update(rowId, commentId, { clayRouted: true, enrichment })
   },
 
   routeCommenterToAttio: async (rowId, commentId) => {
@@ -1461,13 +1453,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       sourceAsset: row.assetName,
       sourceCampaign: row.campaign,
     })
-    // Mark the comment routed so the UI reflects it.
+    // Mark the comment routed so the UI reflects it, and persist it.
     set((s) => ({
       comments: {
         ...s.comments,
         [rowId]: s.comments[rowId].map((c) => (c.id === commentId ? { ...c, routed: true } : c)),
       },
     }))
+    await messageStore.update(rowId, commentId, { routed: true })
   },
 
   openReview: (id) => set({ reviewRowId: id }),
