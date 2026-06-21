@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { applyBreakStatus, detectBreaks, type CoherenceBreak } from '../domain/breaks'
 import { CHANNELS } from '../domain/channels'
 import { FUNNEL_STAGES, funnelStageFor } from '../domain/funnel'
-import { messagingSummary } from '../domain/messaging'
+import { messagingFields, messagingMap, messagingSummary } from '../domain/messaging'
 import { inTimeRange } from '../domain/timeRange'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -22,6 +22,12 @@ const MSG_H = 62
 const MSG_GAP = 24
 const COL_GAP = 80
 const BAND_PAD = 72
+// How far each funnel band bleeds past the content on the left and right, so the
+// stripes run edge to edge instead of stopping at the outermost node.
+const BAND_BLEED = 240
+// Zoom past this and message cards reveal their full messaging breakdown (every
+// component), not just the one-line summary — read everything without leaving the map.
+const DETAIL_ZOOM = 1.15
 const ROOT_Y = 0
 const AUD_Y = 160
 const MSG_Y = 340
@@ -182,10 +188,19 @@ export function CanvasView() {
       return [{ x1: f.x + f.w / 2, y1: f.y + f.h, x2: t.x + t.w / 2, y2: t.y, broken }]
     })
 
-    const bands: Band[] = FUNNEL_STAGES.map((st, i) => ({ stage: st.stage, label: st.label, y: bandTop[i], h: bandH[i] }))
+    // Bands tile the whole canvas: the first stage reaches the top (under the
+    // strategy + audiences), the last reaches the bottom, so every node sits on a
+    // funnel band with no band-less gaps. Message rows keep their positions — only
+    // the painted rectangles grow to fill the canvas.
+    const lastIdx = FUNNEL_STAGES.length - 1
+    const bandBottom = Math.max(acc, ...ns.map((n) => n.y + n.h)) + BAND_PAD
+    const bands: Band[] = FUNNEL_STAGES.map((st, i) => {
+      const top = i === 0 ? 0 : bandTop[i]
+      const bot = i === lastIdx ? bandBottom : bandTop[i + 1]
+      return { stage: st.stage, label: st.label, y: top, h: bot - top }
+    })
     const maxX = Math.max(totalW, ...ns.map((n) => n.x + n.w))
-    const maxY = Math.max(acc, ...ns.map((n) => n.y + n.h))
-    return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: maxY } }
+    return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: bandBottom } }
   }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved])
 
   // ---- pan / zoom / node-drag ----
@@ -217,8 +232,10 @@ export function CanvasView() {
       setMoved((prev) => ({ ...prev, [d.id]: { x: d.sx + dx, y: d.sy + dy } }))
       return
     }
-    if (pan.current)
-      setVp((v) => ({ ...v, tx: pan.current!.tx + (e.clientX - pan.current!.x), ty: pan.current!.ty + (e.clientY - pan.current!.y) }))
+    // Capture the pan origin: the setVp updater runs later, and a mouseup could
+    // null pan.current before it does (which would throw).
+    const p = pan.current
+    if (p) setVp((v) => ({ ...v, tx: p.tx + (e.clientX - p.x), ty: p.ty + (e.clientY - p.y) }))
   }
   const endAll = () => {
     if (drag.current?.far) {
@@ -243,6 +260,8 @@ export function CanvasView() {
       return next
     })
   const resetLayout = () => setMoved({})
+  // Reveal the full per-component copy once the user has zoomed in to read.
+  const detail = vp.s >= DETAIL_ZOOM
 
   if (scoped.length === 0) {
     return (
@@ -298,7 +317,7 @@ export function CanvasView() {
             <div
               key={b.stage}
               className={`cv-band${i % 2 ? ' alt' : ''}`}
-              style={{ left: -180, top: b.y, width: bounds.w + 180, height: b.h }}
+              style={{ left: -BAND_BLEED, top: b.y, width: bounds.w + BAND_BLEED * 2, height: b.h }}
             >
               <span className="cv-band-label">{b.label}</span>
             </div>
@@ -332,7 +351,23 @@ export function CanvasView() {
               )}
               <div className="cv-node-body">
                 <div className="cv-node-label">{n.label}</div>
-                {n.sub && <div className="cv-node-sub">{n.sub}</div>}
+                {(() => {
+                  if (n.kind === 'message' && detail && n.row) {
+                    const bd = messageBreakdown(n.row)
+                    if (bd.length)
+                      return (
+                        <div className="cv-node-full">
+                          {bd.map((fld) => (
+                            <div className="cv-node-field" key={fld.label}>
+                              <span className="cv-node-fkey">{fld.label}</span>
+                              <span className="cv-node-fval">{fld.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                  }
+                  return n.sub ? <div className="cv-node-sub">{n.sub}</div> : null
+                })()}
               </div>
               {n.kind === 'audience' && (
                 <span className="cv-node-collapse">{collapsed.has(n.label) ? '＋' : '−'}</span>
@@ -364,4 +399,13 @@ export function CanvasView() {
 /** A cheap dependency key so the layout recomputes when the audience grouping changes. */
 function audiencesKey(rows: TrafficRow[]): string {
   return rows.map((r) => `${r.id}:${(r.audience ?? '').trim()}`).join('|')
+}
+
+/** Every non-empty messaging component for an asset, in schema order — the full
+ *  copy shown on a card once you zoom in. */
+function messageBreakdown(row: TrafficRow): { label: string; value: string }[] {
+  const map = messagingMap(row)
+  return messagingFields(row.channel, row.assetType)
+    .map((f) => ({ label: f.label, value: (map[f.key] ?? '').trim() }))
+    .filter((x) => x.value)
 }

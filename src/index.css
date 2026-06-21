@@ -4608,6 +4608,7 @@ button {
 }
 .cv-node:hover {
   border-color: var(--accent);
+  z-index: 5;
 }
 .cv-node.k-root {
   background: var(--text);
@@ -4652,6 +4653,32 @@ button {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+/* Full per-component messaging, revealed when zoomed in. */
+.cv-node-full {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cv-node-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cv-node-fkey {
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.cv-node-fval {
+  font-size: 10.5px;
+  color: var(--text);
+  line-height: 1.38;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .cv-node-collapse {
   flex: none;
