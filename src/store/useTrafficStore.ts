@@ -57,6 +57,7 @@ import { mockAttio } from '../adapters/attio/mockAttio'
 import { mockCommentSource, enrichCommenter, type Comment } from '../adapters/comments/mockComments'
 import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
+import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
 
 // Wire the swappable seams here. Replace these two lines to go live.
 const sheet: SheetAdapter = new MockSheetAdapter()
@@ -219,6 +220,34 @@ function saveShares(list: ShareGrant[]): void {
   } catch {
     /* ignore */
   }
+}
+
+// Campaign version history (copy save-points), persisted per client.
+const VERSIONS_KEY = 'stoplight.versions.v1'
+function loadVersions(): CampaignVersion[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(VERSIONS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveVersions(list: CampaignVersion[]): void {
+  try {
+    localStorage.setItem(VERSIONS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+/** Attribute a version to the same identity multiplayer presence uses. */
+function currentAuthor(): string {
+  try {
+    const id = JSON.parse(sessionStorage.getItem('stoplight.presence.identity') || 'null')
+    if (id?.name) return id.name
+  } catch {
+    /* ignore */
+  }
+  return 'You'
 }
 
 // A share link (?share=token) puts the app into that grant's role + client on the
@@ -384,6 +413,13 @@ interface TrafficState {
   createShare: (client: string, role: Role) => ShareGrant
   revokeShare: (id: string) => void
   exitSharedSession: () => void
+  /** Campaign version history: copy save-points per client. */
+  versions: CampaignVersion[]
+  historyOpen: boolean
+  openHistory: () => void
+  closeHistory: () => void
+  saveVersion: (label?: string) => void
+  restoreVersion: (id: string) => Promise<void>
   closeReadiness: () => void
   generateBrandGuide: (client: string) => void
   updateBrandGuide: (client: string, patch: Partial<BrandGuide>) => void
@@ -590,6 +626,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   sharedSession: initialShare,
   shares: loadShares(),
   shareDialogOpen: false,
+  versions: loadVersions(),
+  historyOpen: false,
   icpOpen: false,
   trackingChannel: null,
   drivePickerOpen: false,
@@ -778,6 +816,39 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       /* ignore */
     }
     set({ sharedSession: null, role: 'owner', clientFilter: 'all', campaignFilter: 'all', page: 'clients' })
+  },
+  openHistory: () => set({ historyOpen: true }),
+  closeHistory: () => set({ historyOpen: false }),
+  saveVersion: (label) => {
+    const { rows, clientFilter, versions } = get()
+    if (clientFilter === 'all') return
+    const scoped = rows.filter((r) =>
+      rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter: 'all' }),
+    )
+    if (scoped.length === 0) return
+    const snap = snapshotRows(scoped)
+    const prior = versions.filter((v) => v.client === clientFilter)
+    const changed = diffChanged(prior[0]?.rows ?? null, snap)
+    const isBaseline = prior.length === 0
+    const summary = diffSummary(changed, isBaseline)
+    const version: CampaignVersion = {
+      id: `ver_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`,
+      client: clientFilter,
+      label: label?.trim() || summary,
+      author: currentAuthor(),
+      ts: Date.now(),
+      rows: snap,
+      summary,
+    }
+    const next = [version, ...versions]
+    saveVersions(next)
+    set({ versions: next })
+  },
+  restoreVersion: async (id) => {
+    const v = get().versions.find((x) => x.id === id)
+    if (!v) return
+    for (const r of v.rows) await sheet.update(r.id, { messaging: { ...r.messaging } })
+    await get().refresh()
   },
   generateBrandGuide: (client) =>
     set((s) => {
