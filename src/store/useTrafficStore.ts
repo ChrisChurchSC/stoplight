@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { MockSheetAdapter } from '../adapters/sheet/mockSheetAdapter'
+import { SupabaseSheetAdapter } from '../adapters/sheet/supabaseSheetAdapter'
+import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
 import type { PublisherRegistry } from '../adapters/publishers/types'
@@ -64,8 +66,10 @@ import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
 import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
 
-// Wire the swappable seams here. Replace these two lines to go live.
-const sheet: SheetAdapter = new MockSheetAdapter()
+// Wire the swappable seams here. The sheet is backed by Supabase when a project
+// is configured (VITE_SUPABASE_*), and by localStorage otherwise — so the backend
+// is additive and the app runs unchanged until you provision one.
+const sheet: SheetAdapter = isSupabaseConfigured ? new SupabaseSheetAdapter() : new MockSheetAdapter()
 const publishers: PublisherRegistry = channelPublishers
 const icpSource: IcpSource = new MockIcpSource()
 // Real Claude batch review when a backend + key are present; heuristic otherwise.
