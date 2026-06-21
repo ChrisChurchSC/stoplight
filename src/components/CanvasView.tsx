@@ -73,6 +73,7 @@ export function CanvasView() {
   const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const openReview = useTrafficStore((s) => s.openReview)
   const openDiagnosis = useTrafficStore((s) => s.openDiagnosis)
+  const openHistory = useTrafficStore((s) => s.openHistory)
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
 
@@ -352,6 +353,9 @@ export function CanvasView() {
         <span className="spacer" />
         <button className="cv-diagnose" onClick={openDiagnosis} title="See the live mess, then the same map connected">
           ✦ Diagnosis
+        </button>
+        <button className="cv-reset" onClick={openHistory} title="Version history: save points for this campaign's copy">
+          ⟲ History
         </button>
         {Object.keys(moved).length > 0 && (
           <button className="cv-reset" onClick={resetLayout} title="Snap nodes back to auto-layout">
