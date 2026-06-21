@@ -7,6 +7,7 @@ import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budge
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { mockAttio } from '../adapters/attio/mockAttio'
 import { assetRtbIds, rtbById } from '../domain/rtb'
+import { can } from '../domain/access'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
@@ -121,6 +122,8 @@ export function SheetGrid() {
   const icp = useTrafficStore((s) => s.icp)
   // Batch (column-header) actions.
   const approveAll = useTrafficStore((s) => s.approveAll)
+  const role = useTrafficStore((s) => s.role)
+  const canPublish = can(role, 'publish')
   const gateCleared = useTrafficStore((s) => s.gateCleared)
   const trackingCleared = useTrafficStore((s) => s.trackingCleared)
   const budgetCleared = useTrafficStore((s) => s.budgetCleared)
@@ -320,18 +323,20 @@ export function SheetGrid() {
                 {draftN > 0 ? (
                   <button
                     className="cov-btn green"
-                    disabled={!allGatesCleared}
+                    disabled={!allGatesCleared || !canPublish}
                     onClick={approveAll}
                     title={
-                      allGatesCleared
-                        ? 'Approve all draft rows'
-                        : !connectionCleared
-                          ? `Resolve ${openBreakN} connection break${openBreakN === 1 ? '' : 's'} to unlock`
-                          : 'Clear ICP, tracking, and budget gates to unlock'
+                      !canPublish
+                        ? 'Publishing is owner / editor only'
+                        : allGatesCleared
+                          ? 'Approve all draft rows'
+                          : !connectionCleared
+                            ? `Resolve ${openBreakN} connection break${openBreakN === 1 ? '' : 's'} to unlock`
+                            : 'Clear ICP, tracking, and budget gates to unlock'
                     }
                   >
                     Approve {draftN}
-                    {!allGatesCleared && ' 🔒'}
+                    {!canPublish ? ' 🔒' : !allGatesCleared && ' 🔒'}
                   </button>
                 ) : null}
               </th>
@@ -781,7 +786,7 @@ export function SheetGrid() {
                   </td>
 
                   <td className="act-publish">
-                    {row.status === 'approved' || row.status === 'failed' ? (
+                    {(row.status === 'approved' || row.status === 'failed') && canPublish ? (
                       <button className="btn sm" onClick={() => publishRow(row.id)}>
                         Publish
                       </button>
