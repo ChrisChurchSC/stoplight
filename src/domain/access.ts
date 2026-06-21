@@ -1,8 +1,13 @@
 /**
  * Roles and permissions for sharing a client workspace. Three roles, one matrix.
  * The operator is always the owner; a share link grants a narrower role (editor or
- * stakeholder) scoped to a single client. Gating reads `can(role, permission)` at
- * each action chokepoint, so widening or narrowing access is one line here.
+ * stakeholder) scoped to a single client.
+ *
+ * Enforcement note: in this mock (no backend), gating is applied in the VIEWS —
+ * components read `can(role, permission)` to hide/disable mutating controls. The
+ * store actions themselves are not role-gated, so this is presentation-level only.
+ * A real deployment must enforce these on the server; `can()` is the single source
+ * of truth either way.
  */
 
 export type Role = 'owner' | 'editor' | 'stakeholder'

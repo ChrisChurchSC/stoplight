@@ -36,7 +36,14 @@ export async function runPublish(input: PublishInput): Promise<PublishOutput> {
   const profilesRaw = process.env.BUFFER_PROFILE_IDS
   if (!token || !profilesRaw) throw new NoKeyError('Buffer not configured')
 
-  const profiles = JSON.parse(profilesRaw) as Record<string, string>
+  let profiles: Record<string, string>
+  try {
+    profiles = JSON.parse(profilesRaw) as Record<string, string>
+  } catch {
+    // Malformed BUFFER_PROFILE_IDS is "not configured", not a server crash —
+    // fall back to the mock honestly (501) instead of a silent 500.
+    throw new NoKeyError('BUFFER_PROFILE_IDS is not valid JSON')
+  }
   const profileId = profiles[input.channel]
   if (!profileId) throw new NoKeyError(`No Buffer profile for ${input.channel}`)
 
