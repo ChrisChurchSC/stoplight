@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { filesToAssets } from '../lib/files'
 import { TIMING_BY_KEY } from '../domain/timing'
 import { can } from '../domain/access'
+import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 export function Breadcrumb() {
@@ -12,6 +13,9 @@ export function Breadcrumb() {
   const role = useTrafficStore((s) => s.role)
   const sharedSession = useTrafficStore((s) => s.sharedSession)
   const openShareDialog = useTrafficStore((s) => s.openShareDialog)
+  const rows = useTrafficStore((s) => s.rows)
+  const comments = useTrafficStore((s) => s.comments)
+  const openCommentInbox = useTrafficStore((s) => s.openCommentInbox)
   const query = useTrafficStore((s) => s.query)
   const setQuery = useTrafficStore((s) => s.setQuery)
   const icpOpen = useTrafficStore((s) => s.icpOpen)
@@ -33,6 +37,16 @@ export function Breadcrumb() {
   const overview = clientFilter === 'all'
   const [addOpen, setAddOpen] = useState(false)
   const [folderUrl, setFolderUrl] = useState('')
+
+  // Comments that need a reply, across posted assets in scope (drives the badge).
+  const scopedPostedIds = new Set(
+    rows
+      .filter((r) => r.status === 'posted' && rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
+      .map((r) => r.id),
+  )
+  const needsReply = Object.entries(comments)
+    .filter(([id]) => scopedPostedIds.has(id))
+    .reduce((n, [, cs]) => n + cs.filter((c) => c.needsResponse).length, 0)
 
   async function onFiles(files: FileList | null) {
     if (!files) return
@@ -126,6 +140,12 @@ export function Breadcrumb() {
             title="ICP & proof"
           >
             ◎ ICP
+          </button>
+        )}
+        {!overview && (
+          <button className="btn sm" onClick={openCommentInbox} title="Comments ingested across posted assets">
+            💬 Comments
+            {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}
           </button>
         )}
         {!overview && can(role, 'share') && (

@@ -54,7 +54,7 @@ import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/t
 import { buildUtm, isTrackingClean } from '../domain/tracking'
 import { hasBudget, isPaidRow, mockSpend } from '../domain/budget'
 import { mockAttio } from '../adapters/attio/mockAttio'
-import { mockCommentSource, type Comment } from '../adapters/comments/mockComments'
+import { mockCommentSource, enrichCommenter, type Comment } from '../adapters/comments/mockComments'
 import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
 
@@ -539,6 +539,12 @@ interface TrafficState {
   syncComments: () => Promise<void>
   /** Route an intent-y commenter to Attio as a contact (closes the loop). */
   routeCommenterToAttio: (rowId: string, commentId: string) => Promise<void>
+  /** Enrich an intent commenter via Clay (company / title / fit). */
+  routeToClay: (rowId: string, commentId: string) => void
+  /** Campaign-level comment inbox (ingested across all posted assets). */
+  commentInboxOpen: boolean
+  openCommentInbox: () => void
+  closeCommentInbox: () => void
 
   // copy review
   /** Row whose copy-review drawer is open, or null. */
@@ -600,6 +606,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   reviewRowId: null,
   comments: {},
   commentRowId: null,
+  commentInboxOpen: false,
   icp: null,
   batchReview: null,
   reviewing: false,
@@ -1274,6 +1281,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   openComments: (id) => set({ commentRowId: id }),
+  openCommentInbox: () => set({ commentInboxOpen: true }),
+  closeCommentInbox: () => set({ commentInboxOpen: false }),
 
   syncComments: async () => {
     const posted = get().rows.filter((r) => r.status === 'posted')
@@ -1282,6 +1291,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       comments[r.id] = await mockCommentSource.fetch(r)
     }
     set({ comments })
+  },
+
+  routeToClay: (rowId, commentId) => {
+    const comment = get().comments[rowId]?.find((c) => c.id === commentId)
+    if (!comment) return
+    const enrichment = enrichCommenter(comment)
+    set((s) => ({
+      comments: {
+        ...s.comments,
+        [rowId]: s.comments[rowId].map((c) =>
+          c.id === commentId ? { ...c, clayRouted: true, enrichment } : c,
+        ),
+      },
+    }))
   },
 
   routeCommenterToAttio: async (rowId, commentId) => {
