@@ -43,7 +43,7 @@ export const TIMINGS: TimingDef[] = [
     label: 'Always-on',
     icon: '∞',
     blurb: 'Perpetual, no end date — evergreen nurture, ongoing local lead-gen, always-on demand.',
-    scheduling: 'Continuous trafficking; creative auto-rotates on a refresh cadence so it never goes stale.',
+    scheduling: 'Continuous trafficking; rotate creative on a refresh cadence so it never goes stale.',
     built: true,
   },
   {
@@ -51,8 +51,8 @@ export const TIMINGS: TimingDef[] = [
     label: 'Triggered',
     icon: '⚡',
     blurb: 'Fired by an event, not a calendar — a customer action or an external moment.',
-    scheduling: 'Wired to an event source; ships when the trigger fires.',
-    built: false,
+    scheduling: 'Wired to an event source; ships the checked assets when the trigger fires.',
+    built: true,
   },
 ]
 

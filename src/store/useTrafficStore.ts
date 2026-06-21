@@ -437,6 +437,10 @@ interface TrafficState {
   rerunSeasonalCampaign: (campaign: string) => Promise<void>
   /** Always-on: rotate creative now (reset rotated assets to draft, reschedule, log). */
   rotateAlwaysOn: (campaign: string) => Promise<void>
+  /** Triggered: fire the event now — ship the campaign's draft assets. The
+   *  connection check must be clean first, so a fast-shipped triggered piece is
+   *  still checked before it goes. */
+  fireTrigger: (campaign: string) => Promise<void>
   /** New-client / add-campaign wizard UI state. wizardClient = the client to add
    *  a campaign to (campaign-only mode), or null for the full new-client flow. */
   wizardOpen: boolean
@@ -983,6 +987,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         approvedAt: undefined,
         copyReviewed: false,
       })
+    }
+    await get().refresh()
+  },
+
+  fireTrigger: async (campaignName) => {
+    const camp = get().campaignList.find((c) => c.name === campaignName)
+    if (!camp || camp.timing !== 'triggered') return
+    const rows = get().rows.filter((r) => r.campaign === campaignName)
+    // The connection check still runs: a fast-shipped triggered piece gets checked
+    // before it goes. The UI gates this too, but never ship over an open break.
+    const open = applyBreakStatus(detectBreaks(rows), get().breakStatus).filter((b) => b.status === 'open')
+    if (open.length > 0) return
+    // Fire: the campaign's draft assets ship now (scheduled to the moment).
+    const now = new Date(Date.now()).toISOString()
+    const drafts = rows.filter((r) => r.status === 'draft')
+    for (const r of drafts) {
+      await sheet.update(r.id, { status: 'scheduled', scheduledAt: now })
     }
     await get().refresh()
   },
