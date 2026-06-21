@@ -216,6 +216,39 @@ const SERVER_SECRETS = [
   'RESEND_FROM_EMAIL',
 ]
 
+/**
+ * Dev-server endpoint for the Claude-powered coherence check (the connection
+ * check itself). Keeps the Anthropic key server-side; mirrors /api/icp-review.
+ */
+function coherenceApi(): PluginOption {
+  return {
+    name: 'coherence-api',
+    configureServer(server) {
+      server.middlewares.use('/api/coherence-check', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runCoherenceCheck } = await import('./server/coherenceHandler')
+            const result = await runCoherenceCheck(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   for (const key of SERVER_SECRETS) {
@@ -230,6 +263,7 @@ export default defineConfig(({ mode }) => {
       draftCopyApi(),
       setupApi(),
       askApi(),
+      coherenceApi(),
     ],
   }
 })

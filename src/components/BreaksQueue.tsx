@@ -2,7 +2,8 @@ import {
   AUDIT_LABEL,
   SEVERITY_RANK,
   applyBreakStatus,
-  detectBreaks,
+  breakScopeKey,
+  resolveBreaks,
 } from '../domain/breaks'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -17,6 +18,11 @@ export function BreaksQueue() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const claudeBreaks = useTrafficStore((s) => s.claudeBreaks)
+  const claudeBreaksScope = useTrafficStore((s) => s.claudeBreaksScope)
+  const coherenceChecking = useTrafficStore((s) => s.coherenceChecking)
+  const coherenceLive = useTrafficStore((s) => s.coherenceLive)
+  const runCoherenceCheck = useTrafficStore((s) => s.runCoherenceCheck)
   const auditLog = useTrafficStore((s) => s.auditLog)
   const brandGuides = useTrafficStore((s) => s.brandGuides)
   const openReadiness = useTrafficStore((s) => s.openReadiness)
@@ -32,7 +38,12 @@ export function BreaksQueue() {
   const scoped = rows.filter((r) =>
     rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
   )
-  const breaks = applyBreakStatus(detectBreaks(scoped), breakStatus)
+  const scopeKey = breakScopeKey(clientFilter, campaignFilter)
+  const checkedByClaude = !!claudeBreaks && claudeBreaksScope === scopeKey && coherenceLive
+  const breaks = applyBreakStatus(
+    resolveBreaks(scoped, claudeBreaks, claudeBreaksScope, scopeKey),
+    breakStatus,
+  )
   // Open breaks first, then by severity; dismissed/in-review settle to the bottom.
   const ordered = [...breaks].sort(
     (a, b) =>
@@ -58,6 +69,17 @@ export function BreaksQueue() {
         </div>
 
         <div className="drawer-body">
+          <div className="breaks-recheck-row">
+            <button
+              className="conn-recheck"
+              onClick={() => runCoherenceCheck()}
+              disabled={coherenceChecking || clientFilter === 'all'}
+              title="Run the coherence check with Claude over this campaign's real copy"
+            >
+              {coherenceChecking ? 'Checking…' : '✦ Recheck with Claude'}
+            </button>
+            {checkedByClaude && <span className="conn-checked">✦ found by Claude</span>}
+          </div>
           {client && (
             brandReady ? (
               <div className="breaks-brand ok" title={brand!.guide.voice}>

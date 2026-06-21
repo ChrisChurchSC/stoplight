@@ -327,6 +327,24 @@ export function detectBreaks(rows: TrafficRow[]): CoherenceBreak[] {
   return [...detectAcmeBreaks(rows), ...detectVoiceBreaks(rows)]
 }
 
+/** A scope key for caching a Claude coherence run (client + campaign). */
+export const breakScopeKey = (client: string, campaign: string): string => `${client}|${campaign}`
+
+/**
+ * The break set for the current scope: Claude's last run when it covers this exact
+ * scope, otherwise the synchronous heuristic. The default (no Claude run) is the
+ * heuristic, so the always-on check is unchanged until a recheck is requested.
+ */
+export function resolveBreaks(
+  rows: TrafficRow[],
+  claudeBreaks: CoherenceBreak[] | null,
+  claudeScope: string | null,
+  currentScope: string,
+): CoherenceBreak[] {
+  if (claudeBreaks && claudeScope === currentScope) return claudeBreaks
+  return detectBreaks(rows)
+}
+
 /** Overlay persisted statuses (intended / in-review) onto detected breaks. */
 export function applyBreakStatus(
   breaks: CoherenceBreak[],
