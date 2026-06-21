@@ -5512,6 +5512,77 @@ button {
   color: var(--text-muted);
 }
 
+/* Auth gate (shown only when the Supabase backend is configured) */
+.auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.auth-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--surface-2);
+}
+.auth-card {
+  width: min(360px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.auth-brand {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.auth-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.auth-input {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+.auth-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.auth-err {
+  font-size: 12.5px;
+  color: #b42318;
+}
+.auth-submit {
+  margin-top: 4px;
+  justify-content: center;
+}
+.auth-switch {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.auth-switch:hover {
+  color: var(--text);
+}
+
 /* Ask Claude palette */
 .ask-scrim {
   position: fixed;
