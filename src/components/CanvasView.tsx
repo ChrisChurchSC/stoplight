@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { applyBreakStatus, detectBreaks, type CoherenceBreak } from '../domain/breaks'
 import { CHANNELS } from '../domain/channels'
 import { messagingSummary } from '../domain/messaging'
+import { inTimeRange } from '../domain/timeRange'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { TrafficRow } from '../domain/types'
@@ -54,13 +55,19 @@ export function CanvasView() {
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const openReview = useTrafficStore((s) => s.openReview)
+  const timeRange = useTrafficStore((s) => s.timeRange)
+  const rangeNow = Date.now()
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [vp, setVp] = useState({ tx: 60, ty: 40, s: 0.8 })
   const wrapRef = useRef<HTMLDivElement>(null)
   const pan = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
 
-  const scoped = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+  const scoped = rows.filter(
+    (r) =>
+      rowInScope(r, { filter, query, clientFilter, campaignFilter }) &&
+      inTimeRange(r, timeRange, rangeNow),
+  )
   const breaks = applyBreakStatus(detectBreaks(scoped), breakStatus).filter((b) => b.status === 'open')
   const breakFor = (r: TrafficRow) =>
     breaks.find(
