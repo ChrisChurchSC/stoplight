@@ -11,6 +11,8 @@ export function SetupWizard() {
   const close = useTrafficStore((s) => s.closeSetup)
   const setPage = useTrafficStore((s) => s.setPage)
   const provisionCurrentState = useTrafficStore((s) => s.provisionCurrentState)
+  const addClient = useTrafficStore((s) => s.addClient)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
 
   const [step, setStep] = useState<Step>('input')
   const [url, setUrl] = useState('')
@@ -56,6 +58,16 @@ export function SetupWizard() {
     if (!map) return
     setProvisioning(true)
     await provisionCurrentState(map)
+    onClose()
+  }
+
+  // Escape hatch: no public site (or you want to start manual). Create the client
+  // by name and drop into an empty workspace to fill in. Onboarding stays one flow.
+  const addByName = () => {
+    const name = url.trim()
+    if (!name) return
+    addClient(name)
+    setClientFilter(name)
     onClose()
   }
 
@@ -115,6 +127,12 @@ export function SetupWizard() {
               </button>{' '}
               so Claude can pull more. Optional.
             </div>
+
+            {url.trim() && (
+              <button className="wiz-link setup-byname" onClick={addByName}>
+                No website? Add "{url.trim()}" by name instead →
+              </button>
+            )}
 
             <div className="wiz-foot">
               <span className="wiz-hint">Nothing is committed until you review the map.</span>

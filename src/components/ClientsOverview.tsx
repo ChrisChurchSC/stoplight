@@ -43,7 +43,6 @@ export function ClientsOverview() {
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
   const clientList = useTrafficStore((s) => s.clientList)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
-  const openClientWizard = useTrafficStore((s) => s.openClientWizard)
   const openSetup = useTrafficStore((s) => s.openSetup)
 
   const [tab, setTab] = useState<Tab>('all')
@@ -88,19 +87,20 @@ export function ClientsOverview() {
         <span className="home-setup-text">
           <span className="home-setup-title">Set up with Claude</span>
           <span className="home-setup-sub">
-            Point Claude at your site. It provisions brand, ICP, proof, channel mix, and a first campaign
-            for you to confirm.
+            Point Claude at their site. It reads everything publicly live, their site and their running
+            ads, and maps their whole messaging presence: voice, audiences, claims, and proof, for you
+            to confirm.
           </span>
         </span>
         <span className="home-setup-go">→</span>
       </button>
 
       <div className="home-newclient-cta">
-        <button className="home-addclient" onClick={openClientWizard}>
+        <button className="home-addclient" onClick={openSetup}>
           <span className="home-addclient-ico">＋</span>
           <span>
-            <span className="home-addclient-title">Add new client</span>
-            <span className="home-addclient-sub">Name, ICP via Claude, then a first campaign.</span>
+            <span className="home-addclient-title">Add a client</span>
+            <span className="home-addclient-sub">Paste their site to map their live messaging. No site? Add by name.</span>
           </span>
         </button>
         {all.length === 0 && (
