@@ -18,6 +18,8 @@ import { mockCommentSource, type Comment, type CommentSource, type Enrichment } 
 export interface MessageStore {
   /** Latest inbound messages for the posted rows, persisted, grouped by asset id. */
   sync(rows: TrafficRow[], prev: Record<string, Comment[]>): Promise<Record<string, Comment[]>>
+  /** Persist an already-ingested map (e.g. from the Claude engine) to the store. */
+  persist(rows: TrafficRow[], map: Record<string, Comment[]>): Promise<void>
   /** Persist a routing/enrichment update to one message. */
   update(rowId: string, commentId: string, patch: Partial<Comment>): Promise<void>
 }
@@ -43,6 +45,7 @@ export class MockMessageStore implements MessageStore {
   }
 
   // The store holds the working copy in memory; nothing to persist.
+  async persist(): Promise<void> {}
   async update(): Promise<void> {}
 }
 
@@ -105,6 +108,19 @@ export class SupabaseMessageStore implements MessageStore {
     }
     if (upserts.length) await supabase.from('messages').upsert(upserts)
     return out
+  }
+
+  async persist(rows: TrafficRow[], map: Record<string, Comment[]>): Promise<void> {
+    const ws = await getActiveWorkspaceId()
+    if (!ws || !supabase) return
+    const rowById = new Map(rows.map((r) => [r.id, r]))
+    const upserts: ReturnType<typeof toRecord>[] = []
+    for (const [rowId, comments] of Object.entries(map)) {
+      const r = rowById.get(rowId)
+      if (!r) continue
+      for (const c of comments) upserts.push(toRecord(ws, r, c))
+    }
+    if (upserts.length) await supabase.from('messages').upsert(upserts)
   }
 
   async update(_rowId: string, commentId: string, patch: Partial<Comment>): Promise<void> {
