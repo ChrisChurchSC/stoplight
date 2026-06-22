@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { readLiveAds } from './adScraper'
 import { crawlSite } from './siteCrawler'
 import { readYouTube } from './youtube'
+import { readInstagram } from './instagram'
+import { readLinkedIn } from './linkedin'
 
 /**
  * Current-state messaging map. Given a brand's public site (rendered) + their
@@ -119,6 +121,11 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
   }
   const yt = socials.youtube ? await readYouTube(socials.youtube) : null
   if (yt?.count) onProgress?.({ stage: 'youtube', detail: `Read ${yt.count} YouTube videos` })
+  // Organic social via the client's connected accounts (gated on their tokens).
+  const ig = await readInstagram()
+  if (ig?.count) onProgress?.({ stage: 'instagram', detail: `Read ${ig.count} Instagram posts` })
+  const li = await readLinkedIn()
+  if (li?.count) onProgress?.({ stage: 'linkedin', detail: `Read ${li.count} LinkedIn posts` })
   onProgress?.({ stage: 'extracting', detail: 'Extracting the messaging' })
 
   const content =
@@ -128,6 +135,8 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     `${crawl.text || '(could not fetch, infer from the URL)'}\n` +
     (live.text ? `\nCurrent live ads (${live.sources.join(', ')}):\n${live.text}\n` : '') +
     (yt?.text ? `\nRecent YouTube videos (${yt.title}):\n${yt.text}\n` : '') +
+    (ig?.text ? `\nRecent Instagram posts:\n${ig.text}\n` : '') +
+    (li?.text ? `\nRecent LinkedIn posts:\n${li.text}\n` : '') +
     `\nMap their current live messaging.`
 
   const message = await client.messages.create({
