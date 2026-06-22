@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { readLiveAds } from './adScraper'
 import { crawlSite } from './siteCrawler'
+import { readYouTube } from './youtube'
 
 /**
  * Current-state messaging map. Given a brand's public site (rendered) + their
@@ -101,7 +102,7 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
 
   // Show the work: emit a stage as the crawl and the ad scrape each resolve.
   onProgress?.({ stage: 'reading', detail: `Reading ${url || 'the site'}` })
-  const crawlP = (url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[] })).then((c) => {
+  const crawlP = (url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[], socials: {} as Record<string, string> })).then((c) => {
     onProgress?.({ stage: 'pages', detail: c.pages.length ? `Read ${c.pages.length} page${c.pages.length === 1 ? '' : 's'}` : 'Site could not be read' })
     return c
   })
@@ -110,6 +111,14 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     return a
   })
   const [crawl, live] = await Promise.all([crawlP, adsP])
+
+  // Discovered social profiles + their YouTube content (YouTube Data API, gated).
+  const socials = crawl.socials
+  if (Object.keys(socials).length) {
+    onProgress?.({ stage: 'socials', detail: `Found their ${Object.keys(socials).join(', ')}` })
+  }
+  const yt = socials.youtube ? await readYouTube(socials.youtube) : null
+  if (yt?.count) onProgress?.({ stage: 'youtube', detail: `Read ${yt.count} YouTube videos` })
   onProgress?.({ stage: 'extracting', detail: 'Extracting the messaging' })
 
   const content =
@@ -118,6 +127,7 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     `\nWebsite copy (rendered, crawled ${crawl.pages.length} page(s): ${crawl.pages.join(', ') || 'none'}):\n` +
     `${crawl.text || '(could not fetch, infer from the URL)'}\n` +
     (live.text ? `\nCurrent live ads (${live.sources.join(', ')}):\n${live.text}\n` : '') +
+    (yt?.text ? `\nRecent YouTube videos (${yt.title}):\n${yt.text}\n` : '') +
     `\nMap their current live messaging.`
 
   const message = await client.messages.create({
@@ -136,5 +146,6 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     stage: 'mapped',
     detail: `Mapped ${parsed.audiences?.length ?? 0} audiences, ${parsed.messages?.length ?? 0} messages`,
   })
-  return parsed
+  // Attach discovered socials (for the review UI + the later connect step).
+  return { ...parsed, socials }
 }

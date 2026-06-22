@@ -62,6 +62,26 @@ async function render(page: Page, href: string): Promise<{ html: string; text: s
 export interface SiteCrawl {
   text: string
   pages: string[]
+  /** Social profiles linked from the site (platform -> profile URL). */
+  socials: Record<string, string>
+}
+
+// Social profile links a brand puts in its header/footer. First match per platform.
+const SOCIAL_PATTERNS: { platform: string; re: RegExp }[] = [
+  { platform: 'youtube', re: /https?:\/\/(?:www\.)?youtube\.com\/(?:@[\w.-]+|channel\/UC[\w-]+|c\/[\w.-]+|user\/[\w.-]+)/i },
+  { platform: 'instagram', re: /https?:\/\/(?:www\.)?instagram\.com\/(?!p\/|reel\/|explore\/)[\w.][\w.-]*/i },
+  { platform: 'linkedin', re: /https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in|school)\/[\w.-]+/i },
+  { platform: 'tiktok', re: /https?:\/\/(?:www\.)?tiktok\.com\/@[\w.-]+/i },
+  { platform: 'x', re: /https?:\/\/(?:www\.)?(?:twitter|x)\.com\/(?!intent\/|share|home)[\w]+/i },
+  { platform: 'facebook', re: /https?:\/\/(?:www\.)?facebook\.com\/(?!sharer|share\.php)[\w.-]+/i },
+]
+
+function extractSocials(html: string, found: Record<string, string>): void {
+  for (const { platform, re } of SOCIAL_PATTERNS) {
+    if (found[platform]) continue
+    const m = re.exec(html)
+    if (m) found[platform] = m[0]
+  }
 }
 
 /** Crawl the homepage + top internal pages with a real browser. `maxPages` caps
@@ -72,7 +92,7 @@ export async function crawlSite(url: string, maxPages = 6): Promise<SiteCrawl> {
   try {
     origin = new URL(href).origin
   } catch {
-    return { text: '', pages: [] }
+    return { text: '', pages: [], socials: {} }
   }
 
   let browser
@@ -83,19 +103,22 @@ export async function crawlSite(url: string, maxPages = 6): Promise<SiteCrawl> {
     const page = await ctx.newPage()
 
     const home = await render(page, href)
-    if (!home) return { text: '', pages: [] }
+    if (!home) return { text: '', pages: [], socials: {} }
     const parts = [`# ${origin}\n${home.text}`]
     const pages = [origin]
+    const socials: Record<string, string> = {}
+    extractSocials(home.html, socials)
     for (const link of internalLinks(home.html, origin, maxPages)) {
       const p = await render(page, link)
       if (p?.text) {
         parts.push(`# ${link}\n${p.text}`)
         pages.push(link)
+        extractSocials(p.html, socials)
       }
     }
-    return { text: parts.join('\n\n---\n\n').slice(0, 18000), pages }
+    return { text: parts.join('\n\n---\n\n').slice(0, 18000), pages, socials }
   } catch {
-    return { text: '', pages: [] }
+    return { text: '', pages: [], socials: {} }
   } finally {
     await browser?.close().catch(() => {})
   }
