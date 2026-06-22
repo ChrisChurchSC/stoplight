@@ -18,6 +18,8 @@ export interface ClientProfile {
   industry?: string
   /** Short brand-voice note, e.g. "Plain, technical, no hype." */
   voice?: string
+  /** Connected channel profile URLs (social accounts) to re-gather on refresh. */
+  channels?: string[]
   /** B2C / B2B / B2B2C / … — drives which audience fields matter. */
   businessModel?: string
   companySize?: string

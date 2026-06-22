@@ -33,7 +33,7 @@ import {
   type SetupInput,
   type WorkspaceSetup,
 } from '../adapters/setup/setupGenerator'
-import type { SiteMap } from '../adapters/setup/siteMap'
+import { mapSite, type SiteMap } from '../adapters/setup/siteMap'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { messagingFields, messagingAllText, messagingMap } from '../domain/messaging'
@@ -103,6 +103,36 @@ function buildMessaging(
   put(m.body, ['body', 'description', 'primary', 'caption', 'meta-description', 'd1'])
   put(m.cta, ['cta', 'link'])
   return out
+}
+
+/** The live-messaging rows for a current-state map (shared by provision + refresh). */
+function currentStateRows(campaign: string, map: SiteMap): TrafficRow[] {
+  return map.messages.map((m) => {
+    const channel: ChannelId = m.channel in CHANNELS ? (m.channel as ChannelId) : 'website'
+    return {
+      id: freshRowId(),
+      assetId: '',
+      assetName: m.label || m.headline.slice(0, 48) || 'Message',
+      mediaType: 'text' as const,
+      channel,
+      messaging: buildMessaging(channel, m),
+      campaign,
+      audience: m.audience || '',
+      status: 'posted' as const,
+      scheduledAt: new Date().toISOString(),
+      createdAt: Date.now(),
+    }
+  })
+}
+
+/** Register + persist a current-state map's proof points for the campaign. */
+function currentStateProof(campaign: string, map: SiteMap): void {
+  const rtbs: Rtb[] = map.proofPoints.map((p, i) => ({ id: `rtb-live-${i}`, label: p.label, detail: p.detail }))
+  if (!rtbs.length) return
+  registerCampaignRtbs(campaign, rtbs)
+  const persisted = loadCampaignRtbs()
+  persisted[campaign] = rtbs
+  saveCampaignRtbs(persisted)
 }
 
 // Per-client Google Drive folder links, persisted (clients are derived from
@@ -493,6 +523,10 @@ interface TrafficState {
   provisionWorkspace: (setup: WorkspaceSetup) => Promise<void>
   /** Store an extracted current-state messaging map as the client's connected map. */
   provisionCurrentState: (map: SiteMap) => Promise<void>
+  /** Re-gather a client's channels and replace their live-messaging map. */
+  refreshClient: (client: string) => Promise<void>
+  /** The client currently being refreshed (re-gathered), or null. */
+  refreshingClient: string | null
   /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
    *  across the flight at each asset's monthly cadence, optionally splitting a
    *  media budget across the paid rows. */
@@ -688,6 +722,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   driveLinks: loadDriveLinks(),
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
+  refreshingClient: null,
   clientAudiences: loadClientAudiences(),
   campaignList: loadCampaigns(),
   wizardOpen: false,
@@ -1134,6 +1169,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       website: map.brand.website?.trim() || undefined,
       industry: map.brand.industry?.trim() || undefined,
       voice: map.brand.voice?.trim() || undefined,
+      channels: map.channels ?? [],
     })
     const primary = map.audiences[0]
     get().setIcp({
@@ -1147,34 +1183,38 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // One campaign holds the current-state map; the rows are their LIVE messaging.
     const campaign = `${client} — Live messaging`
     get().addCampaign({ name: campaign, client, strategy: 'Current state' })
-
-    const rtbs: Rtb[] = map.proofPoints.map((p, i) => ({ id: `rtb-live-${i}`, label: p.label, detail: p.detail }))
-    if (rtbs.length) {
-      registerCampaignRtbs(campaign, rtbs)
-      const persisted = loadCampaignRtbs()
-      persisted[campaign] = rtbs
-      saveCampaignRtbs(persisted)
-    }
-
-    const rows: TrafficRow[] = map.messages.map((m) => {
-      const channel: ChannelId = m.channel in CHANNELS ? (m.channel as ChannelId) : 'website'
-      return {
-        id: freshRowId(),
-        assetId: '',
-        assetName: m.label || m.headline.slice(0, 48) || 'Message',
-        mediaType: 'text',
-        channel,
-        messaging: buildMessaging(channel, m),
-        campaign,
-        audience: m.audience || '',
-        status: 'posted',
-        scheduledAt: new Date().toISOString(),
-        createdAt: Date.now(),
-      }
-    })
-    await sheet.append(rows)
+    currentStateProof(campaign, map)
+    await sheet.append(currentStateRows(campaign, map))
     await get().refresh()
     set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all' })
+  },
+
+  refreshClient: async (client) => {
+    const profile = get().clientProfiles[client]
+    if (!profile?.website) return
+    set({ refreshingClient: client })
+    try {
+      const map = await mapSite({ url: profile.website, accounts: profile.channels ?? [] })
+      const campaign = `${client} — Live messaging`
+      if (!get().campaignList.some((c) => c.name === campaign)) {
+        get().addCampaign({ name: campaign, client, strategy: 'Current state' })
+      }
+      // Replace the live-messaging rows with the fresh pull (the re-gather).
+      const stale = get().rows.filter((r) => r.campaign === campaign)
+      for (const r of stale) await sheet.remove(r.id)
+      await sheet.append(currentStateRows(campaign, map))
+      await get().refresh()
+      currentStateProof(campaign, map)
+      get().setClientProfile(client, {
+        voice: map.brand.voice?.trim() || profile.voice,
+        channels: map.channels ?? profile.channels,
+      })
+      set({ clientFilter: client, campaignFilter: campaign })
+    } catch {
+      // Leave the existing map untouched on failure.
+    } finally {
+      set({ refreshingClient: null })
+    }
   },
 
   seedCampaignAssets: async (campaign, deliverables, opts) => {

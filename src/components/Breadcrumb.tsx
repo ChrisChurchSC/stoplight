@@ -17,6 +17,9 @@ export function Breadcrumb() {
   const rows = useTrafficStore((s) => s.rows)
   const comments = useTrafficStore((s) => s.comments)
   const openCommentInbox = useTrafficStore((s) => s.openCommentInbox)
+  const refreshClient = useTrafficStore((s) => s.refreshClient)
+  const refreshingClient = useTrafficStore((s) => s.refreshingClient)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const query = useTrafficStore((s) => s.query)
   const setQuery = useTrafficStore((s) => s.setQuery)
   const icpOpen = useTrafficStore((s) => s.icpOpen)
@@ -157,6 +160,16 @@ export function Breadcrumb() {
               </button>
             )
           })()}
+        {!overview && clientProfiles[clientFilter]?.website && (
+          <button
+            className="btn sm"
+            onClick={() => refreshClient(clientFilter)}
+            disabled={refreshingClient === clientFilter}
+            title="Re-gather this client's channels and refresh their live-messaging map"
+          >
+            {refreshingClient === clientFilter ? '↻ Refreshing…' : '↻ Refresh'}
+          </button>
+        )}
         {!overview && (
           <button
             className={`btn sm${view === 'insights' ? ' primary' : ''}`}
