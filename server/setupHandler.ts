@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { readLiveAds } from './adScraper'
 
 /**
  * Server-side workspace setup generation. Reads the team's site (best-effort)
@@ -56,7 +57,7 @@ const SETUP_SCHEMA = {
 } as const
 
 const SYSTEM = `You are a senior GTM strategist standing up a new marketing workspace for a team.
-From the company's website copy, their current live posts (when provided), and any notes, propose a complete, ready-to-edit setup. Infer brand voice from how their existing copy actually reads, and infer channelMix from the channels they are actually posting on:
+From the company's website copy, their current live ads (when available), and any notes, propose a complete, ready-to-edit setup. Infer brand voice from how their existing copy actually reads, and infer channelMix from where they actually run ads and publish:
 - brand: company name, website domain, industry, and a one-to-two sentence brand voice (how their copy should sound).
 - icp: the ideal customer profile — buyer/segment name, a "segment" fit tag, a 2-3 sentence summary, 4-6 firmographic fields (label + value), and 3-5 short pain phrases.
 - rtbs: 3-4 reasons to believe (proof points) — short label + one-line detail. Use placeholder detail if the site gives no hard proof.
@@ -147,49 +148,14 @@ async function crawlSite(url: string): Promise<{ text: string; pages: string[] }
   return { text: parts.join('\n\n---\n\n').slice(0, 16000), pages }
 }
 
-interface BufferProfile {
-  id?: string
-  service?: string
-  formatted_username?: string
-}
-interface BufferUpdate {
-  text?: string
-}
-
-/** Best-effort read of the client's currently-published posts from connected
- *  accounts (Buffer). Gated on BUFFER_ACCESS_TOKEN: returns empty when unset, so
- *  setup runs website-only until the client's channels are connected. Supermetrics
- *  (metrics) and per-platform APIs plug in here the same way. */
-async function readConnectedPosts(): Promise<{ text: string; channels: string[] }> {
-  const token = process.env.BUFFER_ACCESS_TOKEN
-  if (!token) return { text: '', channels: [] }
-  const t = encodeURIComponent(token)
+/** A best-effort brand search term from the URL (host minus www + TLD), used for
+ *  the ad-library lookup. e.g. "deep-dive.studio" -> "deep dive". */
+function brandFromUrl(url: string): string {
   try {
-    const pres = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${t}`, {
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!pres.ok) return { text: '', channels: [] }
-    const profiles = (await pres.json()) as BufferProfile[]
-    const blocks: string[] = []
-    const channels: string[] = []
-    for (const p of (profiles ?? []).slice(0, 10)) {
-      if (!p.id) continue
-      const ures = await fetch(
-        `https://api.bufferapp.com/1/profiles/${p.id}/updates/sent.json?access_token=${t}&count=10`,
-        { signal: AbortSignal.timeout(8000) },
-      )
-      if (!ures.ok) continue
-      const data = (await ures.json()) as { updates?: BufferUpdate[] }
-      const posts = (data.updates ?? []).map((u) => u.text?.trim()).filter((x): x is string => !!x)
-      if (posts.length) {
-        const label = `${p.service ?? 'channel'}${p.formatted_username ? ` (${p.formatted_username})` : ''}`
-        channels.push(label)
-        blocks.push(`## ${label}\n${posts.slice(0, 10).map((x) => `- ${x}`).join('\n')}`)
-      }
-    }
-    return { text: blocks.join('\n\n').slice(0, 8000), channels }
+    const host = new URL(/^https?:\/\//.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '')
+    return (host.split('.')[0] ?? '').replace(/[-_]+/g, ' ').trim()
   } catch {
-    return { text: '', channels: [] }
+    return ''
   }
 }
 
@@ -199,8 +165,12 @@ export async function runSetup(body: unknown): Promise<unknown> {
 
   const client = new Anthropic({ apiKey })
   const { url, notes } = (body ?? {}) as { url?: string; notes?: string }
-  const crawl = url ? await crawlSite(url) : { text: '', pages: [] }
-  const live = await readConnectedPosts()
+  // Crawl the site and scrape live ads in parallel (the ad scrape spins up a
+  // headless browser, so overlap it with the fetch-based crawl).
+  const [crawl, live] = await Promise.all([
+    url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[] }),
+    url ? readLiveAds(brandFromUrl(url)) : Promise.resolve({ text: '', sources: [] as string[] }),
+  ])
 
   const content =
     `Company URL: ${String(url ?? '')}\n` +
@@ -208,7 +178,7 @@ export async function runSetup(body: unknown): Promise<unknown> {
     `\nWebsite copy (crawled ${crawl.pages.length} page(s): ${crawl.pages.join(', ') || 'none'}):\n` +
     `${crawl.text || '(could not fetch, infer from the URL)'}\n` +
     (live.text
-      ? `\nCurrent live posts from the client's connected accounts (${live.channels.join(', ')}):\n${live.text}\n`
+      ? `\nCurrent live ads, rendered from the public ad libraries (${live.sources.join(', ')}). Extract the ad copy and use it to infer messaging, offers, and channel mix:\n${live.text}\n`
       : '') +
     `\nReturn the proposed workspace setup.`
 
