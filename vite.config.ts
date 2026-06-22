@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
+import { agentBridgeApi } from './server/agentBridge'
 
 /**
  * Dev-server endpoint for the real ICP review. Keeps the Anthropic key
@@ -298,6 +299,7 @@ export default defineConfig(({ mode }) => {
       askApi(),
       coherenceApi(),
       agentApi(),
+      agentBridgeApi(),
     ],
   }
 })
