@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { readLiveAds } from './adScraper'
+import { crawlSite } from './siteCrawler'
 
 /**
  * Server-side workspace setup generation. Reads the team's site (best-effort)
@@ -68,84 +69,6 @@ Infer as much as possible from the site; be concrete and specific to this compan
 
 export class NoKeyError extends Error {
   code = 'NO_KEY'
-}
-
-// Highest-signal pages to pull beyond the homepage, ranked.
-const PRIORITY_PATHS = [
-  'product', 'pricing', 'features', 'solutions', 'platform', 'use-case',
-  'customers', 'about', 'how-it-works', 'services', 'case-stud', 'blog',
-]
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-async function fetchPage(href: string): Promise<{ html: string; text: string } | null> {
-  try {
-    const res = await fetch(href, { signal: AbortSignal.timeout(8000), redirect: 'follow' })
-    if (!res.ok) return null
-    const ct = res.headers.get('content-type') ?? ''
-    if (!ct.includes('text/html')) return null
-    const html = await res.text()
-    return { html, text: stripHtml(html).slice(0, 4000) }
-  } catch {
-    return null
-  }
-}
-
-function rankPath(url: string): number {
-  const p = url.toLowerCase()
-  let s = 0
-  PRIORITY_PATHS.forEach((kw, i) => {
-    if (p.includes(kw)) s += PRIORITY_PATHS.length - i
-  })
-  return s
-}
-
-function internalLinks(html: string, origin: string): string[] {
-  const found = new Set<string>()
-  for (const m of html.matchAll(/href=["']([^"'#]+)["']/gi)) {
-    try {
-      const u = new URL(m[1], origin)
-      if (u.origin !== origin) continue
-      const path = u.pathname.replace(/\/$/, '')
-      if (!path) continue
-      if (/\.(png|jpe?g|gif|svg|webp|avif|pdf|zip|css|js|ico|woff2?|mp4|mov)$/i.test(path)) continue
-      found.add(u.origin + u.pathname)
-    } catch {
-      /* skip malformed href */
-    }
-  }
-  return [...found].sort((a, b) => rankPath(b) - rankPath(a)).slice(0, 6)
-}
-
-/** Crawl the homepage plus the highest-signal internal pages and return the
- *  combined copy. Server-side fetch, so no CORS limits; best-effort per page. */
-async function crawlSite(url: string): Promise<{ text: string; pages: string[] }> {
-  const href = /^https?:\/\//.test(url) ? url : `https://${url}`
-  let origin: string
-  try {
-    origin = new URL(href).origin
-  } catch {
-    return { text: '', pages: [] }
-  }
-  const home = await fetchPage(href)
-  if (!home) return { text: '', pages: [] }
-  const parts = [`# ${origin}\n${home.text}`]
-  const pages = [origin]
-  for (const link of internalLinks(home.html, origin)) {
-    const page = await fetchPage(link)
-    if (page?.text) {
-      parts.push(`# ${link}\n${page.text}`)
-      pages.push(link)
-    }
-  }
-  return { text: parts.join('\n\n---\n\n').slice(0, 16000), pages }
 }
 
 /** A best-effort brand search term from the URL (host minus www + TLD), used for
