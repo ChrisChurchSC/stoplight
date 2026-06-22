@@ -23,11 +23,13 @@ export interface SiteMap {
   /** Social profiles found on their site (platform -> URL). YouTube is pulled
    *  when a key is set; the rest are discovered for the connect step. */
   socials?: Record<string, string>
+  /** All channel profile URLs considered (discovered + added), for refresh. */
+  channels?: string[]
 }
 
 /** Extract the current-state map from a URL. Requires the real engine (Claude);
  *  there is no heuristic fallback because the value is the real extraction. */
-export async function mapSite(input: { url: string; notes?: string }): Promise<SiteMap> {
+export async function mapSite(input: { url: string; notes?: string; accounts?: string[] }): Promise<SiteMap> {
   const res = await fetch('/api/map-site', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

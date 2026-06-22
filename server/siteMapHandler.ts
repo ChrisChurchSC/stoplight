@@ -190,6 +190,7 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     stage: 'mapped',
     detail: `Mapped ${parsed.audiences?.length ?? 0} audiences, ${parsed.messages?.length ?? 0} messages`,
   })
-  // Attach discovered socials (for the review UI + the later connect step).
-  return { ...parsed, socials }
+  // Attach discovered socials + the full channel list (for the review UI, the
+  // connect step, and storing channels so a client can be refreshed later).
+  return { ...parsed, socials, channels: [...profiles.keys()] }
 }
