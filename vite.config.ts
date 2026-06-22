@@ -284,6 +284,45 @@ function siteMapApi(): PluginOption {
 }
 
 /**
+ * Streaming variant of /api/map-site: emits stage progress over SSE (so the
+ * onboarding UI can show the work) then the final map. Mirrors the JSON route.
+ */
+function siteMapStreamApi(): PluginOption {
+  return {
+    name: 'site-map-stream-api',
+    configureServer(server) {
+      server.middlewares.use('/api/map-site-stream', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            connection: 'keep-alive',
+          })
+          const send = (event: string, data: unknown) =>
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          try {
+            const { runSiteMap } = await import('./server/siteMapHandler')
+            const result = await runSiteMap(JSON.parse(body || '{}'), (e) => send('progress', e))
+            send('result', result)
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            send('error', { code: code ?? null, message: String((err as Error)?.message ?? err) })
+          } finally {
+            res.end()
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for the Claude engine — the agent that reads from sources
  * and publishes to channels by calling tools. Keeps the Anthropic key server-side.
  */
@@ -333,6 +372,7 @@ export default defineConfig(({ mode }) => {
       coherenceApi(),
       agentApi(),
       siteMapApi(),
+      siteMapStreamApi(),
       agentBridgeApi(),
     ],
   }

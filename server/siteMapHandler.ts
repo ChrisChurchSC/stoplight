@@ -90,16 +90,27 @@ function brandFromUrl(url: string): string {
   }
 }
 
-export async function runSiteMap(body: unknown): Promise<unknown> {
+export type ProgressFn = (e: { stage: string; detail: string }) => void
+
+export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
   const { url, notes } = (body ?? {}) as { url?: string; notes?: string }
-  const [crawl, live] = await Promise.all([
-    url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[] }),
-    url ? readLiveAds(brandFromUrl(url)) : Promise.resolve({ text: '', sources: [] as string[] }),
-  ])
+
+  // Show the work: emit a stage as the crawl and the ad scrape each resolve.
+  onProgress?.({ stage: 'reading', detail: `Reading ${url || 'the site'}` })
+  const crawlP = (url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[] })).then((c) => {
+    onProgress?.({ stage: 'pages', detail: c.pages.length ? `Read ${c.pages.length} page${c.pages.length === 1 ? '' : 's'}` : 'Site could not be read' })
+    return c
+  })
+  const adsP = (url ? readLiveAds(brandFromUrl(url)) : Promise.resolve({ text: '', sources: [] as string[] })).then((a) => {
+    onProgress?.({ stage: 'ads', detail: a.sources.length ? `Found live ads on ${a.sources.join(', ')}` : 'No live ads found' })
+    return a
+  })
+  const [crawl, live] = await Promise.all([crawlP, adsP])
+  onProgress?.({ stage: 'extracting', detail: 'Extracting the messaging' })
 
   const content =
     `Company URL: ${String(url ?? '')}\n` +
@@ -120,5 +131,10 @@ export async function runSiteMap(body: unknown): Promise<unknown> {
 
   const block = message.content.find((b: Anthropic.ContentBlock) => b.type === 'text')
   const text = block && block.type === 'text' ? block.text : '{}'
-  return JSON.parse(text)
+  const parsed = JSON.parse(text) as { audiences?: unknown[]; messages?: unknown[] }
+  onProgress?.({
+    stage: 'mapped',
+    detail: `Mapped ${parsed.audiences?.length ?? 0} audiences, ${parsed.messages?.length ?? 0} messages`,
+  })
+  return parsed
 }

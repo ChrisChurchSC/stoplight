@@ -35,3 +35,47 @@ export async function mapSite(input: { url: string; notes?: string }): Promise<S
   if (!out?.brand?.name || !Array.isArray(out.messages)) throw new Error('empty map')
   return out
 }
+
+export interface MapProgress {
+  stage: string
+  detail: string
+}
+
+/** Same as mapSite, but streams stage progress (reading, pages, ads, extracting,
+ *  mapped) over SSE so the onboarding UI can show the work as it happens. */
+export async function mapSiteStream(
+  input: { url: string; notes?: string },
+  onProgress: (e: MapProgress) => void,
+): Promise<SiteMap> {
+  const res = await fetch('/api/map-site-stream', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok || !res.body) throw new Error(`map-site-stream ${res.status}`)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let result: SiteMap | null = null
+  let error: string | null = null
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let idx: number
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, idx)
+      buf = buf.slice(idx + 2)
+      const ev = /^event: (.*)$/m.exec(frame)?.[1]
+      const dataLine = /^data: (.*)$/m.exec(frame)?.[1]
+      if (!ev || !dataLine) continue
+      const data = JSON.parse(dataLine) as unknown
+      if (ev === 'progress') onProgress(data as MapProgress)
+      else if (ev === 'result') result = data as SiteMap
+      else if (ev === 'error') error = (data as { message?: string })?.message ?? 'failed'
+    }
+  }
+  if (error) throw new Error(error)
+  if (!result?.brand?.name) throw new Error('empty map')
+  return result
+}
