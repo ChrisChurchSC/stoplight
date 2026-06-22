@@ -2693,12 +2693,28 @@ button {
   gap: 10px;
 }
 .setup-social-row .setup-chip {
-  min-width: 84px;
+  min-width: 78px;
+}
+.setup-acct-url {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .setup-connected {
   font-size: 12px;
   font-weight: 700;
   color: #2faa6a;
+}
+.setup-addacct {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.setup-addacct .wiz-input {
+  flex: 1;
 }
 .setup-remap {
   margin-top: 10px;
