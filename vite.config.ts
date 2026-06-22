@@ -251,6 +251,39 @@ function coherenceApi(): PluginOption {
 }
 
 /**
+ * Dev-server endpoint for the current-state messaging map: crawl + ads in,
+ * structured live messaging out. Keeps the key server-side; mirrors /api/setup.
+ */
+function siteMapApi(): PluginOption {
+  return {
+    name: 'site-map-api',
+    configureServer(server) {
+      server.middlewares.use('/api/map-site', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runSiteMap } = await import('./server/siteMapHandler')
+            const result = await runSiteMap(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for the Claude engine — the agent that reads from sources
  * and publishes to channels by calling tools. Keeps the Anthropic key server-side.
  */
@@ -299,6 +332,7 @@ export default defineConfig(({ mode }) => {
       askApi(),
       coherenceApi(),
       agentApi(),
+      siteMapApi(),
       agentBridgeApi(),
     ],
   }

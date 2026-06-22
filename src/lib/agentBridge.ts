@@ -1,4 +1,5 @@
 import { useTrafficStore } from '../store/useTrafficStore'
+import { mapSite } from '../adapters/setup/siteMap'
 
 /**
  * Browser side of the agent bridge: this tab is the executor. It listens for
@@ -41,6 +42,20 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       strategy: setup.strategy,
       campaign: setup.campaign?.name,
       proofPoints: setup.rtbs?.length ?? 0,
+    }
+  },
+
+  async mapClient(a) {
+    const url = str(a.url).trim()
+    if (!url) throw new Error('url is required')
+    const map = await mapSite({ url, notes: str(a.notes) || undefined })
+    await useTrafficStore.getState().provisionCurrentState(map)
+    return {
+      client: map.brand.name,
+      audiences: map.audiences.map((x) => x.name),
+      proofPoints: map.proofPoints.length,
+      messages: map.messages.length,
+      channels: [...new Set(map.messages.map((m) => m.channel))],
     }
   },
 
