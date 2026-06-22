@@ -72,6 +72,20 @@ server.registerTool(
 )
 
 server.registerTool(
+  'map_client',
+  {
+    title: 'Map a client from their site',
+    description:
+      "Map a client's CURRENT live messaging from their website URL. Claude renders their site and reads their live ads, extracts their real headlines, value props, claims, CTAs, audiences, and proof, and stores it as the connected map you can see. Use this to onboard a client by mapping what they already have live (the front door to diagnosis).",
+    inputSchema: {
+      url: z.string().describe("The client's website URL or domain, e.g. ridge.com"),
+      notes: z.string().optional().describe('Optional notes to steer the mapping'),
+    },
+  },
+  async ({ url, notes }) => text(await dispatch('mapClient', { url, notes })),
+)
+
+server.registerTool(
   'run_coherence_check',
   {
     title: 'Run coherence check',

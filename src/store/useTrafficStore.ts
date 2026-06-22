@@ -33,6 +33,7 @@ import {
   type SetupInput,
   type WorkspaceSetup,
 } from '../adapters/setup/setupGenerator'
+import type { SiteMap } from '../adapters/setup/siteMap'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { messagingFields, messagingAllText, messagingMap } from '../domain/messaging'
@@ -83,6 +84,25 @@ const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSet
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
+}
+
+// Map an extracted message's {headline, body, cta} onto a channel's real
+// messaging field keys, so the current-state copy renders on the canvas.
+function buildMessaging(
+  channel: ChannelId,
+  m: { headline: string; body?: string; cta?: string },
+): Record<string, string> {
+  const keys = messagingFields(channel).map((f) => f.key)
+  const out: Record<string, string> = {}
+  const put = (val: string | undefined, prefer: string[]) => {
+    if (!val?.trim()) return
+    const key = prefer.find((k) => keys.includes(k) && !(k in out)) ?? keys.find((k) => !(k in out))
+    if (key) out[key] = val.trim()
+  }
+  put(m.headline, ['headline', 'title', 'primary', 'intro', 'post', 'caption', 'message', 'subject'])
+  put(m.body, ['body', 'description', 'primary', 'caption', 'meta-description', 'd1'])
+  put(m.cta, ['cta', 'link'])
+  return out
 }
 
 // Per-client Google Drive folder links, persisted (clients are derived from
@@ -471,6 +491,8 @@ interface TrafficState {
   generateSetup: (input: SetupInput) => Promise<WorkspaceSetup>
   /** Commit a confirmed setup: client + profile + ICP + proof + first campaign. */
   provisionWorkspace: (setup: WorkspaceSetup) => Promise<void>
+  /** Store an extracted current-state messaging map as the client's connected map. */
+  provisionCurrentState: (map: SiteMap) => Promise<void>
   /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
    *  across the flight at each asset's monthly cadence, optionally splitting a
    *  media budget across the paid rows. */
@@ -1103,6 +1125,58 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     })
     set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all' })
   },
+
+  provisionCurrentState: async (map) => {
+    const client = map.brand.name.trim()
+    if (!client) return
+    get().addClient(client)
+    get().setClientProfile(client, {
+      website: map.brand.website?.trim() || undefined,
+      industry: map.brand.industry?.trim() || undefined,
+      voice: map.brand.voice?.trim() || undefined,
+    })
+    const primary = map.audiences[0]
+    get().setIcp({
+      name: primary?.name ?? 'Primary audience',
+      segment: 'Current state',
+      summary: primary?.description ?? `Audiences for ${client}, mapped from their live messaging.`,
+      firmographics: [],
+      pains: [],
+    })
+
+    // One campaign holds the current-state map; the rows are their LIVE messaging.
+    const campaign = `${client} — Live messaging`
+    get().addCampaign({ name: campaign, client, strategy: 'Current state' })
+
+    const rtbs: Rtb[] = map.proofPoints.map((p, i) => ({ id: `rtb-live-${i}`, label: p.label, detail: p.detail }))
+    if (rtbs.length) {
+      registerCampaignRtbs(campaign, rtbs)
+      const persisted = loadCampaignRtbs()
+      persisted[campaign] = rtbs
+      saveCampaignRtbs(persisted)
+    }
+
+    const rows: TrafficRow[] = map.messages.map((m) => {
+      const channel: ChannelId = m.channel in CHANNELS ? (m.channel as ChannelId) : 'website'
+      return {
+        id: freshRowId(),
+        assetId: '',
+        assetName: m.label || m.headline.slice(0, 48) || 'Message',
+        mediaType: 'text',
+        channel,
+        messaging: buildMessaging(channel, m),
+        campaign,
+        audience: m.audience || '',
+        status: 'posted',
+        scheduledAt: new Date().toISOString(),
+        createdAt: Date.now(),
+      }
+    })
+    await sheet.append(rows)
+    await get().refresh()
+    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all' })
+  },
+
   seedCampaignAssets: async (campaign, deliverables, opts) => {
     if (!deliverables.length) return
     const flightWeeks = opts?.flightWeeks && opts.flightWeeks > 0 ? opts.flightWeeks : 4
