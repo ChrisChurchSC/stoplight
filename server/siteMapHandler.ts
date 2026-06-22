@@ -4,6 +4,8 @@ import { crawlSite } from './siteCrawler'
 import { readYouTube } from './youtube'
 import { readInstagram } from './instagram'
 import { readLinkedIn } from './linkedin'
+import { gatherWithSession } from './connectChannel'
+import { hasSession } from './sessionStore'
 
 /**
  * Current-state messaging map. Given a brand's public site (rendered) + their
@@ -114,18 +116,45 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
   })
   const [crawl, live] = await Promise.all([crawlP, adsP])
 
-  // Discovered social profiles + their YouTube content (YouTube Data API, gated).
+  // Discovered social profiles.
   const socials = crawl.socials
   if (Object.keys(socials).length) {
-    onProgress?.({ stage: 'socials', detail: `Found their ${Object.keys(socials).join(', ')}` })
+    onProgress?.({ stage: 'socials', detail: `Found their ${Object.keys(socials).filter((p) => p !== 'facebook').join(', ')}` })
   }
-  const yt = socials.youtube ? await readYouTube(socials.youtube) : null
-  if (yt?.count) onProgress?.({ stage: 'youtube', detail: `Read ${yt.count} YouTube videos` })
-  // Organic social via the client's connected accounts (gated on their tokens).
-  const ig = await readInstagram()
-  if (ig?.count) onProgress?.({ stage: 'instagram', detail: `Read ${ig.count} Instagram posts` })
-  const li = await readLinkedIn()
-  if (li?.count) onProgress?.({ stage: 'linkedin', detail: `Read ${li.count} LinkedIn posts` })
+
+  const socialText: string[] = []
+  // 1) Connected channels: read each logged-in session profile (the primary path
+  //    for login-walled channels — this is "Claude reads it the way you would").
+  for (const [platform, profileUrl] of Object.entries(socials)) {
+    if (platform === 'facebook' || !hasSession(profileUrl)) continue
+    const g = await gatherWithSession(profileUrl)
+    if (g?.text) {
+      socialText.push(`Recent ${platform} content (connected account):\n${g.text}`)
+      onProgress?.({ stage: platform, detail: `Read connected ${platform}` })
+    }
+  }
+  // 2) Fallbacks for channels NOT connected: YouTube Data API, IG/LinkedIn env tokens.
+  if (socials.youtube && !hasSession(socials.youtube)) {
+    const yt = await readYouTube(socials.youtube)
+    if (yt?.count) {
+      socialText.push(`Recent YouTube videos (${yt.title}):\n${yt.text}`)
+      onProgress?.({ stage: 'youtube', detail: `Read ${yt.count} YouTube videos` })
+    }
+  }
+  if (!socials.instagram || !hasSession(socials.instagram)) {
+    const ig = await readInstagram()
+    if (ig?.count) {
+      socialText.push(`Recent Instagram posts:\n${ig.text}`)
+      onProgress?.({ stage: 'instagram', detail: `Read ${ig.count} Instagram posts` })
+    }
+  }
+  if (!socials.linkedin || !hasSession(socials.linkedin)) {
+    const li = await readLinkedIn()
+    if (li?.count) {
+      socialText.push(`Recent LinkedIn posts:\n${li.text}`)
+      onProgress?.({ stage: 'linkedin', detail: `Read ${li.count} LinkedIn posts` })
+    }
+  }
   onProgress?.({ stage: 'extracting', detail: 'Extracting the messaging' })
 
   const content =
@@ -134,9 +163,7 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     `\nWebsite copy (rendered, crawled ${crawl.pages.length} page(s): ${crawl.pages.join(', ') || 'none'}):\n` +
     `${crawl.text || '(could not fetch, infer from the URL)'}\n` +
     (live.text ? `\nCurrent live ads (${live.sources.join(', ')}):\n${live.text}\n` : '') +
-    (yt?.text ? `\nRecent YouTube videos (${yt.title}):\n${yt.text}\n` : '') +
-    (ig?.text ? `\nRecent Instagram posts:\n${ig.text}\n` : '') +
-    (li?.text ? `\nRecent LinkedIn posts:\n${li.text}\n` : '') +
+    (socialText.length ? `\n${socialText.join('\n\n')}\n` : '') +
     `\nMap their current live messaging.`
 
   const message = await client.messages.create({

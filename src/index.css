@@ -2682,6 +2682,27 @@ button {
   font-size: 12px;
   text-align: left;
 }
+.setup-socials {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.setup-social-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.setup-social-row .setup-chip {
+  min-width: 84px;
+}
+.setup-connected {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2faa6a;
+}
+.setup-remap {
+  margin-top: 10px;
+}
 .setup-review-intro {
   margin: 0 0 4px;
 }

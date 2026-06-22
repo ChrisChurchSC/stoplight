@@ -329,6 +329,60 @@ function siteMapStreamApi(): PluginOption {
 }
 
 /**
+ * Connect-a-channel endpoints: open a real browser to log into a client's channel
+ * once (/start), then persist that session (/save) so Claude can read the channel
+ * authenticated. Local/dev only — opens a visible browser window for the login.
+ */
+function connectApi(): PluginOption {
+  const readBody = (req: import('node:http').IncomingMessage) =>
+    new Promise<Record<string, unknown>>((resolve) => {
+      let b = ''
+      req.on('data', (c) => (b += c))
+      req.on('end', () => {
+        try {
+          resolve(JSON.parse(b || '{}') as Record<string, unknown>)
+        } catch {
+          resolve({})
+        }
+      })
+    })
+  const handle = (run: (body: Record<string, unknown>) => Promise<unknown>) => async (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => {
+    if (req.method !== 'POST') {
+      res.statusCode = 405
+      return res.end()
+    }
+    try {
+      const result = await run(await readBody(req))
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify(result))
+    } catch (err) {
+      res.statusCode = 500
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: String((err as Error)?.message ?? err) }))
+    }
+  }
+  return {
+    name: 'connect-api',
+    configureServer(server) {
+      server.middlewares.use(
+        '/api/connect/start',
+        handle(async (body) => {
+          const { startConnect } = await import('./server/connectChannel')
+          return startConnect(String(body.url ?? ''))
+        }),
+      )
+      server.middlewares.use(
+        '/api/connect/save',
+        handle(async (body) => {
+          const { saveConnect } = await import('./server/connectChannel')
+          return saveConnect(String(body.token ?? ''))
+        }),
+      )
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for the Claude engine — the agent that reads from sources
  * and publishes to channels by calling tools. Keeps the Anthropic key server-side.
  */
@@ -379,6 +433,7 @@ export default defineConfig(({ mode }) => {
       agentApi(),
       siteMapApi(),
       siteMapStreamApi(),
+      connectApi(),
       agentBridgeApi(),
     ],
   }

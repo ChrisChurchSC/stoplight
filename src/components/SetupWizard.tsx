@@ -21,6 +21,9 @@ export function SetupWizard() {
   const [map, setMap] = useState<SiteMap | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [provisioning, setProvisioning] = useState(false)
+  // Channel connect: platform -> pending token (browser open), and the set connected.
+  const [connecting, setConnecting] = useState<Record<string, string>>({})
+  const [connected, setConnected] = useState<Set<string>>(new Set())
 
   if (!open) return null
 
@@ -59,6 +62,33 @@ export function SetupWizard() {
     setProvisioning(true)
     await provisionCurrentState(map)
     onClose()
+  }
+
+  // Connect a channel: open a real browser to log in, then save the session so
+  // Claude can read it. A re-map then pulls that channel into the map.
+  const startConnect = async (platform: string, channelUrl: string) => {
+    const res = await fetch('/api/connect/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: channelUrl }),
+    })
+    const { token } = (await res.json()) as { token?: string }
+    if (token) setConnecting((c) => ({ ...c, [platform]: token }))
+  }
+  const finishConnect = async (platform: string) => {
+    const token = connecting[platform]
+    if (!token) return
+    await fetch('/api/connect/save', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    setConnecting((c) => {
+      const next = { ...c }
+      delete next[platform]
+      return next
+    })
+    setConnected((s) => new Set(s).add(platform))
   }
 
   // Escape hatch: no public site (or you want to start manual). Create the client
@@ -198,29 +228,37 @@ export function SetupWizard() {
               ))}
             </div>
 
-            {map.socials && Object.keys(map.socials).length > 0 && (
+            {map.socials && Object.keys(map.socials).filter((p) => p !== 'facebook').length > 0 && (
               <>
-                <div className="wiz-label setup-section-plain">Also found on their site</div>
-                <div className="setup-chips">
-                  {Object.keys(map.socials).map((p) => (
-                    <span key={p} className="setup-chip">
-                      {p}
-                    </span>
-                  ))}
+                <div className="wiz-label setup-section-plain">Their channels</div>
+                <div className="setup-socials">
+                  {Object.entries(map.socials)
+                    .filter(([p]) => p !== 'facebook')
+                    .map(([platform, channelUrl]) => (
+                      <div key={platform} className="setup-social-row">
+                        <span className="setup-chip">{platform}</span>
+                        {connected.has(platform) ? (
+                          <span className="setup-connected">✓ connected</span>
+                        ) : connecting[platform] ? (
+                          <button className="btn sm primary" onClick={() => finishConnect(platform)}>
+                            I've logged in, save
+                          </button>
+                        ) : (
+                          <button className="btn sm" onClick={() => startConnect(platform, channelUrl)}>
+                            Connect
+                          </button>
+                        )}
+                      </div>
+                    ))}
                 </div>
-                <div className="wiz-hint setup-socials-note">
-                  YouTube is pulled into the map (with a key). Instagram and LinkedIn need their account
-                  connected to pull, on{' '}
-                  <button
-                    className="wiz-link"
-                    onClick={() => {
-                      onClose()
-                      setPage('connectors')
-                    }}
-                  >
-                    Connectors
+                {connected.size > 0 && (
+                  <button className="btn sm primary setup-remap" onClick={run}>
+                    ✦ Re-map to pull connected channels →
                   </button>
-                  .
+                )}
+                <div className="wiz-hint setup-socials-note">
+                  Connect logs you into that channel once, then Claude reads it like the website. Re-map to
+                  pull a newly connected channel into the map.
                 </div>
               </>
             )}
