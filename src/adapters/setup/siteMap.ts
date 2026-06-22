@@ -20,6 +20,9 @@ export interface SiteMap {
   audiences: { name: string; description: string }[]
   proofPoints: { label: string; detail: string }[]
   messages: SiteMapMessage[]
+  /** Social profiles found on their site (platform -> URL). YouTube is pulled
+   *  when a key is set; the rest are discovered for the connect step. */
+  socials?: Record<string, string>
 }
 
 /** Extract the current-state map from a URL. Requires the real engine (Claude);

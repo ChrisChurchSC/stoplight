@@ -198,6 +198,33 @@ export function SetupWizard() {
               ))}
             </div>
 
+            {map.socials && Object.keys(map.socials).length > 0 && (
+              <>
+                <div className="wiz-label setup-section-plain">Also found on their site</div>
+                <div className="setup-chips">
+                  {Object.keys(map.socials).map((p) => (
+                    <span key={p} className="setup-chip">
+                      {p}
+                    </span>
+                  ))}
+                </div>
+                <div className="wiz-hint setup-socials-note">
+                  YouTube is pulled into the map (with a key). Instagram and LinkedIn need their account
+                  connected to pull, on{' '}
+                  <button
+                    className="wiz-link"
+                    onClick={() => {
+                      onClose()
+                      setPage('connectors')
+                    }}
+                  >
+                    Connectors
+                  </button>
+                  .
+                </div>
+              </>
+            )}
+
             <div className="setup-mapstats">
               {map.messages.length} live messages · {map.proofPoints.length} proof points
             </div>
