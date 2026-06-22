@@ -76,6 +76,10 @@ export function CanvasView() {
   const openReview = useTrafficStore((s) => s.openReview)
   const openDiagnosis = useTrafficStore((s) => s.openDiagnosis)
   const openHistory = useTrafficStore((s) => s.openHistory)
+  // Inbound messages ingested back from every channel, keyed by asset id. Surfaced
+  // on a card once you zoom in, alongside the outbound copy, so the map shows the
+  // whole conversation per asset (what we said + what came back).
+  const comments = useTrafficStore((s) => s.comments)
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
 
@@ -148,13 +152,22 @@ export function CanvasView() {
     const cardHeight = (r: TrafficRow) => {
       if (!detail) return MSG_H
       const fields = messageBreakdown(r)
-      if (!fields.length) return MSG_H
+      const inbound = comments[r.id] ?? []
+      if (!fields.length && !inbound.length) return MSG_H
       let h = 18 + 18 + 5 // padding + label line + breakdown margin
       fields.forEach((f, idx) => {
         if (idx) h += 6 // gap between components
         h += 12 // component label + gap
         h += Math.max(1, Math.ceil(f.value.length / 21)) * 15 // wrapped value lines
       })
+      if (inbound.length) {
+        h += 16 // inbound header
+        inbound.forEach((c) => {
+          h += 13 // author line
+          h += Math.max(1, Math.ceil(c.text.length / 24)) * 13 // wrapped reply lines
+          h += 6 // gap between messages
+        })
+      }
       return Math.max(MSG_H, Math.round(h + 6))
     }
 
@@ -242,7 +255,7 @@ export function CanvasView() {
     })
     const maxX = Math.max(totalW, ...ns.map((n) => n.x + n.w))
     return { nodes: ns, edges: es, bands, bounds: { w: maxX, h: bandBottom } }
-  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved, detail])
+  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientFilter, moved, detail, comments])
 
   // ---- multiplayer presence (cross-tab + ambient) ----
   const { peers, publishCursor, publishNode, publishMove, clearCursor } = usePresence({
@@ -466,7 +479,8 @@ export function CanvasView() {
                 {(() => {
                   if (n.kind === 'message' && detail && n.row) {
                     const bd = messageBreakdown(n.row)
-                    if (bd.length)
+                    const inbound = comments[n.row.id] ?? []
+                    if (bd.length || inbound.length)
                       return (
                         <div className="cv-node-full">
                           {bd.map((fld) => (
@@ -475,6 +489,22 @@ export function CanvasView() {
                               <span className="cv-node-fval">{fld.value}</span>
                             </div>
                           ))}
+                          {inbound.length > 0 && (
+                            <div className="cv-node-msgs">
+                              <div className="cv-node-msgs-hd">
+                                Messages back · {inbound.length}
+                              </div>
+                              {inbound.map((c) => (
+                                <div className={`cv-node-msg s-${c.sentiment}`} key={c.id}>
+                                  <span className="cv-node-msg-who">
+                                    {c.author}
+                                    {c.intent && <span className="cv-node-msg-tag">intent</span>}
+                                  </span>
+                                  <span className="cv-node-msg-txt">{c.text}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )
                   }

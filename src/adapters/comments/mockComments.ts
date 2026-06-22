@@ -85,7 +85,7 @@ export interface CommentSource {
 const NAMES = ['Dana Reyes', 'Sam Ito', 'Priya Shah', 'Marco Diaz', 'Lee Park', 'Ana Costa', 'Tom Vance', 'Riya Nair']
 
 const POOL: { text: string; sentiment: Sentiment; intent: boolean; needsResponse: boolean }[] = [
-  { text: 'This looks great — exactly what our ops team has been missing.', sentiment: 'positive', intent: false, needsResponse: false },
+  { text: 'This looks great, exactly what our ops team has been missing.', sentiment: 'positive', intent: false, needsResponse: false },
   { text: 'How much is this for a 500-person team? Looking for pricing.', sentiment: 'neutral', intent: true, needsResponse: true },
   { text: 'Can we get a demo? Evaluating tools this quarter.', sentiment: 'positive', intent: true, needsResponse: true },
   { text: 'Tried it and it kept crashing for me. Not impressed.', sentiment: 'negative', intent: false, needsResponse: true },

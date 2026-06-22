@@ -4750,6 +4750,62 @@ button {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Inbound messages ingested back from the channel, shown under the outbound copy
+   when zoomed in, so a card holds the whole conversation per asset. */
+.cv-node-msgs {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cv-node-msgs-hd {
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.cv-node-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 6px;
+  border-left: 2px solid var(--border);
+}
+.cv-node-msg.s-positive {
+  border-left-color: #2faa6a;
+}
+.cv-node-msg.s-negative {
+  border-left-color: #d3543f;
+}
+.cv-node-msg-who {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.cv-node-msg-tag {
+  font-size: 7.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.5;
+}
+.cv-node-msg-txt {
+  font-size: 10px;
+  color: var(--text);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .cv-node-collapse {
   flex: none;
   font-weight: 800;
