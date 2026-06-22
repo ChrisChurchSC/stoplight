@@ -4,7 +4,7 @@ import { crawlSite } from './siteCrawler'
 import { readYouTube } from './youtube'
 import { readInstagram } from './instagram'
 import { readLinkedIn } from './linkedin'
-import { gatherWithSession } from './connectChannel'
+import { gatherWithSession, platformOf } from './connectChannel'
 import { hasSession } from './sessionStore'
 
 /**
@@ -102,7 +102,7 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
   if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
-  const { url, notes } = (body ?? {}) as { url?: string; notes?: string }
+  const { url, notes, accounts } = (body ?? {}) as { url?: string; notes?: string; accounts?: string[] }
 
   // Show the work: emit a stage as the crawl and the ad scrape each resolve.
   onProgress?.({ stage: 'reading', detail: `Reading ${url || 'the site'}` })
@@ -116,17 +116,25 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
   })
   const [crawl, live] = await Promise.all([crawlP, adsP])
 
-  // Discovered social profiles.
+  // Discovered social profiles, plus any accounts the user added at onboarding.
   const socials = crawl.socials
-  if (Object.keys(socials).length) {
-    onProgress?.({ stage: 'socials', detail: `Found their ${Object.keys(socials).filter((p) => p !== 'facebook').join(', ')}` })
+  const profiles = new Map<string, string>() // profileUrl -> platform
+  for (const [platform, profileUrl] of Object.entries(socials)) {
+    if (platform !== 'facebook') profiles.set(profileUrl, platform)
+  }
+  for (const a of accounts ?? []) {
+    const u = a.trim()
+    if (u) profiles.set(u, platformOf(u))
+  }
+  if (profiles.size) {
+    onProgress?.({ stage: 'socials', detail: `Found their ${[...new Set(profiles.values())].join(', ')}` })
   }
 
   const socialText: string[] = []
   // 1) Connected channels: read each logged-in session profile (the primary path
   //    for login-walled channels — this is "Claude reads it the way you would").
-  for (const [platform, profileUrl] of Object.entries(socials)) {
-    if (platform === 'facebook' || !hasSession(profileUrl)) continue
+  for (const [profileUrl, platform] of profiles) {
+    if (!hasSession(profileUrl)) continue
     const g = await gatherWithSession(profileUrl)
     if (g?.text) {
       socialText.push(`Recent ${platform} content (connected account):\n${g.text}`)

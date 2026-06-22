@@ -47,7 +47,7 @@ export interface MapProgress {
 /** Same as mapSite, but streams stage progress (reading, pages, ads, extracting,
  *  mapped) over SSE so the onboarding UI can show the work as it happens. */
 export async function mapSiteStream(
-  input: { url: string; notes?: string },
+  input: { url: string; notes?: string; accounts?: string[] },
   onProgress: (e: MapProgress) => void,
 ): Promise<SiteMap> {
   const res = await fetch('/api/map-site-stream', {

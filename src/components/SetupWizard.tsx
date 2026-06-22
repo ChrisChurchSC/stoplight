@@ -6,6 +6,18 @@ import { ChannelIcon } from './ChannelIcon'
 
 type Step = 'input' | 'mapping' | 'review'
 
+/** A short platform label from an account URL, for the connect list. */
+function platformLabel(u: string): string {
+  const s = u.toLowerCase()
+  if (s.includes('instagram')) return 'instagram'
+  if (s.includes('linkedin')) return 'linkedin'
+  if (s.includes('youtube')) return 'youtube'
+  if (s.includes('tiktok')) return 'tiktok'
+  if (s.includes('x.com') || s.includes('twitter')) return 'x'
+  if (s.includes('facebook')) return 'facebook'
+  return 'account'
+}
+
 export function SetupWizard() {
   const open = useTrafficStore((s) => s.setupOpen)
   const close = useTrafficStore((s) => s.closeSetup)
@@ -21,9 +33,12 @@ export function SetupWizard() {
   const [map, setMap] = useState<SiteMap | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [provisioning, setProvisioning] = useState(false)
-  // Channel connect: platform -> pending token (browser open), and the set connected.
+  // Channel connect: account URL -> pending token (browser open), and the set
+  // connected. extraAccounts = accounts you add by hand at onboarding.
   const [connecting, setConnecting] = useState<Record<string, string>>({})
   const [connected, setConnected] = useState<Set<string>>(new Set())
+  const [extraAccounts, setExtraAccounts] = useState<string[]>([])
+  const [accountInput, setAccountInput] = useState('')
 
   if (!open) return null
 
@@ -33,6 +48,10 @@ export function SetupWizard() {
     setMap(null)
     setError(null)
     setProvisioning(false)
+    setConnecting({})
+    setConnected(new Set())
+    setExtraAccounts([])
+    setAccountInput('')
   }
   const onClose = () => {
     close()
@@ -47,7 +66,7 @@ export function SetupWizard() {
     setError(null)
     try {
       const m = await mapSiteStream(
-        { url: url.trim(), notes: notes.trim() || undefined },
+        { url: url.trim(), notes: notes.trim() || undefined, accounts: extraAccounts },
         (e) => setStages((s) => [...s, e]),
       )
       setMap(m)
@@ -65,18 +84,19 @@ export function SetupWizard() {
   }
 
   // Connect a channel: open a real browser to log in, then save the session so
-  // Claude can read it. A re-map then pulls that channel into the map.
-  const startConnect = async (platform: string, channelUrl: string) => {
+  // Claude can read it. A re-map then pulls that channel into the map. Keyed by
+  // the account URL, so it works for discovered and manually-added accounts alike.
+  const startConnect = async (channelUrl: string) => {
     const res = await fetch('/api/connect/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: channelUrl }),
     })
     const { token } = (await res.json()) as { token?: string }
-    if (token) setConnecting((c) => ({ ...c, [platform]: token }))
+    if (token) setConnecting((c) => ({ ...c, [channelUrl]: token }))
   }
-  const finishConnect = async (platform: string) => {
-    const token = connecting[platform]
+  const finishConnect = async (channelUrl: string) => {
+    const token = connecting[channelUrl]
     if (!token) return
     await fetch('/api/connect/save', {
       method: 'POST',
@@ -85,10 +105,16 @@ export function SetupWizard() {
     })
     setConnecting((c) => {
       const next = { ...c }
-      delete next[platform]
+      delete next[channelUrl]
       return next
     })
-    setConnected((s) => new Set(s).add(platform))
+    setConnected((s) => new Set(s).add(channelUrl))
+  }
+  const addAccount = () => {
+    const u = accountInput.trim()
+    if (!u) return
+    setExtraAccounts((a) => (a.includes(u) ? a : [...a, u]))
+    setAccountInput('')
   }
 
   // Escape hatch: no public site (or you want to start manual). Create the client
@@ -102,6 +128,11 @@ export function SetupWizard() {
   }
 
   const channels = map ? [...new Set(map.messages.map((m) => m.channel as ChannelId))] : []
+  // Every account to connect: discovered on the site + ones you add by hand.
+  const discoveredAccounts = map
+    ? Object.entries(map.socials ?? {}).filter(([p]) => p !== 'facebook').map(([, u]) => u)
+    : []
+  const allAccounts = [...new Set([...discoveredAccounts, ...extraAccounts])]
 
   return (
     <>
@@ -228,40 +259,52 @@ export function SetupWizard() {
               ))}
             </div>
 
-            {map.socials && Object.keys(map.socials).filter((p) => p !== 'facebook').length > 0 && (
-              <>
-                <div className="wiz-label setup-section-plain">Their channels</div>
-                <div className="setup-socials">
-                  {Object.entries(map.socials)
-                    .filter(([p]) => p !== 'facebook')
-                    .map(([platform, channelUrl]) => (
-                      <div key={platform} className="setup-social-row">
-                        <span className="setup-chip">{platform}</span>
-                        {connected.has(platform) ? (
-                          <span className="setup-connected">✓ connected</span>
-                        ) : connecting[platform] ? (
-                          <button className="btn sm primary" onClick={() => finishConnect(platform)}>
-                            I've logged in, save
-                          </button>
-                        ) : (
-                          <button className="btn sm" onClick={() => startConnect(platform, channelUrl)}>
-                            Connect
-                          </button>
-                        )}
-                      </div>
-                    ))}
+            <div className="wiz-label setup-section-plain">Their channels</div>
+            <div className="setup-socials">
+              {allAccounts.map((acct) => (
+                <div key={acct} className="setup-social-row">
+                  <span className="setup-chip">{platformLabel(acct)}</span>
+                  <span className="setup-acct-url">{acct.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                  {connected.has(acct) ? (
+                    <span className="setup-connected">✓ connected</span>
+                  ) : connecting[acct] ? (
+                    <button className="btn sm primary" onClick={() => finishConnect(acct)}>
+                      I've logged in, save
+                    </button>
+                  ) : (
+                    <button className="btn sm" onClick={() => startConnect(acct)}>
+                      Connect
+                    </button>
+                  )}
                 </div>
-                {connected.size > 0 && (
-                  <button className="btn sm primary setup-remap" onClick={run}>
-                    ✦ Re-map to pull connected channels →
-                  </button>
-                )}
-                <div className="wiz-hint setup-socials-note">
-                  Connect logs you into that channel once, then Claude reads it like the website. Re-map to
-                  pull a newly connected channel into the map.
-                </div>
-              </>
+              ))}
+              {allAccounts.length === 0 && (
+                <div className="wiz-hint">No channels found on their site. Add any below.</div>
+              )}
+            </div>
+
+            <div className="setup-addacct">
+              <input
+                className="wiz-input"
+                placeholder="Add an account, e.g. instagram.com/theirhandle"
+                value={accountInput}
+                onChange={(e) => setAccountInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addAccount()}
+              />
+              <button className="btn sm" onClick={addAccount} disabled={!accountInput.trim()}>
+                + Add
+              </button>
+            </div>
+
+            {connected.size > 0 && (
+              <button className="btn sm primary setup-remap" onClick={run}>
+                ✦ Re-map to pull connected channels →
+              </button>
             )}
+            <div className="wiz-hint setup-socials-note">
+              Connect logs you into that channel once (your password goes to the platform, never to us),
+              then Claude reads it like the website. Add any account you want, connect each, then re-map.
+            </div>
 
             <div className="setup-mapstats">
               {map.messages.length} live messages · {map.proofPoints.length} proof points
