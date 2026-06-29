@@ -382,7 +382,13 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
 
   const { nodes, edges, bands, audienceSlabs, campaignName, strategyName, bounds } = useMemo(() => {
     const client = clientFilter !== 'all' ? clientFilter : ''
-    const campaignNames = [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))]
+    // A freshly-created canvas has no rows yet, so fall back to the scoped campaign
+    // so its spine + lanes still render (and it's addable) before the first asset.
+    const campaignNames = scoped.length
+      ? [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))]
+      : campaignFilter !== 'all'
+        ? [campaignFilter]
+        : []
     const campObj = campaignList.find((c) => campaignNames.includes(c.name))
     const strat = campObj?.strategy ?? 'Campaign'
     const subjectText = campObj?.subject?.trim() || campaignNames[0] || 'This campaign'
@@ -1302,7 +1308,10 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     }
   }
 
-  if (scoped.length === 0) {
+  // Only truly out-of-scope (no campaign open) shows the empty prompt. A specific
+  // campaign with no rows yet — a fresh canvas — still renders its lanes so you can
+  // add the first asset.
+  if (scoped.length === 0 && campaignFilter === 'all') {
     return (
       <div className="sheet-grid">
         <div className="ins ins-empty">No campaign in scope. Pick a client, or load sample data.</div>

@@ -60,6 +60,9 @@ export function Workbench() {
   // All campaign sub-views (Connection / Grid / Calendar) share the full-bleed,
   // floating-chrome design — the project-tab drawer + dark top bar sit above all three.
   const canvasMode = page === 'clients' && !overview && !level1
+  // The files-browser home carries its own shell (files sidebar + tabs), so the
+  // global rail + breadcrumb step aside there — matching how the canvas works.
+  const homeFiles = page === 'clients' && overview
 
   useEffect(() => {
     refresh()
@@ -94,12 +97,12 @@ export function Workbench() {
     <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
       {/* Persistent global rail — present at every navigation altitude, but it
           yields to the full-bleed campaign canvas (which assumes no rail). */}
-      {!canvasMode && <GlobalNav />}
+      {!canvasMode && !homeFiles && <GlobalNav />}
       {page === 'clients' ? (
         <div className="work-col">
           <ShareBanner />
           {canvasMode && <CanvasProjectTabs />}
-          <Breadcrumb />
+          {!homeFiles && <Breadcrumb />}
           <div
             className={`work-body${over ? ' drop-over' : ''}`}
             onDragOver={(e) => {

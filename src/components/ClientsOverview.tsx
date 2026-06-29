@@ -1,278 +1,208 @@
-import { useState } from 'react'
-import { mockAttio } from '../adapters/attio/mockAttio'
-import { isGoogleDriveConfigured } from '../adapters/drive'
-import { money } from '../domain/budget'
+import { useMemo, useState } from 'react'
+import { applyBreakStatus, breakScopeKey, resolveBreaks } from '../domain/breaks'
 import { clientForCampaign } from '../domain/clients'
+import { campaignAttention, campaignStats, deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
+import { mockAttio } from '../adapters/attio/mockAttio'
 import type { TrafficRow } from '../domain/types'
-import { useTrafficStore } from '../store/useTrafficStore'
-import { HomeHub } from './HomeHub'
+import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
+import { CampaignThumb } from './CampaignThumb'
+import { CanvasProjectTabs } from './CanvasProjectTabs'
+import { HomeSidebar, type BrandRow } from './HomeSidebar'
+import { NewCanvasButton } from './NewCanvasButton'
 
-interface ClientRow {
-  client: string
-  assets: number
-  campaigns: number
-  revenue: number
-  posted: number
-  lastActivity: number
-}
+/**
+ * The home — a files browser for canvases, in the same shell as the canvas page:
+ * a left files sidebar, the open-canvas tabs across the top, and a gallery of
+ * canvas thumbnail cards you open with a click. Canvases live in a brand or in the
+ * personal Drafts space; the sidebar filters the gallery (all / drafts / flagged /
+ * live, or one brand). "New canvas" (top-right) starts a fresh Drafts canvas.
+ */
 
-function summarize(client: string, rows: TrafficRow[]): ClientRow {
-  const names = new Set(rows.map((r) => r.assetName))
-  let revenue = 0
-  for (const n of names) revenue += mockAttio.attributionForAsset(n).wonRevenue
-  return {
-    client,
-    assets: names.size,
-    campaigns: new Set(rows.map((r) => (r.campaign ?? '').trim()).filter(Boolean)).size,
-    revenue,
-    posted: rows.filter((r) => r.status === 'posted').length,
-    lastActivity: Math.max(0, ...rows.map((r) => r.postedAt ?? r.createdAt ?? 0)),
+const HOUR = 3_600_000
+const DAY = 86_400_000
+function fmtAgo(ms: number): string {
+  if (!ms) return ''
+  const d = Date.now() - ms
+  if (d < 0) return 'just now'
+  if (d < HOUR) {
+    const m = Math.floor(d / 60_000)
+    return m <= 1 ? 'just now' : `${m}m ago`
   }
+  if (d < DAY) return `${Math.floor(d / HOUR)}h ago`
+  if (d < 7 * DAY) return `${Math.floor(d / DAY)}d ago`
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-const fmtDate = (ms: number) =>
-  ms ? new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
-
-type Tab = 'all' | 'recents' | 'favorites'
+interface CanvasCard {
+  name: string
+  client: string
+  status: CampaignStatus
+  rows: TrafficRow[]
+  lastTouched: number
+  flagged: boolean
+}
 
 export function ClientsOverview() {
   const rows = useTrafficStore((s) => s.rows)
-  const loadSample = useTrafficStore((s) => s.loadSample)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const driveLinks = useTrafficStore((s) => s.driveLinks)
-  const setDriveLink = useTrafficStore((s) => s.setDriveLink)
-  const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
+  const campaignList = useTrafficStore((s) => s.campaignList)
   const clientList = useTrafficStore((s) => s.clientList)
-  const deleteClient = useTrafficStore((s) => s.deleteClient)
+  const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const openCampaign = useTrafficStore((s) => s.openCampaign)
   const openOnboard = useTrafficStore((s) => s.openOnboard)
-  const setPage = useTrafficStore((s) => s.setPage)
+  const deleteClient = useTrafficStore((s) => s.deleteClient)
+  const loadSample = useTrafficStore((s) => s.loadSample)
 
-  const [tab, setTab] = useState<Tab>('all')
-  const [favorites, setFavorites] = useState<Set<string>>(new Set())
-  const [q, setQ] = useState('')
-  const [linkClient, setLinkClient] = useState<string | null>(null)
-  const [draftUrl, setDraftUrl] = useState('')
+  const [filter, setFilter] = useState('all')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
-  const openLink = (client: string) => {
-    setDraftUrl(driveLinks[client] ?? '')
-    setLinkClient(client)
+  // Every canvas (campaign) across brands + Drafts, as a gallery card. Brand-less
+  // Drafts canvases and zero-asset canvases are included, so a fresh canvas is
+  // always reachable here even before its first asset.
+  const canvases = useMemo<CanvasCard[]>(() => {
+    const allBreaks = applyBreakStatus(resolveBreaks(rows, null, null, breakScopeKey('all', 'all')), breakStatus)
+    const meta = new Map(campaignList.map((c) => [c.name, c] as const))
+    const names = [
+      ...new Set([
+        ...rows.map((r) => (r.campaign ?? '').trim()).filter(Boolean),
+        ...campaignList.map((c) => c.name),
+      ]),
+    ]
+    return names.map((name) => {
+      const cRows = rows.filter((r) => (r.campaign ?? '').trim() === name)
+      const assetNames = new Set(cRows.map((r) => r.assetName))
+      let revenue = 0
+      for (const n of assetNames) revenue += mockAttio.attributionForAsset(n).wonRevenue
+      const spend = cRows.reduce((a, r) => a + (r.spend?.toDate ?? 0), 0)
+      const breaks = allBreaks.filter(
+        (b) => b.campaign === name || assetNames.has(b.from.assetName) || (b.to ? assetNames.has(b.to.assetName) : false),
+      )
+      const attention = campaignAttention({ rows: cRows, breaks, roas: spend > 0 ? revenue / spend : null, spend })
+      return {
+        name,
+        client: clientForCampaign(name),
+        status: deriveCampaignStatus(meta.get(name), cRows),
+        rows: cRows,
+        lastTouched: cRows.reduce((m, r) => Math.max(m, r.postedAt ?? r.createdAt ?? 0), 0),
+        flagged: attention.count > 0,
+      }
+    })
+  }, [rows, campaignList, breakStatus])
+
+  const counts: Record<string, number> = {
+    all: canvases.length,
+    drafts: canvases.filter((c) => c.client === DRAFTS_SPACE).length,
+    flagged: canvases.filter((c) => c.flagged).length,
+    live: canvases.filter((c) => c.status === 'active').length,
   }
 
-  // Clients = explicitly added + any derived from existing rows.
-  const clientNames = [...new Set([...clientList, ...rows.map((r) => clientForCampaign(r.campaign))])]
-  const all = clientNames.map((c) =>
-    summarize(c, rows.filter((r) => clientForCampaign(r.campaign) === c)),
-  )
+  // Brands = real clients (Drafts is its own filter), incl. ones with no canvas yet.
+  const brands = useMemo<BrandRow[]>(() => {
+    const count = new Map<string, number>()
+    for (const c of canvases) if (c.client && c.client !== DRAFTS_SPACE) count.set(c.client, (count.get(c.client) ?? 0) + 1)
+    for (const c of clientList) if (c && c !== DRAFTS_SPACE && !count.has(c)) count.set(c, 0)
+    return [...count.entries()].map(([name, n]) => ({ name, count: n })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [canvases, clientList])
 
-  let list = all
-  if (tab === 'favorites') list = all.filter((c) => favorites.has(c.client))
-  if (tab === 'recents') list = [...all].sort((a, b) => b.lastActivity - a.lastActivity)
-  else list = [...list].sort((a, b) => a.client.localeCompare(b.client))
-  if (q.trim()) list = list.filter((c) => c.client.toLowerCase().includes(q.trim().toLowerCase()))
+  const shown = useMemo(() => {
+    let list = canvases
+    if (filter === 'drafts') list = canvases.filter((c) => c.client === DRAFTS_SPACE)
+    else if (filter === 'flagged') list = canvases.filter((c) => c.flagged)
+    else if (filter === 'live') list = canvases.filter((c) => c.status === 'active')
+    else if (filter.startsWith('brand:')) {
+      const b = filter.slice(6)
+      list = canvases.filter((c) => c.client === b)
+    }
+    return [...list].sort((a, b) => b.lastTouched - a.lastTouched || a.name.localeCompare(b.name))
+  }, [canvases, filter])
 
-  const toggleFav = (client: string) =>
-    setFavorites((prev) => {
-      const next = new Set(prev)
-      if (next.has(client)) next.delete(client)
-      else next.add(client)
-      return next
-    })
+  const title = filter.startsWith('brand:')
+    ? filter.slice(6)
+    : filter === 'drafts'
+      ? 'Drafts'
+      : filter === 'flagged'
+        ? 'Flagged'
+        : filter === 'live'
+          ? 'Live'
+          : 'All canvases'
 
   return (
-    <div className="home">
-      <div className="home-greeting-row">
-        <h1 className="home-greeting">Your clients</h1>
-        <button className="home-library-btn" onClick={() => setPage('library')} title="Reusable CTAs, proof points, audiences, strategies">
-          ▤ Messaging Library
-        </button>
-      </div>
-      <p className="home-sub">Add a client, then bring their creative in from Drive or upload inside their workspace.</p>
+    <div className="home-shell">
+      <HomeSidebar
+        filter={filter}
+        setFilter={setFilter}
+        counts={counts}
+        brands={brands}
+        onAddBrand={openOnboard}
+        onDeleteBrand={setConfirmDelete}
+      />
 
-      {/* The launchpad zones — recents to resume + cross-client triage. Self-hide
-          on a fresh workspace, so create leads when there's nothing to jump back to. */}
-      <HomeHub />
-
-      <button className="home-setup" onClick={openOnboard}>
-        <span className="home-setup-ico">✦</span>
-        <span className="home-setup-text">
-          <span className="home-setup-title">Set up a brand</span>
-          <span className="home-setup-sub">
-            Two ways in: do it yourself, or let Claude set it up from the desktop app. Either way you
-            land on the same connected map of voice, audiences, claims, and proof, for you to confirm.
-          </span>
-        </span>
-        <span className="home-setup-go">→</span>
-      </button>
-
-      <div className="home-newclient-cta">
-        <button className="home-addclient" onClick={openOnboard}>
-          <span className="home-addclient-ico">＋</span>
-          <span>
-            <span className="home-addclient-title">Add a client</span>
-            <span className="home-addclient-sub">Paste their site to map their live messaging. No site? Add by name.</span>
-          </span>
-        </button>
-        {all.length === 0 && (
-          <button className="home-link" onClick={loadSample}>
-            or load sample data
-          </button>
-        )}
-      </div>
-
-      <div className="home-tabs">
-        {(['all', 'recents', 'favorites'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            className={`home-tab${tab === t ? ' active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t === 'all' ? 'All clients' : t === 'recents' ? 'Recents' : 'Favorites'}
-          </button>
-        ))}
-      </div>
-
-      <div className="home-files-head">
-        <h2>Clients</h2>
-        <div className="home-search">
-          <span className="search-ico">⌕</span>
-          <input value={q} placeholder="Search clients…" onChange={(e) => setQ(e.target.value)} />
-        </div>
-      </div>
-
-      {list.length === 0 ? (
-        <div className="home-empty">
-          {all.length === 0 ? 'No clients yet. Add your first client above to get started.' : 'No clients match.'}
-        </div>
-      ) : (
-        <table className="home-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th />
-              <th>Revenue</th>
-              <th>Assets</th>
-              <th>Campaigns</th>
-              <th>Drive folder</th>
-              <th>Last activity</th>
-              <th>Owner</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((c) => (
-              <tr key={c.client} onClick={() => setClientFilter(c.client)}>
-                <td className="home-file-name">
-                  <span className="home-file-ico">▦</span>
-                  {c.client}
-                </td>
-                <td>
-                  <button
-                    className={`home-star${favorites.has(c.client) ? ' on' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleFav(c.client)
-                    }}
-                    title="Favorite"
-                  >
-                    {favorites.has(c.client) ? '★' : '☆'}
-                  </button>
-                </td>
-                <td>{money(c.revenue)}</td>
-                <td>{c.assets}</td>
-                <td>{c.campaigns}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <button className="btn ghost sm" onClick={() => openLink(c.client)}>
-                    {driveLinks[c.client] ? '⬇ Folder linked' : '+ Drive folder'}
-                  </button>
-                </td>
-                <td className="home-muted">{fmtDate(c.lastActivity)}</td>
-                <td className="home-owner">
-                  <span className="home-owner-dot" /> Chris Church
-                </td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="home-del"
-                    onClick={() => setConfirmDelete(c.client)}
-                    title={`Delete ${c.client}`}
-                    aria-label={`Delete ${c.client}`}
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {linkClient && (
-        <>
-          <div className="drawer-scrim" onClick={() => setLinkClient(null)} />
-          <div className="drive-modal" role="dialog" aria-label="Drive folder">
-            <div className="drive-head">
-              <strong>Drive folder · {linkClient}</strong>
-              <button className="btn ghost sm" onClick={() => setLinkClient(null)}>
-                Close
-              </button>
-            </div>
-            <div className="drive-note">
-              Paste a Google Drive folder link — ingesting pulls the files and auto-organizes them by
-              folder + filename.{' '}
-              {isGoogleDriveConfigured
-                ? 'Reads the folder via your Google sign-in (drive.readonly).'
-                : 'Demo: ingests sample files. Set VITE_GOOGLE_CLIENT_ID to read real folders.'}
-            </div>
-            <div className="drive-link-body">
-              <input
-                className="drive-url-input"
-                value={draftUrl}
-                placeholder="https://drive.google.com/drive/folders/…"
-                onChange={(e) => setDraftUrl(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="drive-foot">
-              <button
-                className="btn sm"
-                onClick={() => {
-                  setDriveLink(linkClient, draftUrl)
-                  setLinkClient(null)
-                }}
-              >
-                Save link
-              </button>
-              <span className="spacer" />
-              <button
-                className="btn primary"
-                disabled={!draftUrl.trim()}
-                onClick={() => {
-                  const client = linkClient
-                  setDriveLink(client, draftUrl)
-                  setLinkClient(null)
-                  void ingestDriveLink(client)
-                }}
-              >
-                Ingest assets ↓
-              </button>
-            </div>
+      <div className="home-main">
+        <CanvasProjectTabs />
+        <div className="home-main-scroll">
+          <div className="home-main-head">
+            <h1 className="home-main-title">{title}</h1>
+            <NewCanvasButton />
           </div>
-        </>
-      )}
+
+          {shown.length === 0 ? (
+            <div className="home-empty">
+              {canvases.length === 0 ? (
+                <>
+                  No canvases yet.{' '}
+                  <button className="home-link" onClick={openOnboard}>
+                    Set up a brand
+                  </button>{' '}
+                  or{' '}
+                  <button className="home-link" onClick={loadSample}>
+                    load sample data
+                  </button>
+                  .
+                </>
+              ) : (
+                'No canvases here yet.'
+              )}
+            </div>
+          ) : (
+            <div className="hub-recents home-gallery">
+              {shown.map((c) => (
+                <button
+                  key={`${c.client}|${c.name}`}
+                  className="hub-recent"
+                  onClick={() => openCampaign(c.name)}
+                  title={`Open ${c.name}${c.client ? ` (${c.client})` : ''}`}
+                >
+                  <div className="hub-recent-thumb">
+                    <CampaignThumb rows={c.rows} />
+                  </div>
+                  <div className="hub-recent-foot">
+                    <span className={`hub-recent-dot s-${c.status}`} />
+                    <span className="hub-recent-foot-text">
+                      <span className="hub-recent-name">{c.name}</span>
+                      <span className="hub-recent-sub">
+                        {c.client || 'Drafts'}
+                        {c.lastTouched ? ` · ${fmtAgo(c.lastTouched)}` : ''}
+                      </span>
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {confirmDelete &&
         (() => {
-          const t = all.find((c) => c.client === confirmDelete)
+          const n = canvases.filter((c) => c.client === confirmDelete)
+          const assets = n.reduce((a, c) => a + new Set(c.rows.map((r) => r.assetName)).size, 0)
           return (
             <>
               <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
-              <div className="confirm-modal" role="dialog" aria-label="Delete client">
+              <div className="confirm-modal" role="dialog" aria-label="Delete brand">
                 <strong className="confirm-title">Delete {confirmDelete}?</strong>
                 <p className="confirm-text">
-                  This removes the client
-                  {t && (t.assets > 0 || t.campaigns > 0)
-                    ? ` and its ${t.campaigns} campaign${t.campaigns === 1 ? '' : 's'} · ${t.assets} asset${t.assets === 1 ? '' : 's'}`
-                    : ''}
+                  This removes the brand
+                  {n.length > 0 ? ` and its ${n.length} canvas${n.length === 1 ? '' : 'es'} · ${assets} asset${assets === 1 ? '' : 's'}` : ''}
                   . This can't be undone.
                 </p>
                 <div className="confirm-foot">
@@ -284,10 +214,11 @@ export function ClientsOverview() {
                     className="btn sm danger"
                     onClick={() => {
                       void deleteClient(confirmDelete)
+                      if (filter === `brand:${confirmDelete}`) setFilter('all')
                       setConfirmDelete(null)
                     }}
                   >
-                    Delete client
+                    Delete brand
                   </button>
                 </div>
               </div>

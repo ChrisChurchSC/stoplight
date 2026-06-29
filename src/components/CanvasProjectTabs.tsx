@@ -26,18 +26,17 @@ export function CanvasProjectTabs() {
     return m
   }, [rows])
 
+  // Every open canvas gets a tab — including a freshly-created one with no assets
+  // yet (a blank Drafts canvas), so it's never lost behind the home.
   const projects = useMemo(
-    () =>
-      openProjects
-        .filter((c) => assetCounts.has(c))
-        .map((c) => ({ campaign: c, client: clientForCampaign(c), count: assetCounts.get(c)! })),
+    () => openProjects.map((c) => ({ campaign: c, client: clientForCampaign(c), count: assetCounts.get(c) ?? 0 })),
     [openProjects, assetCounts],
   )
 
-  // Opening a campaign's canvas adds it to the drawer.
+  // Opening a campaign's canvas adds it to the drawer (assets or not).
   useEffect(() => {
-    if (campaignFilter !== 'all' && assetCounts.has(campaignFilter)) openProject(campaignFilter)
-  }, [campaignFilter, assetCounts, openProject])
+    if (campaignFilter !== 'all') openProject(campaignFilter)
+  }, [campaignFilter, openProject])
 
   if (projects.length === 0) return null
 

@@ -2496,6 +2496,104 @@ button {
   flex-direction: column;
   gap: 18px;
 }
+
+/* ---- Home as a files browser (the canvas shell, but for canvases) ---- */
+.home-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--bg);
+}
+.home-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.home-main-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px 28px 40px;
+}
+.home-main-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.home-main-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* The open-canvas tabs as the top bar of the files browser. */
+.home-main > .cv-projects {
+  padding: 8px 14px 0;
+  background: var(--surface);
+}
+/* Files-sidebar brand rows: a click target to filter + a hover ✕ to delete. */
+.home-sb-brands-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.home-sb-add {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.home-sb-add:hover {
+  color: var(--accent);
+}
+.home-sb-empty {
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 3px 12px 6px;
+}
+.home-sb-brand {
+  padding: 0 !important;
+  gap: 0;
+}
+.home-sb-brand-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 7px 4px 7px 10px;
+  text-align: left;
+}
+.home-sb-del {
+  flex: none;
+  opacity: 0;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 6px 9px;
+  border-radius: 5px;
+}
+.home-sb-brand:hover .home-sb-del {
+  opacity: 1;
+}
+.home-sb-del:hover {
+  color: var(--red);
+  background: var(--surface-2);
+}
 .home-greeting {
   margin: 0;
   font-size: 26px;
@@ -2601,75 +2699,148 @@ button {
   border-radius: 999px;
   padding: 1px 8px;
 }
-/* Jump back in — a row of recent-campaign cards. */
+/* New canvas — the "start something" action, kept beside recents (never buried). */
+.hub-new-wrap {
+  margin-left: auto;
+  position: relative;
+}
+.hub-new {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 13px;
+  cursor: pointer;
+}
+.hub-new:hover {
+  filter: brightness(1.06);
+}
+.hub-new-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.hub-new-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 31;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.16);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hub-new-menu-head {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 4px 8px 5px;
+}
+.hub-new-opt {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.hub-new-opt:hover {
+  background: var(--surface-2);
+}
+/* Jump back in — a gallery of recent-campaign thumbnail cards (Figma files-home
+   style): a structural preview on top, a title + meta foot below. */
 .hub-recents {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
+  gap: 16px;
 }
 .hub-recent {
   display: flex;
   flex-direction: column;
-  gap: 5px;
   text-align: left;
-  padding: 13px 15px;
+  padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--surface);
   cursor: pointer;
-  position: relative;
-  border-left: 3px solid var(--border-strong);
+  overflow: hidden;
   transition: border-color 0.12s, box-shadow 0.12s, transform 0.06s;
 }
 .hub-recent:hover {
   border-color: var(--accent);
-  box-shadow: 0 4px 16px rgba(16, 24, 40, 0.08);
+  box-shadow: 0 6px 20px rgba(16, 24, 40, 0.1);
 }
 .hub-recent:active {
   transform: translateY(1px);
 }
-.hub-recent.s-active {
-  border-left-color: #1a7a4c;
+.hub-recent-thumb {
+  height: 150px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
-.hub-recent.s-planning {
-  border-left-color: #2563c9;
+.hub-recent:hover .hub-recent-thumb {
+  border-bottom-color: var(--accent);
 }
-.hub-recent.s-in-review {
-  border-left-color: #9a6a12;
-}
-.hub-recent.s-completed {
-  border-left-color: var(--border-strong);
-}
-.hub-recent-client {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.hub-recent-name {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.25;
-}
-.hub-recent-meta {
+.hub-recent-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 1px;
-  flex-wrap: wrap;
+  gap: 9px;
+  padding: 11px 13px;
 }
-.hub-recent-stat {
-  font-size: 12px;
-  color: var(--text-muted);
+.hub-recent-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border-strong);
 }
-.hub-recent-ago {
-  position: absolute;
-  top: 13px;
-  right: 14px;
-  font-size: 11px;
+.hub-recent-dot.s-active {
+  background: #1a7a4c;
+}
+.hub-recent-dot.s-planning {
+  background: #2563c9;
+}
+.hub-recent-dot.s-in-review {
+  background: #9a6a12;
+}
+.hub-recent-dot.s-completed {
+  background: var(--text-faint);
+}
+.hub-recent-foot-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hub-recent-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hub-recent-sub {
+  font-size: 11.5px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* What needs you — a tight triage strip. */
 .hub-triage {
@@ -4844,19 +5015,26 @@ button {
 }
 /* Project folder tabs — a drawer of campaigns across the very top of the browser,
    flush with the channel-filter sidebar. */
+/* Base (home / in-flow): a light browser-tab strip of open canvases, sitting on a
+   hairline like file tabs. The canvas overrides this into a fixed dark bar below. */
 .cv-projects {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  overflow: visible;
+  border-bottom: 1px solid var(--border);
+}
+/* Canvas (Level 2): the fixed dark bar flush with the channel-filter sidebar. */
+.canvas-mode .cv-projects {
   position: fixed;
   top: 0; /* dark bar runs to the very top of the browser */
   left: 232px; /* flush with the 232px channel-filter sidebar */
   right: 0;
   z-index: 25; /* above the breadcrumb (22) and sidebar (24) */
-  display: flex;
-  align-items: flex-end; /* tabs sit at the bottom; dark gray fills above them */
-  gap: 3px;
   height: 48px;
   padding: 0 12px 0 6px;
   background: #2b2f36; /* dark gray bar behind the tabs */
-  overflow: visible;
+  border-bottom: none;
 }
 .cv-project-tab {
   flex: none;

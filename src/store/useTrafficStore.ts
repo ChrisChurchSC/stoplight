@@ -10,7 +10,7 @@ import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
-import { normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
+import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
 import { defaultLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -104,6 +104,11 @@ const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSet
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
 }
+
+/** The personal space loose canvases live in until a brand is attached (Figma's
+ *  "Drafts"). A canvas here isn't tied to any client; the Brand card on the canvas
+ *  re-homes it to a real brand whenever you're ready. */
+export const DRAFTS_SPACE = 'Drafts'
 
 // Map an extracted message's {headline, body, cta} onto a channel's real
 // messaging field keys, so the current-state copy renders on the canvas.
@@ -847,6 +852,10 @@ interface TrafficState {
   /** Open a campaign straight into its workspace (Level 2 canvas) from anywhere —
    *  the home hub's "jump back in" + triage deep-links use this to resume work. */
   openCampaign: (name: string) => void
+  /** Create a fresh, brand-less canvas in the Drafts space and open it — the hub's
+   *  "New canvas" action. No client / wizard up front; attach a brand later via the
+   *  Brand card. Seeds one default audience lane so the blank canvas is addable. */
+  createCanvas: () => void
   /** Link a campaign to a GTM playbook (ABM, Demand Gen, etc.) — the strategy selector. */
   setCampaignStrategy: (name: string, strategy: string) => void
   /** Swap a campaign's subject (what it's about) — the Subject card picker. */
@@ -1709,6 +1718,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       audienceFilter: 'all',
       cardFilter: 'all',
     })
+  },
+
+  createCanvas: () => {
+    // A unique "Untitled canvas [N]" so repeated New-canvas clicks don't collide.
+    const exists = (n: string) =>
+      get().campaignList.some((c) => c.name === n) || get().rows.some((r) => (r.campaign ?? '') === n)
+    let name = 'Untitled canvas'
+    for (let i = 2; exists(name); i++) name = `Untitled canvas ${i}`
+    registerCampaign(name, DRAFTS_SPACE)
+    get().addCampaign({ name, client: DRAFTS_SPACE, strategy: 'Current state', status: 'planning' })
+    // Seed one default lane for the Drafts space (once) so the blank canvas can take
+    // an asset immediately; a real brand's audiences arrive when you attach one.
+    set((s) => {
+      if ((s.clientAudiences[DRAFTS_SPACE] ?? []).length) return {}
+      const clientAudiences = { ...s.clientAudiences, [DRAFTS_SPACE]: [newAudience({ name: 'General audience' })] }
+      saveClientAudiences(clientAudiences)
+      return { clientAudiences }
+    })
+    get().openCampaign(name)
   },
 
   setCampaignStrategy: (name, strategy) => {
