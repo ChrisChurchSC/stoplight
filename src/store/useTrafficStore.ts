@@ -39,7 +39,15 @@ import {
 import { ingestSanityStream, type SanityIngestResult } from '../adapters/setup/ingestSanity'
 import { ingestResendStream, type ResendIngestResult } from '../adapters/setup/ingestResend'
 import { ingestGoogleAdsStream, type GoogleAdsIngestResult } from '../adapters/setup/ingestGoogleAds'
-import { ClaudeCopyWriter, HeuristicCopyWriter, type CopyWriter } from '../adapters/copy/draftWriter'
+import {
+  ClaudeCopyWriter,
+  HeuristicCopyWriter,
+  type AssetDraft,
+  type CopyWriter,
+  type DraftAsset,
+  type DraftRequest,
+  type DraftResult,
+} from '../adapters/copy/draftWriter'
 import {
   ClaudeSetupGenerator,
   HeuristicSetupGenerator,
@@ -75,6 +83,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
+import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
@@ -98,6 +107,60 @@ const icpSource: IcpSource = new MockIcpSource()
 const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
 // Real Claude starter-copy drafting when a backend + key are present; heuristic otherwise.
 const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
+
+/**
+ * Regenerate any drafted unit whose headline or primary text collides with another
+ * in the same campaign, so a generated set reads as distinct assets, not a template
+ * pasted across audiences. CTAs are EXCLUDED: they're verbatim brand CTAs and recur
+ * by design (matched to stage), so a repeated CTA is correct, not a collision.
+ * Bounded to a few rounds; each feeds the used strings back as an avoid list.
+ */
+async function dedupeCampaignDrafts(
+  result: DraftResult,
+  assets: DraftAsset[],
+  baseReq: Omit<DraftRequest, 'assets' | 'avoid'>,
+): Promise<void> {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  const byId = new Map(assets.map((a) => [a.rowId, a]))
+  const rolesOf = (a: DraftAsset) => {
+    const f = a.fields
+    return {
+      headlineKey: f.find((x) => /headline|subject|title|subhead|^h\d/i.test(x.key))?.key,
+      primaryKey: (f.find((x) => /primary|body|caption|intro|post|message/i.test(x.key)) ?? f[0])?.key,
+    }
+  }
+  const valOf = (d: AssetDraft, key?: string) => (key ? (d.components.find((c) => c.key === key)?.value ?? '') : '')
+  for (let round = 0; round < 3; round++) {
+    const seenH = new Set<string>()
+    const seenB = new Set<string>()
+    const collisions: AssetDraft[] = []
+    for (const d of result.drafts) {
+      const a = byId.get(d.rowId)
+      if (!a) continue
+      const { headlineKey, primaryKey } = rolesOf(a)
+      const h = norm(valOf(d, headlineKey))
+      const b = norm(valOf(d, primaryKey))
+      if ((h && seenH.has(h)) || (b && seenB.has(b))) collisions.push(d)
+      else {
+        if (h) seenH.add(h)
+        if (b) seenB.add(b)
+      }
+    }
+    if (collisions.length === 0) return
+    const avoid = { headlines: [...seenH], bodies: [...seenB], ctas: [] }
+    for (const d of collisions) {
+      const a = byId.get(d.rowId)
+      if (!a) continue
+      const bumped: DraftAsset = { ...a, index: (a.index ?? 0) + (round + 1) * 101 }
+      try {
+        const re = await copyWriter.draft({ ...baseReq, avoid, assets: [bumped] })
+        if (re.drafts[0]) d.components = re.drafts[0].components
+      } catch {
+        // Leave the unit as-is if regeneration fails; better than dropping copy.
+      }
+    }
+  }
+}
 // Real Claude workspace setup (reads the site) when a backend + key are present; heuristic otherwise.
 const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSetupGenerator())
 
@@ -794,6 +857,9 @@ interface TrafficState {
    *  campaign's brand's system directly from brandSystems. */
   library: MessagingLibrary
   addLibraryItem: (kind: LibraryKind, item: LibraryCta | Rtb | AudienceType | GtmStrategy) => void
+  /** Clear a brand's authored messaging (CTAs, proof, audiences, subjects, hooks);
+   *  keeps the standard GTM strategies. Used to reset a polluted system. */
+  resetBrandMessaging: (brand: string) => void
   removeLibraryItem: (kind: LibraryKind, id: string) => void
   /** Bless a draft library asset into an approved master (governance). */
   approveLibraryItem: (kind: LibraryKind, id: string) => void
@@ -992,7 +1058,7 @@ interface TrafficState {
   seedCampaignAssets: (
     campaign: string,
     deliverables: Deliverable[],
-    opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string },
+    opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string; audiences?: string[] },
   ) => Promise<void>
   setFilter: (filter: ChannelId | 'all') => void
   setProofFilter: (proofFilter: string) => void
@@ -1546,6 +1612,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => ({ messagingBrand: brand, library: libFor(s.brandSystems, brand) })),
   addLibraryItem: (kind, item) =>
     set((s) => activeLibPatch(s, (lib) => ({ ...lib, [kind]: [...(lib[kind] as unknown[]), item] }) as MessagingLibrary)),
+  resetBrandMessaging: (brand) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const brandSystems = { ...s.brandSystems, [b]: emptyLibrary() }
+      saveBrandSystems(brandSystems)
+      return { brandSystems, library: s.messagingBrand === b ? brandSystems[b] : s.library }
+    }),
   removeLibraryItem: (kind, id) =>
     set((s) =>
       activeLibPatch(s, (lib) => {
@@ -1994,16 +2068,43 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const client = setup.brand.name.trim()
     if (!client) return
     get().addClient(client)
+    // Non-destructive profile write: fill empty fields, never clobber a human edit
+    // (re-running setup must not re-set a corrected industry / strategy).
+    const existing = get().clientProfiles[client] ?? {}
+    const keep = (cur: unknown, next: string | undefined) =>
+      typeof cur === 'string' && cur.trim() ? cur : next
     get().setClientProfile(client, {
-      website: setup.brand.website?.trim() || undefined,
-      industry: setup.brand.industry?.trim() || undefined,
-      voice: setup.brand.voice?.trim() || undefined,
+      website: keep(existing.website, setup.brand.website?.trim() || undefined),
+      industry: keep(existing.industry, setup.brand.industry?.trim() || undefined),
+      voice: keep(existing.voice, setup.brand.voice?.trim() || undefined),
+      // The inferred GTM motion: stored on the brand so it's queryable, pre-selected
+      // for generation, and overridable. Kept if already set (an override wins).
+      strategy: keep(existing.strategy, setup.strategy || undefined),
+      secondaryStrategy: keep(existing.secondaryStrategy, setup.secondaryStrategy || undefined),
+      strategyRationale: keep(existing.strategyRationale, setup.strategyRationale || undefined),
+      strategyConfidence: keep(existing.strategyConfidence, setup.strategyConfidence || undefined),
+      strategySignals: existing.strategySignals?.length
+        ? existing.strategySignals
+        : setup.signalsUsed?.length
+          ? setup.signalsUsed
+          : undefined,
+      businessModel: keep(existing.businessModel, setup.businessModel || undefined),
     })
+
+    // Re-run guard: if this client already has a setup campaign, reuse it instead of
+    // spawning a duplicate (and don't reset the ICP or re-seed its assets).
+    const campaign = setup.campaign.name?.trim() || `${client} — Campaign`
+    const existingCampaign =
+      get().campaignList.find((c) => c.name === campaign) ??
+      get().campaignList.find((c) => c.client === client)
+    if (existingCampaign) {
+      set({ setupOpen: false, clientFilter: client, campaignFilter: existingCampaign.name, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
+      return
+    }
     get().setIcp(setup.icp)
 
     const strat = GTM_STRATEGIES.find((s) => s.key === setup.strategy)
     const strategyName = strat?.name ?? setup.strategy
-    const campaign = setup.campaign.name?.trim() || `${client} — Campaign`
     const weeks = setup.campaign.durationWeeks > 0 ? setup.campaign.durationWeeks : 8
     const deliverables = STRATEGY_ASSETS[setup.strategy] ?? STRATEGY_ASSETS['demand-gen']
     const contentPerMonth = deliverables
@@ -2418,6 +2519,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         for (const r of paid) r.budget = { amount: per, type: 'lifetime', endDate: opts?.endDate }
       }
     }
+    // Spread the brand's audiences across the seeded assets (round-robin) so each
+    // asset is written for a specific segment, not a generic buyer. Generation
+    // conditions copy on this.
+    const auds = opts?.audiences ?? []
+    if (auds.length) rows.forEach((r, i) => { if (!r.audience) r.audience = auds[i % auds.length] })
     await sheet.append(rows)
     await get().refresh()
   },
@@ -2816,18 +2922,63 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
       const rtbStore = loadCampaignRtbs()
       for (const [campaign, crows] of byCampaign) {
-        const assets = crows.map((r) => ({
-          rowId: r.id,
-          assetName: r.assetName,
-          channel: r.channel,
-          type: r.assetType,
-          fields: messagingFields(r.channel, r.assetType),
-        }))
         const client = clientForCampaign(campaign)
         const brand = get().clientProfiles[client]
         const bg = get().brandGuides[client]
         const brandGuide = bg?.confirmed ? bg.guide : undefined
-        const result = await copyWriter.draft({ icp, campaign, brand, brandGuide, assets })
+        // The brand's messaging system supplies the four composition inputs:
+        // stage (derived), audience (assigned/derived), CTA seed, and proof.
+        const sys = get().brandSystems[client]
+        const libAudiences = sys?.audiences ?? []
+        const libCtas = sys?.ctas ?? []
+        const proofPool: Rtb[] = sys?.rtbs ?? []
+        // CTAs are VERBATIM from the brand's list and DISTRIBUTED across the set:
+        // pick the globally least-used CTA, preferring a stage match among ties. This
+        // caps repetition (no one CTA dominates) even when a stage has few CTAs, while
+        // still landing a stage-appropriate CTA wherever the list allows.
+        const ctaUse = new Map<string, number>()
+        const pickCta = (stage: string): string | undefined => {
+          if (!libCtas.length) return undefined
+          // Stage match is the PRIMARY key (never put a conversion CTA on an awareness
+          // asset just to spread), then least-used so the stage's CTAs distribute. If a
+          // stage has fewer CTAs than assets, the pool is smaller than the demand and
+          // some repeat is unavoidable (but no single CTA dominates the whole set).
+          const scored = libCtas
+            .map((c) => ({ label: c.label, use: ctaUse.get(c.label) ?? 0, match: !c.stage || c.stage === stage }))
+            .sort((a, b) => Number(b.match) - Number(a.match) || a.use - b.use)
+          const chosen = scored[0].label
+          ctaUse.set(chosen, (ctaUse.get(chosen) ?? 0) + 1)
+          return chosen
+        }
+        const assets: DraftAsset[] = crows.map((r, i) => {
+          const stage = funnelStageFor(r.channel, r.assetType)
+          const aud =
+            libAudiences.find((x) => x.name === r.audience) ??
+            (libAudiences.length ? libAudiences[i % libAudiences.length] : undefined)
+          const proof = proofPool.length ? proofPool[i % proofPool.length] : undefined
+          return {
+            rowId: r.id,
+            assetName: r.assetName,
+            channel: r.channel,
+            type: r.assetType,
+            fields: messagingFields(r.channel, r.assetType),
+            stage,
+            audience: aud
+              ? { name: aud.name, role: aud.role, angle: aud.messageAngle, pains: aud.pains }
+              : r.audience
+                ? { name: r.audience }
+                : undefined,
+            ctaSeed: pickCta(stage),
+            proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
+            index: i,
+          }
+        })
+        // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
+        const baseReq = { icp, campaign, brand, brandGuide, proofPool, hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean) }
+        const result = await copyWriter.draft({ ...baseReq, assets })
+        // Anti-repetition: regenerate any unit whose headline / primary / CTA
+        // collides across the campaign, so the set reads as distinct assets.
+        await dedupeCampaignDrafts(result, assets, baseReq)
         // Register + persist the campaign's drafted proof (merged with any authored).
         if (campaign && result.rtbs.length) {
           const existing = rtbsForCampaign(campaign)
@@ -2852,7 +3003,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             if (primaryKey && !(rmap[primaryKey]?.length)) rmap[primaryKey] = ids
             if (ctaKey && !(rmap[ctaKey]?.length)) rmap[ctaKey] = ids
           }
-          await sheet.update(row.id, { messaging: map, rtbMap: rmap })
+          // Persist the chosen execution format (set only by generation, so a human
+          // edit isn't overwritten on re-draft).
+          const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap }
+          if (d.format && !row.format) patch.format = d.format
+          await sheet.update(row.id, patch)
         }
       }
       saveCampaignRtbs(rtbStore)
@@ -2950,7 +3105,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeBreaks: () => set({ breaksOpen: false, activeBreakId: null }),
 
   runCoherenceCheck: async () => {
-    const { rows, clientFilter, campaignFilter, icp, brandGuides } = get()
+    const { rows, clientFilter, campaignFilter, icp, brandGuides, brandSystems, clientProfiles } = get()
     if (clientFilter === 'all') return
     // Coherence is a property of the whole campaign, not the filtered view — check
     // every in-scope asset (matches the Breaks queue + the continuous hash).
@@ -2959,8 +3114,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ coherenceChecking: true })
     const campaign = campaignFilter === 'all' ? 'All campaigns' : campaignFilter
     const brandGuide = brandGuides[clientFilter]?.confirmed ? brandGuides[clientFilter]?.guide : undefined
+    // The brand's vocabulary feeds the deterministic floor (cross-brand contamination,
+    // raw-field leaks, off-audience proof) so the check is real even with no Claude key.
+    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles)
     try {
-      const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide })
+      const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })
       set({
         claudeBreaks: breaks,
         claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),

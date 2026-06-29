@@ -7,7 +7,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * context — not one scary "grant everything" wall), reassurance that both routes
  * build the same map, and an always-available drop-back to the manual route.
  *
- * The agentic connect itself lives in the desktop app (the Rushhour MCP bridge —
+ * The agentic connect itself lives in the desktop app (the Hyperfocus MCP bridge —
  * see docs/claude-desktop-mcp.md). This screen is the seam that routes the user
  * there; the full agentic multi-tool connect is layered on top of it.
  */
@@ -64,7 +64,7 @@ export function ClaudeHandoff() {
         </ol>
 
         <div className="assist-note">
-          In the Claude desktop app, say <strong>"set up my brand in Rushhour"</strong>. Keep this
+          In the Claude desktop app, say <strong>"set up my brand in Hyperfocus"</strong>. Keep this
           tab open — Claude builds the map here as it connects.
         </div>
 

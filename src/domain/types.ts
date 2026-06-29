@@ -1,4 +1,4 @@
-// Core domain model for Rushhour.
+// Core domain model for Hyperfocus.
 //
 // The "sheet" is the source of truth. Each ingested asset, targeted at one
 // channel, becomes one TrafficRow. The schema here is what the (mock) sheet
@@ -145,6 +145,10 @@ export interface TrafficRow {
   }
   /** RTBs (proof points) backing each messaging component: componentKey → rtb ids. */
   rtbMap?: Record<string, string[]>
+  /** The creative EXECUTION format this asset was written as (question, how-to,
+   *  testimonial, myth-bust, story, stat, PSA, before/after, …) — so a generated
+   *  set is visibly varied, not one mold. Set by generation. */
+  format?: string
   /** Destination this unit drives to — the next asset in the journey (by asset
    *  name), e.g. an ad → its landing page, a lead magnet → its nurture email. */
   linksTo?: string

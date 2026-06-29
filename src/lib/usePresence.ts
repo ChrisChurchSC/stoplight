@@ -32,7 +32,7 @@ interface Opts {
   onRemoteMove: (id: string, x: number, y: number) => void
 }
 
-const CHANNEL = 'rushhour-presence-v1'
+const CHANNEL = 'hyperfocus-presence-v1'
 const HEARTBEAT_MS = 2000
 const STALE_MS = 5000
 const CURSOR_THROTTLE_MS = 45

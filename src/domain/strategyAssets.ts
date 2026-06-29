@@ -1,7 +1,7 @@
 import type { ChannelId, MediaType } from './types'
 
 /**
- * The assets a campaign needs to run each GTM strategy, mapped to Rushhour's
+ * The assets a campaign needs to run each GTM strategy, mapped to Hyperfocus's
  * channel + asset-type taxonomy. Three kinds:
  *  - PAID (channel kind 'paid') → a flight that runs the whole campaign (a span
  *    on the calendar).

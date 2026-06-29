@@ -1,4 +1,4 @@
-# Brief: Connect Claude to Rushhour (live API)
+# Brief: Connect Claude to Hyperfocus (live API)
 
 **For:** Cowork
 **Repo:** `ChrisChurchSC/stoplight` — local at `/Users/chris/Documents/GitHub/stoplight`
@@ -18,7 +18,7 @@ The dev server loads `.env` into the handlers' `process.env` at boot (see `vite.
 
 ## Steps
 
-1. **Create an API key.** Console → API Keys → Create Key. Name it something like "Rushhour dev". Copy it (starts with `sk-ant-`).
+1. **Create an API key.** Console → API Keys → Create Key. Name it something like "Hyperfocus dev". Copy it (starts with `sk-ant-`).
 2. **Paste it into `.env`.** Open `/Users/chris/Documents/GitHub/stoplight/.env` and set the first line:
    ```
    ANTHROPIC_API_KEY=sk-ant-...

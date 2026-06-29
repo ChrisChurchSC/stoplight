@@ -8,6 +8,10 @@ interface Connector {
   detail: string
   /** Reached through Claude over MCP — not a separate app OAuth connector. */
   viaClaude?: boolean
+  /** What you can drive from your own Claude once connected. */
+  capabilities?: string[]
+  /** How to wire it up. */
+  howTo?: string[]
 }
 
 const CONNECTORS: Connector[] = [
@@ -21,10 +25,21 @@ const CONNECTORS: Connector[] = [
   },
   {
     name: 'Claude',
-    purpose: 'Setup, ICP enrichment, review, copy',
+    purpose: 'Connect your Claude — set up brands from chat',
     status: 'config',
     detail:
-      'Set ANTHROPIC_API_KEY to enable real generation; heuristic fallback otherwise. Connecting Claude also brings its MCP tools (ICP enrichment, Attio, publishing) — no separate OAuth for those.',
+      'Connect your own Claude (Desktop, over MCP) and it drives Hyperfocus live, in this tab. Everything it does lands as a draft for you to confirm — it proposes, you finish.',
+    capabilities: [
+      'Populate a brand’s About info (one-liner, mission, voice, products, differentiators)',
+      'Pull in a brand’s live assets and messaging from its site and ads',
+      'Write the messaging components — audiences, proof points, subjects, hooks, CTAs',
+      'Generate draft assets for a campaign from everything connected',
+    ],
+    howTo: [
+      'Add Hyperfocus to Claude Desktop (mcp/hyperfocus-server.mjs over stdio) — see docs/claude-desktop-mcp.md',
+      'Keep this tab open with the dev server running — it’s the executor',
+      'Set ANTHROPIC_API_KEY for live generation; without it, heuristic drafts fill in',
+    ],
   },
 ]
 
@@ -43,7 +58,7 @@ export function ConnectorsPage() {
     <div className="page">
       <div className="page-head">
         <h1>Connectors</h1>
-        <span className="page-sub">The services Rushhour runs on — connect to go from mock to live</span>
+        <span className="page-sub">The services Hyperfocus runs on — connect to go from mock to live</span>
       </div>
       <div className="page-body">
         <div className="settings-grid">
@@ -57,6 +72,20 @@ export function ConnectorsPage() {
               </div>
               <div className="settings-card-purpose">{c.purpose}</div>
               <div className="settings-card-detail">{c.detail}</div>
+              {c.capabilities && (
+                <ul className="settings-card-caps">
+                  {c.capabilities.map((cap) => (
+                    <li key={cap}>{cap}</li>
+                  ))}
+                </ul>
+              )}
+              {c.howTo && (
+                <ol className="settings-card-howto">
+                  {c.howTo.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              )}
               {c.viaClaude ? (
                 <span className="settings-card-via">↳ Connected through Claude</span>
               ) : c.name === 'Google Drive' ? (
@@ -77,7 +106,7 @@ export function ConnectorsPage() {
                     {isGoogleDriveConfigured ? 'Import files' : 'Browse Demo Drive'}
                   </button>
                 </div>
-              ) : (
+              ) : c.howTo ? null : (
                 <button className="btn sm settings-card-btn" disabled>
                   {c.status === 'connected' ? 'Manage' : 'Connect'}
                 </button>

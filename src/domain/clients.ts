@@ -18,6 +18,18 @@ export interface ClientProfile {
   industry?: string
   /** Short brand-voice note, e.g. "Plain, technical, no hype." */
   voice?: string
+  // ---- GTM motion (inferred at setup, overridable) ----
+  /** The active GTM strategy key (e.g. 'plg', 'demand-gen', 'sales-led'). Inferred
+   *  from business-model signals at setup, pre-selected for generation, overridable. */
+  strategy?: string
+  /** An optional secondary motion (motions can combine, e.g. PLG + demand-capture). */
+  secondaryStrategy?: string
+  /** Why this motion was chosen — human-readable, so the recommendation is trustable. */
+  strategyRationale?: string
+  /** Inference confidence: 'low' | 'medium' | 'high'. */
+  strategyConfidence?: string
+  /** The business-model signals the recommendation was grounded in. */
+  strategySignals?: string[]
   // ---- Company overview (filled in by site ingestion) ----
   /** One line on what the company does. */
   oneLiner?: string

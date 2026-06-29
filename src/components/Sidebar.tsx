@@ -341,7 +341,7 @@ export function Sidebar() {
         <button
           className="nav-item"
           disabled={rows.length === 0}
-          onClick={() => downloadCsv('rushhour-sheet.csv', rowsToCsv(rows))}
+          onClick={() => downloadCsv('hyperfocus-sheet.csv', rowsToCsv(rows))}
         >
           <span className="nav-ico">⤓</span>
           <span className="nav-label">Export CSV</span>

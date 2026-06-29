@@ -21,7 +21,16 @@ import type { ChannelId, TrafficRow } from './types'
  * check would populate it, so the live version is a drop-in later.
  */
 
-export type BreakAxis = 'journey' | 'audience' | 'proof' | 'cta' | 'voice'
+export type BreakAxis =
+  | 'journey'
+  | 'audience'
+  | 'proof'
+  | 'cta'
+  | 'voice'
+  | 'contamination'
+  | 'leak'
+  | 'casing'
+  | 'duplicate'
 export type BreakSeverity = 'high' | 'medium' | 'low'
 export type BreakStatus = 'open' | 'resolved' | 'intended' | 'in-review'
 
@@ -31,6 +40,10 @@ export const AXIS_META: Record<BreakAxis, { label: string; blurb: string }> = {
   proof: { label: 'Proof gap', blurb: 'A claim or CTA with no backing proof point.' },
   cta: { label: 'Weak CTA', blurb: "A CTA that doesn't cash the promise the funnel made." },
   voice: { label: 'Brand voice', blurb: 'Copy that breaks a rule in the brand guide.' },
+  contamination: { label: 'Cross-brand', blurb: "Another brand's language landed in this campaign." },
+  leak: { label: 'Raw field leak', blurb: 'A library field was pasted in raw instead of written into copy.' },
+  casing: { label: 'Casing / format', blurb: 'Broken casing or a concatenation artifact in the copy.' },
+  duplicate: { label: 'Duplicate', blurb: 'Two assets are identical where they should differ.' },
 }
 
 /** One side of the conflict, shown in the side-by-side evidence. */
