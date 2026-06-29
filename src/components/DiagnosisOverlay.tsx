@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { diagnose, scatterMap, structuredMap } from '../domain/diagnosis'
+import { branchPlan, diagnose, scatterMap, structuredMap } from '../domain/diagnosis'
+import { BranchPreview } from './BranchPreview'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -32,6 +33,7 @@ export function DiagnosisOverlay() {
   }
   const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
   const f = diagnose(scoped, breakStatus, campaignList)
+  const plan = branchPlan(scoped)
   const client = clientFilter !== 'all' ? clientFilter : 'your brand'
   const scatter = scatterMap(scoped, MAP_W, MAP_H, breakStatus)
   const structured = structuredMap(scoped, MAP_W, MAP_H, breakStatus)
@@ -44,6 +46,7 @@ export function DiagnosisOverlay() {
   const cards: { n: number | string; label: string; bad?: boolean }[] = [
     { n: f.contradictions, label: 'contradictions across variants', bad: true },
     { n: f.unsupported, label: 'claims with no proof behind them', bad: true },
+    { n: f.shallowAudiences, label: 'audiences with a shallow journey', bad: true },
     { n: f.offBrand, label: 'lines off your brand voice', bad: true },
     { n: f.noStrategy, label: 'assets with no plan behind them', bad: true },
   ].filter((c) => (c.n as number) > 0)
@@ -138,9 +141,28 @@ export function DiagnosisOverlay() {
             </div>
 
             <p className="dg-punch">
-              The gap between these two pictures is the whole reason to use Hyperfocus. This is what's
+              The gap between these two pictures is the whole reason to use HyperFocus. This is what's
               live, and this is what it looks like connected.
             </p>
+
+            {f.shallowAudiences > 0 && (
+              <div className="dg-reco">
+                <span className="dg-reco-k">✦ Recommendation</span>
+                <span className="dg-reco-body">
+                  Branch the journeys. {f.shallowAudiences} audience
+                  {f.shallowAudiences === 1 ? '' : 's'} stop short of a full path — a message or two, but no
+                  route to the next step. Marketing is routing: build the missing stages so each audience
+                  branches all the way to conversion, not a dead-end.
+                  {plan && (
+                    <>
+                      {' '}
+                      Here's how <b>{plan.audience}</b> would branch:
+                    </>
+                  )}
+                </span>
+                {plan && <BranchPreview plan={plan} />}
+              </div>
+            )}
 
             <div className="dg-foot">
               <button className="btn sm" onClick={() => setAct(1)}>

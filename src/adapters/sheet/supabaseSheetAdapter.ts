@@ -80,4 +80,9 @@ export class SupabaseSheetAdapter implements SheetAdapter {
     if (!ws || !supabase) return
     await supabase.from('assets').delete().eq('workspace_id', ws)
   }
+
+  async replaceAll(rows: TrafficRow[]): Promise<void> {
+    await this.clear()
+    if (rows.length) await this.append(rows)
+  }
 }

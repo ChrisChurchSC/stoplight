@@ -18,8 +18,42 @@ export interface ClientProfile {
   industry?: string
   /** Short brand-voice note, e.g. "Plain, technical, no hype." */
   voice?: string
+  // ---- Company overview (filled in by site ingestion) ----
+  /** One line on what the company does. */
+  oneLiner?: string
+  /** The company's mission, in their words. */
+  mission?: string
+  /** Founding year (or date), as stated. */
+  founded?: string
+  /** Headquarters / primary location. */
+  headquarters?: string
+  /** Key people: founders, leadership, named team. */
+  team?: { name: string; role?: string }[]
+  /** What they make or offer: products, services, programs. */
+  products?: string[]
+  /** What sets them apart — their stated differentiators. */
+  differentiators?: string[]
+  /** Named clients, partners, or backers. */
+  notableClients?: string[]
+  /** Stated values / principles. */
+  values?: string[]
+  /** Traction in their words: a key stat or milestone (e.g. "2M downloads"). */
+  traction?: string
   /** Connected channel profile URLs (social accounts) to re-gather on refresh. */
   channels?: string[]
+  /** Sanity CMS connection, so the brand's owned content can be ingested. */
+  sanity?: { projectId: string; dataset: string; token?: string }
+  /** Resend connection (API key), so the brand's email broadcasts can be ingested. */
+  resend?: { apiKey: string }
+  /** Google Ads API connection, so the brand's live ad copy can be ingested. */
+  googleAds?: {
+    developerToken: string
+    clientId: string
+    clientSecret: string
+    refreshToken: string
+    customerId: string
+    loginCustomerId?: string
+  }
   /** B2C / B2B / B2B2C / … — drives which audience fields matter. */
   businessModel?: string
   companySize?: string
@@ -31,6 +65,9 @@ export interface ClientProfile {
 export interface Campaign {
   name: string
   client: string
+  /** Subject — what the campaign is ABOUT (its theme/focus), e.g. "Spring Launch
+   *  — the new protein line." Distinct from strategy (what you want it to do). */
+  subject?: string
   strategy: string
   objective?: string
   /** Flight length in weeks; omitted/0 = ongoing. */
@@ -58,6 +95,17 @@ export interface Campaign {
   triggerKind?: import('./timing').TriggerKind
   /** Triggered: the selected event (scaffolded, not yet wired). */
   triggerEvent?: string
+  // ---- Lifecycle state (drives the brand campaign-states dashboard) ----
+  /**
+   * Where the campaign sits in its life: planning → in-review → active →
+   * completed. Optional: when unset, the dashboard derives the state from the
+   * campaign's rows (see domain/lifecycle.ts). An explicit value overrides the
+   * derivation — the user sends a campaign to review or marks it complete, and
+   * later the approval gate / publish step set it too.
+   */
+  status?: import('./lifecycle').CampaignStatus
+  /** When the campaign was marked completed (ms epoch); set alongside status: 'completed'. */
+  completedAt?: number
 }
 
 // Campaigns created at runtime (the wizard) register here so clientForCampaign

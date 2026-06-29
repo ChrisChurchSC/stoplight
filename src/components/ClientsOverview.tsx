@@ -5,6 +5,7 @@ import { money } from '../domain/budget'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { HomeHub } from './HomeHub'
 
 interface ClientRow {
   client: string
@@ -43,7 +44,8 @@ export function ClientsOverview() {
   const ingestDriveLink = useTrafficStore((s) => s.ingestDriveLink)
   const clientList = useTrafficStore((s) => s.clientList)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
-  const openSetup = useTrafficStore((s) => s.openSetup)
+  const openOnboard = useTrafficStore((s) => s.openOnboard)
+  const setPage = useTrafficStore((s) => s.setPage)
 
   const [tab, setTab] = useState<Tab>('all')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
@@ -79,24 +81,32 @@ export function ClientsOverview() {
 
   return (
     <div className="home">
-      <h1 className="home-greeting">Your clients</h1>
+      <div className="home-greeting-row">
+        <h1 className="home-greeting">Your clients</h1>
+        <button className="home-library-btn" onClick={() => setPage('library')} title="Reusable CTAs, proof points, audiences, strategies">
+          ▤ Messaging Library
+        </button>
+      </div>
       <p className="home-sub">Add a client, then bring their creative in from Drive or upload inside their workspace.</p>
 
-      <button className="home-setup" onClick={openSetup}>
+      {/* The launchpad zones — recents to resume + cross-client triage. Self-hide
+          on a fresh workspace, so create leads when there's nothing to jump back to. */}
+      <HomeHub />
+
+      <button className="home-setup" onClick={openOnboard}>
         <span className="home-setup-ico">✦</span>
         <span className="home-setup-text">
-          <span className="home-setup-title">Set up with Claude</span>
+          <span className="home-setup-title">Set up a brand</span>
           <span className="home-setup-sub">
-            Point Claude at their site. It reads everything publicly live, their site and their running
-            ads, and maps their whole messaging presence: voice, audiences, claims, and proof, for you
-            to confirm.
+            Two ways in: do it yourself, or let Claude set it up from the desktop app. Either way you
+            land on the same connected map of voice, audiences, claims, and proof, for you to confirm.
           </span>
         </span>
         <span className="home-setup-go">→</span>
       </button>
 
       <div className="home-newclient-cta">
-        <button className="home-addclient" onClick={openSetup}>
+        <button className="home-addclient" onClick={openOnboard}>
           <span className="home-addclient-ico">＋</span>
           <span>
             <span className="home-addclient-title">Add a client</span>

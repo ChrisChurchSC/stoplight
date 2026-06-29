@@ -1,31 +1,16 @@
-import { can } from '../domain/access'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 const CAR =
   'M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z'
 
-const PAGES = [
-  { key: 'clients', label: 'Home', icon: '⌂' },
-  { key: 'connectors', label: 'Connectors', icon: '⇄' },
-  { key: 'billing', label: 'Billing', icon: '▤' },
-] as const
-
 export function GlobalNav() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const role = useTrafficStore((s) => s.role)
-  const openEngine = useTrafficStore((s) => s.openEngine)
 
-  // Billing and Connectors are owner-only; a shared editor/stakeholder sees Home only.
-  const pages = PAGES.filter(
-    (p) => p.key === 'clients' || (p.key === 'billing' ? can(role, 'billing') : role === 'owner'),
-  )
-
-  const go = (key: (typeof PAGES)[number]['key']) => {
-    setPage(key)
-    // Returning to Clients lands on the portfolio overview.
-    if (key === 'clients') setClientFilter('all')
+  const goHome = () => {
+    setPage('clients')
+    setClientFilter('all')
   }
 
   return (
@@ -40,20 +25,21 @@ export function GlobalNav() {
       </div>
 
       <div className="global-nav-items">
-        {pages.map((p) => (
-          <button
-            key={p.key}
-            className={`global-nav-item${page === p.key ? ' active' : ''}`}
-            onClick={() => go(p.key)}
-            title={p.label}
-          >
-            <span className="global-nav-ico">{p.icon}</span>
-            <span className="global-nav-label">{p.label}</span>
-          </button>
-        ))}
-        <button className="global-nav-item global-nav-engine" onClick={openEngine} title="Claude engine">
-          <span className="global-nav-ico">✦</span>
-          <span className="global-nav-label">Engine</span>
+        <button
+          className={`global-nav-item${page === 'clients' ? ' active' : ''}`}
+          onClick={goHome}
+          title="Home"
+        >
+          <span className="global-nav-ico">⌂</span>
+          <span className="global-nav-label">Home</span>
+        </button>
+        <button
+          className={`global-nav-item${page === 'library' ? ' active' : ''}`}
+          onClick={() => setPage('library')}
+          title="Messaging Library — reusable CTAs, proof points, audiences, strategies"
+        >
+          <span className="global-nav-ico">▤</span>
+          <span className="global-nav-label">Library</span>
         </button>
       </div>
     </nav>

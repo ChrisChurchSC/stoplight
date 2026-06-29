@@ -208,7 +208,36 @@ function resolveChannels(asset: Asset): { channels: ChannelId[]; strong: boolean
   return { channels: found.filter((ch) => channelAccepts(ch, asset.mediaType)), strong }
 }
 
-function classifyOne(asset: Asset, stemCounts: Map<string, number>): Asset {
+/**
+ * Infer the audience from the folder path by matching a path SEGMENT against the
+ * brand's defined audience names (word overlap). A folder like
+ * "Surf & Shore Casters/Instagram/clip.mp4" routes the asset to that audience so
+ * it lands in the right lane on the canvas. Conservative: needs at least half an
+ * audience's distinctive words present, and picks the strongest match.
+ */
+const audWords = (s: string): Set<string> =>
+  new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2))
+
+function inferAudience(folderPath: string | undefined, audiences: string[]): string | undefined {
+  if (!folderPath || audiences.length === 0) return undefined
+  const segments = folderPath.split('/').map((s) => s.trim()).filter(Boolean)
+  let best: { name: string; score: number } | undefined
+  for (const seg of segments) {
+    const segWords = audWords(seg)
+    if (!segWords.size) continue
+    for (const aud of audiences) {
+      const target = audWords(aud)
+      if (!target.size) continue
+      let hit = 0
+      for (const w of target) if (segWords.has(w)) hit += 1
+      const score = hit / target.size
+      if (hit > 0 && (!best || score > best.score)) best = { name: aud, score }
+    }
+  }
+  return best && best.score >= 0.5 ? best.name : undefined
+}
+
+function classifyOne(asset: Asset, stemCounts: Map<string, number>, audiences: string[]): Asset {
   const tokenSet = new Set(tokenize(`${asset.folderPath ?? ''} ${asset.name}`))
   const sharesStem =
     asset.mediaType === 'image' && stem(asset.name).length >= 4 && (stemCounts.get(stemKey(asset)) ?? 0) >= 2
@@ -227,19 +256,22 @@ function classifyOne(asset: Asset, stemCounts: Map<string, number>): Asset {
     ...asset,
     channels: hasChannel ? channels : asset.channels,
     suggestedTypeFor,
+    // Keep an audience the caller already set; otherwise infer from the folder.
+    audience: asset.audience || inferAudience(asset.folderPath, audiences),
     classifyConfidence: hasChannel ? (strong ? 0.9 : 0.72) : 0.3,
     classifySource: hasChannel ? 'path' : 'heuristic',
   }
 }
 
-/** Auto-organize a freshly ingested batch: infer channel + per-channel type for
- *  each asset. Batch-aware (carousel slides are detected across the group). */
-export function classifyAssets(assets: Asset[]): Asset[] {
+/** Auto-organize a freshly ingested batch: infer channel + per-channel type and,
+ *  when the brand's defined audience names are passed, the audience from the
+ *  folder path. Batch-aware (carousel slides are detected across the group). */
+export function classifyAssets(assets: Asset[], audiences: string[] = []): Asset[] {
   const stemCounts = new Map<string, number>()
   for (const a of assets) {
     if (a.mediaType !== 'image') continue
     if (stem(a.name).length < 4) continue // skip 'img', 'dsc' camera-roll stems
     stemCounts.set(stemKey(a), (stemCounts.get(stemKey(a)) ?? 0) + 1)
   }
-  return assets.map((a) => classifyOne(a, stemCounts))
+  return assets.map((a) => classifyOne(a, stemCounts, audiences))
 }

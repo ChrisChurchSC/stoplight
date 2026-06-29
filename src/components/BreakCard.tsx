@@ -78,12 +78,19 @@ export function BreakCard({ brk, active }: { brk: CoherenceBreak; active: boolea
         </div>
       )}
 
-      {/* fix preview */}
+      {/* fix preview — an attach-proof fix keeps the copy, so show the intent
+          rather than an identical before → after. */}
       <div className="brk-fix">
         <span className="brk-fix-tag">Suggested fix</span>
-        <span className="brk-fix-before">{brk.suggestedFix.before}</span>
-        <span className="brk-fix-arrow">→</span>
-        <span className="brk-fix-after">{brk.suggestedFix.after}</span>
+        {brk.suggestedFix.attachRtb && brk.suggestedFix.before === brk.suggestedFix.after ? (
+          <span className="brk-fix-after">Attach the matching proof point</span>
+        ) : (
+          <>
+            <span className="brk-fix-before">{brk.suggestedFix.before}</span>
+            <span className="brk-fix-arrow">→</span>
+            <span className="brk-fix-after">{brk.suggestedFix.after}</span>
+          </>
+        )}
       </div>
 
       {/* actions */}

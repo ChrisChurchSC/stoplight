@@ -2,18 +2,19 @@ import { useEffect, useState } from 'react'
 import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
-import { GlobalNav } from './GlobalNav'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
-import { CampaignTabs } from './CampaignTabs'
+import { BrandWorkspace } from './BrandWorkspace'
 import { ClientsOverview } from './ClientsOverview'
 import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { CanvasView } from './CanvasView'
+import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
+import { LibraryPage } from './LibraryPage'
 import { BillingPage } from './BillingPage'
 import { IcpDrawer } from './IcpDrawer'
 import { TrackingDrawer } from './TrackingDrawer'
@@ -21,9 +22,10 @@ import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
 import { NewClientWizard } from './NewClientWizard'
+import { OnboardingFork } from './OnboardingFork'
+import { ClaudeHandoff } from './ClaudeHandoff'
 import { SetupWizard } from './SetupWizard'
 import { AudienceWizard } from './AudienceWizard'
-import { ConnectionHeader } from './ConnectionHeader'
 import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
 import { DiagnosisOverlay } from './DiagnosisOverlay'
@@ -33,6 +35,7 @@ import { ShareDialog } from './ShareDialog'
 import { CommentInbox } from './CommentInbox'
 import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
+import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -40,12 +43,22 @@ export function Workbench() {
   const view = useTrafficStore((s) => s.view)
   const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const wizardOpen = useTrafficStore((s) => s.wizardOpen)
   const wizardClient = useTrafficStore((s) => s.wizardClient)
   const closeWizard = useTrafficStore((s) => s.closeWizard)
   const openAsk = useTrafficStore((s) => s.openAsk)
   const [over, setOver] = useState(false)
   const overview = clientFilter === 'all'
+  // Level 1: a brand is open but no campaign is selected — show the campaign-states
+  // home (campaigns by lifecycle). Picking a campaign drops to Level 2 (the canvas).
+  const level1 = !overview && campaignFilter === 'all'
+  // The Connection (canvas) view goes edge-to-edge: the map fills the whole work
+  // area and the chrome (top nav, channel sidebar, canvas controls, view pills)
+  // floats translucently on top. Scoped by a class so other views stay normal.
+  // All campaign sub-views (Connection / Grid / Calendar) share the full-bleed,
+  // floating-chrome design — the project-tab drawer + dark top bar sit above all three.
+  const canvasMode = page === 'clients' && !overview && !level1
 
   useEffect(() => {
     refresh()
@@ -77,12 +90,11 @@ export function Workbench() {
   }
 
   return (
-    <div className="workspace">
-      <GlobalNav />
-
+    <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
       {page === 'clients' ? (
         <div className="work-col">
           <ShareBanner />
+          {canvasMode && <CanvasProjectTabs />}
           <Breadcrumb />
           <div
             className={`work-body${over ? ' drop-over' : ''}`}
@@ -95,10 +107,8 @@ export function Workbench() {
             }}
             onDrop={onDrop}
           >
-            {!overview && <Sidebar />}
+            {!overview && !level1 && <Sidebar />}
             <div className="main">
-              {!overview && <CampaignTabs />}
-              {!overview && <ConnectionHeader />}
 
               {overview ? (
                 <>
@@ -107,6 +117,8 @@ export function Workbench() {
                   <IngestTray />
                   <ClientsOverview />
                 </>
+              ) : level1 ? (
+                <BrandWorkspace />
               ) : (
                 <>
                   <IngestTray />
@@ -129,7 +141,7 @@ export function Workbench() {
         </div>
       ) : (
         <div className="main">
-          {page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
+          {page === 'library' ? <LibraryPage /> : page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
         </div>
       )}
 
@@ -139,6 +151,7 @@ export function Workbench() {
       <AskClaude />
       <ShareDialog />
       <IcpDrawer />
+      <ChannelIngestDrawer />
       <TrackingDrawer />
       <CopyReview />
       <CommentDrawer />
@@ -147,6 +160,8 @@ export function Workbench() {
       <ClaudeEngine />
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
+      <OnboardingFork />
+      <ClaudeHandoff />
       <SetupWizard />
       <AudienceWizard />
     </div>

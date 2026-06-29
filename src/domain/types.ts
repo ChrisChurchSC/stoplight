@@ -72,6 +72,10 @@ export interface Asset {
   durationSec?: number
   /** Folder path the asset came from (Drive); a channel signal. Empty for local drops. */
   folderPath?: string
+  /** Audience inferred from the folder path (matched to the brand's defined
+   *  audiences), or set by hand in the ingest tray. Carries onto the row so the
+   *  asset lands in the right lane on the canvas. */
+  audience?: string
   /** Channels the user wants this asset trafficked to. Pre-toggled by the classifier. */
   channels: ChannelId[]
   /** Per-channel caption/copy override; falls back to a shared default. */
@@ -100,6 +104,9 @@ export interface TrafficRow {
   channel: ChannelId
   /** Channel-specific asset-type category (see channelAssetTypes.ts). */
   assetType?: string
+  /** Explicit funnel-stage override — set when a card is dragged into a different
+   *  band. Wins over the channel-derived stage so you can place a card by hand. */
+  funnelStage?: import('./funnel').FunnelStage
   /** Carried from the classifier so the grid can flag auto-organized rows. */
   classifyConfidence?: number
   classifySource?: 'path' | 'heuristic' | 'ai'
@@ -123,11 +130,28 @@ export interface TrafficRow {
   extractedCopy?: string
   /** Reviewer has read & signed off on all copy for this row. */
   copyReviewed?: boolean
+  /** A persisted re-check flag raised when a frame change (brand / audience swap)
+   *  moves this PRODUCED/linked asset out from under its proof. Editable copy gets
+   *  redrafted automatically; produced media (a finished video, a static, a live
+   *  page) can't be, so it carries this flag until someone reworks it where it
+   *  lives. Reconciled on every frame change (set when it stops fitting, cleared
+   *  when it fits again) and cleared by hand from the card. */
+  recheckFlag?: {
+    /** Why it was flagged — a short, human reason. */
+    reason: string
+    /** The frame change that raised it, e.g. "Audience → Reef & Wreck". */
+    frame: string
+    at: number
+  }
   /** RTBs (proof points) backing each messaging component: componentKey → rtb ids. */
   rtbMap?: Record<string, string[]>
   /** Destination this unit drives to — the next asset in the journey (by asset
    *  name), e.g. an ad → its landing page, a lead magnet → its nurture email. */
   linksTo?: string
+  /** The asset this one branches off — the previous step in the journey (by asset
+   *  name). One parent can have many branches, so this models the tree the
+   *  `linksTo` single-link can't. Set when you branch a card on the canvas. */
+  branchOf?: string
   /** Auto-generated tracking parameters, written back to the sheet so they
    *  carry through to the platforms (see tracking.ts). */
   utm?: { source: string; medium: string; campaign: string; content: string }
@@ -135,6 +159,8 @@ export interface TrafficRow {
   budget?: { amount: number; type: 'daily' | 'lifetime'; endDate?: string }
   /** Actual spend pulled back from the platform (read-only, daily sync). */
   spend?: { toDate: number; updatedAt: number }
+  /** Real engagement pulled from the channel (organic performance signal). */
+  engagement?: { likes: number; comments: number }
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   /** For assets that run over a period (always-on ads, landing pages, nurture

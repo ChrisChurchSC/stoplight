@@ -1,3 +1,5 @@
+import { isCtaField, messagingFields } from './messaging'
+import { rtbsForCampaign } from './rtb'
 import type { ChannelId, TrafficRow } from './types'
 
 /**
@@ -322,13 +324,157 @@ export function detectVoiceBreaks(rows: TrafficRow[]): CoherenceBreak[] {
 // label for scoping; resolved lazily to avoid importing the clients map here.
 const clientForVoice = (_r: TrafficRow): string => ''
 
-/** The full connection check: the seeded thread breaks plus the live voice check. */
+// ---------------------------------------------------------------------------
+// Generalized, content-driven structural checks — client-agnostic, so the
+// always-on engine works on ANY brand's real copy, not just the seeded Acme
+// fixtures. Conservative by design: precision over recall, so a flag is worth
+// acting on rather than tuned out. (Journey + audience drift stay seeded/LLM —
+// they need semantic judgment these structural rules can't safely make.)
+// ---------------------------------------------------------------------------
+
+const reviewableRow = (r: TrafficRow) => r.status !== 'posted' && r.status !== 'failed'
+
+// A measurable performance or availability claim — the kind that needs a proof
+// point behind it. Hype/superlatives are left to the brand-voice rules above, so
+// the two checks don't double-flag the same words.
+const CLAIM_SIGNAL = /(\d+(?:\.\d+)?\s?%|\b\d+x\b|\$\s?\d[\d,]*|\blive now\b|\bnow live\b|\bavailable now\b)/i
+
+// CTAs that don't cash a promise — a conversion step that asks for nothing.
+const SOFT_CTA = /^(learn more|read more|see more|find out more|discover more|click here|view|explore|more|see how)\.?$/i
+
+/** The asset's primary CTA component — covers multi-CTA pages (cta-mid, etc.). */
+function ctaEntry(r: TrafficRow): { field: string; value: string } | null {
+  const m = r.messaging ?? {}
+  for (const fld of messagingFields(r.channel, r.assetType)) {
+    if (!isCtaField(fld.key)) continue
+    const v = (m[fld.key] ?? '').trim()
+    if (v) return { field: fld.key, value: v }
+  }
+  return null
+}
+
+/** Best-matching campaign RTB for a claim, by word overlap — the proof to attach. */
+function bestRtbForClaim(campaign: string, claim: string): string | undefined {
+  const rtbs = rtbsForCampaign(campaign)
+  if (!rtbs.length) return undefined
+  const words = new Set(claim.toLowerCase().match(/[a-z]{3,}/g) ?? [])
+  let best: string | undefined
+  let bestScore = 0
+  for (const rtb of rtbs) {
+    const hay = `${rtb.label} ${rtb.detail}`.toLowerCase()
+    let score = 0
+    for (const w of words) if (hay.includes(w)) score++
+    if (score > bestScore) {
+      bestScore = score
+      best = rtb.id
+    }
+  }
+  return bestScore > 0 ? best : undefined
+}
+
+/** Unsupported claims: a measurable claim in a component with no RTB attached.
+ *  Fix = attach the best-matching proof point if one exists, else soften the claim. */
+export function detectProofGaps(rows: TrafficRow[]): CoherenceBreak[] {
+  const out: CoherenceBreak[] = []
+  for (const r of rows) {
+    if (!reviewableRow(r)) continue
+    const campaign = (r.campaign ?? '').trim()
+    for (const [field, value] of Object.entries(r.messaging ?? {})) {
+      const v = (value ?? '').trim()
+      if (!v) continue
+      const m = v.match(CLAIM_SIGNAL)
+      if (!m) continue
+      if ((r.rtbMap?.[field] ?? []).length > 0) continue // already backed by proof
+      const highlight = m[0].trim()
+      const rtb = bestRtbForClaim(campaign, v)
+      const softened = v
+        .replace(m[0], '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\s+([.,!?])/g, '$1')
+        .trim()
+      out.push({
+        id: `proofgap-${r.id}-${field}`,
+        axis: 'proof',
+        severity: 'high',
+        headline: `“${highlight}” is a claim with no proof point behind it.`,
+        client: '',
+        campaign,
+        from: { role: `${r.channel} · ${field}`, assetName: r.assetName, channel: r.channel, field, text: v, highlight },
+        why: 'A measurable claim with nothing substantiating it reads as hype. Buyers who discount hype tune out exactly these unbacked lines.',
+        brandRule: 'Every claim carries its proof — attach the RTB, or soften the claim.',
+        suggestedFix: rtb
+          ? { assetName: r.assetName, channel: r.channel, field, before: v, after: v, attachRtb: rtb }
+          : { assetName: r.assetName, channel: r.channel, field, before: v, after: softened || v },
+        status: 'open',
+      })
+    }
+  }
+  return out
+}
+
+/** Weak CTAs: a soft CTA on an asset that makes a promise it never cashes. */
+export function detectWeakCtas(rows: TrafficRow[]): CoherenceBreak[] {
+  const out: CoherenceBreak[] = []
+  for (const r of rows) {
+    if (!reviewableRow(r)) continue
+    const cta = ctaEntry(r)
+    if (!cta || !SOFT_CTA.test(cta.value)) continue
+    // Only a problem if the asset actually makes a promise to convert.
+    const promise = Object.entries(r.messaging ?? {}).some(
+      ([f, v]) => f !== cta.field && CLAIM_SIGNAL.test(v ?? ''),
+    )
+    if (!promise) continue
+    out.push({
+      id: `weakcta-${r.id}-${cta.field}`,
+      axis: 'cta',
+      severity: 'low',
+      headline: `This asset makes a promise, then closes with a soft “${cta.value}.”`,
+      client: '',
+      campaign: (r.campaign ?? '').trim(),
+      from: { role: `${r.channel} · ${cta.field}`, assetName: r.assetName, channel: r.channel, field: cta.field, text: cta.value, highlight: cta.value },
+      why: 'The copy builds intent with a concrete promise, then the CTA fails to convert it into an action. The funnel’s momentum leaks at the ask.',
+      brandRule: 'Carry the promise through to the CTA — ask for the action the copy earned.',
+      suggestedFix: { assetName: r.assetName, channel: r.channel, field: cta.field, before: cta.value, after: 'Get started' },
+      status: 'open',
+    })
+  }
+  return out
+}
+
+/** Identity of the asset component a break covers — for dedupe across detectors. */
+const coverKey = (b: CoherenceBreak) => `${b.from.assetName}|${b.from.channel ?? ''}|${b.from.field}`
+
+/**
+ * The full connection check: the seeded thread breaks (polished, demo anchors)
+ * plus the generalized structural checks (proof gaps, weak CTAs) and the live
+ * voice check — the latter three running on any client's real copy. A seeded
+ * break wins its component, so the hand-authored copy isn't shadowed by a
+ * generic one for the same field.
+ */
 export function detectBreaks(rows: TrafficRow[]): CoherenceBreak[] {
-  return [...detectAcmeBreaks(rows), ...detectVoiceBreaks(rows)]
+  const seeded = detectAcmeBreaks(rows)
+  const seededKeys = new Set(seeded.map(coverKey))
+  const general = [...detectProofGaps(rows), ...detectWeakCtas(rows), ...detectVoiceBreaks(rows)].filter(
+    (b) => !seededKeys.has(coverKey(b)),
+  )
+  return [...seeded, ...general]
 }
 
 /** A scope key for caching a Claude coherence run (client + campaign). */
 export const breakScopeKey = (client: string, campaign: string): string => `${client}|${campaign}`
+
+/** A cheap content fingerprint of the reviewable copy in scope — it changes the
+ *  moment any messaging or proof mapping is edited, so the continuous check knows
+ *  when to re-run and when a cached Claude result is stale. */
+export function coherenceContentHash(rows: TrafficRow[]): string {
+  let h = 0
+  for (const r of rows) {
+    if (r.status === 'posted' || r.status === 'failed') continue
+    const s = `${r.id}|${Object.entries(r.messaging ?? {}).flat().join('')}|${Object.entries(r.rtbMap ?? {}).flat().join(',')}`
+    for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  }
+  return (h >>> 0).toString(36)
+}
 
 /**
  * The break set for the current scope: Claude's last run when it covers this exact

@@ -1,11 +1,58 @@
 import type { TrafficRow } from './types'
 import { messagingAllText } from './messaging'
 
-/** A Reason to Believe — a proof point that substantiates the campaign's promise. */
+/** One recorded outcome for an RTB — its per-use track record. Empty until
+ *  attribution flows back; the structure exists from day one so an RTB can
+ *  accumulate history ("objects that remember"). */
+export interface RtbOutcome {
+  /** Campaign the proof was deployed in. */
+  campaign: string
+  /** Asset that carried the claim, when known. */
+  assetId?: string
+  /** Coarse result now; numeric attribution can refine later. */
+  result: 'won' | 'engaged' | 'flat'
+  /** Attributed revenue, when known. */
+  revenue?: number
+  at: number
+}
+
+/**
+ * A Reason to Believe — a proof point that substantiates a claim. RTBs are
+ * first-class objects OWNED BY a single audience in the foundation (proof belongs
+ * to the audience it persuades); they travel with the audience into campaigns and
+ * accumulate their own per-audience track record via `outcomes`.
+ */
 export interface Rtb {
   id: string
   label: string
   detail: string
+  /** The audience that owns this proof (foundation). Absent on legacy
+   *  campaign-seeded RTBs that haven't been migrated to an owner yet. */
+  audienceId?: string
+  /** Library governance: an approved proof is a blessed, on-brand master you can
+   *  pull with confidence; an unapproved one is an unvetted draft (e.g. authored
+   *  on the canvas, not yet reviewed). Undefined = approved (legacy masters);
+   *  only an explicit `false` marks a draft, so existing data reads as approved. */
+  approved?: boolean
+  /** This proof's track record — what it converted, where it fell flat. Starts
+   *  empty; the rank/reuse intelligence reads this once outcomes accrue. */
+  outcomes?: RtbOutcome[]
+}
+
+/** A proof is a vetted library master unless explicitly marked an unapproved draft. */
+export const isApprovedProof = (r: Rtb): boolean => r.approved !== false
+
+let rtbSeq = 0
+/** A fresh owned RTB. Pass the owning audience so proof is audience-scoped. */
+export function newRtb(patch: Partial<Rtb> & { audienceId: string }): Rtb {
+  rtbSeq += 1
+  return {
+    id: patch.id ?? `rtb_${Date.now().toString(36)}_${rtbSeq}`,
+    label: patch.label ?? '',
+    detail: patch.detail ?? '',
+    outcomes: patch.outcomes ?? [],
+    ...patch,
+  }
 }
 
 /**
@@ -38,8 +85,36 @@ export function registerCampaignRtbs(campaign: string, rtbs: Rtb[]): void {
   if (campaign) runtimeRtbs.set(campaign, rtbs)
 }
 
-export const rtbsForCampaign = (campaign?: string): Rtb[] =>
-  (campaign ? runtimeRtbs.get(campaign) : undefined) ?? CAMPAIGN_RTBS[campaign ?? ''] ?? []
+/** The proof points owned by one audience (foundation). */
+export const rtbsForAudience = (audience: { rtbs?: Rtb[] } | undefined): Rtb[] => audience?.rtbs ?? []
+
+/** Dedupe a set of audiences' RTBs by id — a campaign's available proof is the
+ *  union of the proof owned by the audiences it draws on. */
+export function rtbsFromAudiences(audiences: { rtbs?: Rtb[] }[]): Rtb[] {
+  const out: Rtb[] = []
+  const seen = new Set<string>()
+  for (const a of audiences) for (const r of a.rtbs ?? []) if (!seen.has(r.id)) { seen.add(r.id); out.push(r) }
+  return out
+}
+
+/**
+ * Audience-sourced RTB resolver. Audiences own their proof now, so the canonical
+ * proof for a campaign is the union of its audiences' RTBs. The store installs a
+ * resolver (campaign → that campaign's audiences' RTBs) so the many existing
+ * `rtbsForCampaign` callers keep working while ownership lives on the audience.
+ */
+let audienceRtbResolver: ((campaign: string) => Rtb[]) | null = null
+export function setAudienceRtbResolver(fn: ((campaign: string) => Rtb[]) | null): void {
+  audienceRtbResolver = fn
+}
+
+export const rtbsForCampaign = (campaign?: string): Rtb[] => {
+  // Audience-owned proof is canonical; fall back to the runtime/seed sets for
+  // campaigns whose audiences don't own RTBs yet (legacy demo data).
+  const owned = campaign && audienceRtbResolver ? audienceRtbResolver(campaign) : []
+  if (owned.length) return owned
+  return (campaign ? runtimeRtbs.get(campaign) : undefined) ?? CAMPAIGN_RTBS[campaign ?? ''] ?? []
+}
 
 export const rtbById = (campaign: string | undefined, id: string): Rtb | undefined =>
   rtbsForCampaign(campaign).find((r) => r.id === id)

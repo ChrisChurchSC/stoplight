@@ -24,6 +24,43 @@ export function mediaSharePct(s: GtmStrategy): number | null {
   return m ? Number(m[1]) : null
 }
 
+/**
+ * The ordered stage labels a playbook runs through, parsed from its `sequence`
+ * ("Visitor → Lead → MQL → SQL → Opp → Closed" → six labels). Trailing
+ * parenthetical notes are dropped, so "Convert (+ program outcomes)" → "Convert".
+ * These become the funnel bands on the canvas when a campaign is linked to the
+ * playbook — the journey reads in the playbook's own vocabulary, not the generic
+ * Awareness → Retention funnel.
+ */
+export function playbookStages(sequence: string): string[] {
+  return sequence
+    .split(/→|->/)
+    .map((s) => s.replace(/\([^)]*\)/g, '').trim())
+    .filter(Boolean)
+}
+
+/**
+ * Project one of the canonical funnel positions (0..canonCount-1) onto a
+ * playbook of `nPhases` stages by proportional position. Channels resolve to the
+ * canonical 4-stage funnel; this maps that position into the playbook's own
+ * sequence so a card lands in the nearest playbook stage. Identity when the
+ * playbook has exactly 4 stages (and for the generic 4-stage fallback).
+ */
+export function canonToPhase(canonIdx: number, canonCount: number, nPhases: number): number {
+  if (nPhases <= 1) return 0
+  const pos = canonCount <= 1 ? 0 : canonIdx / (canonCount - 1)
+  return Math.min(nPhases - 1, Math.max(0, Math.round(pos * (nPhases - 1))))
+}
+
+/** Inverse of {@link canonToPhase}: the canonical funnel stage a playbook phase
+ *  best represents, so restaging a card into a playbook band still writes a
+ *  canonical funnelStage the rest of the engine understands. */
+export function phaseToCanon(phaseIdx: number, nPhases: number, canonCount: number): number {
+  if (canonCount <= 1) return 0
+  const pos = nPhases <= 1 ? 0 : phaseIdx / (nPhases - 1)
+  return Math.min(canonCount - 1, Math.max(0, Math.round(pos * (canonCount - 1))))
+}
+
 export const GTM_STRATEGIES: GtmStrategy[] = [
   {
     key: 'demand-gen',

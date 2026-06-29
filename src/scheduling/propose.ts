@@ -32,12 +32,25 @@ function nthSlot(channel: ChannelId, index: number, now: Date): Date {
   return candidate
 }
 
+/** Scope the proposed rows inherit so they land in the right place: the campaign
+ *  whose canvas is open, and a fallback audience when an asset has none of its
+ *  own (the per-asset audience set in the tray / inferred from the folder wins). */
+interface ProposeDefaults {
+  campaign?: string
+  audience?: string
+}
+
 /**
  * Propose a schedule for a batch of assets. Each (asset, channel) pair becomes
  * one draft TrafficRow with a best-time slot. Returns rows in draft status —
- * nothing is approved or posted here.
+ * nothing is approved or posted here. `defaults` carries the open scope so the
+ * rows are pre-mapped onto the canvas (campaign) and lane (audience).
  */
-export function proposeSchedule(assets: Asset[], now: Date = new Date()): TrafficRow[] {
+export function proposeSchedule(
+  assets: Asset[],
+  now: Date = new Date(),
+  defaults: ProposeDefaults = {},
+): TrafficRow[] {
   // Track how many rows we've already placed per channel to advance slots.
   const placedPerChannel: Partial<Record<ChannelId, number>> = {}
   const rows: TrafficRow[] = []
@@ -65,8 +78,8 @@ export function proposeSchedule(assets: Asset[], now: Date = new Date()): Traffi
           ? { [primaryFieldKey(channel, assetType)]: asset.caption }
           : {},
         body: asset.body,
-        campaign: '',
-        audience: '',
+        campaign: defaults.campaign ?? '',
+        audience: (asset.audience ?? '').trim() || defaults.audience || '',
         scheduledAt: when.toISOString(),
         status: 'draft',
         mediaRef: asset.previewUrl,
