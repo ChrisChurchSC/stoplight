@@ -1240,6 +1240,16 @@ button {
 .global-nav-label {
   display: none;
 }
+/* Owner-only utilities (Connectors / Billing) pinned to the foot of the rail,
+   set apart from the everyday Home / Library destinations. */
+.global-nav-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: auto;
+}
 
 /* ---- top-level pages (Calendar / Insights / Assets / Settings) ---- */
 .page {

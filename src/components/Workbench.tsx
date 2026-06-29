@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { GlobalNav } from './GlobalNav'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { BrandWorkspace } from './BrandWorkspace'
@@ -91,6 +92,9 @@ export function Workbench() {
 
   return (
     <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
+      {/* Persistent global rail — present at every navigation altitude, but it
+          yields to the full-bleed campaign canvas (which assumes no rail). */}
+      {!canvasMode && <GlobalNav />}
       {page === 'clients' ? (
         <div className="work-col">
           <ShareBanner />
