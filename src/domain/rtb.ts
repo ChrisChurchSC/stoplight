@@ -29,6 +29,10 @@ export interface Rtb {
   /** The audience that owns this proof (foundation). Absent on legacy
    *  campaign-seeded RTBs that haven't been migrated to an owner yet. */
   audienceId?: string
+  /** Quantified version of the claim, if any (e.g. "40% faster"). */
+  metric?: string
+  /** Where the proof comes from (e.g. "Acme case study", benchmark, survey). */
+  source?: string
   /** Library governance: an approved proof is a blessed, on-brand master you can
    *  pull with confidence; an unapproved one is an unvetted draft (e.g. authored
    *  on the canvas, not yet reviewed). Undefined = approved (legacy masters);

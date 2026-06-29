@@ -46,10 +46,10 @@ export function GlobalNav() {
         <button
           className={`global-nav-item${page === 'library' ? ' active' : ''}`}
           onClick={() => setPage('library')}
-          title="Messaging Library — reusable audiences, proof, subjects, hooks, CTAs"
+          title="Messaging systems — reusable audiences, proof, subjects, hooks, CTAs per brand"
         >
           <span className="global-nav-ico">▤</span>
-          <span className="global-nav-label">Library</span>
+          <span className="global-nav-label">Messaging</span>
         </button>
       </div>
 

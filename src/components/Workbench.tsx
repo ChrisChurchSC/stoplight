@@ -3,6 +3,7 @@ import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { GlobalNav } from './GlobalNav'
+import { HomeShell } from './HomeShell'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { BrandWorkspace } from './BrandWorkspace'
@@ -95,9 +96,10 @@ export function Workbench() {
 
   return (
     <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
-      {/* Persistent global rail — present at every navigation altitude, but it
-          yields to the full-bleed campaign canvas (which assumes no rail). */}
-      {!canvasMode && !homeFiles && <GlobalNav />}
+      {/* Global rail only on the brand workspace (Level 1). The home + the
+          Library / Connectors / Billing pages carry the files sidebar (HomeShell),
+          and the canvas is full-bleed — none of them want the rail. */}
+      {page === 'clients' && !overview && !canvasMode && <GlobalNav />}
       {page === 'clients' ? (
         <div className="work-col">
           <ShareBanner />
@@ -147,9 +149,13 @@ export function Workbench() {
           </div>
         </div>
       ) : (
-        <div className="main">
-          {page === 'library' ? <LibraryPage /> : page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
-        </div>
+        // Library / Connectors / Billing share the home's dashboard shell (files
+        // sidebar + tab bar) so the layout never changes between them and the hub.
+        <HomeShell>
+          <div className="home-main-page">
+            {page === 'library' ? <LibraryPage /> : page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
+          </div>
+        </HomeShell>
       )}
 
       <BreaksQueue />

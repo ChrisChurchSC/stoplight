@@ -11,7 +11,7 @@ import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
-import { defaultLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta } from '../domain/library'
+import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
@@ -393,31 +393,61 @@ function saveClientAudiences(map: Record<string, AudienceType[]>): void {
   }
 }
 
-const LIBRARY_KEY = 'stoplight.library.v1'
-function loadLibrary(): MessagingLibrary {
-  const seed = defaultLibrary()
-  try {
-    const v = JSON.parse(localStorage.getItem(LIBRARY_KEY) || 'null')
-    if (!v || typeof v !== 'object') return seed
-    return {
-      ctas: Array.isArray(v.ctas) ? v.ctas : seed.ctas,
-      rtbs: Array.isArray(v.rtbs) ? v.rtbs : seed.rtbs,
-      audiences: Array.isArray(v.audiences) ? v.audiences.map((a: AudienceType) => normalizeAudience(a)) : seed.audiences,
-      strategies: Array.isArray(v.strategies) ? v.strategies : seed.strategies,
-      // Newer kinds — seed them if an older stored library predates the field.
-      subjects: Array.isArray(v.subjects) ? v.subjects : seed.subjects,
-      hooks: Array.isArray(v.hooks) ? v.hooks : seed.hooks,
-    }
-  } catch {
-    return seed
+
+// Messaging systems — ONE per brand. Each brand owns a self-contained library
+// (audiences, proof, subjects, hooks, CTAs + the universal GTM strategies). Keyed
+// by brand name; created lazily (emptyLibrary) the first time a brand's system is
+// read or edited. The canvas reads the campaign's brand's system; the Messaging
+// page views one brand at a time.
+const BRAND_SYSTEMS_KEY = 'stoplight.brandSystems.v1'
+function normalizeLibrary(v: Partial<MessagingLibrary> | undefined): MessagingLibrary {
+  const seed = emptyLibrary()
+  if (!v || typeof v !== 'object') return seed
+  return {
+    ctas: Array.isArray(v.ctas) ? v.ctas : [],
+    rtbs: Array.isArray(v.rtbs) ? v.rtbs : [],
+    audiences: Array.isArray(v.audiences) ? v.audiences.map((a) => normalizeAudience(a as AudienceType)) : [],
+    strategies: Array.isArray(v.strategies) ? v.strategies : seed.strategies,
+    subjects: Array.isArray(v.subjects) ? v.subjects : [],
+    hooks: Array.isArray(v.hooks) ? v.hooks : [],
   }
 }
-function saveLibrary(lib: MessagingLibrary): void {
+function loadBrandSystems(): Record<string, MessagingLibrary> {
   try {
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib))
+    const v = JSON.parse(localStorage.getItem(BRAND_SYSTEMS_KEY) || 'null')
+    if (v && typeof v === 'object') {
+      const out: Record<string, MessagingLibrary> = {}
+      for (const [brand, lib] of Object.entries(v)) out[brand] = normalizeLibrary(lib as MessagingLibrary)
+      return out
+    }
   } catch {
     /* ignore */
   }
+  return {}
+}
+function saveBrandSystems(map: Record<string, MessagingLibrary>): void {
+  try {
+    localStorage.setItem(BRAND_SYSTEMS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+/** A brand's system, defaulting to a fresh empty one (read-only — never mutates). */
+function libFor(map: Record<string, MessagingLibrary>, brand: string): MessagingLibrary {
+  return map[brand] ?? emptyLibrary()
+}
+/** Apply a change to the VIEWED brand's system (messagingBrand) and keep the
+ *  `library` mirror in sync (the Messaging page + library readers use the mirror). */
+function activeLibPatch(
+  s: TrafficState,
+  fn: (lib: MessagingLibrary) => MessagingLibrary,
+): { brandSystems: Record<string, MessagingLibrary>; library: MessagingLibrary } {
+  const brand = s.messagingBrand
+  if (!brand) return { brandSystems: s.brandSystems, library: s.library }
+  const library = fn(libFor(s.brandSystems, brand))
+  const brandSystems = { ...s.brandSystems, [brand]: library }
+  saveBrandSystems(brandSystems)
+  return { brandSystems, library }
 }
 
 // Coherence decisions: the human accept/override calls on the cross-variant
@@ -732,6 +762,10 @@ interface TrafficState {
   audienceFilter: string
   /** Status / governance card filter (flagged / draft / live / unvetted). */
   cardFilter: CardFilter
+  /** The files-browser home filter (all / drafts / flagged / live / `brand:<name>`),
+   *  owned here so the files sidebar can drive it from any page. */
+  homeFilter: string
+  setHomeFilter: (f: string) => void
   /** Toolbar search across asset name / caption. */
   query: string
   /** Breadcrumb scope: which client, then which campaign. 'all' = no scope. */
@@ -750,7 +784,14 @@ interface TrafficState {
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing' | 'library'
-  /** Cross-project messaging library: reusable CTAs, RTBs, audiences, strategies. */
+  /** One messaging system per brand, keyed by brand name (lazy-created). */
+  brandSystems: Record<string, MessagingLibrary>
+  /** The brand whose system the Messaging page is viewing/editing. */
+  messagingBrand: string
+  setMessagingBrand: (brand: string) => void
+  /** Mirror of the viewed brand's system (brandSystems[messagingBrand]): reusable
+   *  audiences, proof, subjects, hooks, CTAs, strategies. The canvas reads the
+   *  campaign's brand's system directly from brandSystems. */
   library: MessagingLibrary
   addLibraryItem: (kind: LibraryKind, item: LibraryCta | Rtb | AudienceType | GtmStrategy) => void
   removeLibraryItem: (kind: LibraryKind, id: string) => void
@@ -1189,6 +1230,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   ctaFilter: 'all',
   audienceFilter: 'all',
   cardFilter: 'all',
+  homeFilter: 'all',
   query: '',
   // A share link locks the session to its client + role from the first render.
   clientFilter: initialShare?.client ?? 'all',
@@ -1224,7 +1266,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   ingestingChannel: false,
   clientAudiences: loadClientAudiences(),
   regenIds: new Set<string>(),
-  library: loadLibrary(),
+  brandSystems: loadBrandSystems(),
+  messagingBrand: '',
+  library: emptyLibrary(),
   canvases: loadCanvases(),
   artboards: loadArtboards(),
   activeCanvas: loadActiveCanvas(),
@@ -1272,6 +1316,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setCtaFilter: (ctaFilter) => set({ ctaFilter }),
   setAudienceFilter: (audienceFilter) => set({ audienceFilter }),
   setCardFilter: (cardFilter) => set({ cardFilter }),
+  setHomeFilter: (homeFilter) => set({ homeFilter }),
   setQuery: (query) => set({ query }),
   // Switching client resets the campaign scope (campaigns belong to a client).
   // A shared session is locked to its one client. Proof points, CTAs + audience
@@ -1497,60 +1542,56 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { clientAudiences }
     }),
 
+  setMessagingBrand: (brand) =>
+    set((s) => ({ messagingBrand: brand, library: libFor(s.brandSystems, brand) })),
   addLibraryItem: (kind, item) =>
-    set((s) => {
-      const list = [...(s.library[kind] as unknown[]), item]
-      const library = { ...s.library, [kind]: list } as MessagingLibrary
-      saveLibrary(library)
-      return { library }
-    }),
+    set((s) => activeLibPatch(s, (lib) => ({ ...lib, [kind]: [...(lib[kind] as unknown[]), item] }) as MessagingLibrary)),
   removeLibraryItem: (kind, id) =>
-    set((s) => {
-      const idKey = kind === 'strategies' ? 'key' : 'id'
-      const list = (s.library[kind] as { id?: string; key?: string }[]).filter((x) => (x as Record<string, string>)[idKey] !== id)
-      const library = { ...s.library, [kind]: list } as MessagingLibrary
-      saveLibrary(library)
-      return { library }
-    }),
+    set((s) =>
+      activeLibPatch(s, (lib) => {
+        const idKey = kind === 'strategies' ? 'key' : 'id'
+        const list = (lib[kind] as { id?: string; key?: string }[]).filter(
+          (x) => (x as Record<string, string>)[idKey] !== id,
+        )
+        return { ...lib, [kind]: list } as MessagingLibrary
+      }),
+    ),
   approveLibraryItem: (kind, id) =>
-    set((s) => {
-      const list = (s.library[kind] as { id: string; approved?: boolean }[]).map((x) =>
-        x.id === id ? { ...x, approved: true } : x,
-      )
-      const library = { ...s.library, [kind]: list } as MessagingLibrary
-      saveLibrary(library)
-      return { library }
-    }),
+    set((s) =>
+      activeLibPatch(s, (lib) => {
+        const list = (lib[kind] as { id: string; approved?: boolean }[]).map((x) =>
+          x.id === id ? { ...x, approved: true } : x,
+        )
+        return { ...lib, [kind]: list } as MessagingLibrary
+      }),
+    ),
   editLibrarySubject: (id, text) => {
     const next = text.trim()
     const s = get()
-    const master = s.library.subjects.find((x) => x.id === id)
+    const master = libFor(s.brandSystems, s.messagingBrand).subjects.find((x) => x.id === id)
     const oldText = master?.text?.trim() ?? ''
     if (!next || !master || next === oldText) return 0
-    // Update the master on the shelf.
-    const subjects = s.library.subjects.map((x) => (x.id === id ? { ...x, text: next } : x))
-    const library = { ...s.library, subjects }
-    saveLibrary(library)
+    // Update the master in the viewed brand's system.
+    const { brandSystems, library } = activeLibPatch(s, (lib) => ({
+      ...lib,
+      subjects: lib.subjects.map((x) => (x.id === id ? { ...x, text: next } : x)),
+    }))
     // Propagate to instances: every campaign carrying the old subject text follows
-    // the master to the new text (master→instance, the way a renamed component
-    // updates everywhere it's placed).
+    // the master to the new text (master→instance).
     const touched = s.campaignList.filter((c) => (c.subject ?? '').trim() === oldText)
     let campaignList = s.campaignList
     if (oldText && touched.length) {
       campaignList = s.campaignList.map((c) => ((c.subject ?? '').trim() === oldText ? { ...c, subject: next } : c))
       saveCampaigns(campaignList)
     }
-    set({ library, campaignList })
+    set({ brandSystems, library, campaignList })
     return oldText ? touched.length : 0
   },
   editLibraryHook: (id, text) =>
     set((s) => {
       const next = text.trim()
       if (!next) return {}
-      const hooks = s.library.hooks.map((x) => (x.id === id ? { ...x, text: next } : x))
-      const library = { ...s.library, hooks }
-      saveLibrary(library)
-      return { library }
+      return activeLibPatch(s, (lib) => ({ ...lib, hooks: lib.hooks.map((x) => (x.id === id ? { ...x, text: next } : x)) }))
     }),
   useLibraryAudience: (client, audienceId) =>
     set((s) => {
@@ -1566,9 +1607,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   saveAudienceToLibrary: (audience) =>
     set((s) => {
       const clone = normalizeAudience({ ...audience, id: `laud_${Date.now().toString(36)}` })
-      const library = { ...s.library, audiences: [...s.library.audiences, clone] }
-      saveLibrary(library)
-      return { library }
+      return activeLibPatch(s, (lib) => ({ ...lib, audiences: [...lib.audiences, clone] }))
     }),
   deleteClient: async (name) => {
     // Remove the client's rows from the sheet.

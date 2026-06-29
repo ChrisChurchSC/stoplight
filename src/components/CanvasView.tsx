@@ -101,6 +101,9 @@ interface Edge {
    *  messaging connection, whose colour shows whether that copy coheres;
    *  journey = a branch from one asset to its next step (the funnel path). */
   kind: 'strategy' | 'message' | 'journey'
+  /** For a journey edge: the child row whose `branchOf` makes this link. Selecting
+   *  the line targets this row; deleting the line clears its `branchOf`. */
+  childRowId?: string
 }
 interface Band {
   /** Unique band id (the playbook phase index), used for React keys + drag
@@ -137,7 +140,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const regenIds = useTrafficStore((s) => s.regenIds)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
-  const library = useTrafficStore((s) => s.library)
+  // The campaign's brand owns its messaging system — read that brand's subjects for
+  // the reuse menu (not whatever the Messaging page happens to be viewing).
+  const brandLibrary = useTrafficStore((s) => s.brandSystems[clientFilter])
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const claudeBreaks = useTrafficStore((s) => s.claudeBreaks)
   const claudeBreaksScope = useTrafficStore((s) => s.claudeBreaksScope)
@@ -266,6 +271,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   // Selected card (a single click selects; drives the highlight + copy/paste).
   const [selected, setSelected] = useState<string | null>(null)
+  // Selected journey connector (a child row id) — click a line to select, then ✕ or
+  // Delete/Backspace to remove it (clears that card's branchOf, unlinking the step).
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null)
   const clipboard = useRef<string | null>(null)
   // Canvas keyboard shortcuts: Cmd/Ctrl+Z undo · Cmd/Ctrl+C copy the selected card
   // · Cmd/Ctrl+V paste a copy. Ignored while typing in a field.
@@ -290,6 +298,24 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selected, undo, pasteAsset])
+  // A selected connector: Delete/Backspace removes it (clears the child's branchOf);
+  // Escape deselects. Ignored while typing in a field.
+  useEffect(() => {
+    if (!selectedEdge) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        void updateRow(selectedEdge, { branchOf: undefined })
+        setSelectedEdge(null)
+      } else if (e.key === 'Escape') {
+        setSelectedEdge(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedEdge, updateRow])
   // Escape cancels the artboard tool (and any in-progress draw).
   useEffect(() => {
     if (!artboardMode) return
@@ -797,7 +823,17 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       const f = byId.get(fromId)
       const t = byId.get(toId)
       if (!f || !t) return []
-      return [{ x1: f.x + f.w / 2, y1: f.y + f.h, x2: t.x + t.w / 2, y2: t.y, broken, kind }]
+      return [
+        {
+          x1: f.x + f.w / 2,
+          y1: f.y + f.h,
+          x2: t.x + t.w / 2,
+          y2: t.y,
+          broken,
+          kind,
+          childRowId: kind === 'journey' ? t.row?.id : undefined,
+        },
+      ]
     })
 
     // Funnel bands start right below the spine header bands (which tile 0 → MSG_Y)
@@ -903,6 +939,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     if (frameMenu) setFrameMenu(null)
     if (frameChange) setFrameChange(null)
     if (restageConfirm) setRestageConfirm(null)
+    if (selectedEdge) setSelectedEdge(null)
     downAt.current = { x: e.clientX, y: e.clientY }
     if ((e.target as HTMLElement).closest('.cv-node')) return
     // Artboard tool: draw a framing rectangle on empty canvas instead of panning.
@@ -1462,13 +1499,48 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               const mid = (e.y1 + e.y2) / 2
               const c1 = Math.max(mid, e.y1 + 26)
               const c2 = Math.min(mid, e.y2 - 26)
+              const d = `M ${e.x1} ${e.y1} C ${e.x1} ${c1}, ${e.x2} ${c2}, ${e.x2} ${e.y2}`
+              const selectable = e.kind === 'journey' && !!e.childRowId
+              const sel = selectable && selectedEdge === e.childRowId
               return (
-                <path
-                  key={i}
-                  className={`cv-edge${e.broken ? ' broken' : e.kind === 'journey' ? ' journey' : e.kind === 'message' ? ' good' : ''}`}
-                  d={`M ${e.x1} ${e.y1} C ${e.x1} ${c1}, ${e.x2} ${c2}, ${e.x2} ${e.y2}`}
-                  fill="none"
-                />
+                <g key={i}>
+                  <path
+                    className={`cv-edge${e.broken ? ' broken' : e.kind === 'journey' ? ' journey' : e.kind === 'message' ? ' good' : ''}${sel ? ' selected' : ''}`}
+                    d={d}
+                    fill="none"
+                  />
+                  {selectable && (
+                    // A wide transparent path makes the thin line easy to click; it
+                    // re-enables pointer events (the edge layer is otherwise pass-through).
+                    <path
+                      className="cv-edge-hit"
+                      d={d}
+                      fill="none"
+                      onMouseDown={(ev) => ev.stopPropagation()}
+                      onClick={(ev) => {
+                        ev.stopPropagation()
+                        setSelected(null)
+                        setSelectedEdge(e.childRowId!)
+                      }}
+                    />
+                  )}
+                  {sel && (
+                    <g
+                      className="cv-edge-del"
+                      transform={`translate(${(e.x1 + e.x2) / 2} ${(e.y1 + e.y2) / 2})`}
+                      onMouseDown={(ev) => ev.stopPropagation()}
+                      onClick={(ev) => {
+                        ev.stopPropagation()
+                        void updateRow(e.childRowId!, { branchOf: undefined })
+                        setSelectedEdge(null)
+                      }}
+                    >
+                      <title>Delete this connection</title>
+                      <circle r={11} />
+                      <path d="M -3.4 -3.4 L 3.4 3.4 M 3.4 -3.4 L -3.4 3.4" />
+                    </g>
+                  )}
+                </g>
               )
             })}
             {connectLine && (
@@ -1592,6 +1664,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               <div className="cv-node-body">
                 {n.kind === 'audience' && <span className="cv-node-tag">Audience</span>}
                 <div className="cv-node-label">
+                  {n.kind === 'brand' && <span className="cv-node-tag cv-node-tag-inline">Brand</span>}
                   <span className="cv-node-label-name">{n.label}</span>
                   {n.kind === 'brand' && <span className="cv-node-playbook">Swap ▾</span>}
                   {n.kind === 'message' && n.row?.recheckFlag && (
@@ -2094,7 +2167,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   // Reusable subjects = approved library masters + subjects already in
                   // use on this client's campaigns, deduped. Pulling a library subject
                   // onto a campaign is the instance side of master→instance propagation.
-                  const libSubjects = library.subjects.filter((s) => s.approved !== false).map((s) => s.text.trim())
+                  const libSubjects = (brandLibrary?.subjects ?? [])
+                    .filter((s) => s.approved !== false)
+                    .map((s) => s.text.trim())
                   const campSubjects = campaignList.map((c) => c.subject?.trim() ?? '')
                   const subjects = [...new Set([...libSubjects, ...campSubjects].filter(Boolean))]
                   if (subjects.length === 0) return null

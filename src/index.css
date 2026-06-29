@@ -2517,6 +2517,15 @@ button {
   overflow: auto;
   padding: 22px 28px 40px;
 }
+/* A full standalone page (Library / Connectors / Billing) filling the main column
+   below the tab bar — the page owns its own padding + internal scroll. */
+.home-main-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
 .home-main-head {
   display: flex;
   align-items: center;
@@ -2529,6 +2538,39 @@ button {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+/* Brand-folder view toggle — Canvases vs the brand's Messaging system. */
+.folder-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.folder-tab {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 13px;
+  cursor: pointer;
+}
+.folder-tab:hover {
+  color: var(--text);
+}
+.folder-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* The Messaging editor embedded in a brand folder — fill, no page centering/padding. */
+.library-inline {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 /* Files-sidebar brand rows: a click target to filter + a hover ✕ to delete. */
 .home-sb-brands-head {
@@ -6033,6 +6075,35 @@ button.cv-board-tab {
   stroke-width: 2;
   stroke-dasharray: 5 4;
 }
+/* A selected connector — thicker accent line with the ✕ delete control at its midpoint. */
+.cv-edge.selected {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+}
+/* Wide invisible hit area so the thin connector is easy to click. */
+.cv-edge-hit {
+  stroke: transparent;
+  stroke-width: 18;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.cv-edge-del {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.cv-edge-del circle {
+  fill: var(--red);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.cv-edge-del path {
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.cv-edge-del:hover circle {
+  fill: #a01b13;
+}
 .cv-node {
   position: absolute;
   display: flex;
@@ -6133,11 +6204,9 @@ button.cv-board-tab {
   box-shadow: none;
 }
 .cv-node.k-brand .cv-node-label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text);
 }
 /* The spine bands (Subject / Strategy / Audience) read distinct from the funnel
    bands with a faint warm tint. */
@@ -6213,6 +6282,12 @@ button.cv-board-tab {
   font-size: 11px;
   margin-bottom: 5px;
   color: var(--accent);
+}
+/* Inline variant — the Brand pill labels itself on a single line. */
+.cv-node-tag-inline {
+  display: inline-flex;
+  margin: 0;
+  flex: none;
 }
 .cv-node-label {
   font-size: 18px;
@@ -11367,6 +11442,78 @@ button.cv-board-tab {
   color: var(--text-muted);
   max-width: 620px;
 }
+/* Messaging-system switcher — chips for each system, the active one editable. */
+.msys-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+.msys-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.msys-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.msys-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  cursor: default;
+  padding: 4px 6px 4px 12px;
+}
+.msys-name {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  width: 150px;
+  padding: 2px 0;
+  outline: none;
+}
+.msys-del {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.msys-del:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--red);
+}
+.msys-new {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.msys-new:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .library-tabs {
   display: flex;
   gap: 4px;
@@ -11404,10 +11551,39 @@ button.cv-board-tab {
   color: var(--accent);
   background: var(--accent-soft);
 }
+/* The detailed add form — a labelled grid of fields, two per row, with the Add
+   button spanning the full width at the bottom. */
 .library-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+  align-items: start;
+}
+.library-field {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.library-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.library-add-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+/* Brand-info editor — textareas (mission, voice, lists) span the full width. */
+.brand-info-wide {
+  grid-column: 1 / -1;
 }
 .library-input {
   font: inherit;
@@ -11417,15 +11593,16 @@ button.cv-board-tab {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 8px 11px;
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 .library-input:focus {
   outline: none;
   border-color: var(--accent);
 }
-.library-stage {
-  flex: 0 0 150px;
+textarea.library-input {
+  resize: vertical;
+  line-height: 1.4;
 }
 .library-list {
   display: flex;

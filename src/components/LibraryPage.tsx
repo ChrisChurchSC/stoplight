@@ -1,19 +1,60 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { audienceProfile, proofProfile, profileLabel } from '../domain/assetProfile'
 import { newAudience } from '../domain/audiences'
+import { newDescriptor } from '../domain/descriptors'
 import { clientForCampaign } from '../domain/clients'
 import { isApproved, newLibraryCta, type LibraryKind } from '../domain/library'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 
-/** Add-form field placeholders per library kind (keeps the markup out of a deep
- *  nested ternary). f2 is the optional second field; '' hides it (CTAs use a select). */
-const PLACEHOLDERS: Record<LibraryKind, { f1: string; f2: string }> = {
-  audiences: { f1: 'Audience name (e.g. Mid-market Ops lead)', f2: 'Role (optional)' },
-  rtbs: { f1: 'Proof point (e.g. Live in a week)', f2: 'Detail / substantiation' },
-  ctas: { f1: 'CTA (e.g. Book a demo)', f2: '' },
-  subjects: { f1: "Subject (e.g. A faster way to ship)", f2: 'Note (optional)' },
-  hooks: { f1: 'Hook (e.g. Tired of slow tools?)', f2: 'Note (optional)' },
-  strategies: { f1: 'Strategy name', f2: 'Best for…' },
+const STAGES = ['awareness', 'consideration', 'conversion', 'retention']
+const HOOK_KINDS = ['Pain', 'Stat', 'Question', 'Curiosity']
+
+/** A detailed add-form field. These components shape every asset's messaging, so the
+ *  forms capture real depth — not just a label. The first field is the required one. */
+interface Field {
+  key: string
+  label: string
+  type?: 'text' | 'textarea' | 'select'
+  options?: string[]
+  placeholder?: string
+}
+const FORMS: Record<LibraryKind, Field[]> = {
+  audiences: [
+    { key: 'name', label: 'Audience name', placeholder: 'e.g. Mid-market Ops lead' },
+    { key: 'role', label: 'Role / title', placeholder: 'e.g. VP of Operations' },
+    { key: 'angle', label: 'Message angle', type: 'textarea', placeholder: 'How the promise is framed for this buyer' },
+    { key: 'pains', label: 'Key pains', type: 'textarea', placeholder: 'One per line' },
+    { key: 'voice', label: 'Voice / tone', placeholder: 'Comma-separated, e.g. Precise, Plainspoken' },
+  ],
+  rtbs: [
+    { key: 'label', label: 'Claim', placeholder: 'e.g. Live in a week' },
+    { key: 'detail', label: 'Evidence / substantiation', type: 'textarea', placeholder: 'What backs the claim' },
+    { key: 'metric', label: 'Metric', placeholder: 'e.g. 40% faster (optional)' },
+    { key: 'source', label: 'Source', placeholder: 'e.g. Acme case study (optional)' },
+  ],
+  ctas: [
+    { key: 'label', label: 'CTA label', placeholder: 'e.g. Book a demo' },
+    { key: 'stage', label: 'Funnel stage', type: 'select', options: STAGES },
+    { key: 'destination', label: 'Destination', placeholder: 'Where it goes, e.g. /demo' },
+    { key: 'outcome', label: 'Outcome it drives', placeholder: 'e.g. Booked meeting' },
+  ],
+  subjects: [
+    { key: 'text', label: 'Subject', placeholder: 'e.g. A faster way to ship' },
+    { key: 'angle', label: 'Angle — why it lands now', type: 'textarea' },
+    { key: 'outcome', label: 'Primary outcome', placeholder: 'What it drives toward' },
+  ],
+  hooks: [
+    { key: 'text', label: 'Hook line', placeholder: 'e.g. Tired of slow tools?' },
+    { key: 'kind', label: 'Type', type: 'select', options: HOOK_KINDS },
+    { key: 'note', label: 'Note on use', type: 'textarea' },
+  ],
+  strategies: [
+    { key: 'name', label: 'Strategy name' },
+    { key: 'bestFor', label: 'Best for', type: 'textarea' },
+    { key: 'sequence', label: 'Stage sequence', placeholder: 'e.g. Awareness → Consideration → Conversion' },
+    { key: 'coreMetrics', label: 'Core metrics', placeholder: 'e.g. MQL→SQL rate, CAC' },
+  ],
 }
 
 /**
@@ -32,9 +73,7 @@ const TABS: { kind: LibraryKind; label: string }[] = [
   { kind: 'strategies', label: 'Strategies' },
 ]
 
-const STAGES = ['awareness', 'consideration', 'conversion', 'retention']
-
-export function LibraryPage() {
+export function LibraryPage({ inline = false }: { inline?: boolean } = {}) {
   const library = useTrafficStore((s) => s.library)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const removeLibraryItem = useTrafficStore((s) => s.removeLibraryItem)
@@ -47,6 +86,22 @@ export function LibraryPage() {
   const rows = useTrafficStore((s) => s.rows)
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const messagingBrand = useTrafficStore((s) => s.messagingBrand)
+  const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const openOnboard = useTrafficStore((s) => s.openOnboard)
+  const { brands } = useHomeCanvases()
+
+  // The Messaging page views one brand's system. Default to the brand you're in
+  // (or the first brand) whenever the current selection isn't a real brand.
+  useEffect(() => {
+    if (inline) return // the brand folder owns the brand when embedded
+    const names = brands.map((b) => b.name)
+    if (messagingBrand && names.includes(messagingBrand)) return
+    const fallback =
+      clientFilter !== 'all' && names.includes(clientFilter) ? clientFilter : names[0] ?? ''
+    if (fallback && fallback !== messagingBrand) setMessagingBrand(fallback)
+  }, [brands, messagingBrand, clientFilter, setMessagingBrand, inline])
 
   const [tab, setTab] = useState<LibraryKind>('audiences')
 
@@ -60,14 +115,14 @@ export function LibraryPage() {
     return [...set].filter(Boolean).sort()
   }, [clientProfiles, clientAudiences, rows])
 
-  // Inline add-form fields (one set, reused per tab).
-  const [f1, setF1] = useState('')
-  const [f2, setF2] = useState('')
-  const [stage, setStage] = useState('awareness')
-  const reset = () => {
-    setF1('')
-    setF2('')
-  }
+  // The detailed add form — a field bag keyed by the FORMS config for the active tab.
+  const [form, setForm] = useState<Record<string, string>>({})
+  const reset = () => setForm({})
+  const setField = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }))
+  const fv = (k: string) => (form[k] ?? '').trim()
+  // The first field of each form is the required one (the component's headline).
+  const requiredKey = FORMS[tab][0].key
+  const canAdd = fv(requiredKey).length > 0
   // Inline editing of a Subject / Hook master (propagation lives on Subjects).
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editVal, setEditVal] = useState('')
@@ -89,46 +144,77 @@ export function LibraryPage() {
   }
 
   const add = () => {
-    const a = f1.trim()
-    if (!a) return
-    // Authored here → an unvetted draft until approved (keeps the library curated).
-    if (tab === 'ctas') addLibraryItem('ctas', newLibraryCta({ label: a, stage, approved: false }))
-    else if (tab === 'rtbs') addLibraryItem('rtbs', { id: `lrtb_${Date.now().toString(36)}`, label: a, detail: f2.trim(), approved: false })
-    else if (tab === 'audiences') addLibraryItem('audiences', newAudience({ name: a, role: f2.trim(), approved: false }))
-    else if (tab === 'subjects') addLibraryItem('subjects', { id: `subj_${Date.now().toString(36)}`, text: a, note: f2.trim(), approved: false })
-    else if (tab === 'hooks') addLibraryItem('hooks', { id: `hook_${Date.now().toString(36)}`, text: a, note: f2.trim(), approved: false })
-    else if (tab === 'strategies')
-      addLibraryItem('strategies', {
-        key: `strat_${Date.now().toString(36)}`,
-        name: a,
-        sequence: '',
-        bestFor: f2.trim(),
-        coreMetrics: '',
-        mediaContent: '',
-      })
+    if (!canAdd) return
+    const id36 = Date.now().toString(36)
+    const opt = (k: string) => fv(k) || undefined
+    // Authored here → an unvetted draft until approved (keeps the system curated).
+    if (tab === 'ctas') {
+      addLibraryItem('ctas', newLibraryCta({ label: fv('label'), stage: form.stage || 'awareness', destination: opt('destination'), outcome: opt('outcome'), approved: false }))
+    } else if (tab === 'rtbs') {
+      addLibraryItem('rtbs', { id: `lrtb_${id36}`, label: fv('label'), detail: fv('detail'), metric: opt('metric'), source: opt('source'), approved: false })
+    } else if (tab === 'audiences') {
+      addLibraryItem('audiences', newAudience({
+        name: fv('name'),
+        role: fv('role'),
+        messageAngle: fv('angle'),
+        pains: fv('pains') ? fv('pains').split('\n').map((s) => s.trim()).filter(Boolean) : [],
+        descriptors: fv('voice') ? fv('voice').split(',').map((s) => s.trim()).filter(Boolean).map((label) => newDescriptor({ label })) : [],
+        approved: false,
+      }))
+    } else if (tab === 'subjects') {
+      addLibraryItem('subjects', { id: `subj_${id36}`, text: fv('text'), angle: opt('angle'), outcome: opt('outcome'), approved: false })
+    } else if (tab === 'hooks') {
+      addLibraryItem('hooks', { id: `hook_${id36}`, text: fv('text'), kind: form.kind || 'Pain', note: opt('note'), approved: false })
+    } else if (tab === 'strategies') {
+      addLibraryItem('strategies', { key: `strat_${id36}`, name: fv('name'), sequence: fv('sequence'), bestFor: fv('bestFor'), coreMetrics: fv('coreMetrics'), mediaContent: '' })
+    }
     reset()
   }
 
   return (
-    <div className="library">
-      <div className="library-head">
-        <div>
-          <button
-            className="library-back"
-            onClick={() => {
-              setPage('clients')
-              setClientFilter('all')
-            }}
-          >
-            ← Clients
-          </button>
-          <h1 className="library-title">Messaging Library</h1>
-          <p className="library-sub">
-            Reusable building blocks shared across every project — author once, pull onto any client or campaign.
-          </p>
-        </div>
-      </div>
+    <div className={`library${inline ? ' library-inline' : ''}`}>
+      {/* The page chrome (title + brand picker) is hidden when embedded inside a
+          brand folder — the folder already shows which brand you're in. */}
+      {!inline && (
+        <>
+          <div className="library-head">
+            <div>
+              <h1 className="library-title">Messaging System</h1>
+              <p className="library-sub">
+                Each brand has its own messaging system — audiences, proof, subjects, hooks, CTAs, strategies. Pick a
+                brand to build its system; it's the context the brand's canvases pull from.
+              </p>
+            </div>
+          </div>
 
+          {/* Brand picker — one messaging system per brand. */}
+          <div className="msys-bar">
+            {brands.map((b) => (
+              <button
+                key={b.name}
+                className={`msys-chip${messagingBrand === b.name ? ' active' : ''}`}
+                onClick={() => setMessagingBrand(b.name)}
+              >
+                ▤ {b.name}
+              </button>
+            ))}
+            <button className="msys-new" onClick={openOnboard}>
+              ＋ Add brand
+            </button>
+          </div>
+        </>
+      )}
+
+      {brands.length === 0 || !messagingBrand ? (
+        <div className="home-empty">
+          No brands yet.{' '}
+          <button className="home-link" onClick={openOnboard}>
+            Add a brand
+          </button>{' '}
+          to build its messaging system.
+        </div>
+      ) : (
+      <>
       <div className="library-tabs">
         {TABS.map((t) => (
           <button
@@ -145,34 +231,45 @@ export function LibraryPage() {
         ))}
       </div>
 
-      {/* Add row */}
+      {/* Detailed add form — these components shape every asset's messaging, so each
+          captures real depth, not just a label. */}
       <div className="library-add">
-        <input
-          className="library-input"
-          placeholder={PLACEHOLDERS[tab].f1}
-          value={f1}
-          onChange={(e) => setF1(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-        />
-        {tab === 'ctas' ? (
-          <select className="library-input library-stage" value={stage} onChange={(e) => setStage(e.target.value)}>
-            {STAGES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            className="library-input"
-            placeholder={PLACEHOLDERS[tab].f2}
-            value={f2}
-            onChange={(e) => setF2(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && add()}
-          />
-        )}
-        <button className="btn primary sm" onClick={add} disabled={!f1.trim()}>
-          ＋ Add
+        {FORMS[tab].map((f) => (
+          <label className="library-field" key={f.key}>
+            <span className="library-field-label">{f.label}</span>
+            {f.type === 'textarea' ? (
+              <textarea
+                className="library-input"
+                rows={2}
+                placeholder={f.placeholder}
+                value={form[f.key] ?? ''}
+                onChange={(e) => setField(f.key, e.target.value)}
+              />
+            ) : f.type === 'select' ? (
+              <select
+                className="library-input"
+                value={form[f.key] ?? f.options![0]}
+                onChange={(e) => setField(f.key, e.target.value)}
+              >
+                {f.options!.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="library-input"
+                placeholder={f.placeholder}
+                value={form[f.key] ?? ''}
+                onChange={(e) => setField(f.key, e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && add()}
+              />
+            )}
+          </label>
+        ))}
+        <button className="btn primary sm library-add-btn" onClick={add} disabled={!canAdd}>
+          ＋ Add {TABS.find((t) => t.kind === tab)?.label.replace(/s$/, '').toLowerCase()}
         </button>
       </div>
 
@@ -243,6 +340,12 @@ export function LibraryPage() {
                   {!isApproved(r) && <span className="library-draft">Draft</span>}
                 </div>
                 <div className="library-item-sub">{r.detail || '—'}</div>
+                {(r.metric || r.source) && (
+                  <div className="library-item-tags">
+                    {r.metric && <span className="library-pill">📊 {r.metric}</span>}
+                    {r.source && <span className="library-pill">↳ {r.source}</span>}
+                  </div>
+                )}
                 {(() => {
                   const p = proofProfile(r.id, rows)
                   return <div className={`library-prof c-${p.confidence}`}>{profileLabel(p)}</div>
@@ -269,7 +372,16 @@ export function LibraryPage() {
                   ↗ {c.label}
                   {!isApproved(c) && <span className="library-draft">Draft</span>}
                 </div>
-                {c.stage && <div className="library-item-sub">{c.stage}</div>}
+                {(c.destination || c.outcome) && (
+                  <div className="library-item-sub">
+                    {c.destination ? `→ ${c.destination}` : ''}
+                    {c.destination && c.outcome ? ' · ' : ''}
+                    {c.outcome ? `drives ${c.outcome}` : ''}
+                  </div>
+                )}
+                <div className="library-item-tags">
+                  {c.stage && <span className="library-pill">{c.stage}</span>}
+                </div>
               </div>
               <div className="library-item-actions">
                 {!isApproved(c) && (
@@ -309,8 +421,15 @@ export function LibraryPage() {
                   )}
                 </div>
                 <div className="library-item-sub">
-                  {editingId === su.id ? 'Editing the master updates every campaign using it.' : su.note || '—'}
+                  {editingId === su.id
+                    ? 'Editing the master updates every campaign using it.'
+                    : su.angle || su.note || '—'}
                 </div>
+                {editingId !== su.id && su.outcome && (
+                  <div className="library-item-tags">
+                    <span className="library-pill">drives {su.outcome}</span>
+                  </div>
+                )}
               </div>
               <div className="library-item-actions">
                 {editingId !== su.id && (
@@ -355,6 +474,11 @@ export function LibraryPage() {
                   )}
                 </div>
                 {h.note && editingId !== h.id && <div className="library-item-sub">{h.note}</div>}
+                {h.kind && editingId !== h.id && (
+                  <div className="library-item-tags">
+                    <span className="library-pill">{h.kind}</span>
+                  </div>
+                )}
               </div>
               <div className="library-item-actions">
                 {editingId !== h.id && (
@@ -390,6 +514,8 @@ export function LibraryPage() {
             </div>
           ))}
       </div>
+      </>
+      )}
     </div>
   )
 }

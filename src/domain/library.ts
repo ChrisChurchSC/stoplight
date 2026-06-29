@@ -20,6 +20,10 @@ export interface LibraryCta {
   /** Optional funnel-stage hint (awareness…retention) and a usage note. */
   stage?: string
   note?: string
+  /** Where the CTA sends people (e.g. "/demo", a landing page). */
+  destination?: string
+  /** The outcome it drives (e.g. "Booked meeting", "Trial started"). */
+  outcome?: string
   /** Library governance: undefined/true = an approved master; explicit false = an
    *  unvetted draft (authored, not yet blessed). See {@link isApproved}. */
   approved?: boolean
@@ -32,6 +36,10 @@ export interface LibrarySubject {
   id: string
   text: string
   note?: string
+  /** Why this subject lands now — the angle behind it. */
+  angle?: string
+  /** The primary outcome the subject drives toward. */
+  outcome?: string
   approved?: boolean
 }
 
@@ -41,6 +49,8 @@ export interface LibraryHook {
   id: string
   text: string
   note?: string
+  /** Opener type — Pain / Stat / Question / Curiosity. */
+  kind?: string
   approved?: boolean
 }
 
@@ -57,10 +67,25 @@ export interface MessagingLibrary {
   hooks: LibraryHook[]
 }
 
+/** A blank library — the standard GTM strategies (universal motions) but no authored
+ *  audiences / proof / subjects / hooks / CTAs yet. The starting point for a brand's
+ *  messaging system. */
+export function emptyLibrary(): MessagingLibrary {
+  return { ctas: [], rtbs: [], audiences: [], strategies: GTM_STRATEGIES.slice(), subjects: [], hooks: [] }
+}
+
 let ctaSeq = 0
 export function newLibraryCta(patch: Partial<LibraryCta> = {}): LibraryCta {
   ctaSeq += 1
-  return { id: patch.id ?? `lcta_${Date.now().toString(36)}_${ctaSeq}`, label: patch.label ?? '', stage: patch.stage, note: patch.note, approved: patch.approved }
+  return {
+    id: patch.id ?? `lcta_${Date.now().toString(36)}_${ctaSeq}`,
+    label: patch.label ?? '',
+    stage: patch.stage,
+    note: patch.note,
+    destination: patch.destination,
+    outcome: patch.outcome,
+    approved: patch.approved,
+  }
 }
 
 /** The shelf everyone starts with — a few proven CTAs and proof points, the ten
