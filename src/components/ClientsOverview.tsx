@@ -5,10 +5,8 @@ import { campaignAttention, campaignStats, deriveCampaignStatus, type CampaignSt
 import { mockAttio } from '../adapters/attio/mockAttio'
 import type { TrafficRow } from '../domain/types'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
-import { CampaignThumb } from './CampaignThumb'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { HomeSidebar, type BrandRow } from './HomeSidebar'
-import { NewCanvasButton } from './NewCanvasButton'
 
 /**
  * The home — a files browser for canvases, in the same shell as the canvas page:
@@ -141,7 +139,6 @@ export function ClientsOverview() {
         <div className="home-main-scroll">
           <div className="home-main-head">
             <h1 className="home-main-title">{title}</h1>
-            <NewCanvasButton />
           </div>
 
           {shown.length === 0 ? (
@@ -171,9 +168,6 @@ export function ClientsOverview() {
                   onClick={() => openCampaign(c.name)}
                   title={`Open ${c.name}${c.client ? ` (${c.client})` : ''}`}
                 >
-                  <div className="hub-recent-thumb">
-                    <CampaignThumb rows={c.rows} />
-                  </div>
                   <div className="hub-recent-foot">
                     <span className={`hub-recent-dot s-${c.status}`} />
                     <span className="hub-recent-foot-text">

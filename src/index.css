@@ -2530,11 +2530,6 @@ button {
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-/* The open-canvas tabs as the top bar of the files browser. */
-.home-main > .cv-projects {
-  padding: 8px 14px 0;
-  background: var(--surface);
-}
 /* Files-sidebar brand rows: a click target to filter + a hover ✕ to delete. */
 .home-sb-brands-head {
   display: flex;
@@ -2761,20 +2756,18 @@ button {
 .hub-new-opt:hover {
   background: var(--surface-2);
 }
-/* Jump back in — a gallery of recent-campaign thumbnail cards (Figma files-home
-   style): a structural preview on top, a title + meta foot below. */
+/* A gallery of compact canvas cards — a status dot + name + meta line. */
 .hub-recents {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: 12px;
 }
 .hub-recent {
   display: flex;
-  flex-direction: column;
   text-align: left;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface);
   cursor: pointer;
   overflow: hidden;
@@ -2782,25 +2775,18 @@ button {
 }
 .hub-recent:hover {
   border-color: var(--accent);
-  box-shadow: 0 6px 20px rgba(16, 24, 40, 0.1);
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.08);
 }
 .hub-recent:active {
   transform: translateY(1px);
 }
-.hub-recent-thumb {
-  height: 150px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  overflow: hidden;
-}
-.hub-recent:hover .hub-recent-thumb {
-  border-bottom-color: var(--accent);
-}
 .hub-recent-foot {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 11px 13px;
+  gap: 10px;
+  padding: 13px 14px;
+  min-width: 0;
 }
 .hub-recent-dot {
   flex: none;
@@ -5015,26 +5001,26 @@ button {
 }
 /* Project folder tabs — a drawer of campaigns across the very top of the browser,
    flush with the channel-filter sidebar. */
-/* Base (home / in-flow): a light browser-tab strip of open canvases, sitting on a
-   hairline like file tabs. The canvas overrides this into a fixed dark bar below. */
+/* The open-canvas tab bar — a dark strip of browser tabs, IDENTICAL on the home
+   and the canvas (same height, same look) so moving between them never shifts the
+   chrome. In-flow on the home (top of the main column); pinned on the canvas. */
 .cv-projects {
+  flex: none;
   display: flex;
   align-items: flex-end;
   gap: 3px;
   overflow: visible;
-  border-bottom: 1px solid var(--border);
+  height: 48px;
+  padding: 0 12px 0 6px;
+  background: #2b2f36;
 }
-/* Canvas (Level 2): the fixed dark bar flush with the channel-filter sidebar. */
+/* On the canvas it's pinned to the very top, flush with the channel sidebar. */
 .canvas-mode .cv-projects {
   position: fixed;
-  top: 0; /* dark bar runs to the very top of the browser */
+  top: 0;
   left: 232px; /* flush with the 232px channel-filter sidebar */
   right: 0;
   z-index: 25; /* above the breadcrumb (22) and sidebar (24) */
-  height: 48px;
-  padding: 0 12px 0 6px;
-  background: #2b2f36; /* dark gray bar behind the tabs */
-  border-bottom: none;
 }
 .cv-project-tab {
   flex: none;
@@ -5100,6 +5086,23 @@ button {
 }
 .cv-project-tab.active .cv-project-tab-name {
   color: var(--text);
+}
+/* Compact glyph tabs — Home (left, back to the files browser) and New canvas
+   (right, ＋ to open a fresh canvas). Sized to match the project tabs (46px). */
+.cv-project-tab-home,
+.cv-project-tab-new {
+  padding: 5px 14px 7px; /* matches the project tabs → same 46px height */
+  font-size: 17px;
+  line-height: 33px; /* = the project tab's two-line body height */
+  color: var(--text-muted);
+  align-items: center;
+  justify-content: center;
+}
+.cv-project-tab-home.active {
+  color: var(--accent);
+}
+.cv-project-tab-new:hover {
+  color: var(--accent);
 }
 .canvas-mode .cv-boards {
   position: fixed;
@@ -6191,6 +6194,26 @@ button.cv-board-tab {
   min-width: 0;
   flex: 1;
 }
+/* The spine's role tag (Subject / Strategy / Audience) — replaces the old labelled
+   bands by titling each card directly. */
+.cv-node-tag {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  margin-bottom: 3px;
+  line-height: 1;
+}
+.cv-node.k-subject .cv-node-tag {
+  color: rgba(255, 255, 255, 0.55);
+}
+.cv-node.k-audience .cv-node-tag {
+  font-size: 11px;
+  margin-bottom: 5px;
+  color: var(--accent);
+}
 .cv-node-label {
   font-size: 18px;
   font-weight: 700;
@@ -6376,6 +6399,64 @@ button.cv-board-tab {
   padding: 2px 6px;
 }
 .cv-node.k-strategy:hover .cv-node-playbook {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+/* The Frame card — Subject + Strategy folded into one card with two clickable rows
+   (each keeps its own Swap / Playbook control). */
+.cv-node.k-frame {
+  display: block;
+  padding: 0;
+  background: var(--surface);
+  border-color: var(--border-strong);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.cv-frame-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.cv-frame-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 12px 16px;
+}
+.cv-frame-row + .cv-frame-row {
+  border-top: 1px solid var(--border);
+}
+.cv-frame-row:hover {
+  background: var(--surface-2);
+}
+.cv-frame-row-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cv-frame-row .cv-node-label-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.cv-frame-row .cv-node-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+.cv-frame-row:hover .cv-node-playbook {
   color: var(--accent);
   background: var(--accent-soft);
 }

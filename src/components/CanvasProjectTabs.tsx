@@ -9,6 +9,8 @@ import { useTrafficStore } from '../store/useTrafficStore'
  */
 export function CanvasProjectTabs() {
   const rows = useTrafficStore((s) => s.rows)
+  const page = useTrafficStore((s) => s.page)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const openProjects = useTrafficStore((s) => s.openProjects)
   const openProject = useTrafficStore((s) => s.openProject)
@@ -16,6 +18,7 @@ export function CanvasProjectTabs() {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const createCanvas = useTrafficStore((s) => s.createCanvas)
 
   const assetCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -38,7 +41,13 @@ export function CanvasProjectTabs() {
     if (campaignFilter !== 'all') openProject(campaignFilter)
   }, [campaignFilter, openProject])
 
-  if (projects.length === 0) return null
+  // The bar always carries the Home tab (left), even with no open canvases — it's
+  // the way back to the files browser from inside a canvas.
+  const homeActive = page === 'clients' && clientFilter === 'all'
+  const goHome = () => {
+    setPage('clients')
+    setClientFilter('all')
+  }
 
   const switchTo = (client: string, campaign: string) => {
     if (campaign === campaignFilter) return
@@ -61,6 +70,15 @@ export function CanvasProjectTabs() {
 
   return (
     <div className="cv-projects">
+      <span
+        className={`cv-project-tab cv-project-tab-home${homeActive ? ' active' : ''}`}
+        role="button"
+        tabIndex={0}
+        title="Home — all canvases"
+        onClick={goHome}
+      >
+        ⌂
+      </span>
       {projects.map((p) => (
         <span
           key={p.campaign}
@@ -79,6 +97,15 @@ export function CanvasProjectTabs() {
           </button>
         </span>
       ))}
+      <span
+        className="cv-project-tab cv-project-tab-new"
+        role="button"
+        tabIndex={0}
+        title="New canvas"
+        onClick={createCanvas}
+      >
+        ＋
+      </span>
     </div>
   )
 }

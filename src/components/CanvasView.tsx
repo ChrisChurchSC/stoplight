@@ -58,26 +58,21 @@ const BAND_OVERFLOW = 4000
 const DETAIL_ZOOM = 1.15
 // Breathing room below the last row in a band.
 const BAND_BOTTOM_PAD = 120
-// The spine runs down the top of the canvas as its own labelled bands —
-// Brand → Subject → Strategy → Audience — above the funnel-stage bands that hold the
-// assets. Brand is a slim anchor strip (it never varies on a client's canvas); the
-// per-campaign bands below it are full height.
-const BRAND_Y = 22
-const SUBJECT_Y = 140
-const STRATEGY_Y = 310
-const AUD_Y = 484
-const MSG_Y = 724
-// Header band boundaries (Brand / Subject / Strategy / Audience), in world Y.
-const HEADER_BANDS = [
-  { key: 'brand', label: 'Brand', y: 0, h: 84 },
-  { key: 'subject', label: 'Subject', y: 84, h: 170 },
-  { key: 'strategy', label: 'Strategy', y: 254, h: 170 },
-  { key: 'audience', label: 'Audience', y: 424, h: MSG_Y - 424 },
-] as const
+// The spine — Brand → Subject → Strategy → Audience — stacks compactly down the top
+// of the canvas as labelled CARDS (each carries its own tag), not full-width bands;
+// only the funnel stages below get labelled lane-bands (where a card's row encodes
+// its stage). These Y's stack the spine tightly so the funnel starts high.
+const BRAND_Y = 20
+// The Frame card folds Subject + Strategy into one two-row card just below the
+// Brand pill; the audience lanes + funnel follow.
+const FRAME_Y = 72
+const FRAME_H = 150
+const AUD_Y = 250
+const MSG_Y = 450
 
 interface Node {
   id: string
-  kind: 'root' | 'brand' | 'subject' | 'strategy' | 'audience' | 'message' | 'add'
+  kind: 'root' | 'brand' | 'frame' | 'audience' | 'message' | 'add'
   x: number
   y: number
   w: number
@@ -87,6 +82,9 @@ interface Node {
   row?: TrafficRow
   brk?: CoherenceBreak
   flaggedCount?: number
+  /** The 'frame' card folds Subject + Strategy into one two-row card (each row keeps
+   *  its own swap control). */
+  frame?: { subjectText: string; subjectSub?: string; strategyName: string; strategySub?: string }
   /** For 'add' ghost cells: which lane + funnel stage a new card would land in,
    *  and whether the cell is currently empty (so it reads as the obvious next move). */
   addAudience?: string
@@ -560,7 +558,18 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         roots.sort(ord)
         let leaf = 0
         const laneOf = new Map<string, number>()
+        // `assigning` is the recursion stack — if we re-enter a node mid-recursion
+        // the branchOf links form a cycle, so we break it by treating the node as a
+        // leaf instead of recursing forever.
+        const assigning = new Set<string>()
         const assign = (r: TrafficRow): number => {
+          if (assigning.has(r.id)) {
+            const l = leaf
+            leaf += 1
+            laneOf.set(r.id, l)
+            return l
+          }
+          assigning.add(r.id)
           const kids = (childrenOf.get(r.assetName) ?? []).slice().sort(ord)
           let lane: number
           if (!kids.length) {
@@ -571,6 +580,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             lane = ls.reduce((s, x) => s + x, 0) / ls.length
           }
           laneOf.set(r.id, lane)
+          assigning.delete(r.id)
           return lane
         }
         for (const r of roots) assign(r)
@@ -681,17 +691,28 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       acc += bandH[si]
     }
 
-    // The spine, centred over the whole board: Brand → Subject → Strategy → (audiences).
-    // Brand is the constant account anchor; Subject leads with this campaign's theme.
+    // The spine, centred over the whole board: Brand pill → Frame (Subject +
+    // Strategy in one card) → (audiences). Brand is the constant account anchor.
     const subjectSub = campaignNames[0] && campaignNames[0] !== subjectText ? campaignNames[0] : objective
     const brandPos = at('brand', totalW / 2 - NODE_W / 2, BRAND_Y)
     ns.push({ id: 'brand', kind: 'brand', x: brandPos.x, y: brandPos.y, w: NODE_W, h: 40, label: rootLabel, sub: '' })
-    const subjPos = at('subject', totalW / 2 - NODE_W / 2, SUBJECT_Y)
-    ns.push({ id: 'subject', kind: 'subject', x: subjPos.x, y: subjPos.y, w: NODE_W, h: 64, label: subjectText, sub: subjectSub })
-    et.push({ fromId: 'brand', toId: 'subject', broken: false, kind: 'strategy' })
-    const stratPos = at('strategy', totalW / 2 - NODE_W / 2, STRATEGY_Y)
-    ns.push({ id: 'strategy', kind: 'strategy', x: stratPos.x, y: stratPos.y, w: NODE_W, h: 64, label: stratPlan?.name ?? strat, sub: strategySub })
-    et.push({ fromId: 'subject', toId: 'strategy', broken: false, kind: 'strategy' })
+    const framePos = at('frame', totalW / 2 - NODE_W / 2, FRAME_Y)
+    ns.push({
+      id: 'frame',
+      kind: 'frame',
+      x: framePos.x,
+      y: framePos.y,
+      w: NODE_W,
+      h: FRAME_H,
+      label: subjectText,
+      frame: {
+        subjectText,
+        subjectSub: subjectSub || undefined,
+        strategyName: stratPlan?.name ?? strat,
+        strategySub: strategySub || undefined,
+      },
+    })
+    et.push({ fromId: 'brand', toId: 'frame', broken: false, kind: 'strategy' })
 
     laid.forEach((p, i) => {
       const slabStart = slabX[i]
@@ -711,7 +732,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           : 'Empty lane · add an entry, then branch',
         flaggedCount: flagged,
       })
-      et.push({ fromId: 'strategy', toId: `aud-${p.name}`, broken: false, kind: 'strategy' })
+      et.push({ fromId: 'frame', toId: `aud-${p.name}`, broken: false, kind: 'strategy' })
       if (collapsed.has(p.name)) return
       // An empty lane gets ONE entry seed at the top of the funnel — the journey's
       // root. Everything downstream is added by branching, so the canvas grows as a
@@ -1001,7 +1022,25 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         // Dropped over another card → link them (target branches from source).
         const fromRow = nodes.find((n) => n.id === c.fromId)?.row
         const toRow = nodes.find((n) => n.id === targetId)?.row
-        if (fromRow && toRow && fromRow.assetName !== toRow.assetName) {
+        // Making fromRow the parent of toRow would loop the journey tree if toRow is
+        // already an ancestor of fromRow (point a card back at one of its own
+        // upstream cards). The layout recursion never terminates on a cycle, so
+        // reject the connection instead of forming it.
+        const wouldCycle = (() => {
+          if (!fromRow || !toRow) return false
+          const byNameAll = new Map<string, TrafficRow>()
+          for (const r of rows) if (!byNameAll.has(r.assetName)) byNameAll.set(r.assetName, r)
+          const seen = new Set<string>()
+          let cur: TrafficRow | undefined = fromRow
+          while (cur) {
+            if (cur.assetName === toRow.assetName) return true
+            if (seen.has(cur.assetName)) return false
+            seen.add(cur.assetName)
+            cur = cur.branchOf ? byNameAll.get(cur.branchOf) : undefined
+          }
+          return false
+        })()
+        if (fromRow && toRow && fromRow.assetName !== toRow.assetName && !wouldCycle) {
           const patch: Partial<TrafficRow> = { branchOf: fromRow.assetName }
           // Re-parenting can move the card to a later funnel stage (journeys only
           // flow forward). When it does, refresh the stage-dependent CTA so the
@@ -1349,19 +1388,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             overshoot top and bottom so the stripes always fill the whole canvas, not
             just the content's bounding box. */}
         <div className="cv-bands">
-          {/* The spine — Brand / Subject / Strategy / Audience — as its own labelled
-              bands above the funnel stages. The first overshoots up to fill the top. */}
-          {HEADER_BANDS.map((b, i) => {
-            const firstHdr = i === 0
-            const realTop = vp.ty + b.y * vp.s
-            const top = firstHdr ? realTop - BAND_OVERFLOW : realTop
-            const height = b.h * vp.s + (firstHdr ? BAND_OVERFLOW : 0)
-            return (
-              <div key={b.key} className={`cv-band cv-band-header${i % 2 ? ' alt' : ''}`} style={{ top, height }}>
-                <span className="cv-band-label" style={{ top: (firstHdr ? BAND_OVERFLOW : 0) + 9 }}>{b.label}</span>
-              </div>
-            )
-          })}
+          {/* Only the funnel stages are bands now — the spine sits on the plain grid
+              above as labelled cards. Bands start crisply at MSG_Y; the last overshoots
+              down so the lanes fill to the bottom. */}
           {bands.map((b, i) => {
             const last = i === bands.length - 1
             const top = vp.ty + b.y * vp.s
@@ -1369,7 +1398,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             return (
               <div
                 key={b.key}
-                className={`cv-band${(HEADER_BANDS.length + i) % 2 ? ' alt' : ''}${dragStage === b.key ? ' targeted' : ''}`}
+                className={`cv-band${i % 2 ? ' alt' : ''}${dragStage === b.key ? ' targeted' : ''}`}
                 style={{ top, height }}
               >
                 <span className="cv-band-label" style={{ top: 9 }}>
@@ -1501,11 +1530,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                 // A click on a message card just selects/picks it up (the drag is
                 // handled on mousedown); editing is via the ✎ button, bottom-right.
                 if (n.kind === 'message') setSelected(n.id)
-                // The spine cards are interchangeable — click to swap their value.
-                else if (n.kind === 'strategy' && campaignName)
-                  setStratMenu({ campaign: campaignName, current: strategyName, x: e.clientX, y: e.clientY })
+                // Spine cards are interchangeable — click to swap their value. The
+                // Frame card's two rows handle their own clicks (Subject / Strategy).
                 else if (n.kind === 'brand' && campaignName) setFrameMenu({ kind: 'brand', x: e.clientX, y: e.clientY })
-                else if (n.kind === 'subject' && campaignName) setFrameMenu({ kind: 'subject', x: e.clientX, y: e.clientY })
                 else if (n.kind === 'audience') setFrameMenu({ kind: 'audience', audience: n.label, x: e.clientX, y: e.clientY })
               }}
             >
@@ -1528,11 +1555,45 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   <ChannelIcon channel={n.row.channel} size={18} />
                 </span>
               )}
+              {n.kind === 'frame' && n.frame ? (
+                <div className="cv-frame-card">
+                  <button
+                    className="cv-frame-row"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (campaignName) setFrameMenu({ kind: 'subject', x: e.clientX, y: e.clientY })
+                    }}
+                  >
+                    <span className="cv-node-tag">Subject</span>
+                    <span className="cv-frame-row-line">
+                      <span className="cv-node-label-name">{n.frame.subjectText}</span>
+                      <span className="cv-node-playbook">Swap ▾</span>
+                    </span>
+                    {n.frame.subjectSub && <span className="cv-node-sub">{n.frame.subjectSub}</span>}
+                  </button>
+                  <button
+                    className="cv-frame-row"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (campaignName) setStratMenu({ campaign: campaignName, current: strategyName, x: e.clientX, y: e.clientY })
+                    }}
+                  >
+                    <span className="cv-node-tag">Strategy</span>
+                    <span className="cv-frame-row-line">
+                      <span className="cv-node-label-name">{n.frame.strategyName}</span>
+                      <span className="cv-node-playbook">Playbook ▾</span>
+                    </span>
+                    {n.frame.strategySub && <span className="cv-node-sub">{n.frame.strategySub}</span>}
+                  </button>
+                </div>
+              ) : (
               <div className="cv-node-body">
+                {n.kind === 'audience' && <span className="cv-node-tag">Audience</span>}
                 <div className="cv-node-label">
                   <span className="cv-node-label-name">{n.label}</span>
-                  {n.kind === 'strategy' && <span className="cv-node-playbook">Playbook ▾</span>}
-                  {(n.kind === 'brand' || n.kind === 'subject') && <span className="cv-node-playbook">Swap ▾</span>}
+                  {n.kind === 'brand' && <span className="cv-node-playbook">Swap ▾</span>}
                   {n.kind === 'message' && n.row?.recheckFlag && (
                     <button
                       className="cv-node-recheck"
@@ -1695,6 +1756,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   )
                 })()}
               </div>
+              )}
               {n.kind === 'audience' && (
                 <span
                   className="cv-node-collapse"

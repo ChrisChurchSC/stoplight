@@ -42,7 +42,17 @@ export function CampaignThumb({ rows }: { rows: TrafficRow[] }) {
   roots.sort(ord)
   let leaf = 0
   const laneOf = new Map<string, number>()
+  // Break any branchOf cycle: if we re-enter a node mid-recursion, treat it as a
+  // leaf rather than recursing forever (a cycle would otherwise hang the render).
+  const assigning = new Set<string>()
   const assign = (r: TrafficRow): number => {
+    if (assigning.has(r.id)) {
+      const l = leaf
+      leaf += 1
+      laneOf.set(r.id, l)
+      return l
+    }
+    assigning.add(r.id)
     const kids = (childrenOf.get(r.assetName) ?? []).slice().sort(ord)
     let lane: number
     if (!kids.length) {
@@ -53,6 +63,7 @@ export function CampaignThumb({ rows }: { rows: TrafficRow[] }) {
       lane = ls.reduce((s, x) => s + x, 0) / ls.length
     }
     laneOf.set(r.id, lane)
+    assigning.delete(r.id)
     return lane
   }
   for (const r of roots) assign(r)
