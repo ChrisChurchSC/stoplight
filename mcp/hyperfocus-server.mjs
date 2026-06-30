@@ -305,9 +305,102 @@ server.registerTool(
         .array(z.string())
         .optional()
         .describe('Scope the campaign to these audience names (e.g. ["Charter captains & guides"]). Omit to span all of the brand\'s audiences.'),
+      accounts: z
+        .array(z.string())
+        .optional()
+        .describe('ABM: target account names (e.g. ["BlackRock","Robinhood"]). When set, the seeded set is fanned into per-account 1:1 variants, each keyed to the account\'s real situation. Creates accounts + a target list if needed.'),
     },
   },
   async (a) => text(await dispatch('generateAssets', a)),
+)
+
+server.registerTool(
+  'add_account',
+  {
+    title: 'Add a target account (ABM)',
+    description:
+      'Add a named target account under a brand: tier (1:1 / 1:few / 1:many), status (target → engaged → meeting → pipeline → won/lost), segment, the account\'s real situation (notes), and a buying committee (roles + concerns). Accounts are the core of ABM.',
+    inputSchema: {
+      brand: z.string().describe('The brand the account belongs to'),
+      name: z.string().describe('The account name (e.g. "BlackRock")'),
+      domain: z.string().optional().describe('The account domain'),
+      segment: z.string().optional().describe('Industry / segment (e.g. "Asset management")'),
+      tier: z.enum(['1:1', '1:few', '1:many']).optional().describe('How tightly to personalize (default 1:few)'),
+      status: z.enum(['target', 'engaged', 'meeting', 'pipeline', 'won', 'lost']).optional().describe('ABM pipeline status (default target)'),
+      notes: z.string().optional().describe('The account\'s real, public situation — what makes a 1:1 variant differ'),
+      committee: z
+        .array(z.object({ role: z.string(), concern: z.string().optional() }))
+        .optional()
+        .describe('Buying committee: roles + the concern each weighs (e.g. { role: "Compliance", concern: "regulatory exposure" })'),
+    },
+  },
+  async (a) => text(await dispatch('addAccount', a)),
+)
+
+server.registerTool(
+  'create_target_list',
+  {
+    title: 'Create an ABM target list',
+    description:
+      'Create a named target list under a brand from account names (creating any that don\'t exist yet), and optionally attach it to a campaign. The list a program targets — fan_out / generate_assets fan per-account variants across it.',
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+      name: z.string().describe('The list name (e.g. "Financial Institutions")'),
+      accounts: z.array(z.string()).describe('Account names to include (e.g. ["BlackRock","Fidelity","Robinhood"])'),
+      campaign: z.string().optional().describe('A campaign to attach the list to immediately'),
+    },
+  },
+  async (a) => text(await dispatch('createTargetList', a)),
+)
+
+server.registerTool(
+  'attach_target_list',
+  {
+    title: 'Attach a target list to a campaign',
+    description: 'Set (or clear with an empty listId) the target list a campaign targets, so account fan-out resolves to it.',
+    inputSchema: {
+      campaign: z.string().describe('The campaign'),
+      listId: z.string().describe('The target list id (empty string to clear)'),
+    },
+  },
+  async (a) => text(await dispatch('attachTargetList', a)),
+)
+
+server.registerTool(
+  'list_accounts',
+  {
+    title: 'List a brand’s target accounts',
+    description: 'Read a brand\'s accounts (name, segment, tier, status) and its target lists, so you can see ABM state before generating.',
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+    },
+  },
+  async (a) => text(await dispatch('listAccounts', a)),
+)
+
+server.registerTool(
+  'remove_account',
+  {
+    title: 'Remove a target account',
+    description: 'Delete a target account from a brand (also drops it from any target list). Use the id from list_accounts.',
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+      id: z.string().describe('The account id'),
+    },
+  },
+  async (a) => text(await dispatch('removeAccount', a)),
+)
+
+server.registerTool(
+  'remove_target_list',
+  {
+    title: 'Delete an ABM target list',
+    description: 'Delete a target list and detach it from any campaign that targeted it. Use the id from list_accounts.',
+    inputSchema: {
+      listId: z.string().describe('The target list id'),
+    },
+  },
+  async (a) => text(await dispatch('removeTargetList', a)),
 )
 
 server.registerTool(

@@ -31,6 +31,8 @@ export type BreakAxis =
   | 'leak'
   | 'casing'
   | 'duplicate'
+  | 'claim'
+  | 'endorsement'
 export type BreakSeverity = 'high' | 'medium' | 'low'
 export type BreakStatus = 'open' | 'resolved' | 'intended' | 'in-review'
 
@@ -44,6 +46,8 @@ export const AXIS_META: Record<BreakAxis, { label: string; blurb: string }> = {
   leak: { label: 'Raw field leak', blurb: 'A library field was pasted in raw instead of written into copy.' },
   casing: { label: 'Casing / format', blurb: 'Broken casing or a concatenation artifact in the copy.' },
   duplicate: { label: 'Duplicate', blurb: 'Two assets are identical where they should differ.' },
+  claim: { label: 'Unsubstantiated claim', blurb: 'A financial or performance claim with no proof to back it.' },
+  endorsement: { label: 'Implied endorsement', blurb: 'A target account named as a partner or endorser it is not.' },
 }
 
 /** One side of the conflict, shown in the side-by-side evidence. */

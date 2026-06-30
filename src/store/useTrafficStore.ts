@@ -75,6 +75,14 @@ import {
   isBrandless,
   isDraftBrand,
 } from '../domain/brand'
+import {
+  type Account,
+  type AccountStatus,
+  type TargetList,
+  accountContext,
+  newAccount,
+  newTargetList,
+} from '../domain/accounts'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -543,6 +551,26 @@ function saveBrandMeta(map: BrandMetaMap): void {
     /* ignore */
   }
 }
+// ABM target accounts: accounts per brand, named target lists, and the list a campaign
+// targets. The data foundation for account-based programs.
+const ACCOUNTS_KEY = 'stoplight.accounts.v1'
+const TARGET_LISTS_KEY = 'stoplight.targetLists.v1'
+const CAMPAIGN_TARGET_KEY = 'stoplight.campaignTarget.v1'
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* ignore */
+  }
+}
 /** A brand's system, defaulting to a fresh empty one (read-only — never mutates). */
 function libFor(map: Record<string, MessagingLibrary>, brand: string): MessagingLibrary {
   return map[brand] ?? emptyLibrary()
@@ -901,6 +929,13 @@ interface TrafficState {
    *  hard boundary: generation/coherence resolve assets only from a brand's own scope
    *  (self + ancestors + explicit shares). */
   brandMeta: BrandMetaMap
+  // ---- ABM: target accounts ----
+  /** Target accounts per brand (BlackRock, Robinhood, …). Accounts live under a brand. */
+  accountsByBrand: Record<string, Account[]>
+  /** Named account sets a campaign/program targets. */
+  targetLists: TargetList[]
+  /** The target list a campaign targets (campaign name → list id). */
+  campaignTargetList: Record<string, string>
   /** Approved/proposed conditional rules per campaign (fan-out conditional logic). */
   campaignConditions: Record<string, FanCondition[]>
   /** The brand whose system the Messaging page is viewing/editing. */
@@ -1284,6 +1319,21 @@ interface TrafficState {
   /** Promote a draft brand into a real brand, optionally renaming, carrying its assets. */
   promoteBrand: (draftBrand: string, realName?: string) => void
 
+  // ---- ABM: target accounts ----
+  addAccount: (brand: string, patch: Partial<Account>) => Account
+  updateAccount: (brand: string, id: string, patch: Partial<Account>) => void
+  setAccountStatus: (brand: string, id: string, status: AccountStatus) => void
+  removeAccount: (brand: string, id: string) => void
+  /** Create a target list under a brand, optionally seeded with account ids. */
+  createTargetList: (brand: string, name: string, accountIds?: string[]) => TargetList
+  setTargetListAccounts: (listId: string, accountIds: string[]) => void
+  /** Delete a target list and detach it from any campaign that targeted it. */
+  removeTargetList: (listId: string) => void
+  /** Attach (or clear) the target list a campaign targets. */
+  attachTargetList: (campaign: string, listId: string | null) => void
+  /** The accounts a campaign targets (via its attached list). */
+  accountsForCampaign: (campaign: string) => Account[]
+
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
   trackingCleared: boolean
@@ -1431,6 +1481,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandSystems: loadBrandSystems(),
   brandMeta: loadBrandMeta(),
   brandNotice: null,
+  accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
+  targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
+  campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
   campaignConditions: loadConditions(),
   messagingBrand: '',
   library: emptyLibrary(),
@@ -3008,7 +3061,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const variantMasters = new Set(inCampaign.map((r) => (r.variantOf ?? '').trim()).filter(Boolean))
     const base = inCampaign.filter((r) => !variantMasters.has(r.assetName))
     const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
-    const vals = values && values.length ? values : dimensionValues(dimension, effective, s.clientProfiles[client])
+    // The Account dimension fans across the campaign's target list (ABM); other
+    // dimensions pull from the brand library / profile.
+    const libVals =
+      dimension === 'account'
+        ? s.accountsForCampaign(campaign).map((a) => a.name)
+        : dimensionValues(dimension, effective, s.clientProfiles[client])
+    const vals = values && values.length ? values : libVals
     return planFanout(base, dimension, vals, exclude ?? [])
   },
 
@@ -3018,7 +3077,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
     if (inCampaign.length === 0) return { variantCount: 0, created: 0 }
     const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
-    const vals = values && values.length ? values : dimensionValues(dimension, effective, s.clientProfiles[client])
+    const libVals =
+      dimension === 'account'
+        ? s.accountsForCampaign(campaign).map((a) => a.name)
+        : dimensionValues(dimension, effective, s.clientProfiles[client])
+    const vals = values && values.length ? values : libVals
     if (vals.length === 0) return { variantCount: 0, created: 0 }
     const exclude = opts?.exclude ?? []
     // Approved conditions can prune combinations ("if audience = beach then skip winter").
@@ -3213,6 +3276,87 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     })
   },
 
+  // ---- ABM: target accounts ----
+  addAccount: (brand, patch) => {
+    const b = brand.trim()
+    const account = newAccount(b, patch)
+    const s = get()
+    s.addClient(b)
+    const list = [...(s.accountsByBrand[b] ?? []), account]
+    const accountsByBrand = { ...s.accountsByBrand, [b]: list }
+    saveJson(ACCOUNTS_KEY, accountsByBrand)
+    set({ accountsByBrand })
+    return account
+  },
+
+  updateAccount: (brand, id, patch) =>
+    set((s) => {
+      const b = brand.trim()
+      const list = (s.accountsByBrand[b] ?? []).map((a) => (a.id === id ? { ...a, ...patch, id: a.id, brand: b } : a))
+      const accountsByBrand = { ...s.accountsByBrand, [b]: list }
+      saveJson(ACCOUNTS_KEY, accountsByBrand)
+      return { accountsByBrand }
+    }),
+
+  setAccountStatus: (brand, id, status) => get().updateAccount(brand, id, { status }),
+
+  removeAccount: (brand, id) =>
+    set((s) => {
+      const b = brand.trim()
+      const list = (s.accountsByBrand[b] ?? []).filter((a) => a.id !== id)
+      const accountsByBrand = { ...s.accountsByBrand, [b]: list }
+      // Drop it from any target list too.
+      const targetLists = s.targetLists.map((t) => ({ ...t, accountIds: t.accountIds.filter((x) => x !== id) }))
+      saveJson(ACCOUNTS_KEY, accountsByBrand)
+      saveJson(TARGET_LISTS_KEY, targetLists)
+      return { accountsByBrand, targetLists }
+    }),
+
+  createTargetList: (brand, name, accountIds = []) => {
+    const list = newTargetList(brand.trim(), name, accountIds)
+    const s = get()
+    const targetLists = [...s.targetLists, list]
+    saveJson(TARGET_LISTS_KEY, targetLists)
+    set({ targetLists })
+    return list
+  },
+
+  setTargetListAccounts: (listId, accountIds) =>
+    set((s) => {
+      const targetLists = s.targetLists.map((t) => (t.id === listId ? { ...t, accountIds: [...new Set(accountIds)] } : t))
+      saveJson(TARGET_LISTS_KEY, targetLists)
+      return { targetLists }
+    }),
+
+  removeTargetList: (listId) =>
+    set((s) => {
+      const targetLists = s.targetLists.filter((t) => t.id !== listId)
+      const campaignTargetList = Object.fromEntries(Object.entries(s.campaignTargetList).filter(([, id]) => id !== listId))
+      saveJson(TARGET_LISTS_KEY, targetLists)
+      saveJson(CAMPAIGN_TARGET_KEY, campaignTargetList)
+      return { targetLists, campaignTargetList }
+    }),
+
+  attachTargetList: (campaign, listId) =>
+    set((s) => {
+      const c = campaign.trim()
+      const campaignTargetList = { ...s.campaignTargetList }
+      if (listId) campaignTargetList[c] = listId
+      else delete campaignTargetList[c]
+      saveJson(CAMPAIGN_TARGET_KEY, campaignTargetList)
+      return { campaignTargetList }
+    }),
+
+  accountsForCampaign: (campaign) => {
+    const s = get()
+    const listId = s.campaignTargetList[campaign.trim()]
+    if (!listId) return []
+    const list = s.targetLists.find((t) => t.id === listId)
+    if (!list) return []
+    const byId = new Map((s.accountsByBrand[list.brand] ?? []).map((a) => [a.id, a]))
+    return list.accountIds.map((id) => byId.get(id)).filter((a): a is Account => !!a)
+  },
+
   draftCopy: async (rowIds) => {
     const { rows, icp, filter, query, clientFilter, campaignFilter } = get()
     // Targets: explicit ids, else every in-scope reviewable row with no copy yet.
@@ -3278,6 +3422,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // Approved conditions repoint a variant's proof / CTA / hook by its lineage
         // ("if audience = X then proof Y"). Resolved per row below.
         const conditions = get().campaignConditions[campaign] ?? []
+        // Per-account context (segment, situation, lead concern) so a 1:1 ABM variant
+        // reads in terms of the account's real situation, not a name swap.
+        const accountByName = new Map((get().accountsByBrand[client] ?? []).map((acc) => [acc.name.toLowerCase(), acc]))
         const assets: DraftAsset[] = crows.map((r, i) => {
           const stage = funnelStageFor(r.channel, r.assetType)
           const aud =
@@ -3289,6 +3436,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           // structural fields, so exclude them here.
           const context: Record<string, string> = {}
           for (const [k, val] of Object.entries(r.lineage ?? {})) if (k !== 'audience' && k !== 'journey') context[k] = val
+          // An account variant carries the account's real situation (segment, ambition,
+          // lead concern) so BlackRock and Robinhood variants differ on substance.
+          const acct = context.account ? accountByName.get(context.account.toLowerCase()) : undefined
+          if (acct) Object.assign(context, accountContext(acct))
           // Apply approved conditions for this variant's context.
           const journeyLabel = FUNNEL_STAGES.find((st) => st.stage === stage)?.label ?? ''
           const cond = resolveConditions({ audience: (r.audience ?? '').trim(), journey: journeyLabel, ...(r.lineage ?? {}) }, conditions)
@@ -3462,7 +3613,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // raw-field leaks, off-audience proof) so the check is real even with no Claude key.
     // brandMeta resolves the EFFECTIVE baseline (own + inherited + shared) so inheritance
     // is treated as the brand's own voice, never flagged as contamination.
-    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta)
+    // Target accounts are prospects (naming them as partners = an implied endorsement);
+    // the brand's notableClients are substantiated partners that MAY be referenced.
+    const targetAccounts =
+      campaignFilter === 'all'
+        ? (get().accountsByBrand[clientFilter] ?? []).map((acc) => acc.name)
+        : get().accountsForCampaign(campaignFilter).map((acc) => acc.name)
+    const partners = clientProfiles[clientFilter]?.notableClients ?? []
+    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta, { targetAccounts, partners })
     const baseline = get().brandBaselineFor(clientFilter)
     try {
       const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })

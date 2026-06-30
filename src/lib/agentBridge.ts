@@ -352,6 +352,22 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     useTrafficStore.getState().setClientFilter(brand)
     useTrafficStore.getState().setCampaignFilter(campaign)
     await useTrafficStore.getState().draftCopy()
+    // ABM: when accounts (or a target list) are given, fan the seeded set into per-account
+    // 1:1 variants — each carries account lineage and reads to the account's real situation.
+    const accountNames = list(a.accounts)
+    let accountVariants = 0
+    if (accountNames.length) {
+      // Ensure a target list exists + is attached, so the account dimension resolves.
+      const stp = useTrafficStore.getState()
+      const existing = new Map((stp.accountsByBrand[brand] ?? []).map((x) => [x.name.toLowerCase(), x]))
+      const ids = accountNames.map((n) => existing.get(n.toLowerCase())?.id ?? useTrafficStore.getState().addAccount(brand, { name: n }).id)
+      if (!stp.campaignTargetList[campaign]) {
+        const tl = useTrafficStore.getState().createTargetList(brand, `${campaign} targets`, ids)
+        useTrafficStore.getState().attachTargetList(campaign, tl.id)
+      }
+      const res = await useTrafficStore.getState().fanOut(campaign, 'account', accountNames, { generate: true })
+      accountVariants = res.variantCount
+    }
     const after = countFor()
     // Echo the applied strategy KEY (so result.strategy === the requested key) plus
     // its display name and the deliverable count, which differs by motion.
@@ -361,6 +377,8 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       strategy: key,
       strategyName: strat?.name ?? 'Demand Gen',
       audiences,
+      accounts: accountNames,
+      accountVariants,
       deliverableSet: deliverables.length,
       assetsGenerated: Math.max(0, after - before),
       totalAssets: after,
@@ -548,6 +566,84 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!draftBrand) throw new Error('brand is required')
     useTrafficStore.getState().promoteBrand(draftBrand, realName || undefined)
     return { promoted: realName || draftBrand, from: draftBrand }
+  },
+
+  // ---- ABM: target accounts ----
+  // Add a target account under a brand. `committee` is an array of { role, concern }.
+  async addAccount(a) {
+    const brand = str(a.brand).trim()
+    const name = str(a.name).trim()
+    if (!brand || !name) throw new Error('brand and name are required')
+    const tier = str(a.tier).trim()
+    const status = str(a.status).trim()
+    const committee = Array.isArray(a.committee)
+      ? (a.committee as Record<string, unknown>[]).map((m) => ({ role: str(m.role).trim(), concern: str(m.concern).trim() || undefined })).filter((m) => m.role)
+      : undefined
+    const acct = useTrafficStore.getState().addAccount(brand, {
+      name,
+      domain: str(a.domain).trim() || undefined,
+      segment: str(a.segment).trim() || undefined,
+      tier: (tier === '1:1' || tier === '1:few' || tier === '1:many' ? tier : undefined) as never,
+      status: (['target', 'engaged', 'meeting', 'pipeline', 'won', 'lost'].includes(status) ? status : undefined) as never,
+      notes: str(a.notes).trim() || undefined,
+      committee,
+    })
+    return { id: acct.id, name: acct.name, brand, tier: acct.tier, status: acct.status }
+  },
+
+  // Create a target list under a brand from account NAMES (creating any that don't exist
+  // yet), and optionally attach it to a campaign. The ABM target list in one call.
+  async createTargetList(a) {
+    const brand = str(a.brand).trim()
+    const name = str(a.name).trim()
+    if (!brand || !name) throw new Error('brand and name are required')
+    const st = useTrafficStore.getState()
+    const wanted = list(a.accounts)
+    const existing = new Map((st.accountsByBrand[brand] ?? []).map((x) => [x.name.toLowerCase(), x]))
+    const ids = wanted.map((n) => {
+      const found = existing.get(n.toLowerCase())
+      return found ? found.id : useTrafficStore.getState().addAccount(brand, { name: n }).id
+    })
+    const list_ = useTrafficStore.getState().createTargetList(brand, name, ids)
+    const campaign = str(a.campaign).trim()
+    if (campaign) useTrafficStore.getState().attachTargetList(campaign, list_.id)
+    return { id: list_.id, name: list_.name, brand, accounts: wanted, attachedTo: campaign || null }
+  },
+
+  // Remove a target account from a brand (also drops it from any target list).
+  async removeAccount(a) {
+    const brand = str(a.brand).trim()
+    const id = str(a.id).trim()
+    if (!brand || !id) throw new Error('brand and id are required')
+    useTrafficStore.getState().removeAccount(brand, id)
+    return { brand, removed: id }
+  },
+
+  // Delete a target list (and detach it from any campaign).
+  async removeTargetList(a) {
+    const listId = str(a.listId).trim()
+    if (!listId) throw new Error('listId is required')
+    useTrafficStore.getState().removeTargetList(listId)
+    return { removed: listId }
+  },
+
+  // Attach (or clear with listId='') the target list a campaign targets.
+  async attachTargetList(a) {
+    const campaign = str(a.campaign).trim()
+    const listId = str(a.listId).trim()
+    if (!campaign) throw new Error('campaign is required')
+    useTrafficStore.getState().attachTargetList(campaign, listId || null)
+    return { campaign, listId: listId || null }
+  },
+
+  // List a brand's accounts (and which list a campaign targets) so Claude can see state.
+  async listAccounts(a) {
+    const brand = str(a.brand).trim()
+    if (!brand) throw new Error('brand is required')
+    const st = useTrafficStore.getState()
+    const accounts = (st.accountsByBrand[brand] ?? []).map((x) => ({ id: x.id, name: x.name, segment: x.segment ?? null, tier: x.tier, status: x.status }))
+    const lists = st.targetLists.filter((l) => l.brand === brand).map((l) => ({ id: l.id, name: l.name, count: l.accountIds.length }))
+    return { brand, accounts, targetLists: lists }
   },
 
   // Read back what's connected for a brand, so Claude can see before it writes.

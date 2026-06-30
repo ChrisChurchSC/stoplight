@@ -43,6 +43,11 @@ export interface CoherenceVocab {
   /** The brands that contributed to the baseline (self + ancestors + shares), so the
    *  check can report which brand frame it measured against. */
   sources: BrandSource[]
+  /** ABM target accounts — PROSPECTS, not partners. Naming one as a partner / endorser
+   *  is an implied endorsement (a compliance break). */
+  targetAccounts: string[]
+  /** Substantiated partners (the brand's named clients) — these MAY be referenced. */
+  partners: string[]
 }
 
 // Stopwords + generic marketing words: excluded from "distinctive" term sets so a
@@ -76,6 +81,7 @@ export function buildCoherenceVocab(
   brandSystems: Record<string, MessagingLibrary>,
   clientProfiles: Record<string, ClientProfile>,
   brandMeta: BrandMetaMap = {},
+  accounts: { targetAccounts?: string[]; partners?: string[] } = {},
 ): CoherenceVocab {
   // The baseline is the brand's EFFECTIVE library: its own assets plus those inherited
   // from ancestors and explicitly shared in. Those in-scope brands are part of the
@@ -125,7 +131,12 @@ export function buildCoherenceVocab(
   for (const r of sys.rtbs) proofById.set(r.id, { label: r.label, audienceId: r.audienceId })
   for (const a of sys.audiences) for (const r of a.rtbs ?? []) proofById.set(r.id, { label: r.label, audienceId: r.audienceId ?? a.name })
 
-  return { client, campaign, audiences, ownTerms, foreign, proofById, sources }
+  // A target account is a partner only if the brand explicitly lists it as one.
+  const partners = (accounts.partners ?? []).map((p) => p.trim()).filter(Boolean)
+  const partnerLc = new Set(partners.map((p) => p.toLowerCase()))
+  const targetAccounts = (accounts.targetAccounts ?? []).map((a) => a.trim()).filter((a) => a && !partnerLc.has(a.toLowerCase()))
+
+  return { client, campaign, audiences, ownTerms, foreign, proofById, sources, targetAccounts, partners }
 }
 
 // ---- helpers -------------------------------------------------------------------
@@ -465,6 +476,71 @@ function detectJourneyDrops(rows: TrafficRow[], vocab: CoherenceVocab): Coherenc
 }
 
 /** Run every deterministic detector. The always-on floor under the Claude check. */
+// A strong, specific financial / performance / security claim — the kind that must be
+// sourced for a regulated audience. Deliberately narrow so ordinary copy never matches:
+// money magnitudes, return/yield promises, and absolute-security superlatives.
+const FINANCIAL_CLAIM =
+  /(\$\s?\d[\d,.]*\s?(?:billion|million|trillion|bn|mm)\b|\b\d[\d,.]*\s?(?:billion|million|trillion)\s+(?:saved|secured|processed|in\s+(?:savings|tvl|volume))|\b\d+(?:\.\d+)?\s?%\s+(?:returns?|apy|yield|gains?)\b|\bguaranteed\s+(?:returns?|yield|gains?|profit)|\brisk[-\s]?free\b|\b(?:fully|completely|100%|totally)\s+secure\b|\bunhackable\b|\bzero\s+risk\b)/i
+
+/** Unsubstantiated financial claim: a strong money/return/security claim with NO proof
+ *  point attached — it must be sourced or marked, never fabricated. (A claim WITH proof
+ *  is the proof detector's job, not this one.) */
+function detectFinancialClaims(rows: TrafficRow[], vocab: CoherenceVocab): CoherenceBreak[] {
+  const out: CoherenceBreak[] = []
+  for (const row of rows) {
+    if (assetRtbIds(row).length > 0) continue // a claim with proof attached is sourced
+    for (const [field, text] of fieldsOf(row)) {
+      const m = text.match(FINANCIAL_CLAIM)
+      if (!m) continue
+      out.push(
+        mkBreak({
+          axis: 'claim',
+          severity: 'high',
+          headline: 'Unsubstantiated financial claim',
+          why: `"${m[0]}" is a financial/performance claim with no proof point attached. For a regulated audience it must be sourced or marked, never stated bare.`,
+          from: evidence(row, field, text, m[0]),
+          after: text.replace(m[0], '[claim — attach a sourced proof point or remove]'),
+          vocab,
+        }),
+      )
+      break // one claim break per asset is enough to flag it
+    }
+  }
+  return out
+}
+
+// Endorsement / relationship language — saying an account vouches for or partners with us.
+const ENDORSEMENT =
+  /\b(trusted by|partnered with|in partnership with|backed by|chosen by|powering|works with|used by|relied on by|endorsed by)\b/i
+
+/** Implied endorsement: a TARGET account (a prospect, not a substantiated partner) named
+ *  in partnership / endorsement language — implying a relationship that doesn't exist. */
+function detectImpliedEndorsement(rows: TrafficRow[], vocab: CoherenceVocab): CoherenceBreak[] {
+  if (vocab.targetAccounts.length === 0) return []
+  const out: CoherenceBreak[] = []
+  for (const row of rows) {
+    for (const [field, text] of fieldsOf(row)) {
+      const lc = text.toLowerCase()
+      if (!ENDORSEMENT.test(lc)) continue
+      const named = vocab.targetAccounts.find((a) => lc.includes(a.toLowerCase()))
+      if (!named) continue
+      out.push(
+        mkBreak({
+          axis: 'endorsement',
+          severity: 'high',
+          headline: 'Implied endorsement of a target account',
+          why: `${named} is a target account (a prospect), not a substantiated partner. Naming it in partnership/endorsement language implies a relationship that doesn't exist.`,
+          from: evidence(row, field, text, named),
+          after: text,
+          vocab,
+        }),
+      )
+      break
+    }
+  }
+  return out
+}
+
 export function detectStructuralBreaks(rows: TrafficRow[], vocab: CoherenceVocab): CoherenceBreak[] {
   return [
     ...detectContamination(rows, vocab),
@@ -473,5 +549,7 @@ export function detectStructuralBreaks(rows: TrafficRow[], vocab: CoherenceVocab
     ...detectDuplicates(rows, vocab),
     ...detectOffAudience(rows, vocab),
     ...detectJourneyDrops(rows, vocab),
+    ...detectFinancialClaims(rows, vocab),
+    ...detectImpliedEndorsement(rows, vocab),
   ]
 }
