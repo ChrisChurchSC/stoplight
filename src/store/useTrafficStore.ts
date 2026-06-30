@@ -876,6 +876,8 @@ interface TrafficState {
   saveAudienceToLibrary: (audience: AudienceType) => void
   /** ICP & proof side drawer. */
   icpOpen: boolean
+  /** Personalization fan-out card drawer. */
+  personalizeOpen: boolean
   /** Channel whose tracking-setup drawer is open ('all' = overview), or null. */
   trackingChannel: ChannelId | 'all' | null
   openTracking: (channel: ChannelId | 'all') => void
@@ -1072,6 +1074,7 @@ interface TrafficState {
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
   setPage: (page: 'clients' | 'connectors' | 'billing' | 'library') => void
   setIcpOpen: (open: boolean) => void
+  setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
   /** Connect the Drive account (real sign-in, or demo). */
   connectDrive: () => Promise<void>
@@ -1333,6 +1336,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   versions: loadVersions(),
   historyOpen: false,
   icpOpen: false,
+  personalizeOpen: false,
   trackingChannel: null,
   drivePickerOpen: false,
   driveConnected: false,
@@ -1421,6 +1425,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ page })
   },
   setIcpOpen: (icpOpen) => set({ icpOpen }),
+  setPersonalizeOpen: (personalizeOpen) => set({ personalizeOpen }),
   openTracking: (channel) => set({ trackingChannel: channel }),
   closeTracking: () => set({ trackingChannel: null }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
@@ -2916,7 +2921,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   fanOutPreview: (campaign, dimension, values, exclude) => {
     const s = get()
     const client = clientForCampaign(campaign)
-    const base = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    // Count over the leaves (what fanOut actually fans), so the preview matches reality
+    // when cards are stacked.
+    const parents = new Set(inCampaign.map((r) => (r.branchOf ?? '').trim()).filter(Boolean))
+    const base = inCampaign.filter((r) => !parents.has(r.assetName))
     const vals = values && values.length ? values : dimensionValues(dimension, s.brandSystems[client], s.clientProfiles[client])
     return planFanout(base, dimension, vals, exclude ?? [])
   },
@@ -2924,14 +2933,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   fanOut: async (campaign, dimension, values, opts) => {
     const s = get()
     const client = clientForCampaign(campaign)
-    const base = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
-    if (base.length === 0) return { variantCount: 0, created: 0 }
+    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    if (inCampaign.length === 0) return { variantCount: 0, created: 0 }
     const vals = values && values.length ? values : dimensionValues(dimension, s.brandSystems[client], s.clientProfiles[client])
     if (vals.length === 0) return { variantCount: 0, created: 0 }
     const exclude = opts?.exclude ?? []
-    // One variant per (base asset x value), tagged with its full lineage; pruned
-    // combinations are skipped. The dimension also sets a real row field where it maps
-    // (audience, journey stage), so the variant is structural, not only metadata.
+    // Fan the LEAVES (assets not already a parent of a variant) so stacked cards push
+    // the tree DEEPER instead of re-fanning the masters.
+    const parents = new Set(inCampaign.map((r) => (r.branchOf ?? '').trim()).filter(Boolean))
+    const base = inCampaign.filter((r) => !parents.has(r.assetName))
+    // One variant per (leaf x value), tagged with its full lineage. Each variant is a
+    // BRANCH of the leaf it came from, so the canvas fans them out horizontally (a fan,
+    // not a vertical stack) and the master stays as the anchor. The dimension also sets
+    // a real row field where it maps (audience, journey stage). Pruned combos are skipped.
     const variants: TrafficRow[] = []
     for (const row of base) {
       for (const value of vals) {
@@ -2941,6 +2955,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           ...row,
           id: freshRowId(),
           assetName: `${row.assetName} · ${value}`,
+          branchOf: row.assetName, // fan off the master so the canvas spreads them
           messaging: {}, // cleared so generation writes per-variant copy
           rtbMap: undefined,
           format: undefined,
@@ -2953,8 +2968,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     if (variants.length === 0) return { variantCount: 0, created: 0 }
     await sheet.append(variants)
-    // The base assets are now expanded INTO the variants, so retire them.
-    for (const row of base) await sheet.remove(row.id)
     await get().refresh()
     if (opts?.generate !== false) {
       get().setClientFilter(client)

@@ -410,6 +410,8 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         format: r.format ?? '',
         /** The personalization composition this variant was fanned from. */
         lineage: r.lineage ?? {},
+        /** The master this variant fans off (so the canvas spreads them). */
+        branchOf: r.branchOf ?? '',
         /** Every messaging component this asset actually has, key → copy. */
         components: m,
         proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
