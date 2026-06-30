@@ -62,6 +62,7 @@ import { messagingFields, messagingAllText, messagingMap } from '../domain/messa
 import { composeMessaging } from '../domain/matrixDraft'
 import { ctaFor } from '../domain/matrix'
 import { funnelStageFor } from '../domain/funnel'
+import { dimensionField, dimensionValues, isPruned, planFanout, type FanoutPlan } from '../domain/fanout'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -1188,6 +1189,21 @@ interface TrafficState {
   /** Draft starter copy + proof into empty messaging fields. Pass specific row
    *  ids, or omit to draft every in-scope reviewable row that has no copy yet. */
   draftCopy: (rowIds?: string[]) => Promise<void>
+  /** Plan a personalization fan-out without committing (count-before-commit). */
+  fanOutPreview: (
+    campaign: string,
+    dimension: string,
+    values?: string[],
+    exclude?: Record<string, string>[],
+  ) => FanoutPlan
+  /** Fan a campaign's base assets into one lineage-tagged variant per dimension value,
+   *  then regenerate copy per variant. Stacks (multiplies) over existing variants. */
+  fanOut: (
+    campaign: string,
+    dimension: string,
+    values?: string[],
+    opts?: { exclude?: Record<string, string>[]; generate?: boolean },
+  ) => Promise<{ variantCount: number; created: number }>
 
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
@@ -2895,6 +2911,57 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const result = await extractInCreativeCopy(row, realExtractTransport)
     await sheet.update(id, { extractedCopy: result.text })
     await get().refresh()
+  },
+
+  fanOutPreview: (campaign, dimension, values, exclude) => {
+    const s = get()
+    const client = clientForCampaign(campaign)
+    const base = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    const vals = values && values.length ? values : dimensionValues(dimension, s.brandSystems[client], s.clientProfiles[client])
+    return planFanout(base, dimension, vals, exclude ?? [])
+  },
+
+  fanOut: async (campaign, dimension, values, opts) => {
+    const s = get()
+    const client = clientForCampaign(campaign)
+    const base = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    if (base.length === 0) return { variantCount: 0, created: 0 }
+    const vals = values && values.length ? values : dimensionValues(dimension, s.brandSystems[client], s.clientProfiles[client])
+    if (vals.length === 0) return { variantCount: 0, created: 0 }
+    const exclude = opts?.exclude ?? []
+    // One variant per (base asset x value), tagged with its full lineage; pruned
+    // combinations are skipped. The dimension also sets a real row field where it maps
+    // (audience, journey stage), so the variant is structural, not only metadata.
+    const variants: TrafficRow[] = []
+    for (const row of base) {
+      for (const value of vals) {
+        const lineage = { ...(row.lineage ?? {}), [dimension]: value }
+        if (isPruned(lineage, exclude)) continue
+        variants.push({
+          ...row,
+          id: freshRowId(),
+          assetName: `${row.assetName} · ${value}`,
+          messaging: {}, // cleared so generation writes per-variant copy
+          rtbMap: undefined,
+          format: undefined,
+          status: 'draft',
+          createdAt: Date.now(),
+          lineage,
+          ...(dimensionField(dimension, value) ?? {}),
+        })
+      }
+    }
+    if (variants.length === 0) return { variantCount: 0, created: 0 }
+    await sheet.append(variants)
+    // The base assets are now expanded INTO the variants, so retire them.
+    for (const row of base) await sheet.remove(row.id)
+    await get().refresh()
+    if (opts?.generate !== false) {
+      get().setClientFilter(client)
+      get().setCampaignFilter(campaign)
+      await get().draftCopy()
+    }
+    return { variantCount: variants.length, created: variants.length }
   },
 
   draftCopy: async (rowIds) => {

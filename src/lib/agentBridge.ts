@@ -128,7 +128,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       const v = str(a[k]).trim()
       if (v) patch[k] = v
     }
-    for (const k of ['products', 'differentiators', 'values']) {
+    for (const k of ['products', 'differentiators', 'values', 'locations']) {
       const l = list(a[k])
       if (l.length) patch[k] = l
     }
@@ -407,12 +407,45 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         primaryText,
         description,
         cta,
+        format: r.format ?? '',
+        /** The personalization composition this variant was fanned from. */
+        lineage: r.lineage ?? {},
         /** Every messaging component this asset actually has, key → copy. */
         components: m,
         proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
       }
     })
     return { brand, campaign: campaign || null, count: assets.length, assets }
+  },
+
+  // ---- Personalization fan-out (Phase 1) ----
+
+  // Count-before-commit: what a dimension card would create, without fanning.
+  async fanOutPreview(a) {
+    const campaign = str(a.campaign).trim()
+    const dimension = str(a.dimension).trim()
+    if (!campaign || !dimension) throw new Error('campaign and dimension are required')
+    const values = list(a.values)
+    const exclude = Array.isArray(a.exclude) ? (a.exclude as Record<string, string>[]) : []
+    const plan = useTrafficStore.getState().fanOutPreview(campaign, dimension, values.length ? values : undefined, exclude)
+    return {
+      ...plan,
+      note: `Adding a ${dimension} card creates ${plan.variantCount} variants (${plan.baseCount} base × ${plan.values.length} values${plan.pruned ? `, ${plan.pruned} pruned` : ''}). Run the coherence check after to surface only the breaking variants.`,
+    }
+  },
+
+  // Fan the base into one lineage-tagged variant per value, then generate per variant.
+  async fanOut(a) {
+    const campaign = str(a.campaign).trim()
+    const dimension = str(a.dimension).trim()
+    if (!campaign || !dimension) throw new Error('campaign and dimension are required')
+    const values = list(a.values)
+    const exclude = Array.isArray(a.exclude) ? (a.exclude as Record<string, string>[]) : []
+    const generate = a.generate !== false
+    const res = await useTrafficStore
+      .getState()
+      .fanOut(campaign, dimension, values.length ? values : undefined, { exclude, generate })
+    return { campaign, dimension, ...res }
   },
 
   // Read back what's connected for a brand, so Claude can see before it writes.

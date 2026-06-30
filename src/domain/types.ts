@@ -149,6 +149,11 @@ export interface TrafficRow {
    *  testimonial, myth-bust, story, stat, PSA, before/after, …) — so a generated
    *  set is visibly varied, not one mold. Set by generation. */
   format?: string
+  /** Personalization lineage: the composition this variant was fanned from
+   *  (dimension → value, e.g. { audience: 'Captains', location: 'Asbury', journey:
+   *  'Convert' }). Built up as fan-out cards stack, so outcomes attribute to the exact
+   *  combination and feed performance profiles. */
+  lineage?: Record<string, string>
   /** Destination this unit drives to — the next asset in the journey (by asset
    *  name), e.g. an ad → its landing page, a lead magnet → its nurture email. */
   linksTo?: string

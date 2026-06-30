@@ -30,6 +30,9 @@ export interface ClientProfile {
   strategyConfidence?: string
   /** The business-model signals the recommendation was grounded in. */
   strategySignals?: string[]
+  /** Personalization locations (cities / regions / neighborhoods) the Location
+   *  fan-out card fans across. */
+  locations?: string[]
   // ---- Company overview (filled in by site ingestion) ----
   /** One line on what the company does. */
   oneLiner?: string

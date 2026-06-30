@@ -131,6 +131,7 @@ server.registerTool(
       products: z.array(z.string()).optional().describe('Products / offerings'),
       differentiators: z.array(z.string()).optional(),
       values: z.array(z.string()).optional(),
+      locations: z.array(z.string()).optional().describe('Cities / regions the Location fan-out card personalizes across'),
       strategy: z.string().optional().describe('GTM motion key/name to set (e.g. plg, demand-gen, sales-led, abm, community). Overrides the inferred one.'),
     },
   },
@@ -321,6 +322,39 @@ server.registerTool(
     },
   },
   async ({ brand, campaign }) => text(await dispatch('listAssets', { brand, campaign })),
+)
+
+server.registerTool(
+  'fan_out_preview',
+  {
+    title: 'Preview a personalization fan-out',
+    description:
+      "Count-before-commit for a personalization card: how many variants fanning a campaign across a dimension would create, without committing. Values come from the brand's library (audience -> library audiences, location -> library locations, journey -> funnel stages) or pass them explicitly. Stacking multiplies over existing variants.",
+    inputSchema: {
+      campaign: z.string().describe('The campaign to fan out'),
+      dimension: z.string().describe('The personalization dimension: audience, location, journey, channel, time, lifecycle, intent, tier, …'),
+      values: z.array(z.string()).optional().describe('A subset of values to fan across (selective fan-out). Omit to use all library values.'),
+      exclude: z.array(z.record(z.string())).optional().describe('Combinations to prune, e.g. [{ "audience": "Beach season", "time": "Winter" }].'),
+    },
+  },
+  async (a) => text(await dispatch('fanOutPreview', a)),
+)
+
+server.registerTool(
+  'fan_out',
+  {
+    title: 'Fan a campaign across a dimension',
+    description:
+      "Fan a campaign's base assets into one variant per value of a dimension, each tagged with its lineage (the composition, for attribution), then generate copy per variant. Stacks over existing variants (Audience × Location × Journey). Always preview the count first. Use `values` for selective fan-out and `exclude` for matrix pruning.",
+    inputSchema: {
+      campaign: z.string().describe('The campaign to fan out'),
+      dimension: z.string().describe('The personalization dimension (audience, location, journey, …)'),
+      values: z.array(z.string()).optional().describe('A subset of values (selective fan-out). Omit for all library values.'),
+      exclude: z.array(z.record(z.string())).optional().describe('Combinations to prune.'),
+      generate: z.boolean().optional().describe('Generate copy per variant after fanning (default true).'),
+    },
+  },
+  async (a) => text(await dispatch('fanOut', a)),
 )
 
 await server.connect(new StdioServerTransport())
