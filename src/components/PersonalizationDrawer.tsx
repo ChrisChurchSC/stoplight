@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { clientForCampaign } from '../domain/clients'
+import { conditionSentence } from '../domain/conditions'
 import { FANOUT_DIMENSIONS, dimensionValues } from '../domain/fanout'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -23,6 +24,9 @@ export function PersonalizationDrawer() {
   const fanOutPreview = useTrafficStore((s) => s.fanOutPreview)
   const fanOut = useTrafficStore((s) => s.fanOut)
   const runCoherenceCheck = useTrafficStore((s) => s.runCoherenceCheck)
+  const campaignConditions = useTrafficStore((s) => s.campaignConditions)
+  const proposeConditions = useTrafficStore((s) => s.proposeConditions)
+  const setConditionStatus = useTrafficStore((s) => s.setConditionStatus)
 
   const campaign = campaignFilter !== 'all' ? campaignFilter : ''
   const client = clientFilter !== 'all' ? clientFilter : clientForCampaign(campaign)
@@ -33,6 +37,7 @@ export function PersonalizationDrawer() {
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [proposing, setProposing] = useState(false)
 
   const base = useMemo(() => rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim()), [rows, campaign])
   const libValues = useMemo(
@@ -76,6 +81,7 @@ export function PersonalizationDrawer() {
 
   const plan = campaign && chosen.length ? fanOutPreview(campaign, dim, chosen, exclude) : null
   const dimMeta = FANOUT_DIMENSIONS.find((d) => d.key === dim)
+  const conditions = campaign ? campaignConditions[campaign] ?? [] : []
 
   if (!open) return null
 
@@ -92,6 +98,16 @@ export function PersonalizationDrawer() {
       next.has(k) ? next.delete(k) : next.add(k)
       return next
     })
+
+  const propose = () => {
+    if (!campaign || proposing) return
+    setProposing(true)
+    try {
+      proposeConditions(campaign)
+    } finally {
+      setProposing(false)
+    }
+  }
 
   const apply = async () => {
     if (!campaign || !plan || plan.variantCount === 0 || busy) return
@@ -211,6 +227,46 @@ export function PersonalizationDrawer() {
                   <div className="pz-hint">Uncheck a cell to skip that combination.</div>
                 </div>
               )}
+
+              <div className="pz-section">
+                <div className="pz-label">
+                  Conditional logic <span className="pz-src">proposed, you approve</span>
+                </div>
+                {conditions.length === 0 ? (
+                  <div className="pz-cond-empty">
+                    <div className="pz-hint">
+                      Let the brand’s library suggest if/then rules — “if audience is X, lead with their proof”,
+                      “if lifecycle is lapsed, use the win-back CTA”. You approve each before it shapes copy.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pz-conds">
+                    {conditions.map((c) => (
+                      <div key={c.id} className={`pz-cond ${c.status}`}>
+                        <div className="pz-cond-text">{conditionSentence(c)}</div>
+                        {c.rationale && <div className="pz-cond-why">{c.rationale}</div>}
+                        <div className="pz-cond-actions">
+                          <button
+                            className={`btn ghost xs${c.status === 'approved' ? ' on' : ''}`}
+                            onClick={() => setConditionStatus(campaign, c.id, c.status === 'approved' ? 'proposed' : 'approved')}
+                          >
+                            {c.status === 'approved' ? '✓ Approved' : 'Approve'}
+                          </button>
+                          <button
+                            className={`btn ghost xs${c.status === 'rejected' ? ' on' : ''}`}
+                            onClick={() => setConditionStatus(campaign, c.id, c.status === 'rejected' ? 'proposed' : 'rejected')}
+                          >
+                            {c.status === 'rejected' ? 'Dismissed' : 'Dismiss'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button className="btn ghost sm" disabled={proposing} onClick={propose}>
+                  {proposing ? 'Proposing…' : conditions.length ? 'Re-propose conditions' : 'Propose conditions'}
+                </button>
+              </div>
             </div>
 
             <div className="drawer-foot pz-foot">

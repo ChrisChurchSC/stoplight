@@ -26,6 +26,7 @@ export function BreaksQueue() {
   const auditLog = useTrafficStore((s) => s.auditLog)
   const brandGuides = useTrafficStore((s) => s.brandGuides)
   const openReadiness = useTrafficStore((s) => s.openReadiness)
+  const coherenceBaseline = useTrafficStore((s) => s.coherenceBaseline)
 
   if (!open) return null
 
@@ -90,6 +91,12 @@ export function BreaksQueue() {
                 ⚠ No confirmed brand guide — the check has no standard to measure against. Confirm one →
               </button>
             )
+          )}
+          {checkedByClaude && coherenceBaseline && coherenceBaseline.brand === client && coherenceBaseline.sources.length > 1 && (
+            <div className="breaks-baseline" title="The brand frame this check measured against">
+              Baseline: {coherenceBaseline.sources.map((s) => s.brand).join(' + ')}
+              {' '}({coherenceBaseline.sources.filter((s) => s.relation === 'ancestor').length > 0 ? 'inheriting up the brand tree' : 'with shared libraries'})
+            </div>
           )}
           {ordered.length === 0 ? (
             <div className="breaks-empty">

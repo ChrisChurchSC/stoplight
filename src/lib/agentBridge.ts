@@ -7,6 +7,7 @@ import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
 import { messagingFields } from '../domain/messaging'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
+import { conditionSentence } from '../domain/conditions'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 
 /**
@@ -407,10 +408,11 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         primaryText,
         description,
         cta,
-        format: r.format ?? '',
         /** The personalization composition this variant was fanned from. */
         lineage: r.lineage ?? {},
-        /** The master this variant fans off (so the canvas spreads them). */
+        /** The master this is a personalization variant of (sits side by side with it). */
+        variantOf: r.variantOf ?? '',
+        /** The journey step this branches off (flows forward, drawn connected). */
         branchOf: r.branchOf ?? '',
         /** Every messaging component this asset actually has, key → copy. */
         components: m,
@@ -448,6 +450,104 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       .getState()
       .fanOut(campaign, dimension, values.length ? values : undefined, { exclude, generate })
     return { campaign, dimension, ...res }
+  },
+
+  // Propose conditional logic ("if audience = X then proof Y") from the brand's library
+  // associations. Everything lands proposed — a human approves before it shapes copy.
+  async proposeConditions(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const conditions = useTrafficStore.getState().proposeConditions(campaign)
+    return {
+      campaign,
+      count: conditions.length,
+      conditions: conditions.map((c) => ({ id: c.id, sentence: conditionSentence(c), rationale: c.rationale, confidence: c.confidence, status: c.status })),
+      note: conditions.length
+        ? `${conditions.length} conditions proposed. Approve the ones that fit, then fan out — approved conditions repoint each variant's proof/hook/CTA or prune the combination.`
+        : 'No conditions could be inferred yet. Connect more audience proof points and CTAs, then re-propose.',
+    }
+  },
+
+  // List the conditions on a campaign (so Claude can read state before approving).
+  async listConditions(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    const conditions = useTrafficStore.getState().campaignConditions[campaign] ?? []
+    return {
+      campaign,
+      conditions: conditions.map((c) => ({ id: c.id, sentence: conditionSentence(c), rationale: c.rationale, confidence: c.confidence, status: c.status })),
+    }
+  },
+
+  // Approve / reject a proposed condition. Only approved conditions shape generation.
+  async setConditionStatus(a) {
+    const campaign = str(a.campaign).trim()
+    const id = str(a.id).trim()
+    const status = str(a.status).trim()
+    if (!campaign || !id) throw new Error('campaign and id are required')
+    if (status !== 'approved' && status !== 'rejected' && status !== 'proposed') throw new Error('status must be approved, rejected, or proposed')
+    useTrafficStore.getState().setConditionStatus(campaign, id, status)
+    const c = (useTrafficStore.getState().campaignConditions[campaign] ?? []).find((x) => x.id === id)
+    return { campaign, id, status, sentence: c ? conditionSentence(c) : null }
+  },
+
+  // ---- Brand boundary: the canvas's coherence baseline + brand tree ----
+  // Read a brand's effective baseline: the voice / proof in force and where it comes
+  // from (self + inherited ancestors + explicitly shared). What the canvas measures against.
+  async getBrandBaseline(a) {
+    const brand = str(a.brand).trim()
+    if (!brand) throw new Error('brand is required')
+    const b = useTrafficStore.getState().brandBaselineFor(brand)
+    return {
+      brand: b.brand,
+      draft: b.draft,
+      voice: b.voice ?? null,
+      proofCount: b.proofCount,
+      audienceCount: b.audienceCount,
+      sources: b.sources,
+      note: 'Generation and the coherence check read ONLY these sources. Nothing outside this scope can cross the brand boundary.',
+    }
+  },
+
+  // Set (or clear with parent='') a brand's parent, so it inherits the parent's proof /
+  // values / audiences. Cycles and self-parenting are rejected by the store.
+  async setBrandParent(a) {
+    const brand = str(a.brand).trim()
+    const parent = str(a.parent).trim()
+    if (!brand) throw new Error('brand is required')
+    useTrafficStore.getState().setBrandParent(brand, parent || null)
+    return { brand, parent: parent || null, baseline: useTrafficStore.getState().brandBaselineFor(brand).sources }
+  },
+
+  // Explicitly attach (on=true) or detach another brand's library as a shared source —
+  // the only deliberate way assets cross between unrelated brands.
+  async setBrandShare(a) {
+    const brand = str(a.brand).trim()
+    const share = str(a.share).trim()
+    const on = a.on !== false
+    if (!brand || !share) throw new Error('brand and share are required')
+    useTrafficStore.getState().setBrandShare(brand, share, on)
+    return { brand, share, on, baseline: useTrafficStore.getState().brandBaselineFor(brand).sources }
+  },
+
+  // Mark a brand a lightweight draft (sketch) or clear the flag. A draft brand is a real,
+  // isolated binding — it can generate — and can be promoted later.
+  async setBrandDraft(a) {
+    const brand = str(a.brand).trim()
+    const draft = a.draft !== false
+    if (!brand) throw new Error('brand is required')
+    useTrafficStore.getState().setBrandDraft(brand, draft)
+    return { brand, draft }
+  },
+
+  // Promote a draft brand into a real brand (optionally renaming), carrying its library,
+  // profile, and campaigns.
+  async promoteBrand(a) {
+    const draftBrand = str(a.brand).trim()
+    const realName = str(a.realName).trim()
+    if (!draftBrand) throw new Error('brand is required')
+    useTrafficStore.getState().promoteBrand(draftBrand, realName || undefined)
+    return { promoted: realName || draftBrand, from: draftBrand }
   },
 
   // Read back what's connected for a brand, so Claude can see before it writes.

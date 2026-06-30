@@ -3,7 +3,7 @@ import { CHANNELS } from './channels'
 import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from './funnel'
 import { brandPerformance } from './performance'
 import { formatOf } from './presence'
-import { assetRtbIds, type Rtb } from './rtb'
+import { type Rtb } from './rtb'
 import type { ChannelId, TrafficRow } from './types'
 
 /**

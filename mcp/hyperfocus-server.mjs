@@ -357,4 +357,113 @@ server.registerTool(
   async (a) => text(await dispatch('fanOut', a)),
 )
 
+server.registerTool(
+  'propose_conditions',
+  {
+    title: 'Propose conditional fan-out logic',
+    description:
+      "Infer if/then conditions for a campaign's fan-out from the brand's library associations: 'if audience = X then use proof Y', 'if journey = lapsed then win-back CTA', etc. Everything lands proposed — nothing shapes copy until a human approves it with set_condition_status. This is the intended way to add conditional logic: propose, then approve. Never hand-build rules.",
+    inputSchema: {
+      campaign: z.string().describe('The campaign to propose conditions for'),
+    },
+  },
+  async (a) => text(await dispatch('proposeConditions', a)),
+)
+
+server.registerTool(
+  'list_conditions',
+  {
+    title: 'List a campaign’s fan-out conditions',
+    description: 'Read the proposed / approved / rejected conditions on a campaign, as plain-language sentences, before approving or fanning out.',
+    inputSchema: {
+      campaign: z.string().describe('The campaign whose conditions to list'),
+    },
+  },
+  async (a) => text(await dispatch('listConditions', a)),
+)
+
+server.registerTool(
+  'set_condition_status',
+  {
+    title: 'Approve or reject a fan-out condition',
+    description:
+      'Approve, reject, or reset a proposed condition. Only approved conditions repoint a variant’s proof/hook/CTA or prune the combination during the next fan-out / generation.',
+    inputSchema: {
+      campaign: z.string().describe('The campaign the condition belongs to'),
+      id: z.string().describe('The condition id (from propose_conditions / list_conditions)'),
+      status: z.enum(['approved', 'rejected', 'proposed']).describe('approved = it shapes copy; rejected = ignored; proposed = back to pending'),
+    },
+  },
+  async (a) => text(await dispatch('setConditionStatus', a)),
+)
+
+server.registerTool(
+  'get_brand_baseline',
+  {
+    title: 'Read a brand’s coherence baseline',
+    description:
+      'The brand a canvas measures against: the voice and proof set in force and where they come from (the brand itself, an inherited parent, an explicitly shared library). Generation and the coherence check read ONLY this scope — nothing else can cross the brand boundary.',
+    inputSchema: {
+      brand: z.string().describe('The brand (client) to inspect'),
+    },
+  },
+  async (a) => text(await dispatch('getBrandBaseline', a)),
+)
+
+server.registerTool(
+  'set_brand_parent',
+  {
+    title: 'Set a brand’s parent (inherit up the tree)',
+    description:
+      'Bind a sub-brand to a parent so it inherits the parent’s proof / values / audiences, overriding voice and its own assets locally. Pass an empty parent to detach. Cycles and self-parenting are rejected.',
+    inputSchema: {
+      brand: z.string().describe('The sub-brand'),
+      parent: z.string().describe('The parent brand (empty string to clear)'),
+    },
+  },
+  async (a) => text(await dispatch('setBrandParent', a)),
+)
+
+server.registerTool(
+  'set_brand_share',
+  {
+    title: 'Explicitly share a library between brands',
+    description:
+      'Attach (on=true) or detach (on=false) another brand’s library as a shared source for this brand — the only deliberate way assets cross between unrelated brands. Default isolation otherwise.',
+    inputSchema: {
+      brand: z.string().describe('The brand that pulls the shared library in'),
+      share: z.string().describe('The brand whose library is shared in'),
+      on: z.boolean().optional().describe('true to attach (default), false to detach'),
+    },
+  },
+  async (a) => text(await dispatch('setBrandShare', a)),
+)
+
+server.registerTool(
+  'set_brand_draft',
+  {
+    title: 'Mark a brand a draft (sketch)',
+    description:
+      'Flag a brand as a lightweight draft so users can experiment before committing, or clear the flag. A draft brand is a real, isolated binding (it can generate) — not a brand-less canvas.',
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+      draft: z.boolean().optional().describe('true to mark draft (default), false to clear'),
+    },
+  },
+  async (a) => text(await dispatch('setBrandDraft', a)),
+)
+
+server.registerTool(
+  'promote_brand',
+  {
+    title: 'Promote a draft brand to a real brand',
+    description: 'Promote a draft brand into a real brand, optionally renaming it, carrying its library, profile, and campaigns onto the new name.',
+    inputSchema: {
+      brand: z.string().describe('The draft brand to promote'),
+      realName: z.string().optional().describe('The real brand name (omit to keep the same name and just clear the draft flag)'),
+    },
+  },
+  async (a) => text(await dispatch('promoteBrand', a)),
+)
+
 await server.connect(new StdioServerTransport())

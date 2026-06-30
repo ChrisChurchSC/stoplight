@@ -1,10 +1,10 @@
-import { TIMING_BY_KEY } from '../domain/timing'
 import { can } from '../domain/access'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rowInScope } from '../lib/scope'
 import { usePresence } from '../lib/usePresence'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { BrandTabs } from './BrandTabs'
+import { CanvasFrameBar } from './CanvasFrameBar'
 
 export function Breadcrumb() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -22,6 +22,8 @@ export function Breadcrumb() {
   const openHistory = useTrafficStore((s) => s.openHistory)
   const openCommentInbox = useTrafficStore((s) => s.openCommentInbox)
   const comments = useTrafficStore((s) => s.comments)
+  const brandNotice = useTrafficStore((s) => s.brandNotice)
+  const setBrandNotice = useTrafficStore((s) => s.setBrandNotice)
 
   // Comments needing a reply across posted assets in scope (drives the badge).
   const scopedPostedIds = new Set(
@@ -47,7 +49,6 @@ export function Breadcrumb() {
   const activeCampaign =
     campaignFilter !== 'all' ? campaignList.find((c) => c.name === campaignFilter) : undefined
   const timing = activeCampaign?.timing
-  const timingDef = timing ? TIMING_BY_KEY[timing] : undefined
 
   const overview = clientFilter === 'all'
   // The HyperFocus wordmark doubles as Home now that the global rail is gone.
@@ -66,13 +67,17 @@ export function Breadcrumb() {
       {/* Level 1 — the brand-layer tabs live up here in the top bar. At Level 2
           (inside a campaign) this is an empty spacer that keeps search centered. */}
       <div className="bc-left">
-        {campaignFilter === 'all' && (
+        {campaignFilter === 'all' ? (
           <>
             <button className="bc-logo" onClick={goHome} title="Home — back to all clients">
               HyperFocus
             </button>
             <BrandTabs />
           </>
+        ) : (
+          // Inside a campaign (the canvas), the frame that governs the whole board —
+          // Brand · Subject · Strategy — lives up here in the top bar.
+          <CanvasFrameBar />
         )}
       </div>
 
@@ -147,6 +152,14 @@ export function Breadcrumb() {
           </button>
         )}
       </div>
+      {brandNotice && (
+        <div className="bc-brand-notice" role="status">
+          <span>{brandNotice}</span>
+          <button className="bc-notice-x" onClick={() => setBrandNotice(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   )
 }

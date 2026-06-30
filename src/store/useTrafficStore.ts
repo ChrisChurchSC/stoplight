@@ -11,7 +11,7 @@ import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
-import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta } from '../domain/library'
+import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
@@ -61,8 +61,20 @@ import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { messagingFields, messagingAllText, messagingMap } from '../domain/messaging'
 import { composeMessaging } from '../domain/matrixDraft'
 import { ctaFor } from '../domain/matrix'
-import { funnelStageFor } from '../domain/funnel'
+import { funnelStageFor, FUNNEL_STAGES } from '../domain/funnel'
 import { dimensionField, dimensionValues, isPruned, planFanout, type FanoutPlan } from '../domain/fanout'
+import { proposeConditions as proposeConditionsDomain, resolveConditions, type FanCondition } from '../domain/conditions'
+import {
+  type BrandMeta,
+  type BrandMetaMap,
+  type BrandBaseline,
+  resolveBrandScope,
+  resolveBrandVoice,
+  brandBaseline,
+  ancestorsOf,
+  isBrandless,
+  isDraftBrand,
+} from '../domain/brand'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -496,6 +508,41 @@ function saveBrandSystems(map: Record<string, MessagingLibrary>): void {
     /* ignore */
   }
 }
+
+const CONDITIONS_KEY = 'stoplight.conditions.v1'
+function loadConditions(): Record<string, FanCondition[]> {
+  try {
+    const raw = localStorage.getItem(CONDITIONS_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, FanCondition[]>) : {}
+  } catch {
+    return {}
+  }
+}
+function saveConditions(map: Record<string, FanCondition[]>): void {
+  try {
+    localStorage.setItem(CONDITIONS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+// Brand tree + explicit sharing + draft flag, keyed by the same brand (client) name
+// used by brandSystems / clientProfiles. The hard boundary every canvas resolves through.
+const BRAND_META_KEY = 'stoplight.brandMeta.v1'
+function loadBrandMeta(): BrandMetaMap {
+  try {
+    const raw = localStorage.getItem(BRAND_META_KEY)
+    return raw ? (JSON.parse(raw) as BrandMetaMap) : {}
+  } catch {
+    return {}
+  }
+}
+function saveBrandMeta(map: BrandMetaMap): void {
+  try {
+    localStorage.setItem(BRAND_META_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
 /** A brand's system, defaulting to a fresh empty one (read-only — never mutates). */
 function libFor(map: Record<string, MessagingLibrary>, brand: string): MessagingLibrary {
   return map[brand] ?? emptyLibrary()
@@ -850,6 +897,12 @@ interface TrafficState {
   page: 'clients' | 'connectors' | 'billing' | 'library'
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
+  /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
+   *  hard boundary: generation/coherence resolve assets only from a brand's own scope
+   *  (self + ancestors + explicit shares). */
+  brandMeta: BrandMetaMap
+  /** Approved/proposed conditional rules per campaign (fan-out conditional logic). */
+  campaignConditions: Record<string, FanCondition[]>
   /** The brand whose system the Messaging page is viewing/editing. */
   messagingBrand: string
   setMessagingBrand: (brand: string) => void
@@ -857,7 +910,7 @@ interface TrafficState {
    *  audiences, proof, subjects, hooks, CTAs, strategies. The canvas reads the
    *  campaign's brand's system directly from brandSystems. */
   library: MessagingLibrary
-  addLibraryItem: (kind: LibraryKind, item: LibraryCta | Rtb | AudienceType | GtmStrategy) => void
+  addLibraryItem: (kind: LibraryKind, item: LibraryCta | Rtb | AudienceType | GtmStrategy | LibrarySubject | LibraryHook) => void
   /** Clear a brand's authored messaging (CTAs, proof, audiences, subjects, hooks);
    *  keeps the standard GTM strategies. Used to reset a polluted system. */
   resetBrandMessaging: (brand: string) => void
@@ -1152,6 +1205,9 @@ interface TrafficState {
    *  Null until a recheck is requested, so the heuristic is the default everywhere. */
   claudeBreaks: CoherenceBreak[] | null
   claudeBreaksScope: string | null
+  /** Which brand baseline the last coherence check measured against (voice + proof set
+   *  in force, and where it came from). The check reports its referent explicitly. */
+  coherenceBaseline: BrandBaseline | null
   coherenceChecking: boolean
   coherenceLive: boolean
   /** Content hash claudeBreaks were computed for — stale once content changes. */
@@ -1207,6 +1263,26 @@ interface TrafficState {
     values?: string[],
     opts?: { exclude?: Record<string, string>[]; generate?: boolean },
   ) => Promise<{ variantCount: number; created: number }>
+  /** Propose if/then conditions from the brand library (Claude/heuristic); human approves. */
+  proposeConditions: (campaign: string) => FanCondition[]
+  setConditionStatus: (campaign: string, id: string, status: 'proposed' | 'approved' | 'rejected') => void
+
+  // ---- Brand boundary (hard isolation; brand = the coherence baseline) ----
+  /** A transient notice when an action is refused because the canvas has no bound brand
+   *  (the brand-less / contamination failure mode). Cleared on the next bound action. */
+  brandNotice: string | null
+  setBrandNotice: (msg: string | null) => void
+  /** The inspectable baseline for a brand: which voice / proof set is in force and from
+   *  where (self + ancestors + shares). Drives the canvas baseline chip + coherence report. */
+  brandBaselineFor: (brand: string) => BrandBaseline
+  /** Set / clear a brand's parent (inherit the parent's proof / values / audiences). */
+  setBrandParent: (brand: string, parent: string | null) => void
+  /** Explicitly attach (or detach) another brand's library as a shared source. */
+  setBrandShare: (brand: string, share: string, on: boolean) => void
+  /** Mark a brand a lightweight draft (sketch) or clear the flag. */
+  setBrandDraft: (brand: string, draft: boolean) => void
+  /** Promote a draft brand into a real brand, optionally renaming, carrying its assets. */
+  promoteBrand: (draftBrand: string, realName?: string) => void
 
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
@@ -1353,6 +1429,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientAudiences: loadClientAudiences(),
   regenIds: new Set<string>(),
   brandSystems: loadBrandSystems(),
+  brandMeta: loadBrandMeta(),
+  brandNotice: null,
+  campaignConditions: loadConditions(),
   messagingBrand: '',
   library: emptyLibrary(),
   canvases: loadCanvases(),
@@ -1380,6 +1459,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   breakStatus: loadBreakStatus(),
   claudeBreaks: null,
   claudeBreaksScope: null,
+  coherenceBaseline: null,
   coherenceChecking: false,
   coherenceLive: false,
   coherenceCheckedHash: null,
@@ -2923,10 +3003,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const client = clientForCampaign(campaign)
     const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
     // Count over the leaves (what fanOut actually fans), so the preview matches reality
-    // when cards are stacked.
-    const parents = new Set(inCampaign.map((r) => (r.branchOf ?? '').trim()).filter(Boolean))
-    const base = inCampaign.filter((r) => !parents.has(r.assetName))
-    const vals = values && values.length ? values : dimensionValues(dimension, s.brandSystems[client], s.clientProfiles[client])
+    // when cards are stacked. A leaf = a card that isn't already a variant-master; a
+    // journey parent (branchOf) still counts as fannable.
+    const variantMasters = new Set(inCampaign.map((r) => (r.variantOf ?? '').trim()).filter(Boolean))
+    const base = inCampaign.filter((r) => !variantMasters.has(r.assetName))
+    const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
+    const vals = values && values.length ? values : dimensionValues(dimension, effective, s.clientProfiles[client])
     return planFanout(base, dimension, vals, exclude ?? [])
   },
 
@@ -2935,27 +3017,34 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const client = clientForCampaign(campaign)
     const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
     if (inCampaign.length === 0) return { variantCount: 0, created: 0 }
-    const vals = values && values.length ? values : dimensionValues(dimension, s.brandSystems[client], s.clientProfiles[client])
+    const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
+    const vals = values && values.length ? values : dimensionValues(dimension, effective, s.clientProfiles[client])
     if (vals.length === 0) return { variantCount: 0, created: 0 }
     const exclude = opts?.exclude ?? []
-    // Fan the LEAVES (assets not already a parent of a variant) so stacked cards push
-    // the tree DEEPER instead of re-fanning the masters.
-    const parents = new Set(inCampaign.map((r) => (r.branchOf ?? '').trim()).filter(Boolean))
-    const base = inCampaign.filter((r) => !parents.has(r.assetName))
+    // Approved conditions can prune combinations ("if audience = beach then skip winter").
+    const conditions = s.campaignConditions[campaign] ?? []
+    // Fan the LEAVES so stacked cards push the tree DEEPER instead of re-fanning the
+    // masters. A "master" here is a card that already has VARIANTS under it (variantOf),
+    // NOT a journey parent (branchOf) — so a journey step still fans, while a card you
+    // already fanned doesn't re-fan. (This is the fix for "some cards won't fan".)
+    const variantMasters = new Set(inCampaign.map((r) => (r.variantOf ?? '').trim()).filter(Boolean))
+    const base = inCampaign.filter((r) => !variantMasters.has(r.assetName))
     // One variant per (leaf x value), tagged with its full lineage. Each variant is a
-    // BRANCH of the leaf it came from, so the canvas fans them out horizontally (a fan,
-    // not a vertical stack) and the master stays as the anchor. The dimension also sets
-    // a real row field where it maps (audience, journey stage). Pruned combos are skipped.
+    // VARIANT of (not a branch off) the leaf — a personalization sibling that sits side
+    // by side with the master in the same stage, NOT a journey step. The dimension also
+    // sets a real row field where it maps (audience, journey stage). Pruned combos skip.
     const variants: TrafficRow[] = []
     for (const row of base) {
       for (const value of vals) {
         const lineage = { ...(row.lineage ?? {}), [dimension]: value }
         if (isPruned(lineage, exclude)) continue
+        if (resolveConditions({ audience: (row.audience ?? '').trim(), ...lineage }, conditions).exclude) continue
         variants.push({
           ...row,
           id: freshRowId(),
           assetName: `${row.assetName} · ${value}`,
-          branchOf: row.assetName, // fan off the master so the canvas spreads them
+          variantOf: row.assetName, // a personalization sibling, side by side with the master
+          branchOf: undefined, // NOT a journey link — variants don't draw a connecting edge
           messaging: {}, // cleared so generation writes per-variant copy
           rtbMap: undefined,
           format: undefined,
@@ -2975,6 +3064,153 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       await get().draftCopy()
     }
     return { variantCount: variants.length, created: variants.length }
+  },
+
+  proposeConditions: (campaign) => {
+    const s = get()
+    const client = clientForCampaign(campaign)
+    // Propose from the brand's EFFECTIVE library (own + inherited + shared), never a
+    // cross-brand or the merged Unassigned bucket.
+    const sys = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
+    const rows = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    // The dimension values actually present in the campaign (audience + lineage).
+    const present: Record<string, string[]> = {}
+    const add = (k: string, v: string) => {
+      if (!v) return
+      ;(present[k] ??= []).includes(v) || present[k].push(v)
+    }
+    for (const r of rows) {
+      add('audience', (r.audience ?? '').trim())
+      for (const [k, v] of Object.entries(r.lineage ?? {})) add(k, v)
+    }
+    const proposed = proposeConditionsDomain({
+      audiences: sys.audiences,
+      rtbs: sys.rtbs,
+      ctas: sys.ctas,
+      hooks: sys.hooks,
+      present,
+    })
+    // Keep a human's approve/reject across re-proposals; carry forward decisions for
+    // conditions no longer re-proposed.
+    const existing = s.campaignConditions[campaign] ?? []
+    const byId = new Map(existing.map((c) => [c.id, c]))
+    const merged: FanCondition[] = proposed.map((p) => {
+      const prev = byId.get(p.id)
+      return prev ? { ...p, status: prev.status } : p
+    })
+    for (const e of existing) if (!merged.some((m) => m.id === e.id) && e.status !== 'proposed') merged.push(e)
+    const campaignConditions = { ...s.campaignConditions, [campaign]: merged }
+    saveConditions(campaignConditions)
+    set({ campaignConditions })
+    return merged
+  },
+
+  setConditionStatus: (campaign, id, status) =>
+    set((s) => {
+      const list = (s.campaignConditions[campaign] ?? []).map((c) => (c.id === id ? { ...c, status } : c))
+      const campaignConditions = { ...s.campaignConditions, [campaign]: list }
+      saveConditions(campaignConditions)
+      return { campaignConditions }
+    }),
+
+  // ---- Brand boundary actions ----
+  setBrandNotice: (msg) => set({ brandNotice: msg }),
+
+  brandBaselineFor: (brand) => {
+    const s = get()
+    const effective = resolveBrandScope(brand, s.brandSystems, s.brandMeta)
+    const voice = resolveBrandVoice(
+      brand,
+      (b) => s.clientProfiles[b]?.voice ?? (s.brandGuides[b]?.confirmed ? s.brandGuides[b]?.guide?.voice : undefined),
+      s.brandMeta,
+    )
+    return brandBaseline(effective, voice, s.brandMeta)
+  },
+
+  setBrandParent: (brand, parent) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const p = parent?.trim()
+      // No self-parenting and no cycles (the new parent can't already descend from brand).
+      const wouldCycle = !!p && (p === b || ancestorsOf(p, s.brandMeta).includes(b))
+      const meta: BrandMeta = { ...(s.brandMeta[b] ?? {}) }
+      if (p && !wouldCycle) meta.parent = p
+      else delete meta.parent
+      const brandMeta = { ...s.brandMeta, [b]: meta }
+      saveBrandMeta(brandMeta)
+      return { brandMeta }
+    }),
+
+  setBrandShare: (brand, share, on) =>
+    set((s) => {
+      const b = brand.trim()
+      const sh = share.trim()
+      if (!b || !sh || sh === b) return {}
+      const meta: BrandMeta = { ...(s.brandMeta[b] ?? {}) }
+      const set0 = new Set(meta.shares ?? [])
+      if (on) set0.add(sh)
+      else set0.delete(sh)
+      meta.shares = [...set0]
+      if (!meta.shares.length) delete meta.shares
+      const brandMeta = { ...s.brandMeta, [b]: meta }
+      saveBrandMeta(brandMeta)
+      return { brandMeta }
+    }),
+
+  setBrandDraft: (brand, draft) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const meta: BrandMeta = { ...(s.brandMeta[b] ?? {}) }
+      if (draft) meta.draft = true
+      else delete meta.draft
+      const brandMeta = { ...s.brandMeta, [b]: meta }
+      saveBrandMeta(brandMeta)
+      return { brandMeta }
+    }),
+
+  promoteBrand: (draftBrand, realName) => {
+    const s = get()
+    const from = draftBrand.trim()
+    const to = (realName ?? draftBrand).trim()
+    if (!from) return
+    // Same name: just clear the draft flag in place.
+    if (to === from) {
+      s.setBrandDraft(from, false)
+      return
+    }
+    // Rename: carry the brand's library / profile / meta (minus draft) under the new
+    // name, repoint its campaigns, and drop the old draft key.
+    const brandSystems = { ...s.brandSystems }
+    if (brandSystems[from]) brandSystems[to] = brandSystems[from]
+    delete brandSystems[from]
+    const clientProfiles = { ...s.clientProfiles }
+    if (clientProfiles[from]) clientProfiles[to] = clientProfiles[from]
+    delete clientProfiles[from]
+    const brandMeta = { ...s.brandMeta }
+    const carried: BrandMeta = { ...(brandMeta[from] ?? {}) }
+    delete carried.draft
+    if (Object.keys(carried).length) brandMeta[to] = carried
+    delete brandMeta[from]
+    const clientList = s.clientList.map((c) => (c === from ? to : c)).filter((c, i, a) => a.indexOf(c) === i)
+    // Repoint campaigns from the draft brand onto the promoted brand.
+    const campaignList = s.campaignList.map((c) => (c.client === from ? { ...c, client: to } : c))
+    for (const c of campaignList) registerCampaign(c.name, c.client)
+    saveBrandSystems(brandSystems)
+    saveClientProfiles(clientProfiles)
+    saveBrandMeta(brandMeta)
+    saveClients(clientList)
+    saveCampaigns(campaignList)
+    set({
+      brandSystems,
+      clientProfiles,
+      brandMeta,
+      clientList,
+      campaignList,
+      clientFilter: s.clientFilter === from ? to : s.clientFilter,
+      messagingBrand: s.messagingBrand === from ? to : s.messagingBrand,
+    })
   },
 
   draftCopy: async (rowIds) => {
@@ -3003,15 +3239,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const rtbStore = loadCampaignRtbs()
       for (const [campaign, crows] of byCampaign) {
         const client = clientForCampaign(campaign)
+        // HARD BOUNDARY: a canvas must bind to a brand to generate. A brand-less
+        // (Unassigned) campaign is the contamination failure mode — refuse rather than
+        // read the shared catch-all bucket. A draft brand is a real, isolated binding.
+        if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
+          get().setBrandNotice(`Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`)
+          continue
+        }
         const brand = get().clientProfiles[client]
         const bg = get().brandGuides[client]
         const brandGuide = bg?.confirmed ? bg.guide : undefined
-        // The brand's messaging system supplies the four composition inputs:
-        // stage (derived), audience (assigned/derived), CTA seed, and proof.
-        const sys = get().brandSystems[client]
-        const libAudiences = sys?.audiences ?? []
-        const libCtas = sys?.ctas ?? []
-        const proofPool: Rtb[] = sys?.rtbs ?? []
+        // The brand's EFFECTIVE messaging system (its own assets + inherited from
+        // ancestors + explicitly shared) supplies the four composition inputs: stage
+        // (derived), audience (assigned/derived), CTA seed, and proof. Resolving through
+        // the brand scope is the ONLY read path — no other brand's assets can reach here.
+        const sys = resolveBrandScope(client, get().brandSystems, get().brandMeta).library
+        const libAudiences = sys.audiences
+        const libCtas = sys.ctas
+        const proofPool: Rtb[] = sys.rtbs
         // CTAs are VERBATIM from the brand's list and DISTRIBUTED across the set:
         // pick the globally least-used CTA, preferring a stage match among ties. This
         // caps repetition (no one CTA dominates) even when a stage has few CTAs, while
@@ -3030,17 +3275,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           ctaUse.set(chosen, (ctaUse.get(chosen) ?? 0) + 1)
           return chosen
         }
+        // Approved conditions repoint a variant's proof / CTA / hook by its lineage
+        // ("if audience = X then proof Y"). Resolved per row below.
+        const conditions = get().campaignConditions[campaign] ?? []
         const assets: DraftAsset[] = crows.map((r, i) => {
           const stage = funnelStageFor(r.channel, r.assetType)
           const aud =
             libAudiences.find((x) => x.name === r.audience) ??
             (libAudiences.length ? libAudiences[i % libAudiences.length] : undefined)
-          const proof = proofPool.length ? proofPool[i % proofPool.length] : undefined
+          const rotated = proofPool.length ? proofPool[i % proofPool.length] : undefined
           // Non-structural lineage (location, time, lifecycle, …) becomes copy context
           // so fanned variants localize and stay distinct. audience/journey are already
           // structural fields, so exclude them here.
           const context: Record<string, string> = {}
           for (const [k, val] of Object.entries(r.lineage ?? {})) if (k !== 'audience' && k !== 'journey') context[k] = val
+          // Apply approved conditions for this variant's context.
+          const journeyLabel = FUNNEL_STAGES.find((st) => st.stage === stage)?.label ?? ''
+          const cond = resolveConditions({ audience: (r.audience ?? '').trim(), journey: journeyLabel, ...(r.lineage ?? {}) }, conditions)
+          const proof = (cond.proofId && proofPool.find((p) => p.id === cond.proofId)) || rotated
           return {
             rowId: r.id,
             assetName: r.assetName,
@@ -3053,14 +3305,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
               : r.audience
                 ? { name: r.audience }
                 : undefined,
-            ctaSeed: pickCta(stage),
+            ctaSeed: cond.cta ?? pickCta(stage),
             proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
             context: Object.keys(context).length ? context : undefined,
+            hook: cond.hook,
             index: i,
           }
         })
         // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
-        const baseReq = { icp, campaign, brand, brandGuide, proofPool, hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean) }
+        const baseReq = { icp, campaign, brand, brandGuide, proofPool, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Anti-repetition: regenerate any unit whose headline / primary / CTA
         // collides across the campaign, so the set reads as distinct assets.
@@ -3191,8 +3444,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeBreaks: () => set({ breaksOpen: false, activeBreakId: null }),
 
   runCoherenceCheck: async () => {
-    const { rows, clientFilter, campaignFilter, icp, brandGuides, brandSystems, clientProfiles } = get()
+    const { rows, clientFilter, campaignFilter, icp, brandGuides, brandSystems, clientProfiles, brandMeta } = get()
     if (clientFilter === 'all') return
+    // The check needs a brand to measure against — a brand-less canvas has no spec.
+    if (isBrandless(clientFilter) && !isDraftBrand(clientFilter, brandMeta)) {
+      get().setBrandNotice('Bind this canvas to a brand to run the coherence check. The brand is the standard the check measures against.')
+      return
+    }
     // Coherence is a property of the whole campaign, not the filtered view — check
     // every in-scope asset (matches the Breaks queue + the continuous hash).
     const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
@@ -3202,12 +3460,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const brandGuide = brandGuides[clientFilter]?.confirmed ? brandGuides[clientFilter]?.guide : undefined
     // The brand's vocabulary feeds the deterministic floor (cross-brand contamination,
     // raw-field leaks, off-audience proof) so the check is real even with no Claude key.
-    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles)
+    // brandMeta resolves the EFFECTIVE baseline (own + inherited + shared) so inheritance
+    // is treated as the brand's own voice, never flagged as contamination.
+    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta)
+    const baseline = get().brandBaselineFor(clientFilter)
     try {
       const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })
       set({
         claudeBreaks: breaks,
         claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
+        coherenceBaseline: baseline,
         coherenceCheckedHash: coherenceContentHash(scoped),
         coherenceLive: live,
         // A fallback (live === false) means Claude is unavailable — stop auto-retrying.

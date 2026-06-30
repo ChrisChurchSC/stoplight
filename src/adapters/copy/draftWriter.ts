@@ -49,6 +49,8 @@ export interface DraftAsset {
    *  …) — the non-structural lineage. Copy is localized to it so variants of one base
    *  asset come out DISTINCT (not duplicate). */
   context?: Record<string, string>
+  /** A conditioned lead hook ("if audience = X then lead with …") — the copy opens on it. */
+  hook?: string
   /** Stable index in the batch — lets the heuristic vary deterministically. */
   index?: number
 }
@@ -183,6 +185,8 @@ interface Ctx {
   format: Fmt
   /** Personalization context (location, time, lifecycle, …) to localize copy to. */
   context: Record<string, string>
+  /** A conditioned lead hook — when set, the headline + body open on it. */
+  assetHook?: string
 }
 
 export class HeuristicCopyWriter implements CopyWriter {
@@ -230,6 +234,7 @@ export class HeuristicCopyWriter implements CopyWriter {
         i,
         format,
         context: a.context ?? {},
+        assetHook: a.hook?.trim() || undefined,
       }
       const roles = pickRoles(a.fields)
       // The field's position seeds its variant, so two same-role fields in one asset
@@ -282,9 +287,15 @@ function componentCopy(fl: MessagingField, ctx: Ctx, v: number): string {
   if (/subject/.test(k)) return localizeHead(subjectFor(ctx, v), ctx.context)
   if (/subhead|sub-head|subtitle/.test(k)) return localizeHead(descFor(ctx, v), ctx.context)
   if (/preview|desc/.test(k)) return localizeHead(descFor(ctx, v), ctx.context)
-  if (/headline|^h\d|title|long-headline/.test(k)) return localizeHead(ctx.format.head(ctx, ctx.i + v), ctx.context)
-  // primary / body / intro / post / caption / message … -> the chosen execution format.
-  return localizeBody(ctx.format.body(ctx, ctx.i + v), ctx.context)
+  if (/headline|^h\d|title|long-headline/.test(k)) {
+    // A conditioned hook leads the headline; otherwise the chosen format's headline.
+    const head = ctx.assetHook ? cap(ctx.assetHook) : ctx.format.head(ctx, ctx.i + v)
+    return localizeHead(head, ctx.context)
+  }
+  // primary / body / intro / post / caption / message … -> the chosen execution format,
+  // opened on the conditioned hook when one is set.
+  const body = ctx.format.body(ctx, ctx.i + v)
+  return localizeBody(ctx.assetHook ? `${cap(ctx.assetHook)}. ${body}` : body, ctx.context)
 }
 
 // ---- localization: weave the personalization context (location, time, lifecycle, …)
@@ -350,64 +361,76 @@ interface Fmt {
   body: (c: Ctx, r: number) => string
 }
 const pick = <T>(arr: T[], r: number): T => arr[r % arr.length]
+// What the audience is trying to reach — the positive of their pain, kept brand-neutral
+// so no industry's "good day" flavor leaks in. Composes from the brand's own angle/proof.
+const upside = (c: Ctx) => firstClause(c.angle || '') || lower(c.proof.label) || 'what good looks like'
+const who2 = (c: Ctx) => asPlural(c) || `${c.brandName} people`
+/**
+ * Creative EXECUTION formats — brand-NEUTRAL structural scaffolds. Each keeps its own
+ * shape (question, how-to, testimonial, …) but carries ONLY brand-supplied substance:
+ * the audience's real pains/role/angle, the verbatim proof, the one-liner. No industry
+ * flavor of any kind (no domain nouns, scenes, or jargon), so a nonprofit and a fishing
+ * brand get copy in THEIR own terms, never a borrowed voice. This is the contamination
+ * fix at the writer: substance comes from the bound brand, structure from the format.
+ */
 const FORMATS: Fmt[] = [
   {
     key: 'question',
-    head: (c, r) => (painAt(c, r) ? `${cap(painAt(c, r))} or a full day?` : `Know before you go?`),
+    head: (c, r) => (painAt(c, r) ? `${cap(painAt(c, r))}, or a better way?` : `Worth a closer look?`),
     body: (c, r) =>
-      `${painAt(c, r) ? `${cap(painAt(c, r))}? ` : ''}${pick(['Not this trip.', 'Not on your watch.', 'Skip it.'], r)} ${evidence(c)}, so you read the day before you run it.`,
+      `${painAt(c, r) ? `${cap(painAt(c, r))}? ` : ''}${pick(['Not anymore.', 'There is a better way.', 'It does not have to be.'], r)} ${evidence(c)}, so you can decide on the facts.`,
   },
   {
     key: 'how-to',
-    head: (_c, r) => pick([`3 checks before you leave the dock`, `Your pre-run checklist`, `Do this before you cast`], r),
+    head: (_c, r) => pick([`Start here`, `Where to begin`, `The first thing to get right`], r),
     body: (c, r) =>
-      `${pick(['Before you run, check', 'Two minutes before you cast, check', 'First thing each morning, read'], r)} ${lower(c.proof.label)}, watch the window, and skip the day that means ${painAt(c, r) || 'a wasted run'}.`,
+      `${pick(['Start with', 'First, look at', 'Begin with'], r)} ${lower(c.proof.label)}${angOf(c) ? `, ${lower(angOf(c))}` : ''}, and skip what leads to ${painAt(c, r) || 'wasted effort'}.`,
   },
   {
     key: 'testimonial',
-    head: (_c, r) => pick([`"Best call I make all morning"`, `"It paid for itself in a week"`, `"I don't run without it"`], r),
+    head: (_c, r) => pick([`"Best decision we made"`, `"It paid off fast"`, `"We don't work without it now"`], r),
     body: (c, r) =>
-      `"${pick(["I don't leave the ramp without", 'I never run a charter without', 'My first check every morning is'], r)} ${lower(c.proof.label)}. Haven't lost a day to ${painAt(c, r) || 'bad calls'} since."${c.role ? ` — a ${lower(c.role)}` : ''}`,
+      `"${pick(["We don't start without", 'Our first move is always', 'We lean on'], r)} ${lower(c.proof.label)}. Haven't lost ground to ${painAt(c, r) || 'the old way'} since."${c.role ? ` — a ${lower(c.role)}` : ''}`,
   },
   {
     key: 'myth-bust',
-    head: (_c, r) => pick([`You don't have to guess`, `Forget the old way`, `That's a myth`], r),
+    head: (_c, r) => pick([`You don't have to settle`, `Forget the old way`, `That's a myth`], r),
     body: (c, r) =>
-      `${pick(['Myth:', 'They say', 'Common wisdom:'], r)} ${painAt(c, r) || 'a blown run'} is just part of the job. Reality: ${lower(evidence(c))}, so it isn't.`,
+      `${pick(['Myth:', 'They say', 'Common wisdom:'], r)} ${painAt(c, r) || 'this'} is just the cost of doing it. Reality: ${lower(evidence(c))}, so it isn't.`,
   },
   {
     key: 'story',
-    head: (_c, r) => pick([`4am at the ramp`, `Out before sunrise`, `On the water by six`], r),
+    head: (_c, r) => pick([`The moment it changes`, `Here's the shift`, `Picture the difference`], r),
     body: (c, r) =>
-      `${pick(['Dark dock, wind picking up.', 'First light, water like glass.', 'Tide turning, the fleet still asleep.'], r)} One look at ${lower(c.proof.label)} and the call is easy. ${angOf(c) ? `${cap(angOf(c))}.` : `That's how ${asPlural(c)} run a good day.`}`,
+      `${pick([`${cap(who2(c))} used to face ${painAt(c, r) || 'the same problem'} every time.`, `It starts the same way for most ${who2(c)}.`, `${cap(painAt(c, r) || 'The hard part')} used to be the price of entry.`], r)} Then ${lower(c.proof.label)} changes it. ${angOf(c) ? `${cap(angOf(c))}.` : `That's how ${who2(c)} get ahead.`}`,
   },
   {
     key: 'stat',
     head: (c) => cap(c.proof.label),
     body: (c, r) =>
-      `${evidence(c)}. ${pick(['The line between', 'The difference between', 'What separates'], r)} a full day and ${painAt(c, r) || 'a wasted run'}.`,
+      `${evidence(c)}. ${pick(['The line between', 'The difference between', 'What separates'], r)} ${lower(upside(c))} and ${painAt(c, r) || 'standing still'}.`,
   },
   {
     key: 'psa',
-    head: (c) => `Heads up, ${asPlural(c)}`,
+    head: (c) => `Heads up, ${who2(c)}`,
     body: (c, r) =>
-      `${pick(['Conditions turn fast.', 'The weather does not wait.', 'It changes by the hour out there.'], r)} ${evidence(c)} means you're not guessing on ${painAt(c, r) || 'the window'}.`,
+      `${pick(['Things change fast.', 'The ground keeps shifting.', 'It moves quickly.'], r)} ${evidence(c)} means you're not guessing on ${painAt(c, r) || 'what matters'}.`,
   },
   {
     key: 'before-after',
     head: (_c, r) => pick([`Before and after`, `Old way vs new`, `Then and now`], r),
     body: (c, r) =>
-      `${pick(['Before:', 'Old way:', 'Last season:'], r)} ${painAt(c, r) || 'guesswork'}${pain2At(c, r) ? `, ${pain2At(c, r)}` : ''}. ${pick(['After:', 'New way:', 'This season:'], r)} ${lower(evidence(c))}.`,
+      `${pick(['Before:', 'Old way:', 'Until now:'], r)} ${painAt(c, r) || 'guesswork'}${pain2At(c, r) ? `, ${pain2At(c, r)}` : ''}. ${pick(['After:', 'New way:', 'Now:'], r)} ${lower(evidence(c))}.`,
   },
   {
     key: 'one-liner',
-    head: (c, r) => (angOf(c) ? cap(angOf(c)) : pick([`Read the water`, `Know the window`, `Run on the facts`], r)),
+    head: (c, r) => (angOf(c) ? cap(angOf(c)) : pick([`A clearer way`, `Built on proof`, `Facts over guesswork`], r)),
     body: (c, r) =>
       pick(
         [
-          `Know the window. Run the day. ${cap(c.proof.label)}.`,
-          `${cap(angOf(c) || 'Read the water, not the guesswork')}. ${cap(c.proof.label)}.`,
-          `Less ${painAt(c, r) || 'guesswork'}. More time fishing. ${cap(c.proof.label)}.`,
+          `${cap(upside(c))}. Backed by ${lower(c.proof.label)}.`,
+          `${cap(angOf(c) || c.oneLiner || 'Clarity over guesswork')}. ${cap(c.proof.label)}.`,
+          `Less ${painAt(c, r) || 'guesswork'}. More of what works. ${cap(c.proof.label)}.`,
         ],
         r,
       ),
@@ -420,7 +443,7 @@ function descFor(ctx: Ctx, v: number): string {
   const pain = painAt(ctx, r)
   const pool = [
     ...ctx.hooks.map((h) => h.replace(/[.!?]+$/, '')),
-    pain ? `Less ${pain}, more good days` : '',
+    pain ? `Less ${pain}, more of what works` : '',
     ctx.angle ? firstClause(ctx.angle) : '',
     ctx.proof.detail?.trim() || ctx.proof.label,
   ].filter(Boolean)
@@ -432,7 +455,7 @@ function subjectFor(ctx: Ctx, v: number): string {
   const pain = painAt(ctx, r)
   const pool = [
     ...ctx.hooks.map((h) => cap(h).replace(/[.!?]+$/, '')),
-    pain ? `${cap(pain)}? Here's the read` : '',
+    pain ? `${cap(pain)}? Here's the fix` : '',
     ctx.angle ? cap(firstClause(ctx.angle)) : '',
     cap(ctx.proof.label),
   ].filter(Boolean)

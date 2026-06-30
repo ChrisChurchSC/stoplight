@@ -61,18 +61,16 @@ const BAND_BOTTOM_PAD = 120
 // The spine — Brand → Subject → Strategy → Audience — stacks compactly down the top
 // of the canvas as labelled CARDS (each carries its own tag), not full-width bands;
 // only the funnel stages below get labelled lane-bands (where a card's row encodes
-// its stage). These Y's stack the spine tightly so the funnel starts high.
-const BRAND_Y = 20
-// The Frame card folds Subject + Strategy into one two-row card just below the
-// Brand pill; the audience lanes + funnel follow.
-const FRAME_Y = 72
-const FRAME_H = 150
-const AUD_Y = 250
-const MSG_Y = 450
+// its stage). These Y's stack the lanes tightly so the funnel starts high.
+// Brand / Subject / Strategy (the canvas frame) now live in the TOP BAR — they govern
+// the whole board, so they're not cards on the work surface. The audience lanes are the
+// canvas roots, starting at the top.
+const AUD_Y = 20
+const MSG_Y = 220
 
 interface Node {
   id: string
-  kind: 'root' | 'brand' | 'frame' | 'audience' | 'message' | 'add'
+  kind: 'root' | 'audience' | 'message' | 'add'
   x: number
   y: number
   w: number
@@ -82,9 +80,6 @@ interface Node {
   row?: TrafficRow
   brk?: CoherenceBreak
   flaggedCount?: number
-  /** The 'frame' card folds Subject + Strategy into one two-row card (each row keeps
-   *  its own swap control). */
-  frame?: { subjectText: string; subjectSub?: string; strategyName: string; strategySub?: string }
   /** For 'add' ghost cells: which lane + funnel stage a new card would land in,
    *  and whether the cell is currently empty (so it reads as the obvious next move). */
   addAudience?: string
@@ -129,20 +124,12 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const campaignList = useTrafficStore((s) => s.campaignList)
-  const setCampaignStrategy = useTrafficStore((s) => s.setCampaignStrategy)
-  const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
-  const setCampaignClient = useTrafficStore((s) => s.setCampaignClient)
   const duplicateCampaign = useTrafficStore((s) => s.duplicateCampaign)
   const swapCampaignAudience = useTrafficStore((s) => s.swapCampaignAudience)
   const clearRecheckFlag = useTrafficStore((s) => s.clearRecheckFlag)
-  const clientList = useTrafficStore((s) => s.clientList)
-  const redraftAssets = useTrafficStore((s) => s.redraftAssets)
   const regenIds = useTrafficStore((s) => s.regenIds)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
-  // The campaign's brand owns its messaging system — read that brand's subjects for
-  // the reuse menu (not whatever the Messaging page happens to be viewing).
-  const brandLibrary = useTrafficStore((s) => s.brandSystems[clientFilter])
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const claudeBreaks = useTrafficStore((s) => s.claudeBreaks)
   const claudeBreaksScope = useTrafficStore((s) => s.claudeBreaksScope)
@@ -199,12 +186,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // The add-asset flow: pick the funnel part → channel → asset type. `stage` and
   // `channel` fill in as you advance; the empty-lane seed pre-sets `stage`.
   const [addMenu, setAddMenu] = useState<{ audience: string; x: number; y: number; stage?: FunnelStage; channel?: ChannelId } | null>(null)
-  // The Strategy card is a playbook selector — click it to pick a GTM motion
-  // (ABM, Demand Gen, etc.) and link it to this campaign.
-  const [stratMenu, setStratMenu] = useState<{ campaign: string; current: string; x: number; y: number } | null>(null)
-  // Swap a spine card's value (Brand / Subject / Audience) — interchangeable like
-  // the Strategy playbook picker. `audience` is the lane being swapped.
-  const [frameMenu, setFrameMenu] = useState<{ kind: 'brand' | 'subject' | 'audience'; x: number; y: number; audience?: string } | null>(null)
+  // Swap a lane's audience — the Brand / Subject / Strategy frame now lives in the top
+  // bar (CanvasFrameBar); only the per-lane audience swap remains on the canvas.
+  const [frameMenu, setFrameMenu] = useState<{ kind: 'audience'; x: number; y: number; audience?: string } | null>(null)
   // A pending high-blast-radius frame change (strategy / brand / audience swap)
   // awaiting confirmation. It re-checks everything built on it, so we preview the
   // consequence (how many assets, editable-vs-produced split) before committing —
@@ -260,7 +244,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // The "write a new CTA" / "write a new proof" inputs inside the pill menus.
   const ctaInputRef = useRef<HTMLInputElement>(null)
   const proofInputRef = useRef<HTMLInputElement>(null)
-  const subjectInputRef = useRef<HTMLInputElement>(null)
   // Where the pointer went down, to tell a click on the canvas (start a new asset)
   // from a pan (move the view).
   const downAt = useRef<{ x: number; y: number } | null>(null)
@@ -405,8 +388,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // both what each card renders and how much vertical room the layout reserves.
   const detail = vp.s >= DETAIL_ZOOM
 
-  const { nodes, edges, bands, audienceSlabs, campaignName, strategyName, bounds } = useMemo(() => {
-    const client = clientFilter !== 'all' ? clientFilter : ''
+  const { nodes, edges, bands, audienceSlabs, campaignName, bounds } = useMemo(() => {
     // A freshly-created canvas has no rows yet, so fall back to the scoped campaign
     // so its spine + lanes still render (and it's addable) before the first asset.
     const campaignNames = scoped.length
@@ -416,19 +398,12 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         : []
     const campObj = campaignList.find((c) => campaignNames.includes(c.name))
     const strat = campObj?.strategy ?? 'Campaign'
-    const subjectText = campObj?.subject?.trim() || campaignNames[0] || 'This campaign'
-    const objective = campObj?.objective?.trim() || ''
-    const rootLabel = client || (campaignNames[0] ?? 'Campaign')
-    // The strategy is one of the GTM marketing plans we've already authored —
-    // resolve the campaign's strategy to its plan so the card shows the real plan
-    // (its stage flow), not just a loose label.
+    // The strategy is one of the GTM marketing plans we've already authored — resolve
+    // the campaign's strategy to its plan so the funnel bands take the plan's stage flow.
     const stratKey = (campObj?.strategy ?? '').trim().toLowerCase()
     const stratPlan = GTM_STRATEGIES.find(
       (s) => s.key === stratKey || s.name.toLowerCase() === strat.trim().toLowerCase(),
     )
-    const strategySub = stratPlan
-      ? `Plan · ${stratPlan.sequence}`
-      : objective || 'Set a strategy from a marketing plan'
     // The funnel bands take the linked playbook's own sequence (ABM → Engage,
     // Convert; Demand Gen → Visitor … Closed). An authored playbook maps each
     // channel precisely onto its named stages (a lead magnet lands in "Lead",
@@ -530,8 +505,17 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     const laid = audiences.map(([name, msgs]) => {
       const byName = new Map<string, TrafficRow>()
       for (const r of msgs) if (!byName.has(r.assetName)) byName.set(r.assetName, r)
-      const parentOf = (r: TrafficRow) =>
+      // Two kinds of parent link, laid out differently:
+      //  - branchOf: a JOURNEY step. The child flows forward to a later stage and draws
+      //    a connecting edge (a downward fork).
+      //  - variantOf: a personalization VARIANT. The child is a sibling of its master in
+      //    the SAME stage — it sits side by side, flat, with no connecting edge.
+      const branchParentOf = (r: TrafficRow) =>
         r.branchOf && byName.has(r.branchOf) && r.branchOf !== r.assetName ? r.branchOf : null
+      const variantParentOf = (r: TrafficRow) =>
+        r.variantOf && byName.has(r.variantOf) && r.variantOf !== r.assetName ? r.variantOf : null
+      const parentOf = (r: TrafficRow) => branchParentOf(r) ?? variantParentOf(r)
+      const isVariantLink = (r: TrafficRow) => !branchParentOf(r) && !!variantParentOf(r)
       const hasBranches = msgs.some((r) => parentOf(r) !== null)
       // The visible band (playbook phase) a card lands in. A journey only flows
       // FORWARD, so a card never lands in an earlier band than its parent —
@@ -572,21 +556,25 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         placed = msgs.map((r) => ({ row: r, stage: phaseOf(r), laneX: 0, h: cardHeight(r), relY: 0 }))
         lanes = 1
       } else {
-        // Tidy-tree lanes: each leaf takes the next lane; a parent centres over its
-        // children. Children that change stage drop into the next band; same-stage
-        // forks spread sideways in the same band.
-        const childrenOf = new Map<string, TrafficRow[]>()
+        // Tidy-tree lanes: each leaf takes the next lane; a JOURNEY parent centres over
+        // its branch children (which drop into the next band). VARIANTS are different —
+        // they sit side by side to the RIGHT of their master in the same band (a flat
+        // fan), so the master is NOT centred over them.
+        const branchChildren = new Map<string, TrafficRow[]>()
+        const variantChildren = new Map<string, TrafficRow[]>()
         const roots: TrafficRow[] = []
         for (const r of msgs) {
-          const p = parentOf(r)
-          if (p) (childrenOf.get(p) ?? childrenOf.set(p, []).get(p)!).push(r)
+          const bp = branchParentOf(r)
+          const vp = variantParentOf(r)
+          if (bp) (branchChildren.get(bp) ?? branchChildren.set(bp, []).get(bp)!).push(r)
+          else if (vp) (variantChildren.get(vp) ?? variantChildren.set(vp, []).get(vp)!).push(r)
           else roots.push(r)
         }
         roots.sort(ord)
         let leaf = 0
         const laneOf = new Map<string, number>()
         // `assigning` is the recursion stack — if we re-enter a node mid-recursion
-        // the branchOf links form a cycle, so we break it by treating the node as a
+        // the parent links form a cycle, so we break it by treating the node as a
         // leaf instead of recursing forever.
         const assigning = new Set<string>()
         const assign = (r: TrafficRow): number => {
@@ -597,7 +585,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             return l
           }
           assigning.add(r.id)
-          const kids = (childrenOf.get(r.assetName) ?? []).slice().sort(ord)
+          const kids = (branchChildren.get(r.assetName) ?? []).slice().sort(ord)
           let lane: number
           if (!kids.length) {
             lane = leaf
@@ -607,6 +595,10 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             lane = ls.reduce((s, x) => s + x, 0) / ls.length
           }
           laneOf.set(r.id, lane)
+          // Variants of this card fan out to the RIGHT, each taking the next lane (same
+          // tier — the relY pass keeps them flush with the master). They recurse so a
+          // stacked fan (Audience x Location) keeps spreading sideways.
+          for (const v of (variantChildren.get(r.assetName) ?? []).slice().sort(ord)) assign(v)
           assigning.delete(r.id)
           return lane
         }
@@ -653,11 +645,16 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         hById.set(pl.row.id, pl.h)
         const pn = parentOf(pl.row)
         const parent = pn ? byName.get(pn) : undefined
-        // A direct same-stage child still steps a full TIER_GAP below its parent.
-        const tierBelow =
-          parent && relY.has(parent.id) && phaseOf(parent) === pl.stage
-            ? relY.get(parent.id)! + (hById.get(parent.id) ?? MSG_H) + TIER_GAP
-            : 0
+        // A same-stage JOURNEY child steps a full TIER_GAP below its parent (the fork
+        // reads as a downward step). A VARIANT instead sits at the SAME tier as its
+        // master — flush, side by side — since it's a personalization sibling, not a
+        // next step. Collision avoidance below keeps it in its own lane.
+        const sameBandParent = parent && relY.has(parent.id) && phaseOf(parent) === pl.stage
+        const tierBelow = !sameBandParent
+          ? 0
+          : isVariantLink(pl.row)
+            ? relY.get(parent!.id)!
+            : relY.get(parent!.id)! + (hById.get(parent!.id) ?? MSG_H) + TIER_GAP
         let y = Math.max(0, tierBelow)
         const rects = bandRects.get(pl.stage) ?? []
         // Push down until this card clears every card already placed in the band
@@ -718,29 +715,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       acc += bandH[si]
     }
 
-    // The spine, centred over the whole board: Brand pill → Frame (Subject +
-    // Strategy in one card) → (audiences). Brand is the constant account anchor.
-    const subjectSub = campaignNames[0] && campaignNames[0] !== subjectText ? campaignNames[0] : objective
-    const brandPos = at('brand', totalW / 2 - NODE_W / 2, BRAND_Y)
-    ns.push({ id: 'brand', kind: 'brand', x: brandPos.x, y: brandPos.y, w: NODE_W, h: 40, label: rootLabel, sub: '' })
-    const framePos = at('frame', totalW / 2 - NODE_W / 2, FRAME_Y)
-    ns.push({
-      id: 'frame',
-      kind: 'frame',
-      x: framePos.x,
-      y: framePos.y,
-      w: NODE_W,
-      h: FRAME_H,
-      label: subjectText,
-      frame: {
-        subjectText,
-        subjectSub: subjectSub || undefined,
-        strategyName: stratPlan?.name ?? strat,
-        strategySub: strategySub || undefined,
-      },
-    })
-    et.push({ fromId: 'brand', toId: 'frame', broken: false, kind: 'strategy' })
-
+    // Brand · Subject · Strategy (the canvas frame) govern the whole board, so they
+    // live in the TOP BAR (see CanvasFrameBar), not as cards here. The audience lanes
+    // are the canvas roots.
     laid.forEach((p, i) => {
       const slabStart = slabX[i]
       const slabCenter = slabStart + p.slabW / 2
@@ -759,7 +736,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           : 'Empty lane · add an entry, then branch',
         flaggedCount: flagged,
       })
-      et.push({ fromId: 'frame', toId: `aud-${p.name}`, broken: false, kind: 'strategy' })
       if (collapsed.has(p.name)) return
       // An empty lane gets ONE entry seed at the top of the funnel — the journey's
       // root. Everything downstream is added by branching, so the canvas grows as a
@@ -798,9 +774,11 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           row: pl.row,
           brk,
         })
-        // Connect the audience only to its entry roots; branched cards hang off
-        // their parent via the journey edge below, so the tree reads cleanly.
-        const isRoot = !(pl.row.branchOf && byName.has(pl.row.branchOf) && pl.row.branchOf !== pl.row.assetName)
+        // Connect the audience only to its entry roots. A journey branch hangs off its
+        // parent via the journey edge below; a variant sits beside its master with no
+        // edge at all — neither connects to the audience header.
+        const hasParent = (link?: string) => !!link && byName.has(link) && link !== pl.row.assetName
+        const isRoot = !hasParent(pl.row.branchOf) && !hasParent(pl.row.variantOf)
         if (isRoot) et.push({ fromId: `aud-${p.name}`, toId: pl.row.id, broken: !!brk, kind: 'message' })
       }
     })
@@ -863,7 +841,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       bands,
       audienceSlabs,
       campaignName: campObj?.name ?? campaignNames[0] ?? '',
-      strategyName: strat,
       bounds: { w: maxX, h: bandBottom },
     }
   }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientAudiences, clientFilter, moved, detail, comments, scopeKeyDep])
@@ -936,7 +913,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     if (addMenu) setAddMenu(null)
     if (pillMenu) setPillMenu(null)
     if (recheckMenu) setRecheckMenu(null)
-    if (stratMenu) setStratMenu(null)
     if (frameMenu) setFrameMenu(null)
     if (frameChange) setFrameChange(null)
     if (restageConfirm) setRestageConfirm(null)
@@ -1603,9 +1579,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                 // A click on a message card just selects/picks it up (the drag is
                 // handled on mousedown); editing is via the ✎ button, bottom-right.
                 if (n.kind === 'message') setSelected(n.id)
-                // Spine cards are interchangeable — click to swap their value. The
-                // Frame card's two rows handle their own clicks (Subject / Strategy).
-                else if (n.kind === 'brand' && campaignName) setFrameMenu({ kind: 'brand', x: e.clientX, y: e.clientY })
+                // Click an audience lane to swap its audience (Brand / Subject / Strategy
+                // now live in the top bar).
                 else if (n.kind === 'audience') setFrameMenu({ kind: 'audience', audience: n.label, x: e.clientX, y: e.clientY })
               }}
             >
@@ -1628,46 +1603,11 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   <ChannelIcon channel={n.row.channel} size={18} />
                 </span>
               )}
-              {n.kind === 'frame' && n.frame ? (
-                <div className="cv-frame-card">
-                  <button
-                    className="cv-frame-row"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (campaignName) setFrameMenu({ kind: 'subject', x: e.clientX, y: e.clientY })
-                    }}
-                  >
-                    <span className="cv-node-tag">Subject</span>
-                    <span className="cv-frame-row-line">
-                      <span className="cv-node-label-name">{n.frame.subjectText}</span>
-                      <span className="cv-node-playbook">Swap ▾</span>
-                    </span>
-                    {n.frame.subjectSub && <span className="cv-node-sub">{n.frame.subjectSub}</span>}
-                  </button>
-                  <button
-                    className="cv-frame-row"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (campaignName) setStratMenu({ campaign: campaignName, current: strategyName, x: e.clientX, y: e.clientY })
-                    }}
-                  >
-                    <span className="cv-node-tag">Strategy</span>
-                    <span className="cv-frame-row-line">
-                      <span className="cv-node-label-name">{n.frame.strategyName}</span>
-                      <span className="cv-node-playbook">Playbook ▾</span>
-                    </span>
-                    {n.frame.strategySub && <span className="cv-node-sub">{n.frame.strategySub}</span>}
-                  </button>
-                </div>
-              ) : (
+              {(
               <div className="cv-node-body">
                 {n.kind === 'audience' && <span className="cv-node-tag">Audience</span>}
                 <div className="cv-node-label">
-                  {n.kind === 'brand' && <span className="cv-node-tag cv-node-tag-inline">Brand</span>}
                   <span className="cv-node-label-name">{n.label}</span>
-                  {n.kind === 'brand' && <span className="cv-node-playbook">Swap ▾</span>}
                   {n.kind === 'message' && n.row?.recheckFlag && (
                     <button
                       className="cv-node-recheck"
@@ -2050,149 +1990,10 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           </div>
         )}
 
-        {/* Playbook picker — the Strategy card is a GTM-motion selector. Pick a
-            playbook (ABM, Demand Gen, etc.) and it links to this campaign, so the
-            card resolves to the plan's stage flow. */}
-        {stratMenu && (
-          <div
-            className="cv-branch-menu cv-strat-menu"
-            style={menuStyle(stratMenu.x, stratMenu.y)}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="cv-branch-head">Strategy playbook · {stratMenu.campaign}</div>
-            {GTM_STRATEGIES.map((s) => {
-              const active = s.name.toLowerCase() === stratMenu.current.trim().toLowerCase() || s.key === stratMenu.current.trim().toLowerCase()
-              return (
-                <button
-                  key={s.key}
-                  className={`cv-strat-opt${active ? ' active' : ''}`}
-                  onClick={(e) => {
-                    const x = e.clientX
-                    const y = e.clientY
-                    const campaign = stratMenu.campaign
-                    setStratMenu(null)
-                    if (active) return // no-op: already on this playbook
-                    // Don't commit yet — preview the blast radius before committing.
-                    const campRows = rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
-                    previewFrameChange(
-                      `Change strategy to ${s.name}?`,
-                      campaign,
-                      campRows,
-                      (c) => setCampaignStrategy(c, s.name),
-                      x,
-                      y,
-                    )
-                  }}
-                >
-                  <span className="cv-strat-opt-name">
-                    {s.name}
-                    {active && <span className="cv-strat-opt-check">✓</span>}
-                  </span>
-                  <span className="cv-strat-opt-seq">{s.sequence}</span>
-                </button>
-              )
-            })}
-            <button className="cv-branch-cancel" onClick={() => setStratMenu(null)}>
-              Cancel
-            </button>
-          </div>
-        )}
 
-        {/* Spine-card swap menu — Brand / Subject / Audience are interchangeable. */}
+        {/* Audience-lane swap menu (Brand / Subject / Strategy live in the top bar). */}
         {frameMenu && (
           <div className="cv-branch-menu cv-strat-menu" style={menuStyle(frameMenu.x, frameMenu.y)} onMouseDown={(e) => e.stopPropagation()}>
-            {frameMenu.kind === 'brand' && (
-              <>
-                <div className="cv-branch-head">Swap the brand</div>
-                {clientList
-                  .filter((c) => c.trim())
-                  .map((c) => {
-                    const on = c === clientFilter
-                    return (
-                      <button
-                        key={c}
-                        className={`cv-branch-opt${on ? ' added' : ''}`}
-                        onClick={(e) => {
-                          const x = e.clientX, y = e.clientY
-                          setFrameMenu(null)
-                          if (on || !campaignName) return
-                          // Re-homing the campaign is the widest-blast change — preview it.
-                          const campRows = rows.filter((r) => (r.campaign ?? '').trim() === campaignName.trim())
-                          // Re-check each asset's proof against the new brand's proof set.
-                          const newProofs = new Set(
-                            (clientAudiences[c] ?? []).flatMap((au) => [...(au.rtbEmphasis ?? []), ...(au.rtbs ?? []).map((x) => x.id)]),
-                          )
-                          const holds = (r: TrafficRow) => {
-                            const ids = assetRtbIds(r)
-                            return ids.length === 0 || ids.every((id) => newProofs.has(id))
-                          }
-                          previewFrameChange(`Swap brand to ${c}?`, campaignName, campRows, (camp) => setCampaignClient(camp, c), x, y, holds)
-                        }}
-                      >
-                        <span className="cv-branch-ch">▤ {c}</span>
-                        <span className="cv-branch-mark">{on ? '✓ current' : 'Use'}</span>
-                      </button>
-                    )
-                  })}
-                <button className="cv-branch-cancel" onClick={() => setFrameMenu(null)}>Cancel</button>
-              </>
-            )}
-            {frameMenu.kind === 'subject' && (
-              <>
-                <div className="cv-branch-head">Swap the subject</div>
-                <div className="cv-pill-add">
-                  <input
-                    ref={subjectInputRef}
-                    className="cv-pill-input"
-                    placeholder="What it's about…"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => {
-                      e.stopPropagation()
-                      if (e.key === 'Enter') {
-                        const v = e.currentTarget.value.trim()
-                        if (v && campaignName) { setCampaignSubject(campaignName, v); setFrameMenu(null) }
-                      }
-                    }}
-                  />
-                  <button
-                    className="cv-pill-add-btn"
-                    onClick={() => {
-                      const v = subjectInputRef.current?.value.trim()
-                      if (v && campaignName) { setCampaignSubject(campaignName, v); setFrameMenu(null) }
-                    }}
-                  >
-                    Set
-                  </button>
-                </div>
-                {(() => {
-                  // Reusable subjects = approved library masters + subjects already in
-                  // use on this client's campaigns, deduped. Pulling a library subject
-                  // onto a campaign is the instance side of master→instance propagation.
-                  const libSubjects = (brandLibrary?.subjects ?? [])
-                    .filter((s) => s.approved !== false)
-                    .map((s) => s.text.trim())
-                  const campSubjects = campaignList.map((c) => c.subject?.trim() ?? '')
-                  const subjects = [...new Set([...libSubjects, ...campSubjects].filter(Boolean))]
-                  if (subjects.length === 0) return null
-                  return (
-                    <>
-                      <div className="cv-branch-head">Or reuse one</div>
-                      {subjects.map((subj) => (
-                        <button
-                          key={subj}
-                          className="cv-branch-opt"
-                          onClick={() => { if (campaignName) setCampaignSubject(campaignName, subj); setFrameMenu(null) }}
-                        >
-                          <span className="cv-branch-ch">✦ {subj}</span>
-                          <span className="cv-branch-mark">Use</span>
-                        </button>
-                      ))}
-                    </>
-                  )
-                })()}
-                <button className="cv-branch-cancel" onClick={() => setFrameMenu(null)}>Cancel</button>
-              </>
-            )}
             {frameMenu.kind === 'audience' && (() => {
               const others = (clientAudiences[clientFilter] ?? []).filter(
                 (a) => a.name.trim() && a.name.trim() !== (frameMenu.audience ?? '').trim(),

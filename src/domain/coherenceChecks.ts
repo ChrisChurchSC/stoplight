@@ -1,3 +1,4 @@
+import { type BrandMetaMap, type BrandSource, resolveBrandScope, scopeBrands } from './brand'
 import type { BreakEvidence, BreakSeverity, CoherenceBreak } from './breaks'
 import type { ClientProfile } from './clients'
 import { FUNNEL_STAGES, funnelStageFor } from './funnel'
@@ -31,12 +32,17 @@ export interface CoherenceVocab {
   client: string
   campaign: string
   audiences: VocabAudience[]
-  /** All content tokens this brand legitimately uses. */
+  /** All content tokens this brand legitimately uses — including assets inherited from
+   *  ancestors and explicitly-shared brands (in-scope brands are NOT contamination). */
   ownTerms: Set<string>
-  /** Another brand's signature term → that brand's name (not used by this brand). */
+  /** Another brand's signature term → that brand's name (a brand OUTSIDE this brand's
+   *  scope — ancestors / explicit shares are excluded, so inheritance never reads as a leak). */
   foreign: Map<string, string>
   /** Proof points available to this brand, by id (for audience-tagged proof). */
   proofById: Map<string, { label: string; audienceId?: string }>
+  /** The brands that contributed to the baseline (self + ancestors + shares), so the
+   *  check can report which brand frame it measured against. */
+  sources: BrandSource[]
 }
 
 // Stopwords + generic marketing words: excluded from "distinctive" term sets so a
@@ -69,31 +75,42 @@ export function buildCoherenceVocab(
   campaign: string,
   brandSystems: Record<string, MessagingLibrary>,
   clientProfiles: Record<string, ClientProfile>,
+  brandMeta: BrandMetaMap = {},
 ): CoherenceVocab {
-  const sys = brandSystems[client]
-  const prof = clientProfiles[client]
+  // The baseline is the brand's EFFECTIVE library: its own assets plus those inherited
+  // from ancestors and explicitly shared in. Those in-scope brands are part of the
+  // brand's own vocabulary, so their terms must never read as contamination.
+  const sources = scopeBrands(client, brandMeta)
+  const inScope = new Set(sources.map((s) => s.brand))
+  const sys = resolveBrandScope(client, brandSystems, brandMeta).library
   const ownTerms = new Set<string>()
-  addTerms(ownTerms, [prof?.oneLiner, prof?.industry, prof?.mission, prof?.voice, ...(prof?.products ?? []), ...(prof?.differentiators ?? []), ...(prof?.values ?? [])])
-  for (const a of sys?.audiences ?? []) addTerms(ownTerms, [a.name, a.role, a.messageAngle, ...(a.pains ?? [])])
-  for (const r of sys?.rtbs ?? []) addTerms(ownTerms, [r.label, r.detail])
-  for (const a of sys?.audiences ?? []) for (const r of a.rtbs ?? []) addTerms(ownTerms, [r.label, r.detail])
-  for (const h of sys?.hooks ?? []) addTerms(ownTerms, [h.text])
-  for (const s of sys?.subjects ?? []) addTerms(ownTerms, [s.text])
+  // Profile terms come from the bound brand and every ancestor (inheritance), so a
+  // sub-brand legitimately uses its parent's products / values / one-liner.
+  for (const s of sources) {
+    const p = clientProfiles[s.brand]
+    addTerms(ownTerms, [p?.oneLiner, p?.industry, p?.mission, p?.voice, ...(p?.products ?? []), ...(p?.differentiators ?? []), ...(p?.values ?? [])])
+  }
+  for (const a of sys.audiences) addTerms(ownTerms, [a.name, a.role, a.messageAngle, ...(a.pains ?? [])])
+  for (const r of sys.rtbs) addTerms(ownTerms, [r.label, r.detail])
+  for (const a of sys.audiences) for (const r of a.rtbs ?? []) addTerms(ownTerms, [r.label, r.detail])
+  for (const h of sys.hooks) addTerms(ownTerms, [h.text])
+  for (const s of sys.subjects) addTerms(ownTerms, [s.text])
 
-  const audiences: VocabAudience[] = (sys?.audiences ?? []).map((a) => {
+  const audiences: VocabAudience[] = sys.audiences.map((a) => {
     const terms = new Set<string>()
     addTerms(terms, [a.role, ...(a.pains ?? [])])
     return { name: a.name, role: a.role, pains: a.pains ?? [], terms }
   })
 
-  // Foreign signature terms: a SINGLE other brand's distinctive words, from HIGH-SIGNAL
-  // fields only (one-liner, industry, products, proof LABELS). A term used by 2+ other
-  // brands is domain-common (not a signature) and excluded, so a sparse active library
-  // doesn't make ordinary words look foreign. Length >= 5, generics excluded. Detection
-  // also requires >= 3 of these per asset, so only a real chunk of foreign copy fires.
+  // Foreign signature terms: a SINGLE out-of-scope brand's distinctive words, from
+  // HIGH-SIGNAL fields only (one-liner, industry, products, proof LABELS). A term used
+  // by 2+ other brands is domain-common (not a signature) and excluded, so a sparse
+  // active library doesn't make ordinary words look foreign. Length >= 5, generics
+  // excluded. Detection also requires >= 3 of these per asset, so only a real chunk of
+  // foreign copy fires. Brands IN this brand's scope (ancestors / shares) are skipped.
   const termBrands = new Map<string, Set<string>>()
   for (const [b, bsys] of Object.entries(brandSystems)) {
-    if (b === client) continue
+    if (inScope.has(b)) continue
     const hi = new Set<string>()
     const bprof = clientProfiles[b]
     addTerms(hi, [bprof?.oneLiner, bprof?.industry, ...(bprof?.products ?? []), ...(bprof?.differentiators ?? [])])
@@ -105,10 +122,10 @@ export function buildCoherenceVocab(
   for (const [t, brands] of termBrands) if (brands.size === 1 && !ownTerms.has(t)) foreign.set(t, [...brands][0])
 
   const proofById = new Map<string, { label: string; audienceId?: string }>()
-  for (const r of sys?.rtbs ?? []) proofById.set(r.id, { label: r.label, audienceId: r.audienceId })
-  for (const a of sys?.audiences ?? []) for (const r of a.rtbs ?? []) proofById.set(r.id, { label: r.label, audienceId: r.audienceId ?? a.name })
+  for (const r of sys.rtbs) proofById.set(r.id, { label: r.label, audienceId: r.audienceId })
+  for (const a of sys.audiences) for (const r of a.rtbs ?? []) proofById.set(r.id, { label: r.label, audienceId: r.audienceId ?? a.name })
 
-  return { client, campaign, audiences, ownTerms, foreign, proofById }
+  return { client, campaign, audiences, ownTerms, foreign, proofById, sources }
 }
 
 // ---- helpers -------------------------------------------------------------------

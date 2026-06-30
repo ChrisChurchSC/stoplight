@@ -159,8 +159,13 @@ export interface TrafficRow {
   linksTo?: string
   /** The asset this one branches off — the previous step in the journey (by asset
    *  name). One parent can have many branches, so this models the tree the
-   *  `linksTo` single-link can't. Set when you branch a card on the canvas. */
+   *  `linksTo` single-link can't. Set when you branch a card on the canvas. A journey
+   *  link: the child flows FORWARD to a later stage and draws a connecting edge. */
   branchOf?: string
+  /** The master message this is a personalization VARIANT of (by asset name). Distinct
+   *  from branchOf: a variant is a sibling of its master in the SAME stage (it sits side
+   *  by side, not connected by a journey edge). Set by fan-out; carries `lineage`. */
+  variantOf?: string
   /** Auto-generated tracking parameters, written back to the sheet so they
    *  carry through to the platforms (see tracking.ts). */
   utm?: { source: string; medium: string; campaign: string; content: string }
