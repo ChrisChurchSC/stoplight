@@ -57,6 +57,7 @@ Each asset arrives with four inputs that MUST shape its copy:
 - audience: who this asset speaks to (name, role, angle, pains). Write to THIS segment's pains and language, not a generic buyer. Different audiences must get genuinely different copy, not the same line with the name changed.
 - ctaSeed: the action this asset drives toward. Build the body toward this specific action and write a CTA that names it (you may sharpen the wording).
 - proof: the proof point (RTB) this asset substantiates. Name or lean on it. Proof is a SHARED pool reused across many assets by design.
+- context (optional): personalization the variant was fanned to (location, time/season, lifecycle, …). When present, LOCALIZE the copy to it so each variant is distinct and speaks to that context (a Belmar variant must not read identically to an Asbury one).
 
 Write copy for EVERY component of EVERY asset, respecting each component's character limit. Headlines are tight; primary text can breathe; CTAs are short action labels, not sentences.
 

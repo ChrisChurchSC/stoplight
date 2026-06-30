@@ -86,12 +86,12 @@ export function buildCoherenceVocab(
     return { name: a.name, role: a.role, pains: a.pains ?? [], terms }
   })
 
-  // Foreign signature terms: distinctive words other brands use that THIS brand does
-  // not. Drawn from HIGH-SIGNAL fields ONLY (one-liner, industry, products, proof
-  // LABELS) — audience pains/hooks are too generic and caused false positives. Length
-  // >= 5, generics excluded. Detection also requires >= 2 of these per asset, so a
-  // single shared word never fires (a real contamination is a chunk of foreign copy).
-  const foreign = new Map<string, string>()
+  // Foreign signature terms: a SINGLE other brand's distinctive words, from HIGH-SIGNAL
+  // fields only (one-liner, industry, products, proof LABELS). A term used by 2+ other
+  // brands is domain-common (not a signature) and excluded, so a sparse active library
+  // doesn't make ordinary words look foreign. Length >= 5, generics excluded. Detection
+  // also requires >= 3 of these per asset, so only a real chunk of foreign copy fires.
+  const termBrands = new Map<string, Set<string>>()
   for (const [b, bsys] of Object.entries(brandSystems)) {
     if (b === client) continue
     const hi = new Set<string>()
@@ -99,8 +99,10 @@ export function buildCoherenceVocab(
     addTerms(hi, [bprof?.oneLiner, bprof?.industry, ...(bprof?.products ?? []), ...(bprof?.differentiators ?? [])])
     for (const r of bsys.rtbs ?? []) addTerms(hi, [r.label])
     for (const a of bsys.audiences ?? []) for (const r of a.rtbs ?? []) addTerms(hi, [r.label])
-    for (const t of hi) if (t.length >= 5 && !GENERIC.has(t) && !ownTerms.has(t) && !foreign.has(t)) foreign.set(t, b)
+    for (const t of hi) if (t.length >= 5 && !GENERIC.has(t)) (termBrands.get(t) ?? termBrands.set(t, new Set()).get(t)!).add(b)
   }
+  const foreign = new Map<string, string>()
+  for (const [t, brands] of termBrands) if (brands.size === 1 && !ownTerms.has(t)) foreign.set(t, [...brands][0])
 
   const proofById = new Map<string, { label: string; audienceId?: string }>()
   for (const r of sys?.rtbs ?? []) proofById.set(r.id, { label: r.label, audienceId: r.audienceId })
@@ -183,9 +185,10 @@ function detectContamination(rows: TrafficRow[], vocab: CoherenceVocab): Coheren
         else byBrand.set(brand, { terms: new Set([t]), field, text, term: t })
       }
     }
-    // Flag the brand contributing the MOST signature terms, if 2 or more.
+    // Flag the brand contributing the MOST signature terms, if 3 or more (a real chunk
+    // of another brand's copy; fewer is noise, especially with a sparse active library).
     let worst: { brand: string; e: { terms: Set<string>; field: string; text: string; term: string } } | undefined
-    for (const [brand, e] of byBrand) if (e.terms.size >= 2 && (!worst || e.terms.size > worst.e.terms.size)) worst = { brand, e }
+    for (const [brand, e] of byBrand) if (e.terms.size >= 3 && (!worst || e.terms.size > worst.e.terms.size)) worst = { brand, e }
     if (!worst) continue
     const { brand, e } = worst
     const terms = [...e.terms]

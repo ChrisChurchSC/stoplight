@@ -45,6 +45,10 @@ export interface DraftAsset {
   ctaSeed?: string
   /** The proof point this asset substantiates (reused across assets by design). */
   proof?: DraftProof
+  /** Personalization context this variant was fanned to (location, time, lifecycle,
+   *  …) — the non-structural lineage. Copy is localized to it so variants of one base
+   *  asset come out DISTINCT (not duplicate). */
+  context?: Record<string, string>
   /** Stable index in the batch — lets the heuristic vary deterministically. */
   index?: number
 }
@@ -177,6 +181,8 @@ interface Ctx {
   i: number
   /** The creative execution format this asset is written as. */
   format: Fmt
+  /** Personalization context (location, time, lifecycle, …) to localize copy to. */
+  context: Record<string, string>
 }
 
 export class HeuristicCopyWriter implements CopyWriter {
@@ -223,6 +229,7 @@ export class HeuristicCopyWriter implements CopyWriter {
         asset: a,
         i,
         format,
+        context: a.context ?? {},
       }
       const roles = pickRoles(a.fields)
       // The field's position seeds its variant, so two same-role fields in one asset
@@ -272,12 +279,52 @@ function componentCopy(fl: MessagingField, ctx: Ctx, v: number): string {
   if (/^path$/.test(k)) return slug(ctx.asset.assetName)
   if (/business|brand/.test(k)) return ctx.brandName
   if (/when/.test(k)) return 'Live, date TBD'
-  if (/subject/.test(k)) return subjectFor(ctx, v)
-  if (/subhead|sub-head|subtitle/.test(k)) return descFor(ctx, v) // secondary headline -> short line
-  if (/preview|desc/.test(k)) return descFor(ctx, v)
-  if (/headline|^h\d|title|long-headline/.test(k)) return ctx.format.head(ctx, ctx.i + v)
+  if (/subject/.test(k)) return localizeHead(subjectFor(ctx, v), ctx.context)
+  if (/subhead|sub-head|subtitle/.test(k)) return localizeHead(descFor(ctx, v), ctx.context)
+  if (/preview|desc/.test(k)) return localizeHead(descFor(ctx, v), ctx.context)
+  if (/headline|^h\d|title|long-headline/.test(k)) return localizeHead(ctx.format.head(ctx, ctx.i + v), ctx.context)
   // primary / body / intro / post / caption / message … -> the chosen execution format.
-  return ctx.format.body(ctx, ctx.i + v)
+  return localizeBody(ctx.format.body(ctx, ctx.i + v), ctx.context)
+}
+
+// ---- localization: weave the personalization context (location, time, lifecycle, …)
+// so each fanned variant is DISTINCT and speaks to its context (closes the duplicate-
+// on-fan gap). A place/time value leads the headline; all context values appear in the
+// body clause, which guarantees variants of one base asset never come out identical.
+const lifecyclePhrase = (v: string) => {
+  const l = v.toLowerCase()
+  if (/laps|win.?back|dormant|churn/.test(l)) return 'good to have you back'
+  if (/new|prospect|cold/.test(l)) return 'new here'
+  if (/active|engaged|current/.test(l)) return 'keeping it going'
+  if (/month|recurring|loyal|vip|major/.test(l)) return `for our ${l} supporters`
+  return l
+}
+/** The place/time-like context value that reads well as a headline lead. */
+const headLead = (ctx: Record<string, string>) =>
+  ctx.location || ctx.time || ctx.season || ctx.moment || ctx.account || ''
+/** A natural clause naming the full context, so every variant differs. */
+function contextClause(ctx: Record<string, string>): string {
+  const parts: string[] = []
+  if (ctx.location) parts.push(`around ${ctx.location}`)
+  const when = ctx.time || ctx.season || ctx.moment
+  if (when) parts.push(`this ${lower(when)}`)
+  if (ctx.lifecycle) parts.push(lifecyclePhrase(ctx.lifecycle))
+  for (const [k, val] of Object.entries(ctx)) {
+    if (['location', 'time', 'season', 'moment', 'lifecycle', 'account'].includes(k)) continue
+    parts.push(lower(val))
+  }
+  if (ctx.account) parts.push(`for ${ctx.account}`)
+  return parts.join(', ')
+}
+function localizeHead(text: string, ctx: Record<string, string>): string {
+  const lead = headLead(ctx)
+  if (!lead) return text
+  return text.toLowerCase().includes(lead.toLowerCase()) ? text : `${cap(lead)}: ${text}`
+}
+function localizeBody(text: string, ctx: Record<string, string>): string {
+  const clause = contextClause(ctx)
+  if (!clause) return text
+  return `${text.replace(/\.$/, '')}. ${cap(clause)}.`
 }
 
 const painAt = (ctx: Ctx, r: number) => (ctx.pains.length ? ctx.pains[r % ctx.pains.length] : '')

@@ -3023,6 +3023,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             libAudiences.find((x) => x.name === r.audience) ??
             (libAudiences.length ? libAudiences[i % libAudiences.length] : undefined)
           const proof = proofPool.length ? proofPool[i % proofPool.length] : undefined
+          // Non-structural lineage (location, time, lifecycle, …) becomes copy context
+          // so fanned variants localize and stay distinct. audience/journey are already
+          // structural fields, so exclude them here.
+          const context: Record<string, string> = {}
+          for (const [k, val] of Object.entries(r.lineage ?? {})) if (k !== 'audience' && k !== 'journey') context[k] = val
           return {
             rowId: r.id,
             assetName: r.assetName,
@@ -3037,6 +3042,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
                 : undefined,
             ctaSeed: pickCta(stage),
             proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
+            context: Object.keys(context).length ? context : undefined,
             index: i,
           }
         })
