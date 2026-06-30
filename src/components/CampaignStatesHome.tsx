@@ -62,7 +62,7 @@ export function CampaignStatesHome() {
   const openCampaignWizard = useTrafficStore((s) => s.openCampaignWizard)
 
   const brandRows = rows.filter((r) => clientForCampaign(r.campaign) === clientFilter)
-  const forBrand = campaignList.filter((c) => c.client === clientFilter)
+  const forBrand = campaignList.filter((c) => c.client === clientFilter && !c.archivedAt)
   const meta = new Map(forBrand.map((c) => [c.name, c] as const))
   const names = [
     ...new Set([

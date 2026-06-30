@@ -56,6 +56,8 @@ export interface Scope {
 
 /** Single source of truth for which rows a view shows. */
 export function rowInScope(r: TrafficRow, s: Scope): boolean {
+  // Archived (soft-deleted) assets are hidden everywhere until restored.
+  if (r.archivedAt) return false
   if (s.filter !== 'all' && r.channel !== s.filter) return false
   if (s.proofFilter && s.proofFilter !== 'all' && !assetRtbIds(r).includes(s.proofFilter)) return false
   if (s.ctaFilter && s.ctaFilter !== 'all') {

@@ -40,16 +40,19 @@ export type ChannelId =
   | 'lead-magnet'
 
 /**
- * Lifecycle of a single trafficked row. The approval gate sits between
- * `draft` and `approved` — nothing past `approved` happens without the user.
+ * Lifecycle of a single trafficked row. The review gate (draft -> in_review ->
+ * approved/rejected) sits before the publish gate — nothing past `approved` happens
+ * without the user.
  *
- *  draft      -> just ingested, schedule proposed, awaiting review
- *  approved   -> user approved; staged in the sheet, not yet pushed
+ *  draft      -> just ingested / generated, awaiting review
+ *  in_review  -> sent for review, a human is looking at it
+ *  approved   -> user approved; the shippable set, staged but not yet pushed
+ *  rejected   -> user rejected; kept for the record, not shippable
  *  scheduled  -> a publisher has accepted it and queued it for `scheduledAt`
  *  posted     -> confirmed live on the platform
  *  failed     -> a publish attempt errored (see `error`)
  */
-export type RowStatus = 'draft' | 'approved' | 'scheduled' | 'posted' | 'failed'
+export type RowStatus = 'draft' | 'in_review' | 'approved' | 'rejected' | 'scheduled' | 'posted' | 'failed'
 
 /** A raw asset the user dropped in, before it's split across channels. */
 export interface Asset {
@@ -175,6 +178,12 @@ export interface TrafficRow {
   spend?: { toDate: number; updatedAt: number }
   /** Real engagement pulled from the channel (organic performance signal). */
   engagement?: { likes: number; comments: number }
+  /** Richer platform metrics for an imported live post (impressions / reach / shares /
+   *  saves / views / engagementRate, whatever the source exposes). Open-ended. */
+  socialMetrics?: Record<string, number>
+  /** When socialMetrics were last refreshed (ms epoch). Platform metrics lag by up to
+   *  ~24h, so this is the freshness stamp, not a real-time read. */
+  metricsUpdatedAt?: number
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   /** For assets that run over a period (always-on ads, landing pages, nurture
@@ -189,6 +198,28 @@ export interface TrafficRow {
   createdAt: number
   approvedAt?: number
   postedAt?: number
+  /** Hand-authored by a human (vs generated) — first-class, but tagged so the lineage
+   *  shows it was written, not composed. (Kept for back-compat; `source` is the richer tag.) */
+  authored?: boolean
+  /** Where this asset came from. Generated drafts are undefined/'generated'. Real content
+   *  imported into a canvas is tagged so it sits beside drafts, distinguishable:
+   *   - authored:    hand-written by a human in the tool
+   *   - imported:    pasted / uploaded batch (a content audit, a CSV)
+   *   - social-live: a real published social post (Buffer / platform)
+   *   - site:        scraped from the brand's site (a page, a case study) */
+  source?: 'generated' | 'authored' | 'imported' | 'social-live' | 'site'
+  /** The external URL this asset was imported from (the post / page). Also the dedup
+   *  key on re-import, so the same post is never imported twice. */
+  sourceUrl?: string
+  /** When the real content was published externally (ISO), distinct from createdAt. */
+  publishedAt?: string
+  /** Media references for an imported post (image / video / carousel urls). */
+  mediaRefs?: string[]
+  /** An optional note left with the last status change (why it was rejected, etc.). */
+  reviewNote?: string
+  /** Soft-delete: when set, the asset is archived (hidden from views/lists) but
+   *  recoverable. Restore clears it; a hard purge removes the row entirely. */
+  archivedAt?: number
 }
 
 /** Shape the mock sheet persists. Assets are kept so previews survive reloads

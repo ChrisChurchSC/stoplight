@@ -5,7 +5,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
 import type { PublisherRegistry } from '../adapters/publishers/types'
-import type { Asset, ChannelId, TrafficRow } from '../domain/types'
+import type { Asset, ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
@@ -83,6 +83,12 @@ import {
   newAccount,
   newTargetList,
 } from '../domain/accounts'
+import {
+  type AssetSource,
+  normalizeImportItem,
+  engagementFromMetrics,
+  looksLikeBlockedPage,
+} from '../domain/importAssets'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -1206,6 +1212,29 @@ interface TrafficState {
    *  so a strategy/audience change is visibly seen rippling across the cards. */
   regenIds: Set<string>
   removeRow: (id: string) => Promise<void>
+  // ---- Asset lifecycle ----
+  /** Hand-author a first-class asset into a campaign (no generation). Tagged `authored`. */
+  addAsset: (brand: string, campaign: string, patch: Partial<TrafficRow>) => Promise<TrafficRow>
+  /** Bulk-import real content into a canvas as first-class assets (Buffer posts, scraped
+   *  site/case studies, a pasted audit). Dedups by URL/copy so a re-import adds only new. */
+  importAssets: (
+    brand: string,
+    campaign: string,
+    items: Record<string, unknown>[],
+    source: AssetSource,
+  ) => Promise<{ imported: number; updated: number; skipped: number }>
+  /** Set a single asset's review/publish status (draft → in_review → approved/rejected). */
+  setRowStatus: (id: string, status: RowStatus, note?: string) => Promise<void>
+  /** Soft-delete (archive) an asset — hidden but restorable. */
+  archiveRow: (id: string) => Promise<void>
+  /** Soft-delete many assets at once (a whole fan set, a campaign's assets). */
+  archiveRows: (ids: string[]) => Promise<void>
+  /** Restore an archived asset. */
+  restoreRow: (id: string) => Promise<void>
+  /** Soft-delete a campaign + archive its assets. Recoverable. */
+  deleteCampaign: (name: string) => Promise<void>
+  /** Restore an archived campaign + its assets. */
+  restoreCampaign: (name: string) => Promise<void>
   duplicateRow: (id: string) => Promise<void>
   /** Paste a copy of a row as a new draft asset (unique name) — Cmd/Ctrl+V. */
   pasteAsset: (id: string) => Promise<void>
@@ -2819,6 +2848,192 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     pushUndo(get().rows)
     await sheet.remove(id)
     await get().refresh()
+  },
+
+  // ---- Asset lifecycle ----
+  addAsset: async (brand, campaign, patch) => {
+    const c = campaign.trim()
+    get().addClient(brand)
+    if (c && !get().campaignList.some((x) => x.name === c)) get().addCampaign({ name: c, client: brand, strategy: 'Demand Gen' })
+    const channel = (patch.channel ?? 'Instagram') as ChannelId
+    const assetType = patch.assetType && isValidType(channel, patch.assetType) ? patch.assetType : primaryTypeKey(channel)
+    const existing = new Set(get().rows.map((r) => r.assetName))
+    let name = (patch.assetName ?? 'Authored asset').trim() || 'Authored asset'
+    let n = 2
+    while (existing.has(name)) name = `${(patch.assetName ?? 'Authored asset').trim()} ${n++}`
+    const row: TrafficRow = {
+      assetId: '',
+      ...patch,
+      // Required fields, guaranteed after the spread (patch is a Partial).
+      id: freshRowId(),
+      assetName: name,
+      channel,
+      assetType,
+      mediaType: patch.mediaType ?? 'image',
+      messaging: patch.messaging ?? {},
+      campaign: c,
+      audience: patch.audience ?? '',
+      status: patch.status ?? 'draft',
+      scheduledAt: patch.scheduledAt ?? new Date().toISOString(),
+      source: patch.source ?? 'authored',
+      authored: (patch.source ?? 'authored') === 'authored',
+      createdAt: Date.now(),
+    }
+    pushUndo(get().rows)
+    await sheet.append([row])
+    await get().refresh()
+    return row
+  },
+
+  importAssets: async (brand, campaign, items, source) => {
+    const c = campaign.trim()
+    get().addClient(brand)
+    if (c && !get().campaignList.some((x) => x.name === c)) get().addCampaign({ name: c, client: brand, strategy: 'Current state' })
+    const inCampaign = get().rows.filter((r) => (r.campaign ?? '').trim() === c)
+    // Dedup so a re-import never duplicates: by external URL first, else by exact copy.
+    const byUrl = new Map(inCampaign.filter((r) => r.sourceUrl).map((r) => [r.sourceUrl as string, r]))
+    const seenUrls = new Set(byUrl.keys())
+    const seenNames = new Set(inCampaign.map((r) => r.assetName))
+    const copyKey = (r: TrafficRow) => Object.values(r.messaging ?? {}).join(' ¶ ').trim().toLowerCase()
+    const seenCopy = new Set(inCampaign.filter((r) => r.source && r.source !== 'generated').map(copyKey))
+    const rows: TrafficRow[] = []
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    let skipped = 0
+    for (const item of items) {
+      const norm = normalizeImportItem(item, source)
+      const blob = `${norm.headline ?? ''} ${norm.primaryText ?? ''}`.trim()
+      // Never store a login / challenge / error page as content.
+      if (!blob || looksLikeBlockedPage(blob)) {
+        skipped++
+        continue
+      }
+      // Already imported (same URL): refresh its metrics in place rather than duplicate.
+      const existing = norm.sourceUrl ? byUrl.get(norm.sourceUrl) : undefined
+      if (existing) {
+        if (norm.metrics) {
+          updates.push({
+            id: existing.id,
+            patch: {
+              socialMetrics: norm.metrics,
+              engagement: engagementFromMetrics(norm.metrics) ?? existing.engagement,
+              metricsUpdatedAt: norm.metricsUpdatedAt ?? Date.now(),
+            },
+          })
+        } else {
+          skipped++
+        }
+        continue
+      }
+      const channel = norm.channel
+      const assetType = norm.assetType && isValidType(channel, norm.assetType) ? norm.assetType : primaryTypeKey(channel)
+      // Map the normalized copy onto this channel's messaging field keys.
+      const fields = messagingFields(channel, assetType)
+      const key = (re: RegExp) => fields.find((f) => re.test(f.key))?.key
+      const headlineKey = key(/headline|subject|title|subhead/i)
+      const primaryKey = key(/primary|body|caption|intro|post|message/i) ?? fields[0]?.key
+      const descKey = key(/desc|preview/i)
+      const ctaKey = key(/cta/i)
+      const messaging: Record<string, string> = {}
+      if (norm.headline && headlineKey) messaging[headlineKey] = norm.headline
+      if (norm.primaryText && primaryKey) messaging[primaryKey] = norm.primaryText
+      if (norm.description && descKey) messaging[descKey] = norm.description
+      if (norm.cta && ctaKey) messaging[ctaKey] = norm.cta
+      // A body-only channel (no headline slot): keep the post copy in the primary field.
+      if (!Object.keys(messaging).length && primaryKey) messaging[primaryKey] = norm.primaryText || norm.headline || ''
+      const ck = Object.values(messaging).join(' ¶ ').trim().toLowerCase()
+      if (ck && seenCopy.has(ck)) {
+        skipped++
+        continue
+      }
+      let name = (norm.headline || norm.primaryText || `${source} post`).replace(/\s+/g, ' ').trim().slice(0, 60) || `${source} post`
+      let n = 2
+      const baseName = name
+      while (seenNames.has(name)) name = `${baseName} ${n++}`
+      seenNames.add(name)
+      if (norm.sourceUrl) seenUrls.add(norm.sourceUrl)
+      if (ck) seenCopy.add(ck)
+      // Imported real posts/pages are LIVE (posted); a pasted audit is a draft to triage.
+      const status: RowStatus = source === 'imported' ? 'draft' : 'posted'
+      rows.push({
+        assetId: '',
+        id: freshRowId(),
+        assetName: name,
+        channel,
+        assetType,
+        mediaType: norm.mediaRefs?.length ? 'image' : 'image',
+        messaging,
+        campaign: c,
+        audience: norm.audience ?? '',
+        ...(norm.stage ? { funnelStage: norm.stage } : {}),
+        status,
+        scheduledAt: norm.publishedAt || new Date().toISOString(),
+        createdAt: Date.now(),
+        source,
+        sourceUrl: norm.sourceUrl,
+        publishedAt: norm.publishedAt,
+        mediaRefs: norm.mediaRefs,
+        mediaRef: norm.mediaRefs?.[0],
+        socialMetrics: norm.metrics,
+        engagement: engagementFromMetrics(norm.metrics),
+        ...(norm.metrics ? { metricsUpdatedAt: norm.metricsUpdatedAt ?? Date.now() } : {}),
+        ...(status === 'posted' ? { postedAt: norm.publishedAt ? Date.parse(norm.publishedAt) || Date.now() : Date.now() } : {}),
+      })
+    }
+    if (rows.length || updates.length) {
+      pushUndo(get().rows)
+      if (rows.length) await sheet.append(rows)
+      for (const u of updates) await sheet.update(u.id, u.patch)
+      await get().refresh()
+    }
+    return { imported: rows.length, updated: updates.length, skipped }
+  },
+
+  setRowStatus: async (id, status, note) => {
+    const patch: Partial<TrafficRow> = { status }
+    if (status === 'approved') patch.approvedAt = Date.now()
+    if (note !== undefined) patch.reviewNote = note || undefined
+    await get().updateRow(id, patch)
+  },
+
+  archiveRow: async (id) => {
+    await get().updateRow(id, { archivedAt: Date.now() })
+  },
+  archiveRows: async (ids) => {
+    if (!ids.length) return
+    await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: Date.now() } })))
+  },
+  restoreRow: async (id) => {
+    await get().updateRow(id, { archivedAt: undefined })
+  },
+
+  deleteCampaign: async (name) => {
+    const c = name.trim()
+    if (!c) return
+    // Archive the campaign + all its assets (soft, recoverable).
+    const ids = get().rows.filter((r) => (r.campaign ?? '').trim() === c).map((r) => r.id)
+    if (ids.length) await get().archiveRows(ids)
+    set((s) => {
+      const campaignList = s.campaignList.map((x) => (x.name === c ? { ...x, archivedAt: Date.now() } : x))
+      saveCampaigns(campaignList)
+      const open = s.openProjects.filter((p) => p !== c)
+      saveOpenProjects(open)
+      return {
+        campaignList,
+        openProjects: open,
+        campaignFilter: s.campaignFilter === c ? 'all' : s.campaignFilter,
+      }
+    })
+  },
+  restoreCampaign: async (name) => {
+    const c = name.trim()
+    if (!c) return
+    const ids = get().rows.filter((r) => (r.campaign ?? '').trim() === c && r.archivedAt).map((r) => r.id)
+    if (ids.length) await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: undefined } })))
+    set((s) => {
+      const campaignList = s.campaignList.map((x) => (x.name === c ? { ...x, archivedAt: undefined } : x))
+      saveCampaigns(campaignList)
+      return { campaignList }
+    })
   },
 
   duplicateRow: async (id) => {

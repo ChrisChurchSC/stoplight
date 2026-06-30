@@ -6,6 +6,9 @@ import { newLibraryCta } from '../domain/library'
 import { clientForCampaign } from '../domain/clients'
 import { funnelStageFor } from '../domain/funnel'
 import { messagingFields } from '../domain/messaging'
+import { detectBreaks } from '../domain/breaks'
+import { rowInScope } from './scope'
+import type { RowStatus, TrafficRow } from '../domain/types'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
 import { conditionSentence } from '../domain/conditions'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
@@ -31,6 +34,36 @@ const list = (v: unknown): string[] =>
           .map((x) => x.trim())
           .filter(Boolean)
       : []
+
+/** A row's messaging field keys by role, so semantic fields (headline / primaryText /
+ *  description / cta) map onto the right keys for edit + author. */
+function messagingKeys(channel: TrafficRow['channel'], assetType: string) {
+  const fields = messagingFields(channel, assetType)
+  return {
+    headlineKey: fields.find((f) => /headline|subject|title|subhead/i.test(f.key))?.key,
+    ctaKey: fields.find((f) => /cta/i.test(f.key))?.key,
+    descKey: fields.find((f) => /desc|preview/i.test(f.key))?.key,
+    primaryKey: (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key,
+  }
+}
+/** Write the provided semantic copy fields into a messaging map (untouched fields stay). */
+function applyCopyFields(channel: TrafficRow['channel'], assetType: string, base: Record<string, string>, a: Args): Record<string, string> {
+  const k = messagingKeys(channel, assetType)
+  const m = { ...base }
+  if (typeof a.headline === 'string' && k.headlineKey) m[k.headlineKey] = a.headline
+  if (typeof a.primaryText === 'string' && k.primaryKey) m[k.primaryKey] = a.primaryText
+  if (typeof a.description === 'string' && k.descKey) m[k.descKey] = a.description
+  if (typeof a.cta === 'string' && k.ctaKey) m[k.ctaKey] = a.cta
+  return m
+}
+/** Resolve proofPoints (rtb ids OR labels) to rtb ids for a brand. */
+function resolveProofIds(brand: string, proofPoints: string[]): string[] {
+  const rtbs = useTrafficStore.getState().brandSystems[brand]?.rtbs ?? []
+  const byId = new Set(rtbs.map((r) => r.id))
+  const byLabel = new Map(rtbs.map((r) => [r.label.toLowerCase(), r.id]))
+  return proofPoints.map((p) => (byId.has(p) ? p : byLabel.get(p.toLowerCase()) ?? p)).filter(Boolean)
+}
+const ASSET_STATUSES: RowStatus[] = ['draft', 'in_review', 'approved', 'rejected', 'scheduled', 'posted', 'failed']
 
 // Business model per GTM motion, so a strategy override refreshes the brand's
 // businessModel to match (instead of leaving the inferred one stale).
@@ -107,12 +140,40 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     await useTrafficStore.getState().runCoherenceCheck()
     const st = useTrafficStore.getState()
     const breaks = st.claudeBreaks ?? []
+    // The deterministic, FIXABLE breaks (with stable ids + suggested fixes) for the
+    // assets in scope — these are what apply_fix resolves. assetName resolves the row.
+    const inScope = new Set(
+      st.rows
+        .filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter: st.clientFilter, campaignFilter: st.campaignFilter }))
+        .map((r) => r.assetName),
+    )
+    // Fixable = the proof/cta/journey detectors PLUS structural breaks whose fix is a
+    // real rewrite (e.g. casing). Structural breaks with after === before (duplicate,
+    // claim, endorsement) are NOT one-click fixable — they need edit / reject / delete.
+    const fromDetect = detectBreaks(st.rows).filter((b) => inScope.has(b.from.assetName))
+    const fromStructural = (st.claudeBreaks ?? []).filter((b) => b.suggestedFix && b.suggestedFix.after && b.suggestedFix.after !== b.suggestedFix.before)
+    const seen = new Set<string>()
+    const fixable = [...fromDetect, ...fromStructural]
+      .filter((b) => (seen.has(b.id) ? false : (seen.add(b.id), true)))
+      .map((b) => ({
+        id: b.id,
+        axis: b.axis,
+        severity: b.severity,
+        headline: b.headline,
+        asset: b.from.assetName,
+        field: b.suggestedFix.field,
+        fix: { before: b.suggestedFix.before, after: b.suggestedFix.after, attachRtb: b.suggestedFix.attachRtb ?? null },
+      }))
     return {
       client: st.clientFilter,
       campaign: campaign || 'All campaigns',
       live: st.coherenceLive,
       breakCount: breaks.length,
+      // The full check result (incl. compliance/structural breaks — remediated by editing,
+      // rejecting, or deleting the asset).
       breaks: breaks.map((b) => ({ axis: b.axis, severity: b.severity, headline: b.headline })),
+      // The mechanically fixable subset — call apply_fix(breakId) on each.
+      fixable,
     }
   },
 
@@ -397,6 +458,14 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const firstSentence = (s: string) => (s.split(/(?<=[.!?])\s+/)[0] ?? s).trim()
     let rows = st.rows.filter((r) => clientForCampaign(r.campaign) === brand)
     if (campaign) rows = rows.filter((r) => (r.campaign ?? '') === campaign)
+    // Archived (soft-deleted) assets are hidden unless explicitly requested.
+    rows = a.includeArchived === true ? rows : rows.filter((r) => !r.archivedAt)
+    // Optional status filter (e.g. status: "approved" → the shippable set).
+    const wantStatus = list(a.status)
+    if (wantStatus.length) rows = rows.filter((r) => wantStatus.includes(r.status))
+    // Optional source filter (e.g. source: "social-live" → the imported real posts).
+    const wantSource = list(a.source).map((s) => (s === 'buffer' ? 'social-live' : s === 'site-map' ? 'site' : s))
+    if (wantSource.length) rows = rows.filter((r) => wantSource.includes(r.source ?? 'generated'))
     const assets = rows.map((r) => {
       const fields = messagingFields(r.channel, r.assetType)
       const headlineKey = fields.find((f) => /headline|subject|title|subhead/i.test(f.key))?.key
@@ -422,6 +491,24 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         channel: r.channel,
         type: r.assetType,
         format: r.format ?? '',
+        /** Review/publish lifecycle status (draft → in_review → approved/rejected → …). */
+        status: r.status,
+        /** Where this asset came from: generated / authored / imported / social-live / site. */
+        source: r.source ?? 'generated',
+        /** The external post/page URL this was imported from (real content only). */
+        sourceUrl: r.sourceUrl ?? '',
+        /** When it was published externally (real content only). */
+        publishedAt: r.publishedAt ?? '',
+        /** Platform metrics for an imported live post (impressions/reach/shares/…). */
+        metrics: r.socialMetrics ?? null,
+        /** Freshness of those metrics (ms epoch), or null if never fetched. */
+        metricsUpdatedAt: r.metricsUpdatedAt ?? null,
+        /** A single engagement number for ranking: explicit rate, else likes+comments. */
+        engagement: r.socialMetrics?.engagementRate ?? (r.engagement ? r.engagement.likes + r.engagement.comments : 0),
+        /** Hand-authored by a human (vs generated). */
+        authored: !!r.authored,
+        /** Soft-deleted (only present when includeArchived was requested). */
+        archived: !!r.archivedAt,
         headline,
         primaryText,
         description,
@@ -437,7 +524,241 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
       }
     })
+    // Optional ranking: sort by "engagement" (or any metric key, e.g. "impressions"),
+    // descending — so top posts surface first.
+    const sortKey = str(a.sort).trim()
+    if (sortKey) {
+      const val = (x: (typeof assets)[number]) => (sortKey === 'engagement' ? x.engagement : x.metrics?.[sortKey] ?? 0)
+      assets.sort((x, y) => val(y) - val(x))
+    }
     return { brand, campaign: campaign || null, count: assets.length, assets }
+  },
+
+  // ---- Asset lifecycle: edit / author / approve / delete ----
+
+  // Edit an asset's copy / targeting. Editing changes the content, so the cached
+  // coherence status invalidates (the next run reflects the edit).
+  async editAsset(a) {
+    const id = (str(a.assetId).trim() || str(a.id).trim())
+    if (!id) throw new Error('assetId is required')
+    const st = useTrafficStore.getState()
+    const row = st.rows.find((r) => r.id === id)
+    if (!row) throw new Error(`asset not found: ${id}`)
+    const brand = clientForCampaign(row.campaign)
+    const channel = (str(a.channel).trim() || row.channel) as TrafficRow['channel']
+    const assetType = str(a.assetType).trim() || row.assetType || ''
+    const patch: Partial<TrafficRow> = {}
+    if (str(a.channel).trim()) patch.channel = channel
+    if (str(a.assetType).trim()) patch.assetType = assetType
+    if (typeof a.audience === 'string') patch.audience = str(a.audience).trim()
+    if (str(a.format).trim()) patch.format = str(a.format).trim()
+    const stage = str(a.stage).trim().toLowerCase()
+    if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
+    if (['headline', 'primaryText', 'description', 'cta'].some((k) => typeof a[k] === 'string'))
+      patch.messaging = applyCopyFields(channel, assetType, row.messaging ?? {}, a)
+    const proofPoints = list(a.proofPoints)
+    if (proofPoints.length) {
+      const ids = resolveProofIds(brand, proofPoints)
+      const pk = messagingKeys(channel, assetType).primaryKey ?? 'primary'
+      patch.rtbMap = { ...(row.rtbMap ?? {}), [pk]: ids }
+    }
+    await useTrafficStore.getState().updateRow(id, patch)
+    return { id, updated: Object.keys(patch), note: 'Re-run run_coherence_check to see the edit reflected.' }
+  },
+
+  // Apply a coherence check's suggested fix to the flagged asset (the repair payoff).
+  // Handles both break systems: the proof/cta/journey detectors (via applyBreakFix) and
+  // the structural detectors (casing/leak) whose fix is a real rewrite. Breaks with no
+  // mechanical fix (duplicate, claim, endorsement) are remediated by edit / reject / delete.
+  async applyFix(a) {
+    const breakId = str(a.breakId).trim() || str(a.id).trim()
+    if (!breakId) throw new Error('breakId is required')
+    const snapshot = () => JSON.stringify(useTrafficStore.getState().rows.map((r) => [r.id, r.messaging, r.rtbMap]))
+    const before = snapshot()
+    await useTrafficStore.getState().applyBreakFix(breakId)
+    if (snapshot() !== before) return { breakId, applied: true, via: 'suggested-fix' }
+    // Fall back to the structural break set (the coherence check's own breaks).
+    const brk = (useTrafficStore.getState().claudeBreaks ?? []).find((b) => b.id === breakId)
+    const fix = brk?.suggestedFix
+    if (fix && fix.after && fix.after !== fix.before) {
+      const row = useTrafficStore.getState().rows.find((r) => r.assetName === fix.assetName && r.channel === fix.channel)
+      if (row) {
+        const patch: Partial<TrafficRow> = { messaging: { ...row.messaging, [fix.field]: fix.after } }
+        if (fix.attachRtb) patch.rtbMap = { ...(row.rtbMap ?? {}), [fix.field]: [fix.attachRtb] }
+        await useTrafficStore.getState().updateRow(row.id, patch)
+        return { breakId, applied: true, via: 'structural' }
+      }
+    }
+    return { breakId, applied: false, note: 'No mechanical fix for this break (e.g. a duplicate or an unsubstantiated claim). Edit the asset, reject it, or delete it.' }
+  },
+
+  // Reassign an asset's proof to the one the check suggests (the proof-gap fix).
+  async reassignProof(a) {
+    const breakId = str(a.breakId).trim() || str(a.id).trim()
+    if (!breakId) throw new Error('breakId is required')
+    await useTrafficStore.getState().reassignBreakProof(breakId)
+    return { breakId, reassigned: true }
+  },
+
+  // Hand-author a first-class asset into a campaign (no generation step).
+  async addAsset(a) {
+    const brand = str(a.brand).trim()
+    const campaign = str(a.campaign).trim()
+    if (!brand || !campaign) throw new Error('brand and campaign are required')
+    const channel = (str(a.channel).trim() || 'Instagram') as TrafficRow['channel']
+    const assetType = str(a.assetType).trim() || undefined
+    const stage = str(a.stage).trim().toLowerCase()
+    const patch: Partial<TrafficRow> = {
+      channel,
+      assetName: str(a.assetName).trim() || str(a.headline).trim() || 'Authored asset',
+      audience: str(a.audience).trim() || undefined,
+      format: str(a.format).trim() || undefined,
+    }
+    if (assetType) patch.assetType = assetType
+    if (['awareness', 'consideration', 'conversion', 'retention'].includes(stage)) patch.funnelStage = stage as never
+    patch.messaging = applyCopyFields(channel, assetType ?? '', {}, a)
+    const proofPoints = list(a.proofPoints)
+    if (proofPoints.length) {
+      const ids = resolveProofIds(brand, proofPoints)
+      const pk = messagingKeys(channel, assetType ?? '').primaryKey ?? 'primary'
+      patch.rtbMap = { [pk]: ids }
+    }
+    // Provenance: a hand-written asset is 'authored'; an imported one passes source/url/media.
+    const src = str(a.source).trim()
+    if (['authored', 'imported', 'social-live', 'site'].includes(src)) patch.source = src as never
+    if (str(a.sourceUrl).trim()) patch.sourceUrl = str(a.sourceUrl).trim()
+    const mediaRefs = list(a.mediaRefs)
+    if (mediaRefs.length) {
+      patch.mediaRefs = mediaRefs
+      patch.mediaRef = mediaRefs[0]
+    }
+    const row = await useTrafficStore.getState().addAsset(brand, campaign, patch)
+    return { id: row.id, assetName: row.assetName, brand, campaign, source: row.source, status: row.status }
+  },
+
+  // Bulk-import real content into a canvas as first-class assets (Buffer posts, scraped
+  // site/case studies, a pasted audit). Each item is mapped to a row; re-import dedups.
+  async importAssets(a) {
+    const brand = str(a.brand).trim()
+    const campaign = str(a.campaign).trim()
+    const sourceRaw = str(a.source).trim()
+    const sources = ['authored', 'imported', 'social-live', 'site', 'buffer', 'site-map']
+    if (!brand || !campaign) throw new Error('brand and campaign are required')
+    if (!sources.includes(sourceRaw)) throw new Error(`source must be one of: social-live (buffer), site, imported`)
+    // Aliases: buffer -> social-live, site-map -> site.
+    const source = (sourceRaw === 'buffer' ? 'social-live' : sourceRaw === 'site-map' ? 'site' : sourceRaw) as never
+    const items = Array.isArray(a.items) ? (a.items as Record<string, unknown>[]) : []
+    if (!items.length) throw new Error('items[] is required (the posts / pages / rows to import)')
+    const res = await useTrafficStore.getState().importAssets(brand, campaign, items, source)
+    return {
+      brand,
+      campaign,
+      source,
+      imported: res.imported,
+      updated: res.updated,
+      skipped: res.skipped,
+      note: `${res.imported} imported, ${res.updated} refreshed (metrics updated on existing), ${res.skipped} skipped. They're live assets in the canvas — list_assets(source:"${source}") to read them; run_coherence_check to check the real content.`,
+    }
+  },
+
+  // Move a single asset through the review lifecycle.
+  async setAssetStatus(a) {
+    const id = str(a.assetId).trim() || str(a.id).trim()
+    const status = str(a.status).trim() as RowStatus
+    if (!id) throw new Error('assetId is required')
+    if (!ASSET_STATUSES.includes(status)) throw new Error(`status must be one of: ${ASSET_STATUSES.join(', ')}`)
+    await useTrafficStore.getState().setRowStatus(id, status, str(a.note).trim() || undefined)
+    return { id, status }
+  },
+
+  // Bulk-approve: every in-scope draft/in_review asset (or an explicit id list).
+  async approveAssets(a) {
+    const ids = list(a.assetIds)
+    const st = useTrafficStore.getState()
+    let targets: string[]
+    if (ids.length) targets = ids
+    else {
+      const campaign = str(a.campaign).trim()
+      targets = st.rows
+        .filter((r) => !r.archivedAt && (!campaign || (r.campaign ?? '') === campaign) && (r.status === 'draft' || r.status === 'in_review'))
+        .map((r) => r.id)
+    }
+    for (const id of targets) await useTrafficStore.getState().setRowStatus(id, 'approved')
+    return { approved: targets.length }
+  },
+
+  // Soft-delete an asset (archived, recoverable). Use purge: true for a hard delete.
+  async deleteAsset(a) {
+    const id = str(a.assetId).trim() || str(a.id).trim()
+    if (!id) throw new Error('assetId is required')
+    if (a.purge === true) {
+      await useTrafficStore.getState().removeRow(id)
+      return { id, purged: true }
+    }
+    await useTrafficStore.getState().archiveRow(id)
+    return { id, archived: true, note: 'Soft-deleted. restore_asset to recover.' }
+  },
+
+  async restoreAsset(a) {
+    const id = str(a.assetId).trim() || str(a.id).trim()
+    if (!id) throw new Error('assetId is required')
+    await useTrafficStore.getState().restoreRow(id)
+    return { id, restored: true }
+  },
+
+  // Bulk soft-delete (a whole fan set, or an explicit id list). variantOf names the
+  // master of a fan set: archives the master's variants.
+  async deleteAssets(a) {
+    const st = useTrafficStore.getState()
+    let ids = list(a.assetIds)
+    const ofMaster = str(a.variantOf).trim()
+    if (ofMaster) ids = ids.concat(st.rows.filter((r) => (r.variantOf ?? '') === ofMaster).map((r) => r.id))
+    ids = [...new Set(ids)]
+    if (!ids.length) throw new Error('assetIds or variantOf is required')
+    await useTrafficStore.getState().archiveRows(ids)
+    return { archived: ids.length }
+  },
+
+  // Soft-delete a campaign + its assets (recoverable).
+  async deleteCampaign(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    await useTrafficStore.getState().deleteCampaign(campaign)
+    return { campaign, archived: true, note: 'Soft-deleted with its assets. restore_campaign to recover.' }
+  },
+
+  async restoreCampaign(a) {
+    const campaign = str(a.campaign).trim()
+    if (!campaign) throw new Error('campaign is required')
+    await useTrafficStore.getState().restoreCampaign(campaign)
+    return { campaign, restored: true }
+  },
+
+  // Delete a client/brand and all its assets. This is a HARD delete (permanent) — use
+  // it to clear setup-failure junk brands.
+  async deleteClient(a) {
+    const name = str(a.name).trim() || str(a.brand).trim()
+    if (!name) throw new Error('name is required')
+    await useTrafficStore.getState().deleteClient(name)
+    return { name, deleted: true, permanent: true }
+  },
+
+  // Approve or reject a library item (audience / proof / hook / cta / subject). Reject
+  // removes the unvetted draft.
+  async setLibraryItemStatus(a) {
+    const brand = str(a.brand).trim()
+    const kind = str(a.kind).trim()
+    const id = str(a.id).trim()
+    const status = str(a.status).trim()
+    if (!brand || !kind || !id) throw new Error('brand, kind, and id are required')
+    const valid = ['ctas', 'rtbs', 'audiences', 'strategies', 'subjects', 'hooks']
+    if (!valid.includes(kind)) throw new Error(`kind must be one of: ${valid.join(', ')}`)
+    const store = useTrafficStore.getState()
+    store.setMessagingBrand(brand)
+    if (status === 'approved') store.approveLibraryItem(kind as never, id)
+    else if (status === 'rejected') store.removeLibraryItem(kind as never, id)
+    else throw new Error('status must be approved or rejected')
+    return { brand, kind, id, status }
   },
 
   // ---- Personalization fan-out (Phase 1) ----
@@ -676,7 +997,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
             ctas: sys.ctas.map((x) => x.label),
           }
         : null,
-      campaigns: st.campaignList.filter((c) => c.client === brand).map((c) => c.name),
+      campaigns: st.campaignList.filter((c) => c.client === brand && !c.archivedAt).map((c) => c.name),
       assets: st.rows.filter((r) => clientForCampaign(r.campaign) === brand).length,
     }
   },

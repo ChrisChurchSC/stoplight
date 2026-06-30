@@ -406,15 +406,215 @@ server.registerTool(
 server.registerTool(
   'list_assets',
   {
-    title: 'List a campaign’s assets (with copy)',
+    title: 'List a campaign’s assets (with copy + status)',
     description:
-      "Read back each asset's copy for a brand (optionally one campaign): id, funnel stage, audience, channel, type, headline, primaryText, description, cta, and the proof points it leans on. Use this to verify generation — that headlines and bodies are distinct, CTAs do not repeat, and each asset leans on a proof point.",
+      "Read back each asset for a brand (optionally one campaign): id, status, source, sourceUrl, publishedAt, metrics, funnel stage, audience, channel, type, headline, primaryText, description, cta, proof points. Verify generation AND lifecycle AND real-content imports. Filter status:[\"approved\"] for the shippable set, or source:[\"social-live\"] / [\"site\"] for imported real content (the actual captions/copy). Archived hidden unless includeArchived.",
     inputSchema: {
       brand: z.string().describe('The brand / client name'),
       campaign: z.string().optional().describe('A specific campaign name, or omit for all of the brand'),
+      status: z.array(z.string()).optional().describe('Filter to these statuses, e.g. ["approved"] for the shippable set, or ["draft","in_review"].'),
+      source: z.array(z.string()).optional().describe('Filter by provenance: ["social-live"] (real posts), ["site"] (scraped pages), ["imported"], ["authored"], ["generated"].'),
+      sort: z.string().optional().describe('Rank descending by "engagement" (likes+comments or rate) or any metric key (e.g. "impressions","reach","saves") — top posts first.'),
+      includeArchived: z.boolean().optional().describe('Include soft-deleted assets (default false).'),
     },
   },
-  async ({ brand, campaign }) => text(await dispatch('listAssets', { brand, campaign })),
+  async (a) => text(await dispatch('listAssets', a)),
+)
+
+server.registerTool(
+  'edit_asset',
+  {
+    title: 'Edit an asset',
+    description:
+      'Edit an asset’s copy and targeting: headline, primaryText, description, cta, proofPoints (rtb ids or labels), audience, stage, channel, format. Editing changes the content, so re-run run_coherence_check to see the result. This is how a flagged break gets fixed by hand.',
+    inputSchema: {
+      assetId: z.string().describe('The asset id (from list_assets)'),
+      headline: z.string().optional(),
+      primaryText: z.string().optional(),
+      description: z.string().optional(),
+      cta: z.string().optional(),
+      proofPoints: z.array(z.string()).optional().describe('Proof point ids or labels to attach'),
+      audience: z.string().optional(),
+      stage: z.enum(['awareness', 'consideration', 'conversion', 'retention']).optional(),
+      channel: z.string().optional(),
+      format: z.string().optional(),
+    },
+  },
+  async (a) => text(await dispatch('editAsset', a)),
+)
+
+server.registerTool(
+  'apply_fix',
+  {
+    title: 'Apply a coherence check’s suggested fix',
+    description: 'Apply the suggested fix for a break (from run_coherence_check’s `fixable[]`) to the flagged asset. Re-run run_coherence_check and the break is gone, count lower. The repair-loop payoff.',
+    inputSchema: { breakId: z.string().describe('The break id from run_coherence_check fixable[].id') },
+  },
+  async (a) => text(await dispatch('applyFix', a)),
+)
+
+server.registerTool(
+  'reassign_proof',
+  {
+    title: 'Reassign an asset’s proof (proof-gap fix)',
+    description: 'Attach the proof point the check suggests for a proof-gap break, without rewriting copy.',
+    inputSchema: { breakId: z.string().describe('The break id from run_coherence_check fixable[].id') },
+  },
+  async (a) => text(await dispatch('reassignProof', a)),
+)
+
+server.registerTool(
+  'add_asset',
+  {
+    title: 'Hand-author an asset',
+    description:
+      'Create a bespoke asset by hand (no generation): set channel, stage, audience, format, headline, primaryText, description, cta, proofPoints. It is first-class (appears in list_assets, tagged authored, coherence-checked). Use for 1:1 ABM emails and one-off pieces.',
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+      campaign: z.string().describe('The campaign to author into'),
+      channel: z.string().optional().describe('Channel (default Instagram)'),
+      assetType: z.string().optional(),
+      stage: z.enum(['awareness', 'consideration', 'conversion', 'retention']).optional(),
+      audience: z.string().optional(),
+      format: z.string().optional(),
+      assetName: z.string().optional(),
+      headline: z.string().optional(),
+      primaryText: z.string().optional(),
+      description: z.string().optional(),
+      cta: z.string().optional(),
+      proofPoints: z.array(z.string()).optional(),
+      source: z.enum(['authored', 'imported', 'social-live', 'site']).optional().describe('Provenance (default authored). Use for a single imported real asset.'),
+      sourceUrl: z.string().optional().describe('The external post/page URL (imported assets)'),
+      mediaRefs: z.array(z.string()).optional().describe('Media urls (image/video)'),
+    },
+  },
+  async (a) => text(await dispatch('addAsset', a)),
+)
+
+server.registerTool(
+  'import_assets',
+  {
+    title: 'Import real content into a canvas',
+    description:
+      "Bulk-import a brand's REAL content into a campaign as first-class assets, so the canvas reflects the actual brand (not just generated drafts). Pass the items you've pulled: Buffer posts (source:\"social-live\"), scraped site pages / case studies (source:\"site\"), or a pasted content audit (source:\"imported\"). Each item is loosely shaped — caption/copy/headline/title, url, platform/channel, publishedAt, mediaRefs, metrics — and mapped to an asset. Re-import dedups by URL/copy (only new added), and login/challenge pages are dropped. Imported assets are live: list_assets(source:...) returns the real captions, and run_coherence_check evaluates them.",
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+      campaign: z.string().describe('The canvas/campaign to import into'),
+      source: z.enum(['social-live', 'buffer', 'site', 'site-map', 'imported']).describe('social-live/buffer = real posts; site/site-map = scraped pages & case studies; imported = a pasted audit'),
+      items: z
+        .array(z.record(z.any()))
+        .describe('The items to import. Flexible per source — e.g. Buffer: { caption, url, platform, publishedAt, mediaRefs, metrics }; site: { title, copy, url }; audit: { headline, primaryText, channel, stage }.'),
+    },
+  },
+  async (a) => text(await dispatch('importAssets', a)),
+)
+
+server.registerTool(
+  'set_asset_status',
+  {
+    title: 'Approve / reject / review an asset',
+    description: 'Move an asset through the review lifecycle: draft → in_review → approved / rejected (also scheduled/posted/failed). Only approved assets are the shippable set. Optional note.',
+    inputSchema: {
+      assetId: z.string().describe('The asset id'),
+      status: z.enum(['draft', 'in_review', 'approved', 'rejected', 'scheduled', 'posted', 'failed']).describe('The new status'),
+      note: z.string().optional().describe('Why (e.g. a rejection reason)'),
+    },
+  },
+  async (a) => text(await dispatch('setAssetStatus', a)),
+)
+
+server.registerTool(
+  'approve_assets',
+  {
+    title: 'Bulk-approve assets',
+    description: 'Approve every in-scope draft / in_review asset (optionally one campaign), or an explicit assetIds list. The shippable set in one call.',
+    inputSchema: {
+      campaign: z.string().optional().describe('Limit to one campaign'),
+      assetIds: z.array(z.string()).optional().describe('Explicit ids to approve (overrides campaign)'),
+    },
+  },
+  async (a) => text(await dispatch('approveAssets', a)),
+)
+
+server.registerTool(
+  'delete_asset',
+  {
+    title: 'Delete an asset (soft)',
+    description: 'Soft-delete an asset (archived, hidden, recoverable via restore_asset). Pass purge: true for a permanent hard delete.',
+    inputSchema: {
+      assetId: z.string().describe('The asset id'),
+      purge: z.boolean().optional().describe('Hard-delete permanently (default false = soft)'),
+    },
+  },
+  async (a) => text(await dispatch('deleteAsset', a)),
+)
+
+server.registerTool(
+  'restore_asset',
+  {
+    title: 'Restore a soft-deleted asset',
+    description: 'Recover an archived asset.',
+    inputSchema: { assetId: z.string().describe('The asset id (find via list_assets includeArchived: true)') },
+  },
+  async (a) => text(await dispatch('restoreAsset', a)),
+)
+
+server.registerTool(
+  'delete_assets',
+  {
+    title: 'Bulk-delete assets (soft)',
+    description: 'Soft-delete many assets — an explicit assetIds list, or every variant of a fan set via variantOf (the master asset name). Recoverable.',
+    inputSchema: {
+      assetIds: z.array(z.string()).optional(),
+      variantOf: z.string().optional().describe('Archive every variant fanned from this master asset name'),
+    },
+  },
+  async (a) => text(await dispatch('deleteAssets', a)),
+)
+
+server.registerTool(
+  'delete_campaign',
+  {
+    title: 'Delete a campaign (soft)',
+    description: 'Soft-delete a campaign and its assets (recoverable via restore_campaign).',
+    inputSchema: { campaign: z.string().describe('The campaign name') },
+  },
+  async (a) => text(await dispatch('deleteCampaign', a)),
+)
+
+server.registerTool(
+  'restore_campaign',
+  {
+    title: 'Restore a soft-deleted campaign',
+    description: 'Recover an archived campaign and its assets.',
+    inputSchema: { campaign: z.string().describe('The campaign name') },
+  },
+  async (a) => text(await dispatch('restoreCampaign', a)),
+)
+
+server.registerTool(
+  'delete_client',
+  {
+    title: 'Delete a client / brand (permanent)',
+    description: 'Permanently delete a client/brand and all its assets. HARD delete (not recoverable) — use it to clear setup-failure junk brands like "Just a moment...".',
+    inputSchema: { name: z.string().describe('The client / brand name') },
+  },
+  async (a) => text(await dispatch('deleteClient', a)),
+)
+
+server.registerTool(
+  'set_library_item_status',
+  {
+    title: 'Approve / reject a library item',
+    description: 'Approve (vet) or reject (remove) a library item that landed unapproved — an audience / proof / hook / cta / subject. kind is the library bucket.',
+    inputSchema: {
+      brand: z.string().describe('The brand'),
+      kind: z.enum(['ctas', 'rtbs', 'audiences', 'strategies', 'subjects', 'hooks']).describe('The library bucket'),
+      id: z.string().describe('The item id'),
+      status: z.enum(['approved', 'rejected']).describe('approved vets it; rejected removes the draft'),
+    },
+  },
+  async (a) => text(await dispatch('setLibraryItemStatus', a)),
 )
 
 server.registerTool(

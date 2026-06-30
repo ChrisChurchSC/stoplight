@@ -121,6 +121,9 @@ export interface Campaign {
   status?: import('./lifecycle').CampaignStatus
   /** When the campaign was marked completed (ms epoch); set alongside status: 'completed'. */
   completedAt?: number
+  /** Soft-delete: when set, the campaign (and its assets) are archived, hidden from
+   *  lists but recoverable. Restore clears it. */
+  archivedAt?: number
 }
 
 // Campaigns created at runtime (the wizard) register here so clientForCampaign

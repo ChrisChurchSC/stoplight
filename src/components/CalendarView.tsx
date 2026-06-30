@@ -16,8 +16,10 @@ const MONTHS = [
 
 const STATUS_COLOR: Record<RowStatus, string> = {
   draft: '#9aa0aa',
+  in_review: '#c8881f',
   scheduled: 'var(--blue)',
   approved: 'var(--blue)',
+  rejected: '#b42318',
   posted: 'var(--green)',
   failed: '#b42318',
 }
