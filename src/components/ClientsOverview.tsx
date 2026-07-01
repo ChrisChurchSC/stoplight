@@ -47,12 +47,14 @@ export function ClientsOverview() {
     setFolderTab('canvases')
   }, [filter])
 
-  // The brand-folder header (title + Canvases / About / Messaging tabs), shared by
-  // every tab view so the chrome doesn't move between them.
+  // The brand-folder header, shared by every tab view so the chrome doesn't move
+  // between them. Three zones: brand title (left), the view switcher centered (the
+  // three ways to look at the same folder — Canvases / Grid / Calendar), and the
+  // secondary About / Messaging nav (right), which aren't views of the content.
   const folderHead = brandFolder && (
-    <div className="home-main-head">
+    <div className="home-main-head folder-head">
       <h1 className="home-main-title">{brandFolder}</h1>
-      <div className="folder-tabs">
+      <div className="folder-tabs folder-views">
         <button className={`folder-tab${folderTab === 'canvases' ? ' active' : ''}`} onClick={() => setFolderTab('canvases')}>
           Canvases
         </button>
@@ -70,6 +72,8 @@ export function ClientsOverview() {
         >
           Calendar
         </button>
+      </div>
+      <div className="folder-tabs folder-aux">
         <button className={`folder-tab${folderTab === 'about' ? ' active' : ''}`} onClick={() => setFolderTab('about')}>
           About
         </button>
