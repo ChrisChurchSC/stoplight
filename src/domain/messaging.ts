@@ -45,7 +45,7 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   'pinterest-ads': [title(40, 100), description(500), cta(20)],
   'snapchat-ads': [f('brand', 'Brand name', undefined, 25), headline(34), cta(20)],
   'reddit-ads': [title(80, 300), body(), cta(20)],
-  'youtube-ads': [headline(15), description(35), cta(15)],
+  'youtube-ads': [f('hook', 'Hook (first 5s)', undefined, 120, true), headline(15), description(35), cta(15), f('companion', 'Companion banner', undefined, 30)],
   // paid — search / shopping
   'google-search': [f('headline', 'Headline', undefined, 30), description(90), f('path', 'Display path', undefined, 15)],
   'google-demand': [headline(40), f('long-headline', 'Long headline', undefined, 90), description(90), f('business', 'Business name', undefined, 25), cta(15)],
@@ -56,15 +56,40 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   linkedin: [body(3000)],
   x: [f('post', 'Post', undefined, 280, true)],
   tiktok: [caption(2200)],
-  youtube: [title(60, 100), description(5000)],
+  youtube: [
+    f('hook', 'Hook (first 5s)', undefined, 120, true),
+    title(60, 100),
+    description(5000),
+    f('script', 'Script / VO outline', undefined, 2000, true),
+    f('end-screen', 'End-screen CTA', undefined, 40),
+    f('pinned', 'Pinned comment', undefined, 200, true),
+  ],
   pinterest: [title(40, 100), description(500)],
   // owned / lifecycle
   email: [subject(), preview(), headline(60), body(), cta(30)],
   sms: [f('message', 'Message', 160, 160, true), f('link', 'Link / CTA', undefined, 60)],
   push: [f('title', 'Title', 50, 65), f('body', 'Body', 150, 240, true), cta(25)],
-  website: [f('headline', 'Headline', undefined, 60), subhead(), body(), cta(30)],
-  blog: [f('title', 'SEO title', 60, 70), f('meta-description', 'Meta description', 155, 160, true), body()],
-  'landing-page': [f('headline', 'Headline', undefined, 60), subhead(), body(), cta(30)],
+  website: [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    body(),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('cta-mid', 'Mid-page CTA', undefined, 30),
+    f('faq', 'FAQ / objection', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
+  blog: [f('title', 'SEO title', 60, 70), f('meta-description', 'Meta description', 155, 160, true), body(), f('key-takeaway', 'Key takeaway', undefined, 200, true), f('cta', 'In-article CTA', undefined, 30)],
+  'landing-page': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    body(),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
   'lead-magnet': [title(80), f('description', 'Description', 300, undefined, true), cta(30)],
 }
 
@@ -85,7 +110,18 @@ const OVERRIDES: Record<string, MessagingField[]> = {
   'google-search:call': [f('business', 'Business name', undefined, 25), f('h1', 'Headline 1', undefined, 30), f('h2', 'Headline 2', undefined, 30), f('d1', 'Description 1', undefined, 90, true)],
   'google-search:dsa': [f('d1', 'Description 1', undefined, 90, true), f('d2', 'Description 2', undefined, 90, true)],
   // Landing pages
-  'landing-page:sales': [f('headline', 'Headline', undefined, 60), subhead(), body(), f('proof', 'Social proof', undefined, 200, true), cta(30)],
+  'landing-page:sales': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    body(),
+    f('proof', 'Social proof', undefined, 200, true),
+    f('proof-logos', 'Customer logos / count', undefined, 80),
+    f('proof-stat', 'Headline stat', undefined, 120, true),
+    f('cta-mid', 'Mid-page CTA', undefined, 30),
+    f('faq', 'FAQ / objection handling', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
   'landing-page:webinar-reg': [f('headline', 'Headline', undefined, 60), f('when', 'Date / time', undefined, 60), body(), cta(30)],
   // Email
   'email:newsletter': [subject(), preview(), body(), cta(30)],
@@ -129,3 +165,20 @@ export function messagingSummary(row: TrafficRow): string {
 
 export const primaryFieldKey = (channel: ChannelId, assetType?: string): string =>
   messagingFields(channel, assetType)[0]?.key ?? 'body'
+
+/** An asset's CTA value, if it carries one as its own field (organic posts fold
+ *  the CTA into the body, so they return ''). Used by the sidebar CTA filter. */
+/** True for any component that reads as a CTA — covers multi-CTA pages
+ *  (cta, cta-hero, cta-mid, cta-footer, cta1/cta2) and the SMS link. */
+export const isCtaField = (key: string): boolean => /cta/i.test(key) || key === 'link'
+
+export function assetCta(row: TrafficRow): string {
+  const m = messagingMap(row)
+  // First CTA-ish component in schema order — the asset's primary CTA.
+  for (const fld of messagingFields(row.channel, row.assetType)) {
+    if (isCtaField(fld.key) && m[fld.key]?.trim()) return m[fld.key].trim()
+  }
+  // Channels with no dedicated CTA slot (organic posts fold it into the caption)
+  // store a hand-added CTA on a generic `cta` key.
+  return m.cta?.trim() ?? ''
+}

@@ -31,6 +31,10 @@ function Bar({ value, max }: { value: number; max: number }) {
 export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
+  const proofFilter = useTrafficStore((s) => s.proofFilter)
+  const ctaFilter = useTrafficStore((s) => s.ctaFilter)
+  const audienceFilter = useTrafficStore((s) => s.audienceFilter)
+  const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
@@ -45,7 +49,7 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
 
   const view = allClients
     ? rows
-    : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+    : rows.filter((r) => rowInScope(r, { filter, proofFilter, ctaFilter, audienceFilter, cardFilter, query, clientFilter, campaignFilter }))
 
   // The proprietary outcome map. Operational (per-customer) slice = the rows in
   // view; the aggregate (cross-customer) layer is always computed over ALL rows,
@@ -83,6 +87,11 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   const maxStageRev = Math.max(1, ...ins.stages.map((s) => s.revenue))
   const maxStageAssets = Math.max(1, ...ins.stages.map((s) => s.assets))
   const maxChan = Math.max(1, ...ins.channels.map((c) => Math.max(c.revenue, c.leads * 1)))
+  // Organic brands have engagement but no revenue attribution — lead with whichever metric is live.
+  const hasRevenue = ins.kpis.revenue > 0
+  const maxRtbEng = Math.max(1, ...ins.rtbRoi.map((r) => r.engagement))
+  const maxChanEng = Math.max(1, ...ins.channels.map((c) => c.engagement))
+  const eng = (n: number) => n.toLocaleString()
 
   const onIcpRev = ins.icp.onIcp.revenue
   const flaggedRev = ins.icp.flagged.revenue
@@ -106,6 +115,11 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
             <span className="ins-kpi-label">Leads</span>
             <span className="ins-kpi-value">{ins.kpis.leads}</span>
             <span className="ins-kpi-sub">contacts sourced</span>
+          </div>
+          <div className="ins-kpi">
+            <span className="ins-kpi-label">Engagement</span>
+            <span className="ins-kpi-value">{eng(ins.kpis.engagement)}</span>
+            <span className="ins-kpi-sub">likes + comments</span>
           </div>
           <div className="ins-kpi">
             <span className="ins-kpi-label">Spend</span>
@@ -234,19 +248,24 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
           {/* Proof-point ROI */}
           <section className="ins-card ins-wide">
             <div className="ins-card-head">
-              <h3>Proof-point ROI</h3>
-              <span className="ins-card-hint">Revenue credited to each claim's RTB</span>
+              <h3>Proof-point performance</h3>
+              <span className="ins-card-hint">
+                {hasRevenue ? 'Revenue' : 'Engagement'} credited to each claim's RTB
+              </span>
             </div>
             <div className="ins-rows">
               {ins.rtbRoi.map((r) => (
                 <div className="ins-row" key={`${r.campaign}::${r.id}`}>
                   <div className="ins-row-label">
                     <span className="ins-row-name">{r.label}</span>
-                    <span className="ins-row-meta">{r.campaign} · {r.assets} asset{r.assets === 1 ? '' : 's'}</span>
+                    <span className="ins-row-meta">
+                      {r.campaign} · {r.assets} asset{r.assets === 1 ? '' : 's'}
+                      {!hasRevenue && r.engagement > 0 ? ` · ${eng(r.engagement)} eng` : ''}
+                    </span>
                   </div>
-                  <Bar value={r.revenue} max={maxRtb} />
-                  <span className={`ins-row-value${r.revenue === 0 ? ' zero' : ''}`}>
-                    {r.revenue > 0 ? money(r.revenue) : 'no revenue'}
+                  <Bar value={hasRevenue ? r.revenue : r.engagement} max={hasRevenue ? maxRtb : maxRtbEng} />
+                  <span className={`ins-row-value${(hasRevenue ? r.revenue : r.engagement) === 0 ? ' zero' : ''}`}>
+                    {hasRevenue ? (r.revenue > 0 ? money(r.revenue) : 'no revenue') : r.engagement > 0 ? eng(r.engagement) : '—'}
                   </span>
                 </div>
               ))}
@@ -285,7 +304,7 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
           <section className="ins-card">
             <div className="ins-card-head">
               <h3>Channel performance</h3>
-              <span className="ins-card-hint">Revenue & leads by channel</span>
+              <span className="ins-card-hint">{hasRevenue ? 'Revenue & leads' : 'Engagement'} by channel</span>
             </div>
             <div className="ins-rows">
               {ins.channels.map((c) => (
@@ -293,13 +312,14 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
                   <div className="ins-row-label">
                     <span className="ins-row-name">{c.label}</span>
                     <span className="ins-row-meta">
-                      {c.assets} asset{c.assets === 1 ? '' : 's'} · {c.leads} lead{c.leads === 1 ? '' : 's'}
+                      {c.assets} asset{c.assets === 1 ? '' : 's'}
+                      {hasRevenue ? ` · ${c.leads} lead${c.leads === 1 ? '' : 's'}` : c.engagement > 0 ? ` · ${eng(c.engagement)} eng` : ''}
                       {c.spend > 0 ? ` · ${money(c.spend)} spend` : ''}
                     </span>
                   </div>
-                  <Bar value={c.revenue} max={maxChan} />
-                  <span className={`ins-row-value${c.revenue === 0 ? ' zero' : ''}`}>
-                    {c.revenue > 0 ? money(c.revenue) : '—'}
+                  <Bar value={hasRevenue ? c.revenue : c.engagement} max={hasRevenue ? maxChan : maxChanEng} />
+                  <span className={`ins-row-value${(hasRevenue ? c.revenue : c.engagement) === 0 ? ' zero' : ''}`}>
+                    {hasRevenue ? (c.revenue > 0 ? money(c.revenue) : '—') : c.engagement > 0 ? eng(c.engagement) : '—'}
                   </span>
                 </div>
               ))}

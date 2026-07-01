@@ -5,11 +5,14 @@ import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
 import type { PublisherRegistry } from '../adapters/publishers/types'
-import type { Asset, ChannelId, TrafficRow } from '../domain/types'
+import type { Asset, ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
-import type { AudienceType } from '../domain/audiences'
+import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
+import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
+import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
+import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
 import { CHANNELS } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
@@ -25,7 +28,26 @@ import {
 import { sampleRows } from '../domain/sampleData'
 import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
-import { ClaudeCopyWriter, HeuristicCopyWriter, type CopyWriter } from '../adapters/copy/draftWriter'
+import { realExtractTransport } from '../adapters/copy/extractTransport'
+import {
+  ingestChannelStream,
+  IngestError,
+  type ChannelIngestResult,
+  type IngestProgress,
+  type IngestedMessage,
+} from '../adapters/setup/ingestChannel'
+import { ingestSanityStream, type SanityIngestResult } from '../adapters/setup/ingestSanity'
+import { ingestResendStream, type ResendIngestResult } from '../adapters/setup/ingestResend'
+import { ingestGoogleAdsStream, type GoogleAdsIngestResult } from '../adapters/setup/ingestGoogleAds'
+import {
+  ClaudeCopyWriter,
+  HeuristicCopyWriter,
+  type AssetDraft,
+  type CopyWriter,
+  type DraftAsset,
+  type DraftRequest,
+  type DraftResult,
+} from '../adapters/copy/draftWriter'
 import {
   ClaudeSetupGenerator,
   HeuristicSetupGenerator,
@@ -37,8 +59,40 @@ import { mapSite, type SiteMap } from '../adapters/setup/siteMap'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { messagingFields, messagingAllText, messagingMap } from '../domain/messaging'
-import { registerCampaignRtbs, rtbsForCampaign, type Rtb } from '../domain/rtb'
-import { rowInScope } from '../lib/scope'
+import { composeMessaging } from '../domain/matrixDraft'
+import { ctaFor } from '../domain/matrix'
+import { funnelStageFor, FUNNEL_STAGES } from '../domain/funnel'
+import { dimensionField, dimensionValues, isPruned, planFanout, type FanoutPlan } from '../domain/fanout'
+import { proposeConditions as proposeConditionsDomain, resolveConditions, type FanCondition } from '../domain/conditions'
+import {
+  type BrandMeta,
+  type BrandMetaMap,
+  type BrandBaseline,
+  resolveBrandScope,
+  resolveBrandVoice,
+  brandBaseline,
+  ancestorsOf,
+  isBrandless,
+  isDraftBrand,
+} from '../domain/brand'
+import {
+  type Account,
+  type AccountStatus,
+  type TargetList,
+  accountContext,
+  newAccount,
+  newTargetList,
+} from '../domain/accounts'
+import {
+  type AssetSource,
+  normalizeImportItem,
+  engagementFromMetrics,
+  looksLikeBlockedPage,
+} from '../domain/importAssets'
+import { type SavedView, newSavedView } from '../domain/savedViews'
+import { isLinkedExternal } from '../domain/assetKind'
+import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
+import { rowInScope, type CardFilter } from '../lib/scope'
 import { MockIcpSource, MockIcpReviewer, flagResolved } from '../adapters/icp/mockIcp'
 import { type CoherenceDecision, freshDecisionId } from '../domain/coherence'
 import { type BrandGuide, draftBrandGuide } from '../domain/readiness'
@@ -51,11 +105,13 @@ import {
   type CoherenceBreak,
   applyBreakStatus,
   breakScopeKey,
+  coherenceContentHash,
   detectBreaks,
   freshAuditId,
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
+import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
 import type { BatchReview, Icp, IcpReviewer, IcpSource } from '../adapters/icp/types'
@@ -79,12 +135,71 @@ const icpSource: IcpSource = new MockIcpSource()
 const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
 // Real Claude starter-copy drafting when a backend + key are present; heuristic otherwise.
 const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
+
+/**
+ * Regenerate any drafted unit whose headline or primary text collides with another
+ * in the same campaign, so a generated set reads as distinct assets, not a template
+ * pasted across audiences. CTAs are EXCLUDED: they're verbatim brand CTAs and recur
+ * by design (matched to stage), so a repeated CTA is correct, not a collision.
+ * Bounded to a few rounds; each feeds the used strings back as an avoid list.
+ */
+async function dedupeCampaignDrafts(
+  result: DraftResult,
+  assets: DraftAsset[],
+  baseReq: Omit<DraftRequest, 'assets' | 'avoid'>,
+): Promise<void> {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  const byId = new Map(assets.map((a) => [a.rowId, a]))
+  const rolesOf = (a: DraftAsset) => {
+    const f = a.fields
+    return {
+      headlineKey: f.find((x) => /headline|subject|title|subhead|^h\d/i.test(x.key))?.key,
+      primaryKey: (f.find((x) => /primary|body|caption|intro|post|message/i.test(x.key)) ?? f[0])?.key,
+    }
+  }
+  const valOf = (d: AssetDraft, key?: string) => (key ? (d.components.find((c) => c.key === key)?.value ?? '') : '')
+  for (let round = 0; round < 3; round++) {
+    const seenH = new Set<string>()
+    const seenB = new Set<string>()
+    const collisions: AssetDraft[] = []
+    for (const d of result.drafts) {
+      const a = byId.get(d.rowId)
+      if (!a) continue
+      const { headlineKey, primaryKey } = rolesOf(a)
+      const h = norm(valOf(d, headlineKey))
+      const b = norm(valOf(d, primaryKey))
+      if ((h && seenH.has(h)) || (b && seenB.has(b))) collisions.push(d)
+      else {
+        if (h) seenH.add(h)
+        if (b) seenB.add(b)
+      }
+    }
+    if (collisions.length === 0) return
+    const avoid = { headlines: [...seenH], bodies: [...seenB], ctas: [] }
+    for (const d of collisions) {
+      const a = byId.get(d.rowId)
+      if (!a) continue
+      const bumped: DraftAsset = { ...a, index: (a.index ?? 0) + (round + 1) * 101 }
+      try {
+        const re = await copyWriter.draft({ ...baseReq, avoid, assets: [bumped] })
+        if (re.drafts[0]) d.components = re.drafts[0].components
+      } catch {
+        // Leave the unit as-is if regeneration fails; better than dropping copy.
+      }
+    }
+  }
+}
 // Real Claude workspace setup (reads the site) when a backend + key are present; heuristic otherwise.
 const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSetupGenerator())
 
 function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
 }
+
+/** The personal space loose canvases live in until a brand is attached (Figma's
+ *  "Drafts"). A canvas here isn't tied to any client; the Brand card on the canvas
+ *  re-homes it to a real brand whenever you're ready. */
+export const DRAFTS_SPACE = 'Drafts'
 
 // Map an extracted message's {headline, body, cta} onto a channel's real
 // messaging field keys, so the current-state copy renders on the canvas.
@@ -132,6 +247,159 @@ function currentStateProof(campaign: string, map: SiteMap): void {
   registerCampaignRtbs(campaign, rtbs)
   const persisted = loadCampaignRtbs()
   persisted[campaign] = rtbs
+  saveCampaignRtbs(persisted)
+}
+
+// Infer which channel a social profile URL belongs to, so a channel in the
+// Foundation panel can resolve to the account to link + read.
+export function channelIdOfUrl(url: string): ChannelId | null {
+  const u = url.toLowerCase()
+  if (u.includes('instagram.com')) return 'instagram'
+  if (u.includes('linkedin.com')) return 'linkedin'
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube'
+  if (u.includes('tiktok.com')) return 'tiktok'
+  if (u.includes('x.com') || u.includes('twitter.com')) return 'x'
+  if (u.includes('facebook.com')) return 'facebook'
+  if (u.includes('pinterest.com')) return 'pinterest'
+  return null
+}
+
+/** The linked profile URL for a channel, from the client's connected accounts. */
+export function profileUrlForChannel(channel: ChannelId, channels?: string[]): string | undefined {
+  return (channels ?? []).find((u) => channelIdOfUrl(u) === channel)
+}
+
+/** Rows for a per-channel ingest. Posts that carry copy in the art become image
+ *  rows with extractedCopy set; caption-only posts stay text rows. */
+function ingestRows(campaign: string, channel: ChannelId, messages: IngestedMessage[]): TrafficRow[] {
+  return messages.map((m) => {
+    const art = m.extractedCopy?.trim()
+    return {
+      id: freshRowId(),
+      assetId: '',
+      assetName: m.label || m.headline.slice(0, 48) || 'Post',
+      mediaType: art ? ('image' as const) : ('text' as const),
+      channel,
+      messaging: buildMessaging(channel, m),
+      extractedCopy: art || undefined,
+      copyReviewed: false,
+      campaign,
+      audience: m.audience || '',
+      status: 'posted' as const,
+      scheduledAt: new Date().toISOString(),
+      createdAt: Date.now(),
+    }
+  })
+}
+
+// Owned web surfaces a Sanity document can map to; anything else falls to website.
+const OWNED_CHANNELS: ChannelId[] = ['website', 'blog', 'landing-page', 'lead-magnet', 'email']
+
+/** Rows for a Sanity ingest. Tagged assetId 'sanity' so a re-ingest replaces just
+ *  the CMS-sourced rows (not the scraped website rows on the same channel). */
+function sanityRows(campaign: string, messages: SanityIngestResult['messages']): TrafficRow[] {
+  return messages.map((m) => {
+    const channel: ChannelId =
+      m.channel && OWNED_CHANNELS.includes(m.channel as ChannelId) ? (m.channel as ChannelId) : 'website'
+    return {
+      id: freshRowId(),
+      assetId: 'sanity',
+      assetName: m.label || m.headline.slice(0, 48) || 'Content',
+      mediaType: 'text' as const,
+      channel,
+      messaging: buildMessaging(channel, m),
+      copyReviewed: false,
+      campaign,
+      audience: m.audience || '',
+      status: 'posted' as const,
+      scheduledAt: new Date().toISOString(),
+      createdAt: Date.now(),
+    }
+  })
+}
+
+/** Rows for a Resend ingest. Mapped to the email channel, tagged assetId 'resend'
+ *  so a re-ingest replaces just the email-sourced rows. */
+function resendRows(campaign: string, messages: ResendIngestResult['messages']): TrafficRow[] {
+  return messages.map((m) => ({
+    id: freshRowId(),
+    assetId: 'resend',
+    assetName: m.label || m.headline.slice(0, 48) || 'Email',
+    mediaType: 'text' as const,
+    channel: 'email' as ChannelId,
+    messaging: buildMessaging('email', m),
+    copyReviewed: false,
+    campaign,
+    audience: m.audience || '',
+    status: 'posted' as const,
+    scheduledAt: new Date().toISOString(),
+    createdAt: Date.now(),
+  }))
+}
+
+// Paid Google surfaces a Google Ads message can map to.
+const PAID_GOOGLE: ChannelId[] = ['google-search', 'google-demand', 'pmax']
+
+/** Rows for a Google Ads ingest. Mapped to the paid Google channel the ad runs
+ *  on, tagged assetId 'google-ads' so a re-ingest replaces just the ad rows. */
+function googleAdsRows(campaign: string, messages: GoogleAdsIngestResult['messages']): TrafficRow[] {
+  return messages.map((m) => {
+    const channel: ChannelId =
+      m.channel && PAID_GOOGLE.includes(m.channel as ChannelId) ? (m.channel as ChannelId) : 'google-search'
+    return {
+      id: freshRowId(),
+      assetId: 'google-ads',
+      assetName: m.label || m.headline.slice(0, 48) || 'Ad',
+      mediaType: 'text' as const,
+      channel,
+      messaging: buildMessaging(channel, m),
+      copyReviewed: false,
+      campaign,
+      audience: m.audience || '',
+      status: 'posted' as const,
+      scheduledAt: new Date().toISOString(),
+      createdAt: Date.now(),
+    }
+  })
+}
+
+/** The company-overview fields extracted from a site map, as a profile patch.
+ *  Only present fields are included, so a refresh never wipes an existing value. */
+function brandOverview(b: SiteMap['brand']): Partial<ClientProfile> {
+  const out: Partial<ClientProfile> = {}
+  const str = (v?: string) => (v?.trim() ? v.trim() : undefined)
+  const arr = <T,>(a?: T[]) => (a && a.length ? a : undefined)
+  const o = str(b.oneLiner); if (o) out.oneLiner = o
+  const m = str(b.mission); if (m) out.mission = m
+  const f = str(b.founded); if (f) out.founded = f
+  const h = str(b.headquarters); if (h) out.headquarters = h
+  const t = arr(b.team); if (t) out.team = t
+  const p = arr(b.products); if (p) out.products = p
+  const d = arr(b.differentiators); if (d) out.differentiators = d
+  const nc = arr(b.notableClients); if (nc) out.notableClients = nc
+  const v = arr(b.values); if (v) out.values = v
+  const tr = str(b.traction); if (tr) out.traction = tr
+  return out
+}
+
+/** Merge a channel's proof points into the campaign's proof library (by label),
+ *  so ingesting one channel doesn't wipe proof gathered from another. */
+function mergeChannelProof(campaign: string, proof: { label: string; detail: string }[]): void {
+  if (!proof.length) return
+  const persisted = loadCampaignRtbs()
+  const existing = persisted[campaign] ?? []
+  const seen = new Set(existing.map((r) => r.label.toLowerCase()))
+  const additions: Rtb[] = []
+  proof.forEach((p, i) => {
+    const key = p.label.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    additions.push({ id: `rtb-live-${campaign}-${Date.now().toString(36)}-${i}`, label: p.label, detail: p.detail })
+  })
+  if (!additions.length) return
+  const next = [...existing, ...additions]
+  registerCampaignRtbs(campaign, next)
+  persisted[campaign] = next
   saveCampaignRtbs(persisted)
 }
 
@@ -196,7 +464,14 @@ const CLIENT_AUDIENCES_KEY = 'stoplight.clientAudiences.v1'
 function loadClientAudiences(): Record<string, AudienceType[]> {
   try {
     const v = JSON.parse(localStorage.getItem(CLIENT_AUDIENCES_KEY) || '{}')
-    return v && typeof v === 'object' ? v : {}
+    if (!v || typeof v !== 'object') return {}
+    // Backfill the new container fields (rtbs / descriptors) on audiences saved
+    // before they existed, so every audience is a complete first-class object.
+    const out: Record<string, AudienceType[]> = {}
+    for (const [client, list] of Object.entries(v)) {
+      out[client] = Array.isArray(list) ? list.map((a) => normalizeAudience(a as AudienceType)) : []
+    }
+    return out
   } catch {
     return {}
   }
@@ -207,6 +482,120 @@ function saveClientAudiences(map: Record<string, AudienceType[]>): void {
   } catch {
     /* ignore */
   }
+}
+
+
+// Messaging systems — ONE per brand. Each brand owns a self-contained library
+// (audiences, proof, subjects, hooks, CTAs + the universal GTM strategies). Keyed
+// by brand name; created lazily (emptyLibrary) the first time a brand's system is
+// read or edited. The canvas reads the campaign's brand's system; the Messaging
+// page views one brand at a time.
+const BRAND_SYSTEMS_KEY = 'stoplight.brandSystems.v1'
+function normalizeLibrary(v: Partial<MessagingLibrary> | undefined): MessagingLibrary {
+  const seed = emptyLibrary()
+  if (!v || typeof v !== 'object') return seed
+  return {
+    ctas: Array.isArray(v.ctas) ? v.ctas : [],
+    rtbs: Array.isArray(v.rtbs) ? v.rtbs : [],
+    audiences: Array.isArray(v.audiences) ? v.audiences.map((a) => normalizeAudience(a as AudienceType)) : [],
+    strategies: Array.isArray(v.strategies) ? v.strategies : seed.strategies,
+    subjects: Array.isArray(v.subjects) ? v.subjects : [],
+    hooks: Array.isArray(v.hooks) ? v.hooks : [],
+  }
+}
+function loadBrandSystems(): Record<string, MessagingLibrary> {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRAND_SYSTEMS_KEY) || 'null')
+    if (v && typeof v === 'object') {
+      const out: Record<string, MessagingLibrary> = {}
+      for (const [brand, lib] of Object.entries(v)) out[brand] = normalizeLibrary(lib as MessagingLibrary)
+      return out
+    }
+  } catch {
+    /* ignore */
+  }
+  return {}
+}
+function saveBrandSystems(map: Record<string, MessagingLibrary>): void {
+  try {
+    localStorage.setItem(BRAND_SYSTEMS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
+const CONDITIONS_KEY = 'stoplight.conditions.v1'
+function loadConditions(): Record<string, FanCondition[]> {
+  try {
+    const raw = localStorage.getItem(CONDITIONS_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, FanCondition[]>) : {}
+  } catch {
+    return {}
+  }
+}
+function saveConditions(map: Record<string, FanCondition[]>): void {
+  try {
+    localStorage.setItem(CONDITIONS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+// Brand tree + explicit sharing + draft flag, keyed by the same brand (client) name
+// used by brandSystems / clientProfiles. The hard boundary every canvas resolves through.
+const BRAND_META_KEY = 'stoplight.brandMeta.v1'
+function loadBrandMeta(): BrandMetaMap {
+  try {
+    const raw = localStorage.getItem(BRAND_META_KEY)
+    return raw ? (JSON.parse(raw) as BrandMetaMap) : {}
+  } catch {
+    return {}
+  }
+}
+function saveBrandMeta(map: BrandMetaMap): void {
+  try {
+    localStorage.setItem(BRAND_META_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+// ABM target accounts: accounts per brand, named target lists, and the list a campaign
+// targets. The data foundation for account-based programs.
+const ACCOUNTS_KEY = 'stoplight.accounts.v1'
+const TARGET_LISTS_KEY = 'stoplight.targetLists.v1'
+const CAMPAIGN_TARGET_KEY = 'stoplight.campaignTarget.v1'
+// Saved Views (smart canvases): named, re-resolving filters over a brand's assets.
+const SAVED_VIEWS_KEY = 'stoplight.savedViews.v1'
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* ignore */
+  }
+}
+/** A brand's system, defaulting to a fresh empty one (read-only — never mutates). */
+function libFor(map: Record<string, MessagingLibrary>, brand: string): MessagingLibrary {
+  return map[brand] ?? emptyLibrary()
+}
+/** Apply a change to the VIEWED brand's system (messagingBrand) and keep the
+ *  `library` mirror in sync (the Messaging page + library readers use the mirror). */
+function activeLibPatch(
+  s: TrafficState,
+  fn: (lib: MessagingLibrary) => MessagingLibrary,
+): { brandSystems: Record<string, MessagingLibrary>; library: MessagingLibrary } {
+  const brand = s.messagingBrand
+  if (!brand) return { brandSystems: s.brandSystems, library: s.library }
+  const library = fn(libFor(s.brandSystems, brand))
+  const brandSystems = { ...s.brandSystems, [brand]: library }
+  saveBrandSystems(brandSystems)
+  return { brandSystems, library }
 }
 
 // Coherence decisions: the human accept/override calls on the cross-variant
@@ -392,6 +781,98 @@ function saveCampaigns(list: Campaign[]): void {
   }
 }
 
+// Named connection canvases (boards) per campaign. The implicit "All" board
+// (id 'all') shows every audience and isn't stored — only custom boards live here.
+export interface CanvasBoard {
+  id: string
+  client: string
+  campaign: string
+  name: string
+  /** Audiences this board shows, by name; empty shows all. */
+  audiences: string[]
+}
+const CANVASES_KEY = 'stoplight.canvases.v1'
+function loadCanvases(): CanvasBoard[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CANVASES_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveCanvases(list: CanvasBoard[]): void {
+  try {
+    localStorage.setItem(CANVASES_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Artboards: named frames drawn on the infinite canvas to group a region of cards
+// (a launch set, a channel cluster, a phase). Purely a spatial grouping/label in
+// v1 — the projections that read a campaign (Grid, Calendar) already exist; this is
+// the canvas surface for framing work. Persisted per client + campaign, in world coords.
+export interface Artboard {
+  id: string
+  client: string
+  campaign: string
+  name: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+const ARTBOARDS_KEY = 'stoplight.artboards.v1'
+function loadArtboards(): Artboard[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(ARTBOARDS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveArtboards(list: Artboard[]): void {
+  try {
+    localStorage.setItem(ARTBOARDS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+// Open project tabs (campaign names) — the canvases you have open in the folder
+// drawer, in tab order. You close them with the × like browser tabs.
+const OPEN_PROJECTS_KEY = 'stoplight.openProjects.v1'
+function loadOpenProjects(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(OPEN_PROJECTS_KEY) || '[]')
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+function saveOpenProjects(list: string[]): void {
+  try {
+    localStorage.setItem(OPEN_PROJECTS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+const ACTIVE_CANVAS_KEY = 'stoplight.activeCanvas.v1'
+function loadActiveCanvas(): Record<string, string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(ACTIVE_CANVAS_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveActiveCanvas(map: Record<string, string>): void {
+  try {
+    localStorage.setItem(ACTIVE_CANVAS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
 // RTBs drafted from the ICP per campaign, persisted. Re-registered on load so
 // their labels resolve in the grid / drawer / flow after a reload.
 const CAMPAIGN_RTBS_KEY = 'stoplight.campaignRtbs.v1'
@@ -421,6 +902,18 @@ interface TrafficState {
 
   /** Sidebar channel filter; 'all' shows everything. */
   filter: ChannelId | 'all'
+  /** Sidebar proof-point filter (an RTB id); 'all' shows everything. */
+  proofFilter: string
+  /** Sidebar CTA filter (a CTA value); 'all' shows everything. */
+  ctaFilter: string
+  /** Sidebar audience filter (an audience name); 'all' shows everything. */
+  audienceFilter: string
+  /** Status / governance card filter (flagged / draft / live / unvetted). */
+  cardFilter: CardFilter
+  /** The files-browser home filter (all / drafts / flagged / live / `brand:<name>`),
+   *  owned here so the files sidebar can drive it from any page. */
+  homeFilter: string
+  setHomeFilter: (f: string) => void
   /** Toolbar search across asset name / caption. */
   query: string
   /** Breadcrumb scope: which client, then which campaign. 'all' = no scope. */
@@ -428,13 +921,67 @@ interface TrafficState {
   campaignFilter: string
   /** Per-client workspace view. */
   view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas'
+  /** Connection-canvas performance overlay: per-asset reach/rate + plan rollup. */
+  perfMode: boolean
+  togglePerfMode: () => void
+  /** Brand-level (Level 1) view: the workspace's layers. */
+  brandView: 'foundation' | 'live' | 'campaigns' | 'personalize'
+  setBrandView: (v: 'foundation' | 'live' | 'campaigns' | 'personalize') => void
   /** Forward time horizon for the Connection + Grid views. */
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing'
+  page: 'clients' | 'connectors' | 'billing' | 'library'
+  /** One messaging system per brand, keyed by brand name (lazy-created). */
+  brandSystems: Record<string, MessagingLibrary>
+  /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
+   *  hard boundary: generation/coherence resolve assets only from a brand's own scope
+   *  (self + ancestors + explicit shares). */
+  brandMeta: BrandMetaMap
+  // ---- ABM: target accounts ----
+  /** Target accounts per brand (BlackRock, Robinhood, …). Accounts live under a brand. */
+  accountsByBrand: Record<string, Account[]>
+  /** Named account sets a campaign/program targets. */
+  targetLists: TargetList[]
+  /** The target list a campaign targets (campaign name → list id). */
+  campaignTargetList: Record<string, string>
+  /** Saved Views (smart canvases): named, re-resolving filters over a brand's assets. */
+  savedViews: SavedView[]
+  /** Approved/proposed conditional rules per campaign (fan-out conditional logic). */
+  campaignConditions: Record<string, FanCondition[]>
+  /** The brand whose system the Messaging page is viewing/editing. */
+  messagingBrand: string
+  setMessagingBrand: (brand: string) => void
+  /** Mirror of the viewed brand's system (brandSystems[messagingBrand]): reusable
+   *  audiences, proof, subjects, hooks, CTAs, strategies. The canvas reads the
+   *  campaign's brand's system directly from brandSystems. */
+  library: MessagingLibrary
+  addLibraryItem: (kind: LibraryKind, item: LibraryCta | Rtb | AudienceType | GtmStrategy | LibrarySubject | LibraryHook) => void
+  /** Clear a brand's authored messaging (CTAs, proof, audiences, subjects, hooks);
+   *  keeps the standard GTM strategies. Used to reset a polluted system. */
+  resetBrandMessaging: (brand: string) => void
+  removeLibraryItem: (kind: LibraryKind, id: string) => void
+  /** Bless a draft library asset into an approved master (governance). */
+  approveLibraryItem: (kind: LibraryKind, id: string) => void
+  /** Edit a library Subject master and PROPAGATE the new text to every campaign
+   *  carrying the old text (Figma-style master→instance). Returns how many
+   *  campaigns were updated, so the Library can report the blast radius. */
+  editLibrarySubject: (id: string, text: string) => number
+  /** Edit a library Hook master in place (no canvas instances to propagate yet). */
+  editLibraryHook: (id: string, text: string) => void
+  /** Pull a library audience (with its proof + voice) onto a client. */
+  useLibraryAudience: (client: string, audienceId: string) => void
+  /** Save a project's audience into the library for reuse elsewhere. */
+  saveAudienceToLibrary: (audience: AudienceType) => void
   /** ICP & proof side drawer. */
   icpOpen: boolean
+  /** Personalization fan-out card drawer. */
+  personalizeOpen: boolean
+  /** Saved Views (smart canvases) drawer + which view is open as a board (null = list). */
+  savedViewsOpen: boolean
+  setSavedViewsOpen: (open: boolean) => void
+  openSavedViewId: string | null
+  setOpenSavedViewId: (id: string | null) => void
   /** Channel whose tracking-setup drawer is open ('all' = overview), or null. */
   trackingChannel: ChannelId | 'all' | null
   openTracking: (channel: ChannelId | 'all') => void
@@ -491,9 +1038,53 @@ interface TrafficState {
   setClientAudiences: (name: string, audiences: AudienceType[]) => void
   /** Remove a client: its rows, campaigns, saved Drive link, profile, and list entry. */
   deleteClient: (name: string) => Promise<void>
+  /** Named connection canvases (boards) per campaign; the implicit 'all' board
+   *  isn't stored. */
+  canvases: CanvasBoard[]
+  /** Active canvas id per scope key (`client|campaign`); defaults to 'all'. */
+  activeCanvas: Record<string, string>
+  addCanvas: (client: string, campaign: string, name: string, audiences?: string[]) => string
+  renameCanvas: (id: string, name: string) => void
+  deleteCanvas: (id: string) => void
+  /** Artboards: named frames drawn on the canvas to group a region of cards.
+   *  Persisted per client + campaign in world coordinates. */
+  artboards: Artboard[]
+  addArtboard: (client: string, campaign: string, rect: { x: number; y: number; w: number; h: number }) => void
+  renameArtboard: (id: string, name: string) => void
+  deleteArtboard: (id: string) => void
+  setActiveCanvas: (scopeKey: string, id: string) => void
+  setCanvasAudiences: (id: string, audiences: string[]) => void
+  /** Open project tabs (campaign names) in the canvas folder drawer, in tab order. */
+  openProjects: string[]
+  openProject: (campaign: string) => void
+  closeProject: (campaign: string) => void
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
+  /** Move a campaign through its lifecycle (planning → in-review → active → completed). */
+  setCampaignStatus: (name: string, status: CampaignStatus) => void
+  /** Open a campaign straight into its workspace (Level 2 canvas) from anywhere —
+   *  the home hub's "jump back in" + triage deep-links use this to resume work. */
+  openCampaign: (name: string) => void
+  /** Create a fresh, brand-less canvas in the Drafts space and open it — the hub's
+   *  "New canvas" action. No client / wizard up front; attach a brand later via the
+   *  Brand card. Seeds one default audience lane so the blank canvas is addable. */
+  createCanvas: () => void
+  /** Link a campaign to a GTM playbook (ABM, Demand Gen, etc.) — the strategy selector. */
+  setCampaignStrategy: (name: string, strategy: string) => void
+  /** Swap a campaign's subject (what it's about) — the Subject card picker. */
+  setCampaignSubject: (name: string, subject: string) => void
+  /** Swap a campaign's brand/client — the Brand card picker. Re-homes the campaign. */
+  setCampaignClient: (name: string, client: string) => void
+  /** Clone a campaign + all its assets into a new variant campaign (non-destructive
+   *  "duplicate & try"); switches to it and returns the new campaign name. */
+  duplicateCampaign: (name: string) => Promise<string>
+  /** Re-tag every asset in a campaign targeting `from` to `to`, then ripple. The
+   *  audience-swap, as a store action so it works on any campaign (incl. a clone). */
+  swapCampaignAudience: (campaign: string, from: string, to: string) => Promise<void>
+  /** Clear a persisted re-check flag once the produced asset has been reworked
+   *  where it lives (or the mismatch is accepted). */
+  clearRecheckFlag: (id: string) => Promise<void>
   /** Seasonal re-run: clone a campaign's assets + structure into a new editable cycle. */
   rerunSeasonalCampaign: (campaign: string) => Promise<void>
   /** Always-on: rotate creative now (reset rotated assets to draft, reschedule, log). */
@@ -513,10 +1104,18 @@ interface TrafficState {
   audienceWizardOpen: boolean
   openAudienceWizard: () => void
   closeAudienceWizard: () => void
-  /** "Claude sets up the workspace" flow. */
+  /** "Claude sets up the workspace" flow (the manual route's connect + confirm). */
   setupOpen: boolean
   openSetup: () => void
   closeSetup: () => void
+  /** Forked onboarding: pick Do-it-yourself (manual) vs Set-up-with-Claude (assisted). */
+  onboardOpen: boolean
+  openOnboard: () => void
+  closeOnboard: () => void
+  /** The assisted route's desktop handoff screen (opens Claude to connect tools). */
+  assistedOpen: boolean
+  openAssisted: () => void
+  closeAssisted: () => void
   /** Generate a proposed workspace setup from a URL (Claude, heuristic fallback). */
   generateSetup: (input: SetupInput) => Promise<WorkspaceSetup>
   /** Commit a confirmed setup: client + profile + ICP + proof + first campaign. */
@@ -527,21 +1126,59 @@ interface TrafficState {
   refreshClient: (client: string) => Promise<void>
   /** The client currently being refreshed (re-gathered), or null. */
   refreshingClient: string | null
+  // ---- Per-channel link + ingest (Foundation › Channels) ----
+  /** The channel-ingest drawer: open + which client/channel it targets. A 'sanity'
+   *  kind targets the brand's Sanity CMS instead of a scraped channel. */
+  channelIngestOpen: boolean
+  channelIngestTarget: { client: string; channel: ChannelId; kind?: 'channel' | 'sanity' | 'resend' | 'google-ads' } | null
+  /** Streamed stage progress for the running ingest. */
+  channelIngestStages: IngestProgress[]
+  /** The last ingest's result (mapped messaging + in-art copy), or null. */
+  channelIngestResult: ChannelIngestResult | null
+  /** A surfaced error from the ingest (e.g. LOGIN_REQUIRED, NO_KEY). */
+  channelIngestError: { code: string | null; message: string } | null
+  /** True while a per-channel ingest is running. */
+  ingestingChannel: boolean
+  /** Open the per-channel link + ingest drawer for a channel. */
+  openChannelIngest: (client: string, channel: ChannelId) => void
+  closeChannelIngest: () => void
+  /** Manually link a channel by profile URL (the no-browser fallback). */
+  linkChannelUrl: (client: string, channel: ChannelId, url: string) => void
+  /** Open the drawer to ingest the brand's owned content from Sanity. */
+  openSanityIngest: (client: string) => void
+  /** Save a client's Sanity connection (projectId/dataset/token). */
+  setSanityCreds: (client: string, creds: { projectId: string; dataset: string; token?: string }) => void
+  /** Open the drawer to ingest the brand's email copy from Resend. */
+  openResendIngest: (client: string) => void
+  /** Save a client's Resend connection (API key). */
+  setResendCreds: (client: string, creds: { apiKey: string }) => void
+  /** Open the drawer to ingest the brand's live ad copy from the Google Ads API. */
+  openGoogleAdsIngest: (client: string) => void
+  /** Save a client's Google Ads API credentials. */
+  setGoogleAdsCreds: (client: string, creds: NonNullable<ClientProfile['googleAds']>) => void
+  /** Run the ingest for the open target: gather + read the copy (incl. art), or
+   *  query Sanity when the target is the CMS. */
+  ingestChannel: () => Promise<void>
   /** Seed the spreadsheet with draft rows for a strategy's needed assets, spread
    *  across the flight at each asset's monthly cadence, optionally splitting a
    *  media budget across the paid rows. */
   seedCampaignAssets: (
     campaign: string,
     deliverables: Deliverable[],
-    opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string },
+    opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string; audiences?: string[] },
   ) => Promise<void>
   setFilter: (filter: ChannelId | 'all') => void
+  setProofFilter: (proofFilter: string) => void
+  setCtaFilter: (ctaFilter: string) => void
+  setAudienceFilter: (audienceFilter: string) => void
+  setCardFilter: (cardFilter: CardFilter) => void
   setQuery: (query: string) => void
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library') => void
   setIcpOpen: (open: boolean) => void
+  setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
   /** Connect the Drive account (real sign-in, or demo). */
   connectDrive: () => Promise<void>
@@ -566,11 +1203,53 @@ interface TrafficState {
   removeAsset: (id: string) => void
   /** Turn ready tray assets into scheduled draft rows in the sheet. */
   addToSheet: () => Promise<void>
+  /** Generate a draft asset for one personalization-matrix cell (composed from the
+   *  brand model), append it, and refresh so the connection check runs on it. */
+  draftMatrixCell: (row: TrafficRow) => Promise<void>
+  /** Append a batch of matrix-drafted assets at once (bulk gap-fill), then refresh. */
+  draftMatrixCells: (rows: TrafficRow[]) => Promise<void>
 
   // sheet (spreadsheet) edits
   updateRow: (id: string, patch: Partial<TrafficRow>) => Promise<void>
+  /** Apply many row patches as ONE batch (sequential writes, a single refresh) so
+   *  cascades don't race concurrent refreshes and leave the in-memory rows stale. */
+  updateRows: (updates: { id: string; patch: Partial<TrafficRow> }[]) => Promise<void>
+  /** Re-draft the messaging of every asset in scope from the current model — the
+   *  audience's angle + emphasized proof, and the stage CTA. Called when the
+   *  strategy or an audience changes so the change ripples across every asset. */
+  redraftAssets: (scope: { campaign?: string; audience?: string; client?: string }) => Promise<void>
+  /** Row ids currently re-drafting — drives the on-canvas "generating" animation
+   *  so a strategy/audience change is visibly seen rippling across the cards. */
+  regenIds: Set<string>
   removeRow: (id: string) => Promise<void>
+  // ---- Asset lifecycle ----
+  /** Hand-author a first-class asset into a campaign (no generation). Tagged `authored`. */
+  addAsset: (brand: string, campaign: string, patch: Partial<TrafficRow>) => Promise<TrafficRow>
+  /** Bulk-import real content into a canvas as first-class assets (Buffer posts, scraped
+   *  site/case studies, a pasted audit). Dedups by URL/copy so a re-import adds only new. */
+  importAssets: (
+    brand: string,
+    campaign: string,
+    items: Record<string, unknown>[],
+    source: AssetSource,
+  ) => Promise<{ imported: number; updated: number; skipped: number }>
+  /** Set a single asset's review/publish status (draft → in_review → approved/rejected). */
+  setRowStatus: (id: string, status: RowStatus, note?: string) => Promise<void>
+  /** Soft-delete (archive) an asset — hidden but restorable. */
+  archiveRow: (id: string) => Promise<void>
+  /** Soft-delete many assets at once (a whole fan set, a campaign's assets). */
+  archiveRows: (ids: string[]) => Promise<void>
+  /** Restore an archived asset. */
+  restoreRow: (id: string) => Promise<void>
+  /** Soft-delete a campaign + archive its assets. Recoverable. */
+  deleteCampaign: (name: string) => Promise<void>
+  /** Restore an archived campaign + its assets. */
+  restoreCampaign: (name: string) => Promise<void>
   duplicateRow: (id: string) => Promise<void>
+  /** Paste a copy of a row as a new draft asset (unique name) — Cmd/Ctrl+V. */
+  pasteAsset: (id: string) => Promise<void>
+  /** Undo the last sheet mutation (swap, restage, connect, paste, delete) — Cmd/Ctrl+Z. */
+  undo: () => Promise<void>
   approveAll: () => Promise<void>
   publishRow: (id: string) => Promise<void>
   clearSheet: () => Promise<void>
@@ -600,8 +1279,15 @@ interface TrafficState {
    *  Null until a recheck is requested, so the heuristic is the default everywhere. */
   claudeBreaks: CoherenceBreak[] | null
   claudeBreaksScope: string | null
+  /** Which brand baseline the last coherence check measured against (voice + proof set
+   *  in force, and where it came from). The check reports its referent explicitly. */
+  coherenceBaseline: BrandBaseline | null
   coherenceChecking: boolean
   coherenceLive: boolean
+  /** Content hash claudeBreaks were computed for — stale once content changes. */
+  coherenceCheckedHash: string | null
+  /** Claude check fell back / errored — stay on the live heuristic, stop auto-retry. */
+  coherenceUnavailable: boolean
   runCoherenceCheck: () => Promise<void>
   /** The Claude engine: reads from sources + publishes to channels via tools. */
   engineOpen: boolean
@@ -636,6 +1322,61 @@ interface TrafficState {
   /** Draft starter copy + proof into empty messaging fields. Pass specific row
    *  ids, or omit to draft every in-scope reviewable row that has no copy yet. */
   draftCopy: (rowIds?: string[]) => Promise<void>
+  /** Plan a personalization fan-out without committing (count-before-commit). */
+  fanOutPreview: (
+    campaign: string,
+    dimension: string,
+    values?: string[],
+    exclude?: Record<string, string>[],
+  ) => FanoutPlan
+  /** Fan a campaign's base assets into one lineage-tagged variant per dimension value,
+   *  then regenerate copy per variant. Stacks (multiplies) over existing variants. */
+  fanOut: (
+    campaign: string,
+    dimension: string,
+    values?: string[],
+    opts?: { exclude?: Record<string, string>[]; generate?: boolean },
+  ) => Promise<{ variantCount: number; created: number }>
+  /** Propose if/then conditions from the brand library (Claude/heuristic); human approves. */
+  proposeConditions: (campaign: string) => FanCondition[]
+  setConditionStatus: (campaign: string, id: string, status: 'proposed' | 'approved' | 'rejected') => void
+
+  // ---- Brand boundary (hard isolation; brand = the coherence baseline) ----
+  /** A transient notice when an action is refused because the canvas has no bound brand
+   *  (the brand-less / contamination failure mode). Cleared on the next bound action. */
+  brandNotice: string | null
+  setBrandNotice: (msg: string | null) => void
+  /** The inspectable baseline for a brand: which voice / proof set is in force and from
+   *  where (self + ancestors + shares). Drives the canvas baseline chip + coherence report. */
+  brandBaselineFor: (brand: string) => BrandBaseline
+  /** Set / clear a brand's parent (inherit the parent's proof / values / audiences). */
+  setBrandParent: (brand: string, parent: string | null) => void
+  /** Explicitly attach (or detach) another brand's library as a shared source. */
+  setBrandShare: (brand: string, share: string, on: boolean) => void
+  /** Mark a brand a lightweight draft (sketch) or clear the flag. */
+  setBrandDraft: (brand: string, draft: boolean) => void
+  /** Promote a draft brand into a real brand, optionally renaming, carrying its assets. */
+  promoteBrand: (draftBrand: string, realName?: string) => void
+
+  // ---- ABM: target accounts ----
+  addAccount: (brand: string, patch: Partial<Account>) => Account
+  updateAccount: (brand: string, id: string, patch: Partial<Account>) => void
+  setAccountStatus: (brand: string, id: string, status: AccountStatus) => void
+  removeAccount: (brand: string, id: string) => void
+  /** Create a target list under a brand, optionally seeded with account ids. */
+  createTargetList: (brand: string, name: string, accountIds?: string[]) => TargetList
+  setTargetListAccounts: (listId: string, accountIds: string[]) => void
+  /** Delete a target list and detach it from any campaign that targeted it. */
+  removeTargetList: (listId: string) => void
+  /** Attach (or clear) the target list a campaign targets. */
+  attachTargetList: (campaign: string, listId: string | null) => void
+  /** The accounts a campaign targets (via its attached list). */
+  accountsForCampaign: (campaign: string) => Account[]
+
+  // ---- Saved Views (smart canvases) ----
+  createSavedView: (brand: string, name: string, patch: Partial<SavedView>) => SavedView
+  updateSavedView: (id: string, patch: Partial<SavedView>) => void
+  deleteSavedView: (id: string) => void
 
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
@@ -693,16 +1434,65 @@ function pushAudit(
   set({ auditLog })
 }
 
+// Undo history — a row snapshot before each discrete sheet mutation. Module-level
+// (not in state, so it never triggers a re-render) and capped to bound memory. A
+// shallow row clone is enough: mutations replace nested objects, never mutate them.
+const undoStack: TrafficRow[][] = []
+function pushUndo(rows: TrafficRow[]): void {
+  undoStack.push(rows.map((r) => ({ ...r })))
+  if (undoStack.length > 30) undoStack.shift()
+}
+
+/**
+ * Reconcile re-check flags on the PRODUCED/linked assets of a campaign (optionally
+ * one lane) after a frame change. An editable asset just gets redrafted; a produced
+ * one (welded video / static / live page) can't be, so when the new frame's proof
+ * set no longer carries its claim we flag it for external rework — and clear the
+ * flag again if a later change brings it back under valid proof. Idempotent.
+ */
+async function flagRecheckMisfits(
+  get: () => TrafficState,
+  campaign: string,
+  newProofIds: Set<string>,
+  frame: string,
+  audience?: string,
+): Promise<void> {
+  const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+  for (const r of get().rows) {
+    if ((r.campaign ?? '').trim() !== campaign.trim()) continue
+    if (audience != null && (r.audience ?? '').trim() !== audience.trim()) continue
+    if (!isLinkedExternal(r)) continue
+    const ids = assetRtbIds(r)
+    const misfit = ids.length > 0 && !ids.every((id) => newProofIds.has(id))
+    if (misfit && !r.recheckFlag) {
+      updates.push({
+        id: r.id,
+        patch: { recheckFlag: { reason: "Proof point doesn't carry to the new frame", frame, at: Date.now() } },
+      })
+    } else if (!misfit && r.recheckFlag) {
+      updates.push({ id: r.id, patch: { recheckFlag: undefined } })
+    }
+  }
+  if (updates.length) await get().updateRows(updates)
+}
+
 export const useTrafficStore = create<TrafficState>((set, get) => ({
   assets: [],
   rows: [],
   loading: false,
   filter: 'all',
+  proofFilter: 'all',
+  ctaFilter: 'all',
+  audienceFilter: 'all',
+  cardFilter: 'all',
+  homeFilter: 'all',
   query: '',
   // A share link locks the session to its client + role from the first render.
   clientFilter: initialShare?.client ?? 'all',
   campaignFilter: 'all',
   view: 'flow',
+  perfMode: false,
+  brandView: 'campaigns',
   timeRange: 'all',
   page: 'clients',
   brandGuides: loadBrandGuides(),
@@ -716,6 +1506,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   versions: loadVersions(),
   historyOpen: false,
   icpOpen: false,
+  personalizeOpen: false,
+  savedViewsOpen: false,
+  openSavedViewId: null,
   trackingChannel: null,
   drivePickerOpen: false,
   driveConnected: false,
@@ -723,12 +1516,35 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
   refreshingClient: null,
+  channelIngestOpen: false,
+  channelIngestTarget: null,
+  channelIngestStages: [],
+  channelIngestResult: null,
+  channelIngestError: null,
+  ingestingChannel: false,
   clientAudiences: loadClientAudiences(),
+  regenIds: new Set<string>(),
+  brandSystems: loadBrandSystems(),
+  brandMeta: loadBrandMeta(),
+  brandNotice: null,
+  accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
+  targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
+  campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
+  savedViews: loadJson<SavedView[]>(SAVED_VIEWS_KEY, []),
+  campaignConditions: loadConditions(),
+  messagingBrand: '',
+  library: emptyLibrary(),
+  canvases: loadCanvases(),
+  artboards: loadArtboards(),
+  activeCanvas: loadActiveCanvas(),
+  openProjects: loadOpenProjects(),
   campaignList: loadCampaigns(),
   wizardOpen: false,
   wizardClient: null,
   audienceWizardOpen: false,
   setupOpen: false,
+  onboardOpen: false,
+  assistedOpen: false,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -743,8 +1559,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   breakStatus: loadBreakStatus(),
   claudeBreaks: null,
   claudeBreaksScope: null,
+  coherenceBaseline: null,
   coherenceChecking: false,
   coherenceLive: false,
+  coherenceCheckedHash: null,
+  coherenceUnavailable: false,
   engineOpen: false,
   engineRunning: false,
   engineActions: [],
@@ -759,16 +1578,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   budgetCleared: false,
 
   setFilter: (filter) => set({ filter }),
+  setProofFilter: (proofFilter) => set({ proofFilter }),
+  setCtaFilter: (ctaFilter) => set({ ctaFilter }),
+  setAudienceFilter: (audienceFilter) => set({ audienceFilter }),
+  setCardFilter: (cardFilter) => set({ cardFilter }),
+  setHomeFilter: (homeFilter) => set({ homeFilter }),
   setQuery: (query) => set({ query }),
   // Switching client resets the campaign scope (campaigns belong to a client).
-  // A shared session is locked to its one client.
+  // A shared session is locked to its one client. Proof points, CTAs + audience
+  // are campaign-scoped, so those filters reset whenever client or campaign changes.
   setClientFilter: (clientFilter) => {
     const ss = get().sharedSession
     if (ss && clientFilter !== ss.client) return
-    set({ clientFilter, campaignFilter: 'all' })
+    set({ clientFilter, campaignFilter: 'all', proofFilter: 'all', ctaFilter: 'all', audienceFilter: 'all', cardFilter: 'all' })
   },
-  setCampaignFilter: (campaignFilter) => set({ campaignFilter }),
+  setCampaignFilter: (campaignFilter) => set({ campaignFilter, proofFilter: 'all', ctaFilter: 'all', audienceFilter: 'all', cardFilter: 'all' }),
   setView: (view) => set({ view }),
+  togglePerfMode: () => set((s) => ({ perfMode: !s.perfMode })),
+  setBrandView: (brandView) => set({ brandView }),
   setTimeRange: (timeRange) => set({ timeRange }),
   // Billing and Connectors are owner-only; ignore navigation a role can't take.
   setPage: (page) => {
@@ -778,6 +1605,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ page })
   },
   setIcpOpen: (icpOpen) => set({ icpOpen }),
+  setPersonalizeOpen: (personalizeOpen) => set({ personalizeOpen }),
+  setSavedViewsOpen: (savedViewsOpen) => set({ savedViewsOpen }),
+  setOpenSavedViewId: (openSavedViewId) => set({ openSavedViewId }),
   openTracking: (channel) => set({ trackingChannel: channel }),
   closeTracking: () => set({ trackingChannel: null }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
@@ -980,6 +1810,82 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveClientAudiences(clientAudiences)
       return { clientAudiences }
     }),
+
+  setMessagingBrand: (brand) =>
+    set((s) => ({ messagingBrand: brand, library: libFor(s.brandSystems, brand) })),
+  addLibraryItem: (kind, item) =>
+    set((s) => activeLibPatch(s, (lib) => ({ ...lib, [kind]: [...(lib[kind] as unknown[]), item] }) as MessagingLibrary)),
+  resetBrandMessaging: (brand) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const brandSystems = { ...s.brandSystems, [b]: emptyLibrary() }
+      saveBrandSystems(brandSystems)
+      return { brandSystems, library: s.messagingBrand === b ? brandSystems[b] : s.library }
+    }),
+  removeLibraryItem: (kind, id) =>
+    set((s) =>
+      activeLibPatch(s, (lib) => {
+        const idKey = kind === 'strategies' ? 'key' : 'id'
+        const list = (lib[kind] as { id?: string; key?: string }[]).filter(
+          (x) => (x as Record<string, string>)[idKey] !== id,
+        )
+        return { ...lib, [kind]: list } as MessagingLibrary
+      }),
+    ),
+  approveLibraryItem: (kind, id) =>
+    set((s) =>
+      activeLibPatch(s, (lib) => {
+        const list = (lib[kind] as { id: string; approved?: boolean }[]).map((x) =>
+          x.id === id ? { ...x, approved: true } : x,
+        )
+        return { ...lib, [kind]: list } as MessagingLibrary
+      }),
+    ),
+  editLibrarySubject: (id, text) => {
+    const next = text.trim()
+    const s = get()
+    const master = libFor(s.brandSystems, s.messagingBrand).subjects.find((x) => x.id === id)
+    const oldText = master?.text?.trim() ?? ''
+    if (!next || !master || next === oldText) return 0
+    // Update the master in the viewed brand's system.
+    const { brandSystems, library } = activeLibPatch(s, (lib) => ({
+      ...lib,
+      subjects: lib.subjects.map((x) => (x.id === id ? { ...x, text: next } : x)),
+    }))
+    // Propagate to instances: every campaign carrying the old subject text follows
+    // the master to the new text (master→instance).
+    const touched = s.campaignList.filter((c) => (c.subject ?? '').trim() === oldText)
+    let campaignList = s.campaignList
+    if (oldText && touched.length) {
+      campaignList = s.campaignList.map((c) => ((c.subject ?? '').trim() === oldText ? { ...c, subject: next } : c))
+      saveCampaigns(campaignList)
+    }
+    set({ brandSystems, library, campaignList })
+    return oldText ? touched.length : 0
+  },
+  editLibraryHook: (id, text) =>
+    set((s) => {
+      const next = text.trim()
+      if (!next) return {}
+      return activeLibPatch(s, (lib) => ({ ...lib, hooks: lib.hooks.map((x) => (x.id === id ? { ...x, text: next } : x)) }))
+    }),
+  useLibraryAudience: (client, audienceId) =>
+    set((s) => {
+      const c = client.trim()
+      const src = s.library.audiences.find((a) => a.id === audienceId)
+      if (!c || !src) return {}
+      // Clone with a fresh id so foundation edits don't mutate the library copy.
+      const clone = normalizeAudience({ ...src, id: freshAudienceId() })
+      const clientAudiences = { ...s.clientAudiences, [c]: [...(s.clientAudiences[c] ?? []), clone] }
+      saveClientAudiences(clientAudiences)
+      return { clientAudiences }
+    }),
+  saveAudienceToLibrary: (audience) =>
+    set((s) => {
+      const clone = normalizeAudience({ ...audience, id: `laud_${Date.now().toString(36)}` })
+      return activeLibPatch(s, (lib) => ({ ...lib, audiences: [...lib.audiences, clone] }))
+    }),
   deleteClient: async (name) => {
     // Remove the client's rows from the sheet.
     const ids = get()
@@ -1019,6 +1925,252 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
+
+  addCanvas: (client, campaign, name, audiences = []) => {
+    const id = `canvas_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
+    const canvases = [...get().canvases, { id, client, campaign, name, audiences }]
+    saveCanvases(canvases)
+    const activeCanvas = { ...get().activeCanvas, [`${client}|${campaign}`]: id }
+    saveActiveCanvas(activeCanvas)
+    set({ canvases, activeCanvas })
+    return id
+  },
+  renameCanvas: (id, name) => {
+    const canvases = get().canvases.map((c) => (c.id === id ? { ...c, name } : c))
+    saveCanvases(canvases)
+    set({ canvases })
+  },
+  deleteCanvas: (id) => {
+    const board = get().canvases.find((c) => c.id === id)
+    const canvases = get().canvases.filter((c) => c.id !== id)
+    saveCanvases(canvases)
+    let activeCanvas = get().activeCanvas
+    if (board && activeCanvas[`${board.client}|${board.campaign}`] === id) {
+      activeCanvas = { ...activeCanvas, [`${board.client}|${board.campaign}`]: 'all' }
+      saveActiveCanvas(activeCanvas)
+    }
+    set({ canvases, activeCanvas })
+  },
+  setActiveCanvas: (scopeKey, id) => {
+    const activeCanvas = { ...get().activeCanvas, [scopeKey]: id }
+    saveActiveCanvas(activeCanvas)
+    set({ activeCanvas })
+  },
+
+  addArtboard: (client, campaign, rect) => {
+    const existing = get().artboards.filter((a) => a.client === client && a.campaign === campaign)
+    const id = `art_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
+    const artboards = [...get().artboards, { id, client, campaign, name: `Artboard ${existing.length + 1}`, ...rect }]
+    saveArtboards(artboards)
+    set({ artboards })
+  },
+  renameArtboard: (id, name) => {
+    const artboards = get().artboards.map((a) => (a.id === id ? { ...a, name } : a))
+    saveArtboards(artboards)
+    set({ artboards })
+  },
+  deleteArtboard: (id) => {
+    const artboards = get().artboards.filter((a) => a.id !== id)
+    saveArtboards(artboards)
+    set({ artboards })
+  },
+  setCanvasAudiences: (id, audiences) => {
+    const canvases = get().canvases.map((c) => (c.id === id ? { ...c, audiences } : c))
+    saveCanvases(canvases)
+    set({ canvases })
+  },
+
+  openProject: (campaign) => {
+    const c = campaign.trim()
+    if (!c) return
+    const cur = get().openProjects
+    if (cur.includes(c)) return
+    const openProjects = [...cur, c]
+    saveOpenProjects(openProjects)
+    set({ openProjects })
+  },
+  closeProject: (campaign) => {
+    const openProjects = get().openProjects.filter((c) => c !== campaign)
+    saveOpenProjects(openProjects)
+    set({ openProjects })
+  },
+
+  setCampaignStatus: (name, status) =>
+    set((s) => {
+      const completedAt = status === 'completed' ? Date.now() : undefined
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) =>
+          i === idx ? { ...c, status, completedAt } : c,
+        )
+      } else {
+        // Row-only campaign (no wizard record yet): create a minimal entry so the
+        // explicit state persists and resolves to its client before any rows change.
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', status, completedAt }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  openCampaign: (name) => {
+    const campaign = name.trim()
+    if (!campaign) return
+    const client = clientForCampaign(campaign)
+    // Honor a shared session's client lock (a guest can't jump into another brand).
+    const ss = get().sharedSession
+    if (ss && client !== ss.client) return
+    registerCampaign(campaign, client)
+    get().openProject(campaign)
+    set({
+      page: 'clients',
+      clientFilter: client,
+      campaignFilter: campaign,
+      view: 'canvas',
+      proofFilter: 'all',
+      ctaFilter: 'all',
+      audienceFilter: 'all',
+      cardFilter: 'all',
+    })
+  },
+
+  createCanvas: () => {
+    // A unique "Untitled canvas [N]" so repeated New-canvas clicks don't collide.
+    const exists = (n: string) =>
+      get().campaignList.some((c) => c.name === n) || get().rows.some((r) => (r.campaign ?? '') === n)
+    let name = 'Untitled canvas'
+    for (let i = 2; exists(name); i++) name = `Untitled canvas ${i}`
+    registerCampaign(name, DRAFTS_SPACE)
+    get().addCampaign({ name, client: DRAFTS_SPACE, strategy: 'Current state', status: 'planning' })
+    // Seed one default lane for the Drafts space (once) so the blank canvas can take
+    // an asset immediately; a real brand's audiences arrive when you attach one.
+    set((s) => {
+      if ((s.clientAudiences[DRAFTS_SPACE] ?? []).length) return {}
+      const clientAudiences = { ...s.clientAudiences, [DRAFTS_SPACE]: [newAudience({ name: 'General audience' })] }
+      saveClientAudiences(clientAudiences)
+      return { clientAudiences }
+    })
+    get().openCampaign(name)
+  },
+
+  setCampaignStrategy: (name, strategy) => {
+    set((s) => {
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, strategy } : c))
+      } else {
+        // Row-only campaign with no wizard record yet: create a minimal entry so the
+        // chosen playbook persists and resolves to its client.
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    })
+    // Ripple the new playbook across every asset in the campaign.
+    void get().redraftAssets({ campaign: name })
+  },
+
+  setCampaignSubject: (name, subject) =>
+    set((s) => {
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, subject } : c))
+      } else {
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', subject }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  setCampaignClient: (name, client) => {
+    const c = client.trim()
+    if (!c) return
+    set((s) => {
+      registerCampaign(name, c)
+      const idx = s.campaignList.findIndex((x) => x.name === name)
+      const campaignList =
+        idx >= 0
+          ? s.campaignList.map((x, i) => (i === idx ? { ...x, client: c } : x))
+          : [...s.campaignList, { name, client: c, strategy: 'Current state' }]
+      saveCampaigns(campaignList)
+      // Follow the campaign to its new brand so the canvas stays coherent.
+      return { campaignList, clientFilter: c }
+    })
+    // The widest-blast frame change: re-home re-checks every asset against the new
+    // brand's proof set. Produced assets that fall off their proof get flagged for
+    // external rework (editable copy is recomposed lane-by-lane as audiences swap).
+    const newProofIds = new Set(
+      (get().clientAudiences[c] ?? []).flatMap((au) => [...(au.rtbEmphasis ?? []), ...(au.rtbs ?? []).map((x) => x.id)]),
+    )
+    void flagRecheckMisfits(get, name, newProofIds, `Brand → ${c}`)
+  },
+
+  duplicateCampaign: async (name) => {
+    const src = get().campaignList.find((c) => c.name === name)
+    const client = clientForCampaign(name)
+    // A unique "{name} — variant N" so repeated branches don't collide.
+    let newName = `${name} — variant`
+    for (let i = 2; get().campaignList.some((c) => c.name === newName); i++) newName = `${name} — variant ${i}`
+    registerCampaign(newName, client)
+    get().addCampaign({ ...(src ?? { strategy: 'Current state' }), name: newName, client, status: 'planning', completedAt: undefined })
+    const clones: TrafficRow[] = get()
+      .rows.filter((r) => r.campaign === name)
+      .map((r) => ({
+        ...r,
+        id: freshRowId(),
+        assetId: '',
+        campaign: newName,
+        status: 'draft' as const,
+        approvedAt: undefined,
+        postedAt: undefined,
+        copyReviewed: false,
+        error: undefined,
+        spend: undefined,
+        createdAt: Date.now(),
+      }))
+    // Carry the proof set so the clone's RTB labels still resolve.
+    const srcRtbs = rtbsForCampaign(name)
+    if (srcRtbs.length) {
+      registerCampaignRtbs(newName, srcRtbs)
+      const store = loadCampaignRtbs()
+      store[newName] = srcRtbs
+      saveCampaignRtbs(store)
+    }
+    if (clones.length) await sheet.append(clones)
+    await get().refresh()
+    set({ campaignFilter: newName })
+    return newName
+  },
+
+  swapCampaignAudience: async (campaign, from, to) => {
+    if (from.trim() === to.trim()) return
+    const updates = get()
+      .rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim() && (r.audience ?? '').trim() === from.trim())
+      .map((r) => ({ id: r.id, patch: { audience: to } as Partial<TrafficRow> }))
+    if (!updates.length) return
+    await get().updateRows(updates)
+    // Re-check the swapped lane's produced assets against the new audience's proof,
+    // flagging any that no longer hold (editable copy is redrafted below).
+    const client = clientForCampaign(campaign)
+    const toAud = (get().clientAudiences[client] ?? []).find((a) => a.name.trim() === to.trim())
+    if (toAud) {
+      const newProofIds = new Set([...(toAud.rtbEmphasis ?? []), ...(toAud.rtbs ?? []).map((x) => x.id)])
+      await flagRecheckMisfits(get, campaign, newProofIds, `Audience → ${to}`, to)
+    }
+    void get().redraftAssets({ audience: to })
+  },
+
+  clearRecheckFlag: async (id) => {
+    await get().updateRow(id, { recheckFlag: undefined })
+  },
 
   rerunSeasonalCampaign: async (campaignName) => {
     const src = get().campaignList.find((c) => c.name === campaignName)
@@ -1108,22 +2260,54 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   openSetup: () => set({ setupOpen: true }),
   closeSetup: () => set({ setupOpen: false }),
+  openOnboard: () => set({ onboardOpen: true }),
+  closeOnboard: () => set({ onboardOpen: false }),
+  // Fork → assisted: leave the fork, open the desktop handoff.
+  openAssisted: () => set({ onboardOpen: false, assistedOpen: true }),
+  closeAssisted: () => set({ assistedOpen: false }),
   generateSetup: (input) => setupGenerator.generate(input),
 
   provisionWorkspace: async (setup) => {
     const client = setup.brand.name.trim()
     if (!client) return
     get().addClient(client)
+    // Non-destructive profile write: fill empty fields, never clobber a human edit
+    // (re-running setup must not re-set a corrected industry / strategy).
+    const existing = get().clientProfiles[client] ?? {}
+    const keep = (cur: unknown, next: string | undefined) =>
+      typeof cur === 'string' && cur.trim() ? cur : next
     get().setClientProfile(client, {
-      website: setup.brand.website?.trim() || undefined,
-      industry: setup.brand.industry?.trim() || undefined,
-      voice: setup.brand.voice?.trim() || undefined,
+      website: keep(existing.website, setup.brand.website?.trim() || undefined),
+      industry: keep(existing.industry, setup.brand.industry?.trim() || undefined),
+      voice: keep(existing.voice, setup.brand.voice?.trim() || undefined),
+      // The inferred GTM motion: stored on the brand so it's queryable, pre-selected
+      // for generation, and overridable. Kept if already set (an override wins).
+      strategy: keep(existing.strategy, setup.strategy || undefined),
+      secondaryStrategy: keep(existing.secondaryStrategy, setup.secondaryStrategy || undefined),
+      strategyRationale: keep(existing.strategyRationale, setup.strategyRationale || undefined),
+      strategyConfidence: keep(existing.strategyConfidence, setup.strategyConfidence || undefined),
+      strategySignals: existing.strategySignals?.length
+        ? existing.strategySignals
+        : setup.signalsUsed?.length
+          ? setup.signalsUsed
+          : undefined,
+      businessModel: keep(existing.businessModel, setup.businessModel || undefined),
     })
+
+    // Re-run guard: if this client already has a setup campaign, reuse it instead of
+    // spawning a duplicate (and don't reset the ICP or re-seed its assets).
+    const campaign = setup.campaign.name?.trim() || `${client} — Campaign`
+    const existingCampaign =
+      get().campaignList.find((c) => c.name === campaign) ??
+      get().campaignList.find((c) => c.client === client)
+    if (existingCampaign) {
+      set({ setupOpen: false, clientFilter: client, campaignFilter: existingCampaign.name, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
+      return
+    }
     get().setIcp(setup.icp)
 
     const strat = GTM_STRATEGIES.find((s) => s.key === setup.strategy)
     const strategyName = strat?.name ?? setup.strategy
-    const campaign = setup.campaign.name?.trim() || `${client} — Campaign`
     const weeks = setup.campaign.durationWeeks > 0 ? setup.campaign.durationWeeks : 8
     const deliverables = STRATEGY_ASSETS[setup.strategy] ?? STRATEGY_ASSETS['demand-gen']
     const contentPerMonth = deliverables
@@ -1158,7 +2342,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       flightWeeks: weeks,
       endDate,
     })
-    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all' })
+    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
   },
 
   provisionCurrentState: async (map) => {
@@ -1170,6 +2354,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       industry: map.brand.industry?.trim() || undefined,
       voice: map.brand.voice?.trim() || undefined,
       channels: map.channels ?? [],
+      ...brandOverview(map.brand),
     })
     const primary = map.audiences[0]
     get().setIcp({
@@ -1186,7 +2371,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     currentStateProof(campaign, map)
     await sheet.append(currentStateRows(campaign, map))
     await get().refresh()
-    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all' })
+    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
   },
 
   refreshClient: async (client) => {
@@ -1208,12 +2393,197 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       get().setClientProfile(client, {
         voice: map.brand.voice?.trim() || profile.voice,
         channels: map.channels ?? profile.channels,
+        ...brandOverview(map.brand),
       })
       set({ clientFilter: client, campaignFilter: campaign })
     } catch {
       // Leave the existing map untouched on failure.
     } finally {
       set({ refreshingClient: null })
+    }
+  },
+
+  openChannelIngest: (client, channel) =>
+    set({
+      channelIngestOpen: true,
+      channelIngestTarget: { client, channel },
+      channelIngestStages: [],
+      channelIngestResult: null,
+      channelIngestError: null,
+      clientFilter: client,
+    }),
+
+  closeChannelIngest: () => set({ channelIngestOpen: false }),
+
+  linkChannelUrl: (client, _channel, url) => {
+    const u = url.trim()
+    if (!u) return
+    const existing = get().clientProfiles[client]?.channels ?? []
+    if (!existing.includes(u)) get().setClientProfile(client, { channels: [...existing, u] })
+  },
+
+  openSanityIngest: (client) =>
+    set({
+      channelIngestOpen: true,
+      channelIngestTarget: { client, channel: 'website', kind: 'sanity' },
+      channelIngestStages: [],
+      channelIngestResult: null,
+      channelIngestError: null,
+      clientFilter: client,
+    }),
+
+  setSanityCreds: (client, creds) => get().setClientProfile(client, { sanity: creds }),
+
+  openResendIngest: (client) =>
+    set({
+      channelIngestOpen: true,
+      channelIngestTarget: { client, channel: 'email', kind: 'resend' },
+      channelIngestStages: [],
+      channelIngestResult: null,
+      channelIngestError: null,
+      clientFilter: client,
+    }),
+
+  setResendCreds: (client, creds) => get().setClientProfile(client, { resend: creds }),
+
+  openGoogleAdsIngest: (client) =>
+    set({
+      channelIngestOpen: true,
+      channelIngestTarget: { client, channel: 'google-search', kind: 'google-ads' },
+      channelIngestStages: [],
+      channelIngestResult: null,
+      channelIngestError: null,
+      clientFilter: client,
+    }),
+
+  setGoogleAdsCreds: (client, creds) => get().setClientProfile(client, { googleAds: creds }),
+
+  ingestChannel: async () => {
+    const target = get().channelIngestTarget
+    if (!target) return
+    const { client, channel, kind } = target
+    const profile = get().clientProfiles[client]
+    set({ ingestingChannel: true, channelIngestStages: [], channelIngestError: null, channelIngestResult: null })
+    const onStage = (e: IngestProgress) => set((s) => ({ channelIngestStages: [...s.channelIngestStages, e] }))
+    // One campaign holds the brand's live messaging; each source refreshes only its
+    // own rows within it (channel rows by channel, Sanity rows by the 'sanity' tag).
+    const campaign = `${client} — Live messaging`
+    const ensureCampaign = () => {
+      if (!get().campaignList.some((c) => c.name === campaign)) {
+        get().addCampaign({ name: campaign, client, strategy: 'Current state' })
+      }
+    }
+    try {
+      if (kind === 'sanity') {
+        const creds = profile?.sanity
+        if (!creds?.projectId) {
+          set({ channelIngestError: { code: 'SANITY_SETUP', message: 'Add your Sanity project id first.' } })
+          return
+        }
+        const result = await ingestSanityStream(
+          { projectId: creds.projectId, dataset: creds.dataset || 'production', token: creds.token },
+          onStage,
+        )
+        ensureCampaign()
+        const stale = get().rows.filter((r) => r.campaign === campaign && r.assetId === 'sanity')
+        for (const r of stale) await sheet.remove(r.id)
+        await sheet.append(sanityRows(campaign, result.messages))
+        mergeChannelProof(campaign, result.proofPoints)
+        if (result.voice && !profile?.voice) get().setClientProfile(client, { voice: result.voice })
+        await get().refresh()
+        // Render through the shared channel-result shape (Sanity carries no art).
+        set({
+          channelIngestResult: {
+            channel: 'Sanity',
+            voice: result.voice,
+            proofPoints: result.proofPoints,
+            messages: result.messages,
+            imagesSeen: 0,
+            imagesTranscribed: 0,
+          },
+          clientFilter: client,
+        })
+        return
+      }
+
+      if (kind === 'resend') {
+        const creds = profile?.resend
+        if (!creds?.apiKey) {
+          set({ channelIngestError: { code: 'RESEND_SETUP', message: 'Add your Resend API key first.' } })
+          return
+        }
+        const result = await ingestResendStream({ apiKey: creds.apiKey }, onStage)
+        ensureCampaign()
+        const stale = get().rows.filter((r) => r.campaign === campaign && r.assetId === 'resend')
+        for (const r of stale) await sheet.remove(r.id)
+        await sheet.append(resendRows(campaign, result.messages))
+        mergeChannelProof(campaign, result.proofPoints)
+        if (result.voice && !profile?.voice) get().setClientProfile(client, { voice: result.voice })
+        await get().refresh()
+        set({
+          channelIngestResult: {
+            channel: 'Resend',
+            voice: result.voice,
+            proofPoints: result.proofPoints,
+            messages: result.messages,
+            imagesSeen: 0,
+            imagesTranscribed: 0,
+          },
+          clientFilter: client,
+        })
+        return
+      }
+
+      if (kind === 'google-ads') {
+        const creds = profile?.googleAds
+        if (!creds?.developerToken || !creds?.refreshToken || !creds?.customerId) {
+          set({ channelIngestError: { code: 'GOOGLE_ADS_SETUP', message: 'Add your Google Ads API credentials first.' } })
+          return
+        }
+        const result = await ingestGoogleAdsStream(creds, onStage)
+        ensureCampaign()
+        const stale = get().rows.filter((r) => r.campaign === campaign && r.assetId === 'google-ads')
+        for (const r of stale) await sheet.remove(r.id)
+        await sheet.append(googleAdsRows(campaign, result.messages))
+        mergeChannelProof(campaign, result.proofPoints)
+        if (result.voice && !profile?.voice) get().setClientProfile(client, { voice: result.voice })
+        await get().refresh()
+        set({
+          channelIngestResult: {
+            channel: 'Google Ads',
+            voice: result.voice,
+            proofPoints: result.proofPoints,
+            messages: result.messages,
+            imagesSeen: 0,
+            imagesTranscribed: 0,
+          },
+          clientFilter: client,
+        })
+        return
+      }
+
+      const profileUrl = profileUrlForChannel(channel, profile?.channels)
+      const knownAudiences = (get().clientAudiences[client] ?? []).map((a) => a.name).filter(Boolean)
+      const result = await ingestChannelStream(
+        { channel, profileUrl, website: profile?.website, audiences: knownAudiences },
+        onStage,
+      )
+      ensureCampaign()
+      // Keep Sanity rows (assetId 'sanity') even when they share the website channel.
+      const stale = get().rows.filter(
+        (r) => r.campaign === campaign && r.channel === channel && r.assetId !== 'sanity',
+      )
+      for (const r of stale) await sheet.remove(r.id)
+      await sheet.append(ingestRows(campaign, channel, result.messages))
+      mergeChannelProof(campaign, result.proofPoints)
+      if (result.voice && !profile?.voice) get().setClientProfile(client, { voice: result.voice })
+      await get().refresh()
+      set({ channelIngestResult: result, clientFilter: client })
+    } catch (err) {
+      const code = err instanceof IngestError ? err.code : null
+      set({ channelIngestError: { code, message: String((err as Error)?.message ?? err) } })
+    } finally {
+      set({ ingestingChannel: false })
     }
   },
 
@@ -1352,6 +2722,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         for (const r of paid) r.budget = { amount: per, type: 'lifetime', endDate: opts?.endDate }
       }
     }
+    // Spread the brand's audiences across the seeded assets (round-robin) so each
+    // asset is written for a specific segment, not a generic buyer. Generation
+    // conditions copy on this.
+    const auds = opts?.audiences ?? []
+    if (auds.length) rows.forEach((r, i) => { if (!r.audience) r.audience = auds[i % auds.length] })
     await sheet.append(rows)
     await get().refresh()
   },
@@ -1369,9 +2744,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   addAssets: (assets) =>
     set((s) => {
       const have = new Set(s.assets.map((a) => a.id))
-      const fresh = classifyAssets(assets).filter((a) => !have.has(a.id))
+      // Feed the current client's defined audiences in, so a folder named for an
+      // audience routes the asset to that lane on the canvas automatically.
+      const audienceNames = (s.clientAudiences[s.clientFilter] ?? []).map((a) => a.name)
+      const fresh = classifyAssets(assets, audienceNames).filter((a) => !have.has(a.id))
       return { assets: [...s.assets, ...fresh] }
     }),
+
+  draftMatrixCell: async (row) => {
+    await sheet.append([row])
+    await get().refresh()
+  },
+
+  draftMatrixCells: async (rows) => {
+    if (!rows.length) return
+    await sheet.append(rows)
+    await get().refresh()
+  },
 
   updateAsset: (id, patch) =>
     set((s) => ({
@@ -1398,7 +2787,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   addToSheet: async () => {
     const ready = get().assets.filter((a) => a.channels.length > 0)
     if (ready.length === 0) return
-    const rows = proposeSchedule(ready)
+    // Inherit the open campaign so the new rows land on this campaign's canvas
+    // instead of as unscoped drafts. Audience rides on each asset (tray/folder).
+    const { campaignFilter } = get()
+    const rows = proposeSchedule(ready, new Date(), {
+      campaign: campaignFilter !== 'all' ? campaignFilter : '',
+    })
     await sheet.append(rows)
     const stagedIds = new Set(ready.map((a) => a.id))
     set((s) => ({ assets: s.assets.filter((a) => !stagedIds.has(a.id)) }))
@@ -1412,14 +2806,260 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await get().refresh()
   },
 
+  updateRows: async (updates) => {
+    if (!updates.length) return
+    pushUndo(get().rows)
+    for (const u of updates) await sheet.update(u.id, u.patch)
+    await get().refresh()
+  },
+
+  redraftAssets: async (scope) => {
+    const s = get()
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    for (const r of s.rows) {
+      if (scope.campaign && (r.campaign ?? '').trim() !== scope.campaign.trim()) continue
+      if (scope.audience && (r.audience ?? '').trim() !== scope.audience.trim()) continue
+      const client = clientForCampaign(r.campaign)
+      if (scope.client && client !== scope.client) continue
+      // Linked-external assets (produced video / image / live page) can't be
+      // redrafted — their words are welded in. A frame change flags them for
+      // external rework; it never fake-edits them here.
+      if (isLinkedExternal(r)) continue
+      const aud = (s.clientAudiences[client] ?? []).find(
+        (a) => a.name.trim() === (r.audience ?? '').trim(),
+      )
+      if (!aud) continue
+      const assetType = r.assetType ?? primaryTypeKey(r.channel)
+      // The stage drives the CTA; the audience supplies the angle, outcome, and
+      // the emphasized proof. Recompose from the model so the strategy/audience
+      // change shows up in every asset's copy.
+      const stage = r.funnelStage ?? funnelStageFor(r.channel, assetType)
+      // Resolve the audience's lead proof from the campaign's RTB pool (emphasis
+      // ids reference the pool, not a copy on the audience).
+      const pool = rtbsForCampaign(r.campaign)
+      const emphasis = aud.rtbEmphasis ?? []
+      const lead = pool.find((x) => emphasis.includes(x.id)) ?? (aud.rtbs ?? [])[0]
+      const cta = ctaFor(stage, aud.outcome)
+      const { messaging, rtbMap } = composeMessaging({
+        channel: r.channel,
+        assetType,
+        audience: { name: aud.name, messageAngle: aud.messageAngle },
+        proof: lead,
+        cta,
+      })
+      updates.push({ id: r.id, patch: { messaging, rtbMap } })
+    }
+    if (!updates.length) return
+    // Flag the affected cards as regenerating so the canvas can animate the
+    // change rippling across them, then apply the re-draft.
+    const ids = updates.map((u) => u.id)
+    set({ regenIds: new Set(ids) })
+    await get().updateRows(updates)
+    // Clear once the (staggered) animation has played — duration 1.5s plus the
+    // longest stagger (~0.8s), so the "thinking → resolve" effect fully reads.
+    setTimeout(() => {
+      const remaining = new Set(get().regenIds)
+      for (const id of ids) remaining.delete(id)
+      set({ regenIds: remaining })
+    }, 2500)
+  },
+
   removeRow: async (id) => {
+    pushUndo(get().rows)
     await sheet.remove(id)
     await get().refresh()
+  },
+
+  // ---- Asset lifecycle ----
+  addAsset: async (brand, campaign, patch) => {
+    const c = campaign.trim()
+    get().addClient(brand)
+    if (c && !get().campaignList.some((x) => x.name === c)) get().addCampaign({ name: c, client: brand, strategy: 'Demand Gen' })
+    const channel = (patch.channel ?? 'Instagram') as ChannelId
+    const assetType = patch.assetType && isValidType(channel, patch.assetType) ? patch.assetType : primaryTypeKey(channel)
+    const existing = new Set(get().rows.map((r) => r.assetName))
+    let name = (patch.assetName ?? 'Authored asset').trim() || 'Authored asset'
+    let n = 2
+    while (existing.has(name)) name = `${(patch.assetName ?? 'Authored asset').trim()} ${n++}`
+    const row: TrafficRow = {
+      assetId: '',
+      ...patch,
+      // Required fields, guaranteed after the spread (patch is a Partial).
+      id: freshRowId(),
+      assetName: name,
+      channel,
+      assetType,
+      mediaType: patch.mediaType ?? 'image',
+      messaging: patch.messaging ?? {},
+      campaign: c,
+      audience: patch.audience ?? '',
+      status: patch.status ?? 'draft',
+      scheduledAt: patch.scheduledAt ?? new Date().toISOString(),
+      source: patch.source ?? 'authored',
+      authored: (patch.source ?? 'authored') === 'authored',
+      createdAt: Date.now(),
+    }
+    pushUndo(get().rows)
+    await sheet.append([row])
+    await get().refresh()
+    return row
+  },
+
+  importAssets: async (brand, campaign, items, source) => {
+    const c = campaign.trim()
+    get().addClient(brand)
+    if (c && !get().campaignList.some((x) => x.name === c)) get().addCampaign({ name: c, client: brand, strategy: 'Current state' })
+    const inCampaign = get().rows.filter((r) => (r.campaign ?? '').trim() === c)
+    // Dedup so a re-import never duplicates: by external URL first, else by exact copy.
+    const byUrl = new Map(inCampaign.filter((r) => r.sourceUrl).map((r) => [r.sourceUrl as string, r]))
+    const seenUrls = new Set(byUrl.keys())
+    const seenNames = new Set(inCampaign.map((r) => r.assetName))
+    const copyKey = (r: TrafficRow) => Object.values(r.messaging ?? {}).join(' ¶ ').trim().toLowerCase()
+    const seenCopy = new Set(inCampaign.filter((r) => r.source && r.source !== 'generated').map(copyKey))
+    const rows: TrafficRow[] = []
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    let skipped = 0
+    for (const item of items) {
+      const norm = normalizeImportItem(item, source)
+      const blob = `${norm.headline ?? ''} ${norm.primaryText ?? ''}`.trim()
+      // Never store a login / challenge / error page as content.
+      if (!blob || looksLikeBlockedPage(blob)) {
+        skipped++
+        continue
+      }
+      // Already imported (same URL): refresh its metrics in place rather than duplicate.
+      const existing = norm.sourceUrl ? byUrl.get(norm.sourceUrl) : undefined
+      if (existing) {
+        if (norm.metrics) {
+          updates.push({
+            id: existing.id,
+            patch: {
+              socialMetrics: norm.metrics,
+              engagement: engagementFromMetrics(norm.metrics) ?? existing.engagement,
+              metricsUpdatedAt: norm.metricsUpdatedAt ?? Date.now(),
+            },
+          })
+        } else {
+          skipped++
+        }
+        continue
+      }
+      const channel = norm.channel
+      const assetType = norm.assetType && isValidType(channel, norm.assetType) ? norm.assetType : primaryTypeKey(channel)
+      // Map the normalized copy onto this channel's messaging field keys.
+      const fields = messagingFields(channel, assetType)
+      const key = (re: RegExp) => fields.find((f) => re.test(f.key))?.key
+      const headlineKey = key(/headline|subject|title|subhead/i)
+      const primaryKey = key(/primary|body|caption|intro|post|message/i) ?? fields[0]?.key
+      const descKey = key(/desc|preview/i)
+      const ctaKey = key(/cta/i)
+      const messaging: Record<string, string> = {}
+      if (norm.headline && headlineKey) messaging[headlineKey] = norm.headline
+      if (norm.primaryText && primaryKey) messaging[primaryKey] = norm.primaryText
+      if (norm.description && descKey) messaging[descKey] = norm.description
+      if (norm.cta && ctaKey) messaging[ctaKey] = norm.cta
+      // A body-only channel (no headline slot): keep the post copy in the primary field.
+      if (!Object.keys(messaging).length && primaryKey) messaging[primaryKey] = norm.primaryText || norm.headline || ''
+      const ck = Object.values(messaging).join(' ¶ ').trim().toLowerCase()
+      if (ck && seenCopy.has(ck)) {
+        skipped++
+        continue
+      }
+      let name = (norm.headline || norm.primaryText || `${source} post`).replace(/\s+/g, ' ').trim().slice(0, 60) || `${source} post`
+      let n = 2
+      const baseName = name
+      while (seenNames.has(name)) name = `${baseName} ${n++}`
+      seenNames.add(name)
+      if (norm.sourceUrl) seenUrls.add(norm.sourceUrl)
+      if (ck) seenCopy.add(ck)
+      // Imported real posts/pages are LIVE (posted); a pasted audit is a draft to triage.
+      const status: RowStatus = source === 'imported' ? 'draft' : 'posted'
+      rows.push({
+        assetId: '',
+        id: freshRowId(),
+        assetName: name,
+        channel,
+        assetType,
+        mediaType: norm.mediaRefs?.length ? 'image' : 'image',
+        messaging,
+        campaign: c,
+        audience: norm.audience ?? '',
+        ...(norm.stage ? { funnelStage: norm.stage } : {}),
+        status,
+        scheduledAt: norm.publishedAt || new Date().toISOString(),
+        createdAt: Date.now(),
+        source,
+        sourceUrl: norm.sourceUrl,
+        publishedAt: norm.publishedAt,
+        mediaRefs: norm.mediaRefs,
+        mediaRef: norm.mediaRefs?.[0],
+        socialMetrics: norm.metrics,
+        engagement: engagementFromMetrics(norm.metrics),
+        ...(norm.metrics ? { metricsUpdatedAt: norm.metricsUpdatedAt ?? Date.now() } : {}),
+        ...(status === 'posted' ? { postedAt: norm.publishedAt ? Date.parse(norm.publishedAt) || Date.now() : Date.now() } : {}),
+      })
+    }
+    if (rows.length || updates.length) {
+      pushUndo(get().rows)
+      if (rows.length) await sheet.append(rows)
+      for (const u of updates) await sheet.update(u.id, u.patch)
+      await get().refresh()
+    }
+    return { imported: rows.length, updated: updates.length, skipped }
+  },
+
+  setRowStatus: async (id, status, note) => {
+    const patch: Partial<TrafficRow> = { status }
+    if (status === 'approved') patch.approvedAt = Date.now()
+    if (note !== undefined) patch.reviewNote = note || undefined
+    await get().updateRow(id, patch)
+  },
+
+  archiveRow: async (id) => {
+    await get().updateRow(id, { archivedAt: Date.now() })
+  },
+  archiveRows: async (ids) => {
+    if (!ids.length) return
+    await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: Date.now() } })))
+  },
+  restoreRow: async (id) => {
+    await get().updateRow(id, { archivedAt: undefined })
+  },
+
+  deleteCampaign: async (name) => {
+    const c = name.trim()
+    if (!c) return
+    // Archive the campaign + all its assets (soft, recoverable).
+    const ids = get().rows.filter((r) => (r.campaign ?? '').trim() === c).map((r) => r.id)
+    if (ids.length) await get().archiveRows(ids)
+    set((s) => {
+      const campaignList = s.campaignList.map((x) => (x.name === c ? { ...x, archivedAt: Date.now() } : x))
+      saveCampaigns(campaignList)
+      const open = s.openProjects.filter((p) => p !== c)
+      saveOpenProjects(open)
+      return {
+        campaignList,
+        openProjects: open,
+        campaignFilter: s.campaignFilter === c ? 'all' : s.campaignFilter,
+      }
+    })
+  },
+  restoreCampaign: async (name) => {
+    const c = name.trim()
+    if (!c) return
+    const ids = get().rows.filter((r) => (r.campaign ?? '').trim() === c && r.archivedAt).map((r) => r.id)
+    if (ids.length) await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: undefined } })))
+    set((s) => {
+      const campaignList = s.campaignList.map((x) => (x.name === c ? { ...x, archivedAt: undefined } : x))
+      saveCampaigns(campaignList)
+      return { campaignList }
+    })
   },
 
   duplicateRow: async (id) => {
     const row = get().rows.find((r) => r.id === id)
     if (!row) return
+    pushUndo(get().rows)
     const clone: TrafficRow = {
       ...row,
       id: freshRowId(),
@@ -1430,6 +3070,38 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       error: undefined,
     }
     await sheet.append([clone])
+    await get().refresh()
+  },
+
+  pasteAsset: async (id) => {
+    const row = get().rows.find((r) => r.id === id)
+    if (!row) return
+    pushUndo(get().rows)
+    // Unique name + no branchOf so it lands as its own card, not hidden behind the
+    // original (the canvas trees by assetName).
+    const existing = new Set(get().rows.map((r) => r.assetName))
+    let name = `${row.assetName}-copy`
+    let n = 2
+    while (existing.has(name)) name = `${row.assetName}-copy-${n++}`
+    const clone: TrafficRow = {
+      ...row,
+      id: freshRowId(),
+      assetName: name,
+      branchOf: row.branchOf,
+      status: 'draft',
+      createdAt: Date.now(),
+      approvedAt: undefined,
+      postedAt: undefined,
+      error: undefined,
+    }
+    await sheet.append([clone])
+    await get().refresh()
+  },
+
+  undo: async () => {
+    const prev = undoStack.pop()
+    if (!prev) return
+    await sheet.replaceAll(prev)
     await get().refresh()
   },
 
@@ -1609,10 +3281,339 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   extractCopy: async (id) => {
     const row = get().rows.find((r) => r.id === id)
     if (!row) return
-    const result = await extractInCreativeCopy(row)
+    const result = await extractInCreativeCopy(row, realExtractTransport)
     await sheet.update(id, { extractedCopy: result.text })
     await get().refresh()
   },
+
+  fanOutPreview: (campaign, dimension, values, exclude) => {
+    const s = get()
+    const client = clientForCampaign(campaign)
+    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    // Count over the leaves (what fanOut actually fans), so the preview matches reality
+    // when cards are stacked. A leaf = a card that isn't already a variant-master; a
+    // journey parent (branchOf) still counts as fannable.
+    const variantMasters = new Set(inCampaign.map((r) => (r.variantOf ?? '').trim()).filter(Boolean))
+    const base = inCampaign.filter((r) => !variantMasters.has(r.assetName))
+    const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
+    // The Account dimension fans across the campaign's target list (ABM); other
+    // dimensions pull from the brand library / profile.
+    const libVals =
+      dimension === 'account'
+        ? s.accountsForCampaign(campaign).map((a) => a.name)
+        : dimensionValues(dimension, effective, s.clientProfiles[client])
+    const vals = values && values.length ? values : libVals
+    return planFanout(base, dimension, vals, exclude ?? [])
+  },
+
+  fanOut: async (campaign, dimension, values, opts) => {
+    const s = get()
+    const client = clientForCampaign(campaign)
+    const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    if (inCampaign.length === 0) return { variantCount: 0, created: 0 }
+    const effective = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
+    const libVals =
+      dimension === 'account'
+        ? s.accountsForCampaign(campaign).map((a) => a.name)
+        : dimensionValues(dimension, effective, s.clientProfiles[client])
+    const vals = values && values.length ? values : libVals
+    if (vals.length === 0) return { variantCount: 0, created: 0 }
+    const exclude = opts?.exclude ?? []
+    // Approved conditions can prune combinations ("if audience = beach then skip winter").
+    const conditions = s.campaignConditions[campaign] ?? []
+    // Fan the LEAVES so stacked cards push the tree DEEPER instead of re-fanning the
+    // masters. A "master" here is a card that already has VARIANTS under it (variantOf),
+    // NOT a journey parent (branchOf) — so a journey step still fans, while a card you
+    // already fanned doesn't re-fan. (This is the fix for "some cards won't fan".)
+    const variantMasters = new Set(inCampaign.map((r) => (r.variantOf ?? '').trim()).filter(Boolean))
+    const base = inCampaign.filter((r) => !variantMasters.has(r.assetName))
+    // One variant per (leaf x value), tagged with its full lineage. Each variant is a
+    // VARIANT of (not a branch off) the leaf — a personalization sibling that sits side
+    // by side with the master in the same stage, NOT a journey step. The dimension also
+    // sets a real row field where it maps (audience, journey stage). Pruned combos skip.
+    const variants: TrafficRow[] = []
+    for (const row of base) {
+      for (const value of vals) {
+        const lineage = { ...(row.lineage ?? {}), [dimension]: value }
+        if (isPruned(lineage, exclude)) continue
+        if (resolveConditions({ audience: (row.audience ?? '').trim(), ...lineage }, conditions).exclude) continue
+        variants.push({
+          ...row,
+          id: freshRowId(),
+          assetName: `${row.assetName} · ${value}`,
+          variantOf: row.assetName, // a personalization sibling, side by side with the master
+          branchOf: undefined, // NOT a journey link — variants don't draw a connecting edge
+          messaging: {}, // cleared so generation writes per-variant copy
+          rtbMap: undefined,
+          format: undefined,
+          status: 'draft',
+          createdAt: Date.now(),
+          lineage,
+          ...(dimensionField(dimension, value) ?? {}),
+        })
+      }
+    }
+    if (variants.length === 0) return { variantCount: 0, created: 0 }
+    await sheet.append(variants)
+    await get().refresh()
+    if (opts?.generate !== false) {
+      get().setClientFilter(client)
+      get().setCampaignFilter(campaign)
+      await get().draftCopy()
+    }
+    return { variantCount: variants.length, created: variants.length }
+  },
+
+  proposeConditions: (campaign) => {
+    const s = get()
+    const client = clientForCampaign(campaign)
+    // Propose from the brand's EFFECTIVE library (own + inherited + shared), never a
+    // cross-brand or the merged Unassigned bucket.
+    const sys = resolveBrandScope(client, s.brandSystems, s.brandMeta).library
+    const rows = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
+    // The dimension values actually present in the campaign (audience + lineage).
+    const present: Record<string, string[]> = {}
+    const add = (k: string, v: string) => {
+      if (!v) return
+      ;(present[k] ??= []).includes(v) || present[k].push(v)
+    }
+    for (const r of rows) {
+      add('audience', (r.audience ?? '').trim())
+      for (const [k, v] of Object.entries(r.lineage ?? {})) add(k, v)
+    }
+    const proposed = proposeConditionsDomain({
+      audiences: sys.audiences,
+      rtbs: sys.rtbs,
+      ctas: sys.ctas,
+      hooks: sys.hooks,
+      present,
+    })
+    // Keep a human's approve/reject across re-proposals; carry forward decisions for
+    // conditions no longer re-proposed.
+    const existing = s.campaignConditions[campaign] ?? []
+    const byId = new Map(existing.map((c) => [c.id, c]))
+    const merged: FanCondition[] = proposed.map((p) => {
+      const prev = byId.get(p.id)
+      return prev ? { ...p, status: prev.status } : p
+    })
+    for (const e of existing) if (!merged.some((m) => m.id === e.id) && e.status !== 'proposed') merged.push(e)
+    const campaignConditions = { ...s.campaignConditions, [campaign]: merged }
+    saveConditions(campaignConditions)
+    set({ campaignConditions })
+    return merged
+  },
+
+  setConditionStatus: (campaign, id, status) =>
+    set((s) => {
+      const list = (s.campaignConditions[campaign] ?? []).map((c) => (c.id === id ? { ...c, status } : c))
+      const campaignConditions = { ...s.campaignConditions, [campaign]: list }
+      saveConditions(campaignConditions)
+      return { campaignConditions }
+    }),
+
+  // ---- Brand boundary actions ----
+  setBrandNotice: (msg) => set({ brandNotice: msg }),
+
+  brandBaselineFor: (brand) => {
+    const s = get()
+    const effective = resolveBrandScope(brand, s.brandSystems, s.brandMeta)
+    const voice = resolveBrandVoice(
+      brand,
+      (b) => s.clientProfiles[b]?.voice ?? (s.brandGuides[b]?.confirmed ? s.brandGuides[b]?.guide?.voice : undefined),
+      s.brandMeta,
+    )
+    return brandBaseline(effective, voice, s.brandMeta)
+  },
+
+  setBrandParent: (brand, parent) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const p = parent?.trim()
+      // No self-parenting and no cycles (the new parent can't already descend from brand).
+      const wouldCycle = !!p && (p === b || ancestorsOf(p, s.brandMeta).includes(b))
+      const meta: BrandMeta = { ...(s.brandMeta[b] ?? {}) }
+      if (p && !wouldCycle) meta.parent = p
+      else delete meta.parent
+      const brandMeta = { ...s.brandMeta, [b]: meta }
+      saveBrandMeta(brandMeta)
+      return { brandMeta }
+    }),
+
+  setBrandShare: (brand, share, on) =>
+    set((s) => {
+      const b = brand.trim()
+      const sh = share.trim()
+      if (!b || !sh || sh === b) return {}
+      const meta: BrandMeta = { ...(s.brandMeta[b] ?? {}) }
+      const set0 = new Set(meta.shares ?? [])
+      if (on) set0.add(sh)
+      else set0.delete(sh)
+      meta.shares = [...set0]
+      if (!meta.shares.length) delete meta.shares
+      const brandMeta = { ...s.brandMeta, [b]: meta }
+      saveBrandMeta(brandMeta)
+      return { brandMeta }
+    }),
+
+  setBrandDraft: (brand, draft) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const meta: BrandMeta = { ...(s.brandMeta[b] ?? {}) }
+      if (draft) meta.draft = true
+      else delete meta.draft
+      const brandMeta = { ...s.brandMeta, [b]: meta }
+      saveBrandMeta(brandMeta)
+      return { brandMeta }
+    }),
+
+  promoteBrand: (draftBrand, realName) => {
+    const s = get()
+    const from = draftBrand.trim()
+    const to = (realName ?? draftBrand).trim()
+    if (!from) return
+    // Same name: just clear the draft flag in place.
+    if (to === from) {
+      s.setBrandDraft(from, false)
+      return
+    }
+    // Rename: carry the brand's library / profile / meta (minus draft) under the new
+    // name, repoint its campaigns, and drop the old draft key.
+    const brandSystems = { ...s.brandSystems }
+    if (brandSystems[from]) brandSystems[to] = brandSystems[from]
+    delete brandSystems[from]
+    const clientProfiles = { ...s.clientProfiles }
+    if (clientProfiles[from]) clientProfiles[to] = clientProfiles[from]
+    delete clientProfiles[from]
+    const brandMeta = { ...s.brandMeta }
+    const carried: BrandMeta = { ...(brandMeta[from] ?? {}) }
+    delete carried.draft
+    if (Object.keys(carried).length) brandMeta[to] = carried
+    delete brandMeta[from]
+    const clientList = s.clientList.map((c) => (c === from ? to : c)).filter((c, i, a) => a.indexOf(c) === i)
+    // Repoint campaigns from the draft brand onto the promoted brand.
+    const campaignList = s.campaignList.map((c) => (c.client === from ? { ...c, client: to } : c))
+    for (const c of campaignList) registerCampaign(c.name, c.client)
+    saveBrandSystems(brandSystems)
+    saveClientProfiles(clientProfiles)
+    saveBrandMeta(brandMeta)
+    saveClients(clientList)
+    saveCampaigns(campaignList)
+    set({
+      brandSystems,
+      clientProfiles,
+      brandMeta,
+      clientList,
+      campaignList,
+      clientFilter: s.clientFilter === from ? to : s.clientFilter,
+      messagingBrand: s.messagingBrand === from ? to : s.messagingBrand,
+    })
+  },
+
+  // ---- ABM: target accounts ----
+  addAccount: (brand, patch) => {
+    const b = brand.trim()
+    const account = newAccount(b, patch)
+    const s = get()
+    s.addClient(b)
+    const list = [...(s.accountsByBrand[b] ?? []), account]
+    const accountsByBrand = { ...s.accountsByBrand, [b]: list }
+    saveJson(ACCOUNTS_KEY, accountsByBrand)
+    set({ accountsByBrand })
+    return account
+  },
+
+  updateAccount: (brand, id, patch) =>
+    set((s) => {
+      const b = brand.trim()
+      const list = (s.accountsByBrand[b] ?? []).map((a) => (a.id === id ? { ...a, ...patch, id: a.id, brand: b } : a))
+      const accountsByBrand = { ...s.accountsByBrand, [b]: list }
+      saveJson(ACCOUNTS_KEY, accountsByBrand)
+      return { accountsByBrand }
+    }),
+
+  setAccountStatus: (brand, id, status) => get().updateAccount(brand, id, { status }),
+
+  removeAccount: (brand, id) =>
+    set((s) => {
+      const b = brand.trim()
+      const list = (s.accountsByBrand[b] ?? []).filter((a) => a.id !== id)
+      const accountsByBrand = { ...s.accountsByBrand, [b]: list }
+      // Drop it from any target list too.
+      const targetLists = s.targetLists.map((t) => ({ ...t, accountIds: t.accountIds.filter((x) => x !== id) }))
+      saveJson(ACCOUNTS_KEY, accountsByBrand)
+      saveJson(TARGET_LISTS_KEY, targetLists)
+      return { accountsByBrand, targetLists }
+    }),
+
+  createTargetList: (brand, name, accountIds = []) => {
+    const list = newTargetList(brand.trim(), name, accountIds)
+    const s = get()
+    const targetLists = [...s.targetLists, list]
+    saveJson(TARGET_LISTS_KEY, targetLists)
+    set({ targetLists })
+    return list
+  },
+
+  setTargetListAccounts: (listId, accountIds) =>
+    set((s) => {
+      const targetLists = s.targetLists.map((t) => (t.id === listId ? { ...t, accountIds: [...new Set(accountIds)] } : t))
+      saveJson(TARGET_LISTS_KEY, targetLists)
+      return { targetLists }
+    }),
+
+  removeTargetList: (listId) =>
+    set((s) => {
+      const targetLists = s.targetLists.filter((t) => t.id !== listId)
+      const campaignTargetList = Object.fromEntries(Object.entries(s.campaignTargetList).filter(([, id]) => id !== listId))
+      saveJson(TARGET_LISTS_KEY, targetLists)
+      saveJson(CAMPAIGN_TARGET_KEY, campaignTargetList)
+      return { targetLists, campaignTargetList }
+    }),
+
+  attachTargetList: (campaign, listId) =>
+    set((s) => {
+      const c = campaign.trim()
+      const campaignTargetList = { ...s.campaignTargetList }
+      if (listId) campaignTargetList[c] = listId
+      else delete campaignTargetList[c]
+      saveJson(CAMPAIGN_TARGET_KEY, campaignTargetList)
+      return { campaignTargetList }
+    }),
+
+  accountsForCampaign: (campaign) => {
+    const s = get()
+    const listId = s.campaignTargetList[campaign.trim()]
+    if (!listId) return []
+    const list = s.targetLists.find((t) => t.id === listId)
+    if (!list) return []
+    const byId = new Map((s.accountsByBrand[list.brand] ?? []).map((a) => [a.id, a]))
+    return list.accountIds.map((id) => byId.get(id)).filter((a): a is Account => !!a)
+  },
+
+  // ---- Saved Views (smart canvases) ----
+  createSavedView: (brand, name, patch) => {
+    const view = newSavedView(brand.trim(), name, patch)
+    const s = get()
+    get().addClient(brand.trim())
+    const savedViews = [...s.savedViews, view]
+    saveJson(SAVED_VIEWS_KEY, savedViews)
+    set({ savedViews })
+    return view
+  },
+  updateSavedView: (id, patch) =>
+    set((s) => {
+      const savedViews = s.savedViews.map((v) => (v.id === id ? { ...v, ...patch, id: v.id, brand: v.brand, createdAt: v.createdAt } : v))
+      saveJson(SAVED_VIEWS_KEY, savedViews)
+      return { savedViews }
+    }),
+  deleteSavedView: (id) =>
+    set((s) => {
+      const savedViews = s.savedViews.filter((v) => v.id !== id)
+      saveJson(SAVED_VIEWS_KEY, savedViews)
+      return { savedViews }
+    }),
 
   draftCopy: async (rowIds) => {
     const { rows, icp, filter, query, clientFilter, campaignFilter } = get()
@@ -1639,18 +3640,93 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
       const rtbStore = loadCampaignRtbs()
       for (const [campaign, crows] of byCampaign) {
-        const assets = crows.map((r) => ({
-          rowId: r.id,
-          assetName: r.assetName,
-          channel: r.channel,
-          type: r.assetType,
-          fields: messagingFields(r.channel, r.assetType),
-        }))
         const client = clientForCampaign(campaign)
+        // HARD BOUNDARY: a canvas must bind to a brand to generate. A brand-less
+        // (Unassigned) campaign is the contamination failure mode — refuse rather than
+        // read the shared catch-all bucket. A draft brand is a real, isolated binding.
+        if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
+          get().setBrandNotice(`Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`)
+          continue
+        }
         const brand = get().clientProfiles[client]
         const bg = get().brandGuides[client]
         const brandGuide = bg?.confirmed ? bg.guide : undefined
-        const result = await copyWriter.draft({ icp, campaign, brand, brandGuide, assets })
+        // The brand's EFFECTIVE messaging system (its own assets + inherited from
+        // ancestors + explicitly shared) supplies the four composition inputs: stage
+        // (derived), audience (assigned/derived), CTA seed, and proof. Resolving through
+        // the brand scope is the ONLY read path — no other brand's assets can reach here.
+        const sys = resolveBrandScope(client, get().brandSystems, get().brandMeta).library
+        const libAudiences = sys.audiences
+        const libCtas = sys.ctas
+        const proofPool: Rtb[] = sys.rtbs
+        // CTAs are VERBATIM from the brand's list and DISTRIBUTED across the set:
+        // pick the globally least-used CTA, preferring a stage match among ties. This
+        // caps repetition (no one CTA dominates) even when a stage has few CTAs, while
+        // still landing a stage-appropriate CTA wherever the list allows.
+        const ctaUse = new Map<string, number>()
+        const pickCta = (stage: string): string | undefined => {
+          if (!libCtas.length) return undefined
+          // Stage match is the PRIMARY key (never put a conversion CTA on an awareness
+          // asset just to spread), then least-used so the stage's CTAs distribute. If a
+          // stage has fewer CTAs than assets, the pool is smaller than the demand and
+          // some repeat is unavoidable (but no single CTA dominates the whole set).
+          const scored = libCtas
+            .map((c) => ({ label: c.label, use: ctaUse.get(c.label) ?? 0, match: !c.stage || c.stage === stage }))
+            .sort((a, b) => Number(b.match) - Number(a.match) || a.use - b.use)
+          const chosen = scored[0].label
+          ctaUse.set(chosen, (ctaUse.get(chosen) ?? 0) + 1)
+          return chosen
+        }
+        // Approved conditions repoint a variant's proof / CTA / hook by its lineage
+        // ("if audience = X then proof Y"). Resolved per row below.
+        const conditions = get().campaignConditions[campaign] ?? []
+        // Per-account context (segment, situation, lead concern) so a 1:1 ABM variant
+        // reads in terms of the account's real situation, not a name swap.
+        const accountByName = new Map((get().accountsByBrand[client] ?? []).map((acc) => [acc.name.toLowerCase(), acc]))
+        const assets: DraftAsset[] = crows.map((r, i) => {
+          const stage = funnelStageFor(r.channel, r.assetType)
+          const aud =
+            libAudiences.find((x) => x.name === r.audience) ??
+            (libAudiences.length ? libAudiences[i % libAudiences.length] : undefined)
+          const rotated = proofPool.length ? proofPool[i % proofPool.length] : undefined
+          // Non-structural lineage (location, time, lifecycle, …) becomes copy context
+          // so fanned variants localize and stay distinct. audience/journey are already
+          // structural fields, so exclude them here.
+          const context: Record<string, string> = {}
+          for (const [k, val] of Object.entries(r.lineage ?? {})) if (k !== 'audience' && k !== 'journey') context[k] = val
+          // An account variant carries the account's real situation (segment, ambition,
+          // lead concern) so BlackRock and Robinhood variants differ on substance.
+          const acct = context.account ? accountByName.get(context.account.toLowerCase()) : undefined
+          if (acct) Object.assign(context, accountContext(acct))
+          // Apply approved conditions for this variant's context.
+          const journeyLabel = FUNNEL_STAGES.find((st) => st.stage === stage)?.label ?? ''
+          const cond = resolveConditions({ audience: (r.audience ?? '').trim(), journey: journeyLabel, ...(r.lineage ?? {}) }, conditions)
+          const proof = (cond.proofId && proofPool.find((p) => p.id === cond.proofId)) || rotated
+          return {
+            rowId: r.id,
+            assetName: r.assetName,
+            channel: r.channel,
+            type: r.assetType,
+            fields: messagingFields(r.channel, r.assetType),
+            stage,
+            audience: aud
+              ? { name: aud.name, role: aud.role, angle: aud.messageAngle, pains: aud.pains }
+              : r.audience
+                ? { name: r.audience }
+                : undefined,
+            ctaSeed: cond.cta ?? pickCta(stage),
+            proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
+            context: Object.keys(context).length ? context : undefined,
+            hook: cond.hook,
+            index: i,
+          }
+        })
+        // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
+        const baseReq = { icp, campaign, brand, brandGuide, proofPool, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+        const result = await copyWriter.draft({ ...baseReq, assets })
+        // Anti-repetition: regenerate any unit whose headline / primary / CTA
+        // collides across the campaign, so the set reads as distinct assets.
+        await dedupeCampaignDrafts(result, assets, baseReq)
         // Register + persist the campaign's drafted proof (merged with any authored).
         if (campaign && result.rtbs.length) {
           const existing = rtbsForCampaign(campaign)
@@ -1675,7 +3751,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             if (primaryKey && !(rmap[primaryKey]?.length)) rmap[primaryKey] = ids
             if (ctaKey && !(rmap[ctaKey]?.length)) rmap[ctaKey] = ids
           }
-          await sheet.update(row.id, { messaging: map, rtbMap: rmap })
+          // Persist the chosen execution format (set only by generation, so a human
+          // edit isn't overwritten on re-draft).
+          const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap }
+          if (d.format && !row.format) patch.format = d.format
+          await sheet.update(row.id, patch)
         }
       }
       saveCampaignRtbs(rtbStore)
@@ -1703,6 +3783,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   runBatchReview: async () => {
+    const campaignFilter = get().campaignFilter
     set({ reviewing: true })
     let icp = get().icp
     if (!icp) {
@@ -1711,13 +3792,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const batchReview = await icpReviewer.review(icp, get().rows)
     set({ batchReview, reviewing: false })
+    // Wire the gate into the lifecycle: running the approval review on a campaign
+    // that's still being built moves it into In Review (it's now at the gate).
+    if (campaignFilter !== 'all') {
+      const camp = get().campaignList.find((c) => c.name === campaignFilter)
+      const cRows = get().rows.filter((r) => (r.campaign ?? '').trim() === campaignFilter)
+      if (deriveCampaignStatus(camp, cRows) === 'planning') {
+        get().setCampaignStatus(campaignFilter, 'in-review')
+      }
+    }
   },
 
   acceptReview: () => {
     // Capture the human's coherence calls before unlocking. Each flag the user
     // accepts the batch over becomes a decision row: 'resolved' if they'd already
     // fixed it, 'overridden' if they judged it coherent enough to ship anyway.
-    const { batchReview, rows, icp, clientAudiences, coherenceDecisions } = get()
+    const { batchReview, rows, icp, clientAudiences, coherenceDecisions, campaignFilter } = get()
     if (batchReview && batchReview.flags.length > 0) {
       const pains = icp?.pains ?? []
       const at = Date.now()
@@ -1746,9 +3836,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const next = [...coherenceDecisions, ...fresh]
       saveCoherenceDecisions(next)
       set({ coherenceDecisions: next, gateCleared: true })
-      return
+    } else {
+      set({ gateCleared: true })
     }
-    set({ gateCleared: true })
+    // Wire the gate into the lifecycle: approving a specific campaign at the gate
+    // advances it past In Review into Active — it's cleared to run.
+    if (campaignFilter !== 'all') get().setCampaignStatus(campaignFilter, 'active')
   },
 
   setAggregateContributing: (on) => {
@@ -1760,20 +3853,48 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeBreaks: () => set({ breaksOpen: false, activeBreakId: null }),
 
   runCoherenceCheck: async () => {
-    const { rows, clientFilter, campaignFilter, filter, query, icp, brandGuides } = get()
+    const { rows, clientFilter, campaignFilter, icp, brandGuides, brandSystems, clientProfiles, brandMeta } = get()
     if (clientFilter === 'all') return
-    const scoped = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+    // The check needs a brand to measure against — a brand-less canvas has no spec.
+    if (isBrandless(clientFilter) && !isDraftBrand(clientFilter, brandMeta)) {
+      get().setBrandNotice('Bind this canvas to a brand to run the coherence check. The brand is the standard the check measures against.')
+      return
+    }
+    // Coherence is a property of the whole campaign, not the filtered view — check
+    // every in-scope asset (matches the Breaks queue + the continuous hash).
+    const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
     if (scoped.length === 0) return
     set({ coherenceChecking: true })
     const campaign = campaignFilter === 'all' ? 'All campaigns' : campaignFilter
     const brandGuide = brandGuides[clientFilter]?.confirmed ? brandGuides[clientFilter]?.guide : undefined
-    const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide })
-    set({
-      claudeBreaks: breaks,
-      claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
-      coherenceLive: live,
-      coherenceChecking: false,
-    })
+    // The brand's vocabulary feeds the deterministic floor (cross-brand contamination,
+    // raw-field leaks, off-audience proof) so the check is real even with no Claude key.
+    // brandMeta resolves the EFFECTIVE baseline (own + inherited + shared) so inheritance
+    // is treated as the brand's own voice, never flagged as contamination.
+    // Target accounts are prospects (naming them as partners = an implied endorsement);
+    // the brand's notableClients are substantiated partners that MAY be referenced.
+    const targetAccounts =
+      campaignFilter === 'all'
+        ? (get().accountsByBrand[clientFilter] ?? []).map((acc) => acc.name)
+        : get().accountsForCampaign(campaignFilter).map((acc) => acc.name)
+    const partners = clientProfiles[clientFilter]?.notableClients ?? []
+    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta, { targetAccounts, partners })
+    const baseline = get().brandBaselineFor(clientFilter)
+    try {
+      const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })
+      set({
+        claudeBreaks: breaks,
+        claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
+        coherenceBaseline: baseline,
+        coherenceCheckedHash: coherenceContentHash(scoped),
+        coherenceLive: live,
+        // A fallback (live === false) means Claude is unavailable — stop auto-retrying.
+        coherenceUnavailable: !live,
+        coherenceChecking: false,
+      })
+    } catch {
+      set({ coherenceChecking: false, coherenceUnavailable: true })
+    }
   },
 
   openEngine: () => set({ engineOpen: true }),
@@ -1956,3 +4077,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ budgetCleared: true })
   },
 }))
+
+// Audiences own their proof now; point the RTB resolver at the foundation so a
+// campaign's proof = the union of its audiences' owned RTBs (falling back to the
+// seed/runtime sets for campaigns whose audiences don't own RTBs yet).
+setAudienceRtbResolver((campaign) => {
+  const client = clientForCampaign(campaign)
+  const auds = useTrafficStore.getState().clientAudiences[client] ?? []
+  return rtbsFromAudiences(auds)
+})

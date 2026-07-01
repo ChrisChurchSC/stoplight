@@ -3,27 +3,33 @@ import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { GlobalNav } from './GlobalNav'
+import { HomeShell } from './HomeShell'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
-import { CampaignTabs } from './CampaignTabs'
+import { BrandWorkspace } from './BrandWorkspace'
 import { ClientsOverview } from './ClientsOverview'
 import { IngestTray } from './IngestTray'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { CanvasView } from './CanvasView'
+import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
+import { LibraryPage } from './LibraryPage'
 import { BillingPage } from './BillingPage'
 import { IcpDrawer } from './IcpDrawer'
+import { PersonalizationDrawer } from './PersonalizationDrawer'
+import { SavedViewsDrawer } from './SavedViewsDrawer'
 import { TrackingDrawer } from './TrackingDrawer'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
 import { NewClientWizard } from './NewClientWizard'
+import { OnboardingFork } from './OnboardingFork'
+import { ClaudeHandoff } from './ClaudeHandoff'
 import { SetupWizard } from './SetupWizard'
 import { AudienceWizard } from './AudienceWizard'
-import { ConnectionHeader } from './ConnectionHeader'
 import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
 import { DiagnosisOverlay } from './DiagnosisOverlay'
@@ -33,6 +39,7 @@ import { ShareDialog } from './ShareDialog'
 import { CommentInbox } from './CommentInbox'
 import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
+import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -40,12 +47,25 @@ export function Workbench() {
   const view = useTrafficStore((s) => s.view)
   const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const wizardOpen = useTrafficStore((s) => s.wizardOpen)
   const wizardClient = useTrafficStore((s) => s.wizardClient)
   const closeWizard = useTrafficStore((s) => s.closeWizard)
   const openAsk = useTrafficStore((s) => s.openAsk)
   const [over, setOver] = useState(false)
   const overview = clientFilter === 'all'
+  // Level 1: a brand is open but no campaign is selected — show the campaign-states
+  // home (campaigns by lifecycle). Picking a campaign drops to Level 2 (the canvas).
+  const level1 = !overview && campaignFilter === 'all'
+  // The Connection (canvas) view goes edge-to-edge: the map fills the whole work
+  // area and the chrome (top nav, channel sidebar, canvas controls, view pills)
+  // floats translucently on top. Scoped by a class so other views stay normal.
+  // All campaign sub-views (Connection / Grid / Calendar) share the full-bleed,
+  // floating-chrome design — the project-tab drawer + dark top bar sit above all three.
+  const canvasMode = page === 'clients' && !overview && !level1
+  // The files-browser home carries its own shell (files sidebar + tabs), so the
+  // global rail + breadcrumb step aside there — matching how the canvas works.
+  const homeFiles = page === 'clients' && overview
 
   useEffect(() => {
     refresh()
@@ -77,13 +97,16 @@ export function Workbench() {
   }
 
   return (
-    <div className="workspace">
-      <GlobalNav />
-
+    <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
+      {/* Global rail only on the brand workspace (Level 1). The home + the
+          Library / Connectors / Billing pages carry the files sidebar (HomeShell),
+          and the canvas is full-bleed — none of them want the rail. */}
+      {page === 'clients' && !overview && !canvasMode && <GlobalNav />}
       {page === 'clients' ? (
         <div className="work-col">
           <ShareBanner />
-          <Breadcrumb />
+          {canvasMode && <CanvasProjectTabs />}
+          {!homeFiles && <Breadcrumb />}
           <div
             className={`work-body${over ? ' drop-over' : ''}`}
             onDragOver={(e) => {
@@ -95,10 +118,8 @@ export function Workbench() {
             }}
             onDrop={onDrop}
           >
-            {!overview && <Sidebar />}
+            {!overview && !level1 && <Sidebar />}
             <div className="main">
-              {!overview && <CampaignTabs />}
-              {!overview && <ConnectionHeader />}
 
               {overview ? (
                 <>
@@ -107,6 +128,8 @@ export function Workbench() {
                   <IngestTray />
                   <ClientsOverview />
                 </>
+              ) : level1 ? (
+                <BrandWorkspace />
               ) : (
                 <>
                   <IngestTray />
@@ -128,9 +151,13 @@ export function Workbench() {
           </div>
         </div>
       ) : (
-        <div className="main">
-          {page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
-        </div>
+        // Library / Connectors / Billing share the home's dashboard shell (files
+        // sidebar + tab bar) so the layout never changes between them and the hub.
+        <HomeShell>
+          <div className="home-main-page">
+            {page === 'library' ? <LibraryPage /> : page === 'billing' ? <BillingPage /> : <ConnectorsPage />}
+          </div>
+        </HomeShell>
       )}
 
       <BreaksQueue />
@@ -139,6 +166,9 @@ export function Workbench() {
       <AskClaude />
       <ShareDialog />
       <IcpDrawer />
+      <PersonalizationDrawer />
+      <SavedViewsDrawer />
+      <ChannelIngestDrawer />
       <TrackingDrawer />
       <CopyReview />
       <CommentDrawer />
@@ -147,6 +177,8 @@ export function Workbench() {
       <ClaudeEngine />
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
+      <OnboardingFork />
+      <ClaudeHandoff />
       <SetupWizard />
       <AudienceWizard />
     </div>

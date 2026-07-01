@@ -21,4 +21,6 @@ export interface SheetAdapter {
   remove(id: string): Promise<void>
   /** Wipe everything (used by the "clear" action / tests). */
   clear(): Promise<void>
+  /** Replace the whole sheet in one shot (used by undo). */
+  replaceAll(rows: TrafficRow[]): Promise<void>
 }

@@ -12,6 +12,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { ChannelPreview } from './ChannelPreview'
 import { Thumb } from './Thumb'
+import { proxiedMedia } from '../lib/media'
 
 const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
 const UTM_PARTS: { key: keyof Utm; label: string }[] = [
@@ -107,7 +108,7 @@ export function CopyReview() {
         <div className="drawer-asset">
           <div className="drawer-thumb">
             {row.mediaRef ? (
-              <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+              <Thumb mediaType={row.mediaType} url={proxiedMedia(row.mediaRef, 560)} />
             ) : (
               <label className="drawer-thumb-upload" title="Upload creative for this slot">
                 <span className="drawer-thumb-up-ico">⬆</span>

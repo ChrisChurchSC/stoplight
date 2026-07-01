@@ -13,10 +13,13 @@ import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
+import { journeyPerformance, formatReach } from '../domain/journeyPerf'
+import { PlanPerfStrip } from './PlanPerfStrip'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
 import { Thumb } from './Thumb'
+import { proxiedMedia } from '../lib/media'
 
 const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
 
@@ -35,6 +38,7 @@ const COLUMNS = [
   { key: 'tracking', label: 'Tracking', icon: '◈' },
   { key: 'budget', label: 'Budget', icon: '◧' },
   { key: 'attribution', label: 'Attribution', icon: '↗' },
+  { key: 'performance', label: 'Performance', icon: '📊' },
   { key: 'posted', label: 'Posted', icon: '✓' },
   { key: 'comments', label: 'Comments', icon: '💬' },
   { key: 'publish', label: 'Publish', icon: '▷' },
@@ -43,7 +47,7 @@ const COLUMNS = [
 ] as const
 
 // Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 116, 184, 138, 200, 200, 150, 120, 150, 100, 84, 64]
+const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 116, 184, 138, 200, 200, 150, 150, 120, 150, 100, 84, 64]
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -101,12 +105,20 @@ function GrowCell({
   )
 }
 
-export function SheetGrid() {
+export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: boolean; scopeClient?: string } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
+  const proofFilter = useTrafficStore((s) => s.proofFilter)
+  const ctaFilter = useTrafficStore((s) => s.ctaFilter)
+  const audienceFilter = useTrafficStore((s) => s.audienceFilter)
+  const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const clientFilterStore = useTrafficStore((s) => s.clientFilter)
+  const campaignFilterStore = useTrafficStore((s) => s.campaignFilter)
+  // `scopeClient` (from the brand folder's combined Grid) pins the view to one
+  // brand across ALL its campaigns, overriding the global client/campaign filters.
+  const clientFilter = scopeClient ?? clientFilterStore
+  const campaignFilter = scopeClient ? 'all' : campaignFilterStore
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
   const updateRow = useTrafficStore((s) => s.updateRow)
@@ -120,6 +132,7 @@ export function SheetGrid() {
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   // Batch (column-header) actions.
   const approveAll = useTrafficStore((s) => s.approveAll)
   const role = useTrafficStore((s) => s.role)
@@ -155,6 +168,31 @@ export function SheetGrid() {
     return flags.some((fl) => fl.verdict === 'off-icp') ? 'off' : 'drift'
   }
 
+  // Heuristic ICP-fit grade for content that's already live (the batch review
+  // only scores unshipped rows). Graded on whether the piece is targeted to a
+  // defined audience, substantiated by proof, and resonant with that audience's
+  // needs. A "Recheck with Claude" deepens it.
+  const audMap = new Map((clientAudiences[clientFilter] ?? []).map((a) => [a.name, a] as const))
+  const icpGrade = (row: TrafficRow): { letter: 'A' | 'B' | 'C' | 'D'; reasons: string } => {
+    const aud = audMap.get((row.audience ?? '').trim())
+    const targeted = !!aud
+    const proof = assetRtbIds(row).length > 0
+    const text = messagingAllText(row).toLowerCase()
+    const terms = aud ? [...aud.pains, aud.messageAngle].filter(Boolean) : []
+    const resonant = terms.some((t) =>
+      String(t)
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 4)
+        .slice(0, 4)
+        .some((w) => text.includes(w)),
+    )
+    const score = (targeted ? 1 : 0) + (proof ? 1 : 0) + (resonant ? 1 : 0)
+    const letter = score >= 3 ? 'A' : score === 2 ? 'B' : score === 1 ? 'C' : 'D'
+    const reasons = `${targeted ? 'targeted' : 'no audience'} · ${proof ? 'has proof' : 'no proof'} · ${resonant ? 'resonant' : 'generic'}`
+    return { letter, reasons }
+  }
+
   const [widths, setWidths] = useState<number[]>(DEFAULT_WIDTHS)
   const total = widths.reduce((a, b) => a + b, 0)
 
@@ -183,10 +221,26 @@ export function SheetGrid() {
     document.body.style.userSelect = 'none'
   }
 
+  // The brand-folder combined view ("see everything in this folder") is a fresh,
+  // unfiltered look at the whole brand. It must NOT inherit the per-canvas sidebar
+  // filters or the forward time horizon — a stale channel / audience / card filter
+  // or a narrowed time range from a previous canvas session would otherwise hide
+  // the folder's assets, which reads as "my canvases aren't showing up".
+  const scoped = !!scopeClient
   const view = rows.filter(
     (r) =>
-      rowInScope(r, { filter, query, clientFilter, campaignFilter }) &&
-      inTimeRange(r, timeRange, rangeNow),
+      rowInScope(r, {
+        filter: scoped ? 'all' : filter,
+        proofFilter: scoped ? 'all' : proofFilter,
+        ctaFilter: scoped ? 'all' : ctaFilter,
+        audienceFilter: scoped ? 'all' : audienceFilter,
+        cardFilter: scoped ? 'all' : cardFilter,
+        query: scoped ? '' : query,
+        clientFilter,
+        campaignFilter,
+        liveOnly: liveScope,
+      }) &&
+      (scoped || inTimeRange(r, timeRange, rangeNow)),
   )
 
   const totalRows = view.length
@@ -220,6 +274,9 @@ export function SheetGrid() {
   const openBreakN = applyBreakStatus(detectBreaks(scopedForBreaks), breakStatus).filter(
     (b) => b.status === 'open',
   ).length
+  // Journey performance (reach + per-fork flow) on the campaign — the same numbers
+  // the canvas shows, surfaced per row here so performance reads the same everywhere.
+  const journeyPerf = journeyPerformance(scopedForBreaks)
   const connectionCleared = openBreakN === 0
   const allGatesCleared = gateCleared && trackingCleared && budgetCleared && connectionCleared
   const missingUtmN = reviewable.filter((r) => !r.utm).length
@@ -246,11 +303,12 @@ export function SheetGrid() {
   return (
     <div className="sheet-grid">
       <CompletenessBar />
+      <PlanPerfStrip plan={journeyPerf.plan} />
       <div className="sheet-wrap">
         {rows.length === 0 && (
           <div className="sheet-hint">
             <div>
-              Drag assets anywhere here, or click <b>+ Add assets</b> to start the sheet.
+              Drag assets anywhere here to start the sheet.
             </div>
             <button
               className="btn sm"
@@ -368,6 +426,7 @@ export function SheetGrid() {
               </th>
               <th />
               <th />
+              <th />
               <th>
                 {hasPosted ? (
                   <button className="cov-btn" onClick={syncComments} title="Pull comments from posted assets">
@@ -394,6 +453,7 @@ export function SheetGrid() {
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
               <th><CovBar n={budgetSetN} total={paidN} /></th>
               <th><span className="cov-stat">↗ {money(wonScoped)} won</span></th>
+              <th><span className="cov-stat">📊 {formatReach(journeyPerf.plan.topReach)} reach</span></th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th><CovBar n={commentedN} total={postedN} /></th>
               <th />
@@ -423,7 +483,7 @@ export function SheetGrid() {
                     <div className="sheet-asset">
                       <div className="mini">
                         {row.mediaRef ? (
-                          <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+                          <Thumb mediaType={row.mediaType} url={proxiedMedia(row.mediaRef, 200)} />
                         ) : (
                           <label
                             className="mini-upload"
@@ -614,11 +674,17 @@ export function SheetGrid() {
                   <td className="icp-cell" onClick={() => openReview(row.id)} title="Open to review vs ICP">
                     {(() => {
                       const v = rowVerdict(row)
-                      if (v === 'none') return <span className="cell-ro">—</span>
                       if (v === 'on') return <span className="icp-verdict on">✓ On-ICP</span>
                       if (v === 'off') return <span className="icp-verdict off">✕ Off-ICP</span>
+                      if (v === 'drift')
+                        return <span className="icp-verdict drift">⚠ Drift {unresolvedFlags(row)}</span>
+                      // Live / posted content: a heuristic ICP-fit grade.
+                      if (!messagingAllText(row).trim()) return <span className="cell-ro">—</span>
+                      const g = icpGrade(row)
                       return (
-                        <span className="icp-verdict drift">⚠ Drift {unresolvedFlags(row)}</span>
+                        <span className={`icp-grade g-${g.letter}`} title={`ICP fit: ${g.reasons}`}>
+                          {g.letter}
+                        </span>
                       )
                     })()}
                   </td>
@@ -744,6 +810,21 @@ export function SheetGrid() {
                           <span className="attr-leads">
                             {a.leads} lead{a.leads === 1 ? '' : 's'}
                             {a.openDeals ? ` · ${a.openDeals} open` : ''}
+                          </span>
+                        </div>
+                      )
+                    })()}
+                  </td>
+
+                  <td className="perf-cell">
+                    {(() => {
+                      const p = journeyPerf.perAsset.get(row.id)
+                      if (!p || !p.reach) return <span className="cell-ro">—</span>
+                      return (
+                        <div className="perf" title={`Reached ${p.reach.toLocaleString()} · ${(p.rate * 100).toFixed(1)}% ${p.rateLabel}`}>
+                          <span className="perf-reach">{formatReach(p.reach)}</span>
+                          <span className={`perf-rate${p.rate < 0.12 ? ' leak' : ''}`}>
+                            {(p.rate * 100).toFixed(0)}% {p.rateLabel}
                           </span>
                         </div>
                       )

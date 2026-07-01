@@ -136,6 +136,40 @@ function draftCopyApi(): PluginOption {
 }
 
 /**
+ * Dev-server endpoint for generating one personalization-matrix cell's copy with
+ * Claude. Keeps the key server-side; mirrors /api/draft-copy. 501 when no key, so
+ * the client falls back to the deterministic composer.
+ */
+function draftCellApi(): PluginOption {
+  return {
+    name: 'draft-cell-api',
+    configureServer(server) {
+      server.middlewares.use('/api/draft-cell', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runDraftCell } = await import('./server/draftCellHandler')
+            const result = await runDraftCell(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for "Claude sets up the workspace". Reads the team's site
  * server-side and generates a proposed config. Keeps the key private; mirrors
  * /api/icp-review. Moves to a serverless function for prod.
@@ -383,6 +417,198 @@ function connectApi(): PluginOption {
 }
 
 /**
+ * Streaming per-channel ingest: link one channel and pull all of its copy —
+ * including the copy baked into the art (vision reads on-image text). Emits stage
+ * progress over SSE, then the final channel map. Mirrors /api/map-site-stream.
+ */
+function ingestChannelApi(): PluginOption {
+  return {
+    name: 'ingest-channel-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ingest-channel', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            connection: 'keep-alive',
+          })
+          const send = (event: string, data: unknown) =>
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          try {
+            const { runIngestChannel } = await import('./server/ingestChannelHandler')
+            const result = await runIngestChannel(JSON.parse(body || '{}'), (e) => send('progress', e))
+            send('result', result)
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            send('error', { code: code ?? null, message: String((err as Error)?.message ?? err) })
+          } finally {
+            res.end()
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
+ * Streaming ingest of a brand's owned content from their Sanity CMS: query the
+ * dataset, harvest the copy, map it. Emits stage progress over SSE; mirrors
+ * /api/ingest-channel (no vision — Sanity is the source of record).
+ */
+function ingestSanityApi(): PluginOption {
+  return {
+    name: 'ingest-sanity-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ingest-sanity', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            connection: 'keep-alive',
+          })
+          const send = (event: string, data: unknown) =>
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          try {
+            const { runSanityIngest } = await import('./server/sanityIngestHandler')
+            const result = await runSanityIngest(JSON.parse(body || '{}'), (e) => send('progress', e))
+            send('result', result)
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            send('error', { code: code ?? null, message: String((err as Error)?.message ?? err) })
+          } finally {
+            res.end()
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
+ * Streaming ingest of a brand's email copy from Resend: list broadcasts, pull
+ * their copy, map it into the email channel. Mirrors /api/ingest-sanity.
+ */
+function ingestResendApi(): PluginOption {
+  return {
+    name: 'ingest-resend-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ingest-resend', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            connection: 'keep-alive',
+          })
+          const send = (event: string, data: unknown) =>
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          try {
+            const { runResendIngest } = await import('./server/resendIngestHandler')
+            const result = await runResendIngest(JSON.parse(body || '{}'), (e) => send('progress', e))
+            send('result', result)
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            send('error', { code: code ?? null, message: String((err as Error)?.message ?? err) })
+          } finally {
+            res.end()
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
+ * Streaming ingest of a brand's live Google Ads copy via the Google Ads API:
+ * OAuth token exchange, GAQL ad-text query, map into paid Google channels.
+ * Mirrors /api/ingest-sanity.
+ */
+function ingestGoogleAdsApi(): PluginOption {
+  return {
+    name: 'ingest-google-ads-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ingest-google-ads', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            connection: 'keep-alive',
+          })
+          const send = (event: string, data: unknown) =>
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          try {
+            const { runGoogleAdsIngest } = await import('./server/googleAdsIngestHandler')
+            const result = await runGoogleAdsIngest(JSON.parse(body || '{}'), (e) => send('progress', e))
+            send('result', result)
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            send('error', { code: code ?? null, message: String((err as Error)?.message ?? err) })
+          } finally {
+            res.end()
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
+ * Dev-server endpoint for reading the copy inside a single creative (vision OCR).
+ * Backs the row-level extractCopy action; mirrors /api/icp-review.
+ */
+function extractCopyApi(): PluginOption {
+  return {
+    name: 'extract-copy-api',
+    configureServer(server) {
+      server.middlewares.use('/api/extract-copy', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runExtractCopy } = await import('./server/extractCopyHandler')
+            const result = await runExtractCopy(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for the Claude engine — the agent that reads from sources
  * and publishes to channels by calling tools. Keeps the Anthropic key server-side.
  */
@@ -421,12 +647,21 @@ export default defineConfig(({ mode }) => {
     if (env[key] && !process.env[key]) process.env[key] = env[key]
   }
   return {
+    // Don't let test/automation artifacts written into the repo (Playwright MCP
+    // logs, screenshots, exported data snapshots) trigger a dev-server reload —
+    // a reload resets the in-memory store (clientFilter/brandView) to defaults.
+    server: {
+      watch: {
+        ignored: ['**/.playwright-mcp/**', '**/*.png', '**/public/ww-*.json'],
+      },
+    },
     plugins: [
       react(),
       icpReviewApi(),
       publishApi(),
       publishEmailApi(),
       draftCopyApi(),
+      draftCellApi(),
       setupApi(),
       askApi(),
       coherenceApi(),
@@ -434,6 +669,11 @@ export default defineConfig(({ mode }) => {
       siteMapApi(),
       siteMapStreamApi(),
       connectApi(),
+      ingestChannelApi(),
+      ingestSanityApi(),
+      ingestResendApi(),
+      ingestGoogleAdsApi(),
+      extractCopyApi(),
       agentBridgeApi(),
     ],
   }

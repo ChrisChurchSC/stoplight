@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import type { CampaignVerdict } from '../adapters/icp/types'
 import { newAudience, normalizeAudience, type AudienceType } from '../domain/audiences'
@@ -26,11 +26,16 @@ export function IcpDrawer() {
   const refreshIcpFromClosedWon = useTrafficStore((s) => s.refreshIcpFromClosedWon)
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
+  const proofFilter = useTrafficStore((s) => s.proofFilter)
+  const ctaFilter = useTrafficStore((s) => s.ctaFilter)
+  const audienceFilter = useTrafficStore((s) => s.audienceFilter)
+  const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const redraftAssets = useTrafficStore((s) => s.redraftAssets)
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
 
   // Pull the ICP when the drawer opens, no click needed.
@@ -38,9 +43,33 @@ export function IcpDrawer() {
     if (open && !icp) loadIcp()
   }, [open, icp, loadIcp])
 
+  // Snapshot the audiences when the drawer opens, so on close we can ripple only
+  // the ones that actually changed across their assets (not every no-op close).
+  const openSnapshot = useRef<Record<string, string>>({})
+  const activeClient = clientFilter !== 'all' ? clientFilter : ''
+  useEffect(() => {
+    if (open) {
+      openSnapshot.current = Object.fromEntries(
+        (clientAudiences[activeClient] ?? []).map((a) => [a.id, JSON.stringify(a)]),
+      )
+    }
+    // Only re-snapshot when the drawer opens, not on every edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Close the drawer, rippling each edited audience's change across its assets.
+  const closeDrawer = () => {
+    if (activeClient) {
+      for (const a of clientAudiences[activeClient] ?? []) {
+        if (openSnapshot.current[a.id] !== JSON.stringify(a)) void redraftAssets({ audience: a.name })
+      }
+    }
+    setIcpOpen(false)
+  }
+
   if (!open) return null
 
-  const scoped = rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+  const scoped = rows.filter((r) => rowInScope(r, { filter, proofFilter, ctaFilter, audienceFilter, cardFilter, query, clientFilter, campaignFilter }))
   const campaigns = [...new Set(scoped.map((r) => (r.campaign ?? '').trim()).filter(Boolean))].sort()
   const cov = rtbCoverage(scoped)
   const status = gateCleared ? 'cleared' : review ? review.verdict : 'not-reviewed'
@@ -61,7 +90,7 @@ export function IcpDrawer() {
 
   return (
     <>
-      <div className="drawer-scrim" onClick={() => setIcpOpen(false)} />
+      <div className="drawer-scrim" onClick={closeDrawer} />
       <aside className="drawer icp-drawer">
         <div className="drawer-head">
           <strong>ICP &amp; proof</strong>
@@ -70,7 +99,7 @@ export function IcpDrawer() {
           </span>
           <span className="icp-source" title="ICP pulled via Claude">via Claude</span>
           <span className="spacer" />
-          <button className="btn ghost sm" onClick={() => setIcpOpen(false)}>
+          <button className="btn ghost sm" onClick={closeDrawer}>
             ✕
           </button>
         </div>

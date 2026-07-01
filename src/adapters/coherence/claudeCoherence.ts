@@ -1,4 +1,5 @@
 import { detectBreaks, type BreakAxis, type BreakSeverity, type CoherenceBreak } from '../../domain/breaks'
+import { detectStructuralBreaks, type CoherenceVocab } from '../../domain/coherenceChecks'
 import { funnelStageFor } from '../../domain/funnel'
 import { messagingMap } from '../../domain/messaging'
 import type { ChannelId, TrafficRow } from '../../domain/types'
@@ -16,6 +17,8 @@ export interface CoherenceContext {
   campaign: string
   icp: unknown
   brandGuide: unknown
+  /** Brand vocabulary for the deterministic floor detectors (cross-brand, leak, …). */
+  vocab?: CoherenceVocab
 }
 
 interface RawEvidence {
@@ -86,6 +89,15 @@ export async function claudeCoherence(
     messaging: messagingMap(r),
   }))
 
+  // The deterministic floor runs ALWAYS (under Claude when live, on its own when not),
+  // so cross-brand contamination, raw leaks, casing, duplicates, off-audience proof,
+  // and journey drops are caught regardless of the API. Merge by id (no dup).
+  const structural = ctx.vocab ? detectStructuralBreaks(rows, ctx.vocab) : []
+  const merge = (a: CoherenceBreak[]) => {
+    const seen = new Set(a.map((b) => b.id))
+    return [...a, ...structural.filter((b) => !seen.has(b.id))]
+  }
+
   try {
     const res = await fetch('/api/coherence-check', {
       method: 'POST',
@@ -95,9 +107,9 @@ export async function claudeCoherence(
     if (!res.ok) throw new Error(`coherence ${res.status}`)
     const data = (await res.json()) as { breaks?: RawBreak[] }
     if (!Array.isArray(data?.breaks)) throw new Error('bad shape')
-    return { breaks: data.breaks.map((b) => toBreak(b, ctx.client, ctx.campaign)), live: true }
+    return { breaks: merge(data.breaks.map((b) => toBreak(b, ctx.client, ctx.campaign))), live: true }
   } catch {
-    // No backend / no key / error → heuristic detector keeps the check working.
-    return { breaks: detectBreaks(rows), live: false }
+    // No backend / no key / error → heuristic + structural detectors keep it real.
+    return { breaks: merge(detectBreaks(rows)), live: false }
   }
 }

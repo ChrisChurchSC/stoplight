@@ -1,50 +1,33 @@
-import { useRef, useState } from 'react'
-import { filesToAssets } from '../lib/files'
-import { TIMING_BY_KEY } from '../domain/timing'
 import { can } from '../domain/access'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rowInScope } from '../lib/scope'
+import { usePresence } from '../lib/usePresence'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { BrandTabs } from './BrandTabs'
+import { CanvasFrameBar } from './CanvasFrameBar'
 
 export function Breadcrumb() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const addAssets = useTrafficStore((s) => s.addAssets)
   const role = useTrafficStore((s) => s.role)
-  const sharedSession = useTrafficStore((s) => s.sharedSession)
   const openShareDialog = useTrafficStore((s) => s.openShareDialog)
   const rows = useTrafficStore((s) => s.rows)
-  const comments = useTrafficStore((s) => s.comments)
-  const openCommentInbox = useTrafficStore((s) => s.openCommentInbox)
-  const refreshClient = useTrafficStore((s) => s.refreshClient)
-  const refreshingClient = useTrafficStore((s) => s.refreshingClient)
-  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
-  const query = useTrafficStore((s) => s.query)
-  const setQuery = useTrafficStore((s) => s.setQuery)
-  const icpOpen = useTrafficStore((s) => s.icpOpen)
-  const setIcpOpen = useTrafficStore((s) => s.setIcpOpen)
-  const importFromDrive = useTrafficStore((s) => s.importFromDrive)
-  const ingestDriveFolderUrl = useTrafficStore((s) => s.ingestDriveFolderUrl)
-  const view = useTrafficStore((s) => s.view)
-  const setView = useTrafficStore((s) => s.setView)
+  const setPage = useTrafficStore((s) => s.setPage)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const rerunSeasonalCampaign = useTrafficStore((s) => s.rerunSeasonalCampaign)
   const rotateAlwaysOn = useTrafficStore((s) => s.rotateAlwaysOn)
   const fireTrigger = useTrafficStore((s) => s.fireTrigger)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const openHistory = useTrafficStore((s) => s.openHistory)
+  const openCommentInbox = useTrafficStore((s) => s.openCommentInbox)
+  const comments = useTrafficStore((s) => s.comments)
+  const brandNotice = useTrafficStore((s) => s.brandNotice)
+  const setBrandNotice = useTrafficStore((s) => s.setBrandNotice)
+  const setSavedViewsOpen = useTrafficStore((s) => s.setSavedViewsOpen)
+  const setOpenSavedViewId = useTrafficStore((s) => s.setOpenSavedViewId)
 
-  const activeCampaign =
-    campaignFilter !== 'all' ? campaignList.find((c) => c.name === campaignFilter) : undefined
-  const timing = activeCampaign?.timing
-  const timingDef = timing ? TIMING_BY_KEY[timing] : undefined
-
-  const inputRef = useRef<HTMLInputElement>(null)
-  const overview = clientFilter === 'all'
-  const [addOpen, setAddOpen] = useState(false)
-  const [folderUrl, setFolderUrl] = useState('')
-
-  // Comments that need a reply, across posted assets in scope (drives the badge).
+  // Comments needing a reply across posted assets in scope (drives the badge).
   const scopedPostedIds = new Set(
     rows
       .filter((r) => r.status === 'posted' && rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
@@ -54,63 +37,51 @@ export function Breadcrumb() {
     .filter(([id]) => scopedPostedIds.has(id))
     .reduce((n, [, cs]) => n + cs.filter((c) => c.needsResponse).length, 0)
 
-  async function onFiles(files: FileList | null) {
-    if (!files) return
-    const assets = await filesToAssets(Array.from(files))
-    if (assets.length) addAssets(assets)
+  // Live presence in the top bar (the "N here" pill sits next to Share). The
+  // canvas keeps its own usePresence for cursors; both share one tab identity, so
+  // there's no double-counting.
+  const { peers } = usePresence({
+    client: clientFilter,
+    enabled: clientFilter !== 'all',
+    bounds: { w: 0, h: 0 },
+    nodeIds: [],
+    onRemoteMove: () => {},
+  })
+
+  const activeCampaign =
+    campaignFilter !== 'all' ? campaignList.find((c) => c.name === campaignFilter) : undefined
+  const timing = activeCampaign?.timing
+
+  const overview = clientFilter === 'all'
+  // The HyperFocus wordmark doubles as Home now that the global rail is gone.
+  const goHome = () => {
+    setPage('clients')
+    setClientFilter('all')
   }
 
-  function ingestFolder() {
-    if (!folderUrl.trim()) return
-    void ingestDriveFolderUrl(folderUrl)
-    setFolderUrl('')
-    setAddOpen(false)
-  }
+
+  // The overview bar held only the breadcrumb trail and Add assets, both removed —
+  // so there's nothing to show there. Navigation lives in the global rail.
+  if (overview) return null
 
   return (
     <div className="breadcrumb">
+      {/* Level 1 — the brand-layer tabs live up here in the top bar. At Level 2
+          (inside a campaign) this is an empty spacer that keeps search centered. */}
       <div className="bc-left">
-        {overview ? (
-          <span className="crumb active">All clients</span>
-        ) : sharedSession ? (
-          // In a shared session the recipient is locked to this one client.
-          <span className="crumb">All clients</span>
-        ) : (
-          <button className="crumb crumb-link" onClick={() => setClientFilter('all')}>
-            All clients
-          </button>
-        )}
-        {!overview && (
+        {campaignFilter === 'all' ? (
           <>
-            <span className="crumb-sep">/</span>
-            <span className="crumb active">{clientFilter}</span>
-            <span className="crumb-sep">/</span>
-            <span className="crumb">{campaignFilter === 'all' ? 'All campaigns' : campaignFilter}</span>
-            {timingDef && (
-              <span className={`crumb-timing t-${timingDef.key}`} title={timingDef.scheduling}>
-                {timingDef.icon} {timingDef.label}
-                {timing === 'seasonal' && activeCampaign?.seasonalWindow ? ` · ${activeCampaign.seasonalWindow}` : ''}
-                {timing === 'seasonal' && (activeCampaign?.seasonalCycle ?? 1) > 1 ? ` · Cycle ${activeCampaign?.seasonalCycle}` : ''}
-                {timing === 'always-on' && activeCampaign?.refreshWeeks ? ` · every ${activeCampaign.refreshWeeks}w` : ''}
-                {timing === 'triggered' && activeCampaign?.triggerEvent ? ` · ${activeCampaign.triggerEvent}` : ''}
-              </span>
-            )}
+            <button className="bc-logo" onClick={goHome} title="Home — back to all clients">
+              HyperFocus
+            </button>
+            <BrandTabs />
           </>
+        ) : (
+          // Inside a campaign (the canvas), the frame that governs the whole board —
+          // Brand · Subject · Strategy — lives up here in the top bar.
+          <CanvasFrameBar />
         )}
       </div>
-
-      {!overview && (
-        <div className="bc-center">
-          <div className="toolbar-search">
-            <span className="search-ico">⌕</span>
-            <input
-              value={query}
-              placeholder="Search assets…"
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-      )}
 
       <div className="bc-right">
         {timing === 'seasonal' && (
@@ -160,102 +131,40 @@ export function Breadcrumb() {
               </button>
             )
           })()}
-        {!overview && clientProfiles[clientFilter]?.website && (
-          <button
-            className="btn sm"
-            onClick={() => refreshClient(clientFilter)}
-            disabled={refreshingClient === clientFilter}
-            title="Re-gather this client's channels and refresh their live-messaging map"
-          >
-            {refreshingClient === clientFilter ? '↻ Refreshing…' : '↻ Refresh'}
-          </button>
+        {peers.length > 0 && (
+          <div className="cv-presence" title={`${peers.length} here now`}>
+            {peers.slice(0, 4).map((p) => (
+              <span key={p.id} className="cv-avatar" style={{ background: p.color }} title={p.name}>
+                {p.name.charAt(0)}
+              </span>
+            ))}
+            <span className="cv-presence-n">{peers.length} here</span>
+          </div>
         )}
-        {!overview && (
-          <button
-            className={`btn sm${view === 'insights' ? ' primary' : ''}`}
-            onClick={() => setView(view === 'insights' ? 'grid' : 'insights')}
-            title="Insights"
-          >
-            ◧ Insights
-          </button>
-        )}
-        {!overview && (
-          <button
-            className={`btn sm${icpOpen ? ' primary' : ''}`}
-            onClick={() => setIcpOpen(!icpOpen)}
-            title="ICP & proof"
-          >
-            ◎ ICP
-          </button>
-        )}
-        {!overview && (
-          <button className="btn sm" onClick={openCommentInbox} title="Comments ingested across posted assets">
-            💬 Comments
-            {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}
-          </button>
-        )}
-        {!overview && can(role, 'share') && (
+        <button className="btn sm" onClick={() => { setOpenSavedViewId(null); setSavedViewsOpen(true) }} title="Saved Views — live filtered boards (last 30 days, social, …)">
+          ▦ Views
+        </button>
+        <button className="btn sm" onClick={openCommentInbox} title="Comments ingested across posted assets">
+          💬 Comments
+          {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}
+        </button>
+        <button className="btn sm" onClick={openHistory} title="Version history: save points for this client's copy">
+          ⟲ History
+        </button>
+        {can(role, 'share') && (
           <button className="btn sm" onClick={openShareDialog} title="Share this client's workspace">
             ⤴ Share
           </button>
         )}
-        {can(role, 'edit') && (
-        <div className="bc-add">
-          <button className="btn sm primary" onClick={() => setAddOpen((o) => !o)}>
-            + Add assets
-          </button>
-          {addOpen && (
-            <>
-              <div className="bc-add-scrim" onClick={() => setAddOpen(false)} />
-              <div className="bc-add-pop">
-                <div className="bc-add-label">Ingest a Google Drive folder</div>
-                <div className="bc-add-row">
-                  <input
-                    value={folderUrl}
-                    placeholder="Paste a folder link…"
-                    onChange={(e) => setFolderUrl(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && ingestFolder()}
-                    autoFocus
-                  />
-                  <button className="btn sm primary" disabled={!folderUrl.trim()} onClick={ingestFolder}>
-                    Ingest
-                  </button>
-                </div>
-                <div className="bc-add-or">or</div>
-                <button
-                  className="bc-add-opt"
-                  onClick={() => {
-                    setAddOpen(false)
-                    importFromDrive()
-                  }}
-                >
-                  ⇄ Browse Drive (pick files)
-                </button>
-                <button
-                  className="bc-add-opt"
-                  onClick={() => {
-                    setAddOpen(false)
-                    inputRef.current?.click()
-                  }}
-                >
-                  ⬆ Upload from this computer
-                </button>
-              </div>
-            </>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              onFiles(e.target.files)
-              e.target.value = ''
-            }}
-          />
-        </div>
-        )}
       </div>
+      {brandNotice && (
+        <div className="bc-brand-notice" role="status">
+          <span>{brandNotice}</span>
+          <button className="bc-notice-x" onClick={() => setBrandNotice(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   )
 }

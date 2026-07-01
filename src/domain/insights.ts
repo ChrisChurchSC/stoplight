@@ -13,6 +13,8 @@ export interface Kpis {
   roas: number | null
   rows: number
   posted: number
+  /** Real engagement (likes + comments) pulled from the channel. */
+  engagement: number
 }
 export interface RtbRoi {
   campaign: string
@@ -20,6 +22,7 @@ export interface RtbRoi {
   label: string
   revenue: number
   assets: number
+  engagement: number
 }
 export interface StageRoi {
   stage: FunnelStage
@@ -29,6 +32,7 @@ export interface StageRoi {
   revenue: number
   leads: number
   spend: number
+  engagement: number
 }
 export interface ChannelRoi {
   channel: ChannelId
@@ -37,6 +41,7 @@ export interface ChannelRoi {
   revenue: number
   leads: number
   spend: number
+  engagement: number
 }
 export interface IcpPerf {
   hasReview: boolean
@@ -78,6 +83,7 @@ function rollup(assetNames: Set<string>): { revenue: number; leads: number } {
 }
 
 const rowSpend = (r: TrafficRow): number => r.spend?.toDate ?? 0
+const rowEng = (r: TrafficRow): number => (r.engagement ? r.engagement.likes + r.engagement.comments : 0)
 
 /** Compute the full insights rollup from a scoped set of rows. */
 export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
@@ -99,6 +105,7 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
     roas: spend > 0 ? totals.revenue / spend : null,
     rows: rows.length,
     posted: rows.filter((r) => r.status === 'posted').length,
+    engagement: rows.reduce((a, r) => a + rowEng(r), 0),
   }
 
   // ---- Proof-point ROI: revenue credited to each RTB the asset carries ----
@@ -112,6 +119,7 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
       rtbInfo.set(key, { campaign: camp, id: rtb.id, label: rtb.label })
     }
   }
+  const rtbEng = new Map<string, number>()
   for (const r of rows) {
     const camp = (r.campaign ?? '').trim()
     for (const id of assetRtbIds(r)) {
@@ -121,14 +129,15 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
         rtbInfo.set(key, { campaign: camp, id, label: rtbById(camp, id)?.label ?? id })
       }
       rtbSets.get(key)!.add(r.assetName)
+      rtbEng.set(key, (rtbEng.get(key) ?? 0) + rowEng(r))
     }
   }
   const rtbRoi: RtbRoi[] = [...rtbSets.entries()]
     .map(([key, names]) => {
       const info = rtbInfo.get(key)!
-      return { ...info, revenue: rollup(names).revenue, assets: names.size }
+      return { ...info, revenue: rollup(names).revenue, assets: names.size, engagement: rtbEng.get(key) ?? 0 }
     })
-    .sort((a, b) => b.revenue - a.revenue)
+    .sort((a, b) => b.revenue - a.revenue || b.engagement - a.engagement)
 
   // ---- Funnel coverage vs outcome ----
   const stages: StageRoi[] = FUNNEL_STAGES.map(({ stage, label, hint }) => {
@@ -143,6 +152,7 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
       revenue,
       leads,
       spend: stageRows.reduce((a, r) => a + rowSpend(r), 0),
+      engagement: stageRows.reduce((a, r) => a + rowEng(r), 0),
     }
   })
 
@@ -160,9 +170,10 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
         revenue,
         leads,
         spend: chRows.reduce((a, r) => a + rowSpend(r), 0),
+        engagement: chRows.reduce((a, r) => a + rowEng(r), 0),
       }
     })
-    .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads)
+    .sort((a, b) => b.revenue - a.revenue || b.engagement - a.engagement || b.leads - a.leads)
 
   // ---- ICP alignment vs outcome ----
   const flaggedNames = new Set<string>()

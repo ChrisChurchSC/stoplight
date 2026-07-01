@@ -1,33 +1,7 @@
-import { mockAttio } from '../adapters/attio/mockAttio'
-import { money } from '../domain/budget'
 import { clientForCampaign } from '../domain/clients'
-import type { TrafficRow } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
 
-interface Snap {
-  key: string
-  name: string
-  assets: number
-  revenue: number
-  posted: number
-  scheduled: number
-}
-
-function snapshot(key: string, name: string, rows: TrafficRow[]): Snap {
-  const names = new Set(rows.map((r) => r.assetName))
-  let revenue = 0
-  for (const n of names) revenue += mockAttio.attributionForAsset(n).wonRevenue
-  return {
-    key,
-    name,
-    assets: names.size,
-    revenue,
-    posted: rows.filter((r) => r.status === 'posted').length,
-    scheduled: rows.filter((r) => r.status === 'scheduled').length,
-  }
-}
-
-/** Campaign switcher (with snapshots) for the active client. */
+/** Campaign switcher for the active client. */
 export function CampaignTabs() {
   const rows = useTrafficStore((s) => s.rows)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -38,30 +12,18 @@ export function CampaignTabs() {
 
   const clientRows = rows.filter((r) => clientForCampaign(r.campaign) === clientFilter)
   // Campaigns from existing rows + ones created in the wizard (which may have no rows yet).
-  const forClient = campaignList.filter((c) => c.client === clientFilter)
-  const registered = forClient.map((c) => c.name)
-  const campMeta = new Map(forClient.map((c) => [c.name, c] as const))
+  const registered = campaignList.filter((c) => c.client === clientFilter).map((c) => c.name)
   if (clientRows.length === 0 && registered.length === 0) return null
 
   const campaigns = [
     ...new Set([...clientRows.map((r) => (r.campaign ?? '').trim()).filter(Boolean), ...registered]),
   ].sort()
-  const tabs: Snap[] = [
-    snapshot('all', 'All campaigns', clientRows),
-    ...campaigns.map((c) => snapshot(c, c, clientRows.filter((r) => (r.campaign ?? '').trim() === c))),
-  ]
+  const tabs = [{ key: 'all', name: 'All campaigns' }, ...campaigns.map((c) => ({ key: c, name: c }))]
 
   return (
     <div className="client-tabs-wrap">
       <div className="client-tabs" role="tablist" aria-label="Campaigns">
-        {tabs.map((t) => {
-        const meta = t.key === 'all' ? undefined : campMeta.get(t.key)
-        const duration = meta
-          ? meta.durationWeeks
-            ? `${meta.durationWeeks} wks`
-            : 'Ongoing'
-          : null
-        return (
+        {tabs.map((t) => (
           <button
             key={t.key}
             role="tab"
@@ -70,36 +32,8 @@ export function CampaignTabs() {
             onClick={() => setCampaignFilter(t.key)}
           >
             <span className="client-tab-name">{t.name}</span>
-            <span className="client-tab-stats">
-              <span className="client-tab-rev">{money(t.revenue)}</span>
-              <span className="client-tab-dot">·</span>
-              {t.assets} asset{t.assets === 1 ? '' : 's'}
-              <span className="client-tab-dot">·</span>
-              {t.posted} posted
-              <span className="client-tab-dot">·</span>
-              {t.scheduled} scheduled
-              {duration && (
-                <>
-                  <span className="client-tab-dot">·</span>
-                  <span className="client-tab-dur">{duration}</span>
-                </>
-              )}
-              {meta?.contentPerMonth ? (
-                <>
-                  <span className="client-tab-dot">·</span>
-                  {meta.contentPerMonth}/mo
-                </>
-              ) : null}
-              {meta?.oneTimeAssets ? (
-                <>
-                  <span className="client-tab-dot">·</span>
-                  {meta.oneTimeAssets} one-time
-                </>
-              ) : null}
-            </span>
           </button>
-        )
-      })}
+        ))}
       </div>
       <button
         className="client-tab-add"

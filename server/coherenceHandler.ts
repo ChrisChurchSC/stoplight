@@ -66,7 +66,7 @@ const SCHEMA = {
   required: ['breaks'],
 } as const
 
-const SYSTEM = `You are the coherence checker inside Rushhour. Its whole promise is that a campaign's assets tell ONE story to one buyer. You find where that thread snaps.
+const SYSTEM = `You are the coherence checker inside Hyperfocus. Its whole promise is that a campaign's assets tell ONE story to one buyer. You find where that thread snaps.
 
 You are given a campaign's assets — each with its audience, channel, journey stage, and messaging components (headline, body, cta, etc.) — plus the ICP and, if present, the brand guide.
 

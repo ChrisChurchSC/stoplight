@@ -1,3 +1,5 @@
+import type { Descriptor } from './descriptors'
+import type { Rtb } from './rtb'
 import type { ChannelId } from './types'
 
 /**
@@ -43,10 +45,22 @@ export interface AudienceType {
   messageAngle: string
   /** Channels where this persona actually pays attention (where to reach them). */
   channels: ChannelId[]
-  /** RTB ids this audience leans on (emphasis) — a subset of the campaign RTBs. */
+  /** Proof points this audience OWNS (foundation). First-class objects that
+   *  travel with the audience into campaigns and accumulate their own track
+   *  record — proof belongs to the audience it persuades. */
+  rtbs: Rtb[]
+  /** Voice/tone descriptors for how to speak to this audience. */
+  descriptors: Descriptor[]
+  /** Ids of the audience's OWN rtbs to lead with (emphasis ordering). */
   rtbEmphasis: string[]
   /** GTM strategy key tied to this audience (its reach + convert playbook). */
   strategy: string
+  /** The outcome we want this audience to take — the conversion goal the
+   *  messaging and CTAs should drive toward (e.g. Donate, Subscribe, Invest). */
+  outcome?: string
+  /** Library governance: undefined/true = an approved master; explicit false = an
+   *  unvetted draft (authored, not yet blessed into the curated library). */
+  approved?: boolean
 }
 
 /** A blank audience with every field defaulted — the one place defaults live. */
@@ -70,8 +84,11 @@ export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
     triggers: [],
     messageAngle: '',
     channels: [],
+    rtbs: [],
+    descriptors: [],
     rtbEmphasis: [],
     strategy: '',
+    outcome: '',
     ...patch,
   }
 }

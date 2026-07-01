@@ -1,4 +1,4 @@
--- Rushhour backend schema (Supabase / Postgres).
+-- Hyperfocus backend schema (Supabase / Postgres).
 --
 -- Run this in the Supabase SQL editor for a new project, then set
 -- VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY in .env. Until those are set the app

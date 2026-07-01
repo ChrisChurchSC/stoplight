@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { CHANNELS } from '../domain/channels'
 import type { RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
+import { journeyPerformance, formatReach } from '../domain/journeyPerf'
+import { PlanPerfStrip } from './PlanPerfStrip'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -14,8 +16,10 @@ const MONTHS = [
 
 const STATUS_COLOR: Record<RowStatus, string> = {
   draft: '#9aa0aa',
+  in_review: '#c8881f',
   scheduled: 'var(--blue)',
   approved: 'var(--blue)',
+  rejected: '#b42318',
   posted: 'var(--green)',
   failed: '#b42318',
 }
@@ -36,12 +40,20 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'quarter', label: 'Quarter' },
 ]
 
-export function CalendarView({ allClients = false }: { allClients?: boolean }) {
+export function CalendarView({ allClients = false, liveScope = false, scopeClient }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
+  const proofFilter = useTrafficStore((s) => s.proofFilter)
+  const ctaFilter = useTrafficStore((s) => s.ctaFilter)
+  const audienceFilter = useTrafficStore((s) => s.audienceFilter)
+  const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const clientFilterStore = useTrafficStore((s) => s.clientFilter)
+  const campaignFilterStore = useTrafficStore((s) => s.campaignFilter)
+  // `scopeClient` (from the brand folder's combined Calendar) pins the view to one
+  // brand across ALL its campaigns, overriding the global client/campaign filters.
+  const clientFilter = scopeClient ?? clientFilterStore
+  const campaignFilter = scopeClient ? 'all' : campaignFilterStore
   const openReview = useTrafficStore((s) => s.openReview)
 
   const now = new Date()
@@ -49,9 +61,32 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
   const [cursor, setCursor] = useState(() => new Date(now.getFullYear(), now.getMonth(), now.getDate()))
   const [dayKey, setDayKey] = useState<string | null>(null)
 
+  // The brand-folder combined calendar shows the whole brand — it must not inherit
+  // the per-canvas sidebar filters, which would otherwise hide assets outside a
+  // stale filter from a previous canvas session.
+  const scoped = !!scopeClient
   const view = allClients
     ? rows
-    : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+    : rows.filter((r) =>
+        rowInScope(r, {
+          filter: scoped ? 'all' : filter,
+          proofFilter: scoped ? 'all' : proofFilter,
+          ctaFilter: scoped ? 'all' : ctaFilter,
+          audienceFilter: scoped ? 'all' : audienceFilter,
+          cardFilter: scoped ? 'all' : cardFilter,
+          query: scoped ? '' : query,
+          clientFilter,
+          campaignFilter,
+          liveOnly: liveScope,
+        }),
+      )
+
+  // Journey performance (reach) on the campaign — the same numbers as the canvas +
+  // grid, so an asset's reach reads the same wherever you look at it.
+  const journeyPerf = journeyPerformance(
+    allClients ? rows : rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter })),
+  )
+  const reachOf = (r: TrafficRow) => journeyPerf.perAsset.get(r.id)?.reach ?? 0
 
   // Point-in-time content (a post, a send) vs. assets that run over a period
   // (always-on ads, landing pages, nurture flows) — the latter render as spans.
@@ -95,20 +130,24 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
     title = `${f(start)} – ${f(end)}, ${end.getFullYear()}`
   }
 
-  const Event = ({ r }: { r: TrafficRow }) => (
-    <button
-      className="cal-event"
-      onClick={() => openReview(r.id)}
-      title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
-        undefined,
-        { hour: 'numeric', minute: '2-digit' },
-      )} · ${r.status}`}
-    >
-      <span className="cal-event-dot" style={{ background: STATUS_COLOR[r.status] }} />
-      <ChannelIcon channel={r.channel} size={12} />
-      <span className="cal-event-name">{r.assetName}</span>
-    </button>
-  )
+  const Event = ({ r }: { r: TrafficRow }) => {
+    const reach = reachOf(r)
+    return (
+      <button
+        className="cal-event"
+        onClick={() => openReview(r.id)}
+        title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
+          undefined,
+          { hour: 'numeric', minute: '2-digit' },
+        )} · ${r.status}${reach ? ` · reach ${reach.toLocaleString()}` : ''}`}
+      >
+        <span className="cal-event-dot" style={{ background: STATUS_COLOR[r.status] }} />
+        <ChannelIcon channel={r.channel} size={12} />
+        <span className="cal-event-name">{r.assetName}</span>
+        {reach > 0 && <span className="cal-event-reach">{formatReach(reach)}</span>}
+      </button>
+    )
+  }
 
   // ---- Month grid: weeks of day cells + multi-day span bars overlaid ----
   function MonthBody({ anchor }: { anchor: Date }) {
@@ -355,6 +394,8 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
             ))}
           </div>
         </div>
+
+        <PlanPerfStrip plan={journeyPerf.plan} />
 
         {mode === 'month' && <MonthBody anchor={cursor} />}
         {(mode === 'week' || mode === '3day') && <ColumnsBody />}

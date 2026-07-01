@@ -1,4 +1,3 @@
-import { TIME_RANGES } from '../domain/timeRange'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 // Connection leads — it's the storefront (the thesis), now a structured canvas.
@@ -12,46 +11,46 @@ const VIEWS = [
 export function ViewToggle() {
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
-  const loadSample = useTrafficStore((s) => s.loadSample)
-  const timeRange = useTrafficStore((s) => s.timeRange)
-  const setTimeRange = useTrafficStore((s) => s.setTimeRange)
-  // Time-range horizon applies to the Connection + Grid views (Calendar has its own).
-  const showRange = view === 'flow' || view === 'grid'
+  // Refresh stays bottom-right; Comments + History moved up to the top bar.
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
+  const refreshClient = useTrafficStore((s) => s.refreshClient)
+  const refreshingClient = useTrafficStore((s) => s.refreshingClient)
 
   return (
     <div className="view-bar">
-      {showRange ? (
-        <div className="range-toggle" role="group" aria-label="Time range">
-          {TIME_RANGES.map((r) => (
+      {/* Left stays clear — the zoom controls float in the bottom-left corner. */}
+      <div className="view-bar-side" />
+
+      {/* The view switcher sits dead center. */}
+      <div className="view-bar-center">
+        <div className="view-toggle" role="group" aria-label="View">
+          {VIEWS.map((v) => (
             <button
-              key={r.key}
-              className={`range-btn${timeRange === r.key ? ' active' : ''}`}
-              onClick={() => setTimeRange(r.key)}
+              key={v.key}
+              className={`view-btn${view === v.key ? ' active' : ''}`}
+              onClick={() => setView(v.key)}
+              title={`${v.label.replace(/^\S+\s/, '')} view`}
             >
-              {r.label}
+              {v.label}
             </button>
           ))}
         </div>
-      ) : (
-        <span className="view-bar-spacer" />
-      )}
-      <span className="view-bar-spacer" />
-      <div className="view-toggle" role="group" aria-label="View">
-        {VIEWS.map((v) => (
-          <button
-            key={v.key}
-            className={`view-btn${view === v.key ? ' active' : ''}`}
-            onClick={() => setView(v.key)}
-            title={`${v.label.replace(/^\S+\s/, '')} view`}
-          >
-            {v.label}
-          </button>
-        ))}
       </div>
-      <div className="view-bar-right">
-        <button className="btn ghost sm" onClick={loadSample} title="Replace the sheet with sample data">
-          Load sample data
-        </button>
+
+      {/* Refresh on the right (Comments + History moved to the top bar; the
+          Add-asset button floats in the bottom-right corner). */}
+      <div className="view-bar-side right">
+        {clientProfiles[clientFilter]?.website && (
+          <button
+            className="btn sm"
+            onClick={() => refreshClient(clientFilter)}
+            disabled={refreshingClient === clientFilter}
+            title="Re-gather this client's channels and refresh their live-messaging map"
+          >
+            {refreshingClient === clientFilter ? '↻ Refreshing…' : '↻ Refresh'}
+          </button>
+        )}
       </div>
     </div>
   )
