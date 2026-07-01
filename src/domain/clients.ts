@@ -71,6 +71,10 @@ export interface ClientProfile {
   /** Personalization locations (cities / regions / neighborhoods) the Location
    *  fan-out card fans across. */
   locations?: string[]
+  /** Standing personalization values per fan-out dimension the brand fans across
+   *  (behavior, tier, language, account, …). Location has its own `locations`;
+   *  audience + journey come from the library / funnel. Set in the Personalization tab. */
+  personalization?: Record<string, string[]>
   // ---- Company overview (filled in by site ingestion) ----
   /** One line on what the company does. */
   oneLiner?: string

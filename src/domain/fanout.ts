@@ -56,7 +56,9 @@ export function dimensionValues(
     case 'location':
       return profile?.locations ?? []
     default:
-      return []
+      // Any other dimension fans across the standing values set on the brand's
+      // Personalization tab (falls back to caller-supplied manual values when unset).
+      return profile?.personalization?.[dimension] ?? []
   }
 }
 

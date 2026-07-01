@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { BrandInfo } from './BrandInfo'
+import { BrandPersonalization } from './BrandPersonalization'
 import { BrandVoice } from './BrandVoice'
 import { CalendarView } from './CalendarView'
 import { HomeShell } from './HomeShell'
@@ -42,9 +43,9 @@ export function ClientsOverview() {
   // Calendar (every canvas in the folder on one table / one timeline), About, and
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
-  const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar' | 'about' | 'voice' | 'messaging'>(
-    'canvases',
-  )
+  const [folderTab, setFolderTab] = useState<
+    'canvases' | 'grid' | 'calendar' | 'about' | 'voice' | 'personalization' | 'messaging'
+  >('canvases')
   // Leaving a brand folder (or switching brands) snaps back to Canvases.
   useEffect(() => {
     setFolderTab('canvases')
@@ -86,6 +87,13 @@ export function ClientsOverview() {
           title="How the brand sounds — the tone canvases are generated in"
         >
           Voice
+        </button>
+        <button
+          className={`folder-tab${folderTab === 'personalization' ? ' active' : ''}`}
+          onClick={() => setFolderTab('personalization')}
+          title="The dimensions and values the brand personalizes across"
+        >
+          Personalization
         </button>
         <button
           className={`folder-tab${folderTab === 'messaging' ? ' active' : ''}`}
@@ -169,6 +177,16 @@ export function ClientsOverview() {
         <div className="home-main-scroll">
           {folderHead}
           <BrandVoice brand={brandFolder} />
+        </div>
+      </HomeShell>
+    )
+  }
+  if (brandFolder && folderTab === 'personalization') {
+    return (
+      <HomeShell>
+        <div className="home-main-scroll">
+          {folderHead}
+          <BrandPersonalization brand={brandFolder} />
         </div>
       </HomeShell>
     )
