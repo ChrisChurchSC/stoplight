@@ -12389,6 +12389,170 @@ button.cv-board-tab {
 .brand-info-wide {
   grid-column: 1 / -1;
 }
+/* ---- Voice tab: the detailed brand-voice guide ---- */
+.brand-voice {
+  max-width: 900px;
+}
+.brand-voice-intro {
+  margin: 0 0 20px;
+  max-width: 72ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.brand-voice-intro strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.brand-voice-inherit {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+/* Each guide section: a titled block separated by a hairline. */
+.voice-section {
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+}
+.voice-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+.voice-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.voice-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.voice-section-sub {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.voice-section-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+.voice-summary {
+  width: 100%;
+}
+/* Two-column layout for do/don't, lexicon, and the mechanics sub-fields. */
+.voice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.voice-grid-tight {
+  margin-top: 12px;
+}
+@media (max-width: 720px) {
+  .voice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Tone dimension sliders. */
+.voice-tone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.voice-tone-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px;
+  align-items: center;
+  gap: 12px;
+}
+.voice-tone-end {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.voice-tone-end.left {
+  text-align: right;
+}
+.voice-tone-end.right {
+  text-align: left;
+}
+.voice-tone-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* Chip / tag inputs (traits, lexicon). */
+.voice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  min-height: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+.voice-chips:focus-within {
+  border-color: var(--accent);
+}
+.voice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 3px 4px 3px 9px;
+}
+.voice-chip-x {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+  border-radius: 4px;
+}
+.voice-chip-x:hover {
+  color: var(--accent);
+}
+.voice-chip-input {
+  flex: 1;
+  min-width: 140px;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  padding: 3px 2px;
+}
+/* Save bar pinned under the guide. */
+.voice-savebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 20px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.voice-savebar-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+}
 .library-input {
   font: inherit;
   font-size: 13px;

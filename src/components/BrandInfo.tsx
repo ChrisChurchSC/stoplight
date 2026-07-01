@@ -24,7 +24,8 @@ const FIELDS: InfoField[] = [
   { key: 'headquarters', label: 'Headquarters' },
   { key: 'traction', label: 'Traction', placeholder: 'e.g. 2M downloads' },
   { key: 'mission', label: 'Mission', type: 'textarea' },
-  { key: 'voice', label: 'Brand voice', type: 'textarea', placeholder: 'e.g. Plain, technical, no hype' },
+  // Brand voice lives in its own Voice tab now (BrandVoice.tsx) — one home for the
+  // string generation and the coherence check read.
   { key: 'products', label: 'Products / offerings', type: 'textarea', list: true, placeholder: 'One per line' },
   { key: 'differentiators', label: 'Differentiators', type: 'textarea', list: true, placeholder: 'One per line' },
   { key: 'values', label: 'Values', type: 'textarea', list: true, placeholder: 'One per line' },

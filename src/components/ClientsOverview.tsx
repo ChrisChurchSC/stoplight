@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { BrandInfo } from './BrandInfo'
+import { BrandVoice } from './BrandVoice'
 import { CalendarView } from './CalendarView'
 import { HomeShell } from './HomeShell'
 import { LibraryPage } from './LibraryPage'
@@ -41,7 +42,9 @@ export function ClientsOverview() {
   // Calendar (every canvas in the folder on one table / one timeline), About, and
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
-  const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar' | 'about' | 'messaging'>('canvases')
+  const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar' | 'about' | 'voice' | 'messaging'>(
+    'canvases',
+  )
   // Leaving a brand folder (or switching brands) snaps back to Canvases.
   useEffect(() => {
     setFolderTab('canvases')
@@ -76,6 +79,13 @@ export function ClientsOverview() {
       <div className="folder-tabs folder-aux">
         <button className={`folder-tab${folderTab === 'about' ? ' active' : ''}`} onClick={() => setFolderTab('about')}>
           About
+        </button>
+        <button
+          className={`folder-tab${folderTab === 'voice' ? ' active' : ''}`}
+          onClick={() => setFolderTab('voice')}
+          title="How the brand sounds — the tone canvases are generated in"
+        >
+          Voice
         </button>
         <button
           className={`folder-tab${folderTab === 'messaging' ? ' active' : ''}`}
@@ -149,6 +159,16 @@ export function ClientsOverview() {
         <div className="home-main-scroll">
           {folderHead}
           <BrandInfo brand={brandFolder} />
+        </div>
+      </HomeShell>
+    )
+  }
+  if (brandFolder && folderTab === 'voice') {
+    return (
+      <HomeShell>
+        <div className="home-main-scroll">
+          {folderHead}
+          <BrandVoice brand={brandFolder} />
         </div>
       </HomeShell>
     )

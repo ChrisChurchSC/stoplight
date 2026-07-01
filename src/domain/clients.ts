@@ -11,13 +11,51 @@ export const CAMPAIGN_CLIENTS: Record<string, string> = {
 
 export const UNASSIGNED = 'Unassigned'
 
+/** Four tone dimensions on a 0–100 scale (0 = the left trait, 100 = the right).
+ *  A neutral brand sits at 50 on each. Modeled on the NN/g tone-of-voice axes. */
+export interface VoiceTone {
+  funnySerious?: number
+  casualFormal?: number
+  irreverentRespectful?: number
+  enthusiasticMatterOfFact?: number
+}
+
+/** The detailed brand-voice guide behind the short `voice` summary — the full
+ *  reference the team writes to and reviews against. The `voice` string stays the
+ *  compact line generation is prompted with; this is the human-facing guide. */
+export interface VoiceGuide {
+  /** Personality in a few adjectives (e.g. warm, candid, wry). */
+  traits?: string[]
+  /** Where the brand sits on the four tone dimensions. */
+  tone?: VoiceTone
+  /** Practices to follow. */
+  dos?: string[]
+  /** Practices to avoid. */
+  donts?: string[]
+  /** Words & phrases we reach for. */
+  preferredWords?: string[]
+  /** Words & phrases we never use. */
+  avoidWords?: string[]
+  /** Grammar & mechanics: capitalization, punctuation, emoji, contractions. */
+  mechanics?: string
+  /** Reading level / sentence-length guidance. */
+  readingLevel?: string
+  /** Signature line / tagline. */
+  tagline?: string
+  /** Sample copy that sounds unmistakably on-brand. */
+  examples?: string[]
+}
+
 /** A campaign created through the new-client wizard. */
 /** Client identity captured in the intake wizard. Feeds the ICP + copy drafting. */
 export interface ClientProfile {
   website?: string
   industry?: string
-  /** Short brand-voice note, e.g. "Plain, technical, no hype." */
+  /** Short brand-voice note, e.g. "Plain, technical, no hype." The compact line
+   *  injected into generation prompts + measured by the coherence check. */
   voice?: string
+  /** The detailed voice guide behind the summary (traits, tone, do/don't, lexicon). */
+  voiceGuide?: VoiceGuide
   // ---- GTM motion (inferred at setup, overridable) ----
   /** The active GTM strategy key (e.g. 'plg', 'demand-gen', 'sales-led'). Inferred
    *  from business-model signals at setup, pre-selected for generation, overridable. */
