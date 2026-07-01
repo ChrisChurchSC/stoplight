@@ -9,6 +9,7 @@ import { messagingFields } from '../domain/messaging'
 import { detectBreaks } from '../domain/breaks'
 import { rowInScope } from './scope'
 import type { RowStatus, TrafficRow } from '../domain/types'
+import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, groupKeyFor, resolveWindow } from '../domain/savedViews'
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
 import { conditionSentence } from '../domain/conditions'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
@@ -64,6 +65,120 @@ function resolveProofIds(brand: string, proofPoints: string[]): string[] {
   return proofPoints.map((p) => (byId.has(p) ? p : byLabel.get(p.toLowerCase()) ?? p)).filter(Boolean)
 }
 const ASSET_STATUSES: RowStatus[] = ['draft', 'in_review', 'approved', 'rejected', 'scheduled', 'posted', 'failed']
+
+const sourceAlias = (s: string) => (s === 'buffer' ? 'social-live' : s === 'site-map' ? 'site' : s)
+/** A friendly window phrase → trailing days. "last week"/"7d"/"30"/"quarter" etc. */
+function windowToDays(v: unknown): number | undefined {
+  const s = str(v).trim().toLowerCase().replace(/^last\s+/, '').replace(/\s+/g, '')
+  if (!s) return undefined
+  const named: Record<string, number> = { today: 1, week: 7, fortnight: 14, month: 30, quarter: 90, halfyear: 182, year: 365 }
+  if (named[s]) return named[s]
+  const m = s.match(/^(\d+)(d|day|days|w|wk|week|weeks|m|mo|month|months|q|quarter|quarters|y|year|years)?$/)
+  if (!m) return undefined
+  const n = Number(m[1])
+  const u = m[2] ?? 'd'
+  if (/^w/.test(u)) return n * 7
+  if (/^(mo|m)/.test(u) && u !== 'm') return n * 30
+  if (u === 'm') return n * 30
+  if (/^q/.test(u)) return n * 90
+  if (/^y/.test(u)) return n * 365
+  return n
+}
+/** Build an AssetFilter from bridge args (shared by query_assets / list_assets / canvases). */
+function buildFilter(a: Args): AssetFilter {
+  const arr = (v: unknown) => (list(v).length ? list(v) : undefined)
+  const src = list(a.source).map(sourceAlias)
+  const withinDays = Number(a.withinDays) > 0 ? Number(a.withinDays) : windowToDays(a.window)
+  return {
+    source: src.length ? src : undefined,
+    campaign: str(a.campaign).trim() || undefined,
+    channel: arr(a.channel),
+    audience: arr(a.audience),
+    stage: arr(a.stage),
+    status: arr(a.status),
+    publishedAfter: str(a.publishedAfter).trim() || undefined,
+    publishedBefore: str(a.publishedBefore).trim() || undefined,
+    withinDays,
+    includeArchived: a.includeArchived === true,
+  }
+}
+const rowEngagement = (r: TrafficRow) =>
+  r.socialMetrics?.engagementRate ?? (r.engagement ? r.engagement.likes + r.engagement.comments : 0)
+/** Sort rows by a saved-view / query sort key. */
+function sortRows(rows: TrafficRow[], sort?: string): TrafficRow[] {
+  const s = (sort ?? '').trim()
+  if (!s) return rows
+  const out = [...rows]
+  if (s === 'newest') out.sort((a, b) => assetDate(b) - assetDate(a))
+  else if (s === 'oldest') out.sort((a, b) => assetDate(a) - assetDate(b))
+  else if (s === 'engagement') out.sort((a, b) => rowEngagement(b) - rowEngagement(a))
+  else out.sort((a, b) => (b.socialMetrics?.[s] ?? 0) - (a.socialMetrics?.[s] ?? 0))
+  return out
+}
+/** Map a row to the asset shape the connector returns (shared by list_assets + get_canvas). */
+function assetView(r: TrafficRow, proofLabel: Map<string, string>, brandCtas: { label: string; stage?: string }[]) {
+  const firstSentence = (s: string) => (s.split(/(?<=[.!?])\s+/)[0] ?? s).trim()
+  const fields = messagingFields(r.channel, r.assetType)
+  const headlineKey = fields.find((f) => /headline|subject|title|subhead/i.test(f.key))?.key
+  const ctaKey = fields.find((f) => /cta/i.test(f.key))?.key
+  const descKey = fields.find((f) => /desc|preview/i.test(f.key))?.key
+  const primaryKey = (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key
+  const m = r.messaging ?? {}
+  const stage = funnelStageFor(r.channel, r.assetType)
+  const primaryText = primaryKey ? (m[primaryKey] ?? '') : ''
+  const headline = (headlineKey ? (m[headlineKey] ?? '') : '').trim() || firstSentence(primaryText)
+  const stageCta = brandCtas.find((c) => c.stage === stage) ?? brandCtas[0]
+  const cta = (ctaKey ? (m[ctaKey] ?? '') : '').trim() || stageCta?.label || ''
+  const description = (descKey ? (m[descKey] ?? '') : '').trim() || firstSentence(primaryText)
+  const proofIds = [...new Set(Object.values(r.rtbMap ?? {}).flat())]
+  return {
+    id: r.id,
+    stage,
+    audience: r.audience ?? '',
+    channel: r.channel,
+    type: r.assetType,
+    format: r.format ?? '',
+    status: r.status,
+    source: r.source ?? 'generated',
+    sourceUrl: r.sourceUrl ?? '',
+    mediaRef: r.mediaRef ?? '',
+    mediaRefs: r.mediaRefs ?? [],
+    publishedAt: r.publishedAt ?? '',
+    metrics: r.socialMetrics ?? null,
+    metricsUpdatedAt: r.metricsUpdatedAt ?? null,
+    engagement: rowEngagement(r),
+    authored: !!r.authored,
+    archived: !!r.archivedAt,
+    headline,
+    primaryText,
+    description,
+    cta,
+    lineage: r.lineage ?? {},
+    variantOf: r.variantOf ?? '',
+    branchOf: r.branchOf ?? '',
+    components: m,
+    proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
+  }
+}
+/** Rows for a brand matching a filter, sorted, with limit/cursor paging. */
+function resolveBrandAssets(brand: string, filter: AssetFilter, opts: { sort?: string; limit?: number; cursor?: number } = {}) {
+  const st = useTrafficStore.getState()
+  const proofLabel = new Map<string, string>()
+  for (const rtb of st.brandSystems[brand]?.rtbs ?? []) proofLabel.set(rtb.id, rtb.label)
+  const brandCtas = st.brandSystems[brand]?.ctas ?? []
+  // Resolve any relative window (withinDays) to an absolute cutoff NOW, so a saved view
+  // stays relative: "last 30 days" recomputes its start every time it's opened.
+  const f = resolveWindow(filter, Date.now())
+  const matched = sortRows(
+    st.rows.filter((r) => clientForCampaign(r.campaign) === brand && assetMatchesFilter(r, f)),
+    opts.sort,
+  )
+  const total = matched.length
+  const cursor = Math.max(0, opts.cursor ?? 0)
+  const page = opts.limit && opts.limit > 0 ? matched.slice(cursor, cursor + opts.limit) : matched.slice(cursor)
+  const nextCursor = cursor + page.length < total ? cursor + page.length : null
+  return { assets: page.map((r) => assetView(r, proofLabel, brandCtas)), total, nextCursor }
+}
 
 // Business model per GTM motion, so a strategy override refreshes the brand's
 // businessModel to match (instead of leaving the inferred one stale).
@@ -446,92 +561,100 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     }
   },
 
-  // Read back each generated asset's copy, so uniqueness is verifiable in-tool.
+  // Read back / query a brand's assets, filtered server-side so only matches return
+  // (small payloads). Filters: source, campaign, channel[], audience[], stage[], status[],
+  // publishedAfter/Before, plus sort + limit/cursor paging.
   async listAssets(a) {
     const brand = str(a.brand).trim()
-    const campaign = str(a.campaign).trim()
     if (!brand) throw new Error('brand is required')
-    const st = useTrafficStore.getState()
-    const proofLabel = new Map<string, string>()
-    for (const rtb of st.brandSystems[brand]?.rtbs ?? []) proofLabel.set(rtb.id, rtb.label)
-    const brandCtas = st.brandSystems[brand]?.ctas ?? []
-    const firstSentence = (s: string) => (s.split(/(?<=[.!?])\s+/)[0] ?? s).trim()
-    let rows = st.rows.filter((r) => clientForCampaign(r.campaign) === brand)
-    if (campaign) rows = rows.filter((r) => (r.campaign ?? '') === campaign)
-    // Archived (soft-deleted) assets are hidden unless explicitly requested.
-    rows = a.includeArchived === true ? rows : rows.filter((r) => !r.archivedAt)
-    // Optional status filter (e.g. status: "approved" → the shippable set).
-    const wantStatus = list(a.status)
-    if (wantStatus.length) rows = rows.filter((r) => wantStatus.includes(r.status))
-    // Optional source filter (e.g. source: "social-live" → the imported real posts).
-    const wantSource = list(a.source).map((s) => (s === 'buffer' ? 'social-live' : s === 'site-map' ? 'site' : s))
-    if (wantSource.length) rows = rows.filter((r) => wantSource.includes(r.source ?? 'generated'))
-    const assets = rows.map((r) => {
-      const fields = messagingFields(r.channel, r.assetType)
-      const headlineKey = fields.find((f) => /headline|subject|title|subhead/i.test(f.key))?.key
-      const ctaKey = fields.find((f) => /cta/i.test(f.key))?.key
-      const descKey = fields.find((f) => /desc|preview/i.test(f.key))?.key
-      const primaryKey = (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key
-      const m = r.messaging ?? {}
-      const stage = funnelStageFor(r.channel, r.assetType)
-      const primaryText = primaryKey ? (m[primaryKey] ?? '') : ''
-      // For formats whose schema lacks a role (e.g. body-only LinkedIn), surface the
-      // format's EQUIVALENT so nothing reads as empty: headline -> first sentence of
-      // the body; cta -> the stage-matched brand CTA the post drives to; description
-      // -> a short line from the body.
-      const headline = (headlineKey ? (m[headlineKey] ?? '') : '').trim() || firstSentence(primaryText)
-      const stageCta = brandCtas.find((c) => c.stage === stage) ?? brandCtas[0]
-      const cta = (ctaKey ? (m[ctaKey] ?? '') : '').trim() || stageCta?.label || ''
-      const description = (descKey ? (m[descKey] ?? '') : '').trim() || firstSentence(primaryText)
-      const proofIds = [...new Set(Object.values(r.rtbMap ?? {}).flat())]
-      return {
-        id: r.id,
-        stage,
-        audience: r.audience ?? '',
-        channel: r.channel,
-        type: r.assetType,
-        format: r.format ?? '',
-        /** Review/publish lifecycle status (draft → in_review → approved/rejected → …). */
-        status: r.status,
-        /** Where this asset came from: generated / authored / imported / social-live / site. */
-        source: r.source ?? 'generated',
-        /** The external post/page URL this was imported from (real content only). */
-        sourceUrl: r.sourceUrl ?? '',
-        /** When it was published externally (real content only). */
-        publishedAt: r.publishedAt ?? '',
-        /** Platform metrics for an imported live post (impressions/reach/shares/…). */
-        metrics: r.socialMetrics ?? null,
-        /** Freshness of those metrics (ms epoch), or null if never fetched. */
-        metricsUpdatedAt: r.metricsUpdatedAt ?? null,
-        /** A single engagement number for ranking: explicit rate, else likes+comments. */
-        engagement: r.socialMetrics?.engagementRate ?? (r.engagement ? r.engagement.likes + r.engagement.comments : 0),
-        /** Hand-authored by a human (vs generated). */
-        authored: !!r.authored,
-        /** Soft-deleted (only present when includeArchived was requested). */
-        archived: !!r.archivedAt,
-        headline,
-        primaryText,
-        description,
-        cta,
-        /** The personalization composition this variant was fanned from. */
-        lineage: r.lineage ?? {},
-        /** The master this is a personalization variant of (sits side by side with it). */
-        variantOf: r.variantOf ?? '',
-        /** The journey step this branches off (flows forward, drawn connected). */
-        branchOf: r.branchOf ?? '',
-        /** Every messaging component this asset actually has, key → copy. */
-        components: m,
-        proofPoints: proofIds.map((id) => proofLabel.get(id) ?? id),
-      }
+    const { assets, total, nextCursor } = resolveBrandAssets(brand, buildFilter(a), {
+      sort: str(a.sort).trim() || undefined,
+      limit: Number(a.limit) || 0,
+      cursor: Number(a.cursor) || 0,
     })
-    // Optional ranking: sort by "engagement" (or any metric key, e.g. "impressions"),
-    // descending — so top posts surface first.
-    const sortKey = str(a.sort).trim()
-    if (sortKey) {
-      const val = (x: (typeof assets)[number]) => (sortKey === 'engagement' ? x.engagement : x.metrics?.[sortKey] ?? 0)
-      assets.sort((x, y) => val(y) - val(x))
+    return { brand, campaign: str(a.campaign).trim() || null, count: assets.length, total, nextCursor, assets }
+  },
+
+  // ---- Saved Views (smart canvases): named, re-resolving filtered boards of assets ----
+  async createCanvas(a) {
+    const brand = str(a.brand).trim()
+    const name = str(a.name).trim()
+    if (!brand || !name) throw new Error('brand and name are required')
+    const layoutRaw = str(a.layout).trim()
+    const groupRaw = str(a.groupBy).trim()
+    const view = useTrafficStore.getState().createSavedView(brand, name, {
+      // Normalize through buildFilter so a relative `window` ("last week"/"30d"/"quarter")
+      // or `withinDays` is stored as withinDays and stays relative.
+      filter: buildFilter((a.filter && typeof a.filter === 'object' ? a.filter : a) as Args),
+      layout: (['board', 'calendar', 'grid', 'list'].includes(layoutRaw) ? layoutRaw : undefined) as never,
+      groupBy: (['date', 'channel', 'audience', 'stage', 'none'].includes(groupRaw) ? groupRaw : undefined) as never,
+      sort: str(a.sort).trim() || undefined,
+    })
+    return { id: view.id, brand, name: view.name, layout: view.layout, groupBy: view.groupBy, filter: view.filter }
+  },
+
+  // Open a canvas: re-resolve its filter NOW (live) and return the matched assets,
+  // grouped + sorted per its config. New assets in-window appear; aged-out ones drop.
+  async getCanvas(a) {
+    const id = str(a.id).trim()
+    if (!id) throw new Error('id is required')
+    const view = useTrafficStore.getState().savedViews.find((v) => v.id === id)
+    if (!view) throw new Error(`canvas not found: ${id}`)
+    const { assets, total, nextCursor } = resolveBrandAssets(view.brand, view.filter, {
+      sort: view.sort ?? 'newest',
+      limit: Number(a.limit) || 0,
+      cursor: Number(a.cursor) || 0,
+    })
+    // Group per the view config (board/calendar group; list/grid are flat).
+    const gb = view.groupBy as ViewGroupBy
+    const st = useTrafficStore.getState()
+    const byId = new Map(st.rows.map((r) => [r.id, r]))
+    let groups: { key: string; count: number; assetIds: string[] }[] | null = null
+    if (gb && gb !== 'none') {
+      const m = new Map<string, string[]>()
+      for (const asset of assets) {
+        const row = byId.get(asset.id)
+        const k = row ? groupKeyFor(row, gb) : 'all'
+        ;(m.get(k) ?? m.set(k, []).get(k)!).push(asset.id)
+      }
+      groups = [...m.entries()].map(([key, ids]) => ({ key, count: ids.length, assetIds: ids }))
+      // Date groups newest-first; others alphabetical.
+      groups.sort((x, y) => (gb === 'date' ? y.key.localeCompare(x.key) : x.key.localeCompare(y.key)))
     }
-    return { brand, campaign: campaign || null, count: assets.length, assets }
+    return { id: view.id, brand: view.brand, name: view.name, layout: view.layout, groupBy: view.groupBy, sort: view.sort, filter: view.filter, count: assets.length, total, nextCursor, groups, assets }
+  },
+
+  async listCanvases(a) {
+    const brand = str(a.brand).trim()
+    const views = useTrafficStore.getState().savedViews.filter((v) => !brand || v.brand === brand)
+    return {
+      brand: brand || null,
+      canvases: views.map((v) => ({ id: v.id, brand: v.brand, name: v.name, layout: v.layout, groupBy: v.groupBy, sort: v.sort, filter: v.filter })),
+    }
+  },
+
+  async updateCanvas(a) {
+    const id = str(a.id).trim()
+    if (!id) throw new Error('id is required')
+    const st = useTrafficStore.getState()
+    if (!st.savedViews.some((v) => v.id === id)) throw new Error(`canvas not found: ${id}`)
+    const patch: Record<string, unknown> = {}
+    if (str(a.name).trim()) patch.name = str(a.name).trim()
+    if (a.filter && typeof a.filter === 'object') patch.filter = buildFilter(a.filter as Args)
+    const layoutRaw = str(a.layout).trim()
+    if (['board', 'calendar', 'grid', 'list'].includes(layoutRaw)) patch.layout = layoutRaw
+    const groupRaw = str(a.groupBy).trim()
+    if (['date', 'channel', 'audience', 'stage', 'none'].includes(groupRaw)) patch.groupBy = groupRaw
+    if (str(a.sort).trim()) patch.sort = str(a.sort).trim()
+    st.updateSavedView(id, patch)
+    return { id, updated: Object.keys(patch) }
+  },
+
+  async deleteCanvas(a) {
+    const id = str(a.id).trim()
+    if (!id) throw new Error('id is required')
+    useTrafficStore.getState().deleteSavedView(id)
+    return { id, deleted: true }
   },
 
   // ---- Asset lifecycle: edit / author / approve / delete ----

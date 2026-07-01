@@ -20,6 +20,7 @@ import { LibraryPage } from './LibraryPage'
 import { BillingPage } from './BillingPage'
 import { IcpDrawer } from './IcpDrawer'
 import { PersonalizationDrawer } from './PersonalizationDrawer'
+import { SavedViewsDrawer } from './SavedViewsDrawer'
 import { TrackingDrawer } from './TrackingDrawer'
 import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
@@ -166,6 +167,7 @@ export function Workbench() {
       <ShareDialog />
       <IcpDrawer />
       <PersonalizationDrawer />
+      <SavedViewsDrawer />
       <ChannelIngestDrawer />
       <TrackingDrawer />
       <CopyReview />

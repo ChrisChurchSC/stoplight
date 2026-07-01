@@ -24,6 +24,8 @@ export function Breadcrumb() {
   const comments = useTrafficStore((s) => s.comments)
   const brandNotice = useTrafficStore((s) => s.brandNotice)
   const setBrandNotice = useTrafficStore((s) => s.setBrandNotice)
+  const setSavedViewsOpen = useTrafficStore((s) => s.setSavedViewsOpen)
+  const setOpenSavedViewId = useTrafficStore((s) => s.setOpenSavedViewId)
 
   // Comments needing a reply across posted assets in scope (drives the badge).
   const scopedPostedIds = new Set(
@@ -139,6 +141,9 @@ export function Breadcrumb() {
             <span className="cv-presence-n">{peers.length} here</span>
           </div>
         )}
+        <button className="btn sm" onClick={() => { setOpenSavedViewId(null); setSavedViewsOpen(true) }} title="Saved Views — live filtered boards (last 30 days, social, …)">
+          ▦ Views
+        </button>
         <button className="btn sm" onClick={openCommentInbox} title="Comments ingested across posted assets">
           💬 Comments
           {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}

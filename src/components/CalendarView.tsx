@@ -40,7 +40,7 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'quarter', label: 'Quarter' },
 ]
 
-export function CalendarView({ allClients = false, liveScope = false }: { allClients?: boolean; liveScope?: boolean }) {
+export function CalendarView({ allClients = false, liveScope = false, scopeClient }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -48,8 +48,12 @@ export function CalendarView({ allClients = false, liveScope = false }: { allCli
   const audienceFilter = useTrafficStore((s) => s.audienceFilter)
   const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const clientFilterStore = useTrafficStore((s) => s.clientFilter)
+  const campaignFilterStore = useTrafficStore((s) => s.campaignFilter)
+  // `scopeClient` (from the brand folder's combined Calendar) pins the view to one
+  // brand across ALL its campaigns, overriding the global client/campaign filters.
+  const clientFilter = scopeClient ?? clientFilterStore
+  const campaignFilter = scopeClient ? 'all' : campaignFilterStore
   const openReview = useTrafficStore((s) => s.openReview)
 
   const now = new Date()
@@ -57,9 +61,25 @@ export function CalendarView({ allClients = false, liveScope = false }: { allCli
   const [cursor, setCursor] = useState(() => new Date(now.getFullYear(), now.getMonth(), now.getDate()))
   const [dayKey, setDayKey] = useState<string | null>(null)
 
+  // The brand-folder combined calendar shows the whole brand — it must not inherit
+  // the per-canvas sidebar filters, which would otherwise hide assets outside a
+  // stale filter from a previous canvas session.
+  const scoped = !!scopeClient
   const view = allClients
     ? rows
-    : rows.filter((r) => rowInScope(r, { filter, proofFilter, ctaFilter, audienceFilter, cardFilter, query, clientFilter, campaignFilter, liveOnly: liveScope }))
+    : rows.filter((r) =>
+        rowInScope(r, {
+          filter: scoped ? 'all' : filter,
+          proofFilter: scoped ? 'all' : proofFilter,
+          ctaFilter: scoped ? 'all' : ctaFilter,
+          audienceFilter: scoped ? 'all' : audienceFilter,
+          cardFilter: scoped ? 'all' : cardFilter,
+          query: scoped ? '' : query,
+          clientFilter,
+          campaignFilter,
+          liveOnly: liveScope,
+        }),
+      )
 
   // Journey performance (reach) on the campaign — the same numbers as the canvas +
   // grid, so an asset's reach reads the same wherever you look at it.

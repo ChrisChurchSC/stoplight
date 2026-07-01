@@ -19,6 +19,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
 import { Thumb } from './Thumb'
+import { proxiedMedia } from '../lib/media'
 
 const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
 
@@ -104,7 +105,7 @@ function GrowCell({
   )
 }
 
-export function SheetGrid({ liveScope = false }: { liveScope?: boolean } = {}) {
+export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: boolean; scopeClient?: string } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -112,8 +113,12 @@ export function SheetGrid({ liveScope = false }: { liveScope?: boolean } = {}) {
   const audienceFilter = useTrafficStore((s) => s.audienceFilter)
   const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const clientFilterStore = useTrafficStore((s) => s.clientFilter)
+  const campaignFilterStore = useTrafficStore((s) => s.campaignFilter)
+  // `scopeClient` (from the brand folder's combined Grid) pins the view to one
+  // brand across ALL its campaigns, overriding the global client/campaign filters.
+  const clientFilter = scopeClient ?? clientFilterStore
+  const campaignFilter = scopeClient ? 'all' : campaignFilterStore
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
   const updateRow = useTrafficStore((s) => s.updateRow)
@@ -216,10 +221,26 @@ export function SheetGrid({ liveScope = false }: { liveScope?: boolean } = {}) {
     document.body.style.userSelect = 'none'
   }
 
+  // The brand-folder combined view ("see everything in this folder") is a fresh,
+  // unfiltered look at the whole brand. It must NOT inherit the per-canvas sidebar
+  // filters or the forward time horizon — a stale channel / audience / card filter
+  // or a narrowed time range from a previous canvas session would otherwise hide
+  // the folder's assets, which reads as "my canvases aren't showing up".
+  const scoped = !!scopeClient
   const view = rows.filter(
     (r) =>
-      rowInScope(r, { filter, proofFilter, ctaFilter, audienceFilter, cardFilter, query, clientFilter, campaignFilter, liveOnly: liveScope }) &&
-      inTimeRange(r, timeRange, rangeNow),
+      rowInScope(r, {
+        filter: scoped ? 'all' : filter,
+        proofFilter: scoped ? 'all' : proofFilter,
+        ctaFilter: scoped ? 'all' : ctaFilter,
+        audienceFilter: scoped ? 'all' : audienceFilter,
+        cardFilter: scoped ? 'all' : cardFilter,
+        query: scoped ? '' : query,
+        clientFilter,
+        campaignFilter,
+        liveOnly: liveScope,
+      }) &&
+      (scoped || inTimeRange(r, timeRange, rangeNow)),
   )
 
   const totalRows = view.length
@@ -462,7 +483,7 @@ export function SheetGrid({ liveScope = false }: { liveScope?: boolean } = {}) {
                     <div className="sheet-asset">
                       <div className="mini">
                         {row.mediaRef ? (
-                          <Thumb mediaType={row.mediaType} url={row.mediaRef} />
+                          <Thumb mediaType={row.mediaType} url={proxiedMedia(row.mediaRef, 200)} />
                         ) : (
                           <label
                             className="mini-upload"

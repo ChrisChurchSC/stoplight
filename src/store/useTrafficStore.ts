@@ -89,6 +89,7 @@ import {
   engagementFromMetrics,
   looksLikeBlockedPage,
 } from '../domain/importAssets'
+import { type SavedView, newSavedView } from '../domain/savedViews'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -562,6 +563,8 @@ function saveBrandMeta(map: BrandMetaMap): void {
 const ACCOUNTS_KEY = 'stoplight.accounts.v1'
 const TARGET_LISTS_KEY = 'stoplight.targetLists.v1'
 const CAMPAIGN_TARGET_KEY = 'stoplight.campaignTarget.v1'
+// Saved Views (smart canvases): named, re-resolving filters over a brand's assets.
+const SAVED_VIEWS_KEY = 'stoplight.savedViews.v1'
 function loadJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
@@ -942,6 +945,8 @@ interface TrafficState {
   targetLists: TargetList[]
   /** The target list a campaign targets (campaign name → list id). */
   campaignTargetList: Record<string, string>
+  /** Saved Views (smart canvases): named, re-resolving filters over a brand's assets. */
+  savedViews: SavedView[]
   /** Approved/proposed conditional rules per campaign (fan-out conditional logic). */
   campaignConditions: Record<string, FanCondition[]>
   /** The brand whose system the Messaging page is viewing/editing. */
@@ -972,6 +977,11 @@ interface TrafficState {
   icpOpen: boolean
   /** Personalization fan-out card drawer. */
   personalizeOpen: boolean
+  /** Saved Views (smart canvases) drawer + which view is open as a board (null = list). */
+  savedViewsOpen: boolean
+  setSavedViewsOpen: (open: boolean) => void
+  openSavedViewId: string | null
+  setOpenSavedViewId: (id: string | null) => void
   /** Channel whose tracking-setup drawer is open ('all' = overview), or null. */
   trackingChannel: ChannelId | 'all' | null
   openTracking: (channel: ChannelId | 'all') => void
@@ -1363,6 +1373,11 @@ interface TrafficState {
   /** The accounts a campaign targets (via its attached list). */
   accountsForCampaign: (campaign: string) => Account[]
 
+  // ---- Saved Views (smart canvases) ----
+  createSavedView: (brand: string, name: string, patch: Partial<SavedView>) => SavedView
+  updateSavedView: (id: string, patch: Partial<SavedView>) => void
+  deleteSavedView: (id: string) => void
+
   // pre-flight tracking gate (sequential, after the ICP gate)
   trackingRan: boolean
   trackingCleared: boolean
@@ -1492,6 +1507,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   historyOpen: false,
   icpOpen: false,
   personalizeOpen: false,
+  savedViewsOpen: false,
+  openSavedViewId: null,
   trackingChannel: null,
   drivePickerOpen: false,
   driveConnected: false,
@@ -1513,6 +1530,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
   targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
   campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
+  savedViews: loadJson<SavedView[]>(SAVED_VIEWS_KEY, []),
   campaignConditions: loadConditions(),
   messagingBrand: '',
   library: emptyLibrary(),
@@ -1588,6 +1606,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   setIcpOpen: (icpOpen) => set({ icpOpen }),
   setPersonalizeOpen: (personalizeOpen) => set({ personalizeOpen }),
+  setSavedViewsOpen: (savedViewsOpen) => set({ savedViewsOpen }),
+  setOpenSavedViewId: (openSavedViewId) => set({ openSavedViewId }),
   openTracking: (channel) => set({ trackingChannel: channel }),
   closeTracking: () => set({ trackingChannel: null }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
@@ -3571,6 +3591,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const byId = new Map((s.accountsByBrand[list.brand] ?? []).map((a) => [a.id, a]))
     return list.accountIds.map((id) => byId.get(id)).filter((a): a is Account => !!a)
   },
+
+  // ---- Saved Views (smart canvases) ----
+  createSavedView: (brand, name, patch) => {
+    const view = newSavedView(brand.trim(), name, patch)
+    const s = get()
+    get().addClient(brand.trim())
+    const savedViews = [...s.savedViews, view]
+    saveJson(SAVED_VIEWS_KEY, savedViews)
+    set({ savedViews })
+    return view
+  },
+  updateSavedView: (id, patch) =>
+    set((s) => {
+      const savedViews = s.savedViews.map((v) => (v.id === id ? { ...v, ...patch, id: v.id, brand: v.brand, createdAt: v.createdAt } : v))
+      saveJson(SAVED_VIEWS_KEY, savedViews)
+      return { savedViews }
+    }),
+  deleteSavedView: (id) =>
+    set((s) => {
+      const savedViews = s.savedViews.filter((v) => v.id !== id)
+      saveJson(SAVED_VIEWS_KEY, savedViews)
+      return { savedViews }
+    }),
 
   draftCopy: async (rowIds) => {
     const { rows, icp, filter, query, clientFilter, campaignFilter } = get()

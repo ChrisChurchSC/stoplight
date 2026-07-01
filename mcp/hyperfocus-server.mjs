@@ -414,11 +414,103 @@ server.registerTool(
       campaign: z.string().optional().describe('A specific campaign name, or omit for all of the brand'),
       status: z.array(z.string()).optional().describe('Filter to these statuses, e.g. ["approved"] for the shippable set, or ["draft","in_review"].'),
       source: z.array(z.string()).optional().describe('Filter by provenance: ["social-live"] (real posts), ["site"] (scraped pages), ["imported"], ["authored"], ["generated"].'),
-      sort: z.string().optional().describe('Rank descending by "engagement" (likes+comments or rate) or any metric key (e.g. "impressions","reach","saves") — top posts first.'),
+      channel: z.array(z.string()).optional().describe('Filter to channels, e.g. ["instagram","linkedin"].'),
+      audience: z.array(z.string()).optional().describe('Filter to audience names.'),
+      stage: z.array(z.string()).optional().describe('Filter to funnel stages: awareness / consideration / conversion / retention.'),
+      publishedAfter: z.string().optional().describe('ISO date-time; keep assets published on/after (absolute). Filters by publishedAt, else scheduledAt.'),
+      publishedBefore: z.string().optional().describe('ISO date-time; keep assets published on/before.'),
+      window: z.string().optional().describe('RELATIVE trailing window — "last week", "30d", "month", "quarter", "year". Recomputed each call (stays relative). Prefer this over publishedAfter for "last N".'),
+      withinDays: z.number().optional().describe('Trailing window in days (7 = last week, 30, 60, 90 = quarter). Same as window, as a number.'),
+      sort: z.string().optional().describe('"newest" / "oldest" / "engagement" / a metric key (e.g. "impressions").'),
+      limit: z.number().optional().describe('Max assets to return (paging — keeps payloads small).'),
+      cursor: z.number().optional().describe('Offset to start from (paging). The response returns nextCursor when more remain.'),
       includeArchived: z.boolean().optional().describe('Include soft-deleted assets (default false).'),
     },
   },
   async (a) => text(await dispatch('listAssets', a)),
+)
+
+server.registerTool(
+  'create_canvas',
+  {
+    title: 'Create a saved view (smart canvas)',
+    description:
+      "Create a named, persisted, re-resolving filtered view of a brand's assets — a smart canvas (like a smart playlist). It stores a FILTER, not a copy: open it any time and it resolves live, so new matching assets appear and aged-out ones drop. Real imported posts + generated drafts show together. e.g. \"Last 60 Days\" = filter { source:[\"social-live\"], publishedAfter:<now-60d> }, layout board, groupBy date.",
+    inputSchema: {
+      brand: z.string().describe('The brand the view lives under'),
+      name: z.string().describe('The view name, e.g. "Last 60 Days"'),
+      filter: z
+        .object({
+          source: z.array(z.string()).optional(),
+          campaign: z.string().optional(),
+          channel: z.array(z.string()).optional(),
+          audience: z.array(z.string()).optional(),
+          stage: z.array(z.string()).optional(),
+          status: z.array(z.string()).optional(),
+          publishedAfter: z.string().optional(),
+          publishedBefore: z.string().optional(),
+          withinDays: z.number().optional().describe('RELATIVE trailing window in days (7/30/60/90). Stored so the canvas stays relative — "last 30 days" is always the trailing 30.'),
+          window: z.string().optional().describe('Friendly relative window — "last week", "30d", "month", "quarter" — converted to withinDays.'),
+          includeArchived: z.boolean().optional(),
+        })
+        .describe('The query the canvas resolves (AND-ed clauses). For "last N", use withinDays/window (relative), not publishedAfter (frozen).'),
+      layout: z.enum(['board', 'calendar', 'grid', 'list']).optional().describe('default board'),
+      groupBy: z.enum(['date', 'channel', 'audience', 'stage', 'none']).optional().describe('default none'),
+      sort: z.string().optional().describe('"newest" (default) / "oldest" / "engagement" / a metric key'),
+    },
+  },
+  async (a) => text(await dispatch('createCanvas', a)),
+)
+
+server.registerTool(
+  'get_canvas',
+  {
+    title: 'Open a saved view (resolve it live)',
+    description: 'Open a smart canvas by id: re-resolves its filter NOW and returns the matched assets, grouped + sorted per its config (groups[] when grouped). Pass limit/cursor to page.',
+    inputSchema: {
+      id: z.string().describe('The canvas id (from create_canvas / list_canvases)'),
+      limit: z.number().optional(),
+      cursor: z.number().optional(),
+    },
+  },
+  async (a) => text(await dispatch('getCanvas', a)),
+)
+
+server.registerTool(
+  'list_canvases',
+  {
+    title: 'List saved views',
+    description: 'List the saved views (smart canvases) under a brand (or all brands), with their filters + layout.',
+    inputSchema: { brand: z.string().optional().describe('Limit to one brand, or omit for all') },
+  },
+  async (a) => text(await dispatch('listCanvases', a)),
+)
+
+server.registerTool(
+  'update_canvas',
+  {
+    title: 'Update a saved view',
+    description: 'Edit a smart canvas: name, filter, layout, groupBy, or sort. The next get_canvas re-resolves with the new config.',
+    inputSchema: {
+      id: z.string().describe('The canvas id'),
+      name: z.string().optional(),
+      filter: z.record(z.any()).optional().describe('Replace the filter (same shape as create_canvas)'),
+      layout: z.enum(['board', 'calendar', 'grid', 'list']).optional(),
+      groupBy: z.enum(['date', 'channel', 'audience', 'stage', 'none']).optional(),
+      sort: z.string().optional(),
+    },
+  },
+  async (a) => text(await dispatch('updateCanvas', a)),
+)
+
+server.registerTool(
+  'delete_canvas',
+  {
+    title: 'Delete a saved view',
+    description: 'Delete a smart canvas. The underlying assets are untouched (a canvas is just a saved query).',
+    inputSchema: { id: z.string().describe('The canvas id') },
+  },
+  async (a) => text(await dispatch('deleteCanvas', a)),
 )
 
 server.registerTool(

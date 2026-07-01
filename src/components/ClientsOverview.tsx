@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { BrandInfo } from './BrandInfo'
+import { CalendarView } from './CalendarView'
 import { HomeShell } from './HomeShell'
 import { LibraryPage } from './LibraryPage'
+import { SheetGrid } from './SheetGrid'
 
 /**
  * The home — a files browser for canvases in the shared dashboard shell (sidebar +
@@ -35,9 +37,11 @@ export function ClientsOverview() {
   const loadSample = useTrafficStore((s) => s.loadSample)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
 
-  // Inside a brand folder you flip between its Canvases, About, and Messaging.
+  // Inside a brand folder you flip between its Canvases, the combined Grid and
+  // Calendar (every canvas in the folder on one table / one timeline), About, and
+  // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
-  const [folderTab, setFolderTab] = useState<'canvases' | 'about' | 'messaging'>('canvases')
+  const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar' | 'about' | 'messaging'>('canvases')
   // Leaving a brand folder (or switching brands) snaps back to Canvases.
   useEffect(() => {
     setFolderTab('canvases')
@@ -51,6 +55,20 @@ export function ClientsOverview() {
       <div className="folder-tabs">
         <button className={`folder-tab${folderTab === 'canvases' ? ' active' : ''}`} onClick={() => setFolderTab('canvases')}>
           Canvases
+        </button>
+        <button
+          className={`folder-tab${folderTab === 'grid' ? ' active' : ''}`}
+          onClick={() => setFolderTab('grid')}
+          title="Every canvas in this folder, combined into one grid"
+        >
+          Grid
+        </button>
+        <button
+          className={`folder-tab${folderTab === 'calendar' ? ' active' : ''}`}
+          onClick={() => setFolderTab('calendar')}
+          title="Every canvas in this folder on one calendar"
+        >
+          Calendar
         </button>
         <button className={`folder-tab${folderTab === 'about' ? ' active' : ''}`} onClick={() => setFolderTab('about')}>
           About
@@ -89,6 +107,26 @@ export function ClientsOverview() {
         : filter === 'live'
           ? 'Live'
           : 'All canvases'
+
+  // A brand folder's combined Grid / Calendar: every canvas in the folder on one
+  // table / one timeline, scoped to this brand across all its campaigns. These fill
+  // the column (flex, not the document scroll), so the view owns its own height.
+  if (brandFolder && (folderTab === 'grid' || folderTab === 'calendar')) {
+    return (
+      <HomeShell>
+        <div className="home-main-page folder-combined">
+          {folderHead}
+          <div className="folder-view">
+            {folderTab === 'grid' ? (
+              <SheetGrid scopeClient={brandFolder} />
+            ) : (
+              <CalendarView scopeClient={brandFolder} />
+            )}
+          </div>
+        </div>
+      </HomeShell>
+    )
+  }
 
   // A brand folder's Messaging system or About tab: render the embedded editor.
   if (brandFolder && folderTab === 'messaging') {

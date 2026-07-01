@@ -26,6 +26,8 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { typesFor } from '../domain/channelAssetTypes'
 import { ChannelIcon } from './ChannelIcon'
+import { assetBadge } from '../domain/assetBadge'
+import { proxiedMedia } from '../lib/media'
 
 /**
  * The campaign canvas — a structured, zoomable map that makes connection the
@@ -41,6 +43,10 @@ const AUD_W = 440
 const AUD_H = 168
 const MSG_W = 500
 const MSG_H = 132
+// An ingested post's media banner across the TOP of the card, stacked above the copy.
+// Kept in sync with .cv-node-media height in index.css; a media card reserves this much
+// extra height (the banner sits above the copy, so it ADDS to the card height).
+const CARD_MEDIA = 220
 const MSG_GAP = 64
 // Extra vertical gap between TIERS of the same funnel stage (a card and its
 // same-stage child), so a same-stage fork drops down instead of running flat.
@@ -189,6 +195,29 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // Swap a lane's audience — the Brand / Subject / Strategy frame now lives in the top
   // bar (CanvasFrameBar); only the per-lane audience swap remains on the canvas.
   const [frameMenu, setFrameMenu] = useState<{ kind: 'audience'; x: number; y: number; audience?: string } | null>(null)
+  // Measured banner height per asset (rowId → px), so an ingested image renders at the
+  // ART'S real aspect ratio (no crop). Unknown until the image loads, so the card
+  // reserves a default then reflows to the true height on load. 0 = failed to load.
+  const [mediaH, setMediaH] = useState<Record<string, number>>({})
+  // Coalesce image measurements into ONE reflow per frame — otherwise dozens of images
+  // loading each trigger a full canvas re-layout (the slow part). Batched via rAF.
+  const pendingMediaH = useRef<Record<string, number>>({})
+  const mediaRaf = useRef<number | null>(null)
+  const queueMediaH = (rowId: string, h: number) => {
+    pendingMediaH.current[rowId] = h
+    if (mediaRaf.current != null) return
+    mediaRaf.current = requestAnimationFrame(() => {
+      mediaRaf.current = null
+      const batch = pendingMediaH.current
+      pendingMediaH.current = {}
+      setMediaH((prev) => {
+        let changed = false
+        const next = { ...prev }
+        for (const k in batch) if (prev[k] !== batch[k]) ((next[k] = batch[k]), (changed = true))
+        return changed ? next : prev
+      })
+    })
+  }
   // A pending high-blast-radius frame change (strategy / brand / audience swap)
   // awaiting confirmation. It re-checks everything built on it, so we preview the
   // consequence (how many assets, editable-vs-produced split) before committing —
@@ -291,7 +320,10 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
-        void updateRow(selectedEdge, { branchOf: undefined })
+        // A journey connector unlinks (clears branchOf); an audience connector unassigns
+        // the card (clears audience) so it goes back to loose.
+        const row = rows.find((r) => r.id === selectedEdge)
+        void updateRow(selectedEdge, row?.branchOf ? { branchOf: undefined } : { audience: '' })
         setSelectedEdge(null)
       } else if (e.key === 'Escape') {
         setSelectedEdge(null)
@@ -299,7 +331,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedEdge, updateRow])
+  }, [selectedEdge, updateRow, rows])
   // Escape cancels the artboard tool (and any in-progress draw).
   useEffect(() => {
     if (!artboardMode) return
@@ -459,8 +491,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     // never shorter than the real (min-height) card — that would let copy overlap.
     const cardHeight = (r: TrafficRow) => {
       // Every card shows the same rows (all messaging components + a CTA + the
-      // proof point); zoomed out the values are clamped to 2 lines, zoomed in
-      // they're shown in full and inbound replies are appended.
+      // proof point) in FULL at every zoom level — the copy is never truncated, so a
+      // card reserves height for all its lines. Inbound replies append when zoomed in.
       const fields = cardRows(r)
       const inbound = detail ? comments[r.id] ?? [] : []
       if (!fields.length && !inbound.length) return MSG_H
@@ -468,11 +500,16 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       // value 15 / line-height 1.4 ≈ 21, key+gap ≈ 17, padding 14 top+bottom = 28).
       // Rounded up so the reserve never falls short of the rendered card.
       let h = 28 + 24 + 6 // padding + label line + breakdown margin
+      // The media banner is stacked above the copy at the art's real aspect ratio. Use
+      // the measured height once the image loads; a default reserves space until then.
+      if (r.mediaRef) h += (mediaH[r.id] ?? CARD_MEDIA) + 8
       fields.forEach((f, idx) => {
         if (idx) h += 8 // gap between components
         h += 17 // component label + gap
-        const lines = Math.max(1, Math.ceil(f.value.length / 34))
-        h += (detail ? lines : Math.min(2, lines)) * 21 // collapsed clamps to 2 lines
+        // Count hard newlines (pre-wrap renders them) PLUS wrapping per line, so a
+        // multi-paragraph caption (the real social posts) reserves enough height.
+        const lines = f.value.split('\n').reduce((n, seg) => n + Math.max(1, Math.ceil(seg.length / 34)), 0)
+        h += Math.max(1, lines) * 21 // full copy at all zoom levels (no clamp)
       })
       if (inbound.length) {
         h += 20 // inbound header
@@ -779,7 +816,11 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         // edge at all — neither connects to the audience header.
         const hasParent = (link?: string) => !!link && byName.has(link) && link !== pl.row.assetName
         const isRoot = !hasParent(pl.row.branchOf) && !hasParent(pl.row.variantOf)
-        if (isRoot) et.push({ fromId: `aud-${p.name}`, toId: pl.row.id, broken: !!brk, kind: 'message' })
+        // Link a card to its audience only if it actually HAS an assigned audience. An
+        // unassigned asset (an ingested live post) with no audience and no parent stays
+        // loose — no line to the "Unsegmented" lane, since it belongs to nothing.
+        const hasAudience = (pl.row.audience ?? '').trim() !== ''
+        if (isRoot && hasAudience) et.push({ fromId: `aud-${p.name}`, toId: pl.row.id, broken: !!brk, kind: 'message' })
       }
     })
 
@@ -810,7 +851,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           y2: t.y,
           broken,
           kind,
-          childRowId: kind === 'journey' ? t.row?.id : undefined,
+          // Journey + audience connectors are both selectable/deletable by their child row
+          // (journey → the branch card; message → the audience-assigned card).
+          childRowId: kind === 'journey' || kind === 'message' ? t.row?.id : undefined,
         },
       ]
     })
@@ -843,7 +886,19 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       campaignName: campObj?.name ?? campaignNames[0] ?? '',
       bounds: { w: maxX, h: bandBottom },
     }
-  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientAudiences, clientFilter, moved, detail, comments, scopeKeyDep])
+  }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientAudiences, clientFilter, moved, detail, comments, scopeKeyDep, mediaH])
+
+  // Only load a card's image when the card is near the viewport, so a canvas of 80+ real
+  // posts doesn't fetch ~28MB up front — images stream in as you pan. Conservative (a big
+  // margin + window size ≥ the actual container) so a visible card's image never gets culled.
+  const nearViewport = (n: { x: number; y: number; w: number; h: number }): boolean => {
+    const M = 700
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1600
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 900
+    const sx = vp.tx + n.x * vp.s
+    const sy = vp.ty + n.y * vp.s
+    return sx + n.w * vp.s > -M && sx < vw + M && sy + n.h * vp.s > -M && sy < vh + M
+  }
 
   // Journey performance — reach + per-fork flow, derived from the tree. Keyed off a
   // cheap signature so it only recomputes when the journey's shape changes.
@@ -1033,9 +1088,17 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       const el = document.elementFromPoint(lastScreen.current.x, lastScreen.current.y) as HTMLElement | null
       const targetId = el?.closest<HTMLElement>('.cv-node')?.dataset.nodeId
       if (targetId && targetId !== c.fromId) {
-        // Dropped over another card → link them (target branches from source).
+        const targetNode = nodes.find((n) => n.id === targetId)
         const fromRow = nodes.find((n) => n.id === c.fromId)?.row
-        const toRow = nodes.find((n) => n.id === targetId)?.row
+        // Dropped on an AUDIENCE header → assign this card to that audience (so a loose
+        // ingested post gets a home + a link). Dropping on the "Unsegmented" lane clears it.
+        if (targetNode?.kind === 'audience' && fromRow) {
+          const name = targetNode.label === 'Unsegmented' ? '' : targetNode.label
+          if ((fromRow.audience ?? '').trim() !== name) void updateRows([{ id: fromRow.id, patch: { audience: name } }])
+          return
+        }
+        // Dropped over another card → link them (target branches from source).
+        const toRow = targetNode?.row
         // Making fromRow the parent of toRow would loop the journey tree if toRow is
         // already an ancestor of fromRow (point a card back at one of its own
         // upstream cards). The layout recursion never terminates on a cycle, so
@@ -1477,7 +1540,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               const c1 = Math.max(mid, e.y1 + 26)
               const c2 = Math.min(mid, e.y2 - 26)
               const d = `M ${e.x1} ${e.y1} C ${e.x1} ${c1}, ${e.x2} ${c2}, ${e.x2} ${e.y2}`
-              const selectable = e.kind === 'journey' && !!e.childRowId
+              const selectable = (e.kind === 'journey' || e.kind === 'message') && !!e.childRowId
               const sel = selectable && selectedEdge === e.childRowId
               return (
                 <g key={i}>
@@ -1508,11 +1571,12 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                       onMouseDown={(ev) => ev.stopPropagation()}
                       onClick={(ev) => {
                         ev.stopPropagation()
-                        void updateRow(e.childRowId!, { branchOf: undefined })
+                        // Journey connector → unlink (branchOf); audience connector → unassign.
+                        void updateRow(e.childRowId!, e.kind === 'journey' ? { branchOf: undefined } : { audience: '' })
                         setSelectedEdge(null)
                       }}
                     >
-                      <title>Delete this connection</title>
+                      <title>{e.kind === 'journey' ? 'Delete this connection' : 'Unassign from this audience'}</title>
                       <circle r={11} />
                       <path d="M -3.4 -3.4 L 3.4 3.4 M 3.4 -3.4 L -3.4 3.4" />
                     </g>
@@ -1558,7 +1622,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             <div
               key={n.id}
               data-node-id={n.id}
-              className={`cv-node k-${n.kind}${n.brk ? ' broke' : ''}${selected === n.id ? ' selected' : ''}${regen ? ' regen' : ''}`}
+              className={`cv-node k-${n.kind}${n.kind === 'audience' && n.label === 'Unsegmented' ? ' loose' : ''}${n.brk ? ' broke' : ''}${selected === n.id ? ' selected' : ''}${regen ? ' regen' : ''}`}
               style={{
                 left: n.x,
                 top: n.y,
@@ -1603,11 +1667,39 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   <ChannelIcon channel={n.row.channel} size={18} />
                 </span>
               )}
+              {n.kind === 'message' && n.row?.mediaRef && nearViewport(n) && (
+                // The real media of an ingested post, shown at the ART'S aspect ratio (no
+                // crop). On load we measure natural w/h and reserve the true banner height.
+                // Only loaded when the card is near the viewport (streams in as you pan).
+                <div className="cv-node-media" key={n.row.mediaRef}>
+                  <img
+                    src={proxiedMedia(n.row.mediaRef, 720)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    onLoad={(e) => {
+                      const img = e.currentTarget
+                      const h = img.naturalWidth ? Math.round(((MSG_W - 22) * img.naturalHeight) / img.naturalWidth) : CARD_MEDIA
+                      queueMediaH(n.row!.id, h)
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                      queueMediaH(n.row!.id, 0)
+                    }}
+                  />
+                </div>
+              )}
               {(
               <div className="cv-node-body">
-                {n.kind === 'audience' && <span className="cv-node-tag">Audience</span>}
+                {n.kind === 'audience' && (
+                  <span className="cv-node-tag">{n.label === 'Unsegmented' ? 'No audience' : 'Audience'}</span>
+                )}
+                {n.kind === 'message' && n.row && (() => {
+                  const b = assetBadge(n.row)
+                  return <span className={`cv-node-badge badge-${b.kind}`}>{b.label}</span>
+                })()}
                 <div className="cv-node-label">
-                  <span className="cv-node-label-name">{n.label}</span>
+                  <span className="cv-node-label-name">{n.kind === 'audience' && n.label === 'Unsegmented' ? 'Unassigned' : n.label}</span>
                   {n.kind === 'message' && n.row?.recheckFlag && (
                     <button
                       className="cv-node-recheck"
@@ -1747,7 +1839,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                                 }}
                               />
                             ) : (
-                              <span className={`cv-node-fval${detail ? '' : ' clamp2'}`}>{fld.value}</span>
+                              <span className="cv-node-fval">{fld.value}</span>
                             )}
                           </div>
                         )
@@ -1805,7 +1897,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   <span
                     key={edge}
                     className={`cv-node-handle handle-${edge}`}
-                    title="Drag to connect this card to another"
+                    title="Drag to connect this card to another asset, or to an audience lane to assign it"
                     onMouseDown={(e) => startConnect(e, n, edge)}
                   >
                     ＋
@@ -2398,7 +2490,10 @@ function audiencesKey(rows: TrafficRow[]): string {
  *  defined audiences: exact name match, else the defined audience that shares the
  *  most words, else the first. Falls back to the raw value when none are defined. */
 function toDefinedAudience(raw: string, defined: string[]): string {
-  if (!defined.length) return raw || 'Unsegmented'
+  // No audience assigned (e.g. an ingested live post) is genuinely unassigned — never
+  // guess it into a real audience; it stays loose and unlinked.
+  if (!raw) return 'Unsegmented'
+  if (!defined.length) return raw
   if (defined.includes(raw)) return raw
   const words = new Set(raw.toLowerCase().match(/[a-z]{4,}/g) ?? [])
   let best = defined[0]
