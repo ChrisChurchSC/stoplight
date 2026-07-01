@@ -5592,10 +5592,23 @@ button.cv-board-tab {
     linear-gradient(rgba(96, 116, 158, 0.06) 1px, transparent 1px) 0 0 / 13px 13px,
     linear-gradient(90deg, rgba(96, 116, 158, 0.06) 1px, transparent 1px) 0 0 / 13px 13px,
     #eef1f6;
+  cursor: default;
+}
+/* Hold Space to pan — grab cursor while held, grabbing while dragging. */
+.cv-wrap-pan {
   cursor: grab;
 }
-.cv-wrap:active {
+.cv-wrap-pan:active {
   cursor: grabbing;
+}
+/* The marquee selection box drawn by a drag on empty canvas. */
+.cv-marquee {
+  position: absolute;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
 }
 .cv-world {
   position: absolute;
@@ -5990,51 +6003,7 @@ button.cv-board-tab {
   color: var(--text-faint);
 }
 
-.cv-bands {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.cv-band {
-  position: absolute;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  border-top: 1px dashed var(--border);
-  background: rgba(20, 30, 60, 0.018);
-}
-.cv-band.alt {
-  background: rgba(20, 30, 60, 0.045);
-}
-.cv-band-label {
-  position: absolute;
-  left: 248px; /* clear the full-height channel-filter sidebar (232) */
-  top: 9px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-}
-/* The band a dragged card is hovering over — lit up so you see where it'll land. */
-.cv-band.targeted {
-  background: var(--accent-soft);
-  border-top: 2px solid var(--accent);
-}
-.cv-band.targeted .cv-band-label {
-  color: var(--accent);
-}
-.cv-band-drop {
-  margin-left: 10px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-}
-/* Restage confirmation popover — a stage move can re-draft a whole thread. */
+/* Small canvas confirmation popover — shared by the frame-change and re-check menus. */
 .cv-restage {
   position: absolute;
   z-index: 26;
@@ -6307,12 +6276,6 @@ button.cv-board-tab {
 }
 /* The spine bands (Subject / Strategy / Audience) read distinct from the funnel
    bands with a faint warm tint. */
-.cv-band-header {
-  background: rgba(232, 89, 12, 0.028);
-}
-.cv-band-header.alt {
-  background: rgba(232, 89, 12, 0.05);
-}
 .cv-node.k-audience {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -6577,6 +6540,73 @@ button.cv-board-tab {
   color: #b42318;
   background: rgba(180, 35, 24, 0.12);
 }
+/* Stage chip on a card — the funnel stage it sits in, now that the bands no longer
+   carry a persistent label. Sits inline next to the asset badge, coloured by stage. */
+.cv-node-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  margin: 0 0 5px 5px;
+  border-radius: 999px;
+  color: var(--stage-color, var(--text-muted));
+  background: transparent;
+  border: 1px solid var(--stage-color, var(--border-strong));
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+/* Clickable stage pill: a caret hint + a soft fill on hover so it reads as editable. */
+.cv-node-stage::after {
+  content: '▾';
+  font-size: 8px;
+  opacity: 0.7;
+}
+.cv-node-stage:hover {
+  background: color-mix(in srgb, var(--stage-color, #888) 14%, transparent);
+}
+/* Colour-coordinate each card by its funnel stage: a per-stage colour drives both a
+   left accent stripe and the stage chip, so stages read at a glance without bands. */
+.cv-node.stage-awareness {
+  --stage-color: #2f6df0;
+}
+.cv-node.stage-consideration {
+  --stage-color: #8a5cf0;
+}
+.cv-node.stage-conversion {
+  --stage-color: #1a9f6b;
+}
+.cv-node.stage-retention {
+  --stage-color: #d0862a;
+}
+.cv-node.k-message[class*='stage-']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 12px 0 0 12px;
+  background: var(--stage-color);
+  pointer-events: none;
+}
+/* Broken cards keep their red border unmasked — the stripe steps aside. */
+.cv-node.k-message.broke::before {
+  display: none;
+}
+/* Ghost preview of a card being placed via a connector pull — a faint stand-in that
+   follows the cursor, non-interactive, dashed so it reads as not-yet-real. */
+.cv-node-ghost {
+  opacity: 0.45;
+  pointer-events: none;
+  border-style: dashed;
+  box-shadow: none;
+  z-index: 5;
+}
 /* In the saved-view card meta the badge sits inline (no bottom margin). */
 .sv-card-meta .cv-node-badge {
   margin-bottom: 0;
@@ -6787,6 +6817,14 @@ button.cv-board-tab {
 }
 .cv-branch-opt.added .cv-branch-mark {
   color: var(--green);
+}
+/* The card's current stage in the stage picker. */
+.cv-branch-opt.on {
+  color: var(--accent);
+  font-weight: 700;
+}
+.cv-branch-opt.on .cv-branch-mark {
+  color: var(--accent);
 }
 .cv-branch-opt:disabled {
   opacity: 0.5;
@@ -7800,11 +7838,22 @@ button.cv-board-tab {
 /* Edit button — bottom-right of a message card. A click on the card itself just
    picks it up; this is the way into the full edit drawer. Revealed on hover so
    cards stay clean, with a solid chip so it reads over the proof row. */
-.cv-node-edit {
+/* Card actions (Delete · Edit) — a hover-revealed cluster at the card's bottom-right. */
+.cv-node-actions {
   position: absolute;
   bottom: 8px;
   right: 10px;
-  z-index: 2;
+  z-index: 5; /* above the connect handles (z-index 4) so clicks always land */
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.cv-node:hover .cv-node-actions {
+  opacity: 1;
+}
+.cv-node-edit,
+.cv-node-del {
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -7814,15 +7863,23 @@ button.cv-board-tab {
   border-radius: 8px;
   padding: 4px 11px;
   cursor: pointer;
-  opacity: 0;
+  white-space: nowrap;
   box-shadow: 0 1px 4px rgba(16, 24, 40, 0.18);
-  transition: opacity 0.1s ease, background 0.1s ease;
-}
-.cv-node:hover .cv-node-edit {
-  opacity: 1;
+  transition: background 0.1s ease;
 }
 .cv-node-edit:hover {
   background: var(--accent);
+}
+/* Delete reads as a quieter, secondary action until hovered — then it goes red. */
+.cv-node-del {
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+}
+.cv-node-del:hover {
+  color: #fff;
+  background: #b42318;
+  border-color: #b42318;
 }
 /* Connect handles — a + at each edge midpoint, revealed on card hover. Drag one
    out to pull a connector and drop it on another card to link them. */

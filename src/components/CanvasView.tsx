@@ -56,9 +56,6 @@ const TIER_GAP = 220
 const ADD_H = 38
 const COL_GAP = 80
 const BAND_PAD = 220
-// How far the first/last funnel band overshoot the top/bottom of the viewport (in
-// screen px) so the stripes always fill the whole canvas regardless of pan/zoom.
-const BAND_OVERFLOW = 4000
 // Zoom past this and message cards reveal their full messaging breakdown (every
 // component), not just the one-line summary — read everything without leaving the map.
 const DETAIL_ZOOM = 1.15
@@ -74,6 +71,29 @@ const BAND_BOTTOM_PAD = 120
 const AUD_Y = 20
 const MSG_Y = 220
 
+// Hand-placed card positions persist per canvas, so a card you drag stays exactly
+// where you dropped it across re-layouts, reloads, and canvas switches.
+const CARD_POS_KEY = 'stoplight.cardPos.v1'
+type PosMap = Record<string, { x: number; y: number }>
+function loadCardPos(canvasKey: string): PosMap {
+  try {
+    const all = JSON.parse(localStorage.getItem(CARD_POS_KEY) || '{}')
+    return (all && all[canvasKey]) || {}
+  } catch {
+    return {}
+  }
+}
+function saveCardPos(canvasKey: string, pos: PosMap): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(CARD_POS_KEY) || '{}')
+    if (Object.keys(pos).length) all[canvasKey] = pos
+    else delete all[canvasKey]
+    localStorage.setItem(CARD_POS_KEY, JSON.stringify(all))
+  } catch {
+    /* storage unavailable — positions stay in-memory for the session */
+  }
+}
+
 interface Node {
   id: string
   kind: 'root' | 'audience' | 'message' | 'add'
@@ -86,6 +106,12 @@ interface Node {
   row?: TrafficRow
   brk?: CoherenceBreak
   flaggedCount?: number
+  /** The card's funnel-stage name (its band's label), shown as a chip on the card
+   *  now that the funnel bands no longer carry a persistent label. */
+  stageLabel?: string
+  /** The card's canonical funnel stage, used to colour-coordinate the card (a left
+   *  accent stripe + the stage chip) so stages read at a glance without the bands. */
+  stage?: FunnelStage
   /** For 'add' ghost cells: which lane + funnel stage a new card would land in,
    *  and whether the cell is currently empty (so it reads as the obvious next move). */
   addAudience?: string
@@ -145,6 +171,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const runCoherenceCheck = useTrafficStore((s) => s.runCoherenceCheck)
   const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
   const openReview = useTrafficStore((s) => s.openReview)
+  const removeRow = useTrafficStore((s) => s.removeRow)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const updateRows = useTrafficStore((s) => s.updateRows)
   const pasteAsset = useTrafficStore((s) => s.pasteAsset)
@@ -192,6 +219,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // The add-asset flow: pick the funnel part → channel → asset type. `stage` and
   // `channel` fill in as you advance; the empty-lane seed pre-sets `stage`.
   const [addMenu, setAddMenu] = useState<{ audience: string; x: number; y: number; stage?: FunnelStage; channel?: ChannelId } | null>(null)
+  // Change a card's funnel stage by clicking its stage pill — opens a stage picker.
+  const [stageMenu, setStageMenu] = useState<{ rowId: string; x: number; y: number } | null>(null)
   // Swap a lane's audience — the Brand / Subject / Strategy frame now lives in the top
   // bar (CanvasFrameBar); only the per-lane audience swap remains on the canvas.
   const [frameMenu, setFrameMenu] = useState<{ kind: 'audience'; x: number; y: number; audience?: string } | null>(null)
@@ -263,6 +292,16 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // Hand-nudged node positions (id → absolute world position); the engine owns
   // the rest of the layout and the connections re-route to whatever you move.
   const [moved, setMoved] = useState<Record<string, { x: number; y: number }>>({})
+  // Mirror of `moved` for synchronous reads (drag end persists from here, so a save
+  // never races the async state update).
+  const movedRef = useRef<Record<string, { x: number; y: number }>>({})
+  const applyMoved = (next: Record<string, { x: number; y: number }>) => {
+    movedRef.current = next
+    setMoved(next)
+  }
+  // The canvas whose hand-placed positions we load/persist (null when not in a
+  // single-campaign canvas, e.g. the aggregate Live view).
+  const posKey = campaignFilter !== 'all' ? `${clientFilter}|${campaignFilter}` : null
   // Start panned clear of the full-height channels panel (≈232px) so content
   // isn't hidden behind it on entry.
   const [vp, setVp] = useState({ tx: 260, ty: 40, s: 0.7 })
@@ -284,10 +323,23 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   // Selected card (a single click selects; drives the highlight + copy/paste).
   const [selected, setSelected] = useState<string | null>(null)
+  // Marquee (rubber-band) multi-select: drag on empty canvas draws a box and selects
+  // every card it touches. `marquee` holds the drag origin (world coords); `marqueeRect`
+  // is the live box; `multiSel` is the resulting set of card ids. Hold Space to pan.
+  const marquee = useRef<{ x0: number; y0: number } | null>(null)
+  const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [multiSel, setMultiSel] = useState<Set<string>>(new Set())
+  const spaceDown = useRef(false)
   // Selected journey connector (a child row id) — click a line to select, then ✕ or
   // Delete/Backspace to remove it (clears that card's branchOf, unlinking the step).
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null)
   const clipboard = useRef<string | null>(null)
+  // Load hand-placed card positions for the canvas you're on (and reload them when
+  // you switch canvases), so a card sits exactly where it was dropped.
+  useEffect(() => {
+    applyMoved(posKey ? loadCardPos(posKey) : {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posKey])
   // Canvas keyboard shortcuts: Cmd/Ctrl+Z undo · Cmd/Ctrl+C copy the selected card
   // · Cmd/Ctrl+V paste a copy. Ignored while typing in a field.
   useEffect(() => {
@@ -332,6 +384,44 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedEdge, updateRow, rows])
+  // A selected card: Delete/Backspace removes it (Cmd/Ctrl+Z to undo), Escape
+  // deselects. Ignored while typing, and skipped for audience/add nodes.
+  useEffect(() => {
+    if (!selected || selected.startsWith('aud-') || selected.startsWith('add-')) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        const id = selected
+        setSelected(null)
+        void removeRow(id)
+      } else if (e.key === 'Escape') {
+        setSelected(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected, removeRow])
+  // A marquee multi-selection: Delete/Backspace removes every selected card (undoable),
+  // Escape clears the selection. Ignored while typing.
+  useEffect(() => {
+    if (multiSel.size === 0) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        const ids = [...multiSel].filter((id) => !id.startsWith('aud-') && !id.startsWith('add-'))
+        setMultiSel(new Set())
+        ids.forEach((id) => void removeRow(id))
+      } else if (e.key === 'Escape') {
+        setMultiSel(new Set())
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [multiSel, removeRow])
   // Escape cancels the artboard tool (and any in-progress draw).
   useEffect(() => {
     if (!artboardMode) return
@@ -345,29 +435,44 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     window.addEventListener('keydown', onEsc)
     return () => window.removeEventListener('keydown', onEsc)
   }, [artboardMode])
+  // Hold Space to pan (since a plain drag now draws a marquee selection). Track the
+  // key so onDown can choose pan vs marquee; ignored while typing in a field.
+  useEffect(() => {
+    const isTyping = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+    }
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !isTyping(e.target)) {
+        spaceDown.current = true
+        wrapRef.current?.classList.add('cv-wrap-pan')
+        if (!marquee.current) e.preventDefault() // stop the page scrolling on space
+      }
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceDown.current = false
+        wrapRef.current?.classList.remove('cv-wrap-pan')
+      }
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+  }, [])
   // Drag-to-connect: pulling a connector out of a card's edge handle. `connect`
   // holds the source while dragging; `connectLine` (world coords) draws the
   // rubber-band line; `lastScreen` is the cursor at drop, for hit-testing.
   const connect = useRef<{ fromId: string; fromX: number; fromY: number } | null>(null)
   const lastScreen = useRef({ x: 0, y: 0 })
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
-  // While dragging a card over a different funnel band, the stage it would move to
-  // (drives the band highlight + the "→ Stage" cue). Cleared on drop.
-  // The band currently highlighted as a restage target (by band key), or null.
-  const [dragStage, setDragStage] = useState<string | null>(null)
-  // A pending restage awaiting confirmation — moving a card to a new stage can
-  // re-draft a whole thread, so we confirm before applying the batch.
-  const [restageConfirm, setRestageConfirm] = useState<{
-    updates: { id: string; patch: Partial<TrafficRow> }[]
-    rowId: string
-    fromStage: FunnelStage
-    toStage: FunnelStage
-    /** The target band's display label (the playbook stage name). */
-    toLabel: string
-    count: number
-    x: number
-    y: number
-  } | null>(null)
+  // A low-opacity preview of the card this pull would place (a next-step branch off
+  // the source) — shown at the cursor end of the line, hidden while over a drop
+  // target since dropping there links instead of placing a new card.
+  const [connectGhost, setConnectGhost] = useState<{ label: string; stageLabel: string; stage: FunnelStage } | null>(null)
+  const [connectOverTarget, setConnectOverTarget] = useState(false)
 
   const scoped = rows.filter(
     (r) =>
@@ -799,6 +904,11 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         // drop under a same-stage parent, so every connector enters from above.
         const mPos = at(pl.row.id, slabStart + pl.laneX, bandTop[pl.stage] + BAND_PAD + pl.relY)
         const brk = breakFor(pl.row)
+        // The card's canonical funnel stage (colour-coding), resolved the same way as
+        // the bands: the playbook's own phase→canon map, or a proportional projection.
+        const canonStage = stageDefs
+          ? stageDefs[pl.stage].canon
+          : FUNNEL_STAGES[phaseToCanon(pl.stage, nPhases, nCanon)].stage
         ns.push({
           id: pl.row.id,
           kind: 'message',
@@ -810,6 +920,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           sub: messagingSummary(pl.row) || CHANNELS[pl.row.channel].label,
           row: pl.row,
           brk,
+          stageLabel: phaseLabels[pl.stage],
+          stage: canonStage,
         })
         // Connect the audience only to its entry roots. A journey branch hangs off its
         // parent via the journey edge below; a variant sits beside its master with no
@@ -933,7 +1045,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     bounds,
     nodeIds: nodes.filter((n) => n.kind !== 'add').map((n) => n.id),
     // A peer's drag is applied as a local nudge — last write wins.
-    onRemoteMove: (id, x, y) => setMoved((prev) => ({ ...prev, [id]: { x, y } })),
+    onRemoteMove: (id, x, y) => applyMoved({ ...movedRef.current, [id]: { x, y } }),
   })
   const peerByNode = new Map<string, Peer>()
   for (const p of peers) if (p.nodeId) peerByNode.set(p.nodeId, p)
@@ -962,15 +1074,20 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     const fromY = edge === 'top' ? n.y : edge === 'bottom' ? n.y + n.h : n.y + n.h / 2
     connect.current = { fromId: n.id, fromX, fromY }
     setConnectLine({ x1: fromX, y1: fromY, x2: fromX, y2: fromY })
+    setConnectOverTarget(false)
+    // Preview the card an empty-canvas drop would place: the source's next-step branch.
+    const sugs = n.row ? branchSuggestions(n.row) : []
+    const sug = sugs.find((s) => s.group === 'next-step') ?? sugs[0]
+    setConnectGhost(sug ? { label: sug.channelLabel, stageLabel: sug.stageLabel, stage: sug.stage } : null)
   }
   const onDown = (e: React.MouseEvent) => {
     if (branchMenu) setBranchMenu(null)
     if (addMenu) setAddMenu(null)
+    if (stageMenu) setStageMenu(null)
     if (pillMenu) setPillMenu(null)
     if (recheckMenu) setRecheckMenu(null)
     if (frameMenu) setFrameMenu(null)
     if (frameChange) setFrameChange(null)
-    if (restageConfirm) setRestageConfirm(null)
     if (selectedEdge) setSelectedEdge(null)
     downAt.current = { x: e.clientX, y: e.clientY }
     if ((e.target as HTMLElement).closest('.cv-node')) return
@@ -988,7 +1105,21 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       }
       return
     }
-    pan.current = { x: e.clientX, y: e.clientY, tx: vp.tx, ty: vp.ty }
+    // Space held → pan the view; otherwise a drag on empty canvas draws a marquee
+    // that multi-selects the cards it touches.
+    if (spaceDown.current) {
+      pan.current = { x: e.clientX, y: e.clientY, tx: vp.tx, ty: vp.ty }
+      return
+    }
+    const rect = wrapRef.current?.getBoundingClientRect()
+    if (rect) {
+      const wx = (e.clientX - rect.left - vp.tx) / vp.s
+      const wy = (e.clientY - rect.top - vp.ty) / vp.s
+      marquee.current = { x0: wx, y0: wy }
+      setMarqueeRect({ x: wx, y: wy, w: 0, h: 0 })
+      setMultiSel(new Set())
+      setSelected(null)
+    }
   }
   // A click on empty canvas just clears the selection (adding an asset is the
   // bottom-right "Add asset" button now, not a click on the canvas).
@@ -999,6 +1130,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     const el = e.target as HTMLElement
     if (el.closest('.cv-node, .cv-branch-menu, .cv-restage, .cv-bar, .cv-zoom, .cv-plan, .cv-blank, button, a, input, textarea, select')) return
     setSelected(null)
+    setMultiSel(new Set())
   }
   // Open the add-asset flow from the bottom-right button: starts at the funnel
   // step (no stage yet), defaulting to the first audience lane.
@@ -1025,11 +1157,34 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       })
       return
     }
+    // Rubber-band the marquee and live-select every message card it overlaps.
+    if (marquee.current && rect) {
+      const wx = (e.clientX - rect.left - vp.tx) / vp.s
+      const wy = (e.clientY - rect.top - vp.ty) / vp.s
+      const box = {
+        x: Math.min(marquee.current.x0, wx),
+        y: Math.min(marquee.current.y0, wy),
+        w: Math.abs(wx - marquee.current.x0),
+        h: Math.abs(wy - marquee.current.y0),
+      }
+      setMarqueeRect(box)
+      const hit = new Set<string>()
+      for (const n of nodes) {
+        if (n.kind !== 'message') continue
+        if (n.x < box.x + box.w && n.x + n.w > box.x && n.y < box.y + box.h && n.y + n.h > box.y) hit.add(n.id)
+      }
+      setMultiSel(hit)
+      return
+    }
     // Rubber-band the connector to the cursor while pulling one out.
     if (connect.current && rect) {
       const wx = (e.clientX - rect.left - vp.tx) / vp.s
       const wy = (e.clientY - rect.top - vp.ty) / vp.s
       setConnectLine({ x1: connect.current.fromX, y1: connect.current.fromY, x2: wx, y2: wy })
+      // Over another card/lane → dropping links (no new card), so drop the ghost.
+      const overEl = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+      const overId = overEl?.closest<HTMLElement>('.cv-node')?.dataset.nodeId
+      setConnectOverTarget(!!overId && overId !== connect.current.fromId)
       return
     }
     if (drag.current) {
@@ -1039,17 +1194,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       if (Math.abs(dx) + Math.abs(dy) > 3) d.far = true
       const nx = d.sx + dx
       const ny = d.sy + dy
-      setMoved((prev) => ({ ...prev, [d.id]: { x: nx, y: ny } }))
+      applyMoved({ ...movedRef.current, [d.id]: { x: nx, y: ny } })
       publishMove(d.id, nx, ny)
-      // Cue: if the card is now over a DIFFERENT funnel band than its own stage,
-      // light up that band and show where it would land.
-      const node = nodes.find((n) => n.id === d.id)
-      if (node?.row && bands.length) {
-        const centerY = ny + node.h / 2
-        const band = bands.find((b) => centerY >= b.y && centerY < b.y + b.h)
-        const cur = node.row.funnelStage ?? funnelStageFor(node.row.channel, node.row.assetType)
-        setDragStage(band && band.stage !== cur ? band.key : null)
-      }
       return
     }
     // Capture the pan origin: the setVp updater runs later, and a mouseup could
@@ -1058,6 +1204,15 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     if (p) setVp((v) => ({ ...v, tx: p.tx + (e.clientX - p.x), ty: p.ty + (e.clientY - p.y) }))
   }
   const endAll = () => {
+    // Finish a marquee: keep whatever it selected (already live in multiSel), clear the
+    // box, and suppress the trailing click so it doesn't wipe the selection.
+    if (marquee.current) {
+      marquee.current = null
+      setMarqueeRect(null)
+      suppressClick.current = true
+      setTimeout(() => (suppressClick.current = false), 0)
+      return
+    }
     // Finish drawing an artboard: commit it if it's big enough to be intentional,
     // then drop out of the tool (one-shot, so you never get stuck in draw mode).
     if (draw.current) {
@@ -1085,6 +1240,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       const c = connect.current
       connect.current = null
       setConnectLine(null)
+      setConnectGhost(null)
+      setConnectOverTarget(false)
       const el = document.elementFromPoint(lastScreen.current.x, lastScreen.current.y) as HTMLElement | null
       const targetId = el?.closest<HTMLElement>('.cv-node')?.dataset.nodeId
       if (targetId && targetId !== c.fromId) {
@@ -1140,86 +1297,37 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           updateRows([{ id: toRow.id, patch }])
         }
       } else if (!targetId) {
-        // Dropped on empty canvas → draft a NEW asset card branched off the source.
+        // Dropped on empty canvas → draft a NEW asset card branched off the source,
+        // and place it exactly where it was dropped (matching the ghost preview) so it
+        // doesn't jump to the auto-layout slot.
         const from = nodes.find((n) => n.id === c.fromId)
         if (from?.row) {
           const sugs = branchSuggestions(from.row)
           const sug = sugs.find((s) => s.group === 'next-step') ?? sugs[0]
-          if (sug) void doBranch(from.row, sug)
+          if (sug) {
+            const r = wrapRef.current?.getBoundingClientRect()
+            const dropX = r ? (lastScreen.current.x - r.left - vp.tx) / vp.s : null
+            const dropY = r ? (lastScreen.current.y - r.top - vp.ty) / vp.s : null
+            void doBranch(from.row, sug).then((newId) => {
+              if (newId && dropX != null && dropY != null) {
+                const next = { ...movedRef.current, [newId]: { x: dropX, y: dropY - 24 } }
+                applyMoved(next)
+                if (posKey) saveCardPos(posKey, next)
+              }
+            })
+          }
         }
       }
       return
     }
     if (drag.current?.far) {
+      // A real drag (not a click) just repositions the card — the new position is
+      // already in `moved`. Suppress the trailing click so it doesn't open the card,
+      // and persist the final layout so the card stays put across reloads.
       suppressClick.current = true
       setTimeout(() => (suppressClick.current = false), 0)
-      // Drag-to-restage: if the card was dropped in a different funnel band, move
-      // its stage there and refresh the stage-dependent CTA so the messaging
-      // reflects the new stage (a journey card carries a stage, not just a spot).
-      const d = drag.current
-      const node = nodes.find((n) => n.id === d.id)
-      const row = node?.row
-      if (row && bands.length) {
-        const finalY = d.sy + (lastScreen.current.y - d.my) / vp.s
-        const centerY = finalY + node!.h / 2
-        const band = bands.find((b) => centerY >= b.y && centerY < b.y + b.h)
-        const curStage = row.funnelStage ?? funnelStageFor(row.channel, row.assetType)
-        if (band && band.stage !== curStage) {
-          // The stage-dependent CTA for a row, refreshed for a given stage.
-          const ctaMapFor = (r: TrafficRow, stage: FunnelStage) => {
-            const aud = (clientAudiences[clientFilter] ?? []).find((a) => a.name === (r.audience ?? '').trim())
-            const cta = ctaFor(stage, aud?.outcome)
-            const m = { ...messagingMap(r) }
-            let hit = false
-            for (const f of messagingFields(r.channel, r.assetType)) if (isCtaField(f.key)) { m[f.key] = cta; hit = true }
-            return hit ? m : null
-          }
-          // Collect every patch and apply them as ONE batch — firing many async
-          // updateRow calls races the refreshes and leaves the card display stale.
-          const updates: { id: string; patch: Partial<TrafficRow> }[] = []
-          const m = ctaMapFor(row, band.stage)
-          updates.push({ id: row.id, patch: m ? { funnelStage: band.stage, messaging: m } : { funnelStage: band.stage } })
-          // Cascade: the cards connected below are clamped to >= the new stage, so
-          // any whose effective stage shifts get their CTA refreshed too — the whole
-          // downstream thread follows the move.
-          const rank = (s: FunnelStage) => FUNNEL_STAGES.findIndex((x) => x.stage === s)
-          const oldRank = rank(curStage)
-          const newRank = rank(band.stage)
-          const childrenOf = new Map<string, TrafficRow[]>()
-          for (const r of scoped) {
-            if (r.branchOf) (childrenOf.get(r.branchOf) ?? childrenOf.set(r.branchOf, []).get(r.branchOf)!).push(r)
-          }
-          const seen = new Set<string>([row.id])
-          const queue = [...(childrenOf.get(row.assetName) ?? [])]
-          while (queue.length) {
-            const dRow = queue.shift()!
-            if (seen.has(dRow.id)) continue
-            seen.add(dRow.id)
-            for (const c of childrenOf.get(dRow.assetName) ?? []) queue.push(c)
-            if (dRow.funnelStage) continue // pinned by its own drag-placed stage
-            const chRank = rank(funnelStageFor(dRow.channel, dRow.assetType))
-            const before = Math.max(chRank, oldRank)
-            const after = Math.max(chRank, newRank)
-            if (after !== before && after >= 0) {
-              const dm = ctaMapFor(dRow, FUNNEL_STAGES[after].stage)
-              if (dm) updates.push({ id: dRow.id, patch: { messaging: dm } })
-            }
-          }
-          // Don't apply yet — a restage can re-draft a whole thread, so confirm it.
-          setRestageConfirm({
-            updates,
-            rowId: row.id,
-            fromStage: curStage,
-            toStage: band.stage,
-            toLabel: band.label,
-            count: updates.length,
-            x: lastScreen.current.x,
-            y: lastScreen.current.y,
-          })
-        }
-      }
+      if (posKey) saveCardPos(posKey, movedRef.current)
     }
-    setDragStage(null)
     if (drag.current) publishNode(null)
     drag.current = null
     pan.current = null
@@ -1227,22 +1335,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const onLeave = () => {
     clearCursor()
     endAll()
-  }
-  const confirmRestage = () => {
-    if (restageConfirm) void updateRows(restageConfirm.updates)
-    setRestageConfirm(null)
-  }
-  const cancelRestage = () => {
-    // Snap the card back to its original band — drop the manual nudge from the drag.
-    if (restageConfirm) {
-      const id = restageConfirm.rowId
-      setMoved((prev) => {
-        const next = { ...prev }
-        delete next[id]
-        return next
-      })
-    }
-    setRestageConfirm(null)
   }
   const fit = () => {
     const rect = wrapRef.current?.getBoundingClientRect()
@@ -1262,7 +1354,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // Branch a card: draft the chosen fork from the brand model, recorded as a branch
   // off the source so the canvas forks from it (and the check runs on it). The menu
   // stays open and the fork is marked added, so one card can fan out to several.
-  async function doBranch(row: TrafficRow, sug: BranchSuggestion) {
+  async function doBranch(row: TrafficRow, sug: BranchSuggestion): Promise<string | undefined> {
     if (branching) return
     const campaign = (row.campaign ?? '').trim()
     if (!campaign) {
@@ -1285,6 +1377,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     await draftMatrixCell(newRow)
     setBranchAdded((prev) => new Set(prev).add(`${sug.stage}-${sug.channel}`))
     setBranching(false)
+    return newRow.id
   }
 
   // Add a card to a cell: draft a fresh asset for the lane's audience at the
@@ -1392,6 +1485,25 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // Set an asset's CTA: write every dedicated CTA slot, or — for channels that fold
   // the CTA into the caption (organic posts) — a generic `cta` key, so a CTA can be
   // added on any asset and the pill reflects it.
+  // Change a card's funnel stage from its stage pill: pin the new stage and refresh
+  // the stage-dependent CTA so the messaging matches. The card's pill (label + colour)
+  // updates; its position is left as-is (positions are hand-managed now).
+  const changeStage = (rowId: string, stage: FunnelStage) => {
+    const row = rows.find((r) => r.id === rowId)
+    setStageMenu(null)
+    if (!row) return
+    const cur = row.funnelStage ?? funnelStageFor(row.channel, row.assetType)
+    if (stage === cur) return
+    const patch: Partial<TrafficRow> = { funnelStage: stage }
+    const aud = (clientAudiences[clientFilter] ?? []).find((a) => a.name === (row.audience ?? '').trim())
+    const cta = ctaFor(stage, aud?.outcome)
+    const map = { ...messagingMap(row) }
+    let hit = false
+    for (const f of messagingFields(row.channel, row.assetType)) if (isCtaField(f.key)) { map[f.key] = cta; hit = true }
+    if (hit) patch.messaging = map
+    void updateRow(rowId, patch)
+  }
+
   const swapCta = (row: TrafficRow, nextCta: string) => {
     const map = { ...messagingMap(row) }
     let hit = false
@@ -1460,32 +1572,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         onMouseLeave={onLeave}
         onClick={onCanvasClick}
       >
-        {/* Funnel bands live in screen space, pinned to the full viewport width, with
-            their vertical extent tracking the pan/zoom. The first and last stages
-            overshoot top and bottom so the stripes always fill the whole canvas, not
-            just the content's bounding box. */}
-        <div className="cv-bands">
-          {/* Only the funnel stages are bands now — the spine sits on the plain grid
-              above as labelled cards. Bands start crisply at MSG_Y; the last overshoots
-              down so the lanes fill to the bottom. */}
-          {bands.map((b, i) => {
-            const last = i === bands.length - 1
-            const top = vp.ty + b.y * vp.s
-            const height = b.h * vp.s + (last ? BAND_OVERFLOW : 0)
-            return (
-              <div
-                key={b.key}
-                className={`cv-band${i % 2 ? ' alt' : ''}${dragStage === b.key ? ' targeted' : ''}`}
-                style={{ top, height }}
-              >
-                <span className="cv-band-label" style={{ top: 9 }}>
-                  {b.label}
-                  {dragStage === b.key && <span className="cv-band-drop">drop to move here</span>}
-                </span>
-              </div>
-            )
-          })}
-        </div>
+        {/* Funnel stages drive the vertical layout of cards, but they're no longer a
+            drop target — cards carry their stage as a colour + chip, and dragging a
+            card just repositions it (no restage-into-a-section). */}
         <div className="cv-world" style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}>
           {/* Artboard frames — drawn behind the edges + cards, labelled, resizable
               later. The frame body is click-through (pointer-events: none) so it
@@ -1517,6 +1606,12 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             <div
               className="cv-artboard cv-artboard-draft"
               style={{ left: drawRect.x, top: drawRect.y, width: drawRect.w, height: drawRect.h }}
+            />
+          )}
+          {marqueeRect && (
+            <div
+              className="cv-marquee"
+              style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h }}
             />
           )}
           <svg className="cv-edges" width={bounds.w + 60} height={bounds.h + 60}>
@@ -1592,6 +1687,21 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               />
             )}
           </svg>
+          {/* Ghost preview of the card an empty-canvas drop would place — a faint
+              stand-in that follows the cursor end of the connector line. */}
+          {connectGhost && connectLine && !connectOverTarget && (
+            <div
+              className={`cv-node k-message cv-node-ghost stage-${connectGhost.stage}`}
+              style={{ left: connectLine.x2, top: connectLine.y2 - 24, width: MSG_W }}
+            >
+              <span className="cv-node-badge badge-draft">Draft</span>
+              <span className="cv-node-stage">{connectGhost.stageLabel}</span>
+              <div className="cv-node-label">
+                <span className="cv-node-label-name">New {connectGhost.label}</span>
+              </div>
+              <div className="cv-node-sub">Drop to draft this next step</div>
+            </div>
+          )}
           {nodes.map((n, ni) => {
             // Click-to-add ghost cell: a dashed placeholder in a funnel cell that
             // drafts a card into that lane/stage. Rendered apart from the real
@@ -1622,7 +1732,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             <div
               key={n.id}
               data-node-id={n.id}
-              className={`cv-node k-${n.kind}${n.kind === 'audience' && n.label === 'Unsegmented' ? ' loose' : ''}${n.brk ? ' broke' : ''}${selected === n.id ? ' selected' : ''}${regen ? ' regen' : ''}`}
+              className={`cv-node k-${n.kind}${n.stage ? ` stage-${n.stage}` : ''}${n.kind === 'audience' && n.label === 'Unsegmented' ? ' loose' : ''}${n.brk ? ' broke' : ''}${selected === n.id || multiSel.has(n.id) ? ' selected' : ''}${regen ? ' regen' : ''}`}
               style={{
                 left: n.x,
                 top: n.y,
@@ -1642,7 +1752,11 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                 if (suppressClick.current) return
                 // A click on a message card just selects/picks it up (the drag is
                 // handled on mousedown); editing is via the ✎ button, bottom-right.
-                if (n.kind === 'message') setSelected(n.id)
+                // A plain click replaces any marquee multi-selection with just this card.
+                if (n.kind === 'message') {
+                  setSelected(n.id)
+                  setMultiSel(new Set())
+                }
                 // Click an audience lane to swap its audience (Brand / Subject / Strategy
                 // now live in the top bar).
                 else if (n.kind === 'audience') setFrameMenu({ kind: 'audience', audience: n.label, x: e.clientX, y: e.clientY })
@@ -1698,6 +1812,19 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   const b = assetBadge(n.row)
                   return <span className={`cv-node-badge badge-${b.kind}`}>{b.label}</span>
                 })()}
+                {n.kind === 'message' && n.row && n.stageLabel && (
+                  <button
+                    className="cv-node-stage"
+                    title="Change funnel stage"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setStageMenu({ rowId: n.row!.id, x: e.clientX, y: e.clientY })
+                    }}
+                  >
+                    {n.stageLabel}
+                  </button>
+                )}
                 <div className="cv-node-label">
                   <span className="cv-node-label-name">{n.kind === 'audience' && n.label === 'Unsegmented' ? 'Unassigned' : n.label}</span>
                   {n.kind === 'message' && n.row?.recheckFlag && (
@@ -1880,17 +2007,31 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                 <span className="cv-node-flagcount">⚠ {n.flaggedCount}</span>
               )}
               {n.kind === 'message' && n.row && (
-                <button
-                  className="cv-node-edit"
-                  title="Edit this asset"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openReview(n.row!.id)
-                  }}
-                >
-                  ✎ Edit
-                </button>
+                <div className="cv-node-actions">
+                  <button
+                    className="cv-node-del"
+                    title="Delete this card (Cmd/Ctrl+Z to undo)"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (selected === n.id) setSelected(null)
+                      void removeRow(n.row!.id)
+                    }}
+                  >
+                    🗑 Delete
+                  </button>
+                  <button
+                    className="cv-node-edit"
+                    title="Edit this asset"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openReview(n.row!.id)
+                    }}
+                  >
+                    ✎ Edit
+                  </button>
+                </div>
               )}
               {n.kind === 'message' &&
                 (['top', 'right', 'bottom', 'left'] as const).map((edge) => (
@@ -2082,6 +2223,29 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           </div>
         )}
 
+        {/* Stage picker — click a card's stage pill to move it to another funnel stage. */}
+        {stageMenu && (() => {
+          const row = rows.find((r) => r.id === stageMenu.rowId)
+          const cur = row ? row.funnelStage ?? funnelStageFor(row.channel, row.assetType) : null
+          return (
+            <div className="cv-branch-menu" style={menuStyle(stageMenu.x, stageMenu.y)} onMouseDown={(e) => e.stopPropagation()}>
+              <div className="cv-branch-head">Move to funnel stage</div>
+              {bands.map((b) => (
+                <button
+                  key={b.key}
+                  className={`cv-branch-opt${b.stage === cur ? ' on' : ''}`}
+                  onClick={() => changeStage(stageMenu.rowId, b.stage)}
+                >
+                  <span className="cv-branch-ch">{b.label}</span>
+                  {b.stage === cur && <span className="cv-branch-mark">✓</span>}
+                </button>
+              ))}
+              <button className="cv-branch-cancel" onClick={() => setStageMenu(null)}>
+                Cancel
+              </button>
+            </div>
+          )
+        })()}
 
         {/* Audience-lane swap menu (Brand / Subject / Strategy live in the top bar). */}
         {frameMenu && (
@@ -2232,31 +2396,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                 }}
               >
                 ✓ Mark resolved
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Restage confirmation — a stage move can re-draft a whole thread, so it's
-            confirmed before anything changes. */}
-        {restageConfirm && (
-          <div
-            className="cv-restage"
-            style={menuStyle(restageConfirm.x, restageConfirm.y)}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="cv-restage-title">Move to {restageConfirm.toLabel}?</div>
-            <div className="cv-restage-note">
-              {restageConfirm.count === 1
-                ? "Re-drafts this card's CTA for the new stage."
-                : `Re-drafts the CTA on ${restageConfirm.count} cards — this card plus the ${restageConfirm.count - 1} connected below it.`}
-            </div>
-            <div className="cv-restage-actions">
-              <button className="btn sm" onClick={cancelRestage}>
-                Cancel
-              </button>
-              <button className="btn sm green" onClick={confirmRestage}>
-                ✓ Move
               </button>
             </div>
           </div>
@@ -2439,7 +2578,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           <button
             className="cv-zoom-organize"
             onClick={() => {
-              setMoved({})
+              applyMoved({})
+              if (posKey) saveCardPos(posKey, {})
               fit()
             }}
             title="Organize canvas — snap every card back to the auto-layout and fit to view"
