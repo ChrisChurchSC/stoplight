@@ -38,15 +38,18 @@ export function useHomeCanvases(): {
 
   const canvases = useMemo<CanvasCard[]>(() => {
     const allBreaks = applyBreakStatus(resolveBreaks(rows, null, null, breakScopeKey('all', 'all')), breakStatus)
+    // Archived campaigns/assets (soft-deleted) drop out of the hub — recoverable
+    // via restoreCampaign, but hidden from the gallery + counts.
+    const live = rows.filter((r) => !r.archivedAt)
     const meta = new Map(campaignList.map((c) => [c.name, c] as const))
     const names = [
       ...new Set([
-        ...rows.map((r) => (r.campaign ?? '').trim()).filter(Boolean),
-        ...campaignList.map((c) => c.name),
+        ...live.map((r) => (r.campaign ?? '').trim()).filter(Boolean),
+        ...campaignList.filter((c) => !c.archivedAt).map((c) => c.name),
       ]),
     ]
     return names.map((name) => {
-      const cRows = rows.filter((r) => (r.campaign ?? '').trim() === name)
+      const cRows = live.filter((r) => (r.campaign ?? '').trim() === name)
       const assetNames = new Set(cRows.map((r) => r.assetName))
       let revenue = 0
       for (const n of assetNames) revenue += mockAttio.attributionForAsset(n).wonRevenue

@@ -2982,6 +2982,46 @@ button {
 .hub-recent:active {
   transform: translateY(1px);
 }
+/* Canvas card wrapper — holds the card plus a hover-revealed delete icon. */
+.hub-recent-wrap {
+  position: relative;
+  display: flex;
+}
+.hub-recent-wrap .hub-recent {
+  flex: 1;
+  min-width: 0;
+}
+.hub-recent-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease, background 0.1s ease, color 0.1s ease;
+}
+.hub-recent-wrap:hover .hub-recent-del {
+  opacity: 1;
+}
+.hub-recent-del:hover {
+  color: #b42318;
+  background: var(--surface-2);
+}
+.hub-recent-del.confirm {
+  opacity: 1;
+  color: #fff;
+  background: #b42318;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
 .hub-recent-foot {
   flex: 1;
   display: flex;

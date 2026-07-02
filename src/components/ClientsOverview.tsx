@@ -38,6 +38,10 @@ export function ClientsOverview() {
   const openOnboard = useTrafficStore((s) => s.openOnboard)
   const loadSample = useTrafficStore((s) => s.loadSample)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
+  const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
+  // A canvas delete asks for a second click first (it archives the whole canvas +
+  // its assets — recoverable, but not one-click-accidental).
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
 
   // Inside a brand folder you flip between its Canvases, the combined Grid and
   // Calendar (every canvas in the folder on one table / one timeline), About, and
@@ -224,23 +228,40 @@ export function ClientsOverview() {
         ) : (
           <div className="hub-recents home-gallery">
             {shown.map((c) => (
-              <button
-                key={`${c.client}|${c.name}`}
-                className="hub-recent"
-                onClick={() => openCampaign(c.name)}
-                title={`Open ${c.name}${c.client ? ` (${c.client})` : ''}`}
-              >
-                <div className="hub-recent-foot">
-                  <span className={`hub-recent-dot s-${c.status}`} />
-                  <span className="hub-recent-foot-text">
-                    <span className="hub-recent-name">{c.name}</span>
-                    <span className="hub-recent-sub">
-                      {c.client || 'Drafts'}
-                      {c.lastTouched ? ` · ${fmtAgo(c.lastTouched)}` : ''}
+              <div key={`${c.client}|${c.name}`} className="hub-recent-wrap">
+                <button
+                  className="hub-recent"
+                  onClick={() => openCampaign(c.name)}
+                  title={`Open ${c.name}${c.client ? ` (${c.client})` : ''}`}
+                >
+                  <div className="hub-recent-foot">
+                    <span className={`hub-recent-dot s-${c.status}`} />
+                    <span className="hub-recent-foot-text">
+                      <span className="hub-recent-name">{c.name}</span>
+                      <span className="hub-recent-sub">
+                        {c.client || 'Drafts'}
+                        {c.lastTouched ? ` · ${fmtAgo(c.lastTouched)}` : ''}
+                      </span>
                     </span>
-                  </span>
-                </div>
-              </button>
+                  </div>
+                </button>
+                <button
+                  className={`hub-recent-del${confirmDel === c.name ? ' confirm' : ''}`}
+                  title={confirmDel === c.name ? 'Click again to delete this canvas' : 'Delete canvas'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirmDel === c.name) {
+                      void deleteCampaign(c.name)
+                      setConfirmDel(null)
+                    } else {
+                      setConfirmDel(c.name)
+                    }
+                  }}
+                  onMouseLeave={() => confirmDel === c.name && setConfirmDel(null)}
+                >
+                  {confirmDel === c.name ? 'Delete?' : '🗑'}
+                </button>
+              </div>
             ))}
           </div>
         )}
