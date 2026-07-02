@@ -47,6 +47,29 @@ function dateRange(rows: { scheduledAt?: string }[]): string | null {
   return a === b ? a : `${a} – ${b}`
 }
 
+const MONTHS3: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
+const MNAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** The date window a campaign encodes in its own name, e.g. "(Sept 14-20, 2026)" or
+ *  "(Sept 28-Oct 4, 2026)" → "Sep 14 – Sep 20". This is the authoritative campaign
+ *  window even when the assets aren't dated yet. */
+function nameRange(name: string): string | null {
+  // Cross-month: (Sept 28-Oct 4, 2026)
+  const cross = name.match(/\(\s*([A-Za-z]{3,9})\.?\s+(\d{1,2})\s*[-–]\s*([A-Za-z]{3,9})\.?\s+(\d{1,2})/)
+  if (cross) {
+    const m1 = MONTHS3[cross[1].slice(0, 3).toLowerCase()]
+    const m2 = MONTHS3[cross[3].slice(0, 3).toLowerCase()]
+    if (m1 != null && m2 != null) return `${MNAMES[m1]} ${+cross[2]} – ${MNAMES[m2]} ${+cross[4]}`
+  }
+  // Same-month: (Sept 14-20, 2026)
+  const same = name.match(/\(\s*([A-Za-z]{3,9})\.?\s+(\d{1,2})\s*[-–]\s*(\d{1,2})/)
+  if (same) {
+    const mi = MONTHS3[same[1].slice(0, 3).toLowerCase()]
+    if (mi != null) return `${MNAMES[mi]} ${+same[2]} – ${MNAMES[mi]} ${+same[3]}`
+  }
+  return null
+}
+
 export function ClientsOverview() {
   const { canvases } = useHomeCanvases()
   const filter = useTrafficStore((s) => s.homeFilter)
@@ -260,7 +283,7 @@ export function ClientsOverview() {
                       </span>
                     </span>
                     {(() => {
-                      const range = dateRange(c.rows)
+                      const range = nameRange(c.name) ?? dateRange(c.rows)
                       return range ? <span className="hub-recent-dates">◷ {range}</span> : null
                     })()}
                   </div>
