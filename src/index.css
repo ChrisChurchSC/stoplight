@@ -2961,8 +2961,8 @@ button {
 /* A gallery of compact canvas cards — a status dot + name + meta line. */
 .hub-recents {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
 }
 .hub-recent {
   display: flex;
@@ -3026,14 +3026,15 @@ button {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 13px 14px;
+  gap: 13px;
+  padding: 22px 20px;
+  min-height: 84px;
   min-width: 0;
 }
 .hub-recent-dot {
   flex: none;
-  width: 9px;
-  height: 9px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--border-strong);
 }
@@ -3053,18 +3054,19 @@ button {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 .hub-recent-name {
-  font-size: 13.5px;
+  font-size: 16px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .hub-recent-sub {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
