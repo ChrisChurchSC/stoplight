@@ -14,8 +14,6 @@ import { useTrafficStore } from '../store/useTrafficStore'
 const FILE_FILTERS: { key: string; ico: string; label: string }[] = [
   { key: 'all', ico: '▦', label: 'All canvases' },
   { key: 'drafts', ico: '✎', label: 'Drafts' },
-  { key: 'flagged', ico: '⚠', label: 'Flagged' },
-  { key: 'live', ico: '●', label: 'Live' },
 ]
 
 export function HomeSidebar() {
