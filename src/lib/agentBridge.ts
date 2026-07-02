@@ -480,8 +480,24 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (!brand || !name) throw new Error('brand and name are required')
     const store = useTrafficStore.getState()
     store.addClient(brand)
-    store.addCampaign({ name, client: brand, strategy: str(a.strategy) || 'Current state' })
-    return { brand, campaign: name }
+    // Always land on a real GTM strategy — resolve an explicit arg (key / name /
+    // alias; unknown is a hard error), else the brand's stored motion, else
+    // demand-gen. Never the "Current state" placeholder, which reads as "no strategy".
+    const rawStrategy = str(a.strategy).trim()
+    let key: string
+    if (rawStrategy) {
+      const resolved = resolveStrategyKey(rawStrategy)
+      if (!resolved) {
+        throw new Error(`unknown strategy "${rawStrategy}". Valid keys: ${GTM_STRATEGIES.map((s) => s.key).join(', ')}`)
+      }
+      key = resolved
+    } else {
+      const stored = store.clientProfiles[brand]?.strategy
+      key = (stored && resolveStrategyKey(stored)) || 'demand-gen'
+    }
+    const strat = GTM_STRATEGIES.find((s) => s.key === key)
+    store.addCampaign({ name, client: brand, strategy: strat?.name ?? 'Demand Gen Funnel' })
+    return { brand, campaign: name, strategy: strat?.name }
   },
 
   // 4) Generate draft assets for a campaign from everything connected (strategy
