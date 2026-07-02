@@ -89,10 +89,6 @@ export function HomeSidebar() {
       </nav>
 
       <div className="sidebar-foot">
-        <button className={`nav-item${page === 'library' ? ' active' : ''}`} onClick={() => setPage('library')} title="Messaging systems">
-          <span className="nav-ico">▤</span>
-          <span className="nav-label">Messaging</span>
-        </button>
         {role === 'owner' && (
           <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connectors">
             <span className="nav-ico">⇄</span>
