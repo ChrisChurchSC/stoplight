@@ -49,6 +49,9 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Stop a horizontal two-finger scroll from triggering browser back/forward
+     navigation (the canvas consumes horizontal scroll to pan). */
+  overscroll-behavior: none;
 }
 
 button {
@@ -5586,6 +5589,8 @@ button.cv-board-tab {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* Horizontal scroll pans the canvas — never let it chain to browser back/forward. */
+  overscroll-behavior: none;
   position: relative;
   /* Light grayish-blue grid — small cells, very faint lines. */
   background:
