@@ -9098,6 +9098,51 @@ button.cv-board-tab {
   line-height: 16px;
   text-align: center;
 }
+/* "⋯ More" dropdown in the top-right bar — Comments, History, Export CSV. */
+.bc-more {
+  position: relative;
+  display: inline-flex;
+}
+.bc-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 172px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+}
+.bc-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.bc-more-item:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.bc-more-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .ci-drawer {
   width: min(540px, 96vw);
 }

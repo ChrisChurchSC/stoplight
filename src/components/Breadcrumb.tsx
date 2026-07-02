@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { can } from '../domain/access'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rowsToCsv, downloadCsv } from '../lib/csv'
@@ -8,6 +9,18 @@ import { BrandTabs } from './BrandTabs'
 import { CanvasFrameBar } from './CanvasFrameBar'
 
 export function Breadcrumb() {
+  // Comments / History / Export CSV collapse into a "⋯ More" dropdown; close on
+  // an outside click.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [menuOpen])
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const role = useTrafficStore((s) => s.role)
@@ -25,8 +38,6 @@ export function Breadcrumb() {
   const comments = useTrafficStore((s) => s.comments)
   const brandNotice = useTrafficStore((s) => s.brandNotice)
   const setBrandNotice = useTrafficStore((s) => s.setBrandNotice)
-  const setSavedViewsOpen = useTrafficStore((s) => s.setSavedViewsOpen)
-  const setOpenSavedViewId = useTrafficStore((s) => s.setOpenSavedViewId)
 
   // Comments needing a reply across posted assets in scope (drives the badge).
   const scopedPostedIds = new Set(
@@ -142,24 +153,45 @@ export function Breadcrumb() {
             <span className="cv-presence-n">{peers.length} here</span>
           </div>
         )}
-        <button className="btn sm" onClick={() => { setOpenSavedViewId(null); setSavedViewsOpen(true) }} title="Saved Views — live filtered boards (last 30 days, social, …)">
-          ▦ Views
-        </button>
-        <button className="btn sm" onClick={openCommentInbox} title="Comments ingested across posted assets">
-          💬 Comments
-          {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}
-        </button>
-        <button className="btn sm" onClick={openHistory} title="Version history: save points for this client's copy">
-          ⟲ History
-        </button>
-        <button
-          className="btn sm"
-          disabled={rows.length === 0}
-          onClick={() => downloadCsv('hyperfocus-sheet.csv', rowsToCsv(rows))}
-          title="Export the sheet as a CSV"
-        >
-          ⤓ Export CSV
-        </button>
+        <div className="bc-more" ref={menuRef}>
+          <button className="btn sm" onClick={() => setMenuOpen((v) => !v)} title="More — comments, history, export">
+            ⋯ More
+            {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}
+          </button>
+          {menuOpen && (
+            <div className="bc-more-menu">
+              <button
+                className="bc-more-item"
+                onClick={() => {
+                  openCommentInbox()
+                  setMenuOpen(false)
+                }}
+              >
+                <span>💬 Comments</span>
+                {needsReply > 0 && <span className="bc-comment-badge">{needsReply}</span>}
+              </button>
+              <button
+                className="bc-more-item"
+                onClick={() => {
+                  openHistory()
+                  setMenuOpen(false)
+                }}
+              >
+                <span>⟲ History</span>
+              </button>
+              <button
+                className="bc-more-item"
+                disabled={rows.length === 0}
+                onClick={() => {
+                  downloadCsv('hyperfocus-sheet.csv', rowsToCsv(rows))
+                  setMenuOpen(false)
+                }}
+              >
+                <span>⤓ Export CSV</span>
+              </button>
+            </div>
+          )}
+        </div>
         {can(role, 'share') && (
           <button className="btn sm" onClick={openShareDialog} title="Share this client's workspace">
             ⤴ Share
