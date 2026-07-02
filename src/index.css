@@ -6623,6 +6623,21 @@ button.cv-board-tab {
 .cv-node.k-message.broke::before {
   display: none;
 }
+/* Scheduled-date chip on a card, next to the stage pill. */
+.cv-node-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  margin: 0 0 5px 5px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
 /* Ghost preview of a card being placed via a connector pull — a faint stand-in that
    follows the cursor, non-interactive, dashed so it reads as not-yet-real. */
 .cv-node-ghost {

@@ -94,6 +94,15 @@ function saveCardPos(canvasKey: string, pos: PosMap): void {
   }
 }
 
+/** A card's scheduled date, compact — "Sep 4" (adds the year only when it isn't the
+ *  current one). */
+function fmtCardDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(+d)) return ''
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 interface Node {
   id: string
   kind: 'root' | 'audience' | 'message' | 'add'
@@ -1727,6 +1736,11 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                   >
                     {n.stageLabel}
                   </button>
+                )}
+                {n.kind === 'message' && n.row?.scheduledAt && (
+                  <span className="cv-node-date" title={new Date(n.row.scheduledAt).toLocaleString()}>
+                    ◷ {fmtCardDate(n.row.scheduledAt)}
+                  </span>
                 )}
                 <div className="cv-node-label">
                   <span className="cv-node-label-name">{n.kind === 'audience' && n.label === 'Unsegmented' ? 'Unassigned' : n.label}</span>
