@@ -1,5 +1,6 @@
 import { can } from '../domain/access'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
+import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { rowInScope } from '../lib/scope'
 import { usePresence } from '../lib/usePresence'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -150,6 +151,14 @@ export function Breadcrumb() {
         </button>
         <button className="btn sm" onClick={openHistory} title="Version history: save points for this client's copy">
           ⟲ History
+        </button>
+        <button
+          className="btn sm"
+          disabled={rows.length === 0}
+          onClick={() => downloadCsv('hyperfocus-sheet.csv', rowsToCsv(rows))}
+          title="Export the sheet as a CSV"
+        >
+          ⤓ Export CSV
         </button>
         {can(role, 'share') && (
           <button className="btn sm" onClick={openShareDialog} title="Share this client's workspace">

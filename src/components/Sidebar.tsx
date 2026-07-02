@@ -4,7 +4,6 @@ import { assetCta } from '../domain/messaging'
 import { assetRtbIds, rtbsForCampaign } from '../domain/rtb'
 import { channelTracking } from '../domain/tracking'
 import { TIME_RANGES } from '../domain/timeRange'
-import { rowsToCsv, downloadCsv } from '../lib/csv'
 import { CTA_NONE, passesCardFilter, rowInScope, type CardFilter } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
@@ -342,14 +341,6 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
           <span className="nav-ico">📊</span>
           <span className="nav-label">Performance</span>
           {perfMode && <span className="nav-count">on</span>}
-        </button>
-        <button
-          className="nav-item"
-          disabled={rows.length === 0}
-          onClick={() => downloadCsv('hyperfocus-sheet.csv', rowsToCsv(rows))}
-        >
-          <span className="nav-ico">⤓</span>
-          <span className="nav-label">Export CSV</span>
         </button>
         <button className="nav-item" disabled={rows.length === 0} onClick={clearSheet}>
           <span className="nav-ico">🗑</span>
