@@ -1681,6 +1681,46 @@ button {
   display: flex;
   flex-direction: column;
   padding: 14px 10px;
+  position: relative;
+}
+/* Collapse the filter sidebar to give the canvas the full width. */
+.sidebar-collapse {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sidebar-collapse:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+/* Floating button to bring the collapsed filter sidebar back. */
+.filters-show {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 20;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.1);
+}
+.filters-show:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .sidebar-logo {
   font-size: 17px;

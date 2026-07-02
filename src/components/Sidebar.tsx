@@ -15,7 +15,7 @@ import { ChannelIcon } from './ChannelIcon'
  * that used to sit on top lives in the Foundation now, so it's no longer
  * duplicated here.
  */
-export function Sidebar() {
+export function Sidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const setFilter = useTrafficStore((s) => s.setFilter)
@@ -143,6 +143,11 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      {onCollapse && (
+        <button className="sidebar-collapse" onClick={onCollapse} title="Hide filters — more canvas">
+          «
+        </button>
+      )}
       <button className="sidebar-logo" onClick={goHome} title="Home — back to all clients">
         HyperFocus
       </button>

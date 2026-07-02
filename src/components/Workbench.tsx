@@ -53,6 +53,23 @@ export function Workbench() {
   const closeWizard = useTrafficStore((s) => s.closeWizard)
   const openAsk = useTrafficStore((s) => s.openAsk)
   const [over, setOver] = useState(false)
+  // The channel filter sidebar collapses behind a button so the canvas gets the
+  // full width. Sticky across reloads.
+  const [filtersOpen, setFiltersOpen] = useState(() => {
+    try {
+      return localStorage.getItem('stoplight.filtersOpen') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const setFilters = (open: boolean) => {
+    setFiltersOpen(open)
+    try {
+      localStorage.setItem('stoplight.filtersOpen', open ? '1' : '0')
+    } catch {
+      /* storage unavailable */
+    }
+  }
   const overview = clientFilter === 'all'
   // Level 1: a brand is open but no campaign is selected — show the campaign-states
   // home (campaigns by lifecycle). Picking a campaign drops to Level 2 (the canvas).
@@ -118,7 +135,12 @@ export function Workbench() {
             }}
             onDrop={onDrop}
           >
-            {!overview && !level1 && <Sidebar />}
+            {!overview && !level1 && filtersOpen && <Sidebar onCollapse={() => setFilters(false)} />}
+            {!overview && !level1 && !filtersOpen && (
+              <button className="filters-show" onClick={() => setFilters(true)} title="Show filters">
+                ☰
+              </button>
+            )}
             <div className="main">
 
               {overview ? (
