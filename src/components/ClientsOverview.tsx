@@ -70,6 +70,21 @@ function nameRange(name: string): string | null {
   return null
 }
 
+/** The canvas's start date (ms) for sorting: the campaign name's start date if it
+ *  has one, else the earliest asset date, else +Infinity (undated → sorts last). */
+function canvasStartMs(name: string, rows: { scheduledAt?: string }[]): number {
+  const m = name.match(/\(\s*([A-Za-z]{3,9})\.?\s+(\d{1,2})\b/)
+  if (m) {
+    const mi = MONTHS3[m[1].slice(0, 3).toLowerCase()]
+    if (mi != null) {
+      const yr = name.match(/(20\d{2})/)
+      return +new Date(yr ? +yr[1] : new Date().getFullYear(), mi, +m[2])
+    }
+  }
+  const times = rows.map((r) => (r.scheduledAt ? +new Date(r.scheduledAt) : NaN)).filter((t) => !Number.isNaN(t))
+  return times.length ? Math.min(...times) : Infinity
+}
+
 export function ClientsOverview() {
   const { canvases } = useHomeCanvases()
   const filter = useTrafficStore((s) => s.homeFilter)
@@ -81,6 +96,8 @@ export function ClientsOverview() {
   // A canvas delete asks for a second click first (it archives the whole canvas +
   // its assets — recoverable, but not one-click-accidental).
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  // How the gallery is ordered: 'recent' (last touched) or 'date' (campaign start).
+  const [sort, setSort] = useState<'recent' | 'date'>('recent')
 
   // Inside a brand folder you flip between its Canvases, the combined Grid and
   // Calendar (every canvas in the folder on one table / one timeline), About, and
@@ -160,8 +177,12 @@ export function ClientsOverview() {
       const b = filter.slice(6)
       list = canvases.filter((c) => c.client === b)
     }
-    return [...list].sort((a, b) => b.lastTouched - a.lastTouched || a.name.localeCompare(b.name))
-  }, [canvases, filter])
+    return [...list].sort((a, b) =>
+      sort === 'date'
+        ? canvasStartMs(a.name, a.rows) - canvasStartMs(b.name, b.rows) || a.name.localeCompare(b.name)
+        : b.lastTouched - a.lastTouched || a.name.localeCompare(b.name),
+    )
+  }, [canvases, filter, sort])
 
   const title = filter.startsWith('brand:')
     ? filter.slice(6)
@@ -265,6 +286,18 @@ export function ClientsOverview() {
             )}
           </div>
         ) : (
+          <>
+          <div className="home-sort">
+            <span className="home-sort-label">Sort</span>
+            <div className="folder-tabs">
+              <button className={`folder-tab${sort === 'recent' ? ' active' : ''}`} onClick={() => setSort('recent')}>
+                Most recent
+              </button>
+              <button className={`folder-tab${sort === 'date' ? ' active' : ''}`} onClick={() => setSort('date')}>
+                Date
+              </button>
+            </div>
+          </div>
           <div className="hub-recents home-gallery">
             {shown.map((c) => (
               <div key={`${c.client}|${c.name}`} className="hub-recent-wrap">
@@ -307,6 +340,7 @@ export function ClientsOverview() {
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
     </HomeShell>

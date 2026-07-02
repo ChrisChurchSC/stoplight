@@ -2959,6 +2959,20 @@ button {
   background: var(--surface-2);
 }
 /* A gallery of compact canvas cards — a status dot + name + meta line. */
+/* Gallery sort control — sits above the canvas grid. */
+.home-sort {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.home-sort-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .hub-recents {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
