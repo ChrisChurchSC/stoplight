@@ -177,7 +177,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const pasteAsset = useTrafficStore((s) => s.pasteAsset)
   const undo = useTrafficStore((s) => s.undo)
   const draftMatrixCell = useTrafficStore((s) => s.draftMatrixCell)
-  const setPersonalizeOpen = useTrafficStore((s) => s.setPersonalizeOpen)
   const canvases = useTrafficStore((s) => s.canvases)
   const activeCanvasMap = useTrafficStore((s) => s.activeCanvas)
   // Inbound messages ingested back from every channel, keyed by asset id. Surfaced
@@ -2491,17 +2490,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             ⊞ Organize
           </button>
         </div>
-        {/* Personalize — fan the campaign across a dimension (audience, location, …). */}
-        {audienceSlabs.length > 0 && (
-          <button
-            className="cv-add-float cv-personalize-float"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => setPersonalizeOpen(true)}
-            title="Personalize: fan this campaign across a dimension"
-          >
-            ⧉ Personalize
-          </button>
-        )}
         {/* Add an asset — the bottom-right primary action (replaces click-to-add). */}
         {audienceSlabs.length > 0 && (
           <button

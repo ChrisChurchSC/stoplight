@@ -7170,17 +7170,6 @@ button.cv-board-tab {
 .cv-add-float:hover {
   filter: brightness(1.05);
 }
-/* Personalize float sits to the left of Add asset, as a secondary (outline) action. */
-.cv-personalize-float {
-  right: 158px;
-  background: var(--surface);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.1);
-}
-.cv-personalize-float:hover {
-  background: var(--accent-soft);
-}
 
 /* ---- Personalization drawer ---- */
 .drawer.pz-drawer {
