@@ -53,23 +53,9 @@ export function Workbench() {
   const closeWizard = useTrafficStore((s) => s.closeWizard)
   const openAsk = useTrafficStore((s) => s.openAsk)
   const [over, setOver] = useState(false)
-  // The channel filter sidebar collapses behind a button so the canvas gets the
-  // full width. Sticky across reloads.
-  const [filtersOpen, setFiltersOpen] = useState(() => {
-    try {
-      return localStorage.getItem('stoplight.filtersOpen') !== '0'
-    } catch {
-      return true
-    }
-  })
-  const setFilters = (open: boolean) => {
-    setFiltersOpen(open)
-    try {
-      localStorage.setItem('stoplight.filtersOpen', open ? '1' : '0')
-    } catch {
-      /* storage unavailable */
-    }
-  }
+  // All channel/status/time filtering lives behind a bottom-left "Filters" button —
+  // a popover — so the canvas gets the full width. Closed by default.
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const overview = clientFilter === 'all'
   // Level 1: a brand is open but no campaign is selected — show the campaign-states
   // home (campaigns by lifecycle). Picking a campaign drops to Level 2 (the canvas).
@@ -135,11 +121,26 @@ export function Workbench() {
             }}
             onDrop={onDrop}
           >
-            {!overview && !level1 && filtersOpen && <Sidebar onCollapse={() => setFilters(false)} />}
-            {!overview && !level1 && !filtersOpen && (
-              <button className="filters-show" onClick={() => setFilters(true)} title="Show filters">
-                ☰
-              </button>
+            {/* Filtering (channels / status / time / search) lives behind this
+                bottom-left button; the panel pops up above it. */}
+            {!overview && !level1 && (
+              <>
+                <button
+                  className={`filters-fab${filtersOpen ? ' on' : ''}`}
+                  onClick={() => setFiltersOpen((v) => !v)}
+                  title="Filters"
+                >
+                  ☰ Filters
+                </button>
+                {filtersOpen && (
+                  <>
+                    <div className="filters-scrim" onClick={() => setFiltersOpen(false)} />
+                    <div className="filters-popover">
+                      <Sidebar popover onCollapse={() => setFiltersOpen(false)} />
+                    </div>
+                  </>
+                )}
+              </>
             )}
             <div className="main">
 

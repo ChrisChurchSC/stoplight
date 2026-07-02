@@ -1683,16 +1683,16 @@ button {
   padding: 14px 10px;
   position: relative;
 }
-/* Collapse the filter sidebar to give the canvas the full width. */
+/* The ✕ that closes the filter popover (top-right of the panel). */
 .sidebar-collapse {
   position: absolute;
   top: 12px;
-  right: 8px;
+  right: 10px;
   z-index: 2;
   border: none;
   background: transparent;
   color: var(--text-faint);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
   padding: 2px 7px;
   border-radius: 6px;
@@ -1702,25 +1702,72 @@ button {
   color: var(--accent);
   background: var(--surface-2);
 }
-/* Floating button to bring the collapsed filter sidebar back. */
-.filters-show {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 20;
+/* Bottom-left button that reveals all filtering (channels / status / time / search). */
+.filters-fab {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 26;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
-.filters-show:hover {
+.filters-fab:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+.filters-fab.on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* Click-away scrim behind the filter popover. */
+.filters-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 27;
+  background: transparent;
+}
+/* The filter popover — pops up from the bottom-left button. */
+.filters-popover {
+  position: fixed;
+  left: 16px;
+  bottom: 64px;
+  z-index: 28;
+  display: flex;
+}
+/* The sidebar rendered inside the popover reads as a floating card (overrides the
+   old full-height fixed positioning). */
+.filters-popover .sidebar,
+.canvas-mode .filters-popover .sidebar {
+  position: static;
+  top: auto;
+  left: auto;
+  bottom: auto;
+  width: 250px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(16, 24, 40, 0.2);
+}
+.sidebar-head {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  padding: 2px 8px 12px;
+  flex-shrink: 0;
 }
 .sidebar-logo {
   font-size: 17px;
@@ -5071,7 +5118,7 @@ button {
 .canvas-mode.view-grid .sheet-grid,
 .canvas-mode.view-calendar .sheet-grid {
   top: 96px;
-  left: 232px;
+  left: 0;
 }
 /* The canvas control cluster floats as a compact toolbar at top-right, tucked
    under the top nav (it can't sit at the very top — that's behind the nav). */
@@ -5104,7 +5151,7 @@ button {
   background: transparent;
   border-bottom-color: transparent;
   pointer-events: none;
-  padding-left: 244px; /* clear the full-height channels panel (232) + a little gap */
+  padding-left: 16px; /* sidebar is a popover now — reclaim the full width */
 }
 .canvas-mode .breadcrumb .toolbar-search,
 .canvas-mode .breadcrumb button,
@@ -5128,7 +5175,7 @@ button {
 .canvas-mode .view-bar {
   position: fixed;
   bottom: 0;
-  left: 232px; /* channels panel width (no rail) */
+  left: 0;
   right: 0;
   z-index: 22;
   background: transparent;
@@ -5144,7 +5191,7 @@ button {
    pills at the bottom. cv-wrap starts at the rail, so 248px lands just right of the
    232px panel; 56px clears the bottom bar. */
 .canvas-mode .cv-zoom-float {
-  left: 248px; /* just past the channels panel — the canvas's bottom-left corner */
+  left: 120px; /* right of the bottom-left Filters button */
   bottom: 16px;
 }
 
@@ -5173,9 +5220,9 @@ button {
 .canvas-mode .cv-projects {
   position: fixed;
   top: 0;
-  left: 232px; /* flush with the 232px channel-filter sidebar */
+  left: 0; /* full width — the sidebar is a popover now */
   right: 0;
-  z-index: 25; /* above the breadcrumb (22) and sidebar (24) */
+  z-index: 25; /* above the breadcrumb (22) */
 }
 .cv-project-tab {
   flex: none;
@@ -5262,15 +5309,15 @@ button {
 .canvas-mode .cv-boards {
   position: fixed;
   top: 98px;
-  left: 248px; /* just past the channels panel */
+  left: 16px;
   z-index: 23;
 }
 .canvas-mode .cv-board-scope {
   position: fixed;
   top: 134px;
-  left: 248px;
+  left: 16px;
   z-index: 23;
-  max-width: calc(100vw - 264px);
+  max-width: calc(100vw - 32px);
   flex-wrap: wrap;
 }
 .cv-board-tab {
@@ -5398,10 +5445,9 @@ button.cv-board-tab {
 /* Plan rollup panel (screen space, bottom-right of the canvas). */
 .cv-plan {
   position: absolute;
-  /* Clear the channel bar (232px) on the left and the project-tab + breadcrumb
-     chrome (~96px) up top, both of which float over the full-bleed canvas — so the
-     panel sits at the top-left of the actual map, fully visible. */
-  left: 248px;
+  /* Clear the project-tab + breadcrumb chrome (~96px) up top; the sidebar is a
+     popover now, so no left offset is needed. */
+  left: 16px;
   top: 104px;
   z-index: 22;
   width: 290px;

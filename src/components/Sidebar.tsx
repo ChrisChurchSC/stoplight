@@ -14,7 +14,7 @@ import { ChannelIcon } from './ChannelIcon'
  * that used to sit on top lives in the Foundation now, so it's no longer
  * duplicated here.
  */
-export function Sidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
+export function Sidebar({ onCollapse, popover }: { onCollapse?: () => void; popover?: boolean } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const setFilter = useTrafficStore((s) => s.setFilter)
@@ -141,15 +141,19 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
   }`
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${popover ? ' sidebar-popover' : ''}`}>
       {onCollapse && (
-        <button className="sidebar-collapse" onClick={onCollapse} title="Hide filters — more canvas">
-          «
+        <button className="sidebar-collapse" onClick={onCollapse} title={popover ? 'Close filters' : 'Hide filters — more canvas'}>
+          ✕
         </button>
       )}
-      <button className="sidebar-logo" onClick={goHome} title="Home — back to all clients">
-        HyperFocus
-      </button>
+      {popover ? (
+        <div className="sidebar-head">Filters</div>
+      ) : (
+        <button className="sidebar-logo" onClick={goHome} title="Home — back to all clients">
+          HyperFocus
+        </button>
+      )}
       {/* Time-range horizon — lives in the channel bar, applies to every view. */}
       <div className="range-toggle sidebar-range" role="group" aria-label="Time range">
         {TIME_RANGES.map((r) => (
