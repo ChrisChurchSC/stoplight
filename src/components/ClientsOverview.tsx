@@ -31,6 +31,22 @@ function fmtAgo(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function fmtDay(ms: number): string {
+  const d = new Date(ms)
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: '2-digit' })
+}
+
+/** A canvas's scheduled span — earliest to latest asset date — as "Sep 3 – Sep 17"
+ *  (single day when they match), or null when nothing is scheduled. */
+function dateRange(rows: { scheduledAt?: string }[]): string | null {
+  const times = rows.map((r) => (r.scheduledAt ? +new Date(r.scheduledAt) : NaN)).filter((t) => !Number.isNaN(t))
+  if (!times.length) return null
+  const a = fmtDay(Math.min(...times))
+  const b = fmtDay(Math.max(...times))
+  return a === b ? a : `${a} – ${b}`
+}
+
 export function ClientsOverview() {
   const { canvases } = useHomeCanvases()
   const filter = useTrafficStore((s) => s.homeFilter)
@@ -243,6 +259,10 @@ export function ClientsOverview() {
                         {c.lastTouched ? ` · ${fmtAgo(c.lastTouched)}` : ''}
                       </span>
                     </span>
+                    {(() => {
+                      const range = dateRange(c.rows)
+                      return range ? <span className="hub-recent-dates">◷ {range}</span> : null
+                    })()}
                   </div>
                 </button>
                 <button

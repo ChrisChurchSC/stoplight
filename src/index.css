@@ -3051,10 +3051,26 @@ button {
   background: var(--text-faint);
 }
 .hub-recent-foot-text {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+/* Scheduled date-range chip on a canvas card (earliest → latest asset date). */
+.hub-recent-dates {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
 }
 .hub-recent-name {
   font-size: 16px;
