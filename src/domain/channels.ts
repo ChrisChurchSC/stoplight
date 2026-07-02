@@ -27,7 +27,7 @@ export interface ChannelConfig {
 
 const t = (hour: number, minute = 0) => ({ hour, minute })
 
-export const CHANNELS: Record<ChannelId, ChannelConfig> = {
+const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
   // ---------------- Paid — social ads ----------------
   'meta-ads': {
     id: 'meta-ads', label: 'Meta Ads', short: 'META', kind: 'paid', platform: 'Meta',
@@ -137,7 +137,36 @@ export const CHANNELS: Record<ChannelId, ChannelConfig> = {
   },
 }
 
-export const CHANNEL_LIST: ChannelConfig[] = Object.values(CHANNELS)
+/** A neutral config for a channel id we don't define (legacy / ingested labels
+ *  like "Podcast", "Newsletter", "Website"). Keeps the ~30 `CHANNELS[id].prop`
+ *  lookups from crashing on unknown values. */
+function fallbackChannel(id: string): ChannelConfig {
+  return {
+    id: id as ChannelId,
+    label: id,
+    short: id.slice(0, 6).toUpperCase(),
+    kind: 'organic',
+    platform: 'Web',
+    color: '#9aa1ac',
+    accepts: ['image', 'video', 'text', 'link'],
+    bestTimes: [t(10)],
+  }
+}
+
+/**
+ * Look up by channel id, returning a fallback for unknown ids instead of
+ * `undefined` (which would crash every `CHANNELS[id].prop` call site). Only `get`
+ * is trapped, so `id in CHANNELS` and Object.keys/values still reflect the real
+ * channels — lists and validation stay clean.
+ */
+export const CHANNELS: Record<ChannelId, ChannelConfig> = new Proxy(CHANNELS_DEFS, {
+  get(target, prop, receiver) {
+    if (typeof prop === 'string' && !(prop in target)) return fallbackChannel(prop)
+    return Reflect.get(target, prop, receiver)
+  },
+})
+
+export const CHANNEL_LIST: ChannelConfig[] = Object.values(CHANNELS_DEFS)
 
 /** Sidebar sections, in display order. */
 export const KIND_ORDER: { kind: ChannelKind; label: string }[] = [
