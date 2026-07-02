@@ -1054,13 +1054,19 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const rect = wrapRef.current?.getBoundingClientRect()
-    const px = e.clientX - (rect?.left ?? 0)
-    const py = e.clientY - (rect?.top ?? 0)
-    setVp((v) => {
-      const ds = e.deltaY < 0 ? 1.1 : 1 / 1.1
-      const s = Math.min(2.2, Math.max(0.05, v.s * ds))
-      return { tx: px - (px - v.tx) * (s / v.s), ty: py - (py - v.ty) * (s / v.s), s }
-    })
+    // Cmd/Ctrl + scroll (and trackpad pinch, which arrives as ctrl+wheel) zooms,
+    // anchored at the cursor. A plain scroll pans the canvas.
+    if (e.metaKey || e.ctrlKey) {
+      const px = e.clientX - (rect?.left ?? 0)
+      const py = e.clientY - (rect?.top ?? 0)
+      setVp((v) => {
+        const ds = e.deltaY < 0 ? 1.1 : 1 / 1.1
+        const s = Math.min(2.2, Math.max(0.05, v.s * ds))
+        return { tx: px - (px - v.tx) * (s / v.s), ty: py - (py - v.ty) * (s / v.s), s }
+      })
+    } else {
+      setVp((v) => ({ ...v, tx: v.tx - e.deltaX, ty: v.ty - e.deltaY }))
+    }
   }
   const startDrag = (e: React.MouseEvent, n: Node) => {
     e.stopPropagation()
