@@ -49,9 +49,11 @@ export function ChannelIcon({
   size?: number
   color?: string
 }) {
+  // An unknown channel id (e.g. legacy/renamed data) must not crash the canvas —
+  // fall back to a neutral dot instead of dereferencing an undefined channel.
   const c = CHANNELS[channel]
-  const path = BRAND_PATH[c.platform]
-  const fill = color ?? c.color
+  const path = c ? BRAND_PATH[c.platform] : undefined
+  const fill = color ?? c?.color ?? 'var(--text-faint)'
 
   if (!path) {
     return (
