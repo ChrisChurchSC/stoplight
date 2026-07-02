@@ -179,10 +179,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const draftMatrixCell = useTrafficStore((s) => s.draftMatrixCell)
   const setPersonalizeOpen = useTrafficStore((s) => s.setPersonalizeOpen)
   const canvases = useTrafficStore((s) => s.canvases)
-  const artboards = useTrafficStore((s) => s.artboards)
-  const addArtboard = useTrafficStore((s) => s.addArtboard)
-  const renameArtboard = useTrafficStore((s) => s.renameArtboard)
-  const deleteArtboard = useTrafficStore((s) => s.deleteArtboard)
   const activeCanvasMap = useTrafficStore((s) => s.activeCanvas)
   // Inbound messages ingested back from every channel, keyed by asset id. Surfaced
   // on a card once you zoom in, alongside the outbound copy, so the map shows the
@@ -315,12 +311,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   // Where the pointer went down, to tell a click on the canvas (start a new asset)
   // from a pan (move the view).
   const downAt = useRef<{ x: number; y: number } | null>(null)
-  // Artboard tool: when on, a drag on empty canvas draws a framing rectangle (in
-  // world coords) instead of panning. `draw` holds the drag origin; `drawRect` is
-  // the live rubber-band the canvas renders while you draw.
-  const [artboardMode, setArtboardMode] = useState(false)
-  const draw = useRef<{ x0: number; y0: number } | null>(null)
-  const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   // Selected card (a single click selects; drives the highlight + copy/paste).
   const [selected, setSelected] = useState<string | null>(null)
   // Marquee (rubber-band) multi-select: drag on empty canvas draws a box and selects
@@ -422,19 +412,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [multiSel, removeRow])
-  // Escape cancels the artboard tool (and any in-progress draw).
-  useEffect(() => {
-    if (!artboardMode) return
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        draw.current = null
-        setDrawRect(null)
-        setArtboardMode(false)
-      }
-    }
-    window.addEventListener('keydown', onEsc)
-    return () => window.removeEventListener('keydown', onEsc)
-  }, [artboardMode])
   // Hold Space to pan (since a plain drag now draws a marquee selection). Track the
   // key so onDown can choose pan vs marquee; ignored while typing in a field.
   useEffect(() => {
@@ -1097,20 +1074,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     if (selectedEdge) setSelectedEdge(null)
     downAt.current = { x: e.clientX, y: e.clientY }
     if ((e.target as HTMLElement).closest('.cv-node')) return
-    // Artboard tool: draw a framing rectangle on empty canvas instead of panning.
-    if (
-      artboardMode &&
-      !(e.target as HTMLElement).closest('.cv-zoom, .cv-bar, .cv-plan, .cv-artboard, button, a, input, textarea, select')
-    ) {
-      const rect = wrapRef.current?.getBoundingClientRect()
-      if (rect) {
-        const wx = (e.clientX - rect.left - vp.tx) / vp.s
-        const wy = (e.clientY - rect.top - vp.ty) / vp.s
-        draw.current = { x0: wx, y0: wy }
-        setDrawRect({ x: wx, y: wy, w: 0, h: 0 })
-      }
-      return
-    }
     // Space held → pan the view; otherwise a drag on empty canvas draws a marquee
     // that multi-selects the cards it touches.
     if (spaceDown.current) {
@@ -1151,18 +1114,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     const rect = wrapRef.current?.getBoundingClientRect()
     if (rect) publishCursor((e.clientX - rect.left - vp.tx) / vp.s, (e.clientY - rect.top - vp.ty) / vp.s)
     lastScreen.current = { x: e.clientX, y: e.clientY }
-    // Rubber-band the artboard frame to the cursor while drawing one.
-    if (draw.current && rect) {
-      const wx = (e.clientX - rect.left - vp.tx) / vp.s
-      const wy = (e.clientY - rect.top - vp.ty) / vp.s
-      setDrawRect({
-        x: Math.min(draw.current.x0, wx),
-        y: Math.min(draw.current.y0, wy),
-        w: Math.abs(wx - draw.current.x0),
-        h: Math.abs(wy - draw.current.y0),
-      })
-      return
-    }
     // Rubber-band the marquee and live-select every message card it overlaps.
     if (marquee.current && rect) {
       const wx = (e.clientX - rect.left - vp.tx) / vp.s
@@ -1215,27 +1166,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     if (marquee.current) {
       marquee.current = null
       setMarqueeRect(null)
-      suppressClick.current = true
-      setTimeout(() => (suppressClick.current = false), 0)
-      return
-    }
-    // Finish drawing an artboard: commit it if it's big enough to be intentional,
-    // then drop out of the tool (one-shot, so you never get stuck in draw mode).
-    if (draw.current) {
-      const d = draw.current
-      draw.current = null
-      const rect = wrapRef.current?.getBoundingClientRect()
-      setDrawRect(null)
-      if (rect && campaignName) {
-        const wx = (lastScreen.current.x - rect.left - vp.tx) / vp.s
-        const wy = (lastScreen.current.y - rect.top - vp.ty) / vp.s
-        const x = Math.min(d.x0, wx)
-        const y = Math.min(d.y0, wy)
-        const w = Math.abs(wx - d.x0)
-        const h = Math.abs(wy - d.y0)
-        if (w > 40 && h > 40) addArtboard(clientFilter, campaignName, { x, y, w, h })
-      }
-      setArtboardMode(false)
       suppressClick.current = true
       setTimeout(() => (suppressClick.current = false), 0)
       return
@@ -1569,7 +1499,7 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       )}
 
       <div
-        className={`cv-wrap${artboardMode ? ' cv-wrap-drawing' : ''}`}
+        className="cv-wrap"
         ref={wrapRef}
         onWheel={onWheel}
         onMouseDown={onDown}
@@ -1582,38 +1512,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             drop target — cards carry their stage as a colour + chip, and dragging a
             card just repositions it (no restage-into-a-section). */}
         <div className="cv-world" style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.s})` }}>
-          {/* Artboard frames — drawn behind the edges + cards, labelled, resizable
-              later. The frame body is click-through (pointer-events: none) so it
-              never blocks panning or card interaction; only its chrome is live. */}
-          {artboards
-            .filter((a) => a.client === clientFilter && a.campaign === campaignName)
-            .map((a) => (
-              <div key={a.id} className="cv-artboard" style={{ left: a.x, top: a.y, width: a.w, height: a.h }}>
-                <div className="cv-artboard-tab">
-                  <input
-                    className="cv-artboard-name"
-                    value={a.name}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => renameArtboard(a.id, e.target.value)}
-                  />
-                  <button
-                    className="cv-artboard-del"
-                    title="Delete this artboard"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={() => deleteArtboard(a.id)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
-          {/* The live rubber-band while drawing a new artboard. */}
-          {drawRect && (
-            <div
-              className="cv-artboard cv-artboard-draft"
-              style={{ left: drawRect.x, top: drawRect.y, width: drawRect.w, height: drawRect.h }}
-            />
-          )}
           {marqueeRect && (
             <div
               className="cv-marquee"
@@ -2591,13 +2489,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             title="Organize canvas — snap every card back to the auto-layout and fit to view"
           >
             ⊞ Organize
-          </button>
-          <button
-            className={`cv-zoom-organize${artboardMode ? ' on' : ''}`}
-            onClick={() => setArtboardMode((v) => !v)}
-            title="Artboard — drag a frame around a set of cards to group them (Esc to cancel)"
-          >
-            ▱ Artboard
           </button>
         </div>
         {/* Personalize — fan the campaign across a dimension (audience, location, …). */}
