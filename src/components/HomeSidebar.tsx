@@ -44,6 +44,15 @@ export function HomeSidebar() {
       <div className="sidebar-logo">HyperFocus</div>
 
       <nav className="sidebar-nav">
+        <button
+          className={`nav-item${page === 'cockpit' ? ' active' : ''}`}
+          onClick={() => setPage('cockpit')}
+          title="Portfolio cockpit — every campaign across brands"
+        >
+          <span className="nav-ico">◎</span>
+          <span className="nav-label">Cockpit</span>
+        </button>
+
         <div className="nav-section">Files</div>
         {FILE_FILTERS.map((f) => (
           <button

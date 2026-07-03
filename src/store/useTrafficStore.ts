@@ -957,7 +957,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'cockpit'
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
   /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
@@ -1207,7 +1207,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'cockpit') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void

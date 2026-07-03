@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { mockAttio } from '../adapters/attio/mockAttio'
 import { applyBreakStatus, breakScopeKey, resolveBreaks } from '../domain/breaks'
 import { clientForCampaign } from '../domain/clients'
-import { campaignAttention, deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
+import { campaignAttention, deriveCampaignStatus, type CampaignAttention, type CampaignStatus } from '../domain/lifecycle'
 import type { TrafficRow } from '../domain/types'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 
@@ -19,6 +19,12 @@ export interface CanvasCard {
   rows: TrafficRow[]
   lastTouched: number
   flagged: boolean
+  /** Triage detail behind `flagged` (the flags + count), for cockpit/risk views. */
+  attention: CampaignAttention
+  /** Actual paid spend to date across the campaign's assets. */
+  spend: number
+  /** Attributed won revenue across the campaign's assets. */
+  revenue: number
 }
 
 export interface BrandRow {
@@ -65,6 +71,9 @@ export function useHomeCanvases(): {
         rows: cRows,
         lastTouched: cRows.reduce((m, r) => Math.max(m, r.postedAt ?? r.createdAt ?? 0), 0),
         flagged: attention.count > 0,
+        attention,
+        spend,
+        revenue,
       }
     })
   }, [rows, campaignList, breakStatus])
