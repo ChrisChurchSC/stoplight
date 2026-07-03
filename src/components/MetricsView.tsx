@@ -1,8 +1,11 @@
+import { actualTotals } from '../domain/actuals'
+import type { ChannelId } from '../domain/types'
 import { money } from '../domain/budget'
 import { computeInsights } from '../domain/insights'
 import { formatReach, journeyPerformance } from '../domain/journeyPerf'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { ChannelIcon } from './ChannelIcon'
 
 /**
  * Metrics — a brand folder's projected/actual rollup across every canvas in it.
@@ -16,6 +19,22 @@ import { useTrafficStore } from '../store/useTrafficStore'
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 const num = (n: number) => n.toLocaleString()
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmtDay = (iso: string) => {
+  const [, m, d] = iso.split('-').map(Number)
+  return m && d ? `${MONTHS[m - 1]} ${d}` : iso
+}
+const fmtWindow = (from: string, to: string) => `${fmtDay(from)} – ${fmtDay(to)}`
+const sinceLabel = (ms: number) => {
+  const days = Math.floor((Date.now() - ms) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days}d ago`
+}
+// Singular noun for a channel's asset, from what its reach counts.
+const ASSET_NOUN: Record<string, string> = { views: 'video', impressions: 'post', sessions: 'page', clicks: 'page' }
+const assetNoun = (unit: string) => ASSET_NOUN[unit] ?? 'asset'
 
 const STATUS_LABEL: Record<string, string> = {
   planning: 'Planning',
@@ -37,10 +56,15 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
   const { canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const comments = useTrafficStore((s) => s.comments)
+  const brandActuals = useTrafficStore((s) => s.brandActuals)
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
   const brandCanvases = brand ? canvases.filter((c) => c.client === brand) : []
   const brandRows = brandCanvases.flatMap((c) => c.rows)
+  const measured = brand ? brandActuals[brand] : null
+  const mt = actualTotals(measured)
+  const calibratedLabels = measured?.channels.filter((c) => c.reachPerAsset).map((c) => c.label) ?? []
+  const calibrated = calibratedLabels.length > 0
 
   if (!brand || brandRows.length === 0) {
     return (
@@ -109,7 +133,7 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
         <div className="ins-kpi">
           <span className="ins-kpi-label">Projected reach</span>
           <span className="ins-kpi-value">{formatReach(jp.plan.topReach)}</span>
-          <span className="ins-kpi-sub">top of funnel, plan model</span>
+          <span className="ins-kpi-sub">{calibrated ? 'calibrated to your channels' : 'top of funnel, plan model'}</span>
         </div>
         <div className="ins-kpi">
           <span className="ins-kpi-label">Projected to conversion</span>
@@ -135,7 +159,9 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
         <section className="ins-card">
           <div className="ins-card-head">
             <h3>Projected funnel</h3>
-            <span className="ins-card-hint">Reach by stage from the plan model</span>
+            <span className="ins-card-hint">
+              {calibrated ? 'Calibrated to your measured channel averages' : 'Reach by stage from the plan model'}
+            </span>
           </div>
           <div className="ins-rows">
             {jp.plan.byStage.map((s) => (
@@ -153,31 +179,65 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
           </div>
         </section>
 
-        {/* Actual to date */}
+        {/* Measured actuals — real channel performance from a connected source. */}
         <section className="ins-card">
           <div className="ins-card-head">
-            <h3>Actual to date</h3>
-            <span className="ins-card-hint">Live once canvases post and analytics connect</span>
+            <h3>Measured to date</h3>
+            <span className="ins-card-hint">
+              {measured
+                ? `${measured.source} · updated ${sinceLabel(measured.updatedAt)}`
+                : 'Live once canvases post and analytics connect'}
+            </span>
           </div>
-          <div className="ins-stats">
-            <div className="ins-stat">
-              <span>{ins.kpis.posted}</span>posted
-            </div>
-            <div className="ins-stat">
-              <span>{num(ins.kpis.engagement)}</span>engagement
-            </div>
-            <div className="ins-stat">
-              <span>{ins.kpis.leads}</span>leads
-            </div>
-            <div className="ins-stat">
-              <span>{hasRevenue ? money(ins.kpis.revenue) : '—'}</span>revenue
-            </div>
-          </div>
-          {ins.kpis.posted === 0 && (
-            <div className="mtx-note">
-              Nothing is live yet. Actuals populate as assets move to posted. Connect analytics on the
-              Connectors page to pull real reach and engagement.
-            </div>
+          {measured ? (
+            <>
+              <div className="mtx-actuals">
+                {measured.channels.map((c) => (
+                  <div className="mtx-actual" key={`${c.channel}-${c.label}`}>
+                    <span className="mtx-actual-ch">
+                      <ChannelIcon channel={c.channel as ChannelId} size={15} />
+                      {c.label}
+                    </span>
+                    <span className="mtx-actual-val">
+                      <b>{formatReach(c.reach)}</b> {c.reachUnit}
+                      {c.reachPerAsset ? ` · ${formatReach(c.reachPerAsset)}/${assetNoun(c.reachUnit)} avg` : ''}
+                      {c.engagement ? ` · ${num(c.engagement)} eng` : ''}
+                      {c.clicks ? ` · ${num(c.clicks)} clicks` : ''}
+                      {c.conversions ? ` · ${num(c.conversions)} conv` : ''}
+                    </span>
+                    <span className="mtx-actual-win">{fmtWindow(c.from, c.to)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mtx-note">
+                Real performance from {measured.source}. Reach is each channel's native unit (views,
+                impressions, sessions), so compare within a channel, not across. {num(mt.engagement)} total
+                engagement · {num(mt.clicks)} total clicks.
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="ins-stats">
+                <div className="ins-stat">
+                  <span>{ins.kpis.posted}</span>posted
+                </div>
+                <div className="ins-stat">
+                  <span>{num(ins.kpis.engagement)}</span>engagement
+                </div>
+                <div className="ins-stat">
+                  <span>{ins.kpis.leads}</span>leads
+                </div>
+                <div className="ins-stat">
+                  <span>{hasRevenue ? money(ins.kpis.revenue) : '—'}</span>revenue
+                </div>
+              </div>
+              {ins.kpis.posted === 0 && (
+                <div className="mtx-note">
+                  Nothing is live yet. Actuals populate as assets move to posted. Connect analytics on the
+                  Connectors page to pull real reach and engagement.
+                </div>
+              )}
+            </>
           )}
         </section>
 
@@ -244,9 +304,12 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
       </div>
 
       <div className="mtx-foot">
-        Projections use the built-in plan model (reach by channel, deterministic). Set card budgets
-        for projected spend and ROAS, and connect analytics on the Connectors page for measured
-        actuals.
+        {calibrated
+          ? `Projected reach is calibrated to this brand's measured per-asset averages for ${calibratedLabels.join(
+              ', ',
+            )}, and uses the built-in plan model for channels without connected analytics. `
+          : 'Projections use the built-in plan model (reach by channel, deterministic). '}
+        Set card budgets for projected spend and ROAS to add spend and ROAS.
       </div>
     </div>
   )

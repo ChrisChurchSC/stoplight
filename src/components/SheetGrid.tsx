@@ -14,7 +14,6 @@ import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { journeyPerformance, formatReach } from '../domain/journeyPerf'
-import { PlanPerfStrip } from './PlanPerfStrip'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
@@ -303,7 +302,6 @@ export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: bool
   return (
     <div className="sheet-grid">
       <CompletenessBar />
-      <PlanPerfStrip plan={journeyPerf.plan} />
       <div className="sheet-wrap">
         {rows.length === 0 && (
           <div className="sheet-hint">

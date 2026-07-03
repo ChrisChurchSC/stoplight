@@ -3,7 +3,6 @@ import { CHANNELS } from '../domain/channels'
 import type { RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
 import { journeyPerformance, formatReach } from '../domain/journeyPerf'
-import { PlanPerfStrip } from './PlanPerfStrip'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -394,8 +393,6 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
             ))}
           </div>
         </div>
-
-        <PlanPerfStrip plan={journeyPerf.plan} />
 
         {mode === 'month' && <MonthBody anchor={cursor} />}
         {(mode === 'week' || mode === '3day') && <ColumnsBody />}

@@ -3,23 +3,18 @@ import {
   siApple,
   siCrunchyroll,
   siDiscord,
-  siFormspree,
   siFubo,
   siIheartradio,
-  siKit,
-  siMailchimp,
   siMax,
   siNetflix,
   siNextdoor,
   siPandora,
   siParamountplus,
   siQuora,
-  siResend,
   siRoku,
   siSamsung,
   siSoundcloud,
   siSpotify,
-  siSubstack,
   siTelegram,
   siThreads,
   siTubi,
@@ -28,6 +23,7 @@ import {
   siYelp,
 } from 'simple-icons'
 import { CHANNELS, CHANNEL_LIST, KIND_ORDER, type ChannelKind, channelsByKind } from '../domain/channels'
+import { EMAIL_TOOLS } from '../domain/emailTools'
 import type { ChannelId } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -145,16 +141,8 @@ const PAID_SUBGROUPS: { label: string; channels: ChannelId[]; items: PickItem[] 
   },
 ]
 
-// Owned extras: email / form providers, plus offline owned media (your list / events).
-const EMAIL_TOOLS: PickItem[] = [
-  mk('resend', 'Resend', `#${siResend.hex}`, siResend.path),
-  mk('formspree', 'Formspree', `#${siFormspree.hex}`, siFormspree.path),
-  mk('mailchimp', 'Mailchimp', `#${siMailchimp.hex}`, siMailchimp.path),
-  mk('kit', 'Kit (ConvertKit)', `#${siKit.hex}`, siKit.path),
-  mk('substack', 'Substack', `#${siSubstack.hex}`, siSubstack.path),
-  mk('klaviyo', 'Klaviyo', '#232426'),
-  mk('neon-one', 'Neon One', '#00b3b0'),
-]
+// Owned extras: email / form providers (shared with the canvas email-card marks),
+// plus offline owned media (your list / events).
 const OFFLINE_OWNED: PickItem[] = [mk('direct-mail', 'Direct Mail', '#8B5E3C'), mk('events', 'Events & Experiential', '#EC4899')]
 
 const PAID_ITEMS = PAID_SUBGROUPS.flatMap((g) => g.items)

@@ -182,3 +182,58 @@ export const channelsByKind = (kind: ChannelKind): ChannelConfig[] =>
 export function channelAccepts(channel: ChannelId, media: MediaType): boolean {
   return CHANNELS[channel].accepts.includes(media)
 }
+
+// Display names / sub-formats that map to a canonical channel (the data stores
+// channels loosely — sometimes a label, a sub-format, or a profile URL).
+const CHANNEL_ALIASES: Record<string, ChannelId> = {
+  newsletter: 'email',
+  'e-newsletter': 'email',
+  'email newsletter': 'email',
+  'youtube shorts': 'youtube',
+  'yt shorts': 'youtube',
+  shorts: 'youtube',
+  'youtube short': 'youtube',
+  reel: 'instagram',
+  reels: 'instagram',
+  ig: 'instagram',
+  twitter: 'x',
+  'x (twitter)': 'x',
+  web: 'website',
+  site: 'website',
+  'landing page': 'landing-page',
+}
+const HOST_TO_CHANNEL: Record<string, ChannelId> = {
+  'youtube.com': 'youtube',
+  'youtu.be': 'youtube',
+  'instagram.com': 'instagram',
+  'linkedin.com': 'linkedin',
+  'tiktok.com': 'tiktok',
+  'facebook.com': 'facebook',
+  'fb.com': 'facebook',
+  'x.com': 'x',
+  'twitter.com': 'x',
+  'pinterest.com': 'pinterest',
+}
+
+/** Resolve a loose channel value (canonical id, display label, short tag, common
+ *  alias/sub-format, or a profile URL) to a canonical ChannelId, or null. */
+export function resolveChannelId(value: string | undefined | null): ChannelId | null {
+  if (!value) return null
+  const key = value.trim().toLowerCase()
+  if (!key) return null
+  if (key in CHANNELS_DEFS) return key as ChannelId
+  const meta = CHANNEL_LIST.find(
+    (c) => c.id.toLowerCase() === key || c.label.toLowerCase() === key || c.short.toLowerCase() === key,
+  )
+  if (meta) return meta.id
+  if (key in CHANNEL_ALIASES) return CHANNEL_ALIASES[key]
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const host = new URL(value).hostname.replace(/^www\./, '')
+      for (const [h, id] of Object.entries(HOST_TO_CHANNEL)) if (host === h || host.endsWith(`.${h}`)) return id
+    } catch {
+      // not a parseable URL
+    }
+  }
+  return null
+}

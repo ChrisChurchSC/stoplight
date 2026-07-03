@@ -1,3 +1,5 @@
+import { resolveChannelId } from './channels'
+import { clientForCampaign } from './clients'
 import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from './funnel'
 import type { ChannelId, TrafficRow } from './types'
 
@@ -76,6 +78,33 @@ const CHANNEL_REACH: Partial<Record<ChannelId, number>> = {
 }
 const DEFAULT_REACH = 50_000
 
+// Per-brand calibration: measured average reach per asset, per channel, registered
+// from a brand's connected analytics (see domain/actuals + the store). When present it
+// overrides the generic CHANNEL_REACH base, so a projection tracks the brand's real
+// history instead of stock constants. Registered globally so every surface that reads
+// journeyPerformance stays consistent without threading it through each caller.
+const BRAND_CALIBRATION = new Map<string, Record<string, number>>()
+export function setBrandCalibration(brand: string, reachByChannel: Record<string, number>): void {
+  const b = brand.trim()
+  if (!b) return
+  if (Object.keys(reachByChannel).length) BRAND_CALIBRATION.set(b, reachByChannel)
+  else BRAND_CALIBRATION.delete(b)
+}
+/** True when a brand has any measured calibration (so surfaces can label projections). */
+export function isBrandCalibrated(brand: string | null | undefined): boolean {
+  return !!brand && BRAND_CALIBRATION.has(brand)
+}
+
+/** Entry reach for a root asset: the brand's measured per-asset reach for that channel
+ *  when we have it, else the generic per-channel base, else the default. The channel is
+ *  resolved first, so display-name channels ("YouTube", "LinkedIn") hit the right base
+ *  instead of falling through to the default. */
+function baseReach(r: TrafficRow): number {
+  const ch = (resolveChannelId(r.channel) ?? r.channel) as ChannelId
+  const calib = BRAND_CALIBRATION.get(clientForCampaign(r.campaign))
+  return calib?.[ch] ?? CHANNEL_REACH[ch] ?? DEFAULT_REACH
+}
+
 // Stable jitter in [0.8, 1.2] from an asset id, so numbers don't flicker per render.
 function jitter(seed: string): number {
   let x = 2166136261
@@ -129,7 +158,7 @@ export function journeyPerformance(rows: TrafficRow[]): JourneyPerf {
       walk(c, childReach)
     }
   }
-  for (const r of roots) walk(r, Math.round((CHANNEL_REACH[r.channel] ?? DEFAULT_REACH) * jitter(r.id)))
+  for (const r of roots) walk(r, Math.round(baseReach(r) * jitter(r.id)))
 
   for (const r of rows) {
     const reach = reachOf.get(r.id) ?? 0

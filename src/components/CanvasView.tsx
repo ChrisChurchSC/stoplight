@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { applyBreakStatus, breakScopeKey, coherenceContentHash, resolveBreaks, type CoherenceBreak } from '../domain/breaks'
-import { CHANNELS } from '../domain/channels'
+import { CHANNELS, resolveChannelId } from '../domain/channels'
+import { emailToolFromRoster } from '../domain/emailTools'
 import { FUNNEL_STAGES, funnelStageFor, type FunnelStage } from '../domain/funnel'
 import { GTM_STRATEGIES, playbookStages, canonToPhase, phaseToCanon } from '../domain/strategies'
 import { playbookFunnel, makeChannelPhase, firstPhaseForCanon } from '../domain/playbookFunnel'
@@ -163,6 +164,8 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
+  const brandEmailTool = emailToolFromRoster(clientFilter !== 'all' ? clientProfiles[clientFilter]?.channels : undefined)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const duplicateCampaign = useTrafficStore((s) => s.duplicateCampaign)
@@ -1690,7 +1693,15 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               })()}
               {n.kind === 'message' && n.row && (
                 <span className="cv-node-ico">
-                  <ChannelIcon channel={n.row.channel} size={18} />
+                  <ChannelIcon
+                    channel={n.row.channel}
+                    size={18}
+                    override={
+                      brandEmailTool && resolveChannelId(n.row.channel) === 'email'
+                        ? { path: brandEmailTool.path, color: brandEmailTool.color, viewBox: brandEmailTool.viewBox }
+                        : undefined
+                    }
+                  />
                 </span>
               )}
               {n.kind === 'message' && n.row?.mediaRef && nearViewport(n) && (

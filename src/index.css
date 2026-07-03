@@ -13019,6 +13019,47 @@ textarea.library-input {
   color: var(--text-muted);
   line-height: 1.5;
 }
+/* Measured actuals — one row per channel (icon · label / metrics / window). */
+.mtx-actuals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mtx-actual {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.mtx-actual:last-child {
+  border-bottom: none;
+}
+.mtx-actual-ch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.mtx-actual-val {
+  grid-column: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.mtx-actual-val b {
+  color: var(--text);
+  font-weight: 700;
+}
+.mtx-actual-win {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
 .mtx-foot {
   font-size: 12px;
   color: var(--text-faint);

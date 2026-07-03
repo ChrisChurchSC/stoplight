@@ -9,6 +9,8 @@ import type { Asset, ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
+import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
+import { setBrandCalibration } from '../domain/journeyPerf'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
@@ -457,6 +459,30 @@ function saveClientProfiles(map: Record<string, ClientProfile>): void {
   } catch {
     /* ignore */
   }
+}
+
+// Measured actuals per brand, pulled from a connected analytics source (read-only).
+const BRAND_ACTUALS_KEY = 'stoplight.brandActuals.v1'
+function loadBrandActuals(): Record<string, BrandActuals> {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRAND_ACTUALS_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveBrandActuals(map: Record<string, BrandActuals>): void {
+  try {
+    localStorage.setItem(BRAND_ACTUALS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Register measured-actuals calibration on load so projected reach uses each brand's
+// real per-asset averages (see journeyPerf.setBrandCalibration).
+for (const [brand, data] of Object.entries(loadBrandActuals())) {
+  setBrandCalibration(brand, reachByChannelFromActuals(data))
 }
 
 // Audience types per client (personas under the ICP), persisted by client name.
@@ -999,6 +1025,11 @@ interface TrafficState {
   clientProfiles: Record<string, ClientProfile>
   /** Save (merge) a client's profile. */
   setClientProfile: (name: string, profile: ClientProfile) => void
+  /** Measured actuals per brand, pulled from a connected analytics source (read-only,
+   *  refreshed out of band). Read by the Metrics tab beside the projected plan. */
+  brandActuals: Record<string, BrandActuals>
+  /** Replace a brand's measured actuals (whole-object write from a refresh pull). */
+  setBrandActuals: (brand: string, data: BrandActuals) => void
   /** Onboarding readiness: starter brand guides per client + the drawer state. */
   brandGuides: Record<string, BrandGuideEntry>
   readinessOpen: boolean
@@ -1517,6 +1548,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   driveLinks: loadDriveLinks(),
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
+  brandActuals: loadBrandActuals(),
   refreshingClient: null,
   channelIngestOpen: false,
   channelIngestTarget: null,
@@ -1708,6 +1740,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const clientProfiles = { ...s.clientProfiles, [n]: { ...s.clientProfiles[n], ...profile } }
       saveClientProfiles(clientProfiles)
       return { clientProfiles }
+    }),
+
+  setBrandActuals: (brand, data) =>
+    set((s) => {
+      const n = brand.trim()
+      if (!n) return {}
+      const brandActuals = { ...s.brandActuals, [n]: data }
+      saveBrandActuals(brandActuals)
+      setBrandCalibration(n, reachByChannelFromActuals(data))
+      return { brandActuals }
     }),
 
   openReadiness: () => set({ readinessOpen: true }),

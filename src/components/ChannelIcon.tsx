@@ -10,7 +10,7 @@ import {
   siInstagram,
   siFacebook,
 } from 'simple-icons'
-import { CHANNELS } from '../domain/channels'
+import { CHANNELS, resolveChannelId } from '../domain/channels'
 import type { ChannelId } from '../domain/types'
 
 // LinkedIn is not in simple-icons (removed on trademark request), so supply it.
@@ -44,16 +44,31 @@ export function ChannelIcon({
   channel,
   size = 14,
   color,
+  override,
 }: {
   channel: ChannelId
   size?: number
   color?: string
+  /** Force a specific mark (e.g. a brand's email tool on an email card). Wins over the channel.
+   *  `viewBox` lets a vendor logo keep its own coordinate grid. */
+  override?: { path: string | null; color: string; viewBox?: string }
 }) {
-  // An unknown channel id (e.g. legacy/renamed data) must not crash the canvas —
-  // fall back to a neutral dot instead of dereferencing an undefined channel.
-  const c = CHANNELS[channel]
-  const path = c ? BRAND_PATH[c.platform] : undefined
-  const fill = color ?? c?.color ?? 'var(--text-faint)'
+  // Resolve loose values (display names, sub-formats, URLs) to a canonical channel so
+  // the brand logo renders instead of a neutral fallback; an override wins. Unknown
+  // channels fall back to a neutral dot rather than crashing.
+  let path: string | undefined
+  let fill: string
+  let viewBox = '0 0 24 24'
+  if (override) {
+    path = override.path ?? undefined
+    fill = color ?? override.color
+    viewBox = override.viewBox ?? '0 0 24 24'
+  } else {
+    const id = resolveChannelId(channel) ?? channel
+    const c = CHANNELS[id]
+    path = BRAND_PATH[c.platform]
+    fill = color ?? c.color ?? 'var(--text-faint)'
+  }
 
   if (!path) {
     return (
@@ -73,7 +88,7 @@ export function ChannelIcon({
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox={viewBox}
       fill={fill}
       aria-hidden="true"
       style={{ flexShrink: 0 }}
