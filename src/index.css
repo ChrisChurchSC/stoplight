@@ -2671,11 +2671,12 @@ button {
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-/* Brand-folder header: three zones so the view switcher is truly centered —
-   title (left) · Canvases/Grid/Calendar views (center) · About/Messaging (right). */
+/* Brand-folder header: three zones — title (left) · Canvases/Grid/Calendar views
+   (shifted left of center) · About/Messaging (right). The wider right column pulls
+   the view switcher toward the title. */
 .home-main-head.folder-head {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto 2fr;
   align-items: center;
 }
 .folder-head .home-main-title {
@@ -5312,6 +5313,7 @@ button {
   padding: 5px 9px 7px 13px;
   cursor: pointer;
   white-space: nowrap;
+  max-width: 220px; /* cap the tab; long canvas names truncate rather than stretch */
   margin-bottom: -1px; /* sit flush on the dark bar's bottom edge */
   transition: background 0.1s ease;
 }
@@ -5349,6 +5351,10 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .cv-project-tab.active .cv-project-tab-client {
   color: var(--accent);
@@ -5357,6 +5363,10 @@ button {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .cv-project-tab.active .cv-project-tab-name {
   color: var(--text);
@@ -12972,4 +12982,224 @@ textarea.library-input {
 .library-del:hover {
   color: var(--red, #b42318);
   background: var(--surface-2);
+}
+
+/* Metrics tab (Level 1) — brand-wide projected/actual rollup. Reuses the .ins-*
+   scorecard + card grid; adds a document container and a per-campaign table. */
+.mtx {
+  padding: 18px 22px 60px;
+  max-width: 1180px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mtx-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+.mtx-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+.mtx-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.mtx-empty {
+  color: var(--text-faint);
+  text-align: center;
+  padding: 48px 0;
+}
+.mtx-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.mtx-foot {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.mtx-table {
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+}
+.mtx-tr {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) 92px 60px 132px 82px 62px 84px;
+  gap: 10px;
+  align-items: center;
+  min-width: 640px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.mtx-tr:last-child {
+  border-bottom: none;
+}
+.mtx-head-row {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-strong);
+}
+.mtx-r {
+  text-align: right;
+}
+.mtx-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mtx-reach {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.mtx-reach .ins-bar {
+  width: 56px;
+  flex: none;
+}
+.mtx-status {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.mtx-status.s-planning {
+  background: #eef2fb;
+  color: #3a5bbf;
+}
+.mtx-status.s-in-review {
+  background: #fff4e5;
+  color: #9a6a1a;
+}
+.mtx-status.s-active {
+  background: #e7f6ee;
+  color: #1a7a4c;
+}
+.mtx-status.s-completed {
+  background: var(--surface-2);
+  color: var(--text-faint);
+}
+@media (max-width: 900px) {
+  .mtx .ins-cols {
+    grid-template-columns: 1fr;
+  }
+}
+/* Channels picker: a selectable roster of every channel, grouped by kind. */
+.chn-subgroup + .chn-subgroup {
+  margin-top: 14px;
+}
+.chn-sublabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+.chn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.chn-pick {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.chn-pick svg {
+  flex-shrink: 0;
+}
+.chn-pick:hover {
+  border-color: var(--text-faint);
+  background: var(--surface-2);
+}
+.chn-pick.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.chn-pick-label {
+  flex: 1;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chn-pick-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.chn-pick.on .chn-pick-badge {
+  color: var(--accent);
+  background: #fff;
+}
+.chn-pick-check {
+  width: 12px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.chn-pick.on .chn-pick-check {
+  color: var(--accent);
+}
+/* Personalization pick-lists reuse the channel-picker chip, but size chips to
+   their (short) label and add a custom-value input below each dimension. */
+.pz-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pz-grid .chn-pick {
+  width: auto;
+}
+.pz-grid .chn-pick-label {
+  flex: 0 1 auto;
+}
+.pz-custom {
+  margin-top: 9px;
+  width: 100%;
+  max-width: 360px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+}
+.pz-custom:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.pz-add-custom {
+  margin-top: 8px;
 }

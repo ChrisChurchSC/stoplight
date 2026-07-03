@@ -1757,20 +1757,6 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                       ⚠ Re-check
                     </button>
                   )}
-                  {n.kind === 'message' && n.row && branchSuggestions(n.row).length > 0 && (
-                    <button
-                      className="cv-node-branch"
-                      title="Branch this card into next steps"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setBranchAdded(new Set())
-                        setBranchMenu({ row: n.row!, x: e.clientX, y: e.clientY })
-                      }}
-                    >
-                      ⑂ Branch
-                    </button>
-                  )}
                   {n.kind === 'message' && n.row && (
                     <a
                       className="cv-node-link"
@@ -1925,6 +1911,31 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               )}
               {n.kind === 'message' && n.row && (
                 <div className="cv-node-actions">
+                  {branchSuggestions(n.row).length > 0 && (
+                    <button
+                      className="cv-node-branch"
+                      title="Branch this card into next steps"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setBranchAdded(new Set())
+                        setBranchMenu({ row: n.row!, x: e.clientX, y: e.clientY })
+                      }}
+                    >
+                      ⑂ Branch
+                    </button>
+                  )}
+                  <button
+                    className="cv-node-branch cv-node-pz"
+                    title="Personalize — fan this campaign's messaging across a dimension (audience, time, location…)"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      useTrafficStore.getState().setPersonalizeOpen(true)
+                    }}
+                  >
+                    ⧉ Personalize
+                  </button>
                   <button
                     className="cv-node-del"
                     title="Delete this card (Cmd/Ctrl+Z to undo)"

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { clientForCampaign } from '../domain/clients'
 import { conditionSentence } from '../domain/conditions'
-import { FANOUT_DIMENSIONS, dimensionValues } from '../domain/fanout'
+import { DIMENSION_PRESETS, FANOUT_DIMENSIONS, dimensionValues } from '../domain/fanout'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -38,6 +38,7 @@ export function PersonalizationDrawer() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [proposing, setProposing] = useState(false)
+  const [limit, setLimit] = useState<number | ''>('')
 
   const base = useMemo(() => rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim()), [rows, campaign])
   const libValues = useMemo(
@@ -45,16 +46,24 @@ export function PersonalizationDrawer() {
     [dim, brandSystems, clientProfiles, client],
   )
   const manualValues = useMemo(() => extra.split(',').map((s) => s.trim()).filter(Boolean), [extra])
-  const values = libValues.length ? libValues : manualValues
-  const valuesSig = values.join('|')
+  // Option pool = the brand's library values + this dimension's presets + anything
+  // typed in. Presets give the tactical dimensions a real check-off menu here (they
+  // no longer carry standing values at the brand level).
+  const values = useMemo(
+    () => [...new Set([...libValues, ...(DIMENSION_PRESETS[dim] ?? []), ...manualValues])],
+    [dim, libValues, manualValues],
+  )
+  const libSig = libValues.join('|')
 
-  // Default to fanning across all values when the dimension (or its values) changes.
+  // On dimension change, pre-check the brand's own values (audiences, etc.); presets
+  // start unchecked so you pick the ones this campaign fans across.
   useEffect(() => {
-    setSelected(new Set(values))
+    setSelected(new Set(libValues))
+    setExtra('')
     setExcluded(new Set())
     setResult(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dim, valuesSig])
+  }, [dim, libSig])
 
   const chosen = values.filter((v) => selected.has(v))
 
@@ -79,7 +88,7 @@ export function PersonalizationDrawer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [excluded, showMatrix, priorDim, priorVals.join('|'), chosen.join('|'), dim])
 
-  const plan = campaign && chosen.length ? fanOutPreview(campaign, dim, chosen, exclude) : null
+  const plan = campaign && chosen.length ? fanOutPreview(campaign, dim, chosen, exclude, limit || undefined) : null
   const dimMeta = FANOUT_DIMENSIONS.find((d) => d.key === dim)
   const conditions = campaign ? campaignConditions[campaign] ?? [] : []
 
@@ -114,7 +123,7 @@ export function PersonalizationDrawer() {
     setBusy(true)
     setResult(null)
     try {
-      const r = await fanOut(campaign, dim, chosen, { exclude })
+      const r = await fanOut(campaign, dim, chosen, { exclude, limit: limit || undefined })
       await runCoherenceCheck()
       const breaks = useTrafficStore.getState().claudeBreaks ?? []
       setResult(`${r.variantCount} variants created · ${breaks.length} break${breaks.length === 1 ? '' : 's'} found — review in the Breaks queue.`)
@@ -178,10 +187,10 @@ export function PersonalizationDrawer() {
                 </div>
                 {values.length === 0 ? (
                   <div className="pz-manual">
-                    <div className="pz-hint">No {dim} values in the library. Add them in About, or type a few:</div>
+                    <div className="pz-hint">No values yet — type a few (comma-separated):</div>
                     <input
                       className="library-input"
-                      placeholder="e.g. Asbury, Belmar, Manasquan"
+                      placeholder="e.g. Acme Co, Globex, Initech"
                       value={extra}
                       onChange={(e) => setExtra(e.target.value)}
                     />
@@ -204,6 +213,12 @@ export function PersonalizationDrawer() {
                         None
                       </button>
                     </div>
+                    <input
+                      className="library-input pz-add-custom"
+                      placeholder="Add a custom value, comma-separated"
+                      value={extra}
+                      onChange={(e) => setExtra(e.target.value)}
+                    />
                   </>
                 )}
               </div>
@@ -266,6 +281,21 @@ export function PersonalizationDrawer() {
                 <button className="btn ghost sm" disabled={proposing} onClick={propose}>
                   {proposing ? 'Proposing…' : conditions.length ? 'Re-propose conditions' : 'Propose conditions'}
                 </button>
+              </div>
+
+              <div className="pz-section">
+                <div className="pz-label">
+                  Variant cap <span className="pz-src">optional</span>
+                </div>
+                <div className="pz-hint">Blank = one variant per value. Set a number to cap the total, spread across cards.</div>
+                <input
+                  className="library-input"
+                  type="number"
+                  min={1}
+                  placeholder="No cap"
+                  value={limit}
+                  onChange={(e) => setLimit(e.target.value === '' ? '' : Math.max(1, Math.floor(Number(e.target.value))))}
+                />
               </div>
             </div>
 

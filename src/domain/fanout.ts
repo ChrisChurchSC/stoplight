@@ -36,6 +36,22 @@ export const FANOUT_DIMENSIONS: FanoutDimensionMeta[] = [
   { key: 'account', label: 'Account (B2B)', source: 'Account list' },
 ]
 
+/** Preset option values per dimension — the check-off menu on the canvas
+ *  Personalize card (and the brand's Language facet). Users can still add a
+ *  custom value that isn't listed. */
+export const DIMENSION_PRESETS: Record<string, string[]> = {
+  location: ['National', 'Local', 'Northeast', 'Southeast', 'Midwest', 'West', 'Urban', 'Suburban', 'Rural'],
+  channel: ['Instagram', 'Facebook', 'LinkedIn', 'TikTok', 'YouTube', 'X', 'Email', 'SMS', 'Website', 'Meta Ads', 'Google Search', 'Podcast'],
+  behavior: ['Cart abandon', 'Viewed pricing', 'Repeat buyer', 'First-time visitor', 'Browsed, no purchase', 'Signed up', 'Downloaded', 'Email engaged', 'Event attendee'],
+  time: ['Summer', 'Fall', 'Winter', 'Spring', 'Holiday', 'Black Friday', 'Back-to-school', 'New Year', 'Off-season', 'Peak season'],
+  device: ['Mobile', 'Desktop', 'Tablet', 'In-store', 'Connected TV'],
+  lifecycle: ['New', 'Active', 'Loyal', 'Lapsed', 'Win-back', 'Churned'],
+  language: ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Mandarin', 'Arabic'],
+  intent: ['Paid search', 'Organic search', 'Referral', 'Direct', 'Social', 'Email'],
+  tier: ['VIP', 'Standard', 'Prospect', 'Enterprise', 'Mid-market', 'SMB'],
+  account: [],
+}
+
 const JOURNEY_LABELS = FUNNEL_STAGES.map((s) => s.label)
 const labelToStage = new Map(FUNNEL_STAGES.map((s) => [s.label.toLowerCase(), s.stage] as const))
 /** The funnel stage a journey-dimension value maps to (so a journey card can pin the band). */

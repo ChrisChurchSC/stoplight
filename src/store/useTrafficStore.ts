@@ -1328,14 +1328,16 @@ interface TrafficState {
     dimension: string,
     values?: string[],
     exclude?: Record<string, string>[],
+    limit?: number,
   ) => FanoutPlan
   /** Fan a campaign's base assets into one lineage-tagged variant per dimension value,
-   *  then regenerate copy per variant. Stacks (multiplies) over existing variants. */
+   *  then regenerate copy per variant. Stacks (multiplies) over existing variants.
+   *  `limit` caps the total variants (spread across cards) when set. */
   fanOut: (
     campaign: string,
     dimension: string,
     values?: string[],
-    opts?: { exclude?: Record<string, string>[]; generate?: boolean },
+    opts?: { exclude?: Record<string, string>[]; generate?: boolean; limit?: number },
   ) => Promise<{ variantCount: number; created: number }>
   /** Propose if/then conditions from the brand library (Claude/heuristic); human approves. */
   proposeConditions: (campaign: string) => FanCondition[]
@@ -3286,7 +3288,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await get().refresh()
   },
 
-  fanOutPreview: (campaign, dimension, values, exclude) => {
+  fanOutPreview: (campaign, dimension, values, exclude, limit) => {
     const s = get()
     const client = clientForCampaign(campaign)
     const inCampaign = s.rows.filter((r) => (r.campaign ?? '').trim() === campaign.trim())
@@ -3303,7 +3305,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         ? s.accountsForCampaign(campaign).map((a) => a.name)
         : dimensionValues(dimension, effective, s.clientProfiles[client])
     const vals = values && values.length ? values : libVals
-    return planFanout(base, dimension, vals, exclude ?? [])
+    const plan = planFanout(base, dimension, vals, exclude ?? [])
+    return limit && limit > 0 && plan.variantCount > limit ? { ...plan, variantCount: limit } : plan
   },
 
   fanOut: async (campaign, dimension, values, opts) => {
@@ -3331,9 +3334,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // VARIANT of (not a branch off) the leaf — a personalization sibling that sits side
     // by side with the master in the same stage, NOT a journey step. The dimension also
     // sets a real row field where it maps (audience, journey stage). Pruned combos skip.
+    // Optional cap on the total variants. Iterate value-OUTER so the cap spreads
+    // across every base card (each card gets the first value before any card gets a
+    // second), rather than exhausting one card before moving on.
+    const limit = opts?.limit && opts.limit > 0 ? opts.limit : Infinity
     const variants: TrafficRow[] = []
-    for (const row of base) {
-      for (const value of vals) {
+    for (const value of vals) {
+      if (variants.length >= limit) break
+      for (const row of base) {
         const lineage = { ...(row.lineage ?? {}), [dimension]: value }
         if (isPruned(lineage, exclude)) continue
         if (resolveConditions({ audience: (row.audience ?? '').trim(), ...lineage }, conditions).exclude) continue
@@ -3351,6 +3359,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           lineage,
           ...(dimensionField(dimension, value) ?? {}),
         })
+        if (variants.length >= limit) break
       }
     }
     if (variants.length === 0) return { variantCount: 0, created: 0 }

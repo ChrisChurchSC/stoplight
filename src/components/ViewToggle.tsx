@@ -11,11 +11,6 @@ const VIEWS = [
 export function ViewToggle() {
   const view = useTrafficStore((s) => s.view)
   const setView = useTrafficStore((s) => s.setView)
-  // Refresh stays bottom-right; Comments + History moved up to the top bar.
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
-  const refreshClient = useTrafficStore((s) => s.refreshClient)
-  const refreshingClient = useTrafficStore((s) => s.refreshingClient)
 
   return (
     <div className="view-bar">
@@ -38,20 +33,8 @@ export function ViewToggle() {
         </div>
       </div>
 
-      {/* Refresh on the right (Comments + History moved to the top bar; the
-          Add-asset button floats in the bottom-right corner). */}
-      <div className="view-bar-side right">
-        {clientProfiles[clientFilter]?.website && (
-          <button
-            className="btn sm"
-            onClick={() => refreshClient(clientFilter)}
-            disabled={refreshingClient === clientFilter}
-            title="Re-gather this client's channels and refresh their live-messaging map"
-          >
-            {refreshingClient === clientFilter ? '↻ Refreshing…' : '↻ Refresh'}
-          </button>
-        )}
-      </div>
+      {/* Right stays clear — the Add-asset button floats in the bottom-right corner. */}
+      <div className="view-bar-side right" />
     </div>
   )
 }

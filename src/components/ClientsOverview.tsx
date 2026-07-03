@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { BrandInfo } from './BrandInfo'
-import { BrandPersonalization } from './BrandPersonalization'
 import { BrandVoice } from './BrandVoice'
 import { CalendarView } from './CalendarView'
+import { ChannelsView } from './ChannelsView'
 import { HomeShell } from './HomeShell'
 import { LibraryPage } from './LibraryPage'
+import { MetricsView } from './MetricsView'
 import { SheetGrid } from './SheetGrid'
 
 /**
@@ -104,7 +105,7 @@ export function ClientsOverview() {
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
   const [folderTab, setFolderTab] = useState<
-    'canvases' | 'grid' | 'calendar' | 'about' | 'voice' | 'personalization' | 'messaging'
+    'canvases' | 'grid' | 'calendar' | 'metrics' | 'channels' | 'about' | 'voice' | 'messaging'
   >('canvases')
   // Leaving a brand folder (or switching brands) snaps back to Canvases.
   useEffect(() => {
@@ -136,6 +137,13 @@ export function ClientsOverview() {
         >
           Calendar
         </button>
+        <button
+          className={`folder-tab${folderTab === 'metrics' ? ' active' : ''}`}
+          onClick={() => setFolderTab('metrics')}
+          title="Projected vs actual across every canvas in this folder"
+        >
+          Metrics
+        </button>
       </div>
       <div className="folder-tabs folder-aux">
         <button className={`folder-tab${folderTab === 'about' ? ' active' : ''}`} onClick={() => setFolderTab('about')}>
@@ -149,13 +157,6 @@ export function ClientsOverview() {
           Voice
         </button>
         <button
-          className={`folder-tab${folderTab === 'personalization' ? ' active' : ''}`}
-          onClick={() => setFolderTab('personalization')}
-          title="The dimensions and values the brand personalizes across"
-        >
-          Personalization
-        </button>
-        <button
           className={`folder-tab${folderTab === 'messaging' ? ' active' : ''}`}
           onClick={() => {
             setMessagingBrand(brandFolder)
@@ -163,6 +164,13 @@ export function ClientsOverview() {
           }}
         >
           Messaging
+        </button>
+        <button
+          className={`folder-tab${folderTab === 'channels' ? ' active' : ''}`}
+          onClick={() => setFolderTab('channels')}
+          title="The channels this brand publishes on"
+        >
+          Channels
         </button>
       </div>
     </div>
@@ -214,6 +222,30 @@ export function ClientsOverview() {
     )
   }
 
+  // A brand folder's Metrics rollup: projected + actual across every canvas.
+  if (brandFolder && folderTab === 'metrics') {
+    return (
+      <HomeShell>
+        <div className="home-main-scroll">
+          {folderHead}
+          <MetricsView scopeClient={brandFolder} />
+        </div>
+      </HomeShell>
+    )
+  }
+
+  // A brand folder's Channels view: the brand's channel mix across every canvas.
+  if (brandFolder && folderTab === 'channels') {
+    return (
+      <HomeShell>
+        <div className="home-main-scroll">
+          {folderHead}
+          <ChannelsView scopeClient={brandFolder} />
+        </div>
+      </HomeShell>
+    )
+  }
+
   // A brand folder's Messaging system or About tab: render the embedded editor.
   if (brandFolder && folderTab === 'messaging') {
     return (
@@ -241,16 +273,6 @@ export function ClientsOverview() {
         <div className="home-main-scroll">
           {folderHead}
           <BrandVoice brand={brandFolder} />
-        </div>
-      </HomeShell>
-    )
-  }
-  if (brandFolder && folderTab === 'personalization') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <BrandPersonalization brand={brandFolder} />
         </div>
       </HomeShell>
     )
