@@ -13,6 +13,10 @@ import type { ChannelId, TrafficRow } from './types'
 
 export type AssetSource = NonNullable<TrafficRow['source']>
 
+/** The campaign that holds a brand's ingested published content (the Library backfill).
+ *  One per brand keeps the whole body of work in one place and scopes dedup to it. */
+export const CONTENT_LIBRARY_CAMPAIGN = 'Published content'
+
 const PLATFORM_CHANNEL: Record<string, ChannelId> = {
   instagram: 'instagram', ig: 'instagram', insta: 'instagram',
   facebook: 'facebook', fb: 'facebook', meta: 'facebook',

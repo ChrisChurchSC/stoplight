@@ -12,6 +12,7 @@ import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile 
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
+import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
@@ -88,6 +89,7 @@ import {
 } from '../domain/accounts'
 import {
   type AssetSource,
+  CONTENT_LIBRARY_CAMPAIGN,
   normalizeImportItem,
   engagementFromMetrics,
   looksLikeBlockedPage,
@@ -1035,6 +1037,13 @@ interface TrafficState {
   actualsRefreshing: string | null
   /** Re-pull a brand's measured actuals from the connected source (mock or live proxy). */
   refreshActuals: (brand: string) => Promise<void>
+  /** Brand whose content backfill is running right now, or null. */
+  contentIngesting: string | null
+  /** Last content-ingest result per brand (for the Library tab's summary line). */
+  contentIngest: Record<string, { at: number; imported: number; updated: number; skipped: number; sources: string[] }>
+  /** Pull every published post / video / page for a brand from its connected channels
+   *  and land them in the Library as posted content (dedup + metrics via importAssets). */
+  ingestContent: (brand: string) => Promise<void>
   /** Onboarding readiness: starter brand guides per client + the drawer state. */
   brandGuides: Record<string, BrandGuideEntry>
   readinessOpen: boolean
@@ -1555,6 +1564,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientProfiles: loadClientProfiles(),
   brandActuals: loadBrandActuals(),
   actualsRefreshing: null,
+  contentIngesting: null,
+  contentIngest: {},
   refreshingClient: null,
   channelIngestOpen: false,
   channelIngestTarget: null,
@@ -1767,6 +1778,37 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       if (data) get().setBrandActuals(n, data)
     } finally {
       set({ actualsRefreshing: null })
+    }
+  },
+
+  ingestContent: async (brand) => {
+    const n = brand.trim()
+    if (!n || get().contentIngesting) return
+    set({ contentIngesting: n })
+    try {
+      const batches = await contentProvider.fetch(n)
+      if (!batches || !batches.length) {
+        set((s) => ({
+          contentIngest: { ...s.contentIngest, [n]: { at: Date.now(), imported: 0, updated: 0, skipped: 0, sources: [] } },
+        }))
+        return
+      }
+      // One backfill campaign holds the brand's whole published body of work. Each batch
+      // (channel) flows through importAssets with its source tag, deduping on its own.
+      const totals = { imported: 0, updated: 0, skipped: 0 }
+      const sources: string[] = []
+      for (const b of batches) {
+        const r = await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, b.items, b.source)
+        totals.imported += r.imported
+        totals.updated += r.updated
+        totals.skipped += r.skipped
+        if (!sources.includes(b.sourceLabel)) sources.push(b.sourceLabel)
+      }
+      set((s) => ({
+        contentIngest: { ...s.contentIngest, [n]: { at: Date.now(), ...totals, sources } },
+      }))
+    } finally {
+      set({ contentIngesting: null })
     }
   },
 

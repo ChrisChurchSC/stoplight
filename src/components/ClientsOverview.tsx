@@ -8,6 +8,7 @@ import { ChannelsView } from './ChannelsView'
 import { HomeShell } from './HomeShell'
 import { LibraryPage } from './LibraryPage'
 import { MetricsView } from './MetricsView'
+import { LibraryView } from './LibraryView'
 import { SheetGrid } from './SheetGrid'
 
 /**
@@ -105,7 +106,7 @@ export function ClientsOverview() {
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
   const [folderTab, setFolderTab] = useState<
-    'canvases' | 'grid' | 'calendar' | 'metrics' | 'channels' | 'about' | 'voice' | 'messaging'
+    'canvases' | 'grid' | 'calendar' | 'metrics' | 'library' | 'channels' | 'about' | 'voice' | 'messaging'
   >('canvases')
   // Leaving a brand folder (or switching brands) snaps back to Canvases.
   useEffect(() => {
@@ -143,6 +144,13 @@ export function ClientsOverview() {
           title="Projected vs actual across every canvas in this folder"
         >
           Metrics
+        </button>
+        <button
+          className={`folder-tab${folderTab === 'library' ? ' active' : ''}`}
+          onClick={() => setFolderTab('library')}
+          title="Everything this brand has published, ingested from its channels"
+        >
+          Library
         </button>
       </div>
       <div className="folder-tabs folder-aux">
@@ -229,6 +237,18 @@ export function ClientsOverview() {
         <div className="home-main-scroll">
           {folderHead}
           <MetricsView scopeClient={brandFolder} />
+        </div>
+      </HomeShell>
+    )
+  }
+
+  // A brand folder's Library: every published post / video / page, ingested to date.
+  if (brandFolder && folderTab === 'library') {
+    return (
+      <HomeShell>
+        <div className="home-main-scroll">
+          {folderHead}
+          <LibraryView scopeClient={brandFolder} />
         </div>
       </HomeShell>
     )
