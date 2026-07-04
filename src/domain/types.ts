@@ -18,6 +18,7 @@ export type ChannelId =
   | 'snapchat-ads'
   | 'reddit-ads'
   | 'youtube-ads'
+  | 'spotify-ads'
   // paid — search / shopping
   | 'google-search'
   | 'google-demand'
@@ -38,6 +39,7 @@ export type ChannelId =
   | 'blog'
   | 'landing-page'
   | 'lead-magnet'
+  | 'events'
 
 /**
  * Lifecycle of a single trafficked row. The review gate (draft -> in_review ->

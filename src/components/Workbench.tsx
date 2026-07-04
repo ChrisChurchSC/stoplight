@@ -18,8 +18,7 @@ import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
 import { LibraryPage } from './LibraryPage'
 import { BillingPage } from './BillingPage'
-import { PortfolioCockpit } from './PortfolioCockpit'
-import { ReleasePlan } from './ReleasePlan'
+import { Portfolio } from './Portfolio'
 import { IcpDrawer } from './IcpDrawer'
 import { PersonalizationDrawer } from './PersonalizationDrawer'
 import { SavedViewsDrawer } from './SavedViewsDrawer'
@@ -180,10 +179,8 @@ export function Workbench() {
         // sidebar + tab bar) so the layout never changes between them and the hub.
         <HomeShell>
           <div className="home-main-page">
-            {page === 'cockpit' ? (
-              <PortfolioCockpit />
-            ) : page === 'release' ? (
-              <ReleasePlan />
+            {page === 'portfolio' ? (
+              <Portfolio />
             ) : page === 'library' ? (
               <LibraryPage />
             ) : page === 'billing' ? (

@@ -42,7 +42,7 @@ interface CockpitRow {
   risk: number
 }
 
-export function PortfolioCockpit() {
+export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const { canvases } = useHomeCanvases()
   const brandActuals = useTrafficStore((s) => s.brandActuals)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
@@ -137,7 +137,7 @@ export function PortfolioCockpit() {
     <div className="ckpt">
       <header className="ckpt-head">
         <div>
-          <h1 className="ckpt-title">Cockpit</h1>
+          {!embedded && <h1 className="ckpt-title">Cockpit</h1>}
           <p className="ckpt-sub">
             {shown.length} campaign{shown.length === 1 ? '' : 's'} across {brands.length} brand
             {brands.length === 1 ? '' : 's'}

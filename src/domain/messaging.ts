@@ -45,7 +45,10 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   'pinterest-ads': [title(40, 100), description(500), cta(20)],
   'snapchat-ads': [f('brand', 'Brand name', undefined, 25), headline(34), cta(20)],
   'reddit-ads': [title(80, 300), body(), cta(20)],
-  'youtube-ads': [f('hook', 'Hook (first 5s)', undefined, 120, true), headline(15), description(35), cta(15), f('companion', 'Companion banner', undefined, 30)],
+  // The hook lives in the video and the companion is a 300x60 image, neither is text —
+  // the only copy YouTube takes is the headline (15), description (90), and CTA (10).
+  'youtube-ads': [headline(15), description(90), cta(10)],
+  'spotify-ads': [f('script', 'Audio script', undefined, 600, true), f('tagline', 'Companion tagline', undefined, 60), cta(25)],
   // paid — search / shopping
   'google-search': [f('headline', 'Headline', undefined, 30), description(90), f('path', 'Display path', undefined, 15)],
   'google-demand': [headline(40), f('long-headline', 'Long headline', undefined, 90), description(90), f('business', 'Business name', undefined, 25), cta(15)],
@@ -56,14 +59,9 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   linkedin: [body(3000)],
   x: [f('post', 'Post', undefined, 280, true)],
   tiktok: [caption(2200)],
-  youtube: [
-    f('hook', 'Hook (first 5s)', undefined, 120, true),
-    title(60, 100),
-    description(5000),
-    f('script', 'Script / VO outline', undefined, 2000, true),
-    f('end-screen', 'End-screen CTA', undefined, 40),
-    f('pinned', 'Pinned comment', undefined, 200, true),
-  ],
+  // The hook is in the video — the copy you actually enter to post is the title,
+  // description, and (optionally) a pinned comment.
+  youtube: [title(60, 100), description(5000), f('pinned', 'Pinned comment', undefined, 200, true)],
   pinterest: [title(40, 100), description(500)],
   // owned / lifecycle
   email: [subject(), preview(), headline(60), body(), cta(30)],
@@ -91,6 +89,7 @@ const BASE: Record<ChannelId, MessagingField[]> = {
     f('cta-footer', 'Footer CTA', undefined, 30),
   ],
   'lead-magnet': [title(80), f('description', 'Description', 300, undefined, true), cta(30)],
+  events: [f('name', 'Event name', undefined, 80), f('details', 'Details / RSVP copy', undefined, 300, true), cta(30)],
 }
 
 // Per-type overrides where a type's components differ from its channel base.

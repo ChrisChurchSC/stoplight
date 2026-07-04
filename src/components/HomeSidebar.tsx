@@ -45,20 +45,12 @@ export function HomeSidebar() {
 
       <nav className="sidebar-nav">
         <button
-          className={`nav-item${page === 'cockpit' ? ' active' : ''}`}
-          onClick={() => setPage('cockpit')}
-          title="Portfolio cockpit — every campaign across brands"
+          className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
+          onClick={() => setPage('portfolio')}
+          title="Portfolio — every campaign across brands, as a triage board or a release schedule"
         >
           <span className="nav-ico">◎</span>
-          <span className="nav-label">Cockpit</span>
-        </button>
-        <button
-          className={`nav-item${page === 'release' ? ' active' : ''}`}
-          onClick={() => setPage('release')}
-          title="Release plan — the portfolio staged into paced release waves"
-        >
-          <span className="nav-ico">◷</span>
-          <span className="nav-label">Release</span>
+          <span className="nav-label">Portfolio</span>
         </button>
 
         <div className="nav-section">Files</div>

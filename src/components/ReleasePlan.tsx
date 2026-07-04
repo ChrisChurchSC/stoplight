@@ -20,7 +20,7 @@ const fmtDay = (ms: number) => {
   return `${MNAMES[d.getMonth()]} ${d.getDate()}`
 }
 
-export function ReleasePlan() {
+export function ReleasePlan({ embedded }: { embedded?: boolean }) {
   const { canvases } = useHomeCanvases()
   const openReview = useTrafficStore((s) => s.openReview)
 
@@ -90,7 +90,7 @@ export function ReleasePlan() {
     <div className="rel">
       <header className="rel-head">
         <div>
-          <h1 className="rel-title">Release plan</h1>
+          {!embedded && <h1 className="rel-title">Release plan</h1>}
           <p className="rel-sub">
             {board.total} campaign{board.total === 1 ? '' : 's'} staged into waves, released at a pace the audience can
             absorb.

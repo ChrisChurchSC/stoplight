@@ -48,6 +48,7 @@ export const CHANNEL_ASSETS: Record<ChannelId, AssetSlot[]> = {
   'snapchat-ads': [med('video-9x16', 'Video 9:16', '9:16', ['9:16'], ['video', 'image']), cpy('brand', 'Brand name', undefined, 25), cpy('headline', 'Headline', undefined, 34)],
   'reddit-ads': [med('media-1x1', 'Media 1:1', '1:1', ['1:1', '4:5', '1.91:1']), cpy('title', 'Title', 80, 100)],
   'youtube-ads': [med('video-16x9', 'Video 16:9', '16:9', ['16:9', '9:16', '1:1'], ['video']), med('thumbnail', 'Thumbnail 16:9', '16:9', ['16:9'], ['image']), cpy('headline', 'Headline', undefined, 15), cpy('description', 'Description', undefined, 35)],
+  'spotify-ads': [med('audio', 'Audio spot 30s', '1:1', ['1:1'], ['video']), med('companion', 'Companion image 1:1', '1:1', ['1:1'], ['image']), cpy('script', 'Audio script', undefined, 600), cpy('tagline', 'Companion tagline', undefined, 60)],
   // ---- paid — search / shopping ----
   'google-search': [cpy('headline', 'Headline', undefined, 30, 15), cpy('description', 'Description', undefined, 90, 4), cpy('path', 'Display path', undefined, 15, 2)],
   'google-demand': [med('image-1x1', 'Image 1:1', '1:1', ['1:1'], ['image']), med('image-1.91x1', 'Image 1.91:1', '1.91:1', ['1.91:1'], ['image']), med('image-4x5', 'Image 4:5', '4:5', ['4:5'], ['image']), cpy('headline', 'Headline', undefined, 40, 5), cpy('long-headline', 'Long headline', undefined, 90, 5), cpy('description', 'Description', undefined, 90, 5)],
@@ -68,6 +69,7 @@ export const CHANNEL_ASSETS: Record<ChannelId, AssetSlot[]> = {
   blog: [cpy('title', 'SEO title', 60, 70), med('featured', 'Featured image 16:9', '16:9', ['16:9'], ['image']), cpy('body', 'Body'), cpy('meta-description', 'Meta description', 155, 160)],
   'landing-page': [med('hero', 'Hero image 16:9', '16:9', ['16:9'], ['image']), med('og-image', 'OG image 1.91:1', '1.91:1', ['1.91:1'], ['image']), cpy('headline', 'Headline', 60), cpy('body', 'Body')],
   'lead-magnet': [cpy('title', 'Title', 80), med('cover', 'Cover image 1:1', '1:1', ['1:1'], ['image']), cpy('description', 'Description', 300)],
+  events: [cpy('name', 'Event name', undefined, 80), med('keyart', 'Key art', '1:1', ['1:1', '16:9'], ['image']), cpy('details', 'Details / RSVP copy', undefined, 300)],
 }
 
 /** Provenance for each channel's spec: primary source, verified date, confidence. */
@@ -88,6 +90,7 @@ export const CHANNEL_SOURCE: Record<ChannelId, SpecSource> = {
   'snapchat-ads': { url: 'forbusiness.snapchat.com/advertising/ad-formats', verified: PLATFORM },
   'reddit-ads': { url: 'business.reddithelp.com (ad unit specs)', verified: PLATFORM },
   'youtube-ads': { url: 'support.google.com/google-ads/answer/13676244', verified: PLATFORM, note: 'Headline limit varies by format; 15 shown is in-stream.' },
+  'spotify-ads': { url: 'ads.spotify.com (Ad Studio specs)', verified: PLATFORM, confidence: 'medium', note: '30s audio + 640×640 companion; script/tagline are conventions.' },
   'google-search': { url: 'support.google.com/google-ads/answer/7684791', verified: PLATFORM },
   'google-demand': { url: 'support.google.com/google-ads/answer/13704860', verified: PLATFORM, confidence: 'medium', note: 'Standard limits (40/90/90); product-only ads allow 1 each. Verify exact table in Ads UI.' },
   pmax: { url: 'support.google.com/google-ads/answer/17091269', verified: PLATFORM },
@@ -105,6 +108,7 @@ export const CHANNEL_SOURCE: Record<ChannelId, SpecSource> = {
   blog: { url: 'SEO best practice (title ~60, meta ~155)', verified: PLATFORM, confidence: 'medium' },
   'landing-page': { url: 'OG image 1200×630 (1.91:1)', verified: PLATFORM, confidence: 'medium' },
   'lead-magnet': { url: 'convention (no platform limit)', verified: PLATFORM, confidence: 'medium' },
+  events: { url: 'convention (offline / experiential)', verified: PLATFORM, confidence: 'low' },
 }
 
 const FALLBACK: AssetSlot[] = [med('media', 'Media', '1:1'), cpy('caption', 'Caption')]

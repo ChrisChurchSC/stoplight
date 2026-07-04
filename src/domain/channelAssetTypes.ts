@@ -34,6 +34,7 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   'snapchat-ads': [t('single', 'Single image/video ad'), t('story', 'Story ad'), t('collection', 'Collection ad'), t('dynamic', 'Dynamic ad')],
   'reddit-ads': [t('image', 'Image ad'), t('video', 'Video ad'), t('carousel', 'Carousel ad'), t('text', 'Text ad')],
   'youtube-ads': [t('skippable', 'Skippable in-stream'), t('non-skippable', 'Non-skippable in-stream'), t('bumper', 'Bumper ad'), t('in-feed', 'In-feed video ad'), t('shorts', 'Shorts ad')],
+  'spotify-ads': [t('audio', 'Audio ad (30s)'), t('audio-15', 'Audio ad (15s)'), t('video-takeover', 'Video takeover'), t('podcast', 'Podcast placement')],
   // paid — search / shopping
   'google-search': [t('rsa', 'Responsive search ad'), t('call', 'Call ad'), t('dsa', 'Dynamic search ad')],
   'google-demand': [t('image', 'Image ad'), t('video', 'Video ad'), t('carousel', 'Carousel ad'), t('product', 'Product ad')],
@@ -54,6 +55,7 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   blog: [t('article', 'Article'), t('pillar', 'Long-form guide/pillar'), t('listicle', 'Listicle'), t('case-study', 'Case study')],
   'landing-page': [t('lead-capture', 'Lead capture page'), t('sales', 'Sales/offer page'), t('webinar-reg', 'Webinar/event registration'), t('waitlist', 'Waitlist/coming soon')],
   'lead-magnet': [t('ebook', 'Ebook'), t('whitepaper', 'Whitepaper'), t('checklist', 'Checklist'), t('template', 'Template'), t('webinar', 'Webinar'), t('cheat-sheet', 'Cheat sheet')],
+  events: [t('screening', 'Screening'), t('panel', 'Panel / talk'), t('popup', 'Pop-up / activation'), t('workshop', 'Workshop')],
 }
 
 const FALLBACK: AssetType[] = [t('post', 'Post')]

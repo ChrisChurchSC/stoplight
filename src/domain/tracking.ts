@@ -22,6 +22,7 @@ export const TRACKING_CONVENTION: Record<ChannelId, { source: string; medium: st
   'snapchat-ads': { source: 'snapchat', medium: 'paid_social' },
   'reddit-ads': { source: 'reddit', medium: 'paid_social' },
   'youtube-ads': { source: 'youtube', medium: 'paid_video' },
+  'spotify-ads': { source: 'spotify', medium: 'paid_audio' },
   'google-search': { source: 'google', medium: 'cpc' },
   'google-demand': { source: 'google', medium: 'paid_demand' },
   pmax: { source: 'google', medium: 'pmax' },
@@ -39,6 +40,7 @@ export const TRACKING_CONVENTION: Record<ChannelId, { source: string; medium: st
   blog: { source: 'blog', medium: 'organic' },
   'landing-page': { source: 'site', medium: 'web' },
   'lead-magnet': { source: 'leadmagnet', medium: 'content' },
+  events: { source: 'events', medium: 'offline' },
 }
 
 /** Expected tracking per channel: the pixel/tag and the conversion event. */
@@ -173,6 +175,7 @@ export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
   'snapchat-ads': [ti('Snap Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Sign-up event', 'event'), UTM],
   'reddit-ads': [ti('Reddit Pixel', 'pixel'), ti('Conversions API', 'server'), ti('Lead event', 'event'), UTM],
   'youtube-ads': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
+  'spotify-ads': [ti('Spotify Ad Studio pixel', 'pixel'), ti('GA4', 'analytics'), UTM],
   // paid — search / shopping (enhanced conversions apply across Google Ads)
   'google-search': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
   'google-demand': [ti('Google Ads tag', 'pixel'), ti('GA4', 'analytics'), ti('Conversion action', 'event'), ti('Enhanced conversions', 'server'), UTM],
@@ -196,6 +199,7 @@ export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
   blog: [ti('GA4', 'analytics'), UTM],
   'landing-page': [ti('GA4', 'analytics'), ti('GTM container', 'tagmanager'), ti('Conversion event', 'event'), UTM],
   'lead-magnet': [ti('GA4', 'analytics'), ti('Form conversion event', 'event'), UTM],
+  events: [ti('GA4', 'analytics'), ti('RSVP / registration event', 'event'), UTM],
 }
 
 /**

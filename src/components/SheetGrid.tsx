@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
+import { CHANNELS, KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, typesFor } from '../domain/channelAssetTypes'
 import { messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
@@ -512,8 +512,8 @@ export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: bool
                       <ChannelIcon channel={row.channel} size={15} />
                       <select
                         className="cell-select"
-                        style={{ color: CHANNELS[row.channel].color }}
-                        value={row.channel}
+                        style={{ color: CHANNELS[resolveChannelId(row.channel) ?? row.channel].color }}
+                        value={resolveChannelId(row.channel) ?? row.channel}
                         onChange={(e) => {
                           const channel = e.target.value as ChannelId
                           // Keep the type only if still valid for the new channel; else clear & prompt.

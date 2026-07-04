@@ -61,6 +61,10 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
     id: 'youtube-ads', label: 'YouTube Ads', short: 'YT-AD', kind: 'paid', platform: 'YouTube',
     color: '#cc0000', accepts: ['video'], bestTimes: [t(17), t(20)],
   },
+  'spotify-ads': {
+    id: 'spotify-ads', label: 'Spotify Ads', short: 'SPOT-AD', kind: 'paid', platform: 'Spotify',
+    color: '#1db954', accepts: ['video', 'text'], bestTimes: [t(8), t(17)],
+  },
 
   // ---------------- Paid — search / shopping ----------------
   'google-search': {
@@ -134,6 +138,10 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
   'lead-magnet': {
     id: 'lead-magnet', label: 'Lead magnet', short: 'LEAD', kind: 'owned', platform: 'Web',
     color: '#10b981', accepts: ['link', 'text', 'image'], bestTimes: [t(10, 30)],
+  },
+  events: {
+    id: 'events', label: 'Events', short: 'EVENT', kind: 'owned', platform: 'Events',
+    color: '#ec4899', accepts: ['image', 'video', 'text'], bestTimes: [t(18)],
   },
 }
 

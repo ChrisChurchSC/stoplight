@@ -16,7 +16,7 @@ import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } fr
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
-import { CHANNELS } from '../domain/channels'
+import { CHANNELS, resolveChannelId } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
 import { filesToAssets } from '../lib/files'
 import {
@@ -957,7 +957,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'cockpit' | 'release'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio'
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
   /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
@@ -1207,7 +1207,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'cockpit' | 'release') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2777,7 +2777,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   refresh: async () => {
     set({ loading: true })
-    const rows = await sheet.list()
+    const raw = await sheet.list()
+    // Normalize channel values to canonical ids so every surface (grid select, drawer,
+    // messaging fields, icons) reads the same channel. The data was seeded with a mix of
+    // display names ("Instagram", "YouTube Shorts", "Newsletter") and canonical ids; a
+    // loose value made the grid's channel dropdown fall through to its first option.
+    const rows = raw.map((r) => {
+      const c = resolveChannelId(r.channel)
+      return c && c !== r.channel ? { ...r, channel: c } : r
+    })
+    // Persist the normalization so it sticks (only the rows that actually changed).
+    for (const r of rows) {
+      const orig = raw.find((o) => o.id === r.id)
+      if (orig && orig.channel !== r.channel) void sheet.update(r.id, { channel: r.channel })
+    }
     set({ rows, loading: false })
   },
 

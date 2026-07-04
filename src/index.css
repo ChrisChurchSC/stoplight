@@ -13133,6 +13133,49 @@ textarea.library-input {
   white-space: nowrap;
 }
 
+/* ---- Portfolio: one surface, two lenses (Board = cockpit, Schedule = release) ---- */
+.pf-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 22px 32px 0;
+  max-width: 1180px;
+}
+.pf-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+.pf-toggle {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--surface-2);
+  border-radius: 9px;
+  padding: 3px;
+}
+.pf-toggle button {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.pf-toggle button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+/* Embedded views drop their own title and tuck up under the shared bar. */
+.pf .ckpt,
+.pf .rel {
+  padding-top: 14px;
+}
+
 /* ---- Portfolio cockpit: every campaign across brands on one board ---- */
 .ckpt {
   padding: 28px 32px 60px;
@@ -13291,7 +13334,7 @@ textarea.library-input {
 /* ---- Launch queue: the portfolio staged into paced release waves ---- */
 .rel {
   padding: 28px 32px 60px;
-  max-width: 1080px;
+  max-width: 1180px;
 }
 .rel-head {
   display: flex;

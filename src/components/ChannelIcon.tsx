@@ -9,6 +9,7 @@ import {
   siGoogle,
   siInstagram,
   siFacebook,
+  siSpotify,
 } from 'simple-icons'
 import { CHANNELS, resolveChannelId } from '../domain/channels'
 import type { ChannelId } from '../domain/types'
@@ -19,6 +20,8 @@ const LINKEDIN =
 
 // Generic glyphs for owned/lifecycle platforms that have no brand mark.
 const GENERIC: Record<string, string> = {
+  // A ticket/calendar glyph for offline events.
+  Events: 'M20 4H4a2 2 0 0 0-2 2v3a2 2 0 0 1 0 4v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a2 2 0 0 1 0-4V6a2 2 0 0 0-2-2zM9 6h2v2H9V6zm0 4h2v2H9v-2zm0 4h2v2H9v-2z',
   Email: 'M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z',
   SMS: 'M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 4H7v-2h6v2z',
   Push: 'M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5a6 6 0 0 0-5-5.91V4a1 1 0 0 0-2 0v1.09A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z',
@@ -36,6 +39,7 @@ const BRAND_PATH: Record<string, string> = {
   Google: siGoogle.path,
   Instagram: siInstagram.path,
   Facebook: siFacebook.path,
+  Spotify: siSpotify.path,
   LinkedIn: LINKEDIN,
   ...GENERIC,
 }
