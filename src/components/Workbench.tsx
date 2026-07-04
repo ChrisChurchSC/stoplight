@@ -19,6 +19,7 @@ import { ConnectorsPage } from './ConnectorsPage'
 import { LibraryPage } from './LibraryPage'
 import { BillingPage } from './BillingPage'
 import { PortfolioCockpit } from './PortfolioCockpit'
+import { ReleasePlan } from './ReleasePlan'
 import { IcpDrawer } from './IcpDrawer'
 import { PersonalizationDrawer } from './PersonalizationDrawer'
 import { SavedViewsDrawer } from './SavedViewsDrawer'
@@ -181,6 +182,8 @@ export function Workbench() {
           <div className="home-main-page">
             {page === 'cockpit' ? (
               <PortfolioCockpit />
+            ) : page === 'release' ? (
+              <ReleasePlan />
             ) : page === 'library' ? (
               <LibraryPage />
             ) : page === 'billing' ? (

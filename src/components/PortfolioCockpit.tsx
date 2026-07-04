@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { performanceAlerts, pacingAlerts, sortAlerts, type Alert } from '../domain/alerts'
 import { campaignFlight } from '../domain/campaignWindow'
 import { formatReach, journeyPerformance } from '../domain/journeyPerf'
 import { STATUS_LABEL } from '../domain/lifecycle'
@@ -43,6 +44,7 @@ interface CockpitRow {
 
 export function PortfolioCockpit() {
   const { canvases } = useHomeCanvases()
+  const brandActuals = useTrafficStore((s) => s.brandActuals)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setView = useTrafficStore((s) => s.setView)
@@ -88,12 +90,29 @@ export function PortfolioCockpit() {
   const launching = shown.filter((r) => r.start != null && r.start >= now && r.start <= now + 7 * DAY).length
   const totalReach = shown.reduce((a, r) => a + r.reach, 0)
 
-  const open = (r: CockpitRow) => {
-    setClientFilter(r.brand)
-    setCampaignFilter(r.card.name)
+  // Portfolio alerts: performance (measured WoW) per brand + pacing (launch readiness)
+  // per campaign. Both from transparent rules; see domain/alerts.
+  const perf: Alert[] = [...new Set(shown.map((r) => r.brand))].flatMap((b) => performanceAlerts(b, brandActuals[b]))
+  const pace: Alert[] = pacingAlerts(
+    shown.map((r) => ({
+      brand: r.brand,
+      name: r.card.name,
+      label: r.shortName,
+      approved: r.card.rows.filter((x) => x.status === 'approved').length,
+      total: r.card.rows.length,
+      start: r.start,
+    })),
+    now,
+  )
+  const alerts = sortAlerts([...perf, ...pace])
+
+  const openCampaign = (brand: string, name: string) => {
+    setClientFilter(brand)
+    setCampaignFilter(name)
     setView('canvas')
     setPage('clients')
   }
+  const open = (r: CockpitRow) => openCampaign(r.brand, r.card.name)
 
   const pacing = (r: CockpitRow): { label: string; cls: string } => {
     if (r.start == null || r.end == null) return { label: 'undated', cls: 'undated' }
@@ -155,6 +174,43 @@ export function PortfolioCockpit() {
           </div>
         ))}
       </div>
+
+      {alerts.length > 0 && (
+        <div className="ckpt-signals">
+          <div className="ckpt-signals-head">
+            Needs attention<span className="ckpt-signals-n">{alerts.length}</span>
+          </div>
+          {alerts.map((a) => {
+            const clickable = !!a.campaign
+            return (
+              <div
+                key={a.id}
+                className={`ckpt-signal sev-${a.severity}${clickable ? ' clickable' : ''}`}
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={clickable ? () => openCampaign(a.brand, a.campaign as string) : undefined}
+                onKeyDown={
+                  clickable
+                    ? (e) => {
+                        if (e.key === 'Enter') openCampaign(a.brand, a.campaign as string)
+                      }
+                    : undefined
+                }
+              >
+                <span className="ckpt-sig-dot" />
+                <div className="ckpt-sig-body">
+                  <div className="ckpt-sig-title">{a.title}</div>
+                  <div className="ckpt-sig-detail">{a.detail}</div>
+                  <div className="ckpt-sig-rule">
+                    {a.brand} · {a.kind} · rule: {a.rule}
+                  </div>
+                </div>
+                {clickable && <span className="ckpt-sig-go">→</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <div className="ckpt-empty">No campaigns yet. Build one from a brand to see it here.</div>

@@ -52,6 +52,14 @@ export function HomeSidebar() {
           <span className="nav-ico">◎</span>
           <span className="nav-label">Cockpit</span>
         </button>
+        <button
+          className={`nav-item${page === 'release' ? ' active' : ''}`}
+          onClick={() => setPage('release')}
+          title="Release plan — the portfolio staged into paced release waves"
+        >
+          <span className="nav-ico">◷</span>
+          <span className="nav-label">Release</span>
+        </button>
 
         <div className="nav-section">Files</div>
         {FILE_FILTERS.map((f) => (

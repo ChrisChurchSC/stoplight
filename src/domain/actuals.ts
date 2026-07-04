@@ -31,6 +31,8 @@ export interface ChannelActual {
   clicks?: number
   conversions?: number
   revenue?: number
+  /** Reach in the latest 7 days vs the 7 before, for week-over-week alerts. */
+  trend?: { cur: number; prior: number }
   /** ISO date window this measurement covers. */
   from: string
   to: string

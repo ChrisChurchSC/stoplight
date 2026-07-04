@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typeLabel, typesFor } from '../domain/channelAssetTypes'
 import { messagingFields, messagingMap } from '../domain/messaging'
@@ -5,6 +6,7 @@ import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rtbsForCampaign } from '../domain/rtb'
 import { isTrackingClean, trackingChecks, utmQuery, type Utm } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
+import { postSpec } from '../domain/postSpec'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import type { ChannelId, RowStatus } from '../domain/types'
@@ -28,7 +30,6 @@ export function CopyReview() {
   const openReview = useTrafficStore((s) => s.openReview)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const extractCopy = useTrafficStore((s) => s.extractCopy)
-  const toggleReviewed = useTrafficStore((s) => s.toggleReviewed)
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
@@ -37,6 +38,15 @@ export function CopyReview() {
   const fillRowMedia = useTrafficStore((s) => s.fillRowMedia)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const openBreaks = useTrafficStore((s) => s.openBreaks)
+
+  // Config sections collapse so the drawer opens as a review: preview + copy + sign-off.
+  // Expand a section only when you actually need to edit its fields.
+  const [openSec, setOpenSec] = useState<Record<'details' | 'tracking' | 'budget', boolean>>({
+    details: false,
+    tracking: false,
+    budget: false,
+  })
+  const toggleSec = (k: 'details' | 'tracking' | 'budget') => setOpenSec((s) => ({ ...s, [k]: !s[k] }))
 
   const row = rows.find((r) => r.id === reviewRowId)
   if (!row) return null
@@ -57,6 +67,8 @@ export function CopyReview() {
   const typeValid = isValidType(row.channel, row.assetType)
   const paid = isPaidRow(row)
   const now = Date.now()
+  const specs = postSpec(row)
+  const specsMet = specs.filter((s) => s.ok).length
 
   const liveFlags = (batchReview?.flags ?? []).filter(
     (fl) => fl.rowId === row.id && !flagResolved(fl, row, pains),
@@ -135,6 +147,32 @@ export function CopyReview() {
         </div>
 
         <div className="drawer-body">
+          {/* ---- Ready to post: the specs this asset needs to go live ---- */}
+          <div className="drawer-section">
+            Ready to post
+            <span className="spacer" />
+            <span className={`postspec-count${specsMet === specs.length ? ' ok' : ''}`}>
+              {specsMet}/{specs.length}
+            </span>
+          </div>
+          <div className="postspec">
+            {specs.map((s) => (
+              <div
+                key={s.key}
+                className={`postspec-item${s.ok ? ' ok' : ''}${s.fix ? ' fixable' : ''}`}
+                role={s.fix ? 'button' : undefined}
+                tabIndex={s.fix ? 0 : undefined}
+                onClick={
+                  s.fix ? () => setOpenSec((v) => ({ ...v, [s.fix as 'details' | 'tracking' | 'budget']: true })) : undefined
+                }
+              >
+                <span className="postspec-mark">{s.ok ? '✓' : '○'}</span>
+                <span className="postspec-label">{s.label}</span>
+                <span className="postspec-detail">{s.detail}</span>
+              </div>
+            ))}
+          </div>
+
           {/* ---- Preview ---- */}
           <div className="drawer-section">
             Preview
@@ -142,9 +180,13 @@ export function CopyReview() {
           </div>
           <ChannelPreview row={row} />
 
-          {/* ---- Details ---- */}
-          <div className="drawer-section">Details</div>
-
+          {/* ---- Details (collapsed by default) ---- */}
+          <div className="drawer-section drawer-sec-toggle" role="button" tabIndex={0} onClick={() => toggleSec('details')}>
+            <span className="drawer-sec-caret">{openSec.details ? '▾' : '▸'}</span>
+            Details
+          </div>
+          {openSec.details && (
+          <>
           <label className="copy-field">
             <span className="copy-label">Asset name</span>
             <input
@@ -246,6 +288,8 @@ export function CopyReview() {
               </select>
             </label>
           </div>
+          </>
+          )}
 
           {/* ---- Messaging ---- */}
           <div className="drawer-section">
@@ -357,20 +401,23 @@ export function CopyReview() {
             </label>
           )}
 
-          {/* ---- Tracking ---- */}
-          <div className="drawer-section">
+          {/* ---- Tracking (collapsed by default) ---- */}
+          <div className="drawer-section drawer-sec-toggle" role="button" tabIndex={0} onClick={() => toggleSec('tracking')}>
+            <span className="drawer-sec-caret">{openSec.tracking ? '▾' : '▸'}</span>
             Tracking
             {row.utm && (
               <span className={`drawer-pill ${trackingClean ? 'ok' : 'bad'}`}>
                 {trackingClean ? '✓ clean' : `⚑ ${checks.filter((c) => !c.ok).length}`}
               </span>
             )}
-            <span className="spacer" />
+          </div>
+          {openSec.tracking && (
+          <>
+          <div className="drawer-sec-actions">
             <button className="btn ghost sm" onClick={() => generateTrackingForRow(row.id)}>
               ⟳ Generate
             </button>
           </div>
-
           <div className="drawer-grid2">
             {UTM_PARTS.map((p) => (
               <label className="copy-field" key={p.key}>
@@ -385,11 +432,18 @@ export function CopyReview() {
             ))}
           </div>
           {row.utm && <code className="drawer-utm">?{utmQuery(row.utm)}</code>}
+          </>
+          )}
 
-          {/* ---- Budget (paid only) ---- */}
+          {/* ---- Budget (paid only, collapsed by default) ---- */}
           {paid && (
             <>
-              <div className="drawer-section">Budget</div>
+              <div className="drawer-section drawer-sec-toggle" role="button" tabIndex={0} onClick={() => toggleSec('budget')}>
+                <span className="drawer-sec-caret">{openSec.budget ? '▾' : '▸'}</span>
+                Budget
+              </div>
+              {openSec.budget && (
+              <>
               <div className="drawer-grid2">
                 <label className="copy-field">
                   <span className="copy-label">Amount</span>
@@ -433,6 +487,8 @@ export function CopyReview() {
                   </div>
                 )
               })()}
+              </>
+              )}
             </>
           )}
 
@@ -456,12 +512,28 @@ export function CopyReview() {
             </span>
           )}
           <span className="spacer" />
-          <button
-            className={`btn ${row.copyReviewed ? '' : 'green'}`}
-            onClick={() => toggleReviewed(row.id, !row.copyReviewed)}
-          >
-            {row.copyReviewed ? '✓ Reviewed — undo' : 'Mark reviewed'}
-          </button>
+          {row.status === 'approved' ? (
+            <>
+              <span className="copy-approved">✓ Approved</span>
+              <button className="btn sm ghost" onClick={() => updateRow(row.id, { status: 'in_review' })}>
+                Undo
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn sm" onClick={() => updateRow(row.id, { status: 'rejected' })}>
+                Send back
+              </button>
+              <button
+                className="btn green"
+                onClick={() =>
+                  updateRow(row.id, { status: 'approved', approvedAt: row.approvedAt ?? Date.now(), copyReviewed: true })
+                }
+              >
+                Approve
+              </button>
+            </>
+          )}
         </div>
       </aside>
     </>
