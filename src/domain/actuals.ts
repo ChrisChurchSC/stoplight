@@ -31,6 +31,8 @@ export interface ChannelActual {
   clicks?: number
   conversions?: number
   revenue?: number
+  /** Net subscribers / followers gained in the window — the north-star growth metric. */
+  subscribers?: number
   /** Reach in the latest 7 days vs the 7 before, for week-over-week alerts. */
   trend?: { cur: number; prior: number }
   /** ISO date window this measurement covers. */
@@ -44,6 +46,8 @@ export interface BrandActuals {
   /** Human source label, e.g. "Summer · Forward API". */
   source: string
   channels: ChannelActual[]
+  /** Top videos by subscribers driven — which content converts viewers to subscribers. */
+  subVideos?: { title: string; subscribers: number; views: number }[]
 }
 
 export interface ActualTotals {
@@ -52,6 +56,7 @@ export interface ActualTotals {
   clicks: number
   conversions: number
   revenue: number
+  subscribers: number
 }
 
 /** Per-channel average reach per asset, keyed by channel id — used to calibrate
@@ -69,7 +74,7 @@ export function reachByChannelFromActuals(a: BrandActuals | undefined | null): R
 /** Sum the measurable metrics across channels. Reach mixes units (views +
  *  impressions + sessions), so it's a loose top-line, not a precise total. */
 export function actualTotals(a: BrandActuals | undefined | null): ActualTotals {
-  const t: ActualTotals = { reach: 0, engagement: 0, clicks: 0, conversions: 0, revenue: 0 }
+  const t: ActualTotals = { reach: 0, engagement: 0, clicks: 0, conversions: 0, revenue: 0, subscribers: 0 }
   if (!a) return t
   for (const c of a.channels) {
     t.reach += c.reach || 0
@@ -77,6 +82,7 @@ export function actualTotals(a: BrandActuals | undefined | null): ActualTotals {
     t.clicks += c.clicks || 0
     t.conversions += c.conversions || 0
     t.revenue += c.revenue || 0
+    t.subscribers += c.subscribers || 0
   }
   return t
 }

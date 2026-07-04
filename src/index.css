@@ -13091,6 +13091,65 @@ textarea.library-input {
   color: var(--text-muted);
   line-height: 1.5;
 }
+/* North-star KPIs (subscribers gained, cost per subscriber) get an accent edge. */
+.ins-kpi.ins-kpi-focus {
+  border-left: 3px solid var(--accent);
+}
+.ins-kpi-focus .ins-kpi-value {
+  color: var(--text);
+}
+/* Subscriber count leads the measured channel row. */
+.mtx-subs {
+  color: #1a7f4b;
+}
+/* Top subscriber-driving videos: title / subs / rate. */
+.mtx-vids {
+  display: flex;
+  flex-direction: column;
+}
+.mtx-vid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 6px 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.mtx-vid:last-child {
+  border-bottom: none;
+}
+.mtx-vid-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mtx-vid-subs {
+  font-weight: 700;
+  color: #1a7f4b;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mtx-vid-rate {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* "Estimated" tag on modeled/projected numbers (vs the measured panel). */
+.est-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9a6a00;
+  background: rgba(214, 158, 46, 0.16);
+  border-radius: 999px;
+  padding: 1px 6px;
+  vertical-align: middle;
+}
 /* Refresh control on the measured-actuals card head. */
 .mtx-refresh {
   margin-left: auto;

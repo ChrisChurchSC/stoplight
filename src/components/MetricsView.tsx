@@ -109,6 +109,14 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
   const maxChanAssets = Math.max(1, ...ins.channels.map((c) => c.assets))
   const hasSpend = ins.kpis.spend > 0
   const hasRevenue = ins.kpis.revenue > 0
+  // World Within's north star: subscribers gained and what each one costs.
+  const subsGained = mt.subscribers
+  const costPerSub = hasSpend && subsGained > 0 ? ins.kpis.spend / subsGained : null
+  // Subscribe rate = subs ÷ the channel's own reach, from the primary subscriber channel.
+  const subChannel = measured?.channels
+    .filter((c) => c.subscribers && c.reach)
+    .sort((a, b) => (b.subscribers ?? 0) - (a.subscribers ?? 0))[0]
+  const subscribeRate = subChannel ? (subChannel.subscribers as number) / subChannel.reach : null
 
   return (
     <div className="mtx">
@@ -120,8 +128,32 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
         </span>
       </header>
 
-      {/* Scorecard */}
+      {/* Scorecard — led by the subscriber-growth north star. */}
       <div className="ins-kpis">
+        <div className="ins-kpi ins-kpi-focus">
+          <span className="ins-kpi-label">Subscribers gained</span>
+          <span className="ins-kpi-value">{subsGained > 0 ? num(subsGained) : '—'}</span>
+          <span className="ins-kpi-sub">{subsGained > 0 ? 'net new, measured' : 'connect a channel'}</span>
+        </div>
+        <div className="ins-kpi ins-kpi-focus">
+          <span className="ins-kpi-label">Cost / subscriber</span>
+          <span className="ins-kpi-value">{costPerSub != null ? money(costPerSub) : '—'}</span>
+          <span className="ins-kpi-sub">{costPerSub != null ? 'spend ÷ subs gained' : 'set card spend to see CAC'}</span>
+        </div>
+        <div className="ins-kpi ins-kpi-focus">
+          <span className="ins-kpi-label">Subscribe rate</span>
+          <span className="ins-kpi-value">{subscribeRate != null ? pct(subscribeRate) : '—'}</span>
+          <span className="ins-kpi-sub">{subChannel ? `${subChannel.label} ${subChannel.reachUnit}→sub` : 'measured'}</span>
+        </div>
+        <div className="ins-kpi">
+          <span className="ins-kpi-label">
+            Projected reach <span className="est-tag">est</span>
+          </span>
+          <span className="ins-kpi-value">{formatReach(jp.plan.topReach)}</span>
+          <span className="ins-kpi-sub">
+            {calibrated ? `calibrated: ${calibratedLabels.join(', ')}` : 'plan model, not measured'}
+          </span>
+        </div>
         <div className="ins-kpi">
           <span className="ins-kpi-label">Canvases</span>
           <span className="ins-kpi-value">{brandCanvases.length}</span>
@@ -133,26 +165,9 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
           <span className="ins-kpi-sub">{ins.kpis.posted} posted</span>
         </div>
         <div className="ins-kpi">
-          <span className="ins-kpi-label">Projected reach</span>
-          <span className="ins-kpi-value">{formatReach(jp.plan.topReach)}</span>
-          <span className="ins-kpi-sub">{calibrated ? 'calibrated to your channels' : 'top of funnel, plan model'}</span>
-        </div>
-        <div className="ins-kpi">
-          <span className="ins-kpi-label">Projected to conversion</span>
-          <span className="ins-kpi-value">{formatReach(jp.plan.toConversion)}</span>
-          <span className="ins-kpi-sub">{pct(jp.plan.convRate)} of reach</span>
-        </div>
-        <div className="ins-kpi">
           <span className="ins-kpi-label">Spend to date</span>
           <span className="ins-kpi-value">{hasSpend ? money(ins.kpis.spend) : '—'}</span>
           <span className="ins-kpi-sub">{hasSpend ? 'synced' : 'set card budgets to project'}</span>
-        </div>
-        <div className="ins-kpi">
-          <span className="ins-kpi-label">Attributed revenue</span>
-          <span className="ins-kpi-value">{hasRevenue ? money(ins.kpis.revenue) : '—'}</span>
-          <span className="ins-kpi-sub">
-            {ins.kpis.roas != null ? `${ins.kpis.roas.toFixed(1)}x ROAS` : 'live once canvases post'}
-          </span>
         </div>
       </div>
 
@@ -161,8 +176,11 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
         <section className="ins-card">
           <div className="ins-card-head">
             <h3>Projected funnel</h3>
+            <span className="est-tag">Estimated</span>
             <span className="ins-card-hint">
-              {calibrated ? 'Calibrated to your measured channel averages' : 'Reach by stage from the plan model'}
+              {calibrated
+                ? `plan model, calibrated for ${calibratedLabels.join(', ')}`
+                : 'plan model, not measured'}
             </span>
           </div>
           <div className="ins-rows">
@@ -211,6 +229,9 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
                       {c.label}
                     </span>
                     <span className="mtx-actual-val">
+                      {c.subscribers ? (
+                        <b className="mtx-subs">+{num(c.subscribers)} {c.channel === 'linkedin' ? 'followers' : 'subs'} · </b>
+                      ) : null}
                       <b>{formatReach(c.reach)}</b> {c.reachUnit}
                       {c.reachPerAsset ? ` · ${formatReach(c.reachPerAsset)}/${assetNoun(c.reachUnit)} avg` : ''}
                       {c.engagement ? ` · ${num(c.engagement)} eng` : ''}
@@ -222,9 +243,9 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
                 ))}
               </div>
               <div className="mtx-note">
-                Real performance from {measured.source}. Reach is each channel's native unit (views,
-                impressions, sessions), so compare within a channel, not across. {num(mt.engagement)} total
-                engagement · {num(mt.clicks)} total clicks.
+                Real performance from {measured.source}. <strong>{num(mt.subscribers)} subscribers gained</strong> ·{' '}
+                {num(mt.engagement)} engagement · {num(mt.clicks)} clicks. Reach is each channel's native unit
+                (views, impressions, sessions), so compare within a channel, not across.
               </div>
             </>
           ) : (
@@ -253,10 +274,33 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
           )}
         </section>
 
+        {measured?.subVideos && measured.subVideos.length > 0 && (
+          <section className="ins-card ins-wide">
+            <div className="ins-card-head">
+              <h3>Top subscriber-driving videos</h3>
+              <span className="ins-card-hint">Which content converts viewers to subscribers</span>
+            </div>
+            <div className="mtx-vids">
+              {measured.subVideos.map((v) => (
+                <div className="mtx-vid" key={v.title}>
+                  <span className="mtx-vid-title" title={v.title}>
+                    {v.title}
+                  </span>
+                  <span className="mtx-vid-subs">+{v.subscribers} subs</span>
+                  <span className="mtx-vid-rate">
+                    {pct(v.subscribers / v.views)} of {formatReach(v.views)} views
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Per-canvas */}
         <section className="ins-card ins-wide">
           <div className="ins-card-head">
             <h3>By canvas</h3>
+            <span className="est-tag">est</span>
             <span className="ins-card-hint">Ranked by projected reach</span>
           </div>
           <div className="mtx-table">
