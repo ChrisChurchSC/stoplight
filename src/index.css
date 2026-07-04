@@ -13782,6 +13782,55 @@ textarea.library-input {
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
 }
+/* Your-channels roster: label · console link · launch. */
+.chn-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chn-roster-row {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.chn-roster-ch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chn-roster-link {
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+.chn-roster-go {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chn-roster-go:hover {
+  background: var(--surface-2);
+}
+.chn-roster-go.off {
+  color: var(--text-faint);
+  opacity: 0.5;
+  pointer-events: none;
+}
 .chn-pick {
   display: flex;
   align-items: center;

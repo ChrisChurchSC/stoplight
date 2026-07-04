@@ -194,6 +194,19 @@ function resolveId(value: string): string | null {
   return item ? item.id : null
 }
 
+// Ensure a pasted console URL is launchable (prepend https:// when missing).
+const withProto = (u: string) => (/^https?:\/\//i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
+
+/** Label + icon for a selected roster id (a real channel or an extra pick). */
+function describeChannel(id: string): { label: string; icon: ReactNode } {
+  if (CHANNEL_LIST.some((c) => c.id === id)) {
+    return { label: CHANNELS[id as ChannelId].label, icon: <ChannelIcon channel={id as ChannelId} size={16} /> }
+  }
+  const extra = ALL_EXTRAS.find((t) => t.id === id)
+  if (extra) return { label: extra.label, icon: <PickIcon path={extra.path} color={extra.color} /> }
+  return { label: id, icon: <PickIcon path={null} color="#9aa1ac" /> }
+}
+
 function PickIcon({ path, color, size = 16 }: { path: string | null; color: string; size?: number }) {
   if (!path) {
     return (
@@ -251,6 +264,15 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
     setClientProfile(brand, { channels: next })
   }
 
+  // Per-channel console links (launch shortcuts, never credentials).
+  const links = clientProfiles[brand]?.channelLinks ?? {}
+  const setLink = (id: string, url: string) => {
+    const next = { ...links }
+    if (url.trim()) next[id] = url.trim()
+    else delete next[id]
+    setClientProfile(brand, { channelLinks: next })
+  }
+
   const Chip = ({ id, label, icon, kindLabel }: { id: string; label: string; icon: ReactNode; kindLabel: string }) => {
     const isOn = selected.has(id)
     const used = usage.get(id) ?? 0
@@ -278,6 +300,54 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
         <h2>Channels</h2>
         <span className="mtx-sub">{selected.size} selected · pick the channels this brand publishes on</span>
       </header>
+
+      {/* Your channels — the selected roster, each with a quick-launch console link. */}
+      {selected.size > 0 && (
+        <section className="ins-card ins-wide">
+          <div className="ins-card-head">
+            <h3>Your channels</h3>
+            <span className="ins-card-hint">Add a console link to jump straight to each account</span>
+          </div>
+          <div className="chn-roster">
+            {[...selected].sort().map((id) => {
+              const d = describeChannel(id)
+              const link = links[id]
+              return (
+                <div className="chn-roster-row" key={id}>
+                  <span className="chn-roster-ch">
+                    {d.icon}
+                    {d.label}
+                  </span>
+                  <input
+                    className="chn-roster-link"
+                    type="text"
+                    placeholder="Console / admin URL (e.g. studio.youtube.com)"
+                    value={link ?? ''}
+                    onChange={(e) => setLink(id, e.target.value)}
+                  />
+                  {link ? (
+                    <a
+                      className="chn-roster-go"
+                      href={withProto(link)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Open ${d.label}`}
+                    >
+                      ↗ Open
+                    </a>
+                  ) : (
+                    <span className="chn-roster-go off">↗ Open</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="mtx-note">
+            Launch links only, never a password. Auth happens on the platform, via your browser session or
+            your password manager.
+          </div>
+        </section>
+      )}
 
       {/* Paid — sub-grouped */}
       <section className="ins-card ins-wide">

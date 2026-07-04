@@ -98,6 +98,9 @@ export interface ClientProfile {
   traction?: string
   /** Connected channel profile URLs (social accounts) to re-gather on refresh. */
   channels?: string[]
+  /** Quick-access console / admin URLs per channel id (YouTube Studio, ad managers,
+   *  the Neon One dashboard, …). A launch link, never a credential. */
+  channelLinks?: Record<string, string>
   /** Sanity CMS connection, so the brand's owned content can be ingested. */
   sanity?: { projectId: string; dataset: string; token?: string }
   /** Resend connection (API key), so the brand's email broadcasts can be ingested. */
