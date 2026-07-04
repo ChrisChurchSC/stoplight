@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
-import { BrandInfo } from './BrandInfo'
-import { BrandVoice } from './BrandVoice'
 import { CalendarView } from './CalendarView'
-import { ChannelsView } from './ChannelsView'
 import { HomeShell } from './HomeShell'
-import { LibraryPage } from './LibraryPage'
-import { MetricsView } from './MetricsView'
-import { LibraryView } from './LibraryView'
 import { SheetGrid } from './SheetGrid'
 
 /**
@@ -93,7 +87,6 @@ export function ClientsOverview() {
   const openCampaign = useTrafficStore((s) => s.openCampaign)
   const openOnboard = useTrafficStore((s) => s.openOnboard)
   const loadSample = useTrafficStore((s) => s.loadSample)
-  const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   // A canvas delete asks for a second click first (it archives the whole canvas +
   // its assets — recoverable, but not one-click-accidental).
@@ -105,9 +98,7 @@ export function ClientsOverview() {
   // Calendar (every canvas in the folder on one table / one timeline), About, and
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
-  const [folderTab, setFolderTab] = useState<
-    'canvases' | 'grid' | 'calendar' | 'metrics' | 'library' | 'channels' | 'about' | 'voice' | 'messaging'
-  >('canvases')
+  const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar'>('canvases')
   // Leaving a brand folder (or switching brands) snaps back to Canvases.
   useEffect(() => {
     setFolderTab('canvases')
@@ -137,48 +128,6 @@ export function ClientsOverview() {
           title="Every canvas in this folder on one calendar"
         >
           Calendar
-        </button>
-        <button
-          className={`folder-tab${folderTab === 'metrics' ? ' active' : ''}`}
-          onClick={() => setFolderTab('metrics')}
-          title="Projected vs actual across every canvas in this folder"
-        >
-          Metrics
-        </button>
-        <button
-          className={`folder-tab${folderTab === 'library' ? ' active' : ''}`}
-          onClick={() => setFolderTab('library')}
-          title="Everything this brand has published, ingested from its channels"
-        >
-          Library
-        </button>
-      </div>
-      <div className="folder-tabs folder-aux">
-        <button className={`folder-tab${folderTab === 'about' ? ' active' : ''}`} onClick={() => setFolderTab('about')}>
-          About
-        </button>
-        <button
-          className={`folder-tab${folderTab === 'voice' ? ' active' : ''}`}
-          onClick={() => setFolderTab('voice')}
-          title="How the brand sounds — the tone canvases are generated in"
-        >
-          Voice
-        </button>
-        <button
-          className={`folder-tab${folderTab === 'messaging' ? ' active' : ''}`}
-          onClick={() => {
-            setMessagingBrand(brandFolder)
-            setFolderTab('messaging')
-          }}
-        >
-          Messaging
-        </button>
-        <button
-          className={`folder-tab${folderTab === 'channels' ? ' active' : ''}`}
-          onClick={() => setFolderTab('channels')}
-          title="The channels this brand publishes on"
-        >
-          Channels
         </button>
       </div>
     </div>
@@ -230,73 +179,6 @@ export function ClientsOverview() {
     )
   }
 
-  // A brand folder's Metrics rollup: projected + actual across every canvas.
-  if (brandFolder && folderTab === 'metrics') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <MetricsView scopeClient={brandFolder} />
-        </div>
-      </HomeShell>
-    )
-  }
-
-  // A brand folder's Library: every published post / video / page, ingested to date.
-  if (brandFolder && folderTab === 'library') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <LibraryView scopeClient={brandFolder} />
-        </div>
-      </HomeShell>
-    )
-  }
-
-  // A brand folder's Channels view: the brand's channel mix across every canvas.
-  if (brandFolder && folderTab === 'channels') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <ChannelsView scopeClient={brandFolder} />
-        </div>
-      </HomeShell>
-    )
-  }
-
-  // A brand folder's Messaging system or About tab: render the embedded editor.
-  if (brandFolder && folderTab === 'messaging') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <LibraryPage inline />
-        </div>
-      </HomeShell>
-    )
-  }
-  if (brandFolder && folderTab === 'about') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <BrandInfo brand={brandFolder} />
-        </div>
-      </HomeShell>
-    )
-  }
-  if (brandFolder && folderTab === 'voice') {
-    return (
-      <HomeShell>
-        <div className="home-main-scroll">
-          {folderHead}
-          <BrandVoice brand={brandFolder} />
-        </div>
-      </HomeShell>
-    )
-  }
 
   return (
     <HomeShell>

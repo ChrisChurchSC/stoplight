@@ -32,11 +32,13 @@ export function HomeSidebar() {
 
   // On the gallery when we're at the clients overview (page=clients, no client scoped).
   const onGallery = page === 'clients' && clientFilter === 'all'
-  // Picking a files filter / brand always lands on the gallery, filtered.
+  // Brand / Metrics / Library / Channels are brand-scoped destinations: the Brands list
+  // picks which brand they show, so a brand click keeps you on the page, not leaves it.
+  const brandCtx = page === 'content' || page === 'channels' || page === 'metrics' || page === 'brand'
   const go = (filter: string) => {
     setHomeFilter(filter)
     setClientFilter('all')
-    setPage('clients')
+    if (!brandCtx || filter === 'all' || filter === 'drafts') setPage('clients')
   }
 
   return (
@@ -51,6 +53,38 @@ export function HomeSidebar() {
         >
           <span className="nav-ico">◎</span>
           <span className="nav-label">Portfolio</span>
+        </button>
+        <button
+          className={`nav-item${page === 'brand' ? ' active' : ''}`}
+          onClick={() => setPage('brand')}
+          title="Brand — the brand's About, Voice, and Messaging system"
+        >
+          <span className="nav-ico">◈</span>
+          <span className="nav-label">Brand</span>
+        </button>
+        <button
+          className={`nav-item${page === 'metrics' ? ' active' : ''}`}
+          onClick={() => setPage('metrics')}
+          title="Metrics — projected vs actual reach, subscribers, and cost per subscriber"
+        >
+          <span className="nav-ico">◔</span>
+          <span className="nav-label">Metrics</span>
+        </button>
+        <button
+          className={`nav-item${page === 'content' ? ' active' : ''}`}
+          onClick={() => setPage('content')}
+          title="Library — every published post, video, and page a brand has shipped"
+        >
+          <span className="nav-ico">❏</span>
+          <span className="nav-label">Library</span>
+        </button>
+        <button
+          className={`nav-item${page === 'channels' ? ' active' : ''}`}
+          onClick={() => setPage('channels')}
+          title="Channels — the channels a brand publishes on"
+        >
+          <span className="nav-ico">⇉</span>
+          <span className="nav-label">Channels</span>
         </button>
 
         <div className="nav-section">Files</div>
@@ -67,16 +101,16 @@ export function HomeSidebar() {
         ))}
 
         <div className="nav-section home-sb-brands-head">
-          <span>Brands</span>
-          <button className="home-sb-add" title="Add a brand" onClick={openOnboard}>
+          <span>Campaigns</span>
+          <button className="home-sb-add" title="Add a campaign" onClick={openOnboard}>
             ＋
           </button>
         </div>
-        {brands.length === 0 && <div className="home-sb-empty">No brands yet</div>}
+        {brands.length === 0 && <div className="home-sb-empty">No campaigns yet</div>}
         {brands.map((b) => {
           const key = `brand:${b.name}`
           return (
-            <div key={b.name} className={`nav-item home-sb-brand${onGallery && homeFilter === key ? ' active' : ''}`}>
+            <div key={b.name} className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
               <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
                 <span className="nav-ico">▤</span>
                 <span className="nav-label">{b.name}</span>

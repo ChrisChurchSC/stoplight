@@ -17,8 +17,13 @@ import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
 import { ConnectorsPage } from './ConnectorsPage'
 import { LibraryPage } from './LibraryPage'
+import { LibraryView } from './LibraryView'
+import { ChannelsView } from './ChannelsView'
+import { MetricsView } from './MetricsView'
+import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { IcpDrawer } from './IcpDrawer'
 import { PersonalizationDrawer } from './PersonalizationDrawer'
 import { SavedViewsDrawer } from './SavedViewsDrawer'
@@ -48,7 +53,9 @@ export function Workbench() {
   const view = useTrafficStore((s) => s.view)
   const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const homeFilter = useTrafficStore((s) => s.homeFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const { brands } = useHomeCanvases()
   const wizardOpen = useTrafficStore((s) => s.wizardOpen)
   const wizardClient = useTrafficStore((s) => s.wizardClient)
   const closeWizard = useTrafficStore((s) => s.closeWizard)
@@ -70,6 +77,15 @@ export function Workbench() {
   // The files-browser home carries its own shell (files sidebar + tabs), so the
   // global rail + breadcrumb step aside there — matching how the canvas works.
   const homeFiles = page === 'clients' && overview
+  // Library / Channels are top-level, brand-scoped pages. The brand comes from the
+  // sidebar selection (a brand filter), falling back to the only brand when there's
+  // just one — so a single-brand workspace "just works" without picking.
+  const brandFromFilter = homeFilter.startsWith('brand:')
+    ? homeFilter.slice(6)
+    : clientFilter !== 'all'
+      ? clientFilter
+      : null
+  const scopedBrand = brandFromFilter ?? (brands.length === 1 ? brands[0].name : undefined) ?? undefined
 
   useEffect(() => {
     refresh()
@@ -178,17 +194,35 @@ export function Workbench() {
         // Library / Connectors / Billing share the home's dashboard shell (files
         // sidebar + tab bar) so the layout never changes between them and the hub.
         <HomeShell>
-          <div className="home-main-page">
-            {page === 'portfolio' ? (
-              <Portfolio />
-            ) : page === 'library' ? (
-              <LibraryPage />
-            ) : page === 'billing' ? (
-              <BillingPage />
-            ) : (
-              <ConnectorsPage />
-            )}
-          </div>
+          {page === 'brand' ? (
+            <div className="home-main-scroll">
+              <BrandPage brand={scopedBrand} />
+            </div>
+          ) : page === 'metrics' ? (
+            <div className="home-main-scroll">
+              <MetricsView scopeClient={scopedBrand} />
+            </div>
+          ) : page === 'content' ? (
+            <div className="home-main-scroll">
+              <LibraryView scopeClient={scopedBrand} />
+            </div>
+          ) : page === 'channels' ? (
+            <div className="home-main-scroll">
+              <ChannelsView scopeClient={scopedBrand} />
+            </div>
+          ) : (
+            <div className="home-main-page">
+              {page === 'portfolio' ? (
+                <Portfolio />
+              ) : page === 'library' ? (
+                <LibraryPage />
+              ) : page === 'billing' ? (
+                <BillingPage />
+              ) : (
+                <ConnectorsPage />
+              )}
+            </div>
+          )}
         </HomeShell>
       )}
 

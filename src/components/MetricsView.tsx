@@ -75,7 +75,7 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
   if (!brand || brandRows.length === 0) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">No canvases in this folder yet. Build one to project its metrics.</div>
+        <div className="mtx-empty">Pick a brand in the sidebar with canvases to project its metrics.</div>
       </div>
     )
   }
@@ -125,7 +125,7 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
   return (
     <div className="mtx">
       <header className="mtx-head">
-        <h2>Metrics</h2>
+        <h2>{brand} · Metrics</h2>
         <span className="mtx-sub">
           Projected plan and actuals to date across {brandCanvases.length} canvas
           {brandCanvases.length === 1 ? '' : 'es'}

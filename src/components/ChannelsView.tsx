@@ -233,7 +233,7 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
   if (!brand) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">Open a brand folder to pick its channels.</div>
+        <div className="mtx-empty">Pick a brand in the sidebar to choose its channels.</div>
       </div>
     )
   }
@@ -297,7 +297,7 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
   return (
     <div className="mtx">
       <header className="mtx-head">
-        <h2>Channels</h2>
+        <h2>{brand} · Channels</h2>
         <span className="mtx-sub">{selected.size} selected · pick the channels this brand publishes on</span>
       </header>
 
