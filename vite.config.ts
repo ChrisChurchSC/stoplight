@@ -255,6 +255,9 @@ const SERVER_SECRETS = [
   'LINKEDIN_ACCESS_TOKEN',
   'LINKEDIN_ORG_ID',
   'LINKEDIN_VERSION',
+  'NEON_ORG_ID',
+  'NEON_API_KEY',
+  'NEON_BASE',
 ]
 
 /**
@@ -576,6 +579,47 @@ function ingestGoogleAdsApi(): PluginOption {
 }
 
 /**
+ * Streaming ingest of a brand's Neon (NeonCRM) published assets: fundraising
+ * campaign pages and event pages, pulled server-side with the Neon key, mapped
+ * into the Library as posted content. Emits stage progress over SSE; mirrors
+ * /api/ingest-resend.
+ */
+function ingestNeonApi(): PluginOption {
+  return {
+    name: 'ingest-neon-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ingest-neon', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            connection: 'keep-alive',
+          })
+          const send = (event: string, data: unknown) =>
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          try {
+            const { runNeonIngest } = await import('./server/neonIngestHandler')
+            const result = await runNeonIngest(JSON.parse(body || '{}'), (e) => send('progress', e))
+            send('result', result)
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            send('error', { code: code ?? null, message: String((err as Error)?.message ?? err) })
+          } finally {
+            res.end()
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for reading the copy inside a single creative (vision OCR).
  * Backs the row-level extractCopy action; mirrors /api/icp-review.
  */
@@ -673,6 +717,7 @@ export default defineConfig(({ mode }) => {
       ingestSanityApi(),
       ingestResendApi(),
       ingestGoogleAdsApi(),
+      ingestNeonApi(),
       extractCopyApi(),
       agentBridgeApi(),
     ],

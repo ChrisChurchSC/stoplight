@@ -2728,10 +2728,18 @@ button {
   flex-direction: column;
 }
 /* The Messaging editor embedded in a brand folder — fill, no page centering/padding. */
-.library-inline {
+/* Embedded in the Brand page — drop the standalone page's centered 900px column and
+   fill the container. Needs the doubled class to beat `.library` (defined later). */
+.library.library-inline {
   max-width: none;
   margin: 0;
   padding: 0;
+}
+/* Brand page (About / Voice / Messaging) — cap the width like the other sidebar
+   pages (.mtx) so fields don't stretch across a wide window and the header tabs
+   stay in view. */
+.brand-page {
+  max-width: 1180px;
 }
 /* Files-sidebar brand rows: a click target to filter + a hover ✕ to delete. */
 .home-sb-brands-head {
@@ -13878,6 +13886,131 @@ textarea.library-input {
 }
 .lib-card-link:hover {
   color: var(--accent);
+}
+/* Clickable card → opens the detail view. */
+.lib-card-click {
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.lib-card-click:hover {
+  border-color: var(--text-faint);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+.lib-card-click:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Detail modal — read an asset's full messaging. */
+.lib-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px;
+  overflow-y: auto;
+}
+.lib-modal {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.lib-modal-x {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 4px;
+}
+.lib-modal-x:hover {
+  color: var(--text);
+}
+.lib-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.lib-modal-ch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.lib-modal-date {
+  color: var(--text-faint);
+}
+.lib-modal-title {
+  margin: 8px 0 0;
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--text);
+  padding-right: 20px;
+}
+.lib-modal-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.lib-modal-metric strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.lib-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+.lib-modal-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+.lib-modal-field-value {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.lib-modal-empty {
+  font-size: 13px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+.lib-modal-link {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.lib-modal-link:hover {
+  text-decoration: underline;
 }
 .mtx-table {
   display: flex;

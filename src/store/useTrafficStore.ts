@@ -43,6 +43,7 @@ import {
 import { ingestSanityStream, type SanityIngestResult } from '../adapters/setup/ingestSanity'
 import { ingestResendStream, type ResendIngestResult } from '../adapters/setup/ingestResend'
 import { ingestGoogleAdsStream, type GoogleAdsIngestResult } from '../adapters/setup/ingestGoogleAds'
+import { ingestNeonStream } from '../adapters/setup/ingestNeon'
 import {
   ClaudeCopyWriter,
   HeuristicCopyWriter,
@@ -960,7 +961,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand'
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
   /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
@@ -1221,7 +1222,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -1786,24 +1787,57 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (!n || get().contentIngesting) return
     set({ contentIngesting: n })
     try {
-      const batches = await contentProvider.fetch(n)
-      if (!batches || !batches.length) {
-        set((s) => ({
-          contentIngest: { ...s.contentIngest, [n]: { at: Date.now(), imported: 0, updated: 0, skipped: 0, sources: [] } },
-        }))
-        return
-      }
-      // One backfill campaign holds the brand's whole published body of work. Each batch
-      // (channel) flows through importAssets with its source tag, deduping on its own.
+      // One backfill campaign holds the brand's whole published body of work. Each
+      // source's batch flows through importAssets with its own source tag, deduping
+      // on its own (by URL, else copy). Sources are additive: the snapshot provider
+      // (YouTube / LinkedIn), then any live server-held source (Neon).
       const totals = { imported: 0, updated: 0, skipped: 0 }
       const sources: string[] = []
-      for (const b of batches) {
-        const r = await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, b.items, b.source)
+      const add = (r: { imported: number; updated: number; skipped: number }, label: string) => {
         totals.imported += r.imported
         totals.updated += r.updated
         totals.skipped += r.skipped
-        if (!sources.includes(b.sourceLabel)) sources.push(b.sourceLabel)
+        if (!sources.includes(label)) sources.push(label)
       }
+
+      const batches = (await contentProvider.fetch(n)) ?? []
+      for (const b of batches) {
+        add(await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, b.items, b.source), b.sourceLabel)
+      }
+
+      // Neon (NeonCRM) published assets — pulled server-side with the .env key.
+      // Skips silently when Neon isn't configured (NO_KEY) or unreachable, so the
+      // pull never fails on an unconnected source.
+      try {
+        const neon = await ingestNeonStream({ brand: n })
+        if (neon.items.length) {
+          add(await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, neon.items, 'site'), 'Neon')
+        }
+      } catch {
+        /* Neon not configured / unreachable — leave it out of this pull. */
+      }
+
+      // YouTube transcripts — scraped from the browser transcript panel into a committed
+      // snapshot (YouTube blocks API/server access), attached to their video assets by id.
+      try {
+        const res = await fetch('/ww-transcripts.json', { cache: 'no-store' })
+        if (res.ok) {
+          const map = (await res.json()) as Record<string, { text?: string }>
+          const ytRows = get().rows.filter(
+            (r) => (r.campaign ?? '').trim() === CONTENT_LIBRARY_CAMPAIGN && r.channel === 'youtube',
+          )
+          for (const r of ytRows) {
+            const id = /[?&]v=([^&]+)/.exec(r.sourceUrl ?? '')?.[1]
+            const text = id ? map[id]?.text : undefined
+            if (text && r.messaging?.transcript !== text) {
+              await get().updateRow(r.id, { messaging: { ...r.messaging, transcript: text } })
+            }
+          }
+        }
+      } catch {
+        /* No transcripts snapshot yet — YouTube cards keep title + metrics only. */
+      }
+
       set((s) => ({
         contentIngest: { ...s.contentIngest, [n]: { at: Date.now(), ...totals, sources } },
       }))

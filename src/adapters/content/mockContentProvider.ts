@@ -30,6 +30,16 @@ const LI = (copy: string, impressions: number, engagement: number, date: string)
   metrics: { impressions, engagement },
 })
 
+// Sent email campaigns, read from Neon's Sent Emails list (no email API, so this is
+// the last-known pull). Real World Within sends to the All Emails audience.
+const EM = (title: string, opens: number, clicks: number, date: string) => ({
+  platform: 'email',
+  title,
+  copy: 'Sent to All Emails',
+  date,
+  metrics: { opens, clicks },
+})
+
 const BATCHES: Record<string, ContentBatch[]> = {
   'World Within': [
     {
@@ -57,6 +67,20 @@ const BATCHES: Record<string, ContentBatch[]> = {
         LI('Most people don’t know this but over $2 trillion sits in private foundations and DAFs invested in Wall Street. These are dollars that have been donated and for which people have received a tax deduction.', 259, 14, '2026-05-01'),
         LI("If you were as blown away as we were by Alex Honnold's climb of the Taipei 101 skyscraper, you may also be blown away by the work of the Honnold Foundation.", 148, 6, '2026-01-28'),
         LI('Join us on January 12th at the Delancey in San Francisco for a screening and panel discussion of the Old Salt Co-op episode from our upcoming series How To Change The World.', 102, 8, '2026-01-06'),
+      ],
+    },
+    {
+      source: 'social-live',
+      sourceLabel: 'Neon email',
+      items: [
+        EM('Newsletter 3', 2344, 126, '2026-07-02'),
+        EM('HTCTW Ep 19 - Kristen Sonday', 2341, 144, '2026-06-25'),
+        EM('HTCTW Ep 18 - Matt Jorgenson', 2663, 141, '2026-06-12'),
+        EM('Newsletter 2', 3074, 142, '2026-06-04'),
+        EM('HTCTW Ep 17 - Rutger Bregman', 3338, 267, '2026-05-28'),
+        EM('Newsletter 1', 3335, 243, '2026-05-21'),
+        EM('Resend to Non-Openers: SOCAP Voting', 776, 117, '2026-04-24'),
+        EM('SOCAP Voting', 3034, 393, '2026-04-22'),
       ],
     },
   ],

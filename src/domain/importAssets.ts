@@ -29,6 +29,7 @@ const PLATFORM_CHANNEL: Record<string, ChannelId> = {
   blog: 'blog', article: 'blog', 'blog article': 'blog', 'case study': 'blog',
   'landing page': 'landing-page', 'landing-page': 'landing-page', lp: 'landing-page',
   email: 'email', newsletter: 'email', broadcast: 'email',
+  events: 'events', event: 'events',
 }
 
 /** Resolve a platform / channel string to a ChannelId (undefined if unknown). */

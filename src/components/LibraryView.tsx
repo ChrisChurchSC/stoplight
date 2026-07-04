@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { sourceLabel } from '../domain/analyticsSources'
+import { CHANNELS } from '../domain/channels'
 import { formatReach } from '../domain/journeyPerf'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -20,7 +21,15 @@ import { ChannelIcon } from './ChannelIcon'
 const num = (n: number) => n.toLocaleString()
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDate = (iso?: string, ms?: number) => {
-  const d = iso ? new Date(iso) : ms ? new Date(ms) : null
+  // A bare YYYY-MM-DD parses as UTC midnight, which renders a day early in a
+  // negative-offset timezone. Read the date parts as local when it's date-only.
+  let d: Date | null = null
+  if (iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.slice(0, 10))
+    d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso)
+  } else if (ms) {
+    d = new Date(ms)
+  }
   if (!d || Number.isNaN(d.getTime())) return ''
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
@@ -51,6 +60,28 @@ function itemCopy(r: TrafficRow): string {
   return joined && joined !== r.assetName ? joined : ''
 }
 
+/** A channel id's display label (falls back to the raw value for non-canonical ids). */
+const channelLabel = (ch: string): string => CHANNELS[ch as ChannelId]?.label ?? ch
+
+/** Turn a messaging field key into a readable label (body → Body, primaryText → Primary Text). */
+const prettyKey = (k: string): string =>
+  k
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/^\w/, (c) => c.toUpperCase())
+
+/** The messaging fields worth showing in the detail view: [label, value] pairs. */
+function messagingEntries(r: TrafficRow): [string, string][] {
+  return Object.entries(r.messaging ?? {})
+    .filter(([, v]) => typeof v === 'string' && v.trim())
+    .map(([k, v]) => [prettyKey(k), v.trim()] as [string, string])
+}
+
+/** Numeric metrics on a row: [label, value] pairs for the detail view. */
+function metricEntries(r: TrafficRow): [string, number][] {
+  return Object.entries(r.socialMetrics ?? {}).filter(([, v]) => typeof v === 'number' && v > 0) as [string, number][]
+}
+
 export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const { canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -58,6 +89,17 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const contentIngesting = useTrafficStore((s) => s.contentIngesting)
   const contentIngest = useTrafficStore((s) => s.contentIngest)
   const ingestContent = useTrafficStore((s) => s.ingestContent)
+
+  // The asset opened in the detail view (click a card to read its full messaging).
+  const [detail, setDetail] = useState<TrafficRow | null>(null)
+  useEffect(() => {
+    if (!detail) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetail(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [detail])
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
 
@@ -71,7 +113,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   if (!brand) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">Open a brand folder to see its content library.</div>
+        <div className="mtx-empty">Pick a brand in the sidebar to see its content library.</div>
       </div>
     )
   }
@@ -89,7 +131,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   return (
     <div className="mtx">
       <header className="mtx-head">
-        <h2>Library</h2>
+        <h2>{brand} · Library</h2>
         <span className="mtx-sub">
           {items.length > 0
             ? `${num(items.length)} published ${items.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date`
@@ -156,7 +198,19 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
               const eng = r.socialMetrics?.engagement ?? r.socialMetrics?.likes
               const subs = r.socialMetrics?.subscribers
               return (
-                <article className="lib-card" key={r.id}>
+                <article
+                  className="lib-card lib-card-click"
+                  key={r.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetail(r)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setDetail(r)
+                    }
+                  }}
+                >
                   <div className="lib-card-top">
                     <span className="lib-card-ch">
                       <ChannelIcon channel={r.channel as ChannelId} size={14} />
@@ -185,7 +239,13 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
                     )}
                   </div>
                   {r.sourceUrl && (
-                    <a className="lib-card-link" href={r.sourceUrl} target="_blank" rel="noopener noreferrer">
+                    <a
+                      className="lib-card-link"
+                      href={r.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       ↗ Open
                     </a>
                   )}
@@ -199,7 +259,59 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
       <div className="mtx-foot">
         The library is the brand's real published content, sat beside the plan. Each item keeps its source
         link, so a planned card can later reconcile to the post it became and inherit its measured metrics.
+        Click any card to read its full copy.
       </div>
+
+      {detail && (
+        <div className="lib-modal-overlay" onClick={() => setDetail(null)}>
+          <div className="lib-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <button className="lib-modal-x" onClick={() => setDetail(null)} aria-label="Close">
+              ×
+            </button>
+            <div className="lib-modal-head">
+              <span className="lib-modal-ch">
+                <ChannelIcon channel={detail.channel as ChannelId} size={15} />
+                {channelLabel(detail.channel)}
+              </span>
+              {fmtDate(detail.publishedAt, detail.postedAt) && (
+                <span className="lib-modal-date">{fmtDate(detail.publishedAt, detail.postedAt)}</span>
+              )}
+            </div>
+            <h3 className="lib-modal-title">{detail.assetName}</h3>
+
+            {metricEntries(detail).length > 0 && (
+              <div className="lib-modal-metrics">
+                {metricEntries(detail).map(([k, v]) => (
+                  <span className="lib-modal-metric" key={k}>
+                    <strong>{num(v)}</strong> {k}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="lib-modal-fields">
+              {messagingEntries(detail).length > 0 ? (
+                messagingEntries(detail).map(([label, value]) => (
+                  <div className="lib-modal-field" key={label}>
+                    <div className="lib-modal-field-label">{label}</div>
+                    <div className="lib-modal-field-value">{value}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="lib-modal-empty">
+                  No copy captured for this asset yet. Scrape it from the source and it shows up here.
+                </div>
+              )}
+            </div>
+
+            {detail.sourceUrl && (
+              <a className="lib-modal-link" href={detail.sourceUrl} target="_blank" rel="noopener noreferrer">
+                ↗ Open original
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
