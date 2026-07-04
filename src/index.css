@@ -13150,6 +13150,24 @@ textarea.library-input {
   padding: 1px 6px;
   vertical-align: middle;
 }
+/* Connected / not-connected analytics sources (source-driven measured panel). */
+.mtx-sources {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mtx-src-on {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.mtx-src-off {
+  font-size: 11px;
+  color: var(--text-faint);
+}
 /* Refresh control on the measured-actuals card head. */
 .mtx-refresh {
   margin-left: auto;

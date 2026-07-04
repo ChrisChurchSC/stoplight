@@ -1,4 +1,5 @@
 import { actualTotals } from '../domain/actuals'
+import { missingSources, sourceLabel } from '../domain/analyticsSources'
 import type { ChannelId } from '../domain/types'
 import { money } from '../domain/budget'
 import { computeInsights } from '../domain/insights'
@@ -65,6 +66,9 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
   const brandRows = brandCanvases.flatMap((c) => c.rows)
   const measured = brand ? brandActuals[brand] : null
   const mt = actualTotals(measured)
+  // Which analytics sources are wired up (from the aggregator) vs still available to add.
+  const connectedSources = measured?.sources ?? []
+  const missing = missingSources(connectedSources)
   const calibratedLabels = measured?.channels.filter((c) => c.reachPerAsset).map((c) => c.label) ?? []
   const calibrated = calibratedLabels.length > 0
 
@@ -247,6 +251,18 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
                 {num(mt.engagement)} engagement · {num(mt.clicks)} clicks. Reach is each channel's native unit
                 (views, impressions, sessions), so compare within a channel, not across.
               </div>
+              {connectedSources.length > 0 && (
+                <div className="mtx-sources">
+                  <span className="mtx-src-on" title="Analytics sources connected in the aggregator">
+                    ⛁ {connectedSources.map(sourceLabel).join(' · ')}
+                  </span>
+                  {missing.length > 0 && (
+                    <span className="mtx-src-off">
+                      Connect in Summer to add: {missing.map((s) => s.label).join(', ')}
+                    </span>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <>

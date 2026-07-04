@@ -45,6 +45,9 @@ export interface BrandActuals {
   updatedAt: number
   /** Human source label, e.g. "Summer · Forward API". */
   source: string
+  /** Connected analytics-source ids (Summer connectors) that fed this pull — drives the
+   *  Metrics tab's connected/not-connected list so it adapts to the brand's stack. */
+  sources?: string[]
   channels: ChannelActual[]
   /** Top videos by subscribers driven — which content converts viewers to subscribers. */
   subVideos?: { title: string; subscribers: number; views: number }[]

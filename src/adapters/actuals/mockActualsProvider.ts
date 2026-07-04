@@ -12,6 +12,10 @@ import type { ActualsProvider } from './types'
 const SNAPSHOTS: Record<string, Omit<BrandActuals, 'updatedAt'>> = {
   'World Within': {
     source: 'Summer · Forward API',
+    // The connectors actually wired up in Summer for this project (a real provider reads
+    // these from get_user_info's mart schemas). The Metrics tab renders these + prompts
+    // for the rest.
+    sources: ['youtube_analytics', 'google_analytics_4', 'google_search_console', 'linkedin_company_pages'],
     channels: [
       { channel: 'youtube', label: 'YouTube', reachUnit: 'views', reach: 792271, assets: 97, reachPerAsset: 8168, engagement: 4203, subscribers: 2336, trend: { cur: 277706, prior: 416314 }, from: '2026-05-31', to: '2026-06-29' },
       { channel: 'google-search', label: 'Search (GSC)', reachUnit: 'impressions', reach: 15246, clicks: 903, trend: { cur: 2848, prior: 3074 }, from: '2026-04-03', to: '2026-07-02' },
