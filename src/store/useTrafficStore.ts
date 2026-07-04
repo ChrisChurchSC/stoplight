@@ -11,6 +11,7 @@ import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
+import { actualsProvider } from '../adapters/actuals'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
@@ -1030,6 +1031,10 @@ interface TrafficState {
   brandActuals: Record<string, BrandActuals>
   /** Replace a brand's measured actuals (whole-object write from a refresh pull). */
   setBrandActuals: (brand: string, data: BrandActuals) => void
+  /** Brand whose measured actuals are being pulled right now, or null. */
+  actualsRefreshing: string | null
+  /** Re-pull a brand's measured actuals from the connected source (mock or live proxy). */
+  refreshActuals: (brand: string) => Promise<void>
   /** Onboarding readiness: starter brand guides per client + the drawer state. */
   brandGuides: Record<string, BrandGuideEntry>
   readinessOpen: boolean
@@ -1549,6 +1554,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
   brandActuals: loadBrandActuals(),
+  actualsRefreshing: null,
   refreshingClient: null,
   channelIngestOpen: false,
   channelIngestTarget: null,
@@ -1751,6 +1757,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       setBrandCalibration(n, reachByChannelFromActuals(data))
       return { brandActuals }
     }),
+
+  refreshActuals: async (brand) => {
+    const n = brand.trim()
+    if (!n || get().actualsRefreshing) return
+    set({ actualsRefreshing: n })
+    try {
+      const data = await actualsProvider.fetch(n)
+      if (data) get().setBrandActuals(n, data)
+    } finally {
+      set({ actualsRefreshing: null })
+    }
+  },
 
   openReadiness: () => set({ readinessOpen: true }),
   closeReadiness: () => set({ readinessOpen: false }),

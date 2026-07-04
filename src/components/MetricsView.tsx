@@ -57,6 +57,8 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const comments = useTrafficStore((s) => s.comments)
   const brandActuals = useTrafficStore((s) => s.brandActuals)
+  const refreshActuals = useTrafficStore((s) => s.refreshActuals)
+  const actualsRefreshing = useTrafficStore((s) => s.actualsRefreshing)
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
   const brandCanvases = brand ? canvases.filter((c) => c.client === brand) : []
@@ -188,6 +190,16 @@ export function MetricsView({ scopeClient }: { scopeClient?: string }) {
                 ? `${measured.source} · updated ${sinceLabel(measured.updatedAt)}`
                 : 'Live once canvases post and analytics connect'}
             </span>
+            {brand && (
+              <button
+                className="mtx-refresh"
+                onClick={() => refreshActuals(brand)}
+                disabled={actualsRefreshing === brand}
+                title="Re-pull measured actuals from the connected source"
+              >
+                {actualsRefreshing === brand ? '↻ Refreshing…' : '↻ Refresh'}
+              </button>
+            )}
           </div>
           {measured ? (
             <>
