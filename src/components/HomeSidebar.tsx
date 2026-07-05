@@ -11,20 +11,14 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * reads counts + brands from the shared hook and drives navigation via the store.
  */
 
-const FILE_FILTERS: { key: string; ico: string; label: string }[] = [
-  { key: 'all', ico: '▦', label: 'All canvases' },
-  { key: 'drafts', ico: '✎', label: 'Drafts' },
-]
-
 export function HomeSidebar() {
-  const { counts, brands } = useHomeCanvases()
+  const { brands } = useHomeCanvases()
   const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const setHomeFilter = useTrafficStore((s) => s.setHomeFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const openOnboard = useTrafficStore((s) => s.openOnboard)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
   const role = useTrafficStore((s) => s.role)
 
@@ -34,7 +28,7 @@ export function HomeSidebar() {
   const onGallery = page === 'clients' && clientFilter === 'all'
   // Brand / Metrics / Library / Channels are brand-scoped destinations: the Brands list
   // picks which brand they show, so a brand click keeps you on the page, not leaves it.
-  const brandCtx = page === 'content' || page === 'channels' || page === 'metrics' || page === 'brand'
+  const brandCtx = page === 'content' || page === 'channels' || page === 'brand' || page === 'reports'
   const go = (filter: string) => {
     setHomeFilter(filter)
     setClientFilter('all')
@@ -49,10 +43,10 @@ export function HomeSidebar() {
         <button
           className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
           onClick={() => setPage('portfolio')}
-          title="Portfolio — every campaign across brands, as a triage board or a release schedule"
+          title="Overview — what needs attention and what's due next across every campaign"
         >
           <span className="nav-ico">◎</span>
-          <span className="nav-label">Portfolio</span>
+          <span className="nav-label">Overview</span>
         </button>
         <button
           className={`nav-item${page === 'brand' ? ' active' : ''}`}
@@ -61,14 +55,6 @@ export function HomeSidebar() {
         >
           <span className="nav-ico">◈</span>
           <span className="nav-label">Brand</span>
-        </button>
-        <button
-          className={`nav-item${page === 'metrics' ? ' active' : ''}`}
-          onClick={() => setPage('metrics')}
-          title="Metrics — projected vs actual reach, subscribers, and cost per subscriber"
-        >
-          <span className="nav-ico">◔</span>
-          <span className="nav-label">Metrics</span>
         </button>
         <button
           className={`nav-item${page === 'content' ? ' active' : ''}`}
@@ -86,54 +72,64 @@ export function HomeSidebar() {
           <span className="nav-ico">⇉</span>
           <span className="nav-label">Channels</span>
         </button>
+        <button
+          className={`nav-item${page === 'reports' ? ' active' : ''}`}
+          onClick={() => setPage('reports')}
+          title="Reports — saved Claude write-ups over the brand's library"
+        >
+          <span className="nav-ico">◳</span>
+          <span className="nav-label">Reports</span>
+        </button>
 
-        <div className="nav-section">Files</div>
-        {FILE_FILTERS.map((f) => (
+        {brands.length === 1 ? (
+          // One brand: a single clean "Campaigns" destination (its canvases). Lit only
+          // on that gallery, not on the brand-scoped pages (Brand/Metrics/Library/…),
+          // so it doesn't stay highlighted alongside the tab you actually opened.
           <button
-            key={f.key}
-            className={`nav-item${onGallery && homeFilter === f.key ? ' active' : ''}`}
-            onClick={() => go(f.key)}
+            className={`nav-item${onGallery && homeFilter === `brand:${brands[0].name}` ? ' active' : ''}`}
+            onClick={() => {
+              setHomeFilter(`brand:${brands[0].name}`)
+              setClientFilter('all')
+              setPage('clients')
+            }}
+            title={`${brands[0].name}'s campaigns`}
           >
-            <span className="nav-ico">{f.ico}</span>
-            <span className="nav-label">{f.label}</span>
-            {counts[f.key] > 0 && <span className="nav-count">{counts[f.key]}</span>}
+            <span className="nav-ico">▤</span>
+            <span className="nav-label">Campaigns</span>
+            <span className="nav-count">{brands[0].count}</span>
           </button>
-        ))}
-
-        <div className="nav-section home-sb-brands-head">
-          <span>Campaigns</span>
-          <button className="home-sb-add" title="Add a campaign" onClick={openOnboard}>
-            ＋
-          </button>
-        </div>
-        {brands.length === 0 && <div className="home-sb-empty">No campaigns yet</div>}
-        {brands.map((b) => {
-          const key = `brand:${b.name}`
-          return (
-            <div key={b.name} className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
-              <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
-                <span className="nav-ico">▤</span>
-                <span className="nav-label">{b.name}</span>
-                <span className="nav-count">{b.count}</span>
-              </button>
-              <button
-                className="home-sb-del"
-                title={`Delete ${b.name}`}
-                aria-label={`Delete ${b.name}`}
-                onClick={() => setConfirmDelete(b.name)}
-              >
-                ✕
-              </button>
-            </div>
-          )
-        })}
+        ) : (
+          <>
+            <div className="nav-section">Campaigns</div>
+            {brands.map((b) => {
+              const key = `brand:${b.name}`
+              return (
+                <div key={b.name} className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
+                  <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
+                    <span className="nav-ico">▤</span>
+                    <span className="nav-label">{b.name}</span>
+                    <span className="nav-count">{b.count}</span>
+                  </button>
+                  <button
+                    className="home-sb-del"
+                    title={`Delete ${b.name}`}
+                    aria-label={`Delete ${b.name}`}
+                    onClick={() => setConfirmDelete(b.name)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+          </>
+        )}
       </nav>
 
       <div className="sidebar-foot">
         {role === 'owner' && (
-          <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connectors">
+          <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connect Claude">
             <span className="nav-ico">⇄</span>
-            <span className="nav-label">Connectors</span>
+            <span className="nav-label">Connect Claude</span>
           </button>
         )}
         {can(role, 'billing') && (

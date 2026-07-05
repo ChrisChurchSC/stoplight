@@ -96,6 +96,7 @@ import {
   looksLikeBlockedPage,
 } from '../domain/importAssets'
 import { type SavedView, newSavedView } from '../domain/savedViews'
+import type { BrandReport } from '../domain/reports'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -478,6 +479,25 @@ function loadBrandActuals(): Record<string, BrandActuals> {
 function saveBrandActuals(map: Record<string, BrandActuals>): void {
   try {
     localStorage.setItem(BRAND_ACTUALS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Saved Claude-generated reports over a brand's library (narrative + recommendations),
+// persisted as an array. Newest-first is applied at read time in the view.
+const REPORTS_KEY = 'stoplight.reports.v1'
+function loadReports(): BrandReport[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(REPORTS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveReports(list: BrandReport[]): void {
+  try {
+    localStorage.setItem(REPORTS_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -961,7 +981,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports'
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
   /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
@@ -991,6 +1011,9 @@ interface TrafficState {
    *  keeps the standard GTM strategies. Used to reset a polluted system. */
   resetBrandMessaging: (brand: string) => void
   removeLibraryItem: (kind: LibraryKind, id: string) => void
+  /** Set the alias lists on a brand's canonical audiences (keyed by audience id), so
+   *  freeform plan tags tie back to them for performance rollups. */
+  setAudienceAliases: (brand: string, aliasesById: Record<string, string[]>) => void
   /** Bless a draft library asset into an approved master (governance). */
   approveLibraryItem: (kind: LibraryKind, id: string) => void
   /** Edit a library Subject master and PROPAGATE the new text to every campaign
@@ -1034,6 +1057,12 @@ interface TrafficState {
   brandActuals: Record<string, BrandActuals>
   /** Replace a brand's measured actuals (whole-object write from a refresh pull). */
   setBrandActuals: (brand: string, data: BrandActuals) => void
+  /** Saved Claude-generated reports over each brand's library (newest surfaced first). */
+  reports: BrandReport[]
+  /** Save a new report; returns its id. */
+  addReport: (input: { client: string; title: string; kind: BrandReport['kind']; summary?: string; html: string }) => string
+  /** Delete a saved report by id. */
+  deleteReport: (id: string) => void
   /** Brand whose measured actuals are being pulled right now, or null. */
   actualsRefreshing: string | null
   /** Re-pull a brand's measured actuals from the connected source (mock or live proxy). */
@@ -1118,8 +1147,17 @@ interface TrafficState {
   createCanvas: () => void
   /** Link a campaign to a GTM playbook (ABM, Demand Gen, etc.) — the strategy selector. */
   setCampaignStrategy: (name: string, strategy: string) => void
+  /** Apply a GTM strategy to every campaign of a brand at once — the brand-level playbook. */
+  setBrandStrategy: (brand: string, strategy: string) => void
   /** Swap a campaign's subject (what it's about) — the Subject card picker. */
   setCampaignSubject: (name: string, subject: string) => void
+  /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
+  setCampaignGoal: (name: string, goal: string) => void
+  /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
+  setCampaignGoalParts: (
+    name: string,
+    patch: { message?: string; kpi?: string; target?: number | null },
+  ) => void
   /** Swap a campaign's brand/client — the Brand card picker. Re-homes the campaign. */
   setCampaignClient: (name: string, client: string) => void
   /** Clone a campaign + all its assets into a new variant campaign (non-destructive
@@ -1222,7 +1260,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -1564,6 +1602,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientList: loadClients(),
   clientProfiles: loadClientProfiles(),
   brandActuals: loadBrandActuals(),
+  reports: loadReports(),
   actualsRefreshing: null,
   contentIngesting: null,
   contentIngest: {},
@@ -1770,6 +1809,32 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { brandActuals }
     }),
 
+  addReport: (input) => {
+    const id = `report_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+    const report: BrandReport = {
+      id,
+      client: input.client.trim(),
+      title: input.title.trim() || 'Untitled report',
+      kind: input.kind,
+      summary: input.summary?.trim() || undefined,
+      html: input.html,
+      createdAt: Date.now(),
+    }
+    set((s) => {
+      const reports = [report, ...s.reports]
+      saveReports(reports)
+      return { reports }
+    })
+    return id
+  },
+
+  deleteReport: (id) =>
+    set((s) => {
+      const reports = s.reports.filter((r) => r.id !== id)
+      saveReports(reports)
+      return { reports }
+    }),
+
   refreshActuals: async (brand) => {
     const n = brand.trim()
     if (!n || get().actualsRefreshing) return
@@ -1953,6 +2018,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => ({ messagingBrand: brand, library: libFor(s.brandSystems, brand) })),
   addLibraryItem: (kind, item) =>
     set((s) => activeLibPatch(s, (lib) => ({ ...lib, [kind]: [...(lib[kind] as unknown[]), item] }) as MessagingLibrary)),
+  setAudienceAliases: (brand, aliasesById) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const lib = libFor(s.brandSystems, b)
+      const audiences = lib.audiences.map((a) => (aliasesById[a.id] ? { ...a, aliases: aliasesById[a.id] } : a))
+      const nextLib = { ...lib, audiences }
+      const brandSystems = { ...s.brandSystems, [b]: nextLib }
+      saveBrandSystems(brandSystems)
+      return { brandSystems, ...(s.messagingBrand === b ? { library: nextLib } : {}) }
+    }),
   resetBrandMessaging: (brand) =>
     set((s) => {
       const b = brand.trim()
@@ -2213,6 +2289,32 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     void get().redraftAssets({ campaign: name })
   },
 
+  setBrandStrategy: (brand, strategy) => {
+    set((s) => {
+      // Every campaign of this brand: its campaignList records + any row-only campaigns
+      // whose name resolves to this brand.
+      const names = new Set<string>()
+      for (const c of s.campaignList) if (c.client === brand && !c.archivedAt) names.add(c.name)
+      for (const r of s.rows) {
+        const n = (r.campaign ?? '').trim()
+        if (n && clientForCampaign(n) === brand) names.add(n)
+      }
+      let campaignList = s.campaignList.map((c) => (names.has(c.name) ? { ...c, strategy } : c))
+      const existing = new Set(campaignList.map((c) => c.name))
+      for (const name of names) {
+        if (!existing.has(name)) {
+          registerCampaign(name, brand)
+          campaignList = [...campaignList, { name, client: brand, strategy }]
+        }
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    })
+    // Ripple the shared playbook across every asset in the brand (posted/linked-external
+    // assets are welded and skipped by redraftAssets).
+    void get().redraftAssets({ client: brand })
+  },
+
   setCampaignSubject: (name, subject) =>
     set((s) => {
       const idx = s.campaignList.findIndex((c) => c.name === name)
@@ -2223,6 +2325,46 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const client = clientForCampaign(name)
         registerCampaign(name, client)
         campaignList = [...s.campaignList, { name, client, strategy: 'Current state', subject }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  setCampaignGoal: (name, goal) =>
+    set((s) => {
+      const objective = goal.trim() || undefined
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, objective } : c))
+      } else {
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', objective }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  setCampaignGoalParts: (name, patch) =>
+    set((s) => {
+      // Normalize: empty strings clear the field; a message equal to the derived line is
+      // stored as empty so the message stays live-derived until deliberately overridden.
+      const apply = (c: Campaign): Campaign => {
+        const next = { ...c }
+        if ('message' in patch) next.goalMessage = (patch.message ?? '').trim() || undefined
+        if ('kpi' in patch) next.goalKpi = (patch.kpi ?? '').trim() || undefined
+        if ('target' in patch) next.goalTarget = typeof patch.target === 'number' && patch.target >= 0 ? patch.target : undefined
+        return next
+      }
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? apply(c) : c))
+      } else {
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, apply({ name, client, strategy: 'Current state' })]
       }
       saveCampaigns(campaignList)
       return { campaignList }

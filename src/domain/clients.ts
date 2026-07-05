@@ -78,6 +78,14 @@ export interface ClientProfile {
   // ---- Company overview (filled in by site ingestion) ----
   /** One line on what the company does. */
   oneLiner?: string
+  /** The business goal the marketing serves — the outcome campaigns ladder up to
+   *  (e.g. "grow the movement to fund community-owned businesses"). The north-star the
+   *  Portfolio frames every campaign's goal against. */
+  businessGoal?: string
+  /** The north-star metric the business goal is measured by (e.g. "Subscribers"). */
+  businessKpi?: string
+  /** The overall target for that north-star metric (campaign targets sum toward it). */
+  businessTarget?: number
   /** The company's mission, in their words. */
   mission?: string
   /** Founding year (or date), as stated. */
@@ -130,6 +138,11 @@ export interface Campaign {
   subject?: string
   strategy: string
   objective?: string
+  /** Campaign goal, structured. The message is what the assets communicate (derived from
+   *  the cards unless overridden here); the KPI + target are how success is measured. */
+  goalMessage?: string
+  goalKpi?: string
+  goalTarget?: number
   /** Flight length in weeks; omitted/0 = ongoing. */
   durationWeeks?: number
   /** Overall campaign budget (media + content/production). Drives mediaBudget. */

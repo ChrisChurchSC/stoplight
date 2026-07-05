@@ -17,6 +17,10 @@ import type { ChannelId } from './types'
 export interface AudienceType {
   id: string
   name: string
+  /** Other names this audience is known by — the freeform per-campaign tags on the
+   *  plan that mean this canonical audience. Lets its track record tie across messy
+   *  live data (see resolveAudienceId). */
+  aliases?: string[]
   /** The specific buyer/role inside the ICP (e.g. "VP of RevOps", "Founder"). */
   role: string
   // ---- Demographics (matter most for B2C) ----

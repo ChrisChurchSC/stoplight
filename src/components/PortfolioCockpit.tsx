@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { performanceAlerts, pacingAlerts, sortAlerts, type Alert } from '../domain/alerts'
+import { assetBadge } from '../domain/assetBadge'
 import { campaignFlight } from '../domain/campaignWindow'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { formatReach, journeyPerformance } from '../domain/journeyPerf'
 import { STATUS_LABEL } from '../domain/lifecycle'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
@@ -15,19 +17,16 @@ import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
  * and the same lifecycle triage the per-brand home uses, scoped to everything.
  */
 
-type Sort = 'risk' | 'soonest' | 'reach' | 'recent'
-const SORTS: { key: Sort; label: string }[] = [
-  { key: 'risk', label: 'Risk' },
-  { key: 'soonest', label: 'Soonest' },
-  { key: 'reach', label: 'Reach' },
-  { key: 'recent', label: 'Recent' },
-]
-
 const DAY = 86_400_000
 const MNAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDay = (ms: number) => {
   const d = new Date(ms)
   return `${MNAMES[d.getMonth()]} ${d.getDate()}`
+}
+/** Parse a schedule date, reading a bare YYYY-MM-DD as local (UTC would drift a day). */
+const parseDue = (iso: string): number => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : Date.parse(iso)
 }
 const severityWeight = (s: 'high' | 'medium' | 'low') => (s === 'high' ? 100 : s === 'medium' ? 10 : 1)
 
@@ -50,14 +49,14 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const setView = useTrafficStore((s) => s.setView)
   const setPage = useTrafficStore((s) => s.setPage)
 
-  const [sort, setSort] = useState<Sort>('risk')
   const [brandFilter, setBrandFilter] = useState('all')
   const now = Date.now()
 
   const rows = useMemo<CockpitRow[]>(
     () =>
       canvases
-        .filter((c) => c.client && c.client !== DRAFTS_SPACE)
+        // "Published content" is the library archive, not a campaign to run.
+        .filter((c) => c.client && c.client !== DRAFTS_SPACE && c.name !== CONTENT_LIBRARY_CAMPAIGN)
         .map((c) => {
           const flight = campaignFlight(c.name, c.rows)
           const shortName = c.name.startsWith(`${c.client} — `) ? c.name.slice(c.client.length + 3) : c.name
@@ -78,17 +77,33 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const brands = useMemo(() => [...new Set(rows.map((r) => r.brand))].sort(), [rows])
   const shown = rows.filter((r) => brandFilter === 'all' || r.brand === brandFilter)
 
-  const sorted = [...shown].sort((a, b) => {
-    if (sort === 'reach') return b.reach - a.reach
-    if (sort === 'recent') return b.card.lastTouched - a.card.lastTouched
-    if (sort === 'soonest') return (a.start ?? Infinity) - (b.start ?? Infinity)
-    return b.risk - a.risk || (a.start ?? Infinity) - (b.start ?? Infinity)
-  })
+  // Risk-first: the demoted "all campaigns" table always leads with what's off track,
+  // then soonest to launch. (The sort toggle was removed to keep the board focused.)
+  const sorted = [...shown].sort((a, b) => b.risk - a.risk || (a.start ?? Infinity) - (b.start ?? Infinity))
 
   const needAttention = shown.filter((r) => r.card.attention.count > 0).length
   const live = shown.filter((r) => r.card.status === 'active').length
   const launching = shown.filter((r) => r.start != null && r.start >= now && r.start <= now + 7 * DAY).length
-  const totalReach = shown.reduce((a, r) => a + r.reach, 0)
+
+  // What's due next: not-yet-shipped assets across the shown campaigns, soonest first,
+  // at the asset level. Split at today: what's genuinely coming up leads the list, while
+  // anything already past its date is rolled into one "overdue" count rather than flooding
+  // the view (a director wants the next move, not a pile of stale dates).
+  const dayStart = (() => {
+    const d = new Date(now)
+    d.setHours(0, 0, 0, 0)
+    return d.getTime()
+  })()
+  const unposted = shown
+    .flatMap((r) =>
+      r.card.rows
+        .filter((row) => row.status !== 'posted')
+        .map((row) => ({ row, brand: r.brand, campaign: r.shortName, campaignName: r.card.name, due: parseDue(row.scheduledAt) })),
+    )
+    .filter((x) => !Number.isNaN(x.due))
+    .sort((a, b) => a.due - b.due)
+  const overdueCount = unposted.filter((x) => x.due < dayStart).length
+  const upNext = unposted.filter((x) => x.due >= dayStart).slice(0, 7)
 
   // Portfolio alerts: performance (measured WoW) per brand + pacing (launch readiness)
   // per campaign. Both from transparent rules; see domain/alerts.
@@ -125,14 +140,6 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
     return { label: `live · ${pct}%`, cls: 'live' }
   }
 
-  const KPIS = [
-    { label: 'Campaigns', value: String(shown.length), sub: `${brands.length} brand${brands.length === 1 ? '' : 's'}` },
-    { label: 'Need attention', value: String(needAttention), sub: 'open flags' },
-    { label: 'Live now', value: String(live), sub: 'active campaigns' },
-    { label: 'Launching ≤7d', value: String(launching), sub: 'starting this week' },
-    { label: 'Projected reach', value: formatReach(totalReach), sub: 'portfolio, calibrated' },
-  ]
-
   return (
     <div className="ckpt">
       <header className="ckpt-head">
@@ -142,17 +149,11 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
             {shown.length} campaign{shown.length === 1 ? '' : 's'} across {brands.length} brand
             {brands.length === 1 ? '' : 's'}
             {needAttention > 0 ? ` · ${needAttention} need${needAttention === 1 ? 's' : ''} attention` : ' · all healthy'}
+            {` · ${live} live · ${launching} launching ≤7d`}
           </p>
         </div>
-        <div className="ckpt-controls">
-          <div className="ckpt-sorts">
-            {SORTS.map((s) => (
-              <button key={s.key} className={`ckpt-sort${sort === s.key ? ' active' : ''}`} onClick={() => setSort(s.key)}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-          {brands.length > 1 && (
+        {brands.length > 1 && (
+          <div className="ckpt-controls">
             <select className="ckpt-brand" value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>
               <option value="all">All brands</option>
               {brands.map((b) => (
@@ -161,21 +162,11 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
                 </option>
               ))}
             </select>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
-      <div className="ins-kpis ckpt-kpis">
-        {KPIS.map((k) => (
-          <div className="ins-kpi" key={k.label}>
-            <span className="ins-kpi-label">{k.label}</span>
-            <span className="ins-kpi-value">{k.value}</span>
-            <span className="ins-kpi-sub">{k.sub}</span>
-          </div>
-        ))}
-      </div>
-
-      {alerts.length > 0 && (
+      {alerts.length > 0 ? (
         <div className="ckpt-signals">
           <div className="ckpt-signals-head">
             Needs attention<span className="ckpt-signals-n">{alerts.length}</span>
@@ -210,12 +201,60 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
             )
           })}
         </div>
+      ) : (
+        shown.length > 0 && <div className="ckpt-allclear">✓ Nothing needs attention right now.</div>
+      )}
+
+      {(upNext.length > 0 || overdueCount > 0) && (
+        <div className="ckpt-upnext">
+          <div className="ckpt-upnext-head">
+            Up next<span className="ckpt-upnext-sub">next assets due</span>
+          </div>
+          {overdueCount > 0 && (
+            <div className="ckpt-due ckpt-due-note">
+              <span className="ckpt-due-when w-overdue">{overdueCount} overdue</span>
+              <span className="ckpt-due-name ckpt-due-notetext">
+                unshipped assets past their scheduled date{upNext.length > 0 ? ', shown below what is coming up' : ''}
+              </span>
+            </div>
+          )}
+          {upNext.map(({ row, brand, campaign, campaignName, due }) => {
+            const days = Math.ceil((due - now) / DAY)
+            const cls = days < 0 ? 'overdue' : days === 0 ? 'today' : days <= 7 ? 'soon' : 'later'
+            const when =
+              days < 0 ? `overdue ${-days}d` : days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days}d`
+            const badge = assetBadge(row)
+            return (
+              <div
+                key={row.id}
+                className="ckpt-due"
+                role="button"
+                tabIndex={0}
+                onClick={() => openCampaign(brand, campaignName)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') openCampaign(brand, campaignName)
+                }}
+              >
+                <span className={`ckpt-due-when w-${cls}`}>{when}</span>
+                <span className="ckpt-due-date">{fmtDay(due)}</span>
+                <span className="ckpt-due-name" title={row.assetName}>
+                  {row.assetName}
+                </span>
+                <span className="ckpt-due-camp">
+                  {brand} · {campaign}
+                </span>
+                <span className={`cv-node-badge badge-${badge.kind}`}>{badge.label}</span>
+              </div>
+            )
+          })}
+        </div>
       )}
 
       {shown.length === 0 ? (
         <div className="ckpt-empty">No campaigns yet. Build one from a brand to see it here.</div>
       ) : (
         <div className="ckpt-table">
+          <div className="ckpt-allcamps">All campaigns</div>
           <div className="ckpt-tr ckpt-head-row">
             <span>Campaign</span>
             <span>Brand</span>
@@ -238,8 +277,17 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
                   if (e.key === 'Enter') open(r)
                 }}
               >
-                <span className="ckpt-name" title={r.card.name}>
-                  {r.shortName}
+                <span className="ckpt-namecell">
+                  <span className="ckpt-name" title={r.card.name}>
+                    {r.shortName}
+                  </span>
+                  {r.card.goal.message || r.card.goal.target != null ? (
+                    <span className="ckpt-goal" title={r.card.goal.sentence}>
+                      ◎ {r.card.goal.sentence}
+                    </span>
+                  ) : (
+                    <span className="ckpt-goal ckpt-goal-empty">No goal set</span>
+                  )}
                 </span>
                 <span className="ckpt-brandcell">{r.brand}</span>
                 <span>

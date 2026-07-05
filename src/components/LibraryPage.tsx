@@ -68,12 +68,12 @@ const TABS: { kind: LibraryKind; label: string }[] = [
   { kind: 'audiences', label: 'Audiences' },
   { kind: 'rtbs', label: 'Proof points' },
   { kind: 'ctas', label: 'CTAs' },
-  { kind: 'subjects', label: 'Subjects' },
   { kind: 'hooks', label: 'Hooks' },
-  { kind: 'strategies', label: 'Strategies' },
+  // 'strategies' is intentionally not authorable: the canonical GTM playbooks
+  // (domain/strategies) are the real system, picked per-brand in BrandStrategy.
 ]
 
-export function LibraryPage({ inline = false }: { inline?: boolean } = {}) {
+export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds?: LibraryKind[] } = {}) {
   const library = useTrafficStore((s) => s.library)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const removeLibraryItem = useTrafficStore((s) => s.removeLibraryItem)
@@ -103,7 +103,10 @@ export function LibraryPage({ inline = false }: { inline?: boolean } = {}) {
     if (fallback && fallback !== messagingBrand) setMessagingBrand(fallback)
   }, [brands, messagingBrand, clientFilter, setMessagingBrand, inline])
 
-  const [tab, setTab] = useState<LibraryKind>('audiences')
+  // When `kinds` is passed (embedded as a focused Brand sub-page), show only those
+  // sections; a single kind hides the tab bar entirely.
+  const visibleTabs = kinds && kinds.length ? TABS.filter((t) => kinds.includes(t.kind)) : TABS
+  const [tab, setTab] = useState<LibraryKind>(kinds?.[0] ?? 'audiences')
 
   // Known clients you can pull a library audience onto.
   const clients = useMemo(() => {
@@ -215,21 +218,23 @@ export function LibraryPage({ inline = false }: { inline?: boolean } = {}) {
         </div>
       ) : (
       <>
-      <div className="library-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.kind}
-            className={`library-tab${tab === t.kind ? ' active' : ''}`}
-            onClick={() => {
-              setTab(t.kind)
-              reset()
-            }}
-          >
-            {t.label}
-            <span className="library-tab-count">{library[t.kind].length}</span>
-          </button>
-        ))}
-      </div>
+      {visibleTabs.length > 1 && (
+        <div className="library-tabs">
+          {visibleTabs.map((t) => (
+            <button
+              key={t.kind}
+              className={`library-tab${tab === t.kind ? ' active' : ''}`}
+              onClick={() => {
+                setTab(t.kind)
+                reset()
+              }}
+            >
+              {t.label}
+              <span className="library-tab-count">{library[t.kind].length}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Detailed add form — these components shape every asset's messaging, so each
           captures real depth, not just a label. */}
@@ -296,7 +301,7 @@ export function LibraryPage({ inline = false }: { inline?: boolean } = {}) {
                   <span className="library-pill">♪ {a.descriptors.length} voice</span>
                 </div>
                 {(() => {
-                  const p = audienceProfile(a.name, rows)
+                  const p = audienceProfile(a.name, rows, library.audiences)
                   return <div className={`library-prof c-${p.confidence}`}>{profileLabel(p, 'on')}</div>
                 })()}
               </div>
@@ -306,24 +311,6 @@ export function LibraryPage({ inline = false }: { inline?: boolean } = {}) {
                     ✓ Approve
                   </button>
                 )}
-                <select
-                  className="library-input library-use"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      useLibraryAudience(e.target.value, a.id)
-                      setPage('clients')
-                      setClientFilter(e.target.value)
-                    }
-                  }}
-                >
-                  <option value="">Use on…</option>
-                  {clients.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
                 <button className="library-del" title="Remove" onClick={() => removeLibraryItem('audiences', a.id)}>
                   ✕
                 </button>

@@ -1,0 +1,240 @@
+<title>Messaging Adjustments — World Within</title>
+<style>
+  /* Hyperfocus house style: light surfaces, system font, orange = social, purple = web,
+     blue = highlight. Light-only, to match the app it renders inside. */
+  :root{
+    --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5;
+    --ink:#1a1d23; --ink-soft:#4b5563; --ink-faint:#9aa1ac;
+    --line:#e2e5ea; --line-soft:#eef0f3;
+    --ig:#ff6347; --ig-soft:#ffe8e2; --ig-line:#ffd3ca;
+    --seo:#9b2dff; --seo-soft:#f1e6ff; --seo-line:#e4ccff;
+    --gold:#2f6fb0; --gold-soft:#e6f1ff;
+    --serif:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+    --maxw:940px;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.55; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:clamp(20px,5vw,64px) clamp(18px,5vw,40px) 80px;}
+
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-faint);}
+  h1{font-family:var(--serif); font-weight:600; font-size:clamp(30px,5.2vw,50px); line-height:1.05; letter-spacing:-.01em; margin:.3em 0 .35em; text-wrap:balance; max-width:17ch;}
+  h2{font-family:var(--serif); font-weight:600; font-size:clamp(20px,3vw,27px); line-height:1.12; margin:0; text-wrap:balance;}
+  h3{font-family:var(--sans); font-weight:650; font-size:16px; margin:0; letter-spacing:-.005em;}
+  p{margin:0 0 14px; color:var(--ink-soft); max-width:64ch;}
+  .lead{font-size:clamp(15px,1.9vw,17.5px); color:var(--ink-soft); max-width:60ch;}
+  strong{color:var(--ink); font-weight:650;}
+
+  header.mast{border-bottom:1px solid var(--line); padding-bottom:24px;}
+  .mast-meta{display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:14px;}
+  .mast-meta span{font-family:var(--mono); font-size:11.5px; color:var(--ink-faint);}
+  .mast-meta b{color:var(--ink-soft); font-weight:600;}
+
+  /* north star */
+  .northstar{background:var(--gold-soft); border:1px solid var(--gold); border-radius:5px; padding:22px 24px; margin:30px 0 8px;}
+  .northstar .nl{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold);}
+  .northstar .line{font-family:var(--serif); font-size:clamp(19px,2.7vw,27px); color:var(--ink); font-style:italic; line-height:1.25; margin-top:9px; text-wrap:balance; max-width:24ch;}
+  .northstar .sub{font-size:12.5px; color:var(--ink-soft); margin-top:10px; max-width:60ch;}
+
+  section{margin-top:46px;}
+  .sec-head{display:flex; align-items:baseline; gap:12px; margin-bottom:4px;}
+  .sec-lead{font-size:13.5px; color:var(--ink-soft); margin:6px 0 18px; max-width:60ch;}
+  .tag{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; padding:3px 8px; border-radius:2px; white-space:nowrap;}
+  .tag.ig{color:var(--ig); background:var(--ig-soft); border:1px solid var(--ig-line);}
+  .tag.seo{color:var(--seo); background:var(--seo-soft); border:1px solid var(--seo-line);}
+  .tag.both{color:var(--gold); background:var(--gold-soft); border:1px solid var(--gold);}
+
+  /* adjustments */
+  .adj{display:grid; grid-template-columns:42px 1fr; gap:16px; padding:22px 0; border-bottom:1px solid var(--line);}
+  .adj:last-child{border-bottom:none;}
+  .adj-n{font-family:var(--mono); font-size:15px; color:var(--gold); font-weight:600; padding-top:2px; font-variant-numeric:tabular-nums;}
+  .adj-head{display:flex; align-items:baseline; gap:12px; justify-content:space-between; flex-wrap:wrap;}
+  .adj-why{font-size:13px; color:var(--ink-soft); margin:7px 0 13px; max-width:62ch;}
+  .adj-why b{color:var(--ink); font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600;}
+
+  .ba{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  @media(max-width:640px){.ba{grid-template-columns:1fr;}}
+  .ba-now,.ba-new{font-size:12.5px; line-height:1.5; padding:12px 14px; border-radius:4px; border:1px solid var(--line);}
+  .ba-now{background:var(--surface-2); color:var(--ink-faint);}
+  .ba-new{background:var(--seo-soft); border-color:var(--seo-line); color:var(--ink);}
+  .ba-lbl{display:block; font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; margin-bottom:6px;}
+  .ba-now .ba-lbl{color:var(--ink-faint);}
+  .ba-new .ba-lbl{color:var(--seo);}
+  .ba-new.ig{background:var(--ig-soft); border-color:var(--ig-line);}
+  .ba-new.ig .ba-lbl{color:var(--ig);}
+  .ba-list{margin:6px 0 0; padding-left:0; list-style:none; display:flex; flex-direction:column; gap:5px;}
+  .ba-list li{padding-left:14px; position:relative;}
+  .ba-list li::before{content:"›"; position:absolute; left:0; color:var(--seo);}
+
+  /* do / dont */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:680px){.grid2{grid-template-columns:1fr;}}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:18px 20px;}
+  .card h3{margin-bottom:2px;}
+  .card .ch-tag{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;}
+  .ch-tag.ig{color:var(--ig);} .ch-tag.seo{color:var(--seo);}
+  .dd{display:flex; flex-direction:column; gap:8px; margin-top:14px;}
+  .dd-item{display:grid; grid-template-columns:16px 1fr; gap:9px; font-size:13px; color:var(--ink-soft); line-height:1.4;}
+  .dd-item .mk{font-weight:700; text-align:center;}
+  .dd-do .mk{color:var(--seo);} .dd-dont .mk{color:var(--ig);}
+  .dd-sep{height:1px; background:var(--line-soft); margin:4px 0;}
+
+  .prio{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--gold); border-radius:4px; padding:18px 20px; margin-top:22px;}
+  .prio h3{margin-bottom:8px;}
+  .prio ol{margin:0; padding-left:20px; color:var(--ink-soft); font-size:13.5px;}
+  .prio li{margin-bottom:5px;}
+  .prio li b{color:var(--ink);}
+
+  footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--line); font-family:var(--mono); font-size:11px; color:var(--ink-faint); line-height:1.7;}
+  a{color:inherit;}
+  :focus-visible{outline:2px solid var(--seo); outline-offset:2px;}
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0; transform:translateY(8px); animation:rise .6s ease forwards;}
+    @keyframes rise{to{opacity:1; transform:none;}}
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast reveal">
+    <div class="eyebrow">Messaging Adjustments &nbsp;/&nbsp; World Within</div>
+    <h1>Make the two voices one</h1>
+    <p class="lead">Six adjustments drawn straight from your own copy. The message is already good. It is split across a warm social voice and an institutional web voice, and worn thin by two templates. These pull it back together.</p>
+    <div class="mast-meta">
+      <span>Based on <b>91</b> social + <b>84</b> web assets</span>
+      <span>Rust = Instagram &middot; Green = Website</span>
+    </div>
+  </header>
+
+  <div class="northstar reveal">
+    <div class="nl">The one line everything ladders to</div>
+    <div class="line">"We fund and film community-owned businesses, so wealth stays with the people who build it."</div>
+    <div class="sub">Put this in the site hero and the social bio. Every page and every post should be a specific proof of this one sentence. Right now the clearest version of it is buried in <b>20</b> duplicate meta descriptions.</div>
+  </div>
+
+  <section>
+    <div class="sec-head"><h2>The adjustments</h2></div>
+    <p class="sec-lead">Each is a specific change, why it matters in the data, and a before and after in your real copy.</p>
+
+    <div class="adj">
+      <div class="adj-n">01</div>
+      <div>
+        <div class="adj-head"><h3>Bring the first person onto the website</h3><span class="tag seo">Website</span></div>
+        <p class="adj-why">Social says "we / our" in <b>65%</b> of posts; the site says it in <b>5%</b>. A visitor who falls for a reel and clicks through hits copy that stops talking to them.</p>
+        <div class="ba">
+          <div class="ba-now"><span class="ba-lbl">Now</span>"World Within is a 501(c)(3) nonprofit that deploys donated capital into cooperatives, mutual banks, and community land trusts, and produces documentary films about the communities it invests in."</div>
+          <div class="ba-new"><span class="ba-lbl">Adjust to</span>"We move donated capital into the businesses communities own themselves: cooperatives, mutual banks, community land trusts. Then we film the people building them. We are a 501(c)(3) nonprofit."</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adj">
+      <div class="adj-n">02</div>
+      <div>
+        <div class="adj-head"><h3>Name the model on social, not just the show</h3><span class="tag ig">Instagram</span></div>
+        <p class="adj-why">On social the mission collapses to "cooperative" and "change the world." Mutual banks, land trusts, and "keeps wealth local" appear <b>0</b> times. The reach is real; the reason-why never rides along.</p>
+        <div class="ba">
+          <div class="ba-now"><span class="ba-lbl">Now</span>"[hook]&hellip; Watch the full episode on Spotify, Apple Podcasts, and YouTube. Link in bio. #howtochangetheworld #podcast"</div>
+          <div class="ba-new ig"><span class="ba-lbl">Adjust to</span>"[hook]&hellip; [Guest] runs a bank owned by its depositors, not shareholders, so the profit stays in town. That is exactly the kind of business we fund. Full story in bio."</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adj">
+      <div class="adj-n">03</div>
+      <div>
+        <div class="adj-head"><h3>Open with the question, the one device that already crosses over</h3><span class="tag both">Both</span></div>
+        <p class="adj-why">The question is the only move both channels share (<b>23%</b> of social, <b>21%</b> of web). It is the natural bridge for turning a web explainer into a scroll-stopper, and for opening a page with a hook instead of a definition.</p>
+        <div class="ba">
+          <div class="ba-now"><span class="ba-lbl">Now &middot; page title</span>"What Is a Cooperative Business?"</div>
+          <div class="ba-new"><span class="ba-lbl">Adjust to &middot; hook + opener</span>"Who actually owns your grocery store? In a food co-op, it is the people who shop there."</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adj">
+      <div class="adj-n">04</div>
+      <div>
+        <div class="adj-head"><h3>Retire "link in bio" as the reflex close</h3><span class="tag ig">Instagram</span></div>
+        <p class="adj-why"><b>61</b> of 76 captions end the same way. The CTA rarely matches what the post was about, so the ask does no work. Swap the reflex for one specific next step per post.</p>
+        <div class="ba">
+          <div class="ba-now"><span class="ba-lbl">Now</span>Every post ends: "&hellip; Link in bio."</div>
+          <div class="ba-new ig"><span class="ba-lbl">Adjust to &middot; match the ask to the post</span>
+            <ul class="ba-list">
+              <li>"Watch the film, free, in bio."</li>
+              <li>"Meet the co-op we funded in [place]: [link]."</li>
+              <li>"Help fund the next one: [link]."</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adj">
+      <div class="adj-n">05</div>
+      <div>
+        <div class="adj-head"><h3>Promote the strong line, retire the duplicate meta</h3><span class="tag seo">Website</span></div>
+        <p class="adj-why">Your clearest sentence is repeated verbatim across <b>20</b> pages as the meta description, so Google sees near-duplicates and the line gets worn out. Use it once, where it counts, and describe each page on its own terms.</p>
+        <div class="ba">
+          <div class="ba-now"><span class="ba-lbl">Now</span>The same 501(c)(3) sentence sits in ~20 page descriptions, and most <b>/project</b> and <b>/story</b> pages carry no unique copy at all.</div>
+          <div class="ba-new"><span class="ba-lbl">Adjust to</span>Make it the hero line and the social bio, once. Give every page a one-line description of that page, so the story pages become findable instead of invisible.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adj">
+      <div class="adj-n">06</div>
+      <div>
+        <div class="adj-head"><h3>Make one contrast your signature</h3><span class="tag both">Both</span></div>
+        <p class="adj-why">The ownership idea is phrased a dozen ways. The "owned by members, not outside investors" contrast is your sharpest and most portable line, and it already reads well on the site. Standardize it and use it everywhere.</p>
+        <div class="ba">
+          <div class="ba-now"><span class="ba-lbl">Now</span>"owned and governed by its members," "no outside shareholders," "owned by its depositors"&hellip; a different phrasing on every page.</div>
+          <div class="ba-new"><span class="ba-lbl">Adjust to &middot; one signature frame</span>"Owned by the people who use it, not shareholders who don't."</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>The quick rule per surface</h2></div>
+    <div class="grid2" style="margin-top:16px;">
+      <div class="card">
+        <h3>Instagram <span class="ch-tag ig">&middot; reach</span></h3>
+        <div class="dd">
+          <div class="dd-item dd-do"><span class="mk">+</span><span>Open with a question, then name a real community-owned business and what its model does.</span></div>
+          <div class="dd-item dd-do"><span class="mk">+</span><span>End with one specific ask tied to the post.</span></div>
+          <div class="dd-sep"></div>
+          <div class="dd-item dd-dont"><span class="mk">&minus;</span><span>Default to "link in bio."</span></div>
+          <div class="dd-item dd-dont"><span class="mk">&minus;</span><span>Let "the podcast" be the whole message. The show is the hook, not the point.</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Website <span class="ch-tag seo">&middot; conversion</span></h3>
+        <div class="dd">
+          <div class="dd-item dd-do"><span class="mk">+</span><span>Speak in the first person, the way the feed does.</span></div>
+          <div class="dd-item dd-do"><span class="mk">+</span><span>Lead pages with the question, then answer it. Write a unique description per page.</span></div>
+          <div class="dd-sep"></div>
+          <div class="dd-item dd-dont"><span class="mk">&minus;</span><span>Reuse the one positioning sentence as boilerplate meta.</span></div>
+          <div class="dd-item dd-dont"><span class="mk">&minus;</span><span>Open with a dictionary definition.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="prio reveal">
+    <h3>If you change three things this month</h3>
+    <ol>
+      <li>Put the <b>one line</b> in the site hero and the Instagram bio.</li>
+      <li>Rewrite the homepage and top pages into the <b>first person</b> (adjustment 01).</li>
+      <li>Start <b>naming the model</b> in every social caption, not just the podcast (adjustment 02).</li>
+    </ol>
+    <p style="margin:12px 0 0; font-size:12.5px; color:var(--ink-faint);">These three close the widest gaps, the tonal cliff and the missing "why" on social, without a full rewrite.</p>
+  </div>
+
+  <footer>
+    Adjustments drawn from World Within's ingested library: 91 social captions (Instagram, YouTube, LinkedIn) and 84 owned and web assets (worldwithin.org, email), 2026. Before lines are verbatim; after lines are illustrative and use [brackets] for slots. Generated 2026-07-05.
+  </footer>
+
+</div>

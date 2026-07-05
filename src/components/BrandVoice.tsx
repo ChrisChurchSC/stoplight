@@ -259,11 +259,11 @@ export function BrandVoice({ brand }: { brand: string }) {
         />
       </section>
 
-      <div className="voice-savebar">
+      <div className={`brand-savebar${dirty ? ' dirty' : ''}`}>
+        <span className="brand-savebar-status">{dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
         <button className="btn primary sm" onClick={save} disabled={!dirty}>
-          {dirty ? '✓ Save voice guide' : 'Saved'}
+          {dirty ? 'Save voice guide' : 'Saved'}
         </button>
-        {dirty && <span className="voice-savebar-hint">Unsaved changes</span>}
       </div>
     </div>
   )

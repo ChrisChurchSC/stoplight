@@ -29,16 +29,19 @@ export async function runExtractCopy(body: unknown): Promise<ExtractCopyResult> 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
 
-  const { mediaRef, mediaType } = (body ?? {}) as { mediaRef?: string; mediaType?: string }
+  const { mediaRef, mediaType } = (body ?? {}) as {
+    mediaRef?: string
+    mediaType?: string
+  }
 
-  // Video and blob:/object URLs can't be transcribed server-side here; be honest.
+  // Video can't be transcribed server-side here; be honest.
   if (mediaType === 'video') {
     return { text: '(Video transcription not wired — vision reads still images.)', via: 'stub' }
   }
+
   if (!mediaRef || !/^https?:\/\//i.test(mediaRef)) {
     return { text: '(No fetchable image URL — this creative is local-only.)', via: 'stub' }
   }
-
   const resp = await fetch(mediaRef, {
     headers: { 'user-agent': 'Mozilla/5.0' },
     signal: AbortSignal.timeout(8000),

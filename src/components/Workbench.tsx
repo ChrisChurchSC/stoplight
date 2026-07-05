@@ -15,11 +15,12 @@ import { CanvasView } from './CanvasView'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
+import { ConnectDataNudge } from './ConnectDataNudge'
 import { ConnectorsPage } from './ConnectorsPage'
 import { LibraryPage } from './LibraryPage'
 import { LibraryView } from './LibraryView'
 import { ChannelsView } from './ChannelsView'
-import { MetricsView } from './MetricsView'
+import { ReportsView } from './ReportsView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
@@ -198,10 +199,6 @@ export function Workbench() {
             <div className="home-main-scroll">
               <BrandPage brand={scopedBrand} />
             </div>
-          ) : page === 'metrics' ? (
-            <div className="home-main-scroll">
-              <MetricsView scopeClient={scopedBrand} />
-            </div>
           ) : page === 'content' ? (
             <div className="home-main-scroll">
               <LibraryView scopeClient={scopedBrand} />
@@ -209,6 +206,10 @@ export function Workbench() {
           ) : page === 'channels' ? (
             <div className="home-main-scroll">
               <ChannelsView scopeClient={scopedBrand} />
+            </div>
+          ) : page === 'reports' ? (
+            <div className="home-main-scroll">
+              <ReportsView scopeClient={scopedBrand} />
             </div>
           ) : (
             <div className="home-main-page">
@@ -247,6 +248,7 @@ export function Workbench() {
       <ClaudeHandoff />
       <SetupWizard />
       <AudienceWizard />
+      <ConnectDataNudge />
     </div>
   )
 }

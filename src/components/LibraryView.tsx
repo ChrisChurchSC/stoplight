@@ -6,6 +6,7 @@ import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { LibrarySignals } from './LibrarySignals'
 
 /**
  * Library — a brand's whole published body of work, ingested from its connected
@@ -86,10 +87,14 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const { canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const brandActuals = useTrafficStore((s) => s.brandActuals)
+  const brandSystems = useTrafficStore((s) => s.brandSystems)
   const contentIngesting = useTrafficStore((s) => s.contentIngesting)
   const contentIngest = useTrafficStore((s) => s.contentIngest)
   const ingestContent = useTrafficStore((s) => s.ingestContent)
 
+  // Catalog (browse every published asset) vs Signals (what's working — the read
+  // over the library that ranks content by what drives subscribers).
+  const [mode, setMode] = useState<'catalog' | 'signals'>('catalog')
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
   useEffect(() => {
@@ -103,12 +108,17 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
 
+  // Every asset the brand has (planned + published), for the Signals channel-mix read.
+  const allRows = useMemo(
+    () => (brand ? canvases.filter((c) => c.client === brand).flatMap((c) => c.rows) : []),
+    [canvases, brand],
+  )
   const items = useMemo(() => {
     if (!brand) return []
-    const rows = canvases.filter((c) => c.client === brand).flatMap((c) => c.rows).filter(isLibraryItem)
+    const rows = allRows.filter(isLibraryItem)
     // Best content first — a director scans by what earned reach, not by recency.
     return rows.sort((a, b) => (headline(b)?.value ?? 0) - (headline(a)?.value ?? 0))
-  }, [canvases, brand])
+  }, [allRows, brand])
 
   if (!brand) {
     return (
@@ -139,8 +149,31 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         </span>
       </header>
 
-      {/* Ingest control — one pull backfills the whole body of work. */}
-      <section className="lib-ingest">
+      <div className="folder-tabs lib-modes">
+        <button className={`folder-tab${mode === 'catalog' ? ' active' : ''}`} onClick={() => setMode('catalog')}>
+          Catalog
+        </button>
+        <button
+          className={`folder-tab${mode === 'signals' ? ' active' : ''}`}
+          onClick={() => setMode('signals')}
+          title="What's working — content ranked by what drives subscribers"
+        >
+          Signals
+        </button>
+      </div>
+
+      {mode === 'signals' ? (
+        <LibrarySignals
+          rows={items}
+          subVideos={measured?.subVideos}
+          allRows={allRows}
+          proofPoints={brandSystems[brand]?.rtbs}
+          ctas={brandSystems[brand]?.ctas}
+        />
+      ) : (
+        <>
+          {/* Ingest control — one pull backfills the whole body of work. */}
+          <section className="lib-ingest">
         <div className="lib-ingest-main">
           <div className="lib-ingest-copy">
             <strong>Ingest everything to date</strong>
@@ -169,6 +202,21 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
           )}
         </div>
       </section>
+
+      {/* Add a one-off creative through Claude — it reads the copy off the art and
+          writes it here as an asset, no API credits and the sharpest read on
+          stylized creatives. The channel-level backfill above stays automatic. */}
+      <div className="lib-claude">
+        <span className="lib-claude-ico">✦</span>
+        <div className="lib-claude-copy">
+          <strong>Add a creative through Claude</strong>
+          <span>
+            Drop a creative into your Claude chat, or point Claude at a post, and it reads the copy off
+            it and stores it here as an asset. Best for one-offs and stylized art the channel backfill
+            can't reach.
+          </span>
+        </div>
+      </div>
 
       {items.length === 0 ? (
         <div className="mtx-empty">
@@ -256,11 +304,13 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         </>
       )}
 
-      <div className="mtx-foot">
-        The library is the brand's real published content, sat beside the plan. Each item keeps its source
-        link, so a planned card can later reconcile to the post it became and inherit its measured metrics.
-        Click any card to read its full copy.
-      </div>
+          <div className="mtx-foot">
+            The library is the brand's real published content, sat beside the plan. Each item keeps its source
+            link, so a planned card can later reconcile to the post it became and inherit its measured metrics.
+            Click any card to read its full copy.
+          </div>
+        </>
+      )}
 
       {detail && (
         <div className="lib-modal-overlay" onClick={() => setDetail(null)}>

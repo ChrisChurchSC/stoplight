@@ -14,6 +14,8 @@ interface InfoField {
   type?: 'textarea'
   /** A list field — one item per line, stored as string[]. */
   list?: boolean
+  /** A numeric field — stored as a number (empty clears it). */
+  num?: boolean
   placeholder?: string
 }
 const FIELDS: InfoField[] = [
@@ -46,7 +48,13 @@ export function BrandInfo({ brand }: { brand: string }) {
     const next: Info = {}
     for (const f of FIELDS) {
       const v = p[f.key]
-      next[f.key] = f.list ? ((v as string[] | undefined) ?? []).join('\n') : ((v as string | undefined) ?? '')
+      next[f.key] = f.list
+        ? ((v as string[] | undefined) ?? []).join('\n')
+        : f.num
+          ? v != null
+            ? String(v)
+            : ''
+          : ((v as string | undefined) ?? '')
     }
     setInfo(next)
     setDirty(false)
@@ -63,7 +71,13 @@ export function BrandInfo({ brand }: { brand: string }) {
   const save = () => {
     const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
     const patch: Record<string, unknown> = {}
-    for (const f of FIELDS) patch[f.key] = f.list ? lines(info[f.key] ?? '') : (info[f.key] ?? '').trim()
+    for (const f of FIELDS) {
+      if (f.list) patch[f.key] = lines(info[f.key] ?? '')
+      else if (f.num) {
+        const t = (info[f.key] ?? '').trim()
+        patch[f.key] = t === '' ? undefined : Math.max(0, Math.round(Number(t) || 0))
+      } else patch[f.key] = (info[f.key] ?? '').trim()
+    }
     setClientProfile(brand, patch)
     setDirty(false)
   }
@@ -85,6 +99,8 @@ export function BrandInfo({ brand }: { brand: string }) {
             ) : (
               <input
                 className="library-input"
+                type={f.num ? 'number' : 'text'}
+                min={f.num ? 0 : undefined}
                 placeholder={f.placeholder}
                 value={info[f.key] ?? ''}
                 onChange={(e) => set(f.key, e.target.value)}
@@ -92,8 +108,11 @@ export function BrandInfo({ brand }: { brand: string }) {
             )}
           </label>
         ))}
-        <button className="btn primary sm library-add-btn" onClick={save} disabled={!dirty}>
-          {dirty ? '✓ Save brand info' : 'Saved'}
+      </div>
+      <div className={`brand-savebar${dirty ? ' dirty' : ''}`}>
+        <span className="brand-savebar-status">{dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
+        <button className="btn primary sm" onClick={save} disabled={!dirty}>
+          {dirty ? 'Save brand info' : 'Saved'}
         </button>
       </div>
     </div>

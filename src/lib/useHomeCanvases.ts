@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { mockAttio } from '../adapters/attio/mockAttio'
+import { resolveCampaignGoal, type CampaignGoal } from '../domain/campaignGoal'
 import { applyBreakStatus, breakScopeKey, resolveBreaks } from '../domain/breaks'
 import { clientForCampaign } from '../domain/clients'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { campaignAttention, deriveCampaignStatus, type CampaignAttention, type CampaignStatus } from '../domain/lifecycle'
 import type { TrafficRow } from '../domain/types'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
@@ -25,6 +27,8 @@ export interface CanvasCard {
   spend: number
   /** Attributed won revenue across the campaign's assets. */
   revenue: number
+  /** The campaign's resolved goal: what the assets communicate + the KPI/target. */
+  goal: CampaignGoal
 }
 
 export interface BrandRow {
@@ -41,6 +45,7 @@ export function useHomeCanvases(): {
   const campaignList = useTrafficStore((s) => s.campaignList)
   const clientList = useTrafficStore((s) => s.clientList)
   const breakStatus = useTrafficStore((s) => s.breakStatus)
+  const brandSystems = useTrafficStore((s) => s.brandSystems)
 
   const canvases = useMemo<CanvasCard[]>(() => {
     const allBreaks = applyBreakStatus(resolveBreaks(rows, null, null, breakScopeKey('all', 'all')), breakStatus)
@@ -56,6 +61,8 @@ export function useHomeCanvases(): {
     ]
     return names.map((name) => {
       const cRows = live.filter((r) => (r.campaign ?? '').trim() === name)
+      const client = clientForCampaign(name)
+      const rtbPool = (brandSystems[client]?.rtbs ?? []).map((r) => ({ id: r.id, label: r.label }))
       const assetNames = new Set(cRows.map((r) => r.assetName))
       let revenue = 0
       for (const n of assetNames) revenue += mockAttio.attributionForAsset(n).wonRevenue
@@ -66,7 +73,7 @@ export function useHomeCanvases(): {
       const attention = campaignAttention({ rows: cRows, breaks, roas: spend > 0 ? revenue / spend : null, spend })
       return {
         name,
-        client: clientForCampaign(name),
+        client,
         status: deriveCampaignStatus(meta.get(name), cRows),
         rows: cRows,
         lastTouched: cRows.reduce((m, r) => Math.max(m, r.postedAt ?? r.createdAt ?? 0), 0),
@@ -74,9 +81,10 @@ export function useHomeCanvases(): {
         attention,
         spend,
         revenue,
+        goal: resolveCampaignGoal(meta.get(name), cRows, rtbPool),
       }
     })
-  }, [rows, campaignList, breakStatus])
+  }, [rows, campaignList, breakStatus, brandSystems])
 
   const counts: Record<string, number> = {
     all: canvases.length,
@@ -87,7 +95,10 @@ export function useHomeCanvases(): {
 
   const brands = useMemo<BrandRow[]>(() => {
     const count = new Map<string, number>()
-    for (const c of canvases) if (c.client && c.client !== DRAFTS_SPACE) count.set(c.client, (count.get(c.client) ?? 0) + 1)
+    // "Published content" is the library archive, not a campaign — it doesn't count.
+    for (const c of canvases)
+      if (c.client && c.client !== DRAFTS_SPACE && c.name !== CONTENT_LIBRARY_CAMPAIGN)
+        count.set(c.client, (count.get(c.client) ?? 0) + 1)
     for (const c of clientList) if (c && c !== DRAFTS_SPACE && !count.has(c)) count.set(c, 0)
     return [...count.entries()].map(([name, n]) => ({ name, count: n })).sort((a, b) => a.name.localeCompare(b.name))
   }, [canvases, clientList])

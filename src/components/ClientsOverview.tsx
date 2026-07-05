@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { CalendarView } from './CalendarView'
@@ -142,6 +143,8 @@ export function ClientsOverview() {
       const b = filter.slice(6)
       list = canvases.filter((c) => c.client === b)
     }
+    // The published-content archive lives in the Library, not the campaign gallery.
+    list = list.filter((c) => c.name !== CONTENT_LIBRARY_CAMPAIGN)
     return [...list].sort((a, b) =>
       sort === 'date'
         ? canvasStartMs(a.name, a.rows) - canvasStartMs(b.name, b.rows) || a.name.localeCompare(b.name)

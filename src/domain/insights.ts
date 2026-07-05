@@ -165,7 +165,7 @@ export function computeInsights(rows: TrafficRow[], opts: Opts): Insights {
       const { revenue, leads } = rollup(names)
       return {
         channel,
-        label: CHANNELS[channel].label,
+        label: CHANNELS[channel]?.label ?? String(channel),
         assets: names.size,
         revenue,
         leads,

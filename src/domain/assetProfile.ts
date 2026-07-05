@@ -82,12 +82,41 @@ export function proofProfile(rtbId: string, rows: TrafficRow[]): AssetProfile {
   )
 }
 
-/** An audience's profile, from every message targeted at it (sliced by channel). */
-export function audienceProfile(audienceName: string, rows: TrafficRow[]): AssetProfile {
-  return buildProfile(
-    rows.filter((r) => (r.audience ?? '').trim() === audienceName.trim()),
-    (r) => CHANNELS[r.channel]?.label ?? r.channel,
-  )
+/** A canonical audience the plan's freeform tags can be tied back to. */
+export interface AudienceRef {
+  id: string
+  name: string
+  aliases?: string[]
+}
+
+const normAud = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+
+/** Resolve a plan's freeform audience tag to a canonical audience id: exact name,
+ *  then normalized name, then an alias. Undefined when nothing owns the tag. This is
+ *  what ties messy live tags ("Impact Investors & Philanthropists") to the library
+ *  audience they belong to ("HNW Donors & Funders"). */
+export function resolveAudienceId(raw: string, audiences: AudienceRef[]): string | undefined {
+  const n = normAud(raw)
+  if (!n) return undefined
+  for (const a of audiences) if (normAud(a.name) === n) return a.id
+  for (const a of audiences) if ((a.aliases ?? []).some((al) => normAud(al) === n)) return a.id
+  return undefined
+}
+
+/** An audience's profile, from every message targeted at it (sliced by channel).
+ *  Pass `allAudiences` to tie freeform plan tags to this audience via its aliases;
+ *  without it, falls back to exact-name matching (backward compatible). */
+export function audienceProfile(audienceName: string, rows: TrafficRow[], allAudiences?: AudienceRef[]): AssetProfile {
+  const self = allAudiences?.find((a) => a.name === audienceName)
+  const match =
+    self && allAudiences
+      ? (r: TrafficRow) => resolveAudienceId((r.audience ?? '').trim(), allAudiences) === self.id
+      : (r: TrafficRow) => (r.audience ?? '').trim() === audienceName.trim()
+  return buildProfile(rows.filter(match), (r) => CHANNELS[r.channel]?.label ?? r.channel)
 }
 
 /** A one-line, confidence-first summary for the surface — never a hard claim off

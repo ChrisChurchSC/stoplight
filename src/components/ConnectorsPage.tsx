@@ -1,118 +1,102 @@
-import { isGoogleDriveConfigured } from '../adapters/drive'
-import { useTrafficStore } from '../store/useTrafficStore'
+import { useState } from 'react'
 
-interface Connector {
-  name: string
-  purpose: string
-  status: 'connected' | 'mock' | 'config'
-  detail: string
-  /** Reached through Claude over MCP — not a separate app OAuth connector. */
-  viaClaude?: boolean
-  /** What you can drive from your own Claude once connected. */
-  capabilities?: string[]
-  /** How to wire it up. */
-  howTo?: string[]
-}
+/**
+ * Connect Hyperfocus to Claude — the MCP connect card, in the shape every MCP server
+ * uses: the server reference to copy, a tab per client (Claude Code / Desktop / Claude.ai),
+ * and the exact command/config to paste. Hyperfocus runs locally over stdio (the browser
+ * tab is the executor), so the commands are node-over-stdio, not a hosted HTTP URL.
+ */
 
-const CONNECTORS: Connector[] = [
-  {
-    name: 'Google Drive',
-    purpose: 'Asset import & auto-organize',
-    status: isGoogleDriveConfigured ? 'config' : 'mock',
-    detail: isGoogleDriveConfigured
-      ? 'Connected via OAuth (drive.file scope, no key stored). Folders → channel + type through the same classifier as local uploads.'
-      : 'Demo Drive fixture now (folders → channel + type). Set VITE_GOOGLE_CLIENT_ID + VITE_GOOGLE_API_KEY to connect a real Drive (drive.file scope, no app secret).',
-  },
-  {
-    name: 'Claude',
-    purpose: 'Connect your Claude — set up brands from chat',
-    status: 'config',
-    detail:
-      'Connect your own Claude (Desktop, over MCP) and it drives Hyperfocus live, in this tab. Everything it does lands as a draft for you to confirm — it proposes, you finish.',
-    capabilities: [
-      'Populate a brand’s About info (one-liner, mission, voice, products, differentiators)',
-      'Pull in a brand’s live assets and messaging from its site and ads',
-      'Write the messaging components — audiences, proof points, subjects, hooks, CTAs',
-      'Generate draft assets for a campaign from everything connected',
-    ],
-    howTo: [
-      'Add Hyperfocus to Claude Desktop (mcp/hyperfocus-server.mjs over stdio) — see docs/claude-desktop-mcp.md',
-      'Keep this tab open with the dev server running — it’s the executor',
-      'Set ANTHROPIC_API_KEY for live generation; without it, heuristic drafts fill in',
-    ],
-  },
-]
+const SERVER = 'mcp/hyperfocus-server.mjs'
+const CODE_CMD = 'claude mcp add hyperfocus -- node "$(pwd)/mcp/hyperfocus-server.mjs"'
+const DESKTOP_JSON = `{
+  "mcpServers": {
+    "hyperfocus": {
+      "command": "node",
+      "args": ["/absolute/path/to/stoplight/mcp/hyperfocus-server.mjs"]
+    }
+  }
+}`
 
-const STATUS_LABEL: Record<Connector['status'], string> = {
-  connected: 'Connected',
-  mock: 'Mock',
-  config: 'Configured',
-}
+const TABS = [
+  { key: 'code', label: 'Claude Code' },
+  { key: 'desktop', label: 'Desktop' },
+  { key: 'web', label: 'Claude.ai' },
+] as const
+type TabKey = (typeof TABS)[number]['key']
 
 export function ConnectorsPage() {
-  const importFromDrive = useTrafficStore((s) => s.importFromDrive)
-  const importFolderFromDrive = useTrafficStore((s) => s.importFolderFromDrive)
-  const connectDrive = useTrafficStore((s) => s.connectDrive)
-  const driveConnected = useTrafficStore((s) => s.driveConnected)
+  const [tab, setTab] = useState<TabKey>('code')
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const copy = (id: string, text: string) => {
+    void navigator.clipboard?.writeText(text)
+    setCopied(id)
+    window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500)
+  }
+
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>Connectors</h1>
-        <span className="page-sub">The services Hyperfocus runs on — connect to go from mock to live</span>
-      </div>
-      <div className="page-body">
-        <div className="settings-grid">
-          {CONNECTORS.map((c) => (
-            <div key={c.name} className="settings-card">
-              <div className="settings-card-head">
-                <span className="settings-card-name">{c.name}</span>
-                <span className={`settings-badge${c.viaClaude ? ' s-via' : ` s-${c.status}`}`}>
-                  {c.viaClaude ? 'via Claude' : STATUS_LABEL[c.status]}
-                </span>
-              </div>
-              <div className="settings-card-purpose">{c.purpose}</div>
-              <div className="settings-card-detail">{c.detail}</div>
-              {c.capabilities && (
-                <ul className="settings-card-caps">
-                  {c.capabilities.map((cap) => (
-                    <li key={cap}>{cap}</li>
-                  ))}
-                </ul>
-              )}
-              {c.howTo && (
-                <ol className="settings-card-howto">
-                  {c.howTo.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-              )}
-              {c.viaClaude ? (
-                <span className="settings-card-via">↳ Connected through Claude</span>
-              ) : c.name === 'Google Drive' ? (
-                <div className="settings-card-actions">
-                  {driveConnected ? (
-                    <span className="drive-connected">
-                      ✓ {isGoogleDriveConfigured ? 'Account connected' : 'Demo connected'}
-                    </span>
-                  ) : (
-                    <button className="btn sm settings-card-btn" onClick={() => connectDrive()}>
-                      Connect account
-                    </button>
-                  )}
-                  <button className="btn sm settings-card-btn" onClick={() => importFolderFromDrive()}>
-                    Connect folder
-                  </button>
-                  <button className="btn sm settings-card-btn" onClick={() => importFromDrive()}>
-                    {isGoogleDriveConfigured ? 'Import files' : 'Browse Demo Drive'}
-                  </button>
-                </div>
-              ) : c.howTo ? null : (
-                <button className="btn sm settings-card-btn" disabled>
-                  {c.status === 'connected' ? 'Manage' : 'Connect'}
+      <div className="page-body mcpc-body">
+        <div className="mcpc">
+          <h1 className="mcpc-title">Connect Hyperfocus to Claude</h1>
+          <p className="mcpc-sub">Bring your brands into Claude to set them up and run campaigns with AI.</p>
+
+          <div className="mcpc-label">MCP Server</div>
+          <div className="mcpc-url">
+            <code>{SERVER}</code>
+            <button className="mcpc-copy" onClick={() => copy('server', SERVER)}>
+              {copied === 'server' ? '✓ Copied' : '⧉ Copy'}
+            </button>
+          </div>
+
+          <div className="mcpc-tabs">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                className={`mcpc-tab${tab === t.key ? ' active' : ''}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'code' ? (
+            <>
+              <p className="mcpc-run">Run this command in your terminal (from the stoplight repo):</p>
+              <div className="mcpc-cmd">
+                <code>{CODE_CMD}</code>
+                <button className="mcpc-cmd-copy" onClick={() => copy('code', CODE_CMD)} aria-label="Copy command">
+                  {copied === 'code' ? '✓' : '⧉'}
                 </button>
-              )}
-            </div>
-          ))}
+              </div>
+              <p className="mcpc-then">
+                Then keep a tab open at <code>localhost:5173</code> and ask Claude to set up a brand.
+              </p>
+            </>
+          ) : tab === 'desktop' ? (
+            <>
+              <p className="mcpc-run">
+                Add this to <code>claude_desktop_config.json</code>:
+              </p>
+              <div className="mcpc-cmd mcpc-cmd-block">
+                <pre>{DESKTOP_JSON}</pre>
+                <button className="mcpc-cmd-copy" onClick={() => copy('desktop', DESKTOP_JSON)} aria-label="Copy config">
+                  {copied === 'desktop' ? '✓' : '⧉'}
+                </button>
+              </div>
+              <p className="mcpc-then">
+                Use the absolute path to the server, then restart Claude Desktop. The <strong>hyperfocus</strong> tools
+                appear; keep a tab open at <code>localhost:5173</code>.
+              </p>
+            </>
+          ) : (
+            <p className="mcpc-note">
+              Claude.ai connects to hosted (HTTP) servers. Hyperfocus runs locally over stdio, so connect it through{' '}
+              <strong>Claude Code</strong> or <strong>Desktop</strong>.
+            </p>
+          )}
         </div>
       </div>
     </div>

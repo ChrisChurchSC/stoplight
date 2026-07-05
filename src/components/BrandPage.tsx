@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { BrandGoal } from './BrandGoal'
 import { BrandInfo } from './BrandInfo'
+import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { LibraryPage } from './LibraryPage'
 
@@ -11,11 +13,12 @@ import { LibraryPage } from './LibraryPage'
  * LibraryPage, so opening it points the messaging library at this brand.
  */
 export function BrandPage({ brand }: { brand?: string }) {
-  const [tab, setTab] = useState<'about' | 'voice' | 'messaging'>('about')
+  const [tab, setTab] = useState<'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging'>('about')
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
 
+  // Any library-backed tab needs the messaging system pointed at this brand.
   useEffect(() => {
-    if (tab === 'messaging' && brand) setMessagingBrand(brand)
+    if ((tab === 'audiences' || tab === 'strategy' || tab === 'messaging') && brand) setMessagingBrand(brand)
   }, [tab, brand, setMessagingBrand])
 
   if (!brand) {
@@ -35,18 +38,55 @@ export function BrandPage({ brand }: { brand?: string }) {
             About
           </button>
           <button
+            className={`folder-tab${tab === 'goal' ? ' active' : ''}`}
+            onClick={() => setTab('goal')}
+            title="The business goal every campaign ladders up to, and its north-star metric"
+          >
+            Goal
+          </button>
+          <button
             className={`folder-tab${tab === 'voice' ? ' active' : ''}`}
             onClick={() => setTab('voice')}
             title="How the brand sounds — the tone canvases are generated in"
           >
             Voice
           </button>
-          <button className={`folder-tab${tab === 'messaging' ? ' active' : ''}`} onClick={() => setTab('messaging')}>
+          <button
+            className={`folder-tab${tab === 'audiences' ? ' active' : ''}`}
+            onClick={() => setTab('audiences')}
+            title="The brand's audiences — who its canvases target"
+          >
+            Audiences
+          </button>
+          <button
+            className={`folder-tab${tab === 'strategy' ? ' active' : ''}`}
+            onClick={() => setTab('strategy')}
+            title="The brand's GTM strategies"
+          >
+            Strategy
+          </button>
+          <button
+            className={`folder-tab${tab === 'messaging' ? ' active' : ''}`}
+            onClick={() => setTab('messaging')}
+            title="Proof points, CTAs, subjects, and hooks"
+          >
             Messaging
           </button>
         </div>
       </div>
-      {tab === 'about' ? <BrandInfo brand={brand} /> : tab === 'voice' ? <BrandVoice brand={brand} /> : <LibraryPage inline />}
+      {tab === 'about' ? (
+        <BrandInfo brand={brand} />
+      ) : tab === 'goal' ? (
+        <BrandGoal key={`brand-goal-${brand}`} brand={brand} />
+      ) : tab === 'voice' ? (
+        <BrandVoice brand={brand} />
+      ) : tab === 'audiences' ? (
+        <LibraryPage key="brand-audiences" inline kinds={['audiences']} />
+      ) : tab === 'strategy' ? (
+        <BrandStrategy key="brand-strategy" brand={brand} />
+      ) : (
+        <LibraryPage key="brand-messaging" inline kinds={['rtbs', 'ctas', 'hooks']} />
+      )}
     </div>
   )
 }

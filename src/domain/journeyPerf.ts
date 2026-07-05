@@ -216,9 +216,9 @@ export function journeyPerformance(rows: TrafficRow[]): JourneyPerf {
   }
 }
 
-/** Compact metric formatting: 1.2k, 3.4M. */
+/** Compact metric formatting: 1.2k, 3.4M. (999,500+ rounds up to "1.0M", never "1000k".) */
 export function formatReach(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 999_500) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`
   return `${n}`
 }
