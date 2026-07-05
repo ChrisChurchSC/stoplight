@@ -6,6 +6,7 @@ import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { LibraryData } from './LibraryData'
 import { LibraryMap } from './LibraryMap'
 import { LibrarySignals } from './LibrarySignals'
 
@@ -95,7 +96,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
 
   // Catalog (browse every published asset) vs Signals (what's working — the read
   // over the library that ranks content by what drives subscribers).
-  const [mode, setMode] = useState<'catalog' | 'signals' | 'map'>('catalog')
+  const [mode, setMode] = useState<'catalog' | 'signals' | 'map' | 'data'>('catalog')
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
   useEffect(() => {
@@ -168,6 +169,13 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         >
           Map
         </button>
+        <button
+          className={`folder-tab${mode === 'data' ? ' active' : ''}`}
+          onClick={() => setMode('data')}
+          title="Data unlocks — what more data will let this brand see, gamified"
+        >
+          Data
+        </button>
       </div>
 
       {mode === 'signals' ? (
@@ -181,6 +189,14 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         />
       ) : mode === 'map' ? (
         <LibraryMap rows={items} />
+      ) : mode === 'data' ? (
+        <LibraryData
+          items={items}
+          allRows={allRows}
+          proofPoints={brandSystems[brand]?.rtbs}
+          audiences={brandSystems[brand]?.audiences}
+          sources={connectedSources}
+        />
       ) : (
         <>
           {/* Ingest control — one pull backfills the whole body of work. */}
