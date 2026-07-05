@@ -6,7 +6,6 @@ import { rowInScope } from '../lib/scope'
 import { usePresence } from '../lib/usePresence'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { BrandTabs } from './BrandTabs'
-import { CanvasFrameBar } from './CanvasFrameBar'
 
 export function Breadcrumb() {
   // Comments / History / Export CSV collapse into a "⋯ More" dropdown; close on
@@ -88,11 +87,7 @@ export function Breadcrumb() {
             </button>
             <BrandTabs />
           </>
-        ) : (
-          // Inside a campaign (the canvas), the frame that governs the whole board —
-          // Brand · Subject · Strategy — lives up here in the top bar.
-          <CanvasFrameBar />
-        )}
+        ) : null}
       </div>
 
       <div className="bc-right">

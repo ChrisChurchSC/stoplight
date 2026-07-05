@@ -375,7 +375,9 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
       {/* Organic + Owned — flat */}
       {KIND_ORDER.filter((k) => k.kind !== 'paid').map((k) => {
         const list = channelsByKind(k.kind)
-        const items = EXTRA_BY_KIND[k.kind]
+        // Extras layer on tools/offline media that aren't first-class channels. Drop any
+        // whose id already exists as a canonical channel (e.g. 'events') so it renders once.
+        const items = EXTRA_BY_KIND[k.kind].filter((t) => !list.some((c) => c.id === t.id))
         const on =
           list.filter((c) => selected.has(c.id)).length + items.filter((t) => selected.has(t.id)).length
         return (

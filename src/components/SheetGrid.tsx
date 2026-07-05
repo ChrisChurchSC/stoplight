@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
-import { isValidType, typesFor } from '../domain/channelAssetTypes'
+import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
 import { messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
@@ -516,8 +516,9 @@ export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: bool
                         value={resolveChannelId(row.channel) ?? row.channel}
                         onChange={(e) => {
                           const channel = e.target.value as ChannelId
-                          // Keep the type only if still valid for the new channel; else clear & prompt.
-                          const assetType = isValidType(channel, row.assetType) ? row.assetType : ''
+                          // Keep the type if still valid; otherwise preselect the channel's primary
+                          // type (matching how new rows seed) rather than leaving it blank to prompt.
+                          const assetType = isValidType(channel, row.assetType) ? row.assetType : primaryTypeKey(channel)
                           // A human pick clears the inferred-categorization flag.
                           updateRow(row.id, { channel, assetType, classifyConfidence: undefined, classifySource: undefined })
                         }}
