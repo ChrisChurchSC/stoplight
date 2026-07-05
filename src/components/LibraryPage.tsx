@@ -77,7 +77,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
   const library = useTrafficStore((s) => s.library)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const removeLibraryItem = useTrafficStore((s) => s.removeLibraryItem)
-  const approveLibraryItem = useTrafficStore((s) => s.approveLibraryItem)
   const editLibrarySubject = useTrafficStore((s) => s.editLibrarySubject)
   const editLibraryHook = useTrafficStore((s) => s.editLibraryHook)
   const useLibraryAudience = useTrafficStore((s) => s.useLibraryAudience)
@@ -306,11 +305,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 })()}
               </div>
               <div className="library-item-actions">
-                {!isApproved(a) && (
-                  <button className="library-approve" title="Approve as a library master" onClick={() => approveLibraryItem('audiences', a.id)}>
-                    ✓ Approve
-                  </button>
-                )}
                 <button className="library-del" title="Remove" onClick={() => removeLibraryItem('audiences', a.id)}>
                   ✕
                 </button>
@@ -339,11 +333,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 })()}
               </div>
               <div className="library-item-actions">
-                {!isApproved(r) && (
-                  <button className="library-approve" title="Approve as a library master" onClick={() => approveLibraryItem('rtbs', r.id)}>
-                    ✓ Approve
-                  </button>
-                )}
                 <button className="library-del" title="Remove" onClick={() => removeLibraryItem('rtbs', r.id)}>
                   ✕
                 </button>
@@ -371,11 +360,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 </div>
               </div>
               <div className="library-item-actions">
-                {!isApproved(c) && (
-                  <button className="library-approve" title="Approve as a library master" onClick={() => approveLibraryItem('ctas', c.id)}>
-                    ✓ Approve
-                  </button>
-                )}
                 <button className="library-del" title="Remove" onClick={() => removeLibraryItem('ctas', c.id)}>
                   ✕
                 </button>
@@ -424,11 +408,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                     ✎ Edit
                   </button>
                 )}
-                {!isApproved(su) && (
-                  <button className="library-approve" title="Approve as a library master" onClick={() => approveLibraryItem('subjects', su.id)}>
-                    ✓ Approve
-                  </button>
-                )}
                 <button className="library-del" title="Remove" onClick={() => removeLibraryItem('subjects', su.id)}>
                   ✕
                 </button>
@@ -471,11 +450,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 {editingId !== h.id && (
                   <button className="library-edit-btn" title="Edit this hook" onClick={() => startEdit(h.id, h.text)}>
                     ✎ Edit
-                  </button>
-                )}
-                {!isApproved(h) && (
-                  <button className="library-approve" title="Approve as a library master" onClick={() => approveLibraryItem('hooks', h.id)}>
-                    ✓ Approve
                   </button>
                 )}
                 <button className="library-del" title="Remove" onClick={() => removeLibraryItem('hooks', h.id)}>
