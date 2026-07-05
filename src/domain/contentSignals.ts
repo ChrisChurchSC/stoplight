@@ -1,3 +1,4 @@
+import { resolveAudienceId } from './assetProfile'
 import { CHANNELS } from './channels'
 import type { ChannelId, TrafficRow } from './types'
 
@@ -651,10 +652,13 @@ export interface CoverageItem {
   label: string
   /** Assets whose copy states this concept. */
   hits: number
+  /** Measured outcome (engagement / clicks) summed across the assets that use it. */
+  outcome?: number
 }
 export interface MessageCoverage {
-  /** Brand proof points (RTBs): how many are stated in the copy, and which are not. */
-  proof: { total: number; used: number; unused: CoverageItem[] }
+  /** Brand proof points (RTBs): how many are stated, which are not, and which of the
+   *  used ones actually drove outcomes (ranked) — the heuristic, weighted by results. */
+  proof: { total: number; used: number; unused: CoverageItem[]; performing: CoverageItem[] }
   /** Defined CTAs and how often the copy actually makes each ask (0 = never said). */
   cta: { total: number; used: number; items: CoverageItem[] }
   corpusAssets: number
@@ -675,26 +679,182 @@ function conceptHits(copies: string[], label: string): number {
   if (!ws.length) return 0
   return copies.filter((c) => ws.filter((w) => c.includes(w)).length / ws.length >= 0.5).length
 }
+/** Whether one asset's copy states a concept. */
+function conceptMatch(copy: string, ws: string[]): boolean {
+  return ws.length > 0 && ws.filter((w) => copy.includes(w)).length / ws.length >= 0.5
+}
+/** The measured result on a row — engagement, else likes+comments, else clicks. */
+function outcomeOf(r: TrafficRow): number {
+  const m = r.socialMetrics ?? {}
+  if (typeof m.engagement === 'number' && m.engagement > 0) return m.engagement
+  const likes = typeof m.likes === 'number' ? m.likes : 0
+  const comments = typeof m.comments === 'number' ? m.comments : 0
+  if (likes + comments > 0) return likes + comments
+  if (typeof m.clicks === 'number') return m.clicks
+  return 0
+}
 
 export function computeMessageCoverage(
   rows: TrafficRow[],
   proofPoints: { label: string }[],
   ctas: { label: string }[],
 ): MessageCoverage {
-  const copies = rows.map((r) => fullCopy(r).toLowerCase()).filter((c) => c.trim().length > 0)
-  const proofItems = proofPoints
+  const corpus = rows.map((r) => ({ r, c: fullCopy(r).toLowerCase() })).filter((x) => x.c.trim().length > 0)
+  const copies = corpus.map((x) => x.c)
+  const proofItems: CoverageItem[] = proofPoints
     .filter((p) => p.label?.trim())
-    .map((p) => ({ label: p.label, hits: conceptHits(copies, p.label) }))
+    .map((p) => {
+      const ws = covWords(p.label)
+      const matched = corpus.filter((x) => conceptMatch(x.c, ws))
+      return { label: p.label, hits: matched.length, outcome: matched.reduce((s, x) => s + outcomeOf(x.r), 0) }
+    })
   const unused = proofItems.filter((p) => p.hits === 0)
+  // Accumulation → outcomes: of the proof points that ARE used, rank by what the
+  // content carrying them actually drove. "We think this resonates" becomes measured.
+  const performing = proofItems
+    .filter((p) => p.hits > 0 && (p.outcome ?? 0) > 0)
+    .sort((a, b) => (b.outcome ?? 0) - (a.outcome ?? 0))
   const ctaItems = ctas
     .filter((c) => c.label?.trim())
     .map((c) => ({ label: c.label, hits: conceptHits(copies, c.label) }))
     .sort((a, b) => a.hits - b.hits)
   return {
-    proof: { total: proofItems.length, used: proofItems.length - unused.length, unused },
+    proof: { total: proofItems.length, used: proofItems.length - unused.length, unused, performing },
     cta: { total: ctaItems.length, used: ctaItems.filter((c) => c.hits > 0).length, items: ctaItems },
     corpusAssets: copies.length,
   }
+}
+
+// ── Reconciliation: a planned card's projection becomes the measured actual ───
+export interface ReconcileStat {
+  planned: number
+  reconciled: number
+}
+/** Normalized copy of a row — the key for matching a planned card to its published post. */
+export function rowCopyKey(r: TrafficRow): string {
+  return Object.values(r.messaging ?? {})
+    .filter((v): v is string => typeof v === 'string')
+    .join(' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+/** A planned card is one that hasn't posted and wasn't ingested (generated/authored/blank). */
+export const isPlannedCard = (r: TrafficRow): boolean =>
+  r.status !== 'posted' && (!r.source || r.source === 'generated' || r.source === 'authored')
+export function reconciliationStat(rows: TrafficRow[]): ReconcileStat {
+  const planned = rows.filter(isPlannedCard)
+  return { planned: planned.length, reconciled: planned.filter((r) => typeof r.reconciledAt === 'number').length }
+}
+
+// ── Channel connection: does each channel push the audience onward? ───────────
+// A channel that never links to a next step is a dead end — reach with nowhere to
+// go. This reads the copy for onward destinations (newsletter, podcast, site,
+// donate…) so you can see which channels connect the funnel and which strand it.
+const LINK_DESTINATIONS: [string, RegExp][] = [
+  ['Newsletter', /subscribe|newsletter|sign ?up|join the (list|movement)/i],
+  ['Podcast', /podcast|spotify|apple podcast|full episode|tune in|\blisten\b/i],
+  ['Website', /link in (bio|our bio)|\bin bio\b|worldwithin|\.org\b|our (website|site)|head (on )?over|learn more|read more|link below/i],
+  ['YouTube', /\byoutube\b|watch (the|our|full|now)\b/i],
+  ['Donate / Fund', /\bdonate\b|the fund|\binvest\b|wefunder|contribute|give today|chip in/i],
+  ['Events', /\btickets?\b|screening|\brsvp\b|register|join us (on|at)/i],
+  ['Follow', /\bfollow\b|turn on notif|hit the bell/i],
+]
+
+export interface ChannelLink {
+  channel: string
+  label: string
+  total: number
+  connected: number
+  destinations: { key: string; count: number }[]
+}
+export interface ChannelConnection {
+  channels: ChannelLink[]
+  overall: { total: number; connected: number; deadEndPct: number }
+  destRank: { key: string; count: number }[]
+}
+
+export function computeChannelConnection(rows: TrafficRow[]): ChannelConnection {
+  const byCh = new Map<string, TrafficRow[]>()
+  for (const r of rows) {
+    const c = String(r.channel)
+    byCh.set(c, [...(byCh.get(c) ?? []), r])
+  }
+  const overallDest = new Map<string, number>()
+  let connectedTotal = 0
+  const channels: ChannelLink[] = [...byCh.entries()]
+    .map(([channel, list]) => {
+      const destTally = new Map<string, number>()
+      let connected = 0
+      for (const r of list) {
+        const c = fullCopy(r).toLowerCase()
+        let any = false
+        for (const [key, re] of LINK_DESTINATIONS) {
+          if (re.test(c)) {
+            destTally.set(key, (destTally.get(key) ?? 0) + 1)
+            overallDest.set(key, (overallDest.get(key) ?? 0) + 1)
+            any = true
+          }
+        }
+        if (any) connected++
+      }
+      connectedTotal += connected
+      return {
+        channel,
+        label: CHANNELS[channel as ChannelId]?.label ?? channel,
+        total: list.length,
+        connected,
+        destinations: [...destTally.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count),
+      }
+    })
+    .sort((a, b) => b.total - a.total)
+  const total = rows.length
+  return {
+    channels,
+    overall: {
+      total,
+      connected: connectedTotal,
+      deadEndPct: total ? Math.round(((total - connectedTotal) / total) * 100) : 0,
+    },
+    destRank: [...overallDest.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count),
+  }
+}
+
+// ── Audience coverage: which of the brand's audiences the content targets ─────
+// Cross-references the audience tags on the content against the brand's defined
+// audiences: which defined personas have content, which the content targets that
+// aren't defined at all (drift), and how much content names no audience.
+export interface AudienceCoverage {
+  total: number
+  tagged: number
+  untagged: number
+  defined: { label: string; count: number }[]
+  offList: { label: string; count: number }[]
+}
+
+export function computeAudienceCoverage(
+  rows: TrafficRow[],
+  audiences: { id?: string; name?: string; label?: string; aliases?: string[] }[],
+): AudienceCoverage {
+  // Resolve tags to a canonical audience by name OR alias, so "Impact Investors" counts
+  // toward the audience that owns it instead of reading as drift.
+  const refs = audiences
+    .map((a, i) => ({ id: a.id ?? `aud_${i}`, name: (a.name ?? a.label ?? '').trim(), aliases: a.aliases }))
+    .filter((a) => a.name)
+  const perAudience = new Map<string, number>()
+  const offList = new Map<string, number>()
+  let tagged = 0
+  for (const r of rows) {
+    const a = (r.audience ?? '').trim()
+    if (!a) continue
+    tagged++
+    const id = resolveAudienceId(a, refs)
+    if (id) perAudience.set(id, (perAudience.get(id) ?? 0) + 1)
+    else offList.set(a, (offList.get(a) ?? 0) + 1)
+  }
+  const defined = refs.map((r) => ({ label: r.name, count: perAudience.get(r.id) ?? 0 })).sort((a, b) => b.count - a.count)
+  const off = [...offList.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  return { total: rows.length, tagged, untagged: rows.length - tagged, defined, offList: off }
 }
 
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']

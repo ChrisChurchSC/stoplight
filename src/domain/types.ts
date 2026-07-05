@@ -186,6 +186,9 @@ export interface TrafficRow {
   /** When socialMetrics were last refreshed (ms epoch). Platform metrics lag by up to
    *  ~24h, so this is the freshness stamp, not a real-time read. */
   metricsUpdatedAt?: number
+  /** When a planned card was reconciled to its real published post (ms epoch): the
+   *  point its projection was replaced by measured metrics inherited via sourceUrl/copy. */
+  reconciledAt?: number
   /** ISO timestamp the post should go out. Proposed, then user-adjustable. */
   scheduledAt: string
   /** For assets that run over a period (always-on ads, landing pages, nurture

@@ -3,10 +3,13 @@ import { CHANNELS } from '../domain/channels'
 import {
   channelName,
   compact,
+  computeAudienceCoverage,
+  computeChannelConnection,
   computeLibrarySignals,
   computeMessageCoverage,
   computeMessagingPatterns,
   ratePct,
+  reconciliationStat,
 } from '../domain/contentSignals'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { ChannelIcon } from './ChannelIcon'
@@ -23,6 +26,7 @@ export function LibrarySignals({
   allRows,
   proofPoints,
   ctas,
+  audiences,
 }: {
   rows: TrafficRow[]
   /** Top subscriber-driving videos, from the brand's measured actuals (Summer). */
@@ -33,11 +37,18 @@ export function LibrarySignals({
   proofPoints?: { label: string }[]
   /** The brand's defined CTAs, to check which asks the copy actually makes. */
   ctas?: { label: string }[]
+  /** The brand's defined audiences, to check which the content actually targets. */
+  audiences?: { id?: string; name?: string; label?: string; aliases?: string[] }[]
 }) {
   const s = computeLibrarySignals(rows)
   const mp = computeMessagingPatterns(rows)
   const cov = computeMessageCoverage(rows, proofPoints ?? [], ctas ?? [])
   const maxCta = Math.max(...cov.cta.items.map((c) => c.hits), 1)
+  const maxProofOutcome = Math.max(...cov.proof.performing.map((p) => p.outcome ?? 0), 1)
+  const recon = reconciliationStat(allRows ?? rows)
+  const conn = computeChannelConnection(rows)
+  const aud = computeAudienceCoverage(allRows ?? rows, audiences ?? [])
+  const maxAud = Math.max(...aud.defined.map((a) => a.count), 1)
 
   if (!s.converters.length && !s.channels.length) {
     return (
@@ -448,6 +459,49 @@ export function LibrarySignals({
           ) : (
             <p className="sig-note">Every defined proof point shows up somewhere in the copy.</p>
           )}
+          {cov.proof.performing.length > 0 && (
+            <>
+              <p className="sig-note">
+                Of the proof points you do use, ranked by what the content carrying them actually drove (calibrated on
+                real metrics, not a guess):
+              </p>
+              <div className="sig-conv">
+                {cov.proof.performing.slice(0, 6).map((p) => (
+                  <div className="sig-conv-row" key={p.label}>
+                    <span className="sig-conv-title" title={p.label}>
+                      {p.label}
+                    </span>
+                    <span className="sig-conv-bar">
+                      <span
+                        className="sig-conv-fill"
+                        style={{ width: `${Math.round(((p.outcome ?? 0) / maxProofOutcome) * 100)}%` }}
+                      />
+                    </span>
+                    <span className="sig-conv-rate">{compact(p.outcome ?? 0)}</span>
+                    <span className="sig-conv-nums">
+                      drove, across {p.hits} {p.hits === 1 ? 'asset' : 'assets'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {recon.planned > 0 && (
+        <section className="ins-card ins-wide">
+          <div className="ins-card-head">
+            <h3>Plan vs actual</h3>
+            <span className="ins-card-hint">
+              {recon.reconciled} of {recon.planned} planned assets reconciled to their live post
+            </span>
+          </div>
+          <p className="sig-note">
+            When a planned card ships, it reconciles to the real post by its link or copy and inherits the measured
+            metrics, the projection becomes the actual.
+            {recon.reconciled === 0 ? ' None have reconciled yet; they will as cards go live and match a published post.' : ''}
+          </p>
         </section>
       )}
 
@@ -475,6 +529,85 @@ export function LibrarySignals({
             An ask the copy never makes can't convert. If a channel's goal is subscribers but no post says
             "subscribe", the audience has no way to know to.
           </p>
+        </section>
+      )}
+
+      {conn.channels.length > 0 && (
+        <section className="ins-card ins-wide">
+          <div className="ins-card-head">
+            <h3>Do the channels connect?</h3>
+            <span className="ins-card-hint">
+              {conn.overall.connected} of {conn.overall.total} posts point to a next step · {conn.overall.deadEndPct}%
+              dead ends
+            </span>
+          </div>
+          <div className="sig-conv">
+            {conn.channels.map((c) => {
+              const pct = c.total ? Math.round((c.connected / c.total) * 100) : 0
+              return (
+                <div className="sig-conv-row" key={c.channel}>
+                  <span className="sig-conv-title">{c.label}</span>
+                  <span className="sig-conv-bar">
+                    <span className="sig-conv-fill" style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className={`sig-conv-rate${c.connected === 0 ? ' down' : ''}`}>{pct}%</span>
+                  <span className="sig-conv-nums">
+                    {c.destinations.length ? `→ ${c.destinations.slice(0, 3).map((d) => d.key).join(', ')}` : 'dead end'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          {conn.destRank.length > 0 && (
+            <>
+              <p className="sig-note">Where the copy sends people:</p>
+              <div className="sig-themes">
+                {conn.destRank.map((d) => (
+                  <span className="sig-theme" key={d.key}>
+                    {d.key}
+                    <b>×{d.count}</b>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {audiences && audiences.length > 0 && (
+        <section className="ins-card ins-wide">
+          <div className="ins-card-head">
+            <h3>Audience coverage</h3>
+            <span className="ins-card-hint">
+              {aud.tagged} of {aud.total} assets name an audience
+            </span>
+          </div>
+          <div className="sig-conv">
+            {aud.defined.map((a) => (
+              <div className="sig-conv-row" key={a.label}>
+                <span className="sig-conv-title">{a.label}</span>
+                <span className="sig-conv-bar">
+                  <span className="sig-conv-fill" style={{ width: `${Math.round((a.count / maxAud) * 100)}%` }} />
+                </span>
+                <span className={`sig-conv-rate${a.count === 0 ? ' down' : ''}`}>{a.count === 0 ? 'none' : a.count}</span>
+                <span className="sig-conv-nums">{a.count === 0 ? 'defined, no content' : 'assets'}</span>
+              </div>
+            ))}
+          </div>
+          {aud.offList.length > 0 && (
+            <>
+              <p className="sig-note">Content targets these audiences that aren't in the brand's defined set:</p>
+              <div className="sig-themes">
+                {aud.offList.slice(0, 14).map((o) => (
+                  <span className="sig-theme sig-theme-warn" key={o.label}>
+                    {o.label}
+                    <b>×{o.count}</b>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+          {aud.untagged > 0 && <p className="sig-note">{aud.untagged} assets name no audience at all.</p>}
         </section>
       )}
 

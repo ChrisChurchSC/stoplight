@@ -14,7 +14,7 @@ import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
 import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
-import { newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
+import { classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -97,6 +97,7 @@ import {
 } from '../domain/importAssets'
 import { type SavedView, newSavedView } from '../domain/savedViews'
 import type { BrandReport } from '../domain/reports'
+import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -1011,6 +1012,8 @@ interface TrafficState {
    *  keeps the standard GTM strategies. Used to reset a polluted system. */
   resetBrandMessaging: (brand: string) => void
   removeLibraryItem: (kind: LibraryKind, id: string) => void
+  /** Patch fields on a library item (used by the editable audience sheet). */
+  updateLibraryItem: (kind: LibraryKind, id: string, patch: Record<string, unknown>) => void
   /** Set the alias lists on a brand's canonical audiences (keyed by audience id), so
    *  freeform plan tags tie back to them for performance rollups. */
   setAudienceAliases: (brand: string, aliasesById: Record<string, string[]>) => void
@@ -1063,6 +1066,11 @@ interface TrafficState {
   addReport: (input: { client: string; title: string; kind: BrandReport['kind']; summary?: string; html: string }) => string
   /** Delete a saved report by id. */
   deleteReport: (id: string) => void
+  /** Auto-tag a brand's untagged library content to its best-fit audience; returns count tagged. */
+  autoTagAudiences: (brand: string) => Promise<number>
+  /** Reconcile planned cards to their published post (by sourceUrl/copy), inheriting the
+   *  measured metrics so the projection becomes the actual. Returns count reconciled. */
+  reconcileActuals: (brand: string) => Promise<number>
   /** Brand whose measured actuals are being pulled right now, or null. */
   actualsRefreshing: string | null
   /** Re-pull a brand's measured actuals from the connected source (mock or live proxy). */
@@ -1835,6 +1843,57 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { reports }
     }),
 
+  autoTagAudiences: async (brand) => {
+    const sys = get().brandSystems[brand]
+    if (!sys || !sys.audiences.length) return 0
+    const auds = sys.audiences
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    for (const r of get().rows) {
+      if (clientForCampaign(r.campaign) !== brand) continue
+      if ((r.audience ?? '').trim()) continue // never overwrite an existing tag
+      const copy = Object.values(r.messaging ?? {})
+        .filter((v): v is string => typeof v === 'string')
+        .join(' ')
+      if (!copy.trim()) continue
+      const name = classifyRowAudience(copy, auds)
+      if (name) updates.push({ id: r.id, patch: { audience: name } })
+    }
+    if (updates.length) await get().updateRows(updates)
+    return updates.length
+  },
+
+  reconcileActuals: async (brand) => {
+    const rows = get().rows
+    const posted = rows.filter((r) => r.status === 'posted' && r.socialMetrics)
+    const byUrl = new Map<string, TrafficRow>()
+    const byCopy = new Map<string, TrafficRow>()
+    for (const p of posted) {
+      if (p.sourceUrl) byUrl.set(p.sourceUrl, p)
+      const k = rowCopyKey(p)
+      if (k) byCopy.set(k, p)
+    }
+    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    for (const r of rows) {
+      if (clientForCampaign(r.campaign) !== brand) continue
+      if (!isPlannedCard(r) || typeof r.reconciledAt === 'number') continue
+      const match = (r.sourceUrl && byUrl.get(r.sourceUrl)) || byCopy.get(rowCopyKey(r))
+      if (!match || !match.socialMetrics) continue
+      updates.push({
+        id: r.id,
+        patch: {
+          socialMetrics: match.socialMetrics,
+          engagement: match.engagement,
+          postedAt: match.postedAt,
+          metricsUpdatedAt: match.metricsUpdatedAt ?? Date.now(),
+          reconciledAt: Date.now(),
+          sourceUrl: r.sourceUrl ?? match.sourceUrl,
+        },
+      })
+    }
+    if (updates.length) await get().updateRows(updates)
+    return updates.length
+  },
+
   refreshActuals: async (brand) => {
     const n = brand.trim()
     if (!n || get().actualsRefreshing) return
@@ -2047,6 +2106,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         return { ...lib, [kind]: list } as MessagingLibrary
       }),
     ),
+  updateLibraryItem: (kind, id, patch) =>
+    set((s) =>
+      activeLibPatch(s, (lib) => {
+        const idKey = kind === 'strategies' ? 'key' : 'id'
+        const list = (lib[kind] as Record<string, unknown>[]).map((x) =>
+          (x as Record<string, string>)[idKey] === id ? { ...x, ...patch } : x,
+        )
+        return { ...lib, [kind]: list } as MessagingLibrary
+      }),
+    ),
   approveLibraryItem: (kind, id) =>
     set((s) =>
       activeLibPatch(s, (lib) => {
@@ -2097,7 +2166,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }),
   saveAudienceToLibrary: (audience) =>
     set((s) => {
-      const clone = normalizeAudience({ ...audience, id: `laud_${Date.now().toString(36)}` })
+      const clone = normalizeAudience({
+        ...audience,
+        id: `laud_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`,
+      })
       return activeLibPatch(s, (lib) => ({ ...lib, audiences: [...lib.audiences, clone] }))
     }),
   deleteClient: async (name) => {

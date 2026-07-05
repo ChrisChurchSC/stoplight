@@ -62,6 +62,20 @@ export interface AudienceType {
   /** The outcome we want this audience to take — the conversion goal the
    *  messaging and CTAs should drive toward (e.g. Donate, Subscribe, Invest). */
   outcome?: string
+  /** A one-line definition of the specific sub-segment — sharper than role. */
+  definition?: string
+  /** Capacity / value tier for the segment, e.g. "$25M+ deployable". */
+  tier?: string
+  /** What NOT to say to this audience — the anti-messaging. */
+  antiMessage?: string
+  /** Proof points to lead with, ranked (plain labels). */
+  leadProof?: string[]
+  /** Example real accounts that sit in this segment. */
+  examples?: string[]
+  /** Funnel stage this segment sits at (awareness…retention). */
+  funnelStage?: string
+  /** Reference to the account list this segment maps to (e.g. a Neon segment). */
+  listRef?: string
   /** Library governance: undefined/true = an approved master; explicit false = an
    *  unvetted draft (authored, not yet blessed into the curated library). */
   approved?: boolean
@@ -93,6 +107,13 @@ export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
     rtbEmphasis: [],
     strategy: '',
     outcome: '',
+    definition: '',
+    tier: '',
+    antiMessage: '',
+    leadProof: [],
+    examples: [],
+    funnelStage: '',
+    listRef: '',
     ...patch,
   }
 }
@@ -104,4 +125,30 @@ export function normalizeAudience(a: Partial<AudienceType> & { id: string; name:
 
 export function freshAudienceId(): string {
   return `aud_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
+}
+
+// ── Auto-tag: classify a piece of copy to the audience it best fits ───────────
+// Used to tag untagged library content to a canonical audience by matching the
+// copy against each audience's signature (its name, aliases, angle, and pains).
+const CLASSIFY_STOP = new Set(
+  'the a an and or of to in on is are be for with that this those these by from into as at we our us you your it its not no can will more most just audience audiences people viewers your who what community owned own'.split(
+    ' ',
+  ),
+)
+function audienceSignature(a: AudienceType): string[] {
+  const parts = [a.name, ...(a.aliases ?? []), a.role, a.messageAngle, ...(a.pains ?? [])].join(' ')
+  return [...new Set((parts.toLowerCase().match(/[a-z][a-z'-]+/g) ?? []).filter((w) => w.length >= 4 && !CLASSIFY_STOP.has(w)))]
+}
+/** Best-fit audience NAME for a piece of copy, or undefined below the confidence floor
+ *  (so weak matches stay untagged rather than mislabeled). */
+export function classifyRowAudience(copy: string, audiences: AudienceType[]): string | undefined {
+  const c = copy.toLowerCase()
+  let best: { name: string; score: number } | null = null
+  for (const a of audiences) {
+    const sig = audienceSignature(a)
+    if (!sig.length) continue
+    const score = sig.filter((w) => c.includes(w)).length
+    if (!best || score > best.score) best = { name: a.name, score }
+  }
+  return best && best.score >= 2 ? best.name : undefined
 }

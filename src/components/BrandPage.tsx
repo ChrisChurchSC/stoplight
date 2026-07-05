@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { AudienceSheet } from './AudienceSheet'
 import { BrandGoal } from './BrandGoal'
 import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
@@ -81,7 +82,7 @@ export function BrandPage({ brand }: { brand?: string }) {
       ) : tab === 'voice' ? (
         <BrandVoice brand={brand} />
       ) : tab === 'audiences' ? (
-        <LibraryPage key="brand-audiences" inline kinds={['audiences']} />
+        <AudienceSheet key={`aud-sheet-${brand}`} brand={brand} />
       ) : tab === 'strategy' ? (
         <BrandStrategy key="brand-strategy" brand={brand} />
       ) : (
