@@ -17,6 +17,7 @@ export function LibraryData({
   items,
   allRows,
   proofPoints = [],
+  ctas = [],
   audiences = [],
   sources = [],
   donorLinked = false,
@@ -24,13 +25,14 @@ export function LibraryData({
   items: TrafficRow[]
   allRows: TrafficRow[]
   proofPoints?: { label?: string }[]
+  ctas?: { label?: string }[]
   audiences?: { name?: string; label?: string }[]
   sources?: string[]
   donorLinked?: boolean
 }) {
   const prog = useMemo(
-    () => computeDataUnlocks({ items, allRows, proofPoints, audiences, sources, donorLinked }),
-    [items, allRows, proofPoints, audiences, sources, donorLinked],
+    () => computeDataUnlocks({ items, allRows, proofPoints, ctas, audiences, sources, donorLinked }),
+    [items, allRows, proofPoints, ctas, audiences, sources, donorLinked],
   )
 
   if (!items.length) {
@@ -85,12 +87,10 @@ export function LibraryData({
             <span>
               <b>{num(prog.points)}</b> / {num(prog.maxPoints)} data points
             </span>
-            {prog.level < 5 && (
+            {prog.unlockedCount < prog.total && (
               <>
                 <span className="ldata-dot">·</span>
-                <span>
-                  {prog.nextLevelAt - prog.unlockedCount} more to {prog.levelName === 'Scout' ? 'Analyst' : 'level up'}
-                </span>
+                <span>{prog.nextLevelAt - prog.unlockedCount} more to level up</span>
               </>
             )}
           </div>
@@ -147,18 +147,34 @@ function UnlockCard({ u, isNext }: { u: DataUnlock; isNext: boolean }) {
         <span className={`ldata-badge ${state}`}>{u.unlocked ? 'Unlocked' : isNext ? 'In reach' : 'Locked'}</span>
       </div>
       <p className="ldata-card-reveal">{u.reveal}</p>
-      <div className="ldata-card-prog">
-        <div className="ldata-card-track">
-          <div className={`ldata-card-fill ${state}`} style={{ width: `${Math.min(100, pct)}%` }} />
+      {u.unlocked && u.finding ? (
+        <div className="ldata-finding">
+          <span className="ldata-finding-ico" aria-hidden="true">✦</span>
+          <span className="ldata-finding-text">{u.finding}</span>
         </div>
-        <div className="ldata-card-nums">
-          <span className="ldata-card-cur">
-            {num(u.current)} <span className="ldata-card-metric">/ {num(u.threshold)} {u.metric}</span>
-          </span>
-          <span className="ldata-card-pct">{u.unlocked ? 'done' : `${pct}%`}</span>
+      ) : (
+        <div className="ldata-card-prog">
+          <div className="ldata-card-track">
+            <div className={`ldata-card-fill ${state}`} style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+          <div className="ldata-card-nums">
+            <span className="ldata-card-cur">
+              {num(u.current)} <span className="ldata-card-metric">/ {num(u.threshold)} {u.metric}</span>
+            </span>
+            <span className="ldata-card-pct">{`${pct}%`}</span>
+          </div>
         </div>
-      </div>
-      {u.unlocked && u.where && <div className="ldata-card-where">↳ {u.where}</div>}
+      )}
+      {u.unlocked && (
+        <div className="ldata-card-foot">
+          {u.finding && (
+            <span className="ldata-card-done">
+              {num(u.current)} {u.metric}
+            </span>
+          )}
+          {u.where && <span className="ldata-card-where">↳ {u.where}</span>}
+        </div>
+      )}
     </article>
   )
 }

@@ -16299,9 +16299,42 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 11px;
   color: var(--text-muted);
 }
+.ldata-finding {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: rgba(48, 164, 108, 0.08);
+  border: 1px solid rgba(48, 164, 108, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  margin-bottom: 2px;
+}
+.ldata-finding-ico {
+  color: var(--green);
+  font-size: 12px;
+  line-height: 1.5;
+  flex: none;
+}
+.ldata-finding-text {
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.45;
+  font-weight: 500;
+}
+.ldata-card-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+.ldata-card-done {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
 .ldata-card-where {
   font-size: 11px;
   color: var(--green);
-  margin-top: 9px;
   font-weight: 550;
 }

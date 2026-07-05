@@ -194,6 +194,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
           items={items}
           allRows={allRows}
           proofPoints={brandSystems[brand]?.rtbs}
+          ctas={brandSystems[brand]?.ctas}
           audiences={brandSystems[brand]?.audiences}
           sources={connectedSources}
         />
