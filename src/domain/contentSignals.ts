@@ -820,6 +820,116 @@ export function computeChannelConnection(rows: TrafficRow[]): ChannelConnection 
   }
 }
 
+// The drillable version of the flow: keeps the actual assets behind each edge, so the
+// map can answer "which posts drive to the podcast?" and "which link nowhere?".
+export interface FlowAsset {
+  id: string
+  name: string
+  channel: string
+  when: string
+  url?: string
+  destinations: string[]
+}
+export interface ContentFlow {
+  channels: ChannelLink[]
+  destinations: { key: string; count: number; assets: FlowAsset[] }[]
+  deadEnds: FlowAsset[]
+  assets: FlowAsset[]
+  overall: { total: number; connected: number; deadEndPct: number }
+}
+export function contentFlow(rows: TrafficRow[]): ContentFlow {
+  const assets: FlowAsset[] = rows.map((r) => {
+    const c = fullCopy(r).toLowerCase()
+    return {
+      id: r.id,
+      name: r.assetName,
+      channel: String(r.channel),
+      when: (r.publishedAt || r.scheduledAt || '').slice(0, 10),
+      url: r.sourceUrl,
+      destinations: LINK_DESTINATIONS.filter(([, re]) => re.test(c)).map(([k]) => k),
+    }
+  })
+  const destMap = new Map<string, FlowAsset[]>()
+  for (const a of assets) for (const d of a.destinations) destMap.set(d, [...(destMap.get(d) ?? []), a])
+  const destinations = [...destMap.entries()]
+    .map(([key, list]) => ({ key, count: list.length, assets: list }))
+    .sort((a, b) => b.count - a.count)
+  const deadEnds = assets.filter((a) => a.destinations.length === 0)
+  const cc = computeChannelConnection(rows)
+  return { channels: cc.channels, destinations, deadEnds, assets, overall: cc.overall }
+}
+
+/** Plain-language fixes read off the flow: where reach strands, and where it fails to
+ *  route to the ask. */
+export function flowRecommendations(flow: ContentFlow): string[] {
+  const recs: string[] = []
+  const { overall, channels, destinations, deadEnds } = flow
+  if (overall.deadEndPct >= 25 && deadEnds.length) {
+    const byChannel = new Map<string, number>()
+    for (const a of deadEnds) byChannel.set(a.channel, (byChannel.get(a.channel) ?? 0) + 1)
+    const [ch, n] = [...byChannel.entries()].sort((a, b) => b[1] - a[1])[0]
+    const label = CHANNELS[ch as ChannelId]?.label ?? ch
+    recs.push(
+      `${overall.deadEndPct}% of posts link nowhere onward. The biggest cluster is ${label} (${n} posts) — add a next step (a link or CTA) to each.`,
+    )
+  }
+  const sum = (re: RegExp) => destinations.filter((d) => re.test(d.key)).reduce((s, d) => s + d.count, 0)
+  const convTotal = sum(/newsletter|donate|fund|follow/i)
+  const contentTotal = sum(/podcast|youtube|website/i)
+  if (contentTotal > 0 && convTotal < contentTotal / 3) {
+    const fund = destinations.find((d) => /fund|donate/i.test(d.key))?.count ?? 0
+    const news = destinations.find((d) => /newsletter/i.test(d.key))?.count ?? 0
+    recs.push(
+      `Reach isn't routed to the ask: ${contentTotal} posts point to content (podcast, video, site) but only ${convTotal} to conversion — the Fund (${fund}) and newsletter (${news}). Add the donate/subscribe step to your best posts.`,
+    )
+  }
+  for (const c of channels) {
+    if (c.total >= 3 && c.connected === 0) {
+      recs.push(`${c.label} is a pure dead end: all ${c.total} posts link nowhere. Add end-cards or a description link.`)
+    } else if (c.total >= 6 && c.connected / c.total < 0.2) {
+      recs.push(`${c.label} rarely links onward (${c.connected} of ${c.total}). Add a consistent next step.`)
+    }
+  }
+  return recs.slice(0, 4)
+}
+
+// ── Links: the hyperlinks and platforms the copy actually references ──────────
+export interface LinkRef {
+  host: string
+  count: number
+}
+const PLATFORM_MENTIONS: [string, RegExp][] = [
+  ['worldwithin.org', /worldwithin\.org/i],
+  ['spotify', /spotify/i],
+  ['apple podcasts', /apple podcast/i],
+  ['youtube', /\byoutube\b|youtu\.be/i],
+  ['link in bio', /link in (bio|our bio)/i],
+  ['linktree', /linktr\.ee|linktree/i],
+]
+export function extractLinks(rows: TrafficRow[]): LinkRef[] {
+  const tally = new Map<string, number>()
+  const add = (host: string) => host && tally.set(host, (tally.get(host) ?? 0) + 1)
+  for (const r of rows) {
+    if (r.sourceUrl) {
+      try {
+        add(new URL(r.sourceUrl).hostname.replace(/^www\./, ''))
+      } catch {
+        /* ignore */
+      }
+    }
+    const copy = fullCopy(r)
+    for (const u of copy.match(/https?:\/\/[^\s)]+/gi) ?? []) {
+      try {
+        add(new URL(u).hostname.replace(/^www\./, ''))
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const [label, re] of PLATFORM_MENTIONS) if (re.test(copy)) add(label)
+  }
+  return [...tally.entries()].map(([host, count]) => ({ host, count })).sort((a, b) => b.count - a.count).slice(0, 14)
+}
+
 // ── Audience coverage: which of the brand's audiences the content targets ─────
 // Cross-references the audience tags on the content against the brand's defined
 // audiences: which defined personas have content, which the content targets that

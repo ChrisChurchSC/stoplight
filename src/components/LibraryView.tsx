@@ -6,6 +6,7 @@ import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { LibraryMap } from './LibraryMap'
 import { LibrarySignals } from './LibrarySignals'
 
 /**
@@ -94,7 +95,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
 
   // Catalog (browse every published asset) vs Signals (what's working — the read
   // over the library that ranks content by what drives subscribers).
-  const [mode, setMode] = useState<'catalog' | 'signals'>('catalog')
+  const [mode, setMode] = useState<'catalog' | 'signals' | 'map'>('catalog')
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
   useEffect(() => {
@@ -160,6 +161,13 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         >
           Signals
         </button>
+        <button
+          className={`folder-tab${mode === 'map' ? ' active' : ''}`}
+          onClick={() => setMode('map')}
+          title="Content flow — how the library links together and where it drives people"
+        >
+          Map
+        </button>
       </div>
 
       {mode === 'signals' ? (
@@ -171,6 +179,8 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
           ctas={brandSystems[brand]?.ctas}
           audiences={brandSystems[brand]?.audiences}
         />
+      ) : mode === 'map' ? (
+        <LibraryMap rows={items} />
       ) : (
         <>
           {/* Ingest control — one pull backfills the whole body of work. */}
