@@ -22,6 +22,9 @@ export function HomeSidebar() {
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const brandTab = useTrafficStore((s) => s.brandTab)
   const setBrandTab = useTrafficStore((s) => s.setBrandTab)
+  const campaignFolders = useTrafficStore((s) => s.campaignFolders)
+  const campaignFolderView = useTrafficStore((s) => s.campaignFolderView)
+  const setCampaignFolderView = useTrafficStore((s) => s.setCampaignFolderView)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
   const role = useTrafficStore((s) => s.role)
@@ -37,6 +40,31 @@ export function HomeSidebar() {
     setHomeFilter(filter)
     setClientFilter('all')
     if (!brandCtx || filter === 'all' || filter === 'drafts') setPage('clients')
+  }
+
+  // A brand's campaign folders, nested under its Campaigns entry. Only shown while that
+  // brand's gallery is open; each item scopes the gallery to a folder (All / … / Unfiled).
+  const campaignFolderNav = (brand: string) => {
+    const folders = campaignFolders[brand] ?? []
+    if (!folders.length) return null
+    const onThisGallery = page === 'clients' && homeFilter === `brand:${brand}`
+    if (!onThisGallery) return null
+    const items: [string | null, string][] = [[null, 'All'], ...folders.map((f) => [f, f] as [string, string]), ['', 'Unfiled']]
+    const pick = (val: string | null) => {
+      setHomeFilter(`brand:${brand}`)
+      setClientFilter('all')
+      setCampaignFolderView(val)
+      setPage('clients')
+    }
+    return (
+      <div className="nav-sub">
+        {items.map(([val, label]) => (
+          <button key={label} className={`nav-subitem${campaignFolderView === val ? ' active' : ''}`} onClick={() => pick(val)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -131,39 +159,45 @@ export function HomeSidebar() {
           // One brand: a single clean "Campaigns" destination (its canvases). Lit only
           // on that gallery, not on the brand-scoped pages (Brand/Metrics/Library/…),
           // so it doesn't stay highlighted alongside the tab you actually opened.
-          <button
-            className={`nav-item${onGallery && homeFilter === `brand:${brands[0].name}` ? ' active' : ''}`}
-            onClick={() => {
-              setHomeFilter(`brand:${brands[0].name}`)
-              setClientFilter('all')
-              setPage('clients')
-            }}
-            title={`${brands[0].name}'s campaigns`}
-          >
-            <span className="nav-ico">▤</span>
-            <span className="nav-label">Campaigns</span>
-            <span className="nav-count">{brands[0].count}</span>
-          </button>
+          <>
+            <button
+              className={`nav-item${onGallery && homeFilter === `brand:${brands[0].name}` ? ' active' : ''}`}
+              onClick={() => {
+                setHomeFilter(`brand:${brands[0].name}`)
+                setClientFilter('all')
+                setPage('clients')
+              }}
+              title={`${brands[0].name}'s campaigns`}
+            >
+              <span className="nav-ico">▤</span>
+              <span className="nav-label">Campaigns</span>
+              <span className="nav-count">{brands[0].count}</span>
+            </button>
+            {campaignFolderNav(brands[0].name)}
+          </>
         ) : (
           <>
             <div className="nav-section">Campaigns</div>
             {brands.map((b) => {
               const key = `brand:${b.name}`
               return (
-                <div key={b.name} className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
-                  <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
-                    <span className="nav-ico">▤</span>
-                    <span className="nav-label">{b.name}</span>
-                    <span className="nav-count">{b.count}</span>
-                  </button>
-                  <button
-                    className="home-sb-del"
-                    title={`Delete ${b.name}`}
-                    aria-label={`Delete ${b.name}`}
-                    onClick={() => setConfirmDelete(b.name)}
-                  >
-                    ✕
-                  </button>
+                <div key={b.name}>
+                  <div className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
+                    <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
+                      <span className="nav-ico">▤</span>
+                      <span className="nav-label">{b.name}</span>
+                      <span className="nav-count">{b.count}</span>
+                    </button>
+                    <button
+                      className="home-sb-del"
+                      title={`Delete ${b.name}`}
+                      aria-label={`Delete ${b.name}`}
+                      onClick={() => setConfirmDelete(b.name)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {campaignFolderNav(b.name)}
                 </div>
               )
             })}

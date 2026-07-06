@@ -1196,6 +1196,10 @@ interface TrafficState {
   setCampaignClient: (name: string, client: string) => void
   /** Campaign folders per brand: the ordered folder names each brand's gallery files under. */
   campaignFolders: Record<string, string[]>
+  /** Which folder the campaigns gallery is scoped to — nested under Campaigns in the
+   *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
+  campaignFolderView: string | null
+  setCampaignFolderView: (folder: string | null) => void
   /** File a campaign under a folder (within its brand). undefined = unfiled. */
   setCampaignFolder: (name: string, folder: string | undefined) => void
   /** Create an (initially empty) folder for a brand. No-op if it already exists. */
@@ -1677,6 +1681,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openProjects: loadOpenProjects(),
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
+  campaignFolderView: null,
   wizardOpen: false,
   wizardClient: null,
   audienceWizardOpen: false,
@@ -1744,6 +1749,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   setLibraryMode: (libraryMode) => set({ libraryMode, page: 'content' }),
   setBrandTab: (brandTab) => set({ brandTab, page: 'brand' }),
+  setCampaignFolderView: (campaignFolderView) => set({ campaignFolderView }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
   setPersonalizeOpen: (personalizeOpen) => set({ personalizeOpen }),
   setSavedViewsOpen: (savedViewsOpen) => set({ savedViewsOpen }),

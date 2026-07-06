@@ -94,6 +94,9 @@ export function ClientsOverview() {
   const createCampaignFolder = useTrafficStore((s) => s.createCampaignFolder)
   const renameCampaignFolder = useTrafficStore((s) => s.renameCampaignFolder)
   const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
+  // Which folder the sidebar has scoped the gallery to (null = all folders grouped).
+  const folderView = useTrafficStore((s) => s.campaignFolderView)
+  const setFolderView = useTrafficStore((s) => s.setCampaignFolderView)
   // A canvas delete asks for a second click first (it archives the whole canvas +
   // its assets — recoverable, but not one-click-accidental).
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
@@ -114,10 +117,16 @@ export function ClientsOverview() {
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
   const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar'>('canvases')
-  // Leaving a brand folder (or switching brands) snaps back to Canvases.
+  // Leaving a brand folder (or switching brands) snaps back to Canvases and clears any
+  // folder scoping so the new brand shows all its folders.
   useEffect(() => {
     setFolderTab('canvases')
-  }, [filter])
+    setFolderView(null)
+  }, [filter, setFolderView])
+  // Picking a folder from the sidebar means "show me the canvases in it".
+  useEffect(() => {
+    if (folderView !== null) setFolderTab('canvases')
+  }, [folderView])
 
   // The brand-folder header, shared by every tab view so the chrome doesn't move
   // between them. Three zones: brand title (left), the view switcher centered (the
@@ -337,11 +346,12 @@ export function ClientsOverview() {
           </div>
           {brandFolder ? (
             <div className="folder-groups">
-              {[...folderNames, ''].map((folder) => {
+              {(folderView === null ? [...folderNames, ''] : [folderView]).map((folder) => {
                 const key = folder || '__unfiled__'
                 const cards = cardsInFolder(folder)
-                // Skip an empty Unfiled bucket; keep empty named folders as drop targets.
-                if (!folder && cards.length === 0) return null
+                // Skip an empty Unfiled bucket when showing everything; a folder picked in
+                // the sidebar always renders (even empty) so it stays a drop target.
+                if (!folder && cards.length === 0 && folderView === null) return null
                 const isCollapsed = collapsed.has(key)
                 return (
                   <section
