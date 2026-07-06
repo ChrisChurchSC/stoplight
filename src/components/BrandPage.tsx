@@ -5,6 +5,7 @@ import { BrandGoal } from './BrandGoal'
 import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
+import { ChannelsView } from './ChannelsView'
 import { LibraryPage } from './LibraryPage'
 
 /**
@@ -33,9 +34,11 @@ export function BrandPage({ brand }: { brand?: string }) {
 
   return (
     <div className="brand-page">
-      <div className="home-main-head">
-        <h1 className="home-main-title">{brand} · Brand</h1>
-      </div>
+      {tab !== 'channels' && (
+        <div className="home-main-head">
+          <h1 className="home-main-title">{brand} · Brand</h1>
+        </div>
+      )}
       {tab === 'about' ? (
         <BrandInfo brand={brand} />
       ) : tab === 'goal' ? (
@@ -46,6 +49,8 @@ export function BrandPage({ brand }: { brand?: string }) {
         <AudienceSheet key={`aud-sheet-${brand}`} brand={brand} />
       ) : tab === 'strategy' ? (
         <BrandStrategy key="brand-strategy" brand={brand} />
+      ) : tab === 'channels' ? (
+        <ChannelsView key={`brand-channels-${brand}`} scopeClient={brand} />
       ) : (
         <LibraryPage key="brand-messaging" inline kinds={['rtbs', 'ctas', 'hooks']} />
       )}

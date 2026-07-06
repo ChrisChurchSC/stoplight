@@ -98,6 +98,7 @@ export function HomeSidebar() {
                 ['audiences', 'Audiences'],
                 ['strategy', 'Strategy'],
                 ['messaging', 'Messaging'],
+                ['channels', 'Channels'],
               ] as const
             ).map(([t, label]) => (
               <button
@@ -138,14 +139,6 @@ export function HomeSidebar() {
             ))}
           </div>
         )}
-        <button
-          className={`nav-item${page === 'channels' ? ' active' : ''}`}
-          onClick={() => setPage('channels')}
-          title="Channels — the channels a brand publishes on"
-        >
-          <span className="nav-ico">⇉</span>
-          <span className="nav-label">Channels</span>
-        </button>
         <button
           className={`nav-item${page === 'reports' ? ' active' : ''}`}
           onClick={() => setPage('reports')}
