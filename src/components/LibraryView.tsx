@@ -6,6 +6,7 @@ import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { GranolaIcon } from './GranolaIcon'
 import { LibraryData } from './LibraryData'
 import { LibraryMap } from './LibraryMap'
 import { LibrarySignals } from './LibrarySignals'
@@ -65,6 +66,10 @@ function itemCopy(r: TrafficRow): string {
 
 /** A channel id's display label (falls back to the raw value for non-canonical ids). */
 const channelLabel = (ch: string): string => CHANNELS[ch as ChannelId]?.label ?? ch
+
+/** A meeting note ingested from Granola (identified by its source link). These carry the
+ *  Granola mark instead of a publishing-channel icon. */
+const isMeeting = (r: TrafficRow): boolean => /granola\./i.test(r.sourceUrl ?? '') || r.assetType === 'Meeting note'
 
 /** Turn a messaging field key into a readable label (body → Body, primaryText → Primary Text). */
 const prettyKey = (k: string): string =>
@@ -263,7 +268,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
                 >
                   <div className="lib-card-top">
                     <span className="lib-card-ch">
-                      <ChannelIcon channel={r.channel as ChannelId} size={14} />
+                      {isMeeting(r) ? <GranolaIcon size={14} /> : <ChannelIcon channel={r.channel as ChannelId} size={14} />}
                     </span>
                     {when && <span className="lib-card-date">{when}</span>}
                   </div>
@@ -322,8 +327,8 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
             </button>
             <div className="lib-modal-head">
               <span className="lib-modal-ch">
-                <ChannelIcon channel={detail.channel as ChannelId} size={15} />
-                {channelLabel(detail.channel)}
+                {isMeeting(detail) ? <GranolaIcon size={15} /> : <ChannelIcon channel={detail.channel as ChannelId} size={15} />}
+                {isMeeting(detail) ? 'Granola · Meeting' : channelLabel(detail.channel)}
               </span>
               {fmtDate(detail.publishedAt, detail.postedAt) && (
                 <span className="lib-modal-date">{fmtDate(detail.publishedAt, detail.postedAt)}</span>
