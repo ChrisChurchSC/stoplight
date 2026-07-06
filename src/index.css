@@ -14864,6 +14864,133 @@ textarea.library-input {
   color: var(--text-faint);
   margin-right: 6px;
 }
+
+/* ── Trend charts — time-series over the library (Signals / Keywords / AEO) ── */
+.trend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: baseline;
+}
+.trend-leg {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.trend-leg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  align-self: center;
+}
+.trend-leg b {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+.trend-leg em {
+  font-style: normal;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.trend-svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+}
+.trend-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.trend-area {
+  opacity: 0.13;
+}
+.trend-line {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.trend-x {
+  position: relative;
+  height: 14px;
+}
+.trend-x span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.trend-x span:first-child {
+  transform: none;
+}
+.trend-x span:last-child {
+  transform: translateX(-100%);
+}
+
+/* Sparklines — a keyword's reach month over month, one inline cell per row. */
+.kw-trends {
+  display: flex;
+  flex-direction: column;
+}
+.kw-trend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px 64px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.kw-trend-row:last-child {
+  border-bottom: none;
+}
+.kw-trend-term {
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.spark {
+  display: block;
+  width: 132px;
+  height: 30px;
+}
+.kw-trend-num {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  text-align: right;
+}
+.kw-trend-sub {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .kw-trend-row {
+    grid-template-columns: minmax(0, 1fr) 88px 54px;
+  }
+  .kw-trend-sub {
+    display: none;
+  }
+  .spark {
+    width: 88px;
+  }
+}
+
 /* Recommendations — ranked actions synthesized from the signals below. */
 .sig-recs .ins-card-head h3 {
   font-size: 15px;

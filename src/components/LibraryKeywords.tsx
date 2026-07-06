@@ -1,5 +1,6 @@
-import { compact, computeContentKeywords } from '../domain/contentSignals'
+import { compact, computeContentKeywords, keywordTrends } from '../domain/contentSignals'
 import type { TrafficRow } from '../domain/types'
+import { Sparkline } from './TrendChart'
 
 /**
  * Keywords — the terms the brand's own content actually targets, pulled from every post
@@ -23,6 +24,12 @@ export function LibraryKeywords({ rows }: { rows: TrafficRow[] }) {
   const maxReach = Math.max(...kw.byReach.map((k) => k.avgReach), 1)
   const maxSubs = Math.max(...kw.bySubs.map((k) => k.subs), 1)
 
+  // The top terms by total reach, and each one's month-by-month trajectory.
+  const topTerms = [...kw.byUse].sort((a, b) => b.reach - a.reach).slice(0, 8)
+  const trends = keywordTrends(rows, topTerms.map((k) => k.term))
+  const trendTerms = trends.terms.filter((t) => t.total > 0)
+  const spanLabel = trends.labels.length ? `${trends.labels[0]} to ${trends.labels[trends.labels.length - 1]}` : ''
+
   return (
     <div className="sig">
       <header className="mtx-head">
@@ -32,6 +39,27 @@ export function LibraryKeywords({ rows }: { rows: TrafficRow[] }) {
           ones travel and convert
         </span>
       </header>
+
+      {trendTerms.length > 0 && (
+        <section className="ins-card ins-wide">
+          <div className="ins-card-head">
+            <h3>Which keywords traveled, over time</h3>
+            <span className="ins-card-hint">monthly reach of your top terms{spanLabel ? ` · ${spanLabel}` : ''}</span>
+          </div>
+          <div className="kw-trends">
+            {trendTerms.map((t) => (
+              <div className="kw-trend-row" key={t.term}>
+                <span className="kw-trend-term" title={t.term}>
+                  {t.term}
+                </span>
+                <Sparkline values={t.values} />
+                <span className="kw-trend-num">{compact(t.total)}</span>
+                <span className="kw-trend-sub">reach · ×{t.posts}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="ins-card ins-wide">
         <div className="ins-card-head">

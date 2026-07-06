@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { aeoOpportunities, aeoSchema } from '../domain/aeo'
+import { aeoDemand, aeoOpportunities, aeoSchema } from '../domain/aeo'
+import { TrendChart } from './TrendChart'
 
 /**
  * AEO — answer-engine opportunities: the questions this brand already ranks for in Search
@@ -26,6 +27,7 @@ export function LibraryAEO({ brand }: { brand: string }) {
 
   const totalImpr = ops.reduce((s, o) => s + o.impressions, 0)
   const totalClicks = ops.reduce((s, o) => s + o.clicks, 0)
+  const demand = aeoDemand(brand)
 
   const copy = (o: { id: string; answer: string }) => {
     void navigator.clipboard?.writeText(o.answer)
@@ -57,6 +59,29 @@ export function LibraryAEO({ brand }: { brand: string }) {
           <div className="aeo-stat-l">clicks captured — the gap</div>
         </div>
       </div>
+
+      {demand.length >= 2 && (
+        <section className="ins-card ins-wide aeo-trend">
+          <div className="ins-card-head">
+            <h3>Question demand over time</h3>
+            <span className="ins-card-hint">
+              monthly Search Console impressions for these questions vs clicks you captured — the gap is widening
+            </span>
+          </div>
+          <TrendChart
+            sharedMax
+            labels={demand.map((d) => d.label)}
+            series={[
+              { name: 'Impressions', values: demand.map((d) => d.impressions), color: 'var(--accent)', area: true },
+              { name: 'Clicks', values: demand.map((d) => d.clicks), color: 'var(--accent-2)' },
+            ]}
+          />
+          <p className="sig-note">
+            People are asking these questions more every month, but almost none reach you: you rank without answering.
+            Publish the briefs below and those impressions start converting to clicks and citations.
+          </p>
+        </section>
+      )}
 
       <div className="aeo-list">
         {ops.map((o) => (

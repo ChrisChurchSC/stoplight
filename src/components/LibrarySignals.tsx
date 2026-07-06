@@ -8,12 +8,14 @@ import {
   computeLibrarySignals,
   computeMessageCoverage,
   computeMessagingPatterns,
+  monthlySeries,
   ratePct,
   reconciliationStat,
   signalRecommendations,
 } from '../domain/contentSignals'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { ChannelIcon } from './ChannelIcon'
+import { TrendChart } from './TrendChart'
 
 /**
  * Signals — the "what's working" read over the ingested library. Ranks content by
@@ -52,6 +54,8 @@ export function LibrarySignals({
   const maxAud = Math.max(...aud.defined.map((a) => a.count), 1)
   const recs = signalRecommendations({ coverage: cov, connection: conn, audience: aud, reconcile: recon, signals: s, patterns: mp, takeaways: s.takeaways })
   const KIND_LABEL: Record<string, string> = { fix: 'Fix', amplify: 'Amplify', test: 'Test', setup: 'Set up' }
+  const trend = monthlySeries(rows)
+  const trendHasSubs = trend.some((p) => p.subs > 0)
 
   if (!s.converters.length && !s.channels.length) {
     return (
@@ -120,6 +124,24 @@ export function LibrarySignals({
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {trend.length >= 2 && (
+        <section className="ins-card ins-wide">
+          <div className="ins-card-head">
+            <h3>Reach & subscribers over time</h3>
+            <span className="ins-card-hint">monthly, across every dated post — what was working, and when</span>
+          </div>
+          <TrendChart
+            labels={trend.map((p) => p.label)}
+            series={[
+              { name: 'Reach', values: trend.map((p) => p.reach), color: 'var(--accent-3)', area: true, format: compact },
+              ...(trendHasSubs
+                ? [{ name: 'Subscribers', values: trend.map((p) => p.subs), color: 'var(--accent-2)' }]
+                : []),
+            ]}
+          />
         </section>
       )}
 

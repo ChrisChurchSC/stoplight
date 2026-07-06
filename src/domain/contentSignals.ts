@@ -1244,6 +1244,105 @@ export function computeContentKeywords(rows: TrafficRow[]): ContentKeywords {
   }
 }
 
+// ── Trends over time: monthly roll-ups of the library, so a read can show not just
+//    what worked but *when* it worked (reach & subs by month, a keyword's trajectory). ──
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function monthLabel(key: string): string {
+  const [y, m] = key.split('-').map(Number)
+  const mm = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short' })
+  // Anchor the year on January so a multi-year axis stays readable.
+  return m === 1 ? `${mm} ’${String(y).slice(2)}` : mm
+}
+/** A continuous list of month keys spanning the earliest to latest date (gaps filled). */
+function monthAxis(dates: Date[]): string[] {
+  if (!dates.length) return []
+  const keys = dates.map(monthKey).sort()
+  const [minY, minM] = keys[0].split('-').map(Number)
+  const [maxY, maxM] = keys[keys.length - 1].split('-').map(Number)
+  const out: string[] = []
+  let y = minY
+  let m = minM
+  // Cap at 36 months so a stray old date can't blow the axis up.
+  while ((y < maxY || (y === maxY && m <= maxM)) && out.length < 36) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++
+    if (m > 12) {
+      m = 1
+      y++
+    }
+  }
+  return out
+}
+
+export interface TrendPoint {
+  key: string
+  label: string
+  reach: number
+  subs: number
+  eng: number
+  posts: number
+}
+/** Monthly roll-up of reach / subscribers / engagement / post count across dated rows. */
+export function monthlySeries(rows: TrafficRow[]): TrendPoint[] {
+  const dated = rows
+    .map((r) => ({ r, d: dateOf(r) }))
+    .filter((x): x is { r: TrafficRow; d: Date } => !!x.d)
+  const axis = monthAxis(dated.map((x) => x.d))
+  if (!axis.length) return []
+  const map = new Map<string, TrendPoint>(
+    axis.map((k) => [k, { key: k, label: monthLabel(k), reach: 0, subs: 0, eng: 0, posts: 0 }]),
+  )
+  for (const { r, d } of dated) {
+    const p = map.get(monthKey(d))
+    if (!p) continue
+    p.reach += reachOf(r).value
+    p.subs += typeof r.socialMetrics?.subscribers === 'number' ? r.socialMetrics.subscribers : 0
+    p.eng += engOf(r)
+    p.posts += 1
+  }
+  return axis.map((k) => map.get(k)!)
+}
+
+export interface KeywordTrend {
+  term: string
+  values: number[] // monthly reach of posts using the term, aligned to `labels`
+  total: number
+  posts: number
+}
+export interface KeywordTrends {
+  labels: string[]
+  terms: KeywordTrend[]
+}
+/** For each given term, its month-by-month reach — so you see which words rose and fell. */
+export function keywordTrends(rows: TrafficRow[], terms: string[]): KeywordTrends {
+  const dated = rows
+    .map((r) => ({ r, d: dateOf(r) }))
+    .filter((x): x is { r: TrafficRow; d: Date } => !!x.d)
+  const keys = monthAxis(dated.map((x) => x.d))
+  const idx = new Map(keys.map((k, i) => [k, i]))
+  const prep = dated.map(({ r, d }) => ({
+    mi: idx.get(monthKey(d)) ?? -1,
+    copy: fullCopy(r).toLowerCase(),
+    reach: reachOf(r).value,
+  }))
+  const out = terms.map((term) => {
+    const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+    const values = new Array(keys.length).fill(0)
+    let total = 0
+    let posts = 0
+    for (const p of prep) {
+      if (p.mi < 0 || !re.test(p.copy)) continue
+      values[p.mi] += p.reach
+      total += p.reach
+      posts++
+    }
+    return { term, values, total, posts }
+  })
+  return { labels: keys.map(monthLabel), terms: out }
+}
+
 // ── Recommendations: one ranked action list, folding the plain-language takeaways
 //    (amplify what converts) together with the gap reads (fix the leaks). ───────────
 export type RecKind = 'fix' | 'amplify' | 'test' | 'setup'

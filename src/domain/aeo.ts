@@ -109,6 +109,34 @@ export const AEO_OPPORTUNITIES: Record<string, AeoOpportunity[]> = {
   ],
 }
 
+/** Month-by-month search demand for these question queries: how many people are asking,
+ *  and how few clicks the brand captures. Seeded from real Search Console data; the growing
+ *  gap between impressions and clicks is the AEO opportunity. Excludes the current partial
+ *  month so the last point isn't a misleading dip. */
+export interface AeoDemandPoint {
+  label: string
+  impressions: number
+  clicks: number
+}
+export const AEO_DEMAND: Record<string, AeoDemandPoint[]> = {
+  'World Within': [
+    { label: 'Aug', impressions: 1, clicks: 0 },
+    { label: 'Sep', impressions: 4, clicks: 0 },
+    { label: 'Oct', impressions: 11, clicks: 0 },
+    { label: 'Nov', impressions: 34, clicks: 2 },
+    { label: 'Dec', impressions: 43, clicks: 0 },
+    { label: 'Jan ’26', impressions: 37, clicks: 0 },
+    { label: 'Feb', impressions: 152, clicks: 0 },
+    { label: 'Mar', impressions: 261, clicks: 3 },
+    { label: 'Apr', impressions: 558, clicks: 2 },
+    { label: 'May', impressions: 215, clicks: 1 },
+    { label: 'Jun', impressions: 842, clicks: 0 },
+  ],
+}
+export function aeoDemand(brand: string): AeoDemandPoint[] {
+  return AEO_DEMAND[brand] ?? []
+}
+
 export function aeoOpportunities(brand: string): AeoOpportunity[] {
   return (AEO_OPPORTUNITIES[brand] ?? []).slice().sort((a, b) => b.impressions - a.impressions)
 }
