@@ -50,7 +50,8 @@ export function LibrarySignals({
   const conn = computeChannelConnection(rows)
   const aud = computeAudienceCoverage(allRows ?? rows, audiences ?? [])
   const maxAud = Math.max(...aud.defined.map((a) => a.count), 1)
-  const recs = signalRecommendations({ coverage: cov, connection: conn, audience: aud, reconcile: recon, signals: s, patterns: mp })
+  const recs = signalRecommendations({ coverage: cov, connection: conn, audience: aud, reconcile: recon, signals: s, patterns: mp, takeaways: s.takeaways })
+  const KIND_LABEL: Record<string, string> = { fix: 'Fix', amplify: 'Amplify', test: 'Test', setup: 'Set up' }
 
   if (!s.converters.length && !s.channels.length) {
     return (
@@ -105,27 +106,16 @@ export function LibrarySignals({
 
   return (
     <div className="sig">
-      {s.takeaways.length > 0 && (
-        <section className="sig-takeaways">
-          {s.takeaways.map((t, i) => (
-            <div className="sig-take" key={i}>
-              <span className="sig-take-dot">→</span>
-              <span>{t}</span>
-            </div>
-          ))}
-        </section>
-      )}
-
       {recs.length > 0 && (
         <section className="ins-card ins-wide sig-recs">
           <div className="ins-card-head">
             <h3>Recommendations</h3>
-            <span className="ins-card-hint">what to change, read off the signals below</span>
+            <span className="ins-card-hint">fix the leaks, amplify what converts, read off the signals below</span>
           </div>
           <div className="sig-rec-list">
             {recs.map((r, i) => (
               <div className="sig-rec" key={i}>
-                <span className={`sig-rec-tag ${r.priority}`}>{r.priority}</span>
+                <span className={`sig-rec-tag ${r.kind}`}>{KIND_LABEL[r.kind]}</span>
                 <span className="sig-rec-text">{r.text}</span>
               </div>
             ))}

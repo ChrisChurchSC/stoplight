@@ -14715,7 +14715,7 @@ textarea.library-input {
 }
 .sig-rec {
   display: grid;
-  grid-template-columns: 62px 1fr;
+  grid-template-columns: 76px 1fr;
   align-items: baseline;
   gap: 12px;
   padding: 11px 0;
@@ -14734,15 +14734,19 @@ textarea.library-input {
   padding: 3px 0;
   border-radius: 999px;
 }
-.sig-rec-tag.high {
+.sig-rec-tag.fix {
   background: rgba(229, 72, 77, 0.13);
   color: var(--red);
 }
-.sig-rec-tag.medium {
+.sig-rec-tag.amplify {
+  background: rgba(48, 164, 108, 0.15);
+  color: var(--green);
+}
+.sig-rec-tag.test {
   background: rgba(245, 166, 35, 0.16);
   color: #b9791a;
 }
-.sig-rec-tag.low {
+.sig-rec-tag.setup {
   background: var(--surface-2);
   color: var(--text-muted);
 }
