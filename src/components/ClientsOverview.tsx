@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type DragEvent as ReactDragEvent, useEffect, useMemo, useState } from 'react'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
-import { useHomeCanvases } from '../lib/useHomeCanvases'
+import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { CalendarView } from './CalendarView'
 import { HomeShell } from './HomeShell'
@@ -89,11 +89,25 @@ export function ClientsOverview() {
   const openOnboard = useTrafficStore((s) => s.openOnboard)
   const loadSample = useTrafficStore((s) => s.loadSample)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
+  const campaignFolders = useTrafficStore((s) => s.campaignFolders)
+  const setCampaignFolder = useTrafficStore((s) => s.setCampaignFolder)
+  const createCampaignFolder = useTrafficStore((s) => s.createCampaignFolder)
+  const renameCampaignFolder = useTrafficStore((s) => s.renameCampaignFolder)
+  const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
   // A canvas delete asks for a second click first (it archives the whole canvas +
   // its assets — recoverable, but not one-click-accidental).
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
   // How the gallery is ordered: 'recent' (last touched) or 'date' (campaign start).
   const [sort, setSort] = useState<'recent' | 'date'>('recent')
+  // Folder UI: which are collapsed, the drag target, the new-folder input, an inline
+  // rename, and a two-click folder delete. All keyed by folder name; '' = Unfiled.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [dragOver, setDragOver] = useState<string | null>(null)
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
+  const [newFolder, setNewFolder] = useState('')
+  const [editFolder, setEditFolder] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [confirmDelFolder, setConfirmDelFolder] = useState<string | null>(null)
 
   // Inside a brand folder you flip between its Canvases, the combined Grid and
   // Calendar (every canvas in the folder on one table / one timeline), About, and
@@ -182,6 +196,69 @@ export function ClientsOverview() {
     )
   }
 
+  // One canvas card, reused by the flat gallery and the folder sections. Draggable so
+  // it can be dropped onto a folder (drag payload = the campaign name).
+  const renderCard = (c: CanvasCard) => (
+    <div
+      key={`${c.client}|${c.name}`}
+      className={`hub-recent-wrap${brandFolder ? ' draggable' : ''}`}
+      draggable={!!brandFolder}
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', c.name)
+        e.dataTransfer.effectAllowed = 'move'
+      }}
+    >
+      <button className="hub-recent" onClick={() => openCampaign(c.name)} title={`Open ${c.name}${c.client ? ` (${c.client})` : ''}`}>
+        <div className="hub-recent-foot">
+          <span className={`hub-recent-dot s-${c.status}`} />
+          <span className="hub-recent-foot-text">
+            <span className="hub-recent-name">{c.name}</span>
+            <span className="hub-recent-sub">
+              {c.client || 'Drafts'}
+              {c.lastTouched ? ` · ${fmtAgo(c.lastTouched)}` : ''}
+            </span>
+          </span>
+          {(() => {
+            const range = nameRange(c.name) ?? dateRange(c.rows)
+            return range ? <span className="hub-recent-dates">◷ {range}</span> : null
+          })()}
+        </div>
+      </button>
+      <button
+        className={`hub-recent-del${confirmDel === c.name ? ' confirm' : ''}`}
+        title={confirmDel === c.name ? 'Click again to delete this canvas' : 'Delete canvas'}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (confirmDel === c.name) {
+            void deleteCampaign(c.name)
+            setConfirmDel(null)
+          } else {
+            setConfirmDel(c.name)
+          }
+        }}
+        onMouseLeave={() => confirmDel === c.name && setConfirmDel(null)}
+      >
+        {confirmDel === c.name ? 'Delete?' : '🗑'}
+      </button>
+    </div>
+  )
+
+  // Inside a brand folder, campaigns group under named folders (plus an Unfiled bucket).
+  const folderNames = brandFolder ? (campaignFolders[brandFolder] ?? []) : []
+  const cardsInFolder = (folder: string) =>
+    shown.filter((c) => (folder ? c.folder === folder : !c.folder || !folderNames.includes(c.folder)))
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  const onDropTo = (folder: string) => (e: ReactDragEvent) => {
+    e.preventDefault()
+    const name = e.dataTransfer.getData('text/plain')
+    if (name) setCampaignFolder(name, folder || undefined)
+    setDragOver(null)
+  }
 
   return (
     <HomeShell>
@@ -224,49 +301,135 @@ export function ClientsOverview() {
                 Date
               </button>
             </div>
-          </div>
-          <div className="hub-recents home-gallery">
-            {shown.map((c) => (
-              <div key={`${c.client}|${c.name}`} className="hub-recent-wrap">
-                <button
-                  className="hub-recent"
-                  onClick={() => openCampaign(c.name)}
-                  title={`Open ${c.name}${c.client ? ` (${c.client})` : ''}`}
-                >
-                  <div className="hub-recent-foot">
-                    <span className={`hub-recent-dot s-${c.status}`} />
-                    <span className="hub-recent-foot-text">
-                      <span className="hub-recent-name">{c.name}</span>
-                      <span className="hub-recent-sub">
-                        {c.client || 'Drafts'}
-                        {c.lastTouched ? ` · ${fmtAgo(c.lastTouched)}` : ''}
-                      </span>
-                    </span>
-                    {(() => {
-                      const range = nameRange(c.name) ?? dateRange(c.rows)
-                      return range ? <span className="hub-recent-dates">◷ {range}</span> : null
-                    })()}
-                  </div>
-                </button>
-                <button
-                  className={`hub-recent-del${confirmDel === c.name ? ' confirm' : ''}`}
-                  title={confirmDel === c.name ? 'Click again to delete this canvas' : 'Delete canvas'}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (confirmDel === c.name) {
-                      void deleteCampaign(c.name)
-                      setConfirmDel(null)
-                    } else {
-                      setConfirmDel(c.name)
-                    }
-                  }}
-                  onMouseLeave={() => confirmDel === c.name && setConfirmDel(null)}
-                >
-                  {confirmDel === c.name ? 'Delete?' : '🗑'}
-                </button>
+            {brandFolder && (
+              <div className="home-sort-folder">
+                {newFolderOpen ? (
+                  <input
+                    className="folder-new-input"
+                    autoFocus
+                    placeholder="Folder name…"
+                    value={newFolder}
+                    onChange={(e) => setNewFolder(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        createCampaignFolder(brandFolder, newFolder)
+                        setNewFolder('')
+                        setNewFolderOpen(false)
+                      }
+                      if (e.key === 'Escape') {
+                        setNewFolder('')
+                        setNewFolderOpen(false)
+                      }
+                    }}
+                    onBlur={() => {
+                      if (newFolder.trim()) createCampaignFolder(brandFolder, newFolder)
+                      setNewFolder('')
+                      setNewFolderOpen(false)
+                    }}
+                  />
+                ) : (
+                  <button className="folder-new-btn" onClick={() => setNewFolderOpen(true)}>
+                    + New folder
+                  </button>
+                )}
               </div>
-            ))}
+            )}
           </div>
+          {brandFolder ? (
+            <div className="folder-groups">
+              {[...folderNames, ''].map((folder) => {
+                const key = folder || '__unfiled__'
+                const cards = cardsInFolder(folder)
+                // Skip an empty Unfiled bucket; keep empty named folders as drop targets.
+                if (!folder && cards.length === 0) return null
+                const isCollapsed = collapsed.has(key)
+                return (
+                  <section
+                    key={key}
+                    className={`folder-group${dragOver === key ? ' drop-over' : ''}`}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      if (dragOver !== key) setDragOver(key)
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver((p) => (p === key ? null : p))
+                    }}
+                    onDrop={onDropTo(folder)}
+                  >
+                    <div className="folder-group-head">
+                      <button
+                        className="folder-group-toggle"
+                        onClick={() => toggleCollapsed(key)}
+                        aria-label={isCollapsed ? 'Expand folder' : 'Collapse folder'}
+                      >
+                        {isCollapsed ? '▸' : '▾'}
+                      </button>
+                      {editFolder === folder && folder ? (
+                        <input
+                          className="folder-rename-input"
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              renameCampaignFolder(brandFolder, folder, editName)
+                              setEditFolder(null)
+                            }
+                            if (e.key === 'Escape') setEditFolder(null)
+                          }}
+                          onBlur={() => {
+                            renameCampaignFolder(brandFolder, folder, editName)
+                            setEditFolder(null)
+                          }}
+                        />
+                      ) : (
+                        <button
+                          className="folder-group-name"
+                          onClick={() => toggleCollapsed(key)}
+                          onDoubleClick={() => {
+                            if (folder) {
+                              setEditFolder(folder)
+                              setEditName(folder)
+                            }
+                          }}
+                        >
+                          {folder || 'Unfiled'} <span className="folder-group-count">{cards.length}</span>
+                        </button>
+                      )}
+                      {folder && (
+                        <div className="folder-group-actions">
+                          <button className="folder-act" title="Rename folder" onClick={() => { setEditFolder(folder); setEditName(folder) }}>
+                            ✎
+                          </button>
+                          <button
+                            className={`folder-act${confirmDelFolder === folder ? ' danger' : ''}`}
+                            title={confirmDelFolder === folder ? 'Click again to delete (campaigns move to Unfiled)' : 'Delete folder'}
+                            onClick={() => {
+                              if (confirmDelFolder === folder) {
+                                deleteCampaignFolder(brandFolder, folder)
+                                setConfirmDelFolder(null)
+                              } else setConfirmDelFolder(folder)
+                            }}
+                            onMouseLeave={() => confirmDelFolder === folder && setConfirmDelFolder(null)}
+                          >
+                            {confirmDelFolder === folder ? 'Delete?' : '🗑'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {!isCollapsed &&
+                      (cards.length ? (
+                        <div className="hub-recents home-gallery">{cards.map(renderCard)}</div>
+                      ) : (
+                        <div className="folder-empty">Drag a campaign here</div>
+                      ))}
+                  </section>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="hub-recents home-gallery">{shown.map(renderCard)}</div>
+          )}
           </>
         )}
       </div>

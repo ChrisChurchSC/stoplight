@@ -832,6 +832,26 @@ function saveCampaigns(list: Campaign[]): void {
   }
 }
 
+// Campaign folders per brand — the ordered folder names a brand's gallery can file
+// its campaigns under. Membership lives on each Campaign.folder; this holds the list
+// (so an empty folder still exists) and its order. Keyed by brand (client) name.
+const CAMPAIGN_FOLDERS_KEY = 'stoplight.campaignFolders.v1'
+function loadCampaignFolders(): Record<string, string[]> {
+  try {
+    const v = JSON.parse(localStorage.getItem(CAMPAIGN_FOLDERS_KEY) || '{}')
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveCampaignFolders(map: Record<string, string[]>): void {
+  try {
+    localStorage.setItem(CAMPAIGN_FOLDERS_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
 // Named connection canvases (boards) per campaign. The implicit "All" board
 // (id 'all') shows every audience and isn't stored — only custom boards live here.
 export interface CanvasBoard {
@@ -1174,6 +1194,16 @@ interface TrafficState {
   ) => void
   /** Swap a campaign's brand/client — the Brand card picker. Re-homes the campaign. */
   setCampaignClient: (name: string, client: string) => void
+  /** Campaign folders per brand: the ordered folder names each brand's gallery files under. */
+  campaignFolders: Record<string, string[]>
+  /** File a campaign under a folder (within its brand). undefined = unfiled. */
+  setCampaignFolder: (name: string, folder: string | undefined) => void
+  /** Create an (initially empty) folder for a brand. No-op if it already exists. */
+  createCampaignFolder: (brand: string, folder: string) => void
+  /** Rename a brand's folder, moving every campaign filed under it. */
+  renameCampaignFolder: (brand: string, from: string, to: string) => void
+  /** Delete a brand's folder; its campaigns fall back to unfiled. */
+  deleteCampaignFolder: (brand: string, folder: string) => void
   /** Clone a campaign + all its assets into a new variant campaign (non-destructive
    *  "duplicate & try"); switches to it and returns the new campaign name. */
   duplicateCampaign: (name: string) => Promise<string>
@@ -1646,6 +1676,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
   campaignList: loadCampaigns(),
+  campaignFolders: loadCampaignFolders(),
   wizardOpen: false,
   wizardClient: null,
   audienceWizardOpen: false,
@@ -2410,6 +2441,67 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
       saveCampaigns(campaignList)
       return { campaignList }
+    }),
+
+  setCampaignFolder: (name, folder) =>
+    set((s) => {
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, folder } : c))
+      } else {
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', folder }]
+      }
+      saveCampaigns(campaignList)
+      // Filing under a folder that isn't registered yet (e.g. drag-created) adds it.
+      let campaignFolders = s.campaignFolders
+      if (folder) {
+        const brand = clientForCampaign(name)
+        const list = campaignFolders[brand] ?? []
+        if (!list.includes(folder)) {
+          campaignFolders = { ...campaignFolders, [brand]: [...list, folder] }
+          saveCampaignFolders(campaignFolders)
+        }
+      }
+      return { campaignList, campaignFolders }
+    }),
+
+  createCampaignFolder: (brand, folder) =>
+    set((s) => {
+      const trimmed = folder.trim()
+      if (!trimmed) return {}
+      const list = s.campaignFolders[brand] ?? []
+      if (list.includes(trimmed)) return {}
+      const campaignFolders = { ...s.campaignFolders, [brand]: [...list, trimmed] }
+      saveCampaignFolders(campaignFolders)
+      return { campaignFolders }
+    }),
+
+  renameCampaignFolder: (brand, from, to) =>
+    set((s) => {
+      const trimmed = to.trim()
+      if (!trimmed || trimmed === from) return {}
+      const list = s.campaignFolders[brand] ?? []
+      // Merge into an existing folder if the target name already exists.
+      const next = list.includes(trimmed) ? list.filter((f) => f !== from) : list.map((f) => (f === from ? trimmed : f))
+      const campaignFolders = { ...s.campaignFolders, [brand]: next }
+      saveCampaignFolders(campaignFolders)
+      const campaignList = s.campaignList.map((c) => (c.client === brand && c.folder === from ? { ...c, folder: trimmed } : c))
+      saveCampaigns(campaignList)
+      return { campaignFolders, campaignList }
+    }),
+
+  deleteCampaignFolder: (brand, folder) =>
+    set((s) => {
+      const list = s.campaignFolders[brand] ?? []
+      const campaignFolders = { ...s.campaignFolders, [brand]: list.filter((f) => f !== folder) }
+      saveCampaignFolders(campaignFolders)
+      // Its campaigns fall back to unfiled — the campaigns themselves are untouched.
+      const campaignList = s.campaignList.map((c) => (c.client === brand && c.folder === folder ? { ...c, folder: undefined } : c))
+      saveCampaigns(campaignList)
+      return { campaignFolders, campaignList }
     }),
 
   setCampaignGoal: (name, goal) =>

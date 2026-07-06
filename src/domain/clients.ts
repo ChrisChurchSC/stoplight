@@ -182,6 +182,9 @@ export interface Campaign {
   /** Soft-delete: when set, the campaign (and its assets) are archived, hidden from
    *  lists but recoverable. Restore clears it. */
   archivedAt?: number
+  /** Optional folder this campaign is filed under, within its brand's gallery.
+   *  Undefined = unfiled. Folder names are brand-scoped (see campaignFolders). */
+  folder?: string
 }
 
 // Campaigns created at runtime (the wizard) register here so clientForCampaign

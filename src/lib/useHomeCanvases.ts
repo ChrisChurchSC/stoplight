@@ -29,6 +29,8 @@ export interface CanvasCard {
   revenue: number
   /** The campaign's resolved goal: what the assets communicate + the KPI/target. */
   goal: CampaignGoal
+  /** The folder this campaign is filed under, within its brand (undefined = unfiled). */
+  folder?: string
 }
 
 export interface BrandRow {
@@ -82,6 +84,7 @@ export function useHomeCanvases(): {
         spend,
         revenue,
         goal: resolveCampaignGoal(meta.get(name), cRows, rtbPool),
+        folder: meta.get(name)?.folder,
       }
     })
   }, [rows, campaignList, breakStatus, brandSystems])
