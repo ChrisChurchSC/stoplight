@@ -27,7 +27,11 @@ export type UnlockCategory =
   | 'Foundations'
   | 'Message performance'
   | 'Audience'
+  | 'Audience precision'
   | 'Channel & flow'
+  | 'Channel expansion'
+  | 'Paid media'
+  | 'Search, SEO & AEO'
   | 'Timing & cadence'
   | 'Trends over time'
   | 'Conversion & funnel'
@@ -39,7 +43,11 @@ export const CATEGORY_ORDER: UnlockCategory[] = [
   'Foundations',
   'Message performance',
   'Audience',
+  'Audience precision',
   'Channel & flow',
+  'Channel expansion',
+  'Paid media',
+  'Search, SEO & AEO',
   'Timing & cadence',
   'Trends over time',
   'Conversion & funnel',
@@ -142,6 +150,9 @@ interface Ctx {
   momentumPct: number
   postsPerWeek: number
   longestGapDays: number
+  adConnected: number
+  searchConnected: number
+  webAssets: number
   sig: ReturnType<typeof computeLibrarySignals>
   cov: ReturnType<typeof computeMessageCoverage>
   flow: ReturnType<typeof contentFlow> | null
@@ -173,6 +184,9 @@ function buildCtx(inp: UnlockInputs): Ctx {
   const postsWithSubs = items.filter((r) => subsOf(r) > 0).length
   const connected = new Set(sources.map((s) => s.toLowerCase())).size
   const systemsLinked = (connected > 0 ? 1 : 0) + (inp.donorLinked ? 1 : 0)
+  const adConnected = sources.filter((s) => /\bads?\b|adwords|_ads|paid|\bsem\b|\bppc\b/i.test(s)).length
+  const searchConnected = sources.some((s) => /search.?console|\bgsc\b|google.?search|\bseo\b/i.test(s)) ? 1 : 0
+  const webAssets = items.filter((r) => /web|site|search|blog|page|seo/i.test(String(r.channel))).length
   const reconciled = reconciliationStat(inp.allRows).reconciled
 
   // Temporal splits: sort dated posts, compare first half vs second half.
@@ -234,7 +248,7 @@ function buildCtx(inp: UnlockInputs): Ctx {
     items, withMetrics, withCopy, tagged, ctasDefined, proofDefined, audiencesDefined, channelsUsed,
     channelsWithMetrics, postsWithSubs, days, connected, systemsLinked, reconciled, totReach, top10Share,
     ownedPct, deadEndReach, qLift, reachTrendPct, engTrendPct, subsTrendPct, momentumPct, postsPerWeek,
-    longestGapDays, sig, cov, flow, aud, links, pat,
+    longestGapDays, adConnected, searchConnected, webAssets, sig, cov, flow, aud, links, pat,
   }
 }
 
@@ -260,7 +274,7 @@ interface UnlockDef {
 // convenience accessors for findings
 const num = (n: number) => n.toLocaleString()
 
-const CATALOG: UnlockDef[] = [
+const BASE_CATALOG: UnlockDef[] = [
   // ───────────────────────── Foundations ─────────────────────────
   {
     id: 'catalog', category: 'Foundations', title: 'Content catalog', where: 'Library › Catalog',
@@ -642,6 +656,87 @@ const CATALOG: UnlockDef[] = [
     reveal: 'The long arc of the brand: how reach, conversion, and message mix have matured.',
     gates: (c) => [timeG(c, 540)],
   },
+]
+
+// ── Channel expansion: channels not tried yet (or barely) surface as locked opportunities,
+//    each opening into a performance read once you have posted there enough to measure. ──
+const EXPANSION_CHANNELS: { id: string; label: string; re: RegExp; threshold: number; reveal: string }[] = [
+  { id: 'exp-linkedin', label: 'LinkedIn, at cadence', re: /linkedin/i, threshold: 30, reveal: 'You have a handful of posts and a frozen follower count. A real weekly cadence aimed at funders would tell you whether LinkedIn converts the family-office audience.' },
+  { id: 'exp-tiktok', label: 'TikTok', re: /tiktok/i, threshold: 15, reveal: 'Whether the short-form engine that broke out on YouTube Shorts transfers to a second discovery feed with its own audience.' },
+  { id: 'exp-x', label: 'X / Twitter', re: /twitter|(^|[^a-z])x([^a-z]|$)/i, threshold: 20, reveal: 'Whether the impact-finance and co-op conversation on X drives real traffic and puts you in front of journalists and funders.' },
+  { id: 'exp-threads', label: 'Threads', re: /threads/i, threshold: 20, reveal: 'A text-first feed adjacent to your Instagram audience: does the same message land in a different room?' },
+  { id: 'exp-reddit', label: 'Reddit', re: /reddit/i, threshold: 10, reveal: 'Whether communities like r/cooperatives and r/impactinvesting convert people already searching the concept.' },
+  { id: 'exp-substack', label: 'Substack / Notes', re: /substack/i, threshold: 12, reveal: 'A native-discovery newsletter platform where recommendations from adjacent writers grow the owned list you keep.' },
+  { id: 'exp-sms', label: 'SMS / text list', re: /\bsms\b|text/i, threshold: 8, reveal: 'The highest-intent owned channel there is: whether a text list moves donors and event RSVPs the way email cannot.' },
+  { id: 'exp-podcast-guest', label: 'Podcast guesting', re: /guest/i, threshold: 5, reveal: 'Appearing on other shows borrows audiences of exactly your listener for the cost of an hour. Which shows drive subscribers?' },
+  { id: 'exp-own-podcast', label: 'Own podcast, at cadence', re: /podcast/i, threshold: 10, reveal: 'Whether your own show, on a steady cadence, builds a compounding owned audience or just a back catalog.' },
+  { id: 'exp-pr', label: 'Earned media / PR', re: /press|earned|media hit/i, threshold: 6, reveal: 'You got 3 press inquiries unprompted this month. A real PR push could compound that into the coverage that reaches funders.' },
+  { id: 'exp-partnerships', label: 'Partnerships & co-marketing', re: /partner|collab|co-?market/i, threshold: 4, reveal: 'Co-published content with aligned orgs (CDFIs, co-op networks) puts you in front of their trust and their list.' },
+  { id: 'exp-referral', label: 'Member-get-member referral', re: /referral|refer a/i, threshold: 3, reveal: 'Whether your most engaged supporters will bring the next ones — the cheapest growth a movement has.' },
+  { id: 'exp-community', label: 'Community (Discord / circle)', re: /discord|community|circle|slack/i, threshold: 3, reveal: 'A place for the movement to gather between posts: does an owned community lift retention and giving?' },
+]
+const channelExpansionUnlocks: UnlockDef[] = EXPANSION_CHANNELS.map((d) => ({
+  id: d.id,
+  category: 'Channel expansion',
+  title: d.label,
+  reveal: d.reveal,
+  gates: (c) => [G('posts on this channel', c.items.filter((r) => d.re.test(String(r.channel))).length, d.threshold)],
+  finding: (c) => {
+    const roll = c.sig.channels.find((ch) => d.re.test(String(ch.channel)))
+    return roll ? `${channelName(roll.channel)}: ${roll.reachLabel} reach across ${roll.count} posts · ${roll.role.toLowerCase()}` : undefined
+  },
+}))
+
+// ── Paid media: a whole distribution frontier World Within has never spent on. Every unlock
+//    is gated on connecting an ad platform, so the category maps the paid opportunity. ──
+const PAID_UNLOCKS: UnlockDef[] = [
+  { id: 'paid-social', category: 'Paid media', title: 'Paid social', reveal: 'Whether putting spend behind your best organic posts reaches the funders you can’t reach for free.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-search', category: 'Paid media', title: 'Paid search (SEM)', reveal: 'Buy the concept queries you rank for but lose — 618 impressions and zero clicks a month, gone.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-youtube', category: 'Paid media', title: 'YouTube ads', reveal: 'Put spend behind the long-form that drives subscribers, aimed at your 45+ US audience.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-display', category: 'Paid media', title: 'Display & programmatic', reveal: 'Cheap reach across the open web: does it build awareness or just impressions?', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-retargeting', category: 'Paid media', title: 'Retargeting', reveal: 'Recover the people who watched or visited and left — the 99.8% who did not subscribe.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-sponsorship', category: 'Paid media', title: 'Podcast & newsletter sponsorships', reveal: 'Borrow the trust of a show or list whose audience is already your donor — measured in signups.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-creator', category: 'Paid media', title: 'Paid creator partnerships', reveal: 'Whether a creator in the impact / finance space can introduce you to their audience profitably.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-vs-organic', category: 'Paid media', title: 'Paid vs organic efficiency', reveal: 'Which dollar and which hour works harder — the trade you can only see once both run.', gates: (c) => [G('connected ad platforms', c.adConnected, 1), G('assets with metrics', c.withMetrics, 40)] },
+  { id: 'paid-cac-sub', category: 'Paid media', title: 'Cost per subscriber', reveal: 'What it actually costs to add one owned-audience member through paid — your real growth price.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+  { id: 'paid-cac-donor', category: 'Paid media', title: 'Cost per donor & payback', reveal: 'The number that decides the whole paid question: what a donor costs and how fast they pay back.', gates: (c) => [G('connected ad platforms', c.adConnected, 1), G('systems linked (analytics + donor)', c.systemsLinked, 2)] },
+  { id: 'paid-lookalike', category: 'Paid media', title: 'Lookalike expansion', reveal: 'Build a paid audience that looks like your best converters and your existing donors.', gates: (c) => [G('connected ad platforms', c.adConnected, 1), G('posts reporting subscribers', c.postsWithSubs, 15)] },
+  { id: 'paid-geo', category: 'Paid media', title: 'Geo-targeted paid (wealth regions)', reveal: 'Concentrate spend on California, New York, and Massachusetts — where the family offices already are.', gates: (c) => [G('connected ad platforms', c.adConnected, 1)] },
+]
+
+// ── Audience precision: moving from a few broad personas to hyper-specific segments. ──
+const AUDIENCE_PRECISION: UnlockDef[] = [
+  { id: 'aud-micro', category: 'Audience precision', title: 'Micro-segments', reveal: 'Beyond broad personas: hyper-specific segments (e.g. NYC family offices with an ESG mandate) you write to individually.', gates: (c) => [G('audiences defined', c.audiencesDefined, 10)], finding: (c) => `${c.audiencesDefined} segments defined and growing more specific` },
+  { id: 'aud-abm', category: 'Audience precision', title: 'ABM named accounts', reveal: 'Track engagement account by account — which specific funds and offices are actually reading you.', gates: (c) => [G('audiences defined', c.audiencesDefined, 8), G('assets tagged', c.tagged, 80)] },
+  { id: 'aud-persona-channel', category: 'Audience precision', title: 'Persona × channel fit', reveal: 'Which segment to reach on which channel — the map of where each audience actually lives.', gates: (c) => [G('assets tagged', c.tagged, 80), G('channels with metrics', c.channelsWithMetrics, 3)] },
+  { id: 'aud-firmographic', category: 'Audience precision', title: 'Firmographic segments', reveal: 'Group funders by type and size (family office vs foundation vs DAF) and message each on its terms.', gates: (c) => [G('audiences defined', c.audiencesDefined, 8), G('assets tagged', c.tagged, 60)] },
+  { id: 'aud-lifecycle', category: 'Audience precision', title: 'Lifecycle segments', reveal: 'New vs returning vs donor — different messages for strangers, followers, and supporters.', gates: (c) => [G('systems linked (analytics + donor)', c.systemsLinked, 2)] },
+  { id: 'aud-lookalike', category: 'Audience precision', title: 'Lookalike of best converters', reveal: 'A profile of the people who actually subscribe and give, to go find more of them.', gates: (c) => [G('posts reporting subscribers', c.postsWithSubs, 15), G('assets with metrics', c.withMetrics, 80)] },
+  { id: 'aud-geo-wealth', category: 'Audience precision', title: 'Geo-wealth targeting', reveal: 'Target the wealth regions you already reach — California, New York, Massachusetts, Singapore.', gates: (c) => [G('connected data sources', c.connected, 1)], finding: (c) => `Geography is live across ${c.connected} sources; the wealth-center concentration is ready to target` },
+  { id: 'aud-overlap', category: 'Audience precision', title: 'Audience overlap', reveal: 'Where your segments blur into each other, so you stop paying twice to reach the same person.', gates: (c) => [G('audiences defined', c.audiencesDefined, 8), G('assets tagged', c.tagged, 100)] },
+]
+
+// ── Search, SEO & AEO: the keyword and answer-engine frontier. ──
+const SEO_UNLOCKS: UnlockDef[] = [
+  { id: 'seo-titles', category: 'Search, SEO & AEO', title: 'SEO title & meta coverage', reveal: 'How many pages carry an intentional search title and description vs default text.', gates: (c) => [G('web / search pages in library', c.webAssets, 20)], finding: (c) => `${c.webAssets} web pages ingested with their SEO title and meta` },
+  { id: 'seo-rankings', category: 'Search, SEO & AEO', title: 'Keyword rankings', reveal: 'Every query you rank for and where you sit — the map of the search demand you already touch.', gates: (c) => [G('search source connected', c.searchConnected, 1)] },
+  { id: 'seo-gap', category: 'Search, SEO & AEO', title: 'Keyword & concept gaps', reveal: 'Queries you rank for but lose — the concept language (“cooperate or corporate”) that draws impressions and zero clicks.', gates: (c) => [G('search source connected', c.searchConnected, 1)] },
+  { id: 'seo-branded', category: 'Search, SEO & AEO', title: 'Branded vs non-branded', reveal: 'How much of your search comes from your name vs the idea — the difference between fame and demand.', gates: (c) => [G('search source connected', c.searchConnected, 1)] },
+  { id: 'seo-ctr', category: 'Search, SEO & AEO', title: 'CTR by query', reveal: 'Which titles earn the click at the position they hold — where a rewrite pays off fastest.', gates: (c) => [G('search source connected', c.searchConnected, 1)] },
+  { id: 'seo-rank-trend', category: 'Search, SEO & AEO', title: 'Rank movement over time', reveal: 'Which pages are climbing and which are slipping — SEO is a trend, not a snapshot.', gates: (c) => [G('search source connected', c.searchConnected, 1), timeG(c, 90)] },
+  { id: 'seo-content-fit', category: 'Search, SEO & AEO', title: 'Content ↔ query fit', reveal: 'Whether each page targets a real query, and which pages have no search purpose at all.', gates: (c) => [G('search source connected', c.searchConnected, 1), G('web / search pages', c.webAssets, 20)] },
+  { id: 'aeo-presence', category: 'Search, SEO & AEO', title: 'AEO / AI-answer presence', reveal: 'Whether AI answer engines cite World Within when someone asks about community ownership.', gates: () => [G('AEO tracking connected', 0, 1)] },
+  { id: 'aeo-coverage', category: 'Search, SEO & AEO', title: 'Answer-content coverage', reveal: 'Whether you have the plain question-and-answer pages the answer engines pull from.', gates: (c) => [G('web / search pages', c.webAssets, 30), G('posts with copy', c.withCopy, 60)], finding: (c) => `${c.webAssets} pages could carry structured answers for the concept queries people already ask` },
+  { id: 'seo-authority', category: 'Search, SEO & AEO', title: 'Internal linking & authority', reveal: 'How authority flows across your pages — which need links to climb from page two to page one.', gates: (c) => [G('web / search pages', c.webAssets, 25), G('posts with copy', c.withCopy, 60)] },
+  { id: 'seo-nonbrand', category: 'Search, SEO & AEO', title: 'Non-brand demand growth', reveal: 'Whether the idea itself is drawing more searchers over time, independent of your name.', gates: (c) => [G('search source connected', c.searchConnected, 1), timeG(c, 120)] },
+]
+
+const CATALOG: UnlockDef[] = [
+  ...BASE_CATALOG,
+  ...channelExpansionUnlocks,
+  ...PAID_UNLOCKS,
+  ...AUDIENCE_PRECISION,
+  ...SEO_UNLOCKS,
 ]
 
 export function computeDataUnlocks(inp: UnlockInputs): DataProgress {
