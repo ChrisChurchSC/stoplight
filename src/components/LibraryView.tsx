@@ -41,6 +41,36 @@ const fmtDate = (iso?: string, ms?: number) => {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
 
+/** A row's post date as ms (postedAt / publishedAt), date-only strings read local. */
+function postMs(r: TrafficRow): number | null {
+  if (typeof r.postedAt === 'number') return r.postedAt
+  const iso = r.publishedAt ?? (typeof r.postedAt === 'string' ? r.postedAt : undefined)
+  if (iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+    const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso)
+    if (!Number.isNaN(d.getTime())) return d.getTime()
+  }
+  return null
+}
+/** When the row was pulled into the library (the ingest stamps createdAt). */
+const ingestMs = (r: TrafficRow): number | null => (typeof r.createdAt === 'number' ? r.createdAt : null)
+
+/** Date-range presets for the catalog filters. */
+const RANGE_DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 }
+const RANGE_OPTS: [string, string][] = [
+  ['all', 'Any time'],
+  ['7d', 'Past 7 days'],
+  ['30d', 'Past 30 days'],
+  ['90d', 'Past 90 days'],
+  ['365d', 'Past year'],
+]
+function inRange(ms: number | null, range: string, now: number): boolean {
+  if (range === 'all') return true
+  if (ms == null) return false
+  const days = RANGE_DAYS[range]
+  return days ? ms >= now - days * 86400000 : true
+}
+
 /** A row is a library item when it's real published content: it shipped (posted) or
  *  carries a source URL from an ingest. Planned drafts never show here. */
 const isLibraryItem = (r: TrafficRow): boolean =>
@@ -112,6 +142,9 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   // Catalog: click a channel chip to filter the grid to that channel ('__meeting__'
   // for the Granola notes); null shows everything.
   const [chFilter, setChFilter] = useState<string | null>(null)
+  // Catalog date filters: narrow by when a piece was posted and when it was ingested.
+  const [postedRange, setPostedRange] = useState('all')
+  const [ingestedRange, setIngestedRange] = useState('all')
   // The card whose "add to campaign" menu is open.
   const [menuFor, setMenuFor] = useState<string | null>(null)
   useEffect(() => {
@@ -164,10 +197,20 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const meetings = items.filter(isMeeting)
   const published = items.filter((r) => !isMeeting(r))
 
-  // Roll-up: total reach across the published library + per-channel counts.
+  // Roll-up: total reach across the whole published library (a "to date" summary, so
+  // it stays put when the date filters narrow the view below).
   const totalReach = published.reduce((s, r) => s + (headline(r)?.value ?? 0), 0)
+
+  // Date filters — narrow to what was posted / ingested within a window. The channel
+  // tally + grid reflect the filtered set; the header count stays the library total.
+  const now = Date.now()
+  const dateFiltered = (r: TrafficRow) => inRange(postMs(r), postedRange, now) && inRange(ingestMs(r), ingestedRange, now)
+  const dateActive = postedRange !== 'all' || ingestedRange !== 'all'
+  const publishedShown = dateActive ? published.filter(dateFiltered) : published
+  const meetingsShown = dateActive ? meetings.filter(dateFiltered) : meetings
+
   const byChannel = new Map<string, number>()
-  for (const r of published) byChannel.set(String(r.channel), (byChannel.get(String(r.channel)) ?? 0) + 1)
+  for (const r of publishedShown) byChannel.set(String(r.channel), (byChannel.get(String(r.channel)) ?? 0) + 1)
 
   // One catalog card, reused by the published grid and the meeting-notes group.
   const renderCard = (r: TrafficRow) => {
@@ -384,7 +427,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
               className={`lib-tally-chip${chFilter === null ? ' active' : ''}`}
               onClick={() => setChFilter(null)}
             >
-              All {published.length}
+              All {publishedShown.length}
             </button>
             {[...byChannel.entries()]
               .sort((a, b) => b[1] - a[1])
@@ -399,34 +442,73 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
                   {n}
                 </button>
               ))}
-            {meetings.length > 0 && (
+            {meetingsShown.length > 0 && (
               <button
                 className={`lib-tally-chip${chFilter === '__meeting__' ? ' active' : ''}`}
                 title="Meeting notes from Granola"
                 onClick={() => setChFilter((c) => (c === '__meeting__' ? null : '__meeting__'))}
               >
                 <GranolaIcon size={14} />
-                {meetings.length}
+                {meetingsShown.length}
+              </button>
+            )}
+          </div>
+
+          {/* Date filters — by post date and by when it was ingested. */}
+          <div className="lib-filters">
+            <label className="lib-filter">
+              <span>Posted</span>
+              <select value={postedRange} onChange={(e) => setPostedRange(e.target.value)}>
+                {RANGE_OPTS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="lib-filter">
+              <span>Ingested</span>
+              <select value={ingestedRange} onChange={(e) => setIngestedRange(e.target.value)}>
+                {RANGE_OPTS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {dateActive && (
+              <button
+                className="lib-filter-clear"
+                onClick={() => {
+                  setPostedRange('all')
+                  setIngestedRange('all')
+                }}
+              >
+                Clear dates
               </button>
             )}
           </div>
 
           {/* The catalog — published content, then meeting notes grouped on their own. */}
-          {chFilter !== '__meeting__' && (
-            <div className="lib-grid">
-              {(chFilter ? published.filter((r) => String(r.channel) === chFilter) : published).map(renderCard)}
-            </div>
-          )}
+          {chFilter !== '__meeting__' &&
+            (() => {
+              const grid = chFilter ? publishedShown.filter((r) => String(r.channel) === chFilter) : publishedShown
+              return grid.length > 0 ? (
+                <div className="lib-grid">{grid.map(renderCard)}</div>
+              ) : (
+                <div className="mtx-empty">No published assets match these filters.</div>
+              )
+            })()}
 
-          {meetings.length > 0 && (chFilter === null || chFilter === '__meeting__') && (
+          {meetingsShown.length > 0 && (chFilter === null || chFilter === '__meeting__') && (
             <section className="lib-meetings">
               <div className="lib-section-head">
                 <GranolaIcon size={16} />
                 Meeting notes
-                <span className="lib-section-n">{meetings.length}</span>
+                <span className="lib-section-n">{meetingsShown.length}</span>
                 <span className="lib-section-sub">strategy calls from Granola</span>
               </div>
-              <div className="lib-grid">{meetings.map(renderCard)}</div>
+              <div className="lib-grid">{meetingsShown.map(renderCard)}</div>
             </section>
           )}
         </>

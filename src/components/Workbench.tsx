@@ -19,6 +19,7 @@ import { ConnectDataNudge } from './ConnectDataNudge'
 import { ConnectorsPage } from './ConnectorsPage'
 import { LibraryPage } from './LibraryPage'
 import { LibraryView } from './LibraryView'
+import { PrioritiesView } from './PrioritiesView'
 import { ChannelsView } from './ChannelsView'
 import { ReportsView } from './ReportsView'
 import { BrandPage } from './BrandPage'
@@ -195,7 +196,11 @@ export function Workbench() {
         // Library / Connectors / Billing share the home's dashboard shell (files
         // sidebar + tab bar) so the layout never changes between them and the hub.
         <HomeShell>
-          {page === 'brand' ? (
+          {page === 'priorities' ? (
+            <div className="home-main-scroll">
+              <PrioritiesView scopeClient={scopedBrand} />
+            </div>
+          ) : page === 'brand' ? (
             <div className="home-main-scroll">
               <BrandPage brand={scopedBrand} />
             </div>

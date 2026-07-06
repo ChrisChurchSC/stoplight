@@ -35,7 +35,7 @@ export function HomeSidebar() {
   const onGallery = page === 'clients' && clientFilter === 'all'
   // Brand / Metrics / Library / Channels are brand-scoped destinations: the Brands list
   // picks which brand they show, so a brand click keeps you on the page, not leaves it.
-  const brandCtx = page === 'content' || page === 'channels' || page === 'brand' || page === 'reports'
+  const brandCtx = page === 'content' || page === 'channels' || page === 'brand' || page === 'reports' || page === 'priorities'
   const go = (filter: string) => {
     setHomeFilter(filter)
     setClientFilter('all')
@@ -79,6 +79,14 @@ export function HomeSidebar() {
         >
           <span className="nav-ico">◎</span>
           <span className="nav-label">Overview</span>
+        </button>
+        <button
+          className={`nav-item${page === 'priorities' ? ' active' : ''}`}
+          onClick={() => setPage('priorities')}
+          title="Priorities — the top 5 changes to make now, ranked by impact"
+        >
+          <span className="nav-ico">✦</span>
+          <span className="nav-label">Priorities</span>
         </button>
         <button
           className={`nav-item${page === 'brand' ? ' active' : ''}`}

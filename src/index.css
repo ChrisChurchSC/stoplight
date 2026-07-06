@@ -15454,6 +15454,107 @@ textarea.library-input {
   background: var(--surface-2);
   color: var(--text-muted);
 }
+
+/* ── Priorities — the top-5 ranked front door ─────────────────────────────── */
+.prio-list {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.prio-item {
+  display: grid;
+  grid-template-columns: 28px 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 12px;
+}
+.prio-item.fix {
+  border-left-color: var(--red);
+}
+.prio-item.answer {
+  border-left-color: var(--accent-3);
+}
+.prio-item.amplify {
+  border-left-color: var(--green);
+}
+.prio-item.test {
+  border-left-color: var(--amber);
+}
+.prio-n {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-faint);
+  text-align: center;
+}
+.prio-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 999px;
+}
+.prio-tag.fix {
+  background: rgba(229, 72, 77, 0.13);
+  color: var(--red);
+}
+.prio-tag.answer {
+  background: rgba(111, 179, 255, 0.16);
+  color: #2563a8;
+}
+.prio-tag.amplify {
+  background: rgba(48, 164, 108, 0.15);
+  color: var(--green);
+}
+.prio-tag.test {
+  background: rgba(245, 166, 35, 0.16);
+  color: #b9791a;
+}
+.prio-tag.setup {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.prio-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.prio-go {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.prio-go:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+@media (max-width: 640px) {
+  .prio-item {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+  .prio-tag {
+    grid-column: 2 / 4;
+    justify-self: start;
+    padding: 3px 10px;
+  }
+}
 .sig-rec-text {
   font-size: 13.5px;
   line-height: 1.5;
@@ -15880,6 +15981,50 @@ textarea.library-input {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+/* Catalog date filters (Posted / Ingested). */
+.lib-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0 2px;
+}
+.lib-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.lib-filter > span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.lib-filter select {
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.lib-filter-clear {
+  font-size: 11.5px;
+  font-family: inherit;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.lib-filter-clear:hover {
+  color: var(--accent);
 }
 .lib-tally-chip {
   display: inline-flex;

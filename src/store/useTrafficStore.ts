@@ -1040,7 +1040,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords' | 'aeo'
   setLibraryMode: (mode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords' | 'aeo') => void
@@ -1346,7 +1346,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
