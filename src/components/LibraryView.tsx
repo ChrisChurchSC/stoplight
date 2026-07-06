@@ -236,45 +236,52 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
               <em>Ingested</em> {ingested}
             </span>
           )}
-          {inCampaign ? (
-            <span className="lib-card-campaign" title={`In campaign: ${inCampaign}`}>
-              ▤ {inCampaign}
+          {(inCampaign || addOptions.length > 0) && (
+            <span className="lib-card-add-wrap">
+              <button
+                className={inCampaign ? 'lib-card-campaign' : 'lib-card-add'}
+                title={inCampaign ? `In campaign: ${inCampaign}` : 'Add to a campaign'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMenuFor((m) => (m === r.id ? null : r.id))
+                }}
+              >
+                {inCampaign ? `▤ ${inCampaign}` : '+ Campaign'}
+              </button>
+              {menuFor === r.id && (
+                <>
+                  <div className="lib-add-scrim" onClick={(e) => { e.stopPropagation(); setMenuFor(null) }} />
+                  <div className="lib-add-menu" onClick={(e) => e.stopPropagation()}>
+                    <div className="lib-add-menu-head">{inCampaign ? 'Move to campaign' : 'Add to campaign'}</div>
+                    {inCampaign && (
+                      <button
+                        className="lib-add-menu-item remove"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void updateRow(r.id, { campaign: CONTENT_LIBRARY_CAMPAIGN })
+                          setMenuFor(null)
+                        }}
+                      >
+                        ✕ Remove from campaign
+                      </button>
+                    )}
+                    {addOptions.map((name) => (
+                      <button
+                        key={name}
+                        className="lib-add-menu-item"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void updateRow(r.id, { campaign: name })
+                          setMenuFor(null)
+                        }}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </span>
-          ) : (
-            addOptions.length > 0 && (
-              <span className="lib-card-add-wrap">
-                <button
-                  className="lib-card-add"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setMenuFor((m) => (m === r.id ? null : r.id))
-                  }}
-                >
-                  + Campaign
-                </button>
-                {menuFor === r.id && (
-                  <>
-                    <div className="lib-add-scrim" onClick={(e) => { e.stopPropagation(); setMenuFor(null) }} />
-                    <div className="lib-add-menu" onClick={(e) => e.stopPropagation()}>
-                      <div className="lib-add-menu-head">Add to campaign</div>
-                      {addOptions.map((name) => (
-                        <button
-                          key={name}
-                          className="lib-add-menu-item"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void updateRow(r.id, { campaign: name })
-                            setMenuFor(null)
-                          }}
-                        >
-                          {name}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </span>
-            )
           )}
         </div>
       </article>
