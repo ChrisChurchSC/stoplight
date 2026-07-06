@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { aeoOpportunities } from '../domain/aeo'
 import {
   computeAudienceCoverage,
@@ -19,13 +18,15 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * make right now, ranked by impact, each a plain-language action with the detail one click
  * away. Fed by the same recommendation engine as Signals (coverage / connection / audience /
  * what converts) plus the single biggest answer-engine opportunity. Hard cap at five.
+ *
+ * The compute + list are exported so the Overview can lead with the same five.
  */
 
 const isLibraryItem = (r: TrafficRow): boolean =>
   r.status === 'posted' || !!r.postedAt || (!!r.sourceUrl && r.source !== 'generated')
 
-type PKind = RecKind | 'answer'
-interface Priority {
+export type PKind = RecKind | 'answer'
+export interface Priority {
   kind: PKind
   text: string
   goto: 'signals' | 'aeo'
@@ -36,6 +37,62 @@ const KIND_RANK: Record<PKind, number> = { fix: 0, answer: 1, amplify: 2, test: 
 
 const num = (n: number) => n.toLocaleString()
 
+interface BrandSys {
+  rtbs?: { label: string }[]
+  ctas?: { label: string }[]
+  audiences?: { id?: string; name?: string; label?: string; aliases?: string[] }[]
+}
+
+/** The top five priorities for a brand, ranked by impact. Pure so both the Priorities page
+ *  and the Overview can render the same list. `allRows` = the brand's canvas rows. */
+export function computePriorities(brand: string, allRows: TrafficRow[], sys: BrandSys | undefined): Priority[] {
+  const rows = allRows.filter(isLibraryItem)
+  if (!rows.length) return []
+  const s = computeLibrarySignals(rows)
+  const mp = computeMessagingPatterns(rows)
+  const cov = computeMessageCoverage(rows, sys?.rtbs ?? [], sys?.ctas ?? [])
+  const recon = reconciliationStat(allRows)
+  const conn = computeChannelConnection(rows)
+  const aud = computeAudienceCoverage(allRows, sys?.audiences ?? [])
+  const recs = signalRecommendations({
+    coverage: cov,
+    connection: conn,
+    audience: aud,
+    reconcile: recon,
+    signals: s,
+    patterns: mp,
+    takeaways: s.takeaways,
+  })
+  const list: Priority[] = recs.map((r) => ({ kind: r.kind, text: r.text, goto: 'signals' as const }))
+  const aeo = aeoOpportunities(brand).filter((o) => o.impressions >= 50 && o.clicks === 0)[0]
+  if (aeo) {
+    list.push({
+      kind: 'answer',
+      goto: 'aeo',
+      text: `Answer "${aeo.question}" — ${num(aeo.impressions)} searches a month, ${aeo.clicks} clicks, you rank #${Math.round(aeo.position)}.`,
+    })
+  }
+  return [...list].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind]).slice(0, 5)
+}
+
+/** The ranked top-5 list. `onGoto` navigates to the relevant read. */
+export function PriorityList({ priorities, onGoto }: { priorities: Priority[]; onGoto: (goto: 'signals' | 'aeo') => void }) {
+  return (
+    <ol className="prio-list">
+      {priorities.map((p, i) => (
+        <li className={`prio-item ${p.kind}`} key={i}>
+          <span className="prio-n">{i + 1}</span>
+          <span className={`prio-tag ${p.kind}`}>{KIND_LABEL[p.kind]}</span>
+          <span className="prio-text">{p.text}</span>
+          <button className="prio-go" onClick={() => onGoto(p.goto)}>
+            {p.goto === 'aeo' ? 'See' : 'Fix'} →
+          </button>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 export function PrioritiesView({ scopeClient }: { scopeClient?: string }) {
   const { canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -43,40 +100,8 @@ export function PrioritiesView({ scopeClient }: { scopeClient?: string }) {
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
-
-  const priorities = useMemo<Priority[]>(() => {
-    if (!brand) return []
-    const allRows = canvases.filter((c) => c.client === brand).flatMap((c) => c.rows)
-    const rows = allRows.filter(isLibraryItem)
-    if (!rows.length) return []
-    const sys = brandSystems[brand]
-    const s = computeLibrarySignals(rows)
-    const mp = computeMessagingPatterns(rows)
-    const cov = computeMessageCoverage(rows, sys?.rtbs ?? [], sys?.ctas ?? [])
-    const recon = reconciliationStat(allRows)
-    const conn = computeChannelConnection(rows)
-    const aud = computeAudienceCoverage(allRows, sys?.audiences ?? [])
-    const recs = signalRecommendations({
-      coverage: cov,
-      connection: conn,
-      audience: aud,
-      reconcile: recon,
-      signals: s,
-      patterns: mp,
-      takeaways: s.takeaways,
-    })
-    const list: Priority[] = recs.map((r) => ({ kind: r.kind, text: r.text, goto: 'signals' as const }))
-    // The single biggest answer-engine opportunity: a search you rank for but never capture.
-    const aeo = aeoOpportunities(brand).filter((o) => o.impressions >= 50 && o.clicks === 0)[0]
-    if (aeo) {
-      list.push({
-        kind: 'answer',
-        goto: 'aeo',
-        text: `Answer "${aeo.question}" — ${num(aeo.impressions)} searches a month, ${aeo.clicks} clicks, you rank #${Math.round(aeo.position)}.`,
-      })
-    }
-    return [...list].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind]).slice(0, 5)
-  }, [brand, canvases, brandSystems])
+  const allRows = brand ? canvases.filter((c) => c.client === brand).flatMap((c) => c.rows) : []
+  const priorities = brand ? computePriorities(brand, allRows, brandSystems[brand]) : []
 
   if (!brand) {
     return (
@@ -98,18 +123,7 @@ export function PrioritiesView({ scopeClient }: { scopeClient?: string }) {
           Nothing high-impact to flag right now. Ingest more content, or check back after the next campaign ships.
         </div>
       ) : (
-        <ol className="prio-list">
-          {priorities.map((p, i) => (
-            <li className={`prio-item ${p.kind}`} key={i}>
-              <span className="prio-n">{i + 1}</span>
-              <span className={`prio-tag ${p.kind}`}>{KIND_LABEL[p.kind]}</span>
-              <span className="prio-text">{p.text}</span>
-              <button className="prio-go" onClick={() => setLibraryMode(p.goto)}>
-                {p.goto === 'aeo' ? 'See' : 'Fix'} →
-              </button>
-            </li>
-          ))}
-        </ol>
+        <PriorityList priorities={priorities} onGoto={setLibraryMode} />
       )}
 
       <div className="mtx-foot">

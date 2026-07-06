@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { performanceAlerts, pacingAlerts, sortAlerts, type Alert } from '../domain/alerts'
 import { assetBadge } from '../domain/assetBadge'
 import { campaignFlight } from '../domain/campaignWindow'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -7,6 +6,7 @@ import { formatReach, journeyPerformance } from '../domain/journeyPerf'
 import { STATUS_LABEL } from '../domain/lifecycle'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
+import { computePriorities, PriorityList } from './PrioritiesView'
 
 /**
  * The Cockpit — a marketing director's cross-brand home. Every campaign in the
@@ -43,11 +43,12 @@ interface CockpitRow {
 
 export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const { canvases } = useHomeCanvases()
-  const brandActuals = useTrafficStore((s) => s.brandActuals)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setView = useTrafficStore((s) => s.setView)
   const setPage = useTrafficStore((s) => s.setPage)
+  const brandSystems = useTrafficStore((s) => s.brandSystems)
+  const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
 
   const [brandFilter, setBrandFilter] = useState('all')
   const now = Date.now()
@@ -81,9 +82,16 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   // then soonest to launch. (The sort toggle was removed to keep the board focused.)
   const sorted = [...shown].sort((a, b) => b.risk - a.risk || (a.start ?? Infinity) - (b.start ?? Infinity))
 
-  const needAttention = shown.filter((r) => r.card.attention.count > 0).length
   const live = shown.filter((r) => r.card.status === 'active').length
   const launching = shown.filter((r) => r.start != null && r.start >= now && r.start <= now + 7 * DAY).length
+
+  // Priorities: the top-5 high-impact changes for the brand in view (the calm front door,
+  // in place of the old alerts list). Scoped to the filtered brand, or the only brand.
+  const prioBrand = brandFilter !== 'all' ? brandFilter : brands[0]
+  const priorities = useMemo(
+    () => (prioBrand ? computePriorities(prioBrand, canvases.filter((c) => c.client === prioBrand).flatMap((c) => c.rows), brandSystems[prioBrand]) : []),
+    [prioBrand, canvases, brandSystems],
+  )
 
   // What's due next: not-yet-shipped assets across the shown campaigns, soonest first,
   // at the asset level. Split at today: what's genuinely coming up leads the list, while
@@ -104,22 +112,6 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
     .sort((a, b) => a.due - b.due)
   const overdueCount = unposted.filter((x) => x.due < dayStart).length
   const upNext = unposted.filter((x) => x.due >= dayStart).slice(0, 7)
-
-  // Portfolio alerts: performance (measured WoW) per brand + pacing (launch readiness)
-  // per campaign. Both from transparent rules; see domain/alerts.
-  const perf: Alert[] = [...new Set(shown.map((r) => r.brand))].flatMap((b) => performanceAlerts(b, brandActuals[b]))
-  const pace: Alert[] = pacingAlerts(
-    shown.map((r) => ({
-      brand: r.brand,
-      name: r.card.name,
-      label: r.shortName,
-      approved: r.card.rows.filter((x) => x.status === 'approved').length,
-      total: r.card.rows.length,
-      start: r.start,
-    })),
-    now,
-  )
-  const alerts = sortAlerts([...perf, ...pace])
 
   const openCampaign = (brand: string, name: string) => {
     setClientFilter(brand)
@@ -148,7 +140,6 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
           <p className="ckpt-sub">
             {shown.length} campaign{shown.length === 1 ? '' : 's'} across {brands.length} brand
             {brands.length === 1 ? '' : 's'}
-            {needAttention > 0 ? ` · ${needAttention} need${needAttention === 1 ? 's' : ''} attention` : ' · all healthy'}
             {` · ${live} live · ${launching} launching ≤7d`}
           </p>
         </div>
@@ -166,43 +157,19 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
         )}
       </header>
 
-      {alerts.length > 0 ? (
-        <div className="ckpt-signals">
-          <div className="ckpt-signals-head">
-            Needs attention<span className="ckpt-signals-n">{alerts.length}</span>
+      {priorities.length > 0 && (
+        <div className="ckpt-priorities">
+          <div className="ckpt-priorities-head">
+            Priorities<span className="ckpt-priorities-sub">the top 5 changes to make now, ranked by impact</span>
           </div>
-          {alerts.map((a) => {
-            const clickable = !!a.campaign
-            return (
-              <div
-                key={a.id}
-                className={`ckpt-signal sev-${a.severity}${clickable ? ' clickable' : ''}`}
-                role={clickable ? 'button' : undefined}
-                tabIndex={clickable ? 0 : undefined}
-                onClick={clickable ? () => openCampaign(a.brand, a.campaign as string) : undefined}
-                onKeyDown={
-                  clickable
-                    ? (e) => {
-                        if (e.key === 'Enter') openCampaign(a.brand, a.campaign as string)
-                      }
-                    : undefined
-                }
-              >
-                <span className="ckpt-sig-dot" />
-                <div className="ckpt-sig-body">
-                  <div className="ckpt-sig-title">{a.title}</div>
-                  <div className="ckpt-sig-detail">{a.detail}</div>
-                  <div className="ckpt-sig-rule">
-                    {a.brand} · {a.kind} · rule: {a.rule}
-                  </div>
-                </div>
-                {clickable && <span className="ckpt-sig-go">→</span>}
-              </div>
-            )
-          })}
+          <PriorityList
+            priorities={priorities}
+            onGoto={(goto) => {
+              if (prioBrand) setClientFilter(prioBrand)
+              setLibraryMode(goto)
+            }}
+          />
         </div>
-      ) : (
-        shown.length > 0 && <div className="ckpt-allclear">✓ Nothing needs attention right now.</div>
       )}
 
       {(upNext.length > 0 || overdueCount > 0) && (

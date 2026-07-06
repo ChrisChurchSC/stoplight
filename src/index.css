@@ -14421,6 +14421,30 @@ textarea.library-input {
   letter-spacing: 0;
   color: var(--text-faint);
 }
+/* Priorities block on the Overview — the top-5 list, in place of the old alerts. */
+.ckpt-priorities {
+  margin-bottom: 22px;
+}
+.ckpt-priorities-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 2px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.ckpt-priorities-sub {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.ckpt-priorities .prio-list {
+  margin-top: 8px;
+}
 .ckpt-due {
   display: flex;
   align-items: center;
