@@ -100,17 +100,23 @@ export function Sparkline({
   color = 'var(--accent-3)',
   width = 132,
   height = 30,
+  invert = false,
 }: {
   values: number[]
   color?: string
   width?: number
   height?: number
+  /** Lower value is better (a search rank): plot it higher, as a bare line (no area fill),
+   *  so an upward-trending sparkline reads as an improving rank. */
+  invert?: boolean
 }) {
   if (values.length < 2) return <svg className="spark" width={width} height={height} aria-hidden="true" />
   const n = values.length
   const max = Math.max(...values, 1)
   const x = (i: number) => (i / (n - 1)) * width
-  const y = (v: number) => height - 1 - (v / max) * (height - 3)
+  const y = invert
+    ? (v: number) => 1 + (v / max) * (height - 3)
+    : (v: number) => height - 1 - (v / max) * (height - 3)
   const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
   const line = `M${pts.join('L')}`
   const area = `M0,${height}L${pts.join('L')}L${width},${height}Z`
@@ -125,7 +131,7 @@ export function Sparkline({
       role="img"
       aria-hidden="true"
     >
-      <path d={area} fill={color} opacity={0.14} />
+      {!invert && <path d={area} fill={color} opacity={0.14} />}
       <path d={line} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
       <circle cx={x(li)} cy={y(values[li])} r={1.9} fill={color} vectorEffect="non-scaling-stroke" />
     </svg>

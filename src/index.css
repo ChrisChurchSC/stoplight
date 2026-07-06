@@ -14864,6 +14864,47 @@ textarea.library-input {
   color: var(--text-faint);
   margin-right: 6px;
 }
+/* Per-question rank & reach trend, shown under the metrics on each AEO card. */
+.aeo-trend-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 11px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.aeo-strip-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.aeo-strip-lab {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.aeo-strip-cell .spark {
+  width: 94px;
+  height: 26px;
+}
+.aeo-strip-read {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.aeo-strip-read b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.aeo-strip-read.new {
+  color: var(--text-faint);
+  font-style: italic;
+}
 
 /* ── Trend charts — time-series over the library (Signals / Keywords / AEO) ── */
 .trend {

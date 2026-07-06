@@ -137,6 +137,79 @@ export function aeoDemand(brand: string): AeoDemandPoint[] {
   return AEO_DEMAND[brand] ?? []
 }
 
+/** Month-by-month Search Console history for a single question cluster: how many people
+ *  asked, and where the brand ranked (average position, lower = better). Seeded from real
+ *  GSC data, current partial month excluded. Most concept queries only started ranking in
+ *  the last month or two, so only the flagship "how to change the world" has a real trend. */
+export interface AeoRankPoint {
+  label: string
+  impressions: number
+  position: number
+  clicks: number
+}
+export const AEO_RANK_HISTORY: Record<string, Record<string, AeoRankPoint[]>> = {
+  'World Within': {
+    htctw: [
+      { label: 'Aug', impressions: 2, position: 32.5, clicks: 0 },
+      { label: 'Sep', impressions: 9, position: 20.1, clicks: 0 },
+      { label: 'Oct', impressions: 12, position: 12.3, clicks: 0 },
+      { label: 'Nov', impressions: 37, position: 14.6, clicks: 2 },
+      { label: 'Dec', impressions: 51, position: 7.4, clicks: 0 },
+      { label: 'Jan ’26', impressions: 40, position: 12.2, clicks: 0 },
+      { label: 'Feb', impressions: 180, position: 24.9, clicks: 0 },
+      { label: 'Mar', impressions: 299, position: 21.5, clicks: 3 },
+      { label: 'Apr', impressions: 598, position: 24.3, clicks: 1 },
+      { label: 'May', impressions: 224, position: 21.9, clicks: 1 },
+      { label: 'Jun', impressions: 6, position: 23.5, clicks: 0 },
+    ],
+    'coop-vs-corp': [{ label: 'Jun', impressions: 107, position: 9.1, clicks: 0 }],
+    'what-is-coop': [
+      { label: 'Mar', impressions: 2, position: 9.5, clicks: 0 },
+      { label: 'Jun', impressions: 278, position: 29.0, clicks: 0 },
+    ],
+    wimbledon: [{ label: 'Jun', impressions: 187, position: 7.5, clicks: 0 }],
+    'food-coop': [{ label: 'Jun', impressions: 55, position: 27.2, clicks: 0 }],
+    'mutual-bank': [{ label: 'Jun', impressions: 13, position: 25.5, clicks: 0 }],
+    'impact-vs-esg': [{ label: 'Jun', impressions: 95, position: 39.5, clicks: 0 }],
+  },
+}
+export function aeoHistory(brand: string, id: string): AeoRankPoint[] {
+  return AEO_RANK_HISTORY[brand]?.[id] ?? []
+}
+
+export interface AeoRankSummary {
+  firstMonth: string
+  latestMonth: string
+  latestPos: number
+  bestPos: number
+  bestMonth: string
+  months: number
+  /** Only meaningful with 3+ months; otherwise 'new'. */
+  trend: 'improving' | 'slipping' | 'flat' | 'new'
+}
+export function aeoRankSummary(hist: AeoRankPoint[]): AeoRankSummary | null {
+  if (!hist.length) return null
+  const first = hist[0]
+  const latest = hist[hist.length - 1]
+  const best = hist.reduce((a, b) => (b.position < a.position ? b : a))
+  let trend: AeoRankSummary['trend'] = 'new'
+  if (hist.length >= 3) {
+    const span = Math.max(1, Math.ceil(hist.length / 3))
+    const avg = (xs: AeoRankPoint[]) => xs.reduce((s, p) => s + p.position, 0) / xs.length
+    const delta = avg(hist.slice(-span)) - avg(hist.slice(0, span))
+    trend = delta < -2 ? 'improving' : delta > 2 ? 'slipping' : 'flat'
+  }
+  return {
+    firstMonth: first.label,
+    latestMonth: latest.label,
+    latestPos: latest.position,
+    bestPos: best.position,
+    bestMonth: best.label,
+    months: hist.length,
+    trend,
+  }
+}
+
 export function aeoOpportunities(brand: string): AeoOpportunity[] {
   return (AEO_OPPORTUNITIES[brand] ?? []).slice().sort((a, b) => b.impressions - a.impressions)
 }

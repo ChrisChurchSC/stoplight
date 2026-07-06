@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { aeoDemand, aeoOpportunities, aeoSchema } from '../domain/aeo'
-import { TrendChart } from './TrendChart'
+import { aeoDemand, aeoHistory, aeoOpportunities, aeoRankSummary, aeoSchema } from '../domain/aeo'
+import { Sparkline, TrendChart } from './TrendChart'
 
 /**
  * AEO — answer-engine opportunities: the questions this brand already ranks for in Search
@@ -84,7 +84,11 @@ export function LibraryAEO({ brand }: { brand: string }) {
       )}
 
       <div className="aeo-list">
-        {ops.map((o) => (
+        {ops.map((o) => {
+          const hist = aeoHistory(brand, o.id)
+          const sum = aeoRankSummary(hist)
+          const rankPos = sum ? Math.round(sum.latestPos) : Math.round(o.position)
+          return (
           <section className="aeo-card" key={o.id}>
             <div className="aeo-card-head">
               <span className="aeo-q">{o.question}</span>
@@ -96,13 +100,38 @@ export function LibraryAEO({ brand }: { brand: string }) {
               </span>
               <span className="aeo-dot">·</span>
               <span>
-                position <b>{o.position.toFixed(1)}</b>
+                rank <b>#{rankPos}</b>
               </span>
               <span className="aeo-dot">·</span>
               <span className={o.clicks === 0 ? 'aeo-zero' : ''}>
                 <b>{o.clicks}</b> clicks
               </span>
             </div>
+
+            {sum && (
+              <div className="aeo-trend-strip">
+                {hist.length >= 3 ? (
+                  <>
+                    <span className="aeo-strip-cell">
+                      <span className="aeo-strip-lab">Impressions</span>
+                      <Sparkline values={hist.map((h) => h.impressions)} color="var(--accent-3)" width={94} height={26} />
+                    </span>
+                    <span className="aeo-strip-cell">
+                      <span className="aeo-strip-lab">Rank</span>
+                      <Sparkline values={hist.map((h) => h.position)} color="var(--accent)" width={94} height={26} invert />
+                    </span>
+                    <span className="aeo-strip-read">
+                      {sum.trend === 'slipping' ? 'Was ' : 'Best '}
+                      <b>#{Math.round(sum.bestPos)}</b> in {sum.bestMonth}, now <b>#{rankPos}</b> · {sum.months} mo tracked
+                    </span>
+                  </>
+                ) : (
+                  <span className="aeo-strip-read new">
+                    Newly surfaced — first ranked {sum.firstMonth} at <b>#{rankPos}</b>. Not enough history to trend yet.
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="aeo-answer">
               <div className="aeo-answer-label">Answer · written to be lifted verbatim</div>
@@ -131,7 +160,8 @@ export function LibraryAEO({ brand }: { brand: string }) {
               )}
             </div>
           </section>
-        ))}
+          )
+        })}
       </div>
 
       <div className="mtx-foot">
