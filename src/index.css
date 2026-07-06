@@ -3303,9 +3303,136 @@ button {
 .lscape-add {
   align-self: flex-start;
 }
+
+/* Positioning map — the 2x2 perceptual map + its axis-label editor. */
+.lscape-map {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.lscape-map-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.lscape-map-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.lscape-map-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.pmap-wrap {
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+}
+.pmap {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  touch-action: none;
+  user-select: none;
+}
+.pmap-frame {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 0.4;
+}
+.pmap-mid {
+  stroke: var(--border);
+  stroke-width: 0.3;
+  stroke-dasharray: 1 1.2;
+}
+.pmap-white {
+  fill: var(--accent);
+  opacity: 0.08;
+}
+.pmap-white-lab {
+  fill: var(--accent);
+  font-family: var(--mono);
+  font-size: 3px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+.pmap-white-sub {
+  fill: var(--text-faint);
+  font-size: 2.1px;
+}
+.pmap-axis {
+  fill: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 2.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pmap-dot {
+  cursor: grab;
+}
+.pmap-dot:active {
+  cursor: grabbing;
+}
+.pmap-dot circle {
+  stroke: var(--surface);
+  stroke-width: 0.5;
+}
+.pmap-lab {
+  fill: var(--text);
+  font-size: 2.6px;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+.pmap-self-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.6;
+}
+.pmap-self-core {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 0.5;
+}
+.pmap-self-lab {
+  fill: var(--accent);
+  font-weight: 700;
+}
+.pmap-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.lscape-axes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.lscape-axis-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lscape-axis-field span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
 @media (max-width: 640px) {
   .lscape-two {
     grid-template-columns: 1fr;
+  }
+  .lscape-axes {
+    grid-template-columns: 1fr 1fr;
   }
 }
 /* Files-sidebar brand rows: a click target to filter + a hover ✕ to delete. */

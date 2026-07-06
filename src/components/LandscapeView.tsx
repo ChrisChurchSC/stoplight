@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Competitor } from '../domain/clients'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { PositioningMap } from './PositioningMap'
+
+const DEFAULT_AXES = { xLow: 'Talk', xHigh: 'Action', yLow: 'Niche', yHigh: 'Broad reach' }
 
 /**
  * Landscape — who the brand is really up against, for attention and for answers, and the
@@ -28,6 +31,8 @@ export function LandscapeView({ brand }: { brand: string }) {
 
   const [wedge, setWedge] = useState('')
   const [rows, setRows] = useState<Competitor[]>([])
+  const [axes, setAxes] = useState(DEFAULT_AXES)
+  const [self, setSelf] = useState<{ x: number; y: number }>({ x: 50, y: 50 })
   const [dirty, setDirty] = useState(false)
 
   // Seed from the stored profile when the brand changes (not on every write, so an
@@ -36,6 +41,14 @@ export function LandscapeView({ brand }: { brand: string }) {
     const p = clientProfiles[brand] ?? {}
     setWedge(p.wedge ?? '')
     setRows((p.competitors ?? []).map((c) => ({ ...blank(), ...c })))
+    const pos = p.positioning ?? {}
+    setAxes({
+      xLow: pos.xLow || DEFAULT_AXES.xLow,
+      xHigh: pos.xHigh || DEFAULT_AXES.xHigh,
+      yLow: pos.yLow || DEFAULT_AXES.yLow,
+      yHigh: pos.yHigh || DEFAULT_AXES.yHigh,
+    })
+    setSelf({ x: pos.selfX ?? 50, y: pos.selfY ?? 50 })
     setDirty(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brand])
@@ -52,6 +65,18 @@ export function LandscapeView({ brand }: { brand: string }) {
     setRows((prev) => prev.filter((_, idx) => idx !== i))
     setDirty(true)
   }
+  const moveComp = (i: number, x: number, y: number) => {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, x: Math.round(x), y: Math.round(y) } : r)))
+    setDirty(true)
+  }
+  const moveSelf = (x: number, y: number) => {
+    setSelf({ x: Math.round(x), y: Math.round(y) })
+    setDirty(true)
+  }
+  const setAxis = (k: keyof typeof DEFAULT_AXES, v: string) => {
+    setAxes((prev) => ({ ...prev, [k]: v }))
+    setDirty(true)
+  }
 
   const save = () => {
     const competitors: Competitor[] = rows
@@ -62,9 +87,15 @@ export function LandscapeView({ brand }: { brand: string }) {
         strength: r.strength?.trim() || undefined,
         gap: r.gap?.trim() || undefined,
         url: r.url?.trim() || undefined,
+        x: r.x,
+        y: r.y,
       }))
       .filter((r) => r.name)
-    setClientProfile(brand, { competitors, wedge: wedge.trim() })
+    setClientProfile(brand, {
+      competitors,
+      wedge: wedge.trim(),
+      positioning: { xLow: axes.xLow.trim(), xHigh: axes.xHigh.trim(), yLow: axes.yLow.trim(), yHigh: axes.yHigh.trim(), selfX: self.x, selfY: self.y },
+    })
     setDirty(false)
   }
 
@@ -108,6 +139,40 @@ export function LandscapeView({ brand }: { brand: string }) {
           </span>
         ))}
       </div>
+
+      {rows.some((r) => r.name.trim()) && (
+        <section className="lscape-map">
+          <div className="lscape-map-head">
+            <h3>Where the market sits</h3>
+            <span className="lscape-map-hint">two axes you name; the empty quadrant is the white space</span>
+          </div>
+          <PositioningMap
+            competitors={rows}
+            self={{ name: brand, x: self.x, y: self.y }}
+            axes={axes}
+            onMoveCompetitor={moveComp}
+            onMoveSelf={moveSelf}
+          />
+          <div className="lscape-axes">
+            <label className="lscape-axis-field">
+              <span>X axis · left</span>
+              <input className="library-input" value={axes.xLow} onChange={(e) => setAxis('xLow', e.target.value)} />
+            </label>
+            <label className="lscape-axis-field">
+              <span>X axis · right</span>
+              <input className="library-input" value={axes.xHigh} onChange={(e) => setAxis('xHigh', e.target.value)} />
+            </label>
+            <label className="lscape-axis-field">
+              <span>Y axis · bottom</span>
+              <input className="library-input" value={axes.yLow} onChange={(e) => setAxis('yLow', e.target.value)} />
+            </label>
+            <label className="lscape-axis-field">
+              <span>Y axis · top</span>
+              <input className="library-input" value={axes.yHigh} onChange={(e) => setAxis('yHigh', e.target.value)} />
+            </label>
+          </div>
+        </section>
+      )}
 
       {rows.length === 0 ? (
         <div className="lscape-empty">

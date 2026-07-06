@@ -62,6 +62,23 @@ export interface Competitor {
   /** Where they're weak, and the opening it leaves you. */
   gap?: string
   url?: string
+  /** Position on the landscape map, 0-100 on each axis (x = horizontal, y = vertical,
+   *  higher = further up). Set by dragging the dot on the positioning map. */
+  x?: number
+  y?: number
+}
+
+/** The two axes of the positioning map + where the brand itself sits, so the map can show
+ *  the white space (the quadrant no competitor holds). All optional: a brand that hasn't
+ *  set it up gets sensible default labels. */
+export interface Positioning {
+  xLow?: string
+  xHigh?: string
+  yLow?: string
+  yHigh?: string
+  /** The brand's own position on the two axes (0-100), its dot on the map. */
+  selfX?: number
+  selfY?: number
 }
 
 export interface ClientProfile {
@@ -121,6 +138,8 @@ export interface ClientProfile {
   /** The brand's wedge: the position it owns that no competitor does. The one sentence
    *  the whole landscape resolves to. */
   wedge?: string
+  /** The positioning-map axes + the brand's own spot, for the white-space read. */
+  positioning?: Positioning
   /** Named clients, partners, or backers. */
   notableClients?: string[]
   /** Stated values / principles. */
