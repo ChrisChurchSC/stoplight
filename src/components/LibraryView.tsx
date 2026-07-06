@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { sourceLabel } from '../domain/analyticsSources'
 import { CHANNELS } from '../domain/channels'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { formatReach } from '../domain/journeyPerf'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -105,8 +106,14 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   // over the library that ranks content by what drives subscribers). The mode lives
   // in the store so the sidebar's nested Library items drive it too.
   const mode = useTrafficStore((s) => s.libraryMode)
+  const updateRow = useTrafficStore((s) => s.updateRow)
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
+  // Catalog: click a channel chip to filter the grid to that channel ('__meeting__'
+  // for the Granola notes); null shows everything.
+  const [chFilter, setChFilter] = useState<string | null>(null)
+  // The card whose "add to campaign" menu is open.
+  const [menuFor, setMenuFor] = useState<string | null>(null)
   useEffect(() => {
     if (!detail) return
     const onKey = (e: KeyboardEvent) => {
@@ -129,6 +136,15 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
     // Best content first — a director scans by what earned reach, not by recency.
     return rows.sort((a, b) => (headline(b)?.value ?? 0) - (headline(a)?.value ?? 0))
   }, [allRows, brand])
+
+  // The brand's real campaigns (not the ingest bucket), for "add a catalog item to a campaign".
+  const campaignNames = useMemo(
+    () =>
+      Array.from(new Set(canvases.filter((c) => c.client === brand).map((c) => c.name))).filter(
+        (n) => n && n !== CONTENT_LIBRARY_CAMPAIGN,
+      ),
+    [canvases, brand],
+  )
 
   if (!brand) {
     return (
@@ -158,8 +174,12 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
     const h = headline(r)
     const copy = itemCopy(r)
     const when = fmtDate(r.publishedAt, r.postedAt)
+    const ingested = fmtDate(undefined, r.createdAt)
     const eng = r.socialMetrics?.engagement ?? r.socialMetrics?.likes
     const subs = r.socialMetrics?.subscribers
+    const meeting = isMeeting(r)
+    const inCampaign = r.campaign && r.campaign !== CONTENT_LIBRARY_CAMPAIGN ? r.campaign : null
+    const addOptions = campaignNames.filter((n) => n !== r.campaign)
     return (
       <article
         className="lib-card lib-card-click"
@@ -176,9 +196,13 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
       >
         <div className="lib-card-top">
           <span className="lib-card-ch">
-            {isMeeting(r) ? <GranolaIcon size={14} /> : <ChannelIcon channel={r.channel as ChannelId} size={14} />}
+            {meeting ? <GranolaIcon size={14} /> : <ChannelIcon channel={r.channel as ChannelId} size={14} />}
           </span>
-          {when && <span className="lib-card-date">{when}</span>}
+          {when && (
+            <span className="lib-card-date">
+              {!meeting && <em>Posted</em>} {when}
+            </span>
+          )}
         </div>
         <div className="lib-card-title" title={r.assetName}>
           {r.assetName}
@@ -206,6 +230,53 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
             ↗ Open
           </a>
         )}
+        <div className="lib-card-foot">
+          {ingested && (
+            <span className="lib-card-ingested">
+              <em>Ingested</em> {ingested}
+            </span>
+          )}
+          {inCampaign ? (
+            <span className="lib-card-campaign" title={`In campaign: ${inCampaign}`}>
+              ▤ {inCampaign}
+            </span>
+          ) : (
+            addOptions.length > 0 && (
+              <span className="lib-card-add-wrap">
+                <button
+                  className="lib-card-add"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenuFor((m) => (m === r.id ? null : r.id))
+                  }}
+                >
+                  + Campaign
+                </button>
+                {menuFor === r.id && (
+                  <>
+                    <div className="lib-add-scrim" onClick={(e) => { e.stopPropagation(); setMenuFor(null) }} />
+                    <div className="lib-add-menu" onClick={(e) => e.stopPropagation()}>
+                      <div className="lib-add-menu-head">Add to campaign</div>
+                      {addOptions.map((name) => (
+                        <button
+                          key={name}
+                          className="lib-add-menu-item"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void updateRow(r.id, { campaign: name })
+                            setMenuFor(null)
+                          }}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </span>
+            )
+          )}
+        </div>
       </article>
     )
   }
@@ -300,28 +371,47 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         </div>
       ) : (
         <>
-          {/* Per-channel tally, plus a Granola meeting-notes group. */}
+          {/* Per-channel tally, clickable to filter the grid. */}
           <div className="lib-tally">
+            <button
+              className={`lib-tally-chip${chFilter === null ? ' active' : ''}`}
+              onClick={() => setChFilter(null)}
+            >
+              All {published.length}
+            </button>
             {[...byChannel.entries()]
               .sort((a, b) => b[1] - a[1])
               .map(([ch, n]) => (
-                <span className="lib-tally-chip" key={ch}>
+                <button
+                  className={`lib-tally-chip${chFilter === ch ? ' active' : ''}`}
+                  key={ch}
+                  onClick={() => setChFilter((c) => (c === ch ? null : ch))}
+                  title={channelLabel(ch)}
+                >
                   <ChannelIcon channel={ch as ChannelId} size={14} />
                   {n}
-                </span>
+                </button>
               ))}
             {meetings.length > 0 && (
-              <span className="lib-tally-chip" title="Meeting notes from Granola">
+              <button
+                className={`lib-tally-chip${chFilter === '__meeting__' ? ' active' : ''}`}
+                title="Meeting notes from Granola"
+                onClick={() => setChFilter((c) => (c === '__meeting__' ? null : '__meeting__'))}
+              >
                 <GranolaIcon size={14} />
                 {meetings.length}
-              </span>
+              </button>
             )}
           </div>
 
           {/* The catalog — published content, then meeting notes grouped on their own. */}
-          <div className="lib-grid">{published.map(renderCard)}</div>
+          {chFilter !== '__meeting__' && (
+            <div className="lib-grid">
+              {(chFilter ? published.filter((r) => String(r.channel) === chFilter) : published).map(renderCard)}
+            </div>
+          )}
 
-          {meetings.length > 0 && (
+          {meetings.length > 0 && (chFilter === null || chFilter === '__meeting__') && (
             <section className="lib-meetings">
               <div className="lib-section-head">
                 <GranolaIcon size={16} />
