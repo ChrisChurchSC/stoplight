@@ -14,9 +14,8 @@ import { LibraryPage } from './LibraryPage'
  * LibraryPage, so opening it points the messaging library at this brand.
  */
 export function BrandPage({ brand }: { brand?: string }) {
-  // The sub-tab lives in the store so the sidebar's nested Brand items drive it too.
+  // The sub-tab lives in the store so the sidebar's nested Brand items drive it.
   const tab = useTrafficStore((s) => s.brandTab)
-  const setTab = useTrafficStore((s) => s.setBrandTab)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
 
   // Any library-backed tab needs the messaging system pointed at this brand.
@@ -36,46 +35,6 @@ export function BrandPage({ brand }: { brand?: string }) {
     <div className="brand-page">
       <div className="home-main-head">
         <h1 className="home-main-title">{brand} · Brand</h1>
-        <div className="folder-tabs">
-          <button className={`folder-tab${tab === 'about' ? ' active' : ''}`} onClick={() => setTab('about')}>
-            About
-          </button>
-          <button
-            className={`folder-tab${tab === 'goal' ? ' active' : ''}`}
-            onClick={() => setTab('goal')}
-            title="The business goal every campaign ladders up to, and its north-star metric"
-          >
-            Goal
-          </button>
-          <button
-            className={`folder-tab${tab === 'voice' ? ' active' : ''}`}
-            onClick={() => setTab('voice')}
-            title="How the brand sounds — the tone canvases are generated in"
-          >
-            Voice
-          </button>
-          <button
-            className={`folder-tab${tab === 'audiences' ? ' active' : ''}`}
-            onClick={() => setTab('audiences')}
-            title="The brand's audiences — who its canvases target"
-          >
-            Audiences
-          </button>
-          <button
-            className={`folder-tab${tab === 'strategy' ? ' active' : ''}`}
-            onClick={() => setTab('strategy')}
-            title="The brand's GTM strategies"
-          >
-            Strategy
-          </button>
-          <button
-            className={`folder-tab${tab === 'messaging' ? ' active' : ''}`}
-            onClick={() => setTab('messaging')}
-            title="Proof points, CTAs, subjects, and hooks"
-          >
-            Messaging
-          </button>
-        </div>
       </div>
       {tab === 'about' ? (
         <BrandInfo brand={brand} />

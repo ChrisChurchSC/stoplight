@@ -98,7 +98,6 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   // over the library that ranks content by what drives subscribers). The mode lives
   // in the store so the sidebar's nested Library items drive it too.
   const mode = useTrafficStore((s) => s.libraryMode)
-  const setMode = useTrafficStore((s) => s.setLibraryMode)
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
   useEffect(() => {
@@ -152,33 +151,6 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
             : 'Everything this brand has published, pulled from its connected channels'}
         </span>
       </header>
-
-      <div className="folder-tabs lib-modes">
-        <button className={`folder-tab${mode === 'catalog' ? ' active' : ''}`} onClick={() => setMode('catalog')}>
-          Catalog
-        </button>
-        <button
-          className={`folder-tab${mode === 'signals' ? ' active' : ''}`}
-          onClick={() => setMode('signals')}
-          title="What's working — content ranked by what drives subscribers"
-        >
-          Signals
-        </button>
-        <button
-          className={`folder-tab${mode === 'map' ? ' active' : ''}`}
-          onClick={() => setMode('map')}
-          title="Content flow — how the library links together and where it drives people"
-        >
-          Map
-        </button>
-        <button
-          className={`folder-tab${mode === 'data' ? ' active' : ''}`}
-          onClick={() => setMode('data')}
-          title="Data unlocks — what more data will let this brand see, gamified"
-        >
-          Data
-        </button>
-      </div>
 
       {mode === 'signals' ? (
         <LibrarySignals
