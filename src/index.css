@@ -15446,10 +15446,11 @@ textarea.library-input {
   gap: 6px;
 }
 .chn-roster-row {
-  display: grid;
-  grid-template-columns: 180px 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  position: relative;
+  padding: 5px 0;
 }
 .chn-roster-ch {
   display: inline-flex;
@@ -15460,6 +15461,8 @@ textarea.library-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 .chn-roster-link {
   font-size: 12px;
@@ -15487,6 +15490,73 @@ textarea.library-input {
   color: var(--text-faint);
   opacity: 0.5;
   pointer-events: none;
+}
+/* Quick-open shortcut shown inline once a link is set. */
+.chn-roster-open {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+.chn-roster-open:hover {
+  background: var(--surface-2);
+}
+/* The ⋯ menu button and its popover. */
+.chn-roster-menu-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 3px 9px;
+  border-radius: 6px;
+  flex: none;
+}
+.chn-roster-menu-btn:hover,
+.chn-roster-menu-btn.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.chn-roster-menu-btn.set {
+  color: var(--accent);
+}
+.chn-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.chn-roster-menu {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  right: auto;
+  top: calc(100% + 4px);
+  z-index: 41;
+  width: 240px;
+  max-width: 80vw;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.chn-roster-menu-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.chn-roster-menu-foot {
+  display: flex;
+  justify-content: flex-end;
 }
 .chn-pick {
   display: flex;
@@ -15540,6 +15610,45 @@ textarea.library-input {
 }
 .chn-pick.on .chn-pick-check {
   color: var(--accent);
+}
+/* Tile wrapper so a selected channel can carry a ⋯ console-link menu alongside the
+   toggle (a button can't nest inside the toggle button). */
+.chn-pick-wrap {
+  position: relative;
+  display: flex;
+}
+.chn-pick-wrap .chn-pick {
+  width: 100%;
+}
+.chn-pick-wrap.on .chn-pick {
+  padding-right: 34px;
+}
+.chn-pick-menu-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+  opacity: 0.8;
+}
+.chn-pick-menu-btn:hover,
+.chn-pick-menu-btn.active,
+.chn-pick-menu-btn.set {
+  opacity: 1;
+  background: #fff;
+}
+.chn-roster-menu-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
 }
 /* Personalization pick-lists reuse the channel-picker chip, but size chips to
    their (short) label and add a custom-value input below each dimension. */

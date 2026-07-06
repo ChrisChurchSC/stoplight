@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import {
   siApple,
   siCrunchyroll,
@@ -264,7 +264,9 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
     setClientProfile(brand, { channels: next })
   }
 
-  // Per-channel console links (launch shortcuts, never credentials).
+  // Per-channel console links (launch shortcuts, never credentials). The link editor
+  // lives behind a per-row ⋯ menu so the roster reads as a clean list of channels.
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
   const links = clientProfiles[brand]?.channelLinks ?? {}
   const setLink = (id: string, url: string) => {
     const next = { ...links }
@@ -276,18 +278,58 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
   const Chip = ({ id, label, icon, kindLabel }: { id: string; label: string; icon: ReactNode; kindLabel: string }) => {
     const isOn = selected.has(id)
     const used = usage.get(id) ?? 0
+    const link = links[id]
     return (
-      <button
-        className={`chn-pick${isOn ? ' on' : ''}`}
-        onClick={() => toggle(id)}
-        aria-pressed={isOn}
-        title={`${label} · ${kindLabel}${used ? ` · ${used} assets` : ''}`}
-      >
-        {icon}
-        <span className="chn-pick-label">{label}</span>
-        {used > 0 && <span className="chn-pick-badge">{used}</span>}
-        <span className="chn-pick-check">{isOn ? '✓' : '+'}</span>
-      </button>
+      <div className={`chn-pick-wrap${isOn ? ' on' : ''}`}>
+        <button
+          className={`chn-pick${isOn ? ' on' : ''}`}
+          onClick={() => toggle(id)}
+          aria-pressed={isOn}
+          title={`${label} · ${kindLabel}${used ? ` · ${used} assets` : ''}`}
+        >
+          {icon}
+          <span className="chn-pick-label">{label}</span>
+          {used > 0 && <span className="chn-pick-badge">{used}</span>}
+          {!isOn && <span className="chn-pick-check">+</span>}
+        </button>
+        {isOn && (
+          <button
+            className={`chn-pick-menu-btn${link ? ' set' : ''}${openMenu === id ? ' active' : ''}`}
+            onClick={() => setOpenMenu(openMenu === id ? null : id)}
+            title={link ? 'Console link' : 'Add a console link'}
+            aria-label={`${label} console link`}
+          >
+            ⋯
+          </button>
+        )}
+        {isOn && openMenu === id && (
+          <>
+            <div className="chn-menu-scrim" onClick={() => setOpenMenu(null)} />
+            <div className="chn-roster-menu" role="dialog" aria-label={`${label} console link`}>
+              <div className="chn-roster-menu-label">Console / admin link</div>
+              <input
+                className="chn-roster-link"
+                type="text"
+                autoFocus
+                placeholder="e.g. studio.youtube.com"
+                value={link ?? ''}
+                onChange={(e) => setLink(id, e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && setOpenMenu(null)}
+              />
+              <div className="chn-roster-menu-foot">
+                {link ? (
+                  <a className="chn-roster-go" href={withProto(link)} target="_blank" rel="noopener noreferrer" title={`Open ${label}`}>
+                    ↗ Open
+                  </a>
+                ) : (
+                  <span className="chn-roster-go off">↗ Open</span>
+                )}
+              </div>
+              <div className="chn-roster-menu-note">Launch link only, never a password.</div>
+            </div>
+          </>
+        )}
+      </div>
     )
   }
 
@@ -301,53 +343,7 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
         <span className="mtx-sub">{selected.size} selected · pick the channels this brand publishes on</span>
       </header>
 
-      {/* Your channels — the selected roster, each with a quick-launch console link. */}
-      {selected.size > 0 && (
-        <section className="ins-card ins-wide">
-          <div className="ins-card-head">
-            <h3>Your channels</h3>
-            <span className="ins-card-hint">Add a console link to jump straight to each account</span>
-          </div>
-          <div className="chn-roster">
-            {[...selected].sort().map((id) => {
-              const d = describeChannel(id)
-              const link = links[id]
-              return (
-                <div className="chn-roster-row" key={id}>
-                  <span className="chn-roster-ch">
-                    {d.icon}
-                    {d.label}
-                  </span>
-                  <input
-                    className="chn-roster-link"
-                    type="text"
-                    placeholder="Console / admin URL (e.g. studio.youtube.com)"
-                    value={link ?? ''}
-                    onChange={(e) => setLink(id, e.target.value)}
-                  />
-                  {link ? (
-                    <a
-                      className="chn-roster-go"
-                      href={withProto(link)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`Open ${d.label}`}
-                    >
-                      ↗ Open
-                    </a>
-                  ) : (
-                    <span className="chn-roster-go off">↗ Open</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div className="mtx-note">
-            Launch links only, never a password. Auth happens on the platform, via your browser session or
-            your password manager.
-          </div>
-        </section>
-      )}
+      {/* A selected channel's ⋯ menu (below) opens a console-link editor right on its tile. */}
 
       {/* Paid — sub-grouped */}
       <section className="ins-card ins-wide">
