@@ -1,17 +1,21 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { computeDataUnlocks, type DataUnlock } from '../domain/dataUnlocks'
 import type { TrafficRow } from '../domain/types'
 
 /**
- * Data — the gamified read on the Library. Every insight Hyperfocus can give a brand
- * sits on a floor of data: you can't rank proof points off three posts or forecast
- * reach off a handful of metrics. This turns that floor into a progression the brand
- * climbs by ingesting, tagging, connecting, and publishing. Each card has a real
- * threshold and a live current value, so the bars fill as the brand's data grows and
- * the locked insights unlock themselves. Same signal, once there's enough of it.
+ * Data — the gamified read on the Library. A large, progressive catalog of insights you
+ * earn by pairing messaging with data over time. Every unlock has real gates (content,
+ * metrics, tags, a connected source, and often months of history), a live progress bar,
+ * and, once open, its actual finding computed off the brand's own library. Most of the
+ * catalog is locked today and lights up on its own as the brand keeps publishing and
+ * measuring. Grouped by category, filterable by state, and paced by a level system.
  */
 
 const num = (n: number) => n.toLocaleString()
+
+type Filter = 'all' | 'unlocked' | 'reach' | 'locked'
+const cardState = (u: DataUnlock): 'unlocked' | 'reach' | 'locked' =>
+  u.unlocked ? 'unlocked' : u.progress >= 0.6 ? 'reach' : 'locked'
 
 export function LibraryData({
   items,
@@ -34,23 +38,39 @@ export function LibraryData({
     () => computeDataUnlocks({ items, allRows, proofPoints, ctas, audiences, sources, donorLinked }),
     [items, allRows, proofPoints, ctas, audiences, sources, donorLinked],
   )
+  const [filter, setFilter] = useState<Filter>('all')
 
   if (!items.length) {
     return <div className="mtx-empty">Ingest this brand's content first — the data unlocks fill in as the library grows.</div>
   }
+
+  const counts = {
+    all: prog.total,
+    unlocked: prog.unlocks.filter((u) => u.unlocked).length,
+    reach: prog.unlocks.filter((u) => cardState(u) === 'reach').length,
+    locked: prog.unlocks.filter((u) => cardState(u) === 'locked').length,
+  }
+  const match = (u: DataUnlock) => (filter === 'all' ? true : filter === 'unlocked' ? u.unlocked : cardState(u) === filter)
 
   // Level ring geometry.
   const R = 34
   const CIRC = 2 * Math.PI * R
   const ringPct = prog.total ? prog.unlockedCount / prog.total : 0
 
+  const FILTERS: { key: Filter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'unlocked', label: 'Unlocked' },
+    { key: 'reach', label: 'In reach' },
+    { key: 'locked', label: 'Locked' },
+  ]
+
   return (
     <div className="ldata">
       <header className="mtx-head">
         <h2>Data unlocks</h2>
         <span className="mtx-sub">
-          Every insight needs a floor of data underneath it. Here's what's unlocked, what's close, and what a little
-          more data will open up — the bars fill on their own as the library grows.
+          {prog.total} insights you earn by pairing messaging with data over time. Each one opens when its gates are met;
+          many need months of history. The bars fill on their own as the library grows.
         </span>
       </header>
 
@@ -81,7 +101,7 @@ export function LibraryData({
           </div>
           <div className="ldata-hero-meta">
             <span>
-              <b>{prog.unlockedCount}</b> of {prog.total} insights unlocked
+              <b>{prog.unlockedCount}</b> of {prog.total} unlocked
             </span>
             <span className="ldata-dot">·</span>
             <span>
@@ -109,42 +129,63 @@ export function LibraryData({
         )}
       </div>
 
-      {/* Tiers. */}
-      {prog.byTier.map(({ tier, unlocks }) => (
-        <section className="ldata-tier" key={tier}>
-          <div className="ldata-tier-head">
-            <span className="ldata-tier-name">{tier}</span>
-            <span className="ldata-tier-count">
-              {unlocks.filter((u) => u.unlocked).length}/{unlocks.length}
-            </span>
-          </div>
-          <div className="ldata-grid">
-            {unlocks.map((u) => (
-              <UnlockCard key={u.id} u={u} isNext={prog.next?.id === u.id} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* Filter bar. */}
+      <div className="ldata-filters">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            className={`ldata-filter${filter === f.key ? ' active' : ''}`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label} <span className="ldata-filter-n">{counts[f.key]}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Categories. */}
+      {prog.byCategory.map(({ category, unlocks, unlocked }) => {
+        const shown = unlocks.filter(match)
+        if (!shown.length) return null
+        return (
+          <section className="ldata-tier" key={category}>
+            <div className="ldata-tier-head">
+              <span className="ldata-tier-name">{category}</span>
+              <span className="ldata-tier-count">
+                {unlocked}/{unlocks.length}
+              </span>
+              <div className="ldata-tier-track">
+                <div className="ldata-tier-fill" style={{ width: `${(unlocked / unlocks.length) * 100}%` }} />
+              </div>
+            </div>
+            <div className="ldata-grid">
+              {shown.map((u) => (
+                <UnlockCard key={u.id} u={u} />
+              ))}
+            </div>
+          </section>
+        )
+      })}
 
       <div className="mtx-foot">
-        Locked doesn't mean unavailable forever — it means not enough data yet. Ingest more content, tag it to
-        audiences, connect another source, and the bars climb until the insight opens on its own.
+        Locked doesn't mean unavailable forever — it means not enough data yet, or not held long enough. Keep publishing,
+        tag content to audiences, connect a source, and the bars climb until each insight opens on its own.
       </div>
     </div>
   )
 }
 
-function UnlockCard({ u, isNext }: { u: DataUnlock; isNext: boolean }) {
-  const state = u.unlocked ? 'unlocked' : isNext ? 'next' : 'locked'
+function UnlockCard({ u }: { u: DataUnlock }) {
+  const state = cardState(u)
   const pct = Math.round(u.progress * 100)
+  const badge = u.unlocked ? 'Unlocked' : state === 'reach' ? 'In reach' : 'Locked'
   return (
     <article className={`ldata-card ${state}`}>
       <div className="ldata-card-top">
         <span className="ldata-card-ico" aria-hidden="true">
-          {u.unlocked ? '✓' : isNext ? '◆' : '🔒'}
+          {u.unlocked ? '✓' : state === 'reach' ? '◆' : '🔒'}
         </span>
         <span className="ldata-card-title">{u.title}</span>
-        <span className={`ldata-badge ${state}`}>{u.unlocked ? 'Unlocked' : isNext ? 'In reach' : 'Locked'}</span>
+        <span className={`ldata-badge ${state}`}>{badge}</span>
       </div>
       <p className="ldata-card-reveal">{u.reveal}</p>
       {u.unlocked && u.finding ? (
@@ -161,7 +202,7 @@ function UnlockCard({ u, isNext }: { u: DataUnlock; isNext: boolean }) {
             <span className="ldata-card-cur">
               {num(u.current)} <span className="ldata-card-metric">/ {num(u.threshold)} {u.metric}</span>
             </span>
-            <span className="ldata-card-pct">{`${pct}%`}</span>
+            <span className="ldata-card-pct">{u.unlocked ? 'unlocked' : `${pct}%`}</span>
           </div>
         </div>
       )}
