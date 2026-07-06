@@ -690,6 +690,41 @@ function saveBreakStatus(map: Record<string, BreakStatus>): void {
     /* ignore */
   }
 }
+// The last Claude-run coherence check, persisted so it survives a reload (the whole
+// point of "ask Claude to check": the result shouldn't evaporate). Only a real Claude
+// run (live) is stored; the local heuristic fallback is never persisted as the check.
+const COHERENCE_CHECK_KEY = 'stoplight.coherenceCheck.v1'
+interface PersistedCoherence {
+  claudeBreaks: CoherenceBreak[] | null
+  claudeBreaksScope: string | null
+  coherenceCheckedHash: string | null
+  coherenceLive: boolean
+  coherenceBaseline: BrandBaseline | null
+}
+const EMPTY_COHERENCE: PersistedCoherence = {
+  claudeBreaks: null,
+  claudeBreaksScope: null,
+  coherenceCheckedHash: null,
+  coherenceLive: false,
+  coherenceBaseline: null,
+}
+function loadCoherenceCheck(): PersistedCoherence {
+  try {
+    const v = JSON.parse(localStorage.getItem(COHERENCE_CHECK_KEY) || 'null')
+    if (v && typeof v === 'object' && Array.isArray(v.claudeBreaks)) return v as PersistedCoherence
+  } catch {
+    /* ignore */
+  }
+  return EMPTY_COHERENCE
+}
+function saveCoherenceCheck(c: PersistedCoherence): void {
+  try {
+    localStorage.setItem(COHERENCE_CHECK_KEY, JSON.stringify(c))
+  } catch {
+    /* ignore */
+  }
+}
+const INITIAL_COHERENCE = loadCoherenceCheck()
 const AUDIT_LOG_KEY = 'stoplight.auditLog.v1'
 function loadAuditLog(): AuditEntry[] {
   try {
@@ -1707,12 +1742,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   breaksOpen: false,
   activeBreakId: null,
   breakStatus: loadBreakStatus(),
-  claudeBreaks: null,
-  claudeBreaksScope: null,
-  coherenceBaseline: null,
+  claudeBreaks: INITIAL_COHERENCE.claudeBreaks,
+  claudeBreaksScope: INITIAL_COHERENCE.claudeBreaksScope,
+  coherenceBaseline: INITIAL_COHERENCE.coherenceBaseline,
   coherenceChecking: false,
-  coherenceLive: false,
-  coherenceCheckedHash: null,
+  coherenceLive: INITIAL_COHERENCE.coherenceLive,
+  coherenceCheckedHash: INITIAL_COHERENCE.coherenceCheckedHash,
   coherenceUnavailable: false,
   engineOpen: false,
   engineRunning: false,
@@ -4369,16 +4404,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const baseline = get().brandBaselineFor(clientFilter)
     try {
       const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })
+      const scope = breakScopeKey(clientFilter, campaignFilter)
+      const hash = coherenceContentHash(scoped)
       set({
         claudeBreaks: breaks,
-        claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
+        claudeBreaksScope: scope,
         coherenceBaseline: baseline,
-        coherenceCheckedHash: coherenceContentHash(scoped),
+        coherenceCheckedHash: hash,
         coherenceLive: live,
         // A fallback (live === false) means Claude is unavailable — stop auto-retrying.
         coherenceUnavailable: !live,
         coherenceChecking: false,
       })
+      // Only a real Claude run is durable; the heuristic fallback stays session-only.
+      if (live) saveCoherenceCheck({ claudeBreaks: breaks, claudeBreaksScope: scope, coherenceCheckedHash: hash, coherenceLive: true, coherenceBaseline: baseline })
     } catch {
       set({ coherenceChecking: false, coherenceUnavailable: true })
     }
@@ -4417,15 +4456,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           status: 'open',
         }
       })
+    const scope = breakScopeKey(clientFilter, campaignFilter)
+    const hash = coherenceContentHash(scoped)
+    const baseline = get().brandBaselineFor(clientFilter)
     set({
       claudeBreaks: breaks,
-      claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
-      coherenceBaseline: get().brandBaselineFor(clientFilter),
-      coherenceCheckedHash: coherenceContentHash(scoped),
+      claudeBreaksScope: scope,
+      coherenceBaseline: baseline,
+      coherenceCheckedHash: hash,
       coherenceLive: true,
       coherenceUnavailable: false,
       coherenceChecking: false,
     })
+    // Persist so the Claude-run check survives a reload (never persist the heuristic).
+    saveCoherenceCheck({ claudeBreaks: breaks, claudeBreaksScope: scope, coherenceCheckedHash: hash, coherenceLive: true, coherenceBaseline: baseline })
   },
 
   openEngine: () => set({ engineOpen: true }),
