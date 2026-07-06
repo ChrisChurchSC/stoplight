@@ -109,7 +109,10 @@ import {
   AUDIT_LABEL,
   type AuditAction,
   type AuditEntry,
+  type BreakAxis,
+  type BreakSeverity,
   type BreakStatus,
+  type ClaudeCoherenceFlag,
   type CoherenceBreak,
   applyBreakStatus,
   breakScopeKey,
@@ -1421,6 +1424,10 @@ interface TrafficState {
   /** Claude check fell back / errored — stay on the live heuristic, stop auto-retry. */
   coherenceUnavailable: boolean
   runCoherenceCheck: () => Promise<void>
+  /** The connected Claude app pushes coherence flags it ran itself (so the check
+   *  comes from the live Claude, not Hyperfocus's own API credits). Injects them
+   *  for the current scope and marks the result live. */
+  applyClaudeCoherence: (flags: ClaudeCoherenceFlag[]) => void
   /** The Claude engine: reads from sources + publishes to channels via tools. */
   engineOpen: boolean
   engineRunning: boolean
@@ -4375,6 +4382,50 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     } catch {
       set({ coherenceChecking: false, coherenceUnavailable: true })
     }
+  },
+
+  applyClaudeCoherence: (flags) => {
+    const { rows, clientFilter, campaignFilter } = get()
+    if (clientFilter === 'all' || campaignFilter === 'all') return
+    const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
+    if (scoped.length === 0) return
+    const byName = new Map(scoped.map((r) => [r.assetName, r]))
+    const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40)
+    // Clamp to a real axis / severity so a stray value from the pusher can never crash
+    // the break UI (which looks up AXIS_META[axis].label).
+    const VALID_AXES = new Set<BreakAxis>(['journey', 'audience', 'proof', 'cta', 'voice', 'contamination', 'leak', 'casing', 'duplicate'])
+    const VALID_SEV = new Set<BreakSeverity>(['high', 'medium', 'low'])
+    const breaks: CoherenceBreak[] = flags
+      .filter((f) => byName.has(f.assetName))
+      .map((f) => {
+        const r = byName.get(f.assetName)!
+        const field = f.field && r.messaging?.[f.field] != null ? f.field : Object.keys(r.messaging ?? {})[0] ?? 'body'
+        const text = String(r.messaging?.[field] ?? '')
+        const axis: BreakAxis = f.axis && VALID_AXES.has(f.axis) ? f.axis : 'voice'
+        const severity: BreakSeverity = f.severity && VALID_SEV.has(f.severity) ? f.severity : 'medium'
+        return {
+          id: `cl-${axis}-${slug(f.assetName)}-${slug(field)}`,
+          axis,
+          severity,
+          headline: f.headline,
+          campaign: campaignFilter,
+          client: clientFilter,
+          from: { role: `${r.channel} · ${field}`, assetName: f.assetName, channel: r.channel, field, text, highlight: f.highlight ?? '' },
+          why: f.why ?? '',
+          brandRule: 'Checked by Claude.',
+          suggestedFix: { assetName: f.assetName, channel: r.channel, field, before: text, after: f.suggestion },
+          status: 'open',
+        }
+      })
+    set({
+      claudeBreaks: breaks,
+      claudeBreaksScope: breakScopeKey(clientFilter, campaignFilter),
+      coherenceBaseline: get().brandBaselineFor(clientFilter),
+      coherenceCheckedHash: coherenceContentHash(scoped),
+      coherenceLive: true,
+      coherenceUnavailable: false,
+      coherenceChecking: false,
+    })
   },
 
   openEngine: () => set({ engineOpen: true }),

@@ -98,6 +98,27 @@ export interface CoherenceBreak {
   status: BreakStatus
 }
 
+/** A coherence flag pushed by the connected Claude app (it ran the check itself,
+ *  rather than Hyperfocus spending its own API credits). The store turns each of
+ *  these into a full CoherenceBreak against the named asset. `suggestion` is the
+ *  one-line fix Claude proposes. */
+export interface ClaudeCoherenceFlag {
+  /** The asset the flag is about, matched by name within the current scope. */
+  assetName: string
+  /** Which messaging field the issue is in (defaults to the primary body). */
+  field?: string
+  axis?: BreakAxis
+  severity?: BreakSeverity
+  /** The problem, said in one sentence a CMO would say out loud. */
+  headline: string
+  /** Why it matters for this brand's audience / goal. */
+  why?: string
+  /** The exact phrase to underline in the copy, if any. */
+  highlight?: string
+  /** The simple suggested fix (a rewrite or a one-line instruction). */
+  suggestion: string
+}
+
 export type AuditAction = 'check' | 'apply-fix' | 'reassign-proof' | 'mark-intended' | 'send-to-review'
 
 export const AUDIT_LABEL: Record<AuditAction, string> = {
