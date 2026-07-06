@@ -141,10 +141,72 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const busy = contentIngesting === brand
   const last = contentIngest[brand]
 
-  // Roll-up: total reach across the library + per-channel counts.
-  const totalReach = items.reduce((s, r) => s + (headline(r)?.value ?? 0), 0)
+  // Meeting notes (from Granola) are a distinct kind of asset, not published content, so
+  // they're grouped on their own and kept out of the published count / reach roll-up.
+  const meetings = items.filter(isMeeting)
+  const published = items.filter((r) => !isMeeting(r))
+
+  // Roll-up: total reach across the published library + per-channel counts.
+  const totalReach = published.reduce((s, r) => s + (headline(r)?.value ?? 0), 0)
   const byChannel = new Map<string, number>()
-  for (const r of items) byChannel.set(String(r.channel), (byChannel.get(String(r.channel)) ?? 0) + 1)
+  for (const r of published) byChannel.set(String(r.channel), (byChannel.get(String(r.channel)) ?? 0) + 1)
+
+  // One catalog card, reused by the published grid and the meeting-notes group.
+  const renderCard = (r: TrafficRow) => {
+    const h = headline(r)
+    const copy = itemCopy(r)
+    const when = fmtDate(r.publishedAt, r.postedAt)
+    const eng = r.socialMetrics?.engagement ?? r.socialMetrics?.likes
+    const subs = r.socialMetrics?.subscribers
+    return (
+      <article
+        className="lib-card lib-card-click"
+        key={r.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetail(r)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setDetail(r)
+          }
+        }}
+      >
+        <div className="lib-card-top">
+          <span className="lib-card-ch">
+            {isMeeting(r) ? <GranolaIcon size={14} /> : <ChannelIcon channel={r.channel as ChannelId} size={14} />}
+          </span>
+          {when && <span className="lib-card-date">{when}</span>}
+        </div>
+        <div className="lib-card-title" title={r.assetName}>
+          {r.assetName}
+        </div>
+        {copy && <div className="lib-card-copy">{copy}</div>}
+        <div className="lib-card-metrics">
+          {h && (
+            <span className="lib-metric strong">
+              {formatReach(h.value)} <em>{h.label}</em>
+            </span>
+          )}
+          {typeof eng === 'number' && eng > 0 && (
+            <span className="lib-metric">
+              {num(eng)} <em>eng.</em>
+            </span>
+          )}
+          {typeof subs === 'number' && subs > 0 && (
+            <span className="lib-metric sub">
+              +{num(subs)} <em>subs</em>
+            </span>
+          )}
+        </div>
+        {r.sourceUrl && (
+          <a className="lib-card-link" href={r.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+            ↗ Open
+          </a>
+        )}
+      </article>
+    )
+  }
 
   return (
     <div className="mtx">
@@ -152,7 +214,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         <h2>{brand} · Library</h2>
         <span className="mtx-sub">
           {items.length > 0
-            ? `${num(items.length)} published ${items.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date`
+            ? `${num(published.length)} published ${published.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date${meetings.length ? ` · ${meetings.length} meeting ${meetings.length === 1 ? 'note' : 'notes'}` : ''}`
             : 'Everything this brand has published, pulled from its connected channels'}
         </span>
       </header>
@@ -232,7 +294,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         </div>
       ) : (
         <>
-          {/* Per-channel tally. */}
+          {/* Per-channel tally, plus a Granola meeting-notes group. */}
           <div className="lib-tally">
             {[...byChannel.entries()]
               .sort((a, b) => b[1] - a[1])
@@ -242,72 +304,28 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
                   {n}
                 </span>
               ))}
+            {meetings.length > 0 && (
+              <span className="lib-tally-chip" title="Meeting notes from Granola">
+                <GranolaIcon size={14} />
+                {meetings.length}
+              </span>
+            )}
           </div>
 
-          {/* The catalog. */}
-          <div className="lib-grid">
-            {items.map((r) => {
-              const h = headline(r)
-              const copy = itemCopy(r)
-              const when = fmtDate(r.publishedAt, r.postedAt)
-              const eng = r.socialMetrics?.engagement ?? r.socialMetrics?.likes
-              const subs = r.socialMetrics?.subscribers
-              return (
-                <article
-                  className="lib-card lib-card-click"
-                  key={r.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setDetail(r)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      setDetail(r)
-                    }
-                  }}
-                >
-                  <div className="lib-card-top">
-                    <span className="lib-card-ch">
-                      {isMeeting(r) ? <GranolaIcon size={14} /> : <ChannelIcon channel={r.channel as ChannelId} size={14} />}
-                    </span>
-                    {when && <span className="lib-card-date">{when}</span>}
-                  </div>
-                  <div className="lib-card-title" title={r.assetName}>
-                    {r.assetName}
-                  </div>
-                  {copy && <div className="lib-card-copy">{copy}</div>}
-                  <div className="lib-card-metrics">
-                    {h && (
-                      <span className="lib-metric strong">
-                        {formatReach(h.value)} <em>{h.label}</em>
-                      </span>
-                    )}
-                    {typeof eng === 'number' && eng > 0 && (
-                      <span className="lib-metric">
-                        {num(eng)} <em>eng.</em>
-                      </span>
-                    )}
-                    {typeof subs === 'number' && subs > 0 && (
-                      <span className="lib-metric sub">
-                        +{num(subs)} <em>subs</em>
-                      </span>
-                    )}
-                  </div>
-                  {r.sourceUrl && (
-                    <a
-                      className="lib-card-link"
-                      href={r.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      ↗ Open
-                    </a>
-                  )}
-                </article>
-              )
-            })}
-          </div>
+          {/* The catalog — published content, then meeting notes grouped on their own. */}
+          <div className="lib-grid">{published.map(renderCard)}</div>
+
+          {meetings.length > 0 && (
+            <section className="lib-meetings">
+              <div className="lib-section-head">
+                <GranolaIcon size={16} />
+                Meeting notes
+                <span className="lib-section-n">{meetings.length}</span>
+                <span className="lib-section-sub">strategy calls from Granola</span>
+              </div>
+              <div className="lib-grid">{meetings.map(renderCard)}</div>
+            </section>
+          )}
         </>
       )}
 

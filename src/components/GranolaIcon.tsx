@@ -12,7 +12,7 @@ const SPIRAL = (() => {
   let d = ''
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
-    const th = -Math.PI / 2 + t * turns * 2 * Math.PI // start at top, go clockwise
+    const th = -Math.PI / 2 - t * turns * 2 * Math.PI // start at top, go counter-clockwise
     const r = maxR * (1 - t) // spiral inward to the center
     const x = cx + r * Math.cos(th)
     const y = cy + r * Math.sin(th)
