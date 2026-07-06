@@ -95,8 +95,10 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const ingestContent = useTrafficStore((s) => s.ingestContent)
 
   // Catalog (browse every published asset) vs Signals (what's working — the read
-  // over the library that ranks content by what drives subscribers).
-  const [mode, setMode] = useState<'catalog' | 'signals' | 'map' | 'data'>('catalog')
+  // over the library that ranks content by what drives subscribers). The mode lives
+  // in the store so the sidebar's nested Library items drive it too.
+  const mode = useTrafficStore((s) => s.libraryMode)
+  const setMode = useTrafficStore((s) => s.setLibraryMode)
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
   useEffect(() => {

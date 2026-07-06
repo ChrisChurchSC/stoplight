@@ -18,6 +18,10 @@ export function HomeSidebar() {
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const setHomeFilter = useTrafficStore((s) => s.setHomeFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const libraryMode = useTrafficStore((s) => s.libraryMode)
+  const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
+  const brandTab = useTrafficStore((s) => s.brandTab)
+  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
   const role = useTrafficStore((s) => s.role)
@@ -56,6 +60,28 @@ export function HomeSidebar() {
           <span className="nav-ico">◈</span>
           <span className="nav-label">Brand</span>
         </button>
+        {page === 'brand' && (
+          <div className="nav-sub">
+            {(
+              [
+                ['about', 'About'],
+                ['goal', 'Goal'],
+                ['voice', 'Voice'],
+                ['audiences', 'Audiences'],
+                ['strategy', 'Strategy'],
+                ['messaging', 'Messaging'],
+              ] as const
+            ).map(([t, label]) => (
+              <button
+                key={t}
+                className={`nav-subitem${brandTab === t ? ' active' : ''}`}
+                onClick={() => setBrandTab(t)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           className={`nav-item${page === 'content' ? ' active' : ''}`}
           onClick={() => setPage('content')}
@@ -64,6 +90,26 @@ export function HomeSidebar() {
           <span className="nav-ico">❏</span>
           <span className="nav-label">Library</span>
         </button>
+        {page === 'content' && (
+          <div className="nav-sub">
+            {(
+              [
+                ['catalog', 'Catalog'],
+                ['signals', 'Signals'],
+                ['map', 'Map'],
+                ['data', 'Data'],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                className={`nav-subitem${libraryMode === m ? ' active' : ''}`}
+                onClick={() => setLibraryMode(m)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           className={`nav-item${page === 'channels' ? ' active' : ''}`}
           onClick={() => setPage('channels')}

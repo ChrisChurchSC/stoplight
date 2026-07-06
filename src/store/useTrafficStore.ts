@@ -983,6 +983,12 @@ interface TrafficState {
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports'
+  /** Which Library sub-view is open — nested under Library in the sidebar. */
+  libraryMode: 'catalog' | 'signals' | 'map' | 'data'
+  setLibraryMode: (mode: 'catalog' | 'signals' | 'map' | 'data') => void
+  /** Which Brand sub-view is open — nested under Brand in the sidebar. */
+  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging'
+  setBrandTab: (tab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging') => void
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
   /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
@@ -1589,6 +1595,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandView: 'campaigns',
   timeRange: 'all',
   page: 'clients',
+  libraryMode: 'catalog',
+  brandTab: 'about',
   brandGuides: loadBrandGuides(),
   readinessOpen: false,
   diagnosisOpen: false,
@@ -1703,6 +1711,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (page === 'connectors' && role !== 'owner') return
     set({ page })
   },
+  setLibraryMode: (libraryMode) => set({ libraryMode, page: 'content' }),
+  setBrandTab: (brandTab) => set({ brandTab, page: 'brand' }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),
   setPersonalizeOpen: (personalizeOpen) => set({ personalizeOpen }),
   setSavedViewsOpen: (savedViewsOpen) => set({ savedViewsOpen }),

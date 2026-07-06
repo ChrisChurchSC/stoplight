@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { AudienceSheet } from './AudienceSheet'
 import { BrandGoal } from './BrandGoal'
@@ -14,7 +14,9 @@ import { LibraryPage } from './LibraryPage'
  * LibraryPage, so opening it points the messaging library at this brand.
  */
 export function BrandPage({ brand }: { brand?: string }) {
-  const [tab, setTab] = useState<'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging'>('about')
+  // The sub-tab lives in the store so the sidebar's nested Brand items drive it too.
+  const tab = useTrafficStore((s) => s.brandTab)
+  const setTab = useTrafficStore((s) => s.setBrandTab)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
 
   // Any library-backed tab needs the messaging system pointed at this brand.
