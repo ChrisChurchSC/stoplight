@@ -1176,3 +1176,82 @@ const CH_LABELS: Record<string, string> = {
   website: 'Website',
 }
 export const channelName = (c: string): string => CH_LABELS[c] ?? c
+
+// ── Recommendations: turn the Signals reads into ranked, actionable next steps ────
+export interface SignalRec {
+  text: string
+  priority: 'high' | 'medium' | 'low'
+}
+export function signalRecommendations(i: {
+  coverage: MessageCoverage
+  connection: ChannelConnection
+  audience: AudienceCoverage
+  reconcile: ReconcileStat
+  signals: LibrarySignals
+  patterns: MessagingPatterns
+}): SignalRec[] {
+  const { coverage: cov, connection: conn, audience: aud, reconcile: recon, signals: s, patterns: mp } = i
+  const recs: SignalRec[] = []
+
+  // Conversion blockers first (high) — the copy actively fails to convert.
+  if (conn.overall.total >= 10 && conn.overall.deadEndPct >= 40) {
+    const worst = conn.channels
+      .filter((c) => c.total >= 3 && c.connected === 0)
+      .sort((a, b) => b.total - a.total)[0]
+    recs.push({
+      priority: 'high',
+      text: `${conn.overall.deadEndPct}% of your posts link nowhere onward. Add a next step (a link or CTA) to your highest-reach posts${worst ? `, starting with ${worst.label}, which never connects` : ''}.`,
+    })
+  }
+  const neverCtas = cov.cta.items.filter((c) => c.hits === 0)
+  if (neverCtas.length) {
+    recs.push({
+      priority: 'high',
+      text: `You never actually say ${neverCtas.slice(0, 2).map((c) => `“${c.label}”`).join(' or ')}${neverCtas.length > 2 ? ` (and ${neverCtas.length - 2} more)`: ''}. An ask the copy never makes can’t convert.`,
+    })
+  }
+  if (cov.proof.unused.length >= 3) {
+    recs.push({
+      priority: 'high',
+      text: `${cov.proof.unused.length} of your ${cov.proof.total} proof points never appear in any post. Put them to work, starting with “${cov.proof.unused[0].label}”.`,
+    })
+  }
+
+  // Optimizations (medium) — lean into what's already working.
+  const topProof = cov.proof.performing[0]
+  if (topProof && (topProof.outcome ?? 0) > 0) {
+    recs.push({ priority: 'medium', text: `“${topProof.label}” is your strongest proof point (drove ${compact(topProof.outcome ?? 0)} across ${topProof.hits} posts). Lead with it more often.` })
+  }
+  const topPat = [...s.patterns].sort((a, b) => b.avgRate - a.avgRate)[0]
+  if (topPat && topPat.count >= 3 && topPat.avgRate > 0) {
+    recs.push({ priority: 'medium', text: `${topPat.shape} titles convert best at ${ratePct(topPat.avgRate)}. Write more of them.` })
+  }
+  const topTopic = s.topics[0]
+  if (topTopic && topTopic.subs > 0) {
+    recs.push({ priority: 'medium', text: `“${topTopic.topic}” drives the most subscribers of any theme. Make more content on it.` })
+  }
+  const social = mp.surfaces.find((su) => /social/i.test(su.surface))
+  const owned = mp.surfaces.find((su) => /own|web|site/i.test(su.surface))
+  if (social && owned && social.youPct - owned.youPct >= 25) {
+    recs.push({ priority: 'medium', text: `Your social copy speaks to “you” (${social.youPct}%) but your owned copy barely does (${owned.youPct}%). Bring the social voice to the site and the ask.` })
+  }
+
+  // Hygiene (low) — set up so the next reads get sharper.
+  const starved = aud.defined.filter((a) => a.count === 0)
+  if (starved.length) {
+    recs.push({ priority: 'low', text: `${starved.length} defined ${starved.length === 1 ? 'segment has' : 'segments have'} no content: ${starved.slice(0, 2).map((a) => a.label).join(', ')}. Write for them or drop them.` })
+  }
+  if (aud.total >= 10 && aud.untagged / aud.total >= 0.4) {
+    recs.push({ priority: 'low', text: `${aud.untagged} of ${aud.total} assets name no audience. Tag them so you can see what each segment responds to.` })
+  }
+  if (recon.planned >= 10 && recon.reconciled === 0) {
+    recs.push({ priority: 'low', text: `None of your ${recon.planned} planned cards have reconciled to a live post. Add the source link when a card ships so projections become actuals.` })
+  }
+  const bestDay = s.days[0]
+  if (bestDay && s.days.length >= 3) {
+    recs.push({ priority: 'low', text: `${bestDay.day} is your best day to post (avg ${compact(bestDay.avgReach)} reach). Weight the calendar toward it.` })
+  }
+
+  const order = { high: 0, medium: 1, low: 2 }
+  return recs.sort((a, b) => order[a.priority] - order[b.priority]).slice(0, 8)
+}

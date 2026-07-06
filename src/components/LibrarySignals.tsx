@@ -10,6 +10,7 @@ import {
   computeMessagingPatterns,
   ratePct,
   reconciliationStat,
+  signalRecommendations,
 } from '../domain/contentSignals'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { ChannelIcon } from './ChannelIcon'
@@ -49,6 +50,7 @@ export function LibrarySignals({
   const conn = computeChannelConnection(rows)
   const aud = computeAudienceCoverage(allRows ?? rows, audiences ?? [])
   const maxAud = Math.max(...aud.defined.map((a) => a.count), 1)
+  const recs = signalRecommendations({ coverage: cov, connection: conn, audience: aud, reconcile: recon, signals: s, patterns: mp })
 
   if (!s.converters.length && !s.channels.length) {
     return (
@@ -111,6 +113,23 @@ export function LibrarySignals({
               <span>{t}</span>
             </div>
           ))}
+        </section>
+      )}
+
+      {recs.length > 0 && (
+        <section className="ins-card ins-wide sig-recs">
+          <div className="ins-card-head">
+            <h3>Recommendations</h3>
+            <span className="ins-card-hint">what to change, read off the signals below</span>
+          </div>
+          <div className="sig-rec-list">
+            {recs.map((r, i) => (
+              <div className="sig-rec" key={i}>
+                <span className={`sig-rec-tag ${r.priority}`}>{r.priority}</span>
+                <span className="sig-rec-text">{r.text}</span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 

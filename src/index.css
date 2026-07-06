@@ -14705,6 +14705,52 @@ textarea.library-input {
   font-weight: 700;
   flex-shrink: 0;
 }
+/* Recommendations — ranked actions synthesized from the signals below. */
+.sig-recs .ins-card-head h3 {
+  font-size: 15px;
+}
+.sig-rec-list {
+  display: flex;
+  flex-direction: column;
+}
+.sig-rec {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sig-rec:last-child {
+  border-bottom: none;
+}
+.sig-rec-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: 999px;
+}
+.sig-rec-tag.high {
+  background: rgba(229, 72, 77, 0.13);
+  color: var(--red);
+}
+.sig-rec-tag.medium {
+  background: rgba(245, 166, 35, 0.16);
+  color: #b9791a;
+}
+.sig-rec-tag.low {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.sig-rec-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
 /* Converters — one row per piece: title · rate bar · rate · counts. */
 .sig-conv {
   display: flex;
