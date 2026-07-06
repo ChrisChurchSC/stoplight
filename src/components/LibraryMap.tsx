@@ -205,11 +205,11 @@ export function LibraryMap({ rows }: { rows: TrafficRow[] }) {
       {flow.deadEnds.length > 0 && (
         <div className="lmap-deadends">
           <div className="lmap-links-h">Dead ends · {flow.deadEnds.length} assets link nowhere onward</div>
-          <div className="lmap-asset-list">
-            {flow.deadEnds.slice(0, 24).map((a) => (
+          <div className="lmap-asset-list lmap-deadend-list">
+            {flow.deadEnds.slice(0, 6).map((a) => (
               <AssetRow a={a} key={a.id} />
             ))}
-            {flow.deadEnds.length > 24 && <div className="lmap-asset-more">+{flow.deadEnds.length - 24} more</div>}
+            {flow.deadEnds.length > 6 && <div className="lmap-asset-more">+{flow.deadEnds.length - 6} more</div>}
           </div>
         </div>
       )}

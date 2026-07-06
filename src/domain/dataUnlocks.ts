@@ -74,7 +74,20 @@ export interface DataUnlock {
   /** The real data volumes this finding is computed over — one per gate (ingested content
    *  and brand inputs only), used to show its source line. */
   sources: { metric: string; current: number }[]
+  /** An optional mini-visual of the finding's own numbers, rendered under the text. */
+  visual?: UnlockVisual
 }
+
+/** A small chart that sits under a finding. Each is a single measure, so single-hue.
+ *  bars = a ranked top-N; ratio = X of a whole; meter = one proportion (0..1). */
+/** A good/warn/bad read on a value, so the visual can color it. Only set where a value
+ *  has a clear direction (rising trend = good, high dead-end = bad); never on bars. */
+export type Tone = 'good' | 'warn' | 'bad'
+export type UnlockVisual =
+  | { kind: 'bars'; data: { label: string; value: number; display: string }[] }
+  | { kind: 'ratio'; part: number; whole: number; tone?: Tone }
+  | { kind: 'meter'; value: number; tone?: Tone }
+  | { kind: 'delta'; pct: number; tone?: Tone }
 
 export interface DataProgress {
   unlocks: DataUnlock[]
@@ -845,6 +858,86 @@ const UNLOCK_EXAMPLES: Record<string, string> = {
   'seo-nonbrand': '“Non-brand demand for the idea is up 30% this year”',
 }
 
+/** Top-N ranked bars from a list, by value, positive only. */
+function vbars<T>(rows: T[] | undefined, get: (r: T) => { label: string; value: number; display: string }, n = 4): UnlockVisual | undefined {
+  const data = (rows ?? []).map(get).filter((d) => d.value > 0).sort((a, b) => b.value - a.value).slice(0, n)
+  return data.length ? { kind: 'bars', data } : undefined
+}
+
+// Tone bands. up = higher is better (coverage); down = higher is worse (dead-end);
+// delta = a signed change. Each pairs with a visible number, never color alone.
+const upTone = (v: number): Tone => (v >= 0.66 ? 'good' : v >= 0.33 ? 'warn' : 'bad')
+const downTone = (v: number): Tone => (v <= 0.25 ? 'good' : v <= 0.5 ? 'warn' : 'bad')
+const deltaTone = (pct: number): Tone => (pct >= 5 ? 'good' : pct <= -5 ? 'bad' : 'warn')
+const rtone = (part: number, whole: number): Tone => upTone(whole ? part / whole : 0)
+
+/** The mini-visual for a finding, keyed by unlock id — the same numbers the finding text
+ *  reads, drawn from the ingested library. Only chartable findings return one. */
+function unlockVisual(id: string, c: Ctx): UnlockVisual | undefined {
+  switch (id) {
+    // Foundations
+    case 'flow': {
+      if (!c.flow) return undefined
+      const v = c.flow.overall.deadEndPct / 100
+      return { kind: 'meter', value: v, tone: downTone(v) }
+    }
+    case 'linkmap':
+      return vbars(c.links, (l) => ({ label: l.host, value: l.count, display: `×${l.count}` }))
+    case 'proof-coverage':
+      return { kind: 'ratio', part: c.cov.proof.used, whole: c.cov.proof.total, tone: rtone(c.cov.proof.used, c.cov.proof.total) }
+    // Message performance
+    case 'proof':
+      return vbars(c.cov.proof.performing, (p) => ({ label: p.label, value: p.outcome ?? 0, display: compact(p.outcome ?? 0) }))
+    case 'hook-shapes':
+      return vbars(c.sig.patterns, (p) => ({ label: p.shape, value: p.avgReach, display: formatReach(p.avgReach) }))
+    case 'voice-lift':
+      return vbars(c.sig.voice, (v) => ({ label: v.trait, value: v.lift, display: `${v.lift.toFixed(1)}×` }))
+    case 'length':
+      return vbars(c.sig.lengthBands, (b) => ({ label: b.band, value: b.avgReach, display: formatReach(b.avgReach) }))
+    case 'openers':
+      return vbars(c.sig.openers, (o) => ({ label: o.word, value: o.avgReach, display: formatReach(o.avgReach) }))
+    case 'asks':
+      return vbars(c.sig.asks, (a) => ({ label: a.ask, value: a.avgEng, display: compact(a.avgEng) }))
+    case 'cta': {
+      const used = c.cov.cta.items.filter((x) => x.hits > 0).length
+      return { kind: 'ratio', part: used, whole: c.cov.cta.items.length, tone: rtone(used, c.cov.cta.items.length) }
+    }
+    case 'concentration':
+      return { kind: 'meter', value: c.top10Share / 100 }
+    // Audience
+    case 'audience':
+      return { kind: 'ratio', part: c.aud.tagged, whole: c.aud.total, tone: rtone(c.aud.tagged, c.aud.total) }
+    case 'audience-coverage': {
+      const covered = c.aud.defined.filter((d) => d.count > 0).length
+      return { kind: 'ratio', part: covered, whole: c.aud.defined.length, tone: rtone(covered, c.aud.defined.length) }
+    }
+    case 'topics':
+      return vbars(c.sig.topics, (t) => ({ label: t.topic, value: t.subs, display: compact(t.subs) }))
+    // Channel & flow
+    case 'destination-mix':
+      return vbars(c.flow?.destinations, (d) => ({ label: d.key, value: d.count, display: `${d.count}` }))
+    case 'cross-channel':
+      return { kind: 'meter', value: c.ownedPct / 100, tone: upTone(c.ownedPct / 100) }
+    // Timing
+    case 'best-day':
+      return vbars(c.sig.days, (d) => ({ label: d.day, value: d.avgReach, display: formatReach(d.avgReach) }))
+    // Conversion
+    case 'subscribers':
+      return vbars(c.sig.converters, (cv) => ({ label: cv.title, value: cv.rate ?? 0, display: `${((cv.rate ?? 0) * 100).toFixed(2)}%` }))
+    // Trends over time — signed change from a center baseline
+    case 'reach-trend':
+      return { kind: 'delta', pct: c.reachTrendPct, tone: deltaTone(c.reachTrendPct) }
+    case 'engagement-trend':
+      return { kind: 'delta', pct: c.engTrendPct, tone: deltaTone(c.engTrendPct) }
+    case 'momentum':
+      return { kind: 'delta', pct: c.momentumPct, tone: deltaTone(c.momentumPct) }
+    case 'subs-trend':
+      return { kind: 'delta', pct: c.subsTrendPct, tone: deltaTone(c.subsTrendPct) }
+    default:
+      return undefined
+  }
+}
+
 export function computeDataUnlocks(inp: UnlockInputs): DataProgress {
   const c = buildCtx(inp)
 
@@ -863,6 +956,7 @@ export function computeDataUnlocks(inp: UnlockInputs): DataProgress {
       unlocked, progress, finding, example: UNLOCK_EXAMPLES[def.id], where: def.where,
       gated: unlocked ? undefined : binding?.g.metric,
       sources: gates.map((g) => ({ metric: g.metric, current: g.current })),
+      visual: unlocked && finding ? unlockVisual(def.id, c) : undefined,
     }
   })
 

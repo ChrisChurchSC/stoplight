@@ -1,18 +1,21 @@
 import { useMemo } from 'react'
 import { computeDataUnlocks } from '../domain/dataUnlocks'
 import type { TrafficRow } from '../domain/types'
-import { FindingsCharts } from './FindingsCharts'
-
-const num = (n: number) => n.toLocaleString()
-/** The finding's source: the real ingested-data volumes it was computed over. */
-const sourceLine = (sources: { metric: string; current: number }[]): string =>
-  sources.map((s) => `${num(s.current)} ${s.metric}`).join(' · ')
+import {
+  FindingsCharts,
+  FindingsTable,
+  KpiBand,
+  ReachSubsScatter,
+  PostingByWeekday,
+  ReachMixOverTime,
+} from './FindingsCharts'
+import { LibraryMap } from './LibraryMap'
 
 /**
- * Insights — the straight read on the Library. We surface only the findings that
- * actually compute off this brand's data, grouped by category. No levels, points, or
- * locked teasers: if there isn't enough data to say something yet, it simply isn't here.
- * Everything updates on its own as the library grows.
+ * Insights — the straight read on the Library: a visual header (headline metrics, reach
+ * charts, and the content-flow map) over a spreadsheet of every finding that actually
+ * computes off this brand's data. Nothing locked or teased: if there isn't enough data
+ * to say something yet, it simply isn't here.
  */
 
 export function LibraryData({
@@ -65,24 +68,19 @@ export function LibraryData({
         </span>
       </header>
 
+      <KpiBand items={items} />
       <FindingsCharts items={items} />
+      <div className="fchart-row">
+        <ReachSubsScatter items={items} />
+        <PostingByWeekday items={items} />
+      </div>
+      <ReachMixOverTime items={items} />
 
-      {groups.map(({ category, found }) => (
-        <section className="lfind-group" key={category}>
-          <div className="lfind-head">{category}</div>
-          <div className="lfind-list">
-            {found.map((u) => (
-              <div className="lfind" key={u.id}>
-                <div className="lfind-title">{u.title}</div>
-                <div className="lfind-text">{u.finding}</div>
-                {u.sources.length > 0 && (
-                  <div className="lfind-src">based on {sourceLine(u.sources)}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+      <section className="lfind-mapcard">
+        <LibraryMap rows={items} />
+      </section>
+
+      <FindingsTable groups={groups} />
     </div>
   )
 }

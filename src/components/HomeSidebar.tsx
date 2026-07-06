@@ -112,36 +112,21 @@ export function HomeSidebar() {
           </div>
         )}
         <button
-          className={`nav-item${page === 'content' ? ' active' : ''}`}
-          onClick={() => setPage('content')}
+          className={`nav-item${page === 'content' && libraryMode === 'catalog' ? ' active' : ''}`}
+          onClick={() => setLibraryMode('catalog')}
           title="Library — every published post, video, and page a brand has shipped"
         >
           <span className="nav-ico">❏</span>
           <span className="nav-label">Library</span>
         </button>
-        {page === 'content' && (
-          <div className="nav-sub">
-            {(
-              [
-                ['catalog', 'Catalog'],
-                ['data', 'Insights'],
-              ] as const
-            ).map(([m, label]) => {
-              // Catalog is its own tab; Insights owns every derived read (unlocks,
-              // keywords, AEO, map), so it stays lit for any non-catalog mode.
-              const active = m === 'catalog' ? libraryMode === 'catalog' : libraryMode !== 'catalog'
-              return (
-                <button
-                  key={m}
-                  className={`nav-subitem${active ? ' active' : ''}`}
-                  onClick={() => setLibraryMode(m)}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        )}
+        <button
+          className={`nav-item${page === 'content' && libraryMode !== 'catalog' ? ' active' : ''}`}
+          onClick={() => setLibraryMode('data')}
+          title="Insights — the read over this brand's library: headline metrics, charts, and findings"
+        >
+          <span className="nav-ico">◔</span>
+          <span className="nav-label">Insights</span>
+        </button>
         <button
           className={`nav-item${page === 'reports' ? ' active' : ''}`}
           onClick={() => setPage('reports')}
