@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react'
 import { assetBadge } from '../domain/assetBadge'
 import { campaignFlight } from '../domain/campaignWindow'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
-import { formatReach, journeyPerformance } from '../domain/journeyPerf'
-import { STATUS_LABEL } from '../domain/lifecycle'
+import { journeyPerformance } from '../domain/journeyPerf'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { computePriorities, PriorityList } from './PrioritiesView'
@@ -49,6 +48,8 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const setPage = useTrafficStore((s) => s.setPage)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
+  const pinnedInsights = useTrafficStore((s) => s.pinnedInsights)
+  const removePinnedInsight = useTrafficStore((s) => s.removePinnedInsight)
 
   const [brandFilter, setBrandFilter] = useState('all')
   const now = Date.now()
@@ -78,15 +79,13 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const brands = useMemo(() => [...new Set(rows.map((r) => r.brand))].sort(), [rows])
   const shown = rows.filter((r) => brandFilter === 'all' || r.brand === brandFilter)
 
-  // Risk-first: the demoted "all campaigns" table always leads with what's off track,
-  // then soonest to launch. (The sort toggle was removed to keep the board focused.)
-  const sorted = [...shown].sort((a, b) => b.risk - a.risk || (a.start ?? Infinity) - (b.start ?? Infinity))
-
   const live = shown.filter((r) => r.card.status === 'active').length
   const launching = shown.filter((r) => r.start != null && r.start >= now && r.start <= now + 7 * DAY).length
 
   // Priorities: the top-5 high-impact changes for the brand in view (the calm front door,
   // in place of the old alerts list). Scoped to the filtered brand, or the only brand.
+  // Insights pinned out of reports, scoped to the selected brand (all when unscoped).
+  const pins = pinnedInsights.filter((p) => brandFilter === 'all' || p.client === brandFilter)
   const prioBrand = brandFilter !== 'all' ? brandFilter : brands[0]
   const priorities = useMemo(
     () => (prioBrand ? computePriorities(prioBrand, canvases.filter((c) => c.client === prioBrand).flatMap((c) => c.rows), brandSystems[prioBrand]) : []),
@@ -119,18 +118,6 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
     setView('canvas')
     setPage('clients')
   }
-  const open = (r: CockpitRow) => openCampaign(r.brand, r.card.name)
-
-  const pacing = (r: CockpitRow): { label: string; cls: string } => {
-    if (r.start == null || r.end == null) return { label: 'undated', cls: 'undated' }
-    if (r.end < now) return { label: 'ended', cls: 'ended' }
-    if (r.start > now) {
-      const days = Math.ceil((r.start - now) / DAY)
-      return { label: days <= 0 ? 'today' : `in ${days}d`, cls: 'upcoming' }
-    }
-    const pct = Math.round(((now - r.start) / Math.max(1, r.end - r.start)) * 100)
-    return { label: `live · ${pct}%`, cls: 'live' }
-  }
 
   return (
     <div className="ckpt">
@@ -156,6 +143,44 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
           </div>
         )}
       </header>
+
+      {pins.length > 0 && (
+        <div className="ckpt-pins">
+          <div className="ckpt-pins-head">
+            Pinned<span className="ckpt-pins-sub">findings you lifted from reports</span>
+          </div>
+          <div className="ckpt-pins-list">
+            {pins.map((p) => (
+              <div key={p.id} className="ckpt-pin">
+                <div className="ckpt-pin-body">
+                  <div className="ckpt-pin-text">{p.text}</div>
+                  {(brandFilter === 'all' || p.sourceTitle) && (
+                    <button
+                      className="ckpt-pin-src"
+                      title="Open the report this came from"
+                      onClick={() => {
+                        setClientFilter(p.client)
+                        setPage('reports')
+                      }}
+                    >
+                      {brandFilter === 'all' ? `${p.client} · ` : ''}
+                      {p.sourceTitle ? `from “${p.sourceTitle}”` : 'from a report'}
+                    </button>
+                  )}
+                </div>
+                <button
+                  className="ckpt-pin-x"
+                  title="Unpin"
+                  aria-label="Unpin"
+                  onClick={() => removePinnedInsight(p.id)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {priorities.length > 0 && (
         <div className="ckpt-priorities">
@@ -217,76 +242,8 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
         </div>
       )}
 
-      {shown.length === 0 ? (
+      {shown.length === 0 && (
         <div className="ckpt-empty">No campaigns yet. Build one from a brand to see it here.</div>
-      ) : (
-        <div className="ckpt-table">
-          <div className="ckpt-allcamps">All campaigns</div>
-          <div className="ckpt-tr ckpt-head-row">
-            <span>Campaign</span>
-            <span>Brand</span>
-            <span>Status</span>
-            <span>Window</span>
-            <span className="ckpt-r">Proj. reach</span>
-            <span className="ckpt-r">Assets</span>
-            <span>Risk</span>
-          </div>
-          {sorted.map((r) => {
-            const p = pacing(r)
-            return (
-              <div
-                className="ckpt-tr"
-                key={r.card.name}
-                role="button"
-                tabIndex={0}
-                onClick={() => open(r)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') open(r)
-                }}
-              >
-                <span className="ckpt-namecell">
-                  <span className="ckpt-name" title={r.card.name}>
-                    {r.shortName}
-                  </span>
-                  {r.card.goal.message || r.card.goal.target != null ? (
-                    <span className="ckpt-goal" title={r.card.goal.sentence}>
-                      ◎ {r.card.goal.sentence}
-                    </span>
-                  ) : (
-                    <span className="ckpt-goal ckpt-goal-empty">No goal set</span>
-                  )}
-                </span>
-                <span className="ckpt-brandcell">{r.brand}</span>
-                <span>
-                  <span className={`pill s-${r.card.status}`}>{STATUS_LABEL[r.card.status]}</span>
-                </span>
-                <span className="ckpt-win">
-                  <span className={`ckpt-pace p-${p.cls}`}>{p.label}</span>
-                  {r.start != null && r.end != null && (
-                    <span className="ckpt-dates">
-                      {fmtDay(r.start)} – {fmtDay(r.end)}
-                    </span>
-                  )}
-                </span>
-                <span className="ckpt-r ckpt-reach">{formatReach(r.reach)}</span>
-                <span className="ckpt-r">
-                  {r.posted}/{r.card.rows.length}
-                </span>
-                <span className="ckpt-risk">
-                  {r.card.attention.count === 0 ? (
-                    <span className="ckpt-ok">✓ healthy</span>
-                  ) : (
-                    r.card.attention.flags.map((f) => (
-                      <span key={f.kind} className={`flag k-${f.kind} sev-${f.severity}`}>
-                        {f.label}
-                      </span>
-                    ))
-                  )}
-                </span>
-              </div>
-            )
-          })}
-        </div>
       )}
     </div>
   )

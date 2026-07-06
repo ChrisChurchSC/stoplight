@@ -6,7 +6,6 @@ import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { ChannelsView } from './ChannelsView'
-import { LandscapeView } from './LandscapeView'
 import { LibraryPage } from './LibraryPage'
 
 /**
@@ -52,8 +51,6 @@ export function BrandPage({ brand }: { brand?: string }) {
         <BrandStrategy key="brand-strategy" brand={brand} />
       ) : tab === 'channels' ? (
         <ChannelsView key={`brand-channels-${brand}`} scopeClient={brand} />
-      ) : tab === 'landscape' ? (
-        <LandscapeView key={`brand-landscape-${brand}`} brand={brand} />
       ) : (
         <LibraryPage key="brand-messaging" inline kinds={['rtbs', 'ctas', 'hooks']} />
       )}

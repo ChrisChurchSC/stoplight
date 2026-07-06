@@ -81,14 +81,6 @@ export function HomeSidebar() {
           <span className="nav-label">Overview</span>
         </button>
         <button
-          className={`nav-item${page === 'priorities' ? ' active' : ''}`}
-          onClick={() => setPage('priorities')}
-          title="Priorities — the top 5 changes to make now, ranked by impact"
-        >
-          <span className="nav-ico">✦</span>
-          <span className="nav-label">Priorities</span>
-        </button>
-        <button
           className={`nav-item${page === 'brand' ? ' active' : ''}`}
           onClick={() => setPage('brand')}
           title="Brand — the brand's About, Voice, and Messaging system"
@@ -107,7 +99,6 @@ export function HomeSidebar() {
                 ['strategy', 'Strategy'],
                 ['messaging', 'Messaging'],
                 ['channels', 'Channels'],
-                ['landscape', 'Landscape'],
               ] as const
             ).map(([t, label]) => (
               <button
@@ -133,21 +124,22 @@ export function HomeSidebar() {
             {(
               [
                 ['catalog', 'Catalog'],
-                ['signals', 'Signals'],
-                ['keywords', 'Keywords'],
-                ['aeo', 'AEO'],
-                ['map', 'Map'],
-                ['data', 'Data'],
+                ['data', 'Insights'],
               ] as const
-            ).map(([m, label]) => (
-              <button
-                key={m}
-                className={`nav-subitem${libraryMode === m ? ' active' : ''}`}
-                onClick={() => setLibraryMode(m)}
-              >
-                {label}
-              </button>
-            ))}
+            ).map(([m, label]) => {
+              // Catalog is its own tab; Insights owns every derived read (unlocks,
+              // keywords, AEO, map), so it stays lit for any non-catalog mode.
+              const active = m === 'catalog' ? libraryMode === 'catalog' : libraryMode !== 'catalog'
+              return (
+                <button
+                  key={m}
+                  className={`nav-subitem${active ? ' active' : ''}`}
+                  onClick={() => setLibraryMode(m)}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
         )}
         <button

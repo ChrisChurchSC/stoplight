@@ -97,6 +97,7 @@ import {
 } from '../domain/importAssets'
 import { type SavedView, newSavedView } from '../domain/savedViews'
 import type { BrandReport } from '../domain/reports'
+import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
@@ -502,6 +503,24 @@ function loadReports(): BrandReport[] {
 function saveReports(list: BrandReport[]): void {
   try {
     localStorage.setItem(REPORTS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Insights pinned out of a report and kept in view on the Overview. Persisted like reports.
+const PINNED_KEY = 'stoplight.pinnedInsights.v1'
+function loadPinned(): PinnedInsight[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PINNED_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function savePinned(list: PinnedInsight[]): void {
+  try {
+    localStorage.setItem(PINNED_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1042,10 +1061,10 @@ interface TrafficState {
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
-  libraryMode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords' | 'aeo'
-  setLibraryMode: (mode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords' | 'aeo') => void
+  libraryMode: 'catalog' | 'map' | 'data'
+  setLibraryMode: (mode: 'catalog' | 'map' | 'data') => void
   /** Which Brand sub-view is open — nested under Brand in the sidebar. */
-  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels' | 'landscape'
+  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels'
   setBrandTab: (tab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels') => void
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
@@ -1130,6 +1149,12 @@ interface TrafficState {
   addReport: (input: { client: string; title: string; kind: BrandReport['kind']; summary?: string; html: string }) => string
   /** Delete a saved report by id. */
   deleteReport: (id: string) => void
+  /** Insights pinned out of a report, kept in view on the Overview (newest first). */
+  pinnedInsights: PinnedInsight[]
+  /** Pin a finding lifted from a report; returns its id. */
+  addPinnedInsight: (input: { client: string; text: string; note?: string; sourceReportId?: string; sourceTitle?: string }) => string
+  /** Remove a pinned insight by id. */
+  removePinnedInsight: (id: string) => void
   /** Auto-tag a brand's untagged library content to its best-fit audience; returns count tagged. */
   autoTagAudiences: (brand: string) => Promise<number>
   /** Reconcile planned cards to their published post (by sourceUrl/copy), inheriting the
@@ -1695,6 +1720,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientProfiles: loadClientProfiles(),
   brandActuals: loadBrandActuals(),
   reports: loadReports(),
+  pinnedInsights: loadPinned(),
   actualsRefreshing: null,
   contentIngesting: null,
   contentIngest: {},
@@ -1930,6 +1956,32 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const reports = s.reports.filter((r) => r.id !== id)
       saveReports(reports)
       return { reports }
+    }),
+
+  addPinnedInsight: (input) => {
+    const id = `pin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+    const pin: PinnedInsight = {
+      id,
+      client: input.client.trim(),
+      text: input.text.trim(),
+      note: input.note?.trim() || undefined,
+      sourceReportId: input.sourceReportId,
+      sourceTitle: input.sourceTitle?.trim() || undefined,
+      createdAt: Date.now(),
+    }
+    set((s) => {
+      const pinnedInsights = [pin, ...s.pinnedInsights]
+      savePinned(pinnedInsights)
+      return { pinnedInsights }
+    })
+    return id
+  },
+
+  removePinnedInsight: (id) =>
+    set((s) => {
+      const pinnedInsights = s.pinnedInsights.filter((p) => p.id !== id)
+      savePinned(pinnedInsights)
+      return { pinnedInsights }
     }),
 
   autoTagAudiences: async (brand) => {

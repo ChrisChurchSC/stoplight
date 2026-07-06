@@ -71,6 +71,9 @@ export interface DataUnlock {
   example?: string
   where?: string
   gated?: string // a short note on what still gates it (the binding gate), when locked
+  /** The real data volumes this finding is computed over — one per gate (ingested content
+   *  and brand inputs only), used to show its source line. */
+  sources: { metric: string; current: number }[]
 }
 
 export interface DataProgress {
@@ -288,7 +291,7 @@ const BASE_CATALOG: UnlockDef[] = [
     },
   },
   {
-    id: 'patterns', category: 'Foundations', title: 'Messaging patterns', where: 'Library › Signals · Reports',
+    id: 'patterns', category: 'Foundations', title: 'Messaging patterns', where: 'Library › Insights · Reports',
     reveal: 'Your verbal tics, the words only you use, and the lines you repeat word for word.',
     gates: (c) => [G('posts with copy', c.withCopy, 60)],
     finding: (c) => {
@@ -312,19 +315,19 @@ const BASE_CATALOG: UnlockDef[] = [
     },
   },
   {
-    id: 'flow', category: 'Foundations', title: 'Content flow map', where: 'Library › Map',
+    id: 'flow', category: 'Foundations', title: 'Content flow map', where: 'Library › Insights · Map',
     reveal: 'How your content links together and where every post sends people next.',
     gates: (c) => [G('posts mapped', c.items.length, 80)],
     finding: (c) => (c.flow ? `${c.flow.overall.deadEndPct}% of posts dead-end · the ones that connect mostly drive to ${c.flow.destinations[0]?.key ?? '—'} (${c.flow.destinations[0]?.count ?? 0})` : undefined),
   },
   {
-    id: 'linkmap', category: 'Foundations', title: 'Link & destination map', where: 'Library › Map',
+    id: 'linkmap', category: 'Foundations', title: 'Link & destination map', where: 'Library › Insights · Map',
     reveal: 'Every place your copy points people — the platforms and pages you actually route to.',
     gates: (c) => [G('posts with copy', c.withCopy, 40)],
     finding: (c) => (c.links[0] ? `Copy points most often to ${c.links[0].host} (×${c.links[0].count})` : undefined),
   },
   {
-    id: 'proof-coverage', category: 'Foundations', title: 'Proof-point coverage', where: 'Library › Signals',
+    id: 'proof-coverage', category: 'Foundations', title: 'Proof-point coverage', where: 'Library › Insights',
     reveal: 'How many of your brand proof points ever actually appear in the copy, and which never do.',
     gates: (c) => [G('proof points defined', c.proofDefined, 5), G('posts with copy', c.withCopy, 40)],
     finding: (c) => `${c.cov.proof.used} of ${c.cov.proof.total} proof points appear in the copy · ${c.cov.proof.unused.length} never said`,
@@ -332,7 +335,7 @@ const BASE_CATALOG: UnlockDef[] = [
 
   // ───────────────────────── Message performance ─────────────────────────
   {
-    id: 'proof', category: 'Message performance', title: 'Proof-point performance', where: 'Library › Signals',
+    id: 'proof', category: 'Message performance', title: 'Proof-point performance', where: 'Library › Insights',
     reveal: 'Which of your proof points actually earn engagement, ranked by what the content drove.',
     gates: (c) => [G('assets with metrics', c.withMetrics, 40)],
     finding: (c) => {
@@ -341,7 +344,7 @@ const BASE_CATALOG: UnlockDef[] = [
     },
   },
   {
-    id: 'hook-shapes', category: 'Message performance', title: 'Hook shapes', where: 'Library › Signals',
+    id: 'hook-shapes', category: 'Message performance', title: 'Hook shapes', where: 'Library › Insights',
     reveal: 'Which title shape — question, how-to, provocative claim — earns the most.',
     gates: (c) => [G('assets with metrics', c.withMetrics, 60)],
     finding: (c) => {
@@ -383,7 +386,7 @@ const BASE_CATALOG: UnlockDef[] = [
     finding: (c) => (c.qLift > 0 ? `Posts that ask a question earn ${c.qLift.toFixed(1)}× the engagement` : undefined),
   },
   {
-    id: 'cta', category: 'Message performance', title: 'CTA effectiveness', where: 'Library › Signals',
+    id: 'cta', category: 'Message performance', title: 'CTA effectiveness', where: 'Library › Insights',
     reveal: 'Which calls to action you actually make in the copy, and which you never say out loud.',
     gates: (c) => [G('CTAs defined', c.ctasDefined, 3)],
     finding: (c) => {
@@ -438,7 +441,7 @@ const BASE_CATALOG: UnlockDef[] = [
     },
   },
   {
-    id: 'topics', category: 'Audience', title: 'Topic performance', where: 'Library › Signals',
+    id: 'topics', category: 'Audience', title: 'Topic performance', where: 'Library › Insights',
     reveal: 'Which subjects and themes drive subscribers, not just which get posted most.',
     gates: (c) => [G('posts with copy', c.withCopy, 60)],
     finding: (c) => {
@@ -460,7 +463,7 @@ const BASE_CATALOG: UnlockDef[] = [
 
   // ───────────────────────── Channel & flow ─────────────────────────
   {
-    id: 'attribution', category: 'Channel & flow', title: 'Channel attribution', where: 'Library › Signals',
+    id: 'attribution', category: 'Channel & flow', title: 'Channel attribution', where: 'Library › Insights',
     reveal: 'Which channel earns the reach and which drives subscribers, measured side by side.',
     gates: (c) => [G('channels with metrics', c.channelsWithMetrics, 3)],
     finding: (c) => {
@@ -502,7 +505,7 @@ const BASE_CATALOG: UnlockDef[] = [
 
   // ───────────────────────── Timing & cadence ─────────────────────────
   {
-    id: 'best-day', category: 'Timing & cadence', title: 'Best day to post', where: 'Library › Signals',
+    id: 'best-day', category: 'Timing & cadence', title: 'Best day to post', where: 'Library › Insights',
     reveal: 'Your best weekday, learned from what actually earned reach.',
     gates: (c) => [timeG(c, 45), G('assets with metrics', c.withMetrics, 30)],
     finding: (c) => {
@@ -577,7 +580,7 @@ const BASE_CATALOG: UnlockDef[] = [
 
   // ───────────────────────── Conversion & funnel ─────────────────────────
   {
-    id: 'subscribers', category: 'Conversion & funnel', title: 'Subscriber drivers', where: 'Library › Signals',
+    id: 'subscribers', category: 'Conversion & funnel', title: 'Subscriber drivers', where: 'Library › Insights',
     reveal: 'The specific content that converts viewers to subscribers, by subscribe rate.',
     gates: (c) => [G('posts reporting subscribers', c.postsWithSubs, 15)],
     finding: (c) => {
@@ -859,6 +862,7 @@ export function computeDataUnlocks(inp: UnlockInputs): DataProgress {
       metric: binding?.g.metric ?? '', current: binding?.g.current ?? 0, threshold: binding?.g.threshold ?? 0,
       unlocked, progress, finding, example: UNLOCK_EXAMPLES[def.id], where: def.where,
       gated: unlocked ? undefined : binding?.g.metric,
+      sources: gates.map((g) => ({ metric: g.metric, current: g.current })),
     }
   })
 

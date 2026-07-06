@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { REPORT_KIND_LABEL } from '../domain/reports'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -18,8 +18,12 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const reports = useTrafficStore((s) => s.reports)
   const deleteReport = useTrafficStore((s) => s.deleteReport)
+  const addPinnedInsight = useTrafficStore((s) => s.addPinnedInsight)
   const openAsk = useTrafficStore((s) => s.openAsk)
   const [openId, setOpenId] = useState<string | null>(null)
+  // Transient feedback under the report toolbar after a pin attempt.
+  const [pinMsg, setPinMsg] = useState<string | null>(null)
+  const frameRef = useRef<HTMLIFrameElement>(null)
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
 
@@ -34,11 +38,25 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
   const mine = reports.filter((r) => r.client === brand).sort((a, b) => b.createdAt - a.createdAt)
   const open = openId ? mine.find((r) => r.id === openId) : null
 
+  // Pin the highlighted text out of the report. The report renders in a same-origin
+  // srcDoc iframe, so its live selection is readable here.
+  const pinSelection = () => {
+    if (!open) return
+    const text = (frameRef.current?.contentWindow?.getSelection?.()?.toString() ?? '').trim()
+    if (!text) {
+      setPinMsg('Select a line in the report first, then pin it.')
+      return
+    }
+    addPinnedInsight({ client: open.client, text, sourceReportId: open.id, sourceTitle: open.title })
+    frameRef.current?.contentWindow?.getSelection?.()?.removeAllRanges?.()
+    setPinMsg('Pinned to the Overview ✓')
+  }
+
   if (open) {
     return (
       <div className="mtx report-open">
         <div className="report-bar">
-          <button className="report-back" onClick={() => setOpenId(null)}>
+          <button className="report-back" onClick={() => { setOpenId(null); setPinMsg(null) }}>
             ← All reports
           </button>
           <div className="report-bar-title">
@@ -46,18 +64,24 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
             <span>{open.title}</span>
             <span className="report-bar-date">{fmtWhen(open.createdAt)}</span>
           </div>
+          {pinMsg && <span className="report-pin-msg">{pinMsg}</span>}
+          <button className="report-pin" title="Highlight a line in the report, then pin it to the Overview" onClick={pinSelection}>
+            📌 Pin selection
+          </button>
           <button
             className="report-del"
             title="Delete report"
             onClick={() => {
               deleteReport(open.id)
               setOpenId(null)
+              setPinMsg(null)
             }}
           >
             Delete
           </button>
         </div>
         <iframe
+          ref={frameRef}
           className="report-frame"
           title={open.title}
           srcDoc={open.html}
@@ -81,7 +105,7 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
       <header className="mtx-head">
         <h2>{brand} · Reports</h2>
         <span className="mtx-sub">
-          Saved analyses over this brand's library. Signals is the live read; a report is a dated synthesis you keep.
+          Saved analyses over this brand's library. Insights is the live read; a report is a dated synthesis you keep.
         </span>
       </header>
 
@@ -148,7 +172,7 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
 
       <div className="mtx-foot">
         Reports are point-in-time. They capture the story and the recommendations, including the before/after
-        rewrites that the live Signals read can't generate. Regenerate anytime the library moves.
+        rewrites that the live Insights read can't generate. Regenerate anytime the library moves.
       </div>
     </div>
   )

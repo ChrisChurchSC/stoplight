@@ -1,4 +1,3 @@
-import { aeoOpportunities } from '../domain/aeo'
 import {
   computeAudienceCoverage,
   computeChannelConnection,
@@ -25,17 +24,15 @@ import { useTrafficStore } from '../store/useTrafficStore'
 const isLibraryItem = (r: TrafficRow): boolean =>
   r.status === 'posted' || !!r.postedAt || (!!r.sourceUrl && r.source !== 'generated')
 
-export type PKind = RecKind | 'answer'
+export type PKind = RecKind
 export interface Priority {
   kind: PKind
   text: string
-  goto: 'signals' | 'aeo'
+  goto: 'data'
 }
-const KIND_LABEL: Record<PKind, string> = { fix: 'Fix', amplify: 'Amplify', test: 'Test', setup: 'Set up', answer: 'Answer' }
-// Impact order: leaks first, then the big unanswered search, then amplify / test / setup.
-const KIND_RANK: Record<PKind, number> = { fix: 0, answer: 1, amplify: 2, test: 3, setup: 4 }
-
-const num = (n: number) => n.toLocaleString()
+const KIND_LABEL: Record<PKind, string> = { fix: 'Fix', amplify: 'Amplify', test: 'Test', setup: 'Set up' }
+// Impact order: leaks first, then amplify / test / setup.
+const KIND_RANK: Record<PKind, number> = { fix: 0, amplify: 2, test: 3, setup: 4 }
 
 interface BrandSys {
   rtbs?: { label: string }[]
@@ -45,7 +42,7 @@ interface BrandSys {
 
 /** The top five priorities for a brand, ranked by impact. Pure so both the Priorities page
  *  and the Overview can render the same list. `allRows` = the brand's canvas rows. */
-export function computePriorities(brand: string, allRows: TrafficRow[], sys: BrandSys | undefined): Priority[] {
+export function computePriorities(_brand: string, allRows: TrafficRow[], sys: BrandSys | undefined): Priority[] {
   const rows = allRows.filter(isLibraryItem)
   if (!rows.length) return []
   const s = computeLibrarySignals(rows)
@@ -63,20 +60,12 @@ export function computePriorities(brand: string, allRows: TrafficRow[], sys: Bra
     patterns: mp,
     takeaways: s.takeaways,
   })
-  const list: Priority[] = recs.map((r) => ({ kind: r.kind, text: r.text, goto: 'signals' as const }))
-  const aeo = aeoOpportunities(brand).filter((o) => o.impressions >= 50 && o.clicks === 0)[0]
-  if (aeo) {
-    list.push({
-      kind: 'answer',
-      goto: 'aeo',
-      text: `Answer "${aeo.question}" — ${num(aeo.impressions)} searches a month, ${aeo.clicks} clicks, you rank #${Math.round(aeo.position)}.`,
-    })
-  }
+  const list: Priority[] = recs.map((r) => ({ kind: r.kind, text: r.text, goto: 'data' as const }))
   return [...list].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind]).slice(0, 5)
 }
 
 /** The ranked top-5 list. `onGoto` navigates to the relevant read. */
-export function PriorityList({ priorities, onGoto }: { priorities: Priority[]; onGoto: (goto: 'signals' | 'aeo') => void }) {
+export function PriorityList({ priorities, onGoto }: { priorities: Priority[]; onGoto: (goto: 'data') => void }) {
   return (
     <ol className="prio-list">
       {priorities.map((p, i) => (
@@ -85,7 +74,7 @@ export function PriorityList({ priorities, onGoto }: { priorities: Priority[]; o
           <span className={`prio-tag ${p.kind}`}>{KIND_LABEL[p.kind]}</span>
           <span className="prio-text">{p.text}</span>
           <button className="prio-go" onClick={() => onGoto(p.goto)}>
-            {p.goto === 'aeo' ? 'See' : 'Fix'} →
+            Fix →
           </button>
         </li>
       ))}

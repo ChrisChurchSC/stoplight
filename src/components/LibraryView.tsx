@@ -8,11 +8,8 @@ import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { GranolaIcon } from './GranolaIcon'
-import { LibraryAEO } from './LibraryAEO'
 import { LibraryData } from './LibraryData'
-import { LibraryKeywords } from './LibraryKeywords'
 import { LibraryMap } from './LibraryMap'
-import { LibrarySignals } from './LibrarySignals'
 
 /**
  * Library — a brand's whole published body of work, ingested from its connected
@@ -136,6 +133,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   // over the library that ranks content by what drives subscribers). The mode lives
   // in the store so the sidebar's nested Library items drive it too.
   const mode = useTrafficStore((s) => s.libraryMode)
+  const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const updateRow = useTrafficStore((s) => s.updateRow)
   // The asset opened in the detail view (click a card to read its full messaging).
   const [detail, setDetail] = useState<TrafficRow | null>(null)
@@ -342,30 +340,39 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         </span>
       </header>
 
-      {mode === 'signals' ? (
-        <LibrarySignals
-          rows={items}
-          subVideos={measured?.subVideos}
-          allRows={allRows}
-          proofPoints={brandSystems[brand]?.rtbs}
-          ctas={brandSystems[brand]?.ctas}
-          audiences={brandSystems[brand]?.audiences}
-        />
-      ) : mode === 'map' ? (
-        <LibraryMap rows={items} />
-      ) : mode === 'keywords' ? (
-        <LibraryKeywords rows={items} />
-      ) : mode === 'aeo' ? (
-        <LibraryAEO brand={brand} />
-      ) : mode === 'data' ? (
-        <LibraryData
-          items={items}
-          allRows={allRows}
-          proofPoints={brandSystems[brand]?.rtbs}
-          ctas={brandSystems[brand]?.ctas}
-          audiences={brandSystems[brand]?.audiences}
-          sources={connectedSources}
-        />
+      {mode !== 'catalog' ? (
+        // Insights: the derived reads over the library — Findings, with the flow Map
+        // behind a secondary nav.
+        <div className="lib-insights">
+          <div className="library-tabs lib-insights-tabs">
+            {(
+              [
+                ['data', 'Findings'],
+                ['map', 'Map'],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                className={`library-tab${mode === m ? ' active' : ''}`}
+                onClick={() => setLibraryMode(m)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {mode === 'map' ? (
+            <LibraryMap rows={items} />
+          ) : (
+            <LibraryData
+              items={items}
+              allRows={allRows}
+              proofPoints={brandSystems[brand]?.rtbs}
+              ctas={brandSystems[brand]?.ctas}
+              audiences={brandSystems[brand]?.audiences}
+              sources={connectedSources}
+            />
+          )}
+        </div>
       ) : (
         <>
           {/* Ingest control — one pull backfills the whole body of work. */}
