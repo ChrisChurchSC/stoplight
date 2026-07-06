@@ -6036,14 +6036,34 @@ button {
   flex: 1;
 }
 .cv-flagjump {
+  position: fixed;
+  top: 98px; /* below the project tabs row */
+  right: 16px;
+  z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid #f0c8c2;
-  background: #fdf4f3;
+  background: rgba(253, 244, 243, 0.9);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   color: #b42318;
   font-weight: 700;
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 7px;
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 9px;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+.cv-flagjump:hover {
+  background: #fbe7e4;
+}
+.cv-flagjump-n {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 13px;
+  text-align: center;
 }
 .cv-flagjump:hover {
   border-color: #b42318;

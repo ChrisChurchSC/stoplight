@@ -1499,14 +1499,14 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       {/* Diagnosis moved to the top bar; this floating cluster only appears when
           there's a layout reset or open flags to surface. */}
       {breaks.length > 0 && (
-        <div className="cv-bar">
-          <span className="spacer" />
-          {breaks.length > 0 && (
-            <button className="cv-flagjump" onClick={() => openBreaksQueue()}>
-              ⚠ {breaks.length} flag{breaks.length === 1 ? '' : 's'} — jump to
-            </button>
-          )}
-        </div>
+        <button
+          className="cv-flagjump"
+          onClick={() => openBreaksQueue()}
+          title={`${breaks.length} flag${breaks.length === 1 ? '' : 's'} — open the connection check`}
+          aria-label={`${breaks.length} open flags`}
+        >
+          ⚠<span className="cv-flagjump-n">{breaks.length}</span>
+        </button>
       )}
 
       <div
