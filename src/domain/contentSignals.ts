@@ -1177,6 +1177,73 @@ const CH_LABELS: Record<string, string> = {
 }
 export const channelName = (c: string): string => CH_LABELS[c] ?? c
 
+// ── Keywords: the terms the brand's own content targets, weighted by what they drive ──
+export interface KeywordStat {
+  term: string
+  posts: number // how many posts use it
+  reach: number // total reach of posts using it
+  eng: number
+  subs: number
+  avgReach: number // reach per post using it — how far the keyword's content travels
+}
+export interface ContentKeywords {
+  total: number // distinct keywords used in 2+ posts
+  corpus: number // posts carrying copy
+  byUse: KeywordStat[] // most-used
+  byReach: KeywordStat[] // keywords whose posts travel furthest (by avg reach)
+  bySubs: KeywordStat[] // keywords on subscriber-driving content
+  phrases: KeywordStat[] // recurring two-word phrases
+}
+export function computeContentKeywords(rows: TrafficRow[]): ContentKeywords {
+  type Agg = { posts: Set<string>; reach: number; eng: number; subs: number }
+  const uni = new Map<string, Agg>()
+  const bi = new Map<string, Agg>()
+  const bump = (m: Map<string, Agg>, k: string, id: string, reach: number, eng: number, subs: number) => {
+    const cur = m.get(k) ?? { posts: new Set<string>(), reach: 0, eng: 0, subs: 0 }
+    cur.posts.add(id)
+    cur.reach += reach
+    cur.eng += eng
+    cur.subs += subs
+    m.set(k, cur)
+  }
+  let corpus = 0
+  for (const r of rows) {
+    const copy = fullCopy(r).toLowerCase()
+    const words = (copy.match(/[a-z][a-z'-]+/g) ?? []).filter((w) => w.length >= 4 && !COV_STOP.has(w))
+    if (!words.length) continue
+    corpus++
+    const reach = reachOf(r).value
+    const eng = outcomeOf(r)
+    const subs = typeof r.socialMetrics?.subscribers === 'number' ? r.socialMetrics.subscribers : 0
+    for (const w of new Set(words)) bump(uni, w, r.id, reach, eng, subs)
+    const seen = new Set<string>()
+    for (let i = 0; i < words.length - 1; i++) {
+      const bg = `${words[i]} ${words[i + 1]}`
+      if (seen.has(bg)) continue
+      seen.add(bg)
+      bump(bi, bg, r.id, reach, eng, subs)
+    }
+  }
+  const toStat = ([term, v]: [string, Agg]): KeywordStat => ({
+    term,
+    posts: v.posts.size,
+    reach: v.reach,
+    eng: v.eng,
+    subs: v.subs,
+    avgReach: v.posts.size ? v.reach / v.posts.size : 0,
+  })
+  const stats = [...uni.entries()].map(toStat).filter((s) => s.posts >= 2)
+  const phrases = [...bi.entries()].map(toStat).filter((s) => s.posts >= 2)
+  return {
+    total: stats.length,
+    corpus,
+    byUse: [...stats].sort((a, b) => b.posts - a.posts).slice(0, 24),
+    byReach: [...stats].sort((a, b) => b.avgReach - a.avgReach).slice(0, 14),
+    bySubs: [...stats].filter((s) => s.subs > 0).sort((a, b) => b.subs - a.subs).slice(0, 14),
+    phrases: [...phrases].sort((a, b) => b.posts - a.posts).slice(0, 18),
+  }
+}
+
 // ── Recommendations: one ranked action list, folding the plain-language takeaways
 //    (amplify what converts) together with the gap reads (fix the leaks). ───────────
 export type RecKind = 'fix' | 'amplify' | 'test' | 'setup'

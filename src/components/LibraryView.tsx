@@ -8,6 +8,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { GranolaIcon } from './GranolaIcon'
 import { LibraryData } from './LibraryData'
+import { LibraryKeywords } from './LibraryKeywords'
 import { LibraryMap } from './LibraryMap'
 import { LibrarySignals } from './LibrarySignals'
 
@@ -230,6 +231,8 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         />
       ) : mode === 'map' ? (
         <LibraryMap rows={items} />
+      ) : mode === 'keywords' ? (
+        <LibraryKeywords rows={items} />
       ) : mode === 'data' ? (
         <LibraryData
           items={items}

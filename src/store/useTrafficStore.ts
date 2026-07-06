@@ -1004,8 +1004,8 @@ interface TrafficState {
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
-  libraryMode: 'catalog' | 'signals' | 'map' | 'data'
-  setLibraryMode: (mode: 'catalog' | 'signals' | 'map' | 'data') => void
+  libraryMode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords'
+  setLibraryMode: (mode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords') => void
   /** Which Brand sub-view is open — nested under Brand in the sidebar. */
   brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels'
   setBrandTab: (tab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels') => void
