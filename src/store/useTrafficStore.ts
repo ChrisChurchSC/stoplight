@@ -1007,7 +1007,7 @@ interface TrafficState {
   libraryMode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords' | 'aeo'
   setLibraryMode: (mode: 'catalog' | 'signals' | 'map' | 'data' | 'keywords' | 'aeo') => void
   /** Which Brand sub-view is open — nested under Brand in the sidebar. */
-  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels'
+  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels' | 'landscape'
   setBrandTab: (tab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels') => void
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>

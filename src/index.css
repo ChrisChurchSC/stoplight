@@ -3131,6 +3131,183 @@ button {
 .brand-savebar.dirty .brand-savebar-status {
   color: var(--accent);
 }
+
+/* ── Landscape — the competitive-landscape editor under Brand ─────────────── */
+.lscape {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.lscape-intro {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 72ch;
+  margin: 0;
+}
+.lscape-wedge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+}
+.lscape-wedge-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 650;
+}
+.lscape-wedge-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+.lscape-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lscape-legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  flex: 1 1 220px;
+  padding: 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.lscape-kind-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  align-self: center;
+  flex: none;
+}
+.lscape-legend-item.answer .lscape-kind-dot {
+  background: var(--accent-3);
+}
+.lscape-legend-item.attention .lscape-kind-dot {
+  background: var(--accent-2);
+}
+.lscape-legend-item.model .lscape-kind-dot {
+  background: var(--accent);
+}
+.lscape-legend-item b {
+  color: var(--text);
+  font-weight: 650;
+}
+.lscape-legend-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.lscape-legend-hint {
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.lscape-empty {
+  padding: 24px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.lscape-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lscape-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 10px;
+}
+.lscape-card.answer {
+  border-left-color: var(--accent-3);
+}
+.lscape-card.attention {
+  border-left-color: var(--accent-2);
+}
+.lscape-card.model {
+  border-left-color: var(--accent);
+}
+.lscape-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lscape-name {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+.lscape-kind-select {
+  flex: none;
+  padding: 7px 9px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.lscape-del {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.lscape-del:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+.lscape-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.lscape-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lscape-field-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.lscape-add {
+  align-self: flex-start;
+}
+@media (max-width: 640px) {
+  .lscape-two {
+    grid-template-columns: 1fr;
+  }
+}
 /* Files-sidebar brand rows: a click target to filter + a hover ✕ to delete. */
 .home-sb-brands-head {
   display: flex;

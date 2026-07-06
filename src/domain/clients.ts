@@ -48,6 +48,22 @@ export interface VoiceGuide {
 
 /** A campaign created through the new-client wizard. */
 /** Client identity captured in the intake wizard. Feeds the ICP + copy drafting. */
+/** A competitor in the brand's landscape. `kind` says what you compete with them FOR:
+ *  'answer' — they own the search / answer-engine real estate for your questions;
+ *  'attention' — they win your audience's watch-time on adjacent topics;
+ *  'model' — they're the closest direct analog to what you actually do. */
+export interface Competitor {
+  name: string
+  kind?: 'answer' | 'attention' | 'model'
+  /** One line on what they are. */
+  what?: string
+  /** Where they win — the ground they hold. */
+  strength?: string
+  /** Where they're weak, and the opening it leaves you. */
+  gap?: string
+  url?: string
+}
+
 export interface ClientProfile {
   website?: string
   industry?: string
@@ -98,6 +114,13 @@ export interface ClientProfile {
   products?: string[]
   /** What sets them apart — their stated differentiators. */
   differentiators?: string[]
+  /** The competitive landscape — who the brand is really up against, for attention and
+   *  for answers. A brand-system input (you define it), so other reads can contrast
+   *  against it: AEO answers written against the incumbent, Signals differentiation. */
+  competitors?: Competitor[]
+  /** The brand's wedge: the position it owns that no competitor does. The one sentence
+   *  the whole landscape resolves to. */
+  wedge?: string
   /** Named clients, partners, or backers. */
   notableClients?: string[]
   /** Stated values / principles. */

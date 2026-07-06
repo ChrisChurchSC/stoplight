@@ -99,6 +99,7 @@ export function HomeSidebar() {
                 ['strategy', 'Strategy'],
                 ['messaging', 'Messaging'],
                 ['channels', 'Channels'],
+                ['landscape', 'Landscape'],
               ] as const
             ).map(([t, label]) => (
               <button
