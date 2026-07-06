@@ -4548,16 +4548,33 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   applyBreakFix: async (breakId) => {
-    const brk = detectBreaks(get().rows).find((b) => b.id === breakId)
+    // Resolve from the Claude-pushed set first (its ids are cl-*), then the heuristic —
+    // so Apply works whoever found the break, not just the local detector.
+    const claude = get().claudeBreaks ?? []
+    const fromClaude = claude.find((b) => b.id === breakId)
+    const brk = fromClaude ?? detectBreaks(get().rows).find((b) => b.id === breakId)
     if (!brk) return
     const { assetName, channel, field, after, attachRtb } = brk.suggestedFix
     const row = get().rows.find((r) => r.assetName === assetName && r.channel === channel)
     if (!row) return
     const messaging = { ...row.messaging, [field]: after }
     const patch: Partial<typeof row> = { messaging }
+    // If the fixed field is the one the card is named after, rename the card too so the
+    // change is visible on the canvas, not just in the field.
+    if (row.assetName === String(row.messaging?.[field] ?? '')) patch.assetName = after
     if (attachRtb) patch.rtbMap = { ...(row.rtbMap ?? {}), [field]: [attachRtb] }
     await sheet.update(row.id, patch)
     await get().refresh()
+    // Clear a Claude break from the live set once fixed, and re-baseline the content hash
+    // so the continuous check doesn't re-run the (dead) API over the changed copy.
+    if (fromClaude) {
+      const { clientFilter, campaignFilter, claudeBreaksScope, coherenceLive, coherenceBaseline } = get()
+      const remaining = claude.filter((b) => b.id !== breakId)
+      const scoped = get().rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
+      const hash = coherenceContentHash(scoped)
+      set({ claudeBreaks: remaining, coherenceCheckedHash: hash })
+      saveCoherenceCheck({ claudeBreaks: remaining, claudeBreaksScope, coherenceCheckedHash: hash, coherenceLive, coherenceBaseline })
+    }
     pushAudit(get, set, {
       breakId,
       action: 'apply-fix',
