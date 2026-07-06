@@ -16646,6 +16646,30 @@ table.aud-sheet td.stick .aud-cell {
   line-height: 1.45;
   font-weight: 500;
 }
+/* Locked-card preview: a sample of the outcome this unlock will tell. */
+.ldata-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.ldata-preview-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.ldata-preview-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  font-style: italic;
+}
 .ldata-card-foot {
   display: flex;
   align-items: baseline;

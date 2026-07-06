@@ -194,17 +194,25 @@ function UnlockCard({ u }: { u: DataUnlock }) {
           <span className="ldata-finding-text">{u.finding}</span>
         </div>
       ) : (
-        <div className="ldata-card-prog">
-          <div className="ldata-card-track">
-            <div className={`ldata-card-fill ${state}`} style={{ width: `${Math.min(100, pct)}%` }} />
+        <>
+          {u.example && (
+            <div className="ldata-preview">
+              <span className="ldata-preview-label">Will tell you</span>
+              <span className="ldata-preview-text">{u.example}</span>
+            </div>
+          )}
+          <div className="ldata-card-prog">
+            <div className="ldata-card-track">
+              <div className={`ldata-card-fill ${state}`} style={{ width: `${Math.min(100, pct)}%` }} />
+            </div>
+            <div className="ldata-card-nums">
+              <span className="ldata-card-cur">
+                {num(u.current)} <span className="ldata-card-metric">/ {num(u.threshold)} {u.metric}</span>
+              </span>
+              <span className="ldata-card-pct">{`${pct}%`}</span>
+            </div>
           </div>
-          <div className="ldata-card-nums">
-            <span className="ldata-card-cur">
-              {num(u.current)} <span className="ldata-card-metric">/ {num(u.threshold)} {u.metric}</span>
-            </span>
-            <span className="ldata-card-pct">{u.unlocked ? 'unlocked' : `${pct}%`}</span>
-          </div>
-        </div>
+        </>
       )}
       {u.unlocked && (
         <div className="ldata-card-foot">
