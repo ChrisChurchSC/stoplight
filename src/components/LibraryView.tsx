@@ -7,6 +7,7 @@ import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { GranolaIcon } from './GranolaIcon'
+import { LibraryAEO } from './LibraryAEO'
 import { LibraryData } from './LibraryData'
 import { LibraryKeywords } from './LibraryKeywords'
 import { LibraryMap } from './LibraryMap'
@@ -233,6 +234,8 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         <LibraryMap rows={items} />
       ) : mode === 'keywords' ? (
         <LibraryKeywords rows={items} />
+      ) : mode === 'aeo' ? (
+        <LibraryAEO brand={brand} />
       ) : mode === 'data' ? (
         <LibraryData
           items={items}

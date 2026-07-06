@@ -14705,6 +14705,165 @@ textarea.library-input {
   font-weight: 700;
   flex-shrink: 0;
 }
+/* AEO opportunities — questions you rank for, with drafted answers. */
+.aeo-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 6px;
+}
+@media (max-width: 640px) {
+  .aeo-summary {
+    grid-template-columns: 1fr;
+  }
+}
+.aeo-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 13px 15px;
+}
+.aeo-stat.warn {
+  border-left: 3px solid var(--red);
+}
+.aeo-stat-v {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.aeo-stat-l {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+.aeo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.aeo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.aeo-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: space-between;
+}
+.aeo-q {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.25;
+}
+.aeo-cluster {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  flex: none;
+}
+.aeo-metrics {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 7px 0 12px;
+}
+.aeo-metrics b {
+  font-family: var(--mono);
+  color: var(--text);
+}
+.aeo-dot {
+  color: var(--text-faint);
+}
+.aeo-zero b {
+  color: var(--red);
+}
+.aeo-answer {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.aeo-answer-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+.aeo-answer-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+.aeo-answer-foot {
+  display: flex;
+  gap: 8px;
+}
+.aeo-btn {
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.aeo-btn:hover {
+  background: #fff;
+}
+.aeo-btn.ghost {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.aeo-schema {
+  margin: 10px 0 0;
+  background: var(--text);
+  color: #e8eaed;
+  border-radius: 7px;
+  padding: 11px 13px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.aeo-support {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 11px;
+}
+.aeo-support-item {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.aeo-support-item em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 6px;
+}
 /* Recommendations — ranked actions synthesized from the signals below. */
 .sig-recs .ins-card-head h3 {
   font-size: 15px;

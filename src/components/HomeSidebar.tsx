@@ -126,6 +126,7 @@ export function HomeSidebar() {
                 ['catalog', 'Catalog'],
                 ['signals', 'Signals'],
                 ['keywords', 'Keywords'],
+                ['aeo', 'AEO'],
                 ['map', 'Map'],
                 ['data', 'Data'],
               ] as const
