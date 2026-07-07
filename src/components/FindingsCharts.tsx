@@ -284,7 +284,49 @@ export function PostingByWeekday({ items }: { items: TrafficRow[] }) {
   )
 }
 
-/** How the channel mix of reach shifted month to month — stacked bars. */
+/** A single month's channel composition as a pie — slices sized by reach share. */
+function MonthPie({ slices }: { slices: { value: number; color: string; label: string }[] }) {
+  const c = 26
+  const r = 23
+  const total = slices.reduce((a, b) => a + b.value, 0)
+  const active = slices.filter((s) => s.value > 0)
+  if (!total || !active.length) {
+    return (
+      <svg viewBox="0 0 52 52" className="fmixpie-svg">
+        <circle cx={c} cy={c} r={r} fill="var(--surface-2)" />
+      </svg>
+    )
+  }
+  let acc = 0
+  return (
+    <svg viewBox="0 0 52 52" className="fmixpie-svg">
+      {active.length === 1 ? (
+        <circle cx={c} cy={c} r={r} fill={active[0].color}>
+          <title>{`${active[0].label} · 100%`}</title>
+        </circle>
+      ) : (
+        active.map((s, i) => {
+          const a0 = (acc / total) * 2 * Math.PI
+          acc += s.value
+          const a1 = (acc / total) * 2 * Math.PI
+          const x0 = c + r * Math.sin(a0)
+          const y0 = c - r * Math.cos(a0)
+          const x1 = c + r * Math.sin(a1)
+          const y1 = c - r * Math.cos(a1)
+          const large = a1 - a0 > Math.PI ? 1 : 0
+          const d = `M ${c} ${c} L ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`
+          return (
+            <path key={i} d={d} fill={s.color} className="fmixpie-slice">
+              <title>{`${s.label} · ${Math.round((s.value / total) * 100)}%`}</title>
+            </path>
+          )
+        })
+      )}
+    </svg>
+  )
+}
+
+/** How the channel mix of reach shifted month to month — a pie per month. */
 export function ReachMixOverTime({ items }: { items: TrafficRow[] }) {
   const { months, channels } = useMemo(() => {
     const mm = new Map<string, { t: number; byCh: Map<string, number> }>()
@@ -307,21 +349,14 @@ export function ReachMixOverTime({ items }: { items: TrafficRow[] }) {
     return { months, channels }
   }, [items])
   if (months.length < 2 || !channels.length) return null
-  const max = Math.max(...months.map((m) => m.total), 1)
   return (
     <section className="fchart">
       <div className="fchart-head">Reach mix over time</div>
-      <div className="fmix-bars">
+      <div className="fmixpie-row">
         {months.map((m, i) => (
-          <div className="fmix-col" key={i}>
-            <div className="fmix-stack" style={{ height: `${(m.total / max) * 100}%` }}>
-              {channels.map((ch) => {
-                const v = m.byCh.get(ch) ?? 0
-                if (!v) return null
-                return <div key={ch} className="fmix-seg" style={{ height: `${(v / m.total) * 100}%`, background: chColor(ch) }} title={`${channelLabel(ch)} · ${formatReach(v)}`} />
-              })}
-            </div>
-            <span className="fmix-x">{m.label}</span>
+          <div className="fmixpie-col" key={i}>
+            <MonthPie slices={channels.map((ch) => ({ value: m.byCh.get(ch) ?? 0, color: chColor(ch), label: channelLabel(ch) }))} />
+            <span className="fmixpie-x">{m.label}</span>
           </div>
         ))}
       </div>
