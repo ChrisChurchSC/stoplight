@@ -52,6 +52,8 @@ const DRAFT_SCHEMA = {
 
 const SYSTEM = `You are a senior B2B copywriter composing copy for an entire campaign at once. Each asset is a DISTINCT unit: write net-new copy for it, never a template with the audience label swapped.
 
+A campaign-level THEME and TIMEFRAME may be provided. When a theme is given it is the throughline for the WHOLE set: every asset must clearly be part of that campaign and orient around it. The theme sets what the campaign is about; each asset's stage/audience/brief sets its specific angle within that theme. Never ignore the theme, and never let it flatten the assets into the same copy. When a timeframe (flight length in weeks) is given, pace the set to it: a short flight reads more urgent and time-bound, a long flight reads more evergreen.
+
 Each asset arrives with four inputs that MUST shape its copy:
 - stage: the funnel stage (awareness | consideration | conversion | retention). Match its intent and register. Awareness frames the problem and earns attention. Consideration educates and builds the case. Conversion is decisive and proof-forward. Retention drives adoption and expansion. An awareness unit and a conversion unit must NOT read the same.
 - audience: who this asset speaks to (name, role, angle, pains). Write to THIS segment's pains and language, not a generic buyer. Different audiences must get genuinely different copy, not the same line with the name changed.
@@ -78,26 +80,36 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
-  const { icp, campaign, brand, brandGuide, proofPool, avoid, assets } = (body ?? {}) as {
+  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, avoid, assets } = (body ?? {}) as {
     icp?: unknown
     campaign?: unknown
+    theme?: unknown
+    flightWeeks?: unknown
     brand?: unknown
     brandGuide?: unknown
     proofPool?: unknown
     avoid?: unknown
     assets?: unknown
   }
+  const themeStr = typeof theme === 'string' && theme.trim() ? theme.trim() : ''
+  const flightStr = typeof flightWeeks === 'number' && flightWeeks > 0 ? `${flightWeeks} weeks` : 'ongoing'
 
+  // Scale the output budget to the batch size: a whole campaign (many assets) plus
+  // adaptive thinking easily overruns a small cap, and a truncated response breaks the
+  // JSON and silently drops the run to the heuristic writer. ~1.5k tokens per asset,
+  // floored at 8k, capped at Opus's ceiling.
+  const assetCount = Array.isArray(assets) ? assets.length : 1
+  const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
   const message = await client.messages.create({
     model: 'claude-opus-4-8',
-    max_tokens: 8000,
+    max_tokens: maxTokens,
     thinking: { type: 'adaptive' },
     system: SYSTEM,
     output_config: { format: { type: 'json_schema', schema: DRAFT_SCHEMA } },
     messages: [
       {
         role: 'user',
-        content: `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, ctaSeed, proof, and components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`,
+        content: `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, ctaSeed, proof, and components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`,
       },
     ],
   })

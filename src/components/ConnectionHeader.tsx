@@ -71,7 +71,7 @@ export function ConnectionHeader() {
       >
         {coherenceChecking ? 'Checking…' : '✦ Recheck with Claude'}
       </button>
-      <button className="conn-ask" onClick={openAsk} title="Ask Claude about this campaign (⌘K)">
+      <button className="conn-ask" onClick={() => openAsk()} title="Ask Claude about this campaign (⌘K)">
         ✦ Ask Claude
       </button>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { can } from '../domain/access'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -6,10 +6,113 @@ import { useTrafficStore } from '../store/useTrafficStore'
 /**
  * The app's left sidebar for the files-browser shell — the same panel on the home
  * AND on the Library / Connectors / Billing pages, so the layout never changes
- * between them. A Files nav (all / drafts / flagged / live), the Brands list, and
- * the Library / Connectors / Billing destinations at the foot. Self-contained: it
- * reads counts + brands from the shared hook and drives navigation via the store.
+ * between them. A workspace header, a Quick-actions + search row over the Ask
+ * palette, the primary destinations, a recent-Chats list (saved reports), and the
+ * Connect / Billing foot. Self-contained: reads counts + brands from the shared
+ * hook and drives navigation via the store.
  */
+
+// The workspace/org shown in the header (the tenant, above the product). One line to change.
+const WORKSPACE = 'Super-conscious'
+
+// Thin line icons on a 24 grid; they inherit color via currentColor.
+const ICONS: Record<string, ReactNode> = {
+  home: (
+    <>
+      <path d="M4 11 12 4l8 7" />
+      <path d="M6 10v9h5v-5h2v5h5v-9" />
+    </>
+  ),
+  brand: <path d="M12 2 22 12 12 22 2 12Z" />,
+  library: (
+    <>
+      <rect x="4" y="4" width="7" height="7" rx="1.3" />
+      <rect x="13" y="4" width="7" height="7" rx="1.3" />
+      <rect x="4" y="13" width="7" height="7" rx="1.3" />
+      <rect x="13" y="13" width="7" height="7" rx="1.3" />
+    </>
+  ),
+  insights: (
+    <>
+      <path d="M4 20h16" />
+      <path d="M7 20v-5" />
+      <path d="M12 20V8" />
+      <path d="M17 20v-9" />
+    </>
+  ),
+  reports: (
+    <>
+      <path d="M7 3h7l5 5v13H7z" />
+      <path d="M14 3v5h5" />
+      <path d="M10 13h6M10 17h5" />
+    </>
+  ),
+  campaigns: (
+    <>
+      <rect x="4" y="4" width="6" height="16" rx="1.4" />
+      <rect x="14" y="4" width="6" height="10" rx="1.4" />
+    </>
+  ),
+  companies: (
+    <>
+      <rect x="4" y="3" width="9" height="18" rx="1.4" />
+      <path d="M13 8h7v13H4" />
+      <path d="M7 7h3M7 11h3M7 15h3M16 12h0M16 16h0" />
+    </>
+  ),
+  people: (
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M4 20a5 5 0 0 1 10 0" />
+      <path d="M16 5.2a3 3 0 0 1 0 5.6" />
+      <path d="M17 14.5a5 5 0 0 1 3 5.5" />
+    </>
+  ),
+  segments: (
+    <>
+      <path d="M12 3 2 8l10 5 10-5-10-5Z" />
+      <path d="m2 13 10 5 10-5" />
+    </>
+  ),
+  flows: (
+    <>
+      <circle cx="6" cy="6" r="2.4" />
+      <circle cx="18" cy="6" r="2.4" />
+      <circle cx="12" cy="18" r="2.4" />
+      <path d="M6 8.4v3a2 2 0 0 0 2 2h2.4M18 8.4v3a2 2 0 0 1-2 2h-2.4" />
+    </>
+  ),
+  connect: (
+    <>
+      <path d="M9.5 14.5 14.5 9.5" />
+      <path d="M11 6.5 12 5.5a3.5 3.5 0 0 1 5 5l-1 1" />
+      <path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1" />
+    </>
+  ),
+  billing: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M3 10h18" />
+    </>
+  ),
+  chat: <path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4v3l4-3h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.6-3.6" />
+    </>
+  ),
+  spark: <path d="M12 4l1.7 4.8L18.5 12l-4.8 1.7L12 18.5l-1.7-4.8L5.5 12l4.8-1.7z" />,
+  caret: <path d="m6 9 6 6 6-6" />,
+}
+
+function Ico({ name }: { name: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  )
+}
 
 export function HomeSidebar() {
   const { brands } = useHomeCanvases()
@@ -28,8 +131,14 @@ export function HomeSidebar() {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const deleteClient = useTrafficStore((s) => s.deleteClient)
   const role = useTrafficStore((s) => s.role)
+  const reports = useTrafficStore((s) => s.reports)
+  const openAsk = useTrafficStore((s) => s.openAsk)
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [chatsOpen, setChatsOpen] = useState(true)
+  const [recordsOpen, setRecordsOpen] = useState(true)
+
+  const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
 
   // On the gallery when we're at the clients overview (page=clients, no client scoped).
   const onGallery = page === 'clients' && clientFilter === 'all'
@@ -68,8 +177,29 @@ export function HomeSidebar() {
   }
 
   return (
-    <aside className="sidebar home-sidebar">
-      <div className="sidebar-logo">HyperFocus</div>
+    <aside className="sidebar home-sidebar hsb">
+      <div className="hsb-top">
+        <button className="hsb-ws" onClick={() => setPage('portfolio')} title="Home">
+          <span className="hsb-ws-chip">{WORKSPACE[0]}</span>
+          <span className="hsb-ws-name">{WORKSPACE}</span>
+          <span className="hsb-ws-caret">
+            <Ico name="caret" />
+          </span>
+        </button>
+      </div>
+
+      <div className="hsb-actions">
+        <button className="hsb-qa" onClick={() => openAsk()} title="Ask Claude / quick actions">
+          <span className="hsb-qa-ic">
+            <Ico name="spark" />
+          </span>
+          <span className="hsb-qa-label">Quick actions</span>
+          <span className="hsb-kbd">⌘K</span>
+        </button>
+        <button className="hsb-srch" onClick={() => openAsk()} title="Search / ask" aria-label="Search">
+          <Ico name="search" />
+        </button>
+      </div>
 
       <nav className="sidebar-nav">
         <button
@@ -77,7 +207,9 @@ export function HomeSidebar() {
           onClick={() => setPage('portfolio')}
           title="Overview — what needs attention and what's due next across every campaign"
         >
-          <span className="nav-ico">◎</span>
+          <span className="nav-ico">
+            <Ico name="home" />
+          </span>
           <span className="nav-label">Overview</span>
         </button>
         <button
@@ -85,7 +217,9 @@ export function HomeSidebar() {
           onClick={() => setPage('brand')}
           title="Brand — the brand's About, Voice, and Messaging system"
         >
-          <span className="nav-ico">◈</span>
+          <span className="nav-ico">
+            <Ico name="brand" />
+          </span>
           <span className="nav-label">Brand</span>
         </button>
         {page === 'brand' && (
@@ -101,11 +235,7 @@ export function HomeSidebar() {
                 ['channels', 'Channels'],
               ] as const
             ).map(([t, label]) => (
-              <button
-                key={t}
-                className={`nav-subitem${brandTab === t ? ' active' : ''}`}
-                onClick={() => setBrandTab(t)}
-              >
+              <button key={t} className={`nav-subitem${brandTab === t ? ' active' : ''}`} onClick={() => setBrandTab(t)}>
                 {label}
               </button>
             ))}
@@ -116,7 +246,9 @@ export function HomeSidebar() {
           onClick={() => setLibraryMode('catalog')}
           title="Library — every published post, video, and page a brand has shipped"
         >
-          <span className="nav-ico">❏</span>
+          <span className="nav-ico">
+            <Ico name="library" />
+          </span>
           <span className="nav-label">Library</span>
         </button>
         <button
@@ -124,7 +256,9 @@ export function HomeSidebar() {
           onClick={() => setLibraryMode('data')}
           title="Insights — the read over this brand's library: headline metrics, charts, and findings"
         >
-          <span className="nav-ico">◔</span>
+          <span className="nav-ico">
+            <Ico name="insights" />
+          </span>
           <span className="nav-label">Insights</span>
         </button>
         <button
@@ -132,8 +266,20 @@ export function HomeSidebar() {
           onClick={() => setPage('reports')}
           title="Reports — saved Claude write-ups over the brand's library"
         >
-          <span className="nav-ico">◳</span>
+          <span className="nav-ico">
+            <Ico name="reports" />
+          </span>
           <span className="nav-label">Reports</span>
+        </button>
+        <button
+          className={`nav-item${page === 'flows' ? ' active' : ''}`}
+          onClick={() => setPage('flows')}
+          title="Flows — a visual builder for campaign automations (exploratory)"
+        >
+          <span className="nav-ico">
+            <Ico name="flows" />
+          </span>
+          <span className="nav-label">Flows</span>
         </button>
 
         {brands.length === 1 ? (
@@ -150,7 +296,9 @@ export function HomeSidebar() {
               }}
               title={`${brands[0].name}'s campaigns`}
             >
-              <span className="nav-ico">▤</span>
+              <span className="nav-ico">
+                <Ico name="campaigns" />
+              </span>
               <span className="nav-label">Campaigns</span>
               <span className="nav-count">{brands[0].count}</span>
             </button>
@@ -165,7 +313,9 @@ export function HomeSidebar() {
                 <div key={b.name}>
                   <div className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
                     <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
-                      <span className="nav-ico">▤</span>
+                      <span className="nav-ico">
+                        <Ico name="campaigns" />
+                      </span>
                       <span className="nav-label">{b.name}</span>
                       <span className="nav-count">{b.count}</span>
                     </button>
@@ -184,18 +334,84 @@ export function HomeSidebar() {
             })}
           </>
         )}
+
+        <div className="hsb-chats">
+          <button className="hsb-sec" onClick={() => setRecordsOpen((o) => !o)}>
+            <span className={`hsb-sec-chev${recordsOpen ? ' open' : ''}`}>
+              <Ico name="caret" />
+            </span>
+            Records
+          </button>
+          {recordsOpen && (
+            <div className="hsb-chat-list">
+              <button className={`nav-item${page === 'records' ? ' active' : ''}`} onClick={() => setPage('records')} title="Companies">
+                <span className="nav-ico">
+                  <Ico name="companies" />
+                </span>
+                <span className="nav-label">Companies</span>
+              </button>
+              <button className={`nav-item${page === 'people' ? ' active' : ''}`} onClick={() => setPage('people')} title="People">
+                <span className="nav-ico">
+                  <Ico name="people" />
+                </span>
+                <span className="nav-label">People</span>
+              </button>
+              <button className={`nav-item${page === 'segments' ? ' active' : ''}`} onClick={() => setPage('segments')} title="Segments">
+                <span className="nav-ico">
+                  <Ico name="segments" />
+                </span>
+                <span className="nav-label">Segments</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {recentChats.length > 0 && (
+          <div className="hsb-chats">
+            <button className="hsb-sec" onClick={() => setChatsOpen((o) => !o)}>
+              <span className={`hsb-sec-chev${chatsOpen ? ' open' : ''}`}>
+                <Ico name="caret" />
+              </span>
+              Chats
+            </button>
+            {chatsOpen && (
+              <div className="hsb-chat-list">
+                {recentChats.map((r) => (
+                  <button
+                    key={r.id}
+                    className="hsb-chat"
+                    title={r.title}
+                    onClick={() => {
+                      setClientFilter(r.client)
+                      setPage('reports')
+                    }}
+                  >
+                    <span className="hsb-chat-ic">
+                      <Ico name="chat" />
+                    </span>
+                    <span className="hsb-chat-title">{r.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
       <div className="sidebar-foot">
         {role === 'owner' && (
           <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connect Claude">
-            <span className="nav-ico">⇄</span>
+            <span className="nav-ico">
+              <Ico name="connect" />
+            </span>
             <span className="nav-label">Connect Claude</span>
           </button>
         )}
         {can(role, 'billing') && (
           <button className={`nav-item${page === 'billing' ? ' active' : ''}`} onClick={() => setPage('billing')} title="Billing">
-            <span className="nav-ico">◫</span>
+            <span className="nav-ico">
+              <Ico name="billing" />
+            </span>
             <span className="nav-label">Billing</span>
           </button>
         )}

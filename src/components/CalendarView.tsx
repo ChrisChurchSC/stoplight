@@ -39,7 +39,7 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'quarter', label: 'Quarter' },
 ]
 
-export function CalendarView({ allClients = false, liveScope = false, scopeClient }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string }) {
+export function CalendarView({ allClients = false, liveScope = false, scopeClient, scopeCampaign }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string; scopeCampaign?: string }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -52,7 +52,8 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
   // `scopeClient` (from the brand folder's combined Calendar) pins the view to one
   // brand across ALL its campaigns, overriding the global client/campaign filters.
   const clientFilter = scopeClient ?? clientFilterStore
-  const campaignFilter = scopeClient ? 'all' : campaignFilterStore
+  // scopeCampaign pins the view to a single campaign (the Flows calendar).
+  const campaignFilter = scopeCampaign ?? (scopeClient ? 'all' : campaignFilterStore)
   const openReview = useTrafficStore((s) => s.openReview)
 
   const now = new Date()

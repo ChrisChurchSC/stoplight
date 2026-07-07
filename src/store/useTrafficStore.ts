@@ -48,6 +48,7 @@ import {
   ClaudeCopyWriter,
   HeuristicCopyWriter,
   type AssetDraft,
+  type CopySource,
   type CopyWriter,
   type DraftAsset,
   type DraftRequest,
@@ -97,6 +98,9 @@ import {
 } from '../domain/importAssets'
 import { type SavedView, newSavedView } from '../domain/savedViews'
 import type { BrandReport } from '../domain/reports'
+import { type Company, freshCompanyId, seedCompanies } from '../domain/companies'
+import { type Person, freshPersonId, seedPeople } from '../domain/people'
+import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -503,6 +507,78 @@ function loadReports(): BrandReport[] {
 function saveReports(list: BrandReport[]): void {
   try {
     localStorage.setItem(REPORTS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Records › Companies — a lightweight CRM table, persisted as a plain array. Seeds with
+// the agency's known clients on first ever load (only when the key is unset, so deleting
+// every row doesn't resurrect them).
+const COMPANIES_KEY = 'stoplight.companies.v1'
+function loadCompanies(): Company[] {
+  try {
+    const raw = localStorage.getItem(COMPANIES_KEY)
+    if (raw == null) {
+      const seeded = seedCompanies([])
+      localStorage.setItem(COMPANIES_KEY, JSON.stringify(seeded))
+      return seeded
+    }
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveCompanies(list: Company[]): void {
+  try {
+    localStorage.setItem(COMPANIES_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Records › People — the contacts table, same seed-once persistence as Companies.
+const PEOPLE_KEY = 'stoplight.people.v1'
+function loadPeople(): Person[] {
+  try {
+    const raw = localStorage.getItem(PEOPLE_KEY)
+    if (raw == null) {
+      const seeded = seedPeople()
+      localStorage.setItem(PEOPLE_KEY, JSON.stringify(seeded))
+      return seeded
+    }
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function savePeople(list: Person[]): void {
+  try {
+    localStorage.setItem(PEOPLE_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+const SEGMENTS_KEY = 'stoplight.segments.v1'
+function loadSegments(): Segment[] {
+  try {
+    const raw = localStorage.getItem(SEGMENTS_KEY)
+    if (raw == null) {
+      const seeded = seedSegments()
+      localStorage.setItem(SEGMENTS_KEY, JSON.stringify(seeded))
+      return seeded
+    }
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveSegments(list: Segment[]): void {
+  try {
+    localStorage.setItem(SEGMENTS_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1059,7 +1135,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -1149,6 +1225,30 @@ interface TrafficState {
   addReport: (input: { client: string; title: string; kind: BrandReport['kind']; summary?: string; html: string }) => string
   /** Delete a saved report by id. */
   deleteReport: (id: string) => void
+  /** Records › Companies — the lightweight CRM table. */
+  companies: Company[]
+  /** Add a company row (blank defaults unless overridden); returns its id. */
+  addCompany: (partial?: Partial<Company>) => string
+  /** Patch a company row by id. */
+  updateCompany: (id: string, patch: Partial<Company>) => void
+  /** Delete a company row by id. */
+  deleteCompany: (id: string) => void
+  /** Records › People — the contacts table. */
+  people: Person[]
+  /** Add a person row (blank defaults unless overridden); returns its id. */
+  addPerson: (partial?: Partial<Person>) => string
+  /** Patch a person row by id. */
+  updatePerson: (id: string, patch: Partial<Person>) => void
+  /** Delete a person row by id. */
+  deletePerson: (id: string) => void
+  /** Records › Segments — the account-segments table. */
+  segments: Segment[]
+  /** Add a segment row (blank defaults unless overridden); returns its id. */
+  addSegment: (partial?: Partial<Segment>) => string
+  /** Patch a segment row by id. */
+  updateSegment: (id: string, patch: Partial<Segment>) => void
+  /** Delete a segment row by id. */
+  deleteSegment: (id: string) => void
   /** Insights pinned out of a report, kept in view on the Overview (newest first). */
   pinnedInsights: PinnedInsight[]
   /** Pin a finding lifted from a report; returns its id. */
@@ -1181,7 +1281,10 @@ interface TrafficState {
   closeDiagnosis: () => void
   /** Ask Claude: the conversational connection / what-worked palette. */
   askOpen: boolean
-  openAsk: () => void
+  /** A question to pre-fill and auto-run when the palette opens (from the home hero /
+   *  quick-action chips). Consumed and cleared by AskClaude on open. */
+  askSeed?: string
+  openAsk: (seed?: string) => void
   closeAsk: () => void
   /** Sharing & access: the current session role and the owner's share links. */
   role: Role
@@ -1371,7 +1474,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -1519,8 +1622,29 @@ interface TrafficState {
   /** True while a draft run is in flight (drives the button states). */
   drafting: boolean
   /** Draft starter copy + proof into empty messaging fields. Pass specific row
-   *  ids, or omit to draft every in-scope reviewable row that has no copy yet. */
-  draftCopy: (rowIds?: string[]) => Promise<void>
+   *  ids, or omit to draft every in-scope reviewable row that has no copy yet.
+   *  Resolves to which writer produced the copy ('claude' | 'heuristic'), or null
+   *  when nothing was drafted, so callers can show a source badge. 'heuristic' is
+   *  sticky: if any campaign group fell back, the whole run reports 'heuristic'. */
+  draftCopy: (rowIds?: string[]) => Promise<CopySource | null>
+  /** Live preview: draft copy for a set of not-yet-built deliverable slots WITHOUT
+   *  seeding any rows or touching localStorage. Resolves one {headline, primary} per
+   *  slot (in order) plus which writer produced it, so the Flows builder can show
+   *  copy on a deliverable the moment it's added. Returns null when the brand can't
+   *  generate (brandless / unbound). */
+  previewFlowCopy: (input: {
+    client: string
+    channel: ChannelId
+    assetType: string
+    /** One entry per slot; the brief drives that slot's copy (empty = generic on-brand). */
+    briefs: (string | undefined)[]
+    /** Audience names to write to, rotated across slots; empty = the brand's own list. */
+    audiences: string[]
+    /** Campaign theme — the throughline every slot orients around. */
+    theme?: string
+    /** Flight length in weeks — the campaign timeframe, so copy paces to it. */
+    flightWeeks?: number
+  }) => Promise<{ source: CopySource | null; posts: { headline: string; primary: string }[] } | null>
   /** Plan a personalization fan-out without committing (count-before-commit). */
   fanOutPreview: (
     campaign: string,
@@ -1720,6 +1844,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientProfiles: loadClientProfiles(),
   brandActuals: loadBrandActuals(),
   reports: loadReports(),
+  companies: loadCompanies(),
+  people: loadPeople(),
+  segments: loadSegments(),
   pinnedInsights: loadPinned(),
   actualsRefreshing: null,
   contentIngesting: null,
@@ -1958,6 +2085,81 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { reports }
     }),
 
+  addCompany: (partial) => {
+    const id = freshCompanyId()
+    const company: Company = { name: 'New company', ...(partial ?? {}), id }
+    set((s) => {
+      const companies = [company, ...s.companies]
+      saveCompanies(companies)
+      return { companies }
+    })
+    return id
+  },
+
+  updateCompany: (id, patch) =>
+    set((s) => {
+      const companies = s.companies.map((c) => (c.id === id ? { ...c, ...patch } : c))
+      saveCompanies(companies)
+      return { companies }
+    }),
+
+  deleteCompany: (id) =>
+    set((s) => {
+      const companies = s.companies.filter((c) => c.id !== id)
+      saveCompanies(companies)
+      return { companies }
+    }),
+
+  addPerson: (partial) => {
+    const id = freshPersonId()
+    const person: Person = { name: 'New person', ...(partial ?? {}), id }
+    set((s) => {
+      const people = [person, ...s.people]
+      savePeople(people)
+      return { people }
+    })
+    return id
+  },
+
+  updatePerson: (id, patch) =>
+    set((s) => {
+      const people = s.people.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      savePeople(people)
+      return { people }
+    }),
+
+  deletePerson: (id) =>
+    set((s) => {
+      const people = s.people.filter((p) => p.id !== id)
+      savePeople(people)
+      return { people }
+    }),
+
+  addSegment: (partial) => {
+    const id = freshSegmentId()
+    const segment: Segment = { name: 'New segment', ...(partial ?? {}), id }
+    set((s) => {
+      const segments = [segment, ...s.segments]
+      saveSegments(segments)
+      return { segments }
+    })
+    return id
+  },
+
+  updateSegment: (id, patch) =>
+    set((s) => {
+      const segments = s.segments.map((x) => (x.id === id ? { ...x, ...patch } : x))
+      saveSegments(segments)
+      return { segments }
+    }),
+
+  deleteSegment: (id) =>
+    set((s) => {
+      const segments = s.segments.filter((x) => x.id !== id)
+      saveSegments(segments)
+      return { segments }
+    }),
+
   addPinnedInsight: (input) => {
     const id = `pin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
     const pin: PinnedInsight = {
@@ -2115,8 +2317,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeReadiness: () => set({ readinessOpen: false }),
   openDiagnosis: () => set({ diagnosisOpen: true }),
   closeDiagnosis: () => set({ diagnosisOpen: false }),
-  openAsk: () => set({ askOpen: true }),
-  closeAsk: () => set({ askOpen: false }),
+  openAsk: (seed) => set({ askOpen: true, askSeed: seed }),
+  closeAsk: () => set({ askOpen: false, askSeed: undefined }),
   openShareDialog: () => set({ shareDialogOpen: true }),
   closeShareDialog: () => set({ shareDialogOpen: false }),
   createShare: (client, role) => {
@@ -4201,7 +4403,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             r.status !== 'failed' &&
             !messagingAllText(r).trim(),
         )
-    if (targets.length === 0) return
+    if (targets.length === 0) return null
+    // Which writer produced the copy. 'heuristic' is sticky (a single fallback means
+    // the run isn't fully Claude-written), so the badge never over-claims.
+    let copySource: CopySource | null = null
     set({ drafting: true })
     try {
       // Group by campaign so RTBs (proof) stay scoped and shared within a story.
@@ -4295,9 +4500,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             index: i,
           }
         })
+        // Anchor the set to the campaign brief: its subject is the theme, its
+        // duration the timeframe (both authored on the campaign at build time).
+        const campMeta = get().campaignList.find((c) => c.name === campaign)
         // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
-        const baseReq = { icp, campaign, brand, brandGuide, proofPool, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+        const baseReq = { icp, campaign, theme: campMeta?.subject, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
         const result = await copyWriter.draft({ ...baseReq, assets })
+        // Track the writer: once any group falls back to the heuristic, the whole
+        // run is 'heuristic'; otherwise it's 'claude'.
+        if (result.source === 'heuristic') copySource = 'heuristic'
+        else if (result.source === 'claude' && copySource !== 'heuristic') copySource = 'claude'
         // Anti-repetition: regenerate any unit whose headline / primary / CTA
         // collides across the campaign, so the set reads as distinct assets.
         await dedupeCampaignDrafts(result, assets, baseReq)
@@ -4337,6 +4549,64 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ drafting: false })
       await get().refresh()
     }
+    return copySource
+  },
+
+  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, theme, flightWeeks }) => {
+    if (!briefs.length) return null
+    // Same hard boundary as draftCopy: a brand must be bound to generate. A brandless
+    // (or non-draft-brandless) client has no voice/proof to write from.
+    if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) return null
+    const brand = get().clientProfiles[client]
+    const bg = get().brandGuides[client]
+    const brandGuide = bg?.confirmed ? bg.guide : undefined
+    // The brand's effective messaging system supplies audience / proof / CTA — the same
+    // scoped read path draftCopy uses, so preview copy matches what a build would write.
+    const sys = resolveBrandScope(client, get().brandSystems, get().brandMeta).library
+    const libAudiences = sys.audiences
+    const proofPool: Rtb[] = sys.rtbs
+    const fields = messagingFields(channel, assetType)
+    const stage = funnelStageFor(channel, assetType)
+    // Which audiences to write to (selected names, else the brand's own), rotated per slot.
+    const chosen = audiences.length ? audiences : libAudiences.map((a) => a.name)
+    const assets: DraftAsset[] = briefs.map((brief, i) => {
+      const audName = chosen.length ? chosen[i % chosen.length] : undefined
+      const aud = libAudiences.find((x) => x.name === audName)
+      const proof = proofPool.length ? proofPool[i % proofPool.length] : undefined
+      const b = brief?.trim()
+      return {
+        rowId: `preview-${i}`,
+        assetName: '',
+        channel,
+        type: assetType,
+        fields,
+        stage,
+        audience: aud
+          ? { name: aud.name, role: aud.role, angle: aud.messageAngle, pains: aud.pains }
+          : audName
+            ? { name: audName }
+            : undefined,
+        ctaSeed: sys.ctas.length ? sys.ctas[i % sys.ctas.length].label : undefined,
+        proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
+        // The mini brief drives this slot's copy (mirrors lineage.brief on a real build).
+        context: b ? { brief: b } : undefined,
+        index: i,
+      }
+    })
+    // campaign = client so the heuristic fallback still names the brand correctly.
+    // theme + flightWeeks anchor the whole set to the campaign brief.
+    const baseReq = { icp: get().icp, campaign: client, theme, flightWeeks, brand, brandGuide, proofPool, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+    const result = await copyWriter.draft({ ...baseReq, assets })
+    // Pull headline + primary per slot for the card preview (same role heuristic as the writer).
+    const headKey = fields.find((f) => /headline|subject|title|subhead|^h\d/i.test(f.key))?.key
+    const primKey = (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key
+    const byRow = new Map(result.drafts.map((d) => [d.rowId, d]))
+    const posts = assets.map((a) => {
+      const d = byRow.get(a.rowId)
+      const val = (k?: string) => (k ? d?.components.find((c) => c.key === k)?.value ?? '' : '')
+      return { headline: val(headKey), primary: val(primKey) }
+    })
+    return { source: result.source ?? null, posts }
   },
 
   toggleReviewed: async (id, value) => {

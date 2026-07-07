@@ -57,6 +57,11 @@ export interface DraftAsset {
 export interface DraftRequest {
   icp: Icp | null
   campaign: string
+  /** The campaign's theme / goal — the throughline every asset in the set should
+   *  orient around (the audience/stage/brief set each asset's specific angle). */
+  theme?: string
+  /** Flight length in weeks — the campaign's timeframe, so copy can pace to it. */
+  flightWeeks?: number
   /** The client's brand profile (website / industry / voice), if captured. */
   brand?: ClientProfile
   /** The confirmed brand guide — generation writes in its voice and honors its don'ts. */
@@ -82,9 +87,14 @@ export interface AssetDraft {
   /** Campaign RTB ids this asset leans on (proof carried into the funnel). */
   rtbIds: string[]
 }
+/** Which writer produced a result: the real Claude API, or the offline heuristic fallback. */
+export type CopySource = 'claude' | 'heuristic'
+
 export interface DraftResult {
   rtbs: Rtb[]
   drafts: AssetDraft[]
+  /** Which writer produced this result. Set by the writer; lets the UI show a source badge. */
+  source?: CopySource
 }
 
 export interface CopyWriter {
@@ -109,9 +119,10 @@ export class ClaudeCopyWriter implements CopyWriter {
       if (!res.ok) throw new Error(`draft-copy ${res.status}`)
       const out = (await res.json()) as DraftResult
       if (!out?.drafts?.length) throw new Error('empty draft')
-      return out
+      return { ...out, source: 'claude' }
     } catch {
-      return this.fallback.draft(req)
+      const fb = await this.fallback.draft(req)
+      return { ...fb, source: 'heuristic' }
     }
   }
 }
@@ -270,7 +281,7 @@ export class HeuristicCopyWriter implements CopyWriter {
         a.channel === 'landing-page' && second.id !== proof.id ? [proof.id, second.id] : [proof.id]
       return { rowId: a.rowId, components, format: format.key, rtbIds }
     })
-    return { rtbs, drafts }
+    return { rtbs, drafts, source: 'heuristic' }
   }
 }
 

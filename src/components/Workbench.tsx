@@ -22,6 +22,10 @@ import { LibraryView } from './LibraryView'
 import { PrioritiesView } from './PrioritiesView'
 import { ChannelsView } from './ChannelsView'
 import { ReportsView } from './ReportsView'
+import { CompaniesView } from './CompaniesView'
+import { PeopleView } from './PeopleView'
+import { SegmentsView } from './SegmentsView'
+import { FlowsView } from './FlowsView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
@@ -215,6 +219,22 @@ export function Workbench() {
           ) : page === 'reports' ? (
             <div className="home-main-scroll">
               <ReportsView scopeClient={scopedBrand} />
+            </div>
+          ) : page === 'records' ? (
+            <div className="home-main-scroll">
+              <CompaniesView />
+            </div>
+          ) : page === 'people' ? (
+            <div className="home-main-scroll">
+              <PeopleView />
+            </div>
+          ) : page === 'segments' ? (
+            <div className="home-main-scroll">
+              <SegmentsView />
+            </div>
+          ) : page === 'flows' ? (
+            <div className="home-main-page">
+              <FlowsView />
             </div>
           ) : (
             <div className="home-main-page">

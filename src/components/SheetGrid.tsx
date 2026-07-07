@@ -104,7 +104,7 @@ function GrowCell({
   )
 }
 
-export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: boolean; scopeClient?: string } = {}) {
+export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { liveScope?: boolean; scopeClient?: string; scopeCampaign?: string } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -117,7 +117,9 @@ export function SheetGrid({ liveScope = false, scopeClient }: { liveScope?: bool
   // `scopeClient` (from the brand folder's combined Grid) pins the view to one
   // brand across ALL its campaigns, overriding the global client/campaign filters.
   const clientFilter = scopeClient ?? clientFilterStore
-  const campaignFilter = scopeClient ? 'all' : campaignFilterStore
+  // scopeCampaign pins the view to a single campaign (the Flows grid); scopeClient alone
+  // pins to a brand across all its campaigns; otherwise follow the global filters.
+  const campaignFilter = scopeCampaign ?? (scopeClient ? 'all' : campaignFilterStore)
   const timeRange = useTrafficStore((s) => s.timeRange)
   const rangeNow = Date.now()
   const updateRow = useTrafficStore((s) => s.updateRow)

@@ -37,15 +37,30 @@ export function AskClaude() {
   const campaignList = useTrafficStore((s) => s.campaignList)
   const openBreaks = useTrafficStore((s) => s.openBreaks)
   const setView = useTrafficStore((s) => s.setView)
+  const askSeed = useTrafficStore((s) => s.askSeed)
 
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const [answer, setAnswer] = useState<(AskAnswer & { live: boolean }) | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Guards the seed so it auto-runs once per open (survives StrictMode double-effects).
+  const seededRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
   }, [open])
+
+  // A question handed in from the home hero / quick-action chips: pre-fill and run it,
+  // then clear the seed so it doesn't re-fire. Reset the guard when the palette closes.
+  useEffect(() => {
+    if (open && askSeed && seededRef.current !== askSeed) {
+      seededRef.current = askSeed
+      run(askSeed)
+      useTrafficStore.setState({ askSeed: undefined })
+    }
+    if (!open) seededRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, askSeed])
 
   if (!open) return null
 

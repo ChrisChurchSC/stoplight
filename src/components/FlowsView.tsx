@@ -1,0 +1,1480 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { CHANNELS } from '../domain/channels'
+import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
+import type { CopySource } from '../adapters/copy/draftWriter'
+import type { Deliverable } from '../domain/strategyAssets'
+import type { ChannelId } from '../domain/types'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
+import { useTrafficStore } from '../store/useTrafficStore'
+import { SheetGrid } from './SheetGrid'
+import { CalendarView } from './CalendarView'
+import { FlowsHome } from './FlowsHome'
+
+/**
+ * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
+ * one opens it as a read-only flow (its deliverables reverse-engineered from its assets)
+ * with a jump to the canvas for detailed work. "New campaign" is the builder: a brief
+ * node plus deliverable nodes you pick from a palette, and "Build" seeds a real draft
+ * campaign (optionally writing copy), staying in the flow. Campaigns + canvas stay intact.
+ */
+
+const CAMPAIGN_TONE = '#ff6347'
+
+// Every channel that has a scaffoldable deliverable, derived from the preset list so it
+// never drifts. Picking one scaffolds its default deliverable onto the canvas (the first
+// preset for that channel); un-picking removes that channel's deliverables. Grouped by
+// kind in the picker so the full set stays organized.
+const CHANNEL_PICKS: ChannelId[] = [...new Set(DELIVERABLE_PRESETS.map((p) => p.channel))]
+const CHANNEL_GROUPS: { kind: string; label: string }[] = [
+  { kind: 'organic', label: 'Social' },
+  { kind: 'paid', label: 'Paid' },
+  { kind: 'owned', label: 'Owned' },
+]
+// Cleaner chip labels only where the raw channel label reads as an asset type.
+const CHANNEL_LABEL: Partial<Record<ChannelId, string>> = {
+  linkedin: 'LinkedIn', blog: 'Blog', x: 'X',
+}
+
+// A recurring deliverable (newsletter, social) breaks into monthly posts. A lead magnet
+// (ebook, whitepaper) breaks into sections. Both show briefable sub-cards; other one-offs
+// (landing page, event) stay a single asset.
+const hasSubcards = (p: DeliverablePreset): boolean =>
+  !(p.brand || p.runtime === 'one-off') || p.channel === 'lead-magnet'
+// The word for a sub-card: monthly posts vs ebook sections.
+const subcardWord = (p: DeliverablePreset): string => (p.channel === 'lead-magnet' ? 'Section' : 'Post')
+// Sub-cards a deliverable shows: monthly cadence, or a lead magnet's sections (default 4).
+const subcardCount = (p: DeliverablePreset, perMonth: number): number =>
+  hasSubcards(p) ? Math.min(perMonth, 12) : 0
+// Count a freshly-added deliverable starts with (lead magnets get a few sections).
+const startCount = (p: DeliverablePreset): number => (p.channel === 'lead-magnet' ? 4 : p.perMonth)
+
+const PresetTile = ({ tone }: { tone: string }) => (
+  <span className="flow-tile" style={{ background: `color-mix(in srgb, ${tone} 20%, transparent)`, color: tone }}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="7" rx="1.6" />
+      <path d="M4 16h11" />
+      <path d="M19 14v5M16.5 16.5h5" />
+    </svg>
+  </span>
+)
+
+const CampaignTile = () => (
+  <span className="flow-tile" style={{ background: `color-mix(in srgb, ${CAMPAIGN_TONE} 20%, transparent)`, color: CAMPAIGN_TONE }}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 21V4h11l-1.5 3.5L16 11H5" />
+    </svg>
+  </span>
+)
+
+type ViewDeliverable = { key: string; label: string; tone: string; channel: ChannelId; assetType: string; count: number }
+
+// A rounded right-angle connector from a source port (exits right) to a target (enters left).
+/** Draw a path through an axis-aligned polyline, rounding each interior corner by r
+ *  (clamped so it never overshoots a short leg). Keeps the right-angle look while
+ *  softening the corners like the forward elbow. */
+function roundedPath(pts: { x: number; y: number }[], r: number): string {
+  if (pts.length < 2) return ''
+  let d = `M ${pts[0].x} ${pts[0].y}`
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const inLen = Math.abs(p1.x - p0.x) + Math.abs(p1.y - p0.y)
+    const outLen = Math.abs(p2.x - p1.x) + Math.abs(p2.y - p1.y)
+    const rr = Math.max(0, Math.min(r, inLen / 2, outLen / 2))
+    const bx = p1.x - Math.sign(p1.x - p0.x) * rr
+    const by = p1.y - Math.sign(p1.y - p0.y) * rr
+    const ax = p1.x + Math.sign(p2.x - p1.x) * rr
+    const ay = p1.y + Math.sign(p2.y - p1.y) * rr
+    d += ` L ${bx} ${by} Q ${p1.x} ${p1.y} ${ax} ${ay}`
+  }
+  const last = pts[pts.length - 1]
+  d += ` L ${last.x} ${last.y}`
+  return d
+}
+
+function elbowPath(sx: number, sy: number, tx: number, ty: number): string {
+  const r = 14
+  // Straight run when the ports line up and the target is to the right.
+  if (Math.abs(ty - sy) < 3 && tx > sx) return `M ${sx} ${sy} H ${tx}`
+  // Target at or to the LEFT of the source's exit port: the same right-angle elbow,
+  // flopped. The source port faces right, so exit rightward, drop to a lane, run left,
+  // then come back into the target's left edge going right. All right angles (rounded),
+  // matching the forward elbow — no double-back bend, arrowhead still points inward.
+  if (tx <= sx + 24) {
+    const gap = 40
+    const sep = Math.abs(ty - sy)
+    const laneY = sep >= 96 ? (sy + ty) / 2 : Math.max(sy, ty) + 56
+    return roundedPath(
+      [
+        { x: sx, y: sy },
+        { x: sx + gap, y: sy },
+        { x: sx + gap, y: laneY },
+        { x: tx - gap, y: laneY },
+        { x: tx - gap, y: ty },
+        { x: tx, y: ty },
+      ],
+      r,
+    )
+  }
+  // Forward (left-to-right): a rounded right-angle elbow.
+  const midX = tx > sx + 80 ? (sx + tx) / 2 : sx + 40
+  const dir = ty > sy ? 1 : -1
+  return `M ${sx} ${sy} H ${midX - r} Q ${midX} ${sy} ${midX} ${sy + r * dir} V ${ty - r * dir} Q ${midX} ${ty} ${midX + r} ${ty} H ${tx}`
+}
+
+export function FlowsView() {
+  const { brands, canvases } = useHomeCanvases()
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  const companies = useTrafficStore((s) => s.companies)
+  const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
+  const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const openCampaign = useTrafficStore((s) => s.openCampaign)
+  const draftCopy = useTrafficStore((s) => s.draftCopy)
+  const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
+  const updateRow = useTrafficStore((s) => s.updateRow)
+
+  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  const audienceNames = useMemo(() => (clientAudiences[brand] ?? []).map((a) => a.name), [clientAudiences, brand])
+  // Distinct segments across the Companies records — targetable as audiences.
+  const companySegments = useMemo(() => [...new Set(companies.map((c) => (c.segment ?? '').trim()).filter(Boolean))].sort(), [companies])
+
+  const [name, setName] = useState('')
+  const [subject, setSubject] = useState('')
+  const [flightWeeks, setFlightWeeks] = useState(12)
+  const [audiences, setAudiences] = useState<string[]>(audienceNames)
+  const [nodes, setNodes] = useState<FlowDeliverable[]>([])
+  const [sel, setSel] = useState<'campaign' | string | null>('campaign')
+  const [pickAt, setPickAt] = useState<number | null>(null)
+  const [building, setBuilding] = useState(false)
+  const [writeCopy, setWriteCopy] = useState(true)
+  const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null } | null>(null)
+  // Live draft copy per deliverable node, generated when it's added (and on redraft).
+  // Ephemeral UI state: never seeded into rows or localStorage until you Build.
+  const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string }[] }>>({})
+  // How the flow-in-progress is shown: the canvas, or a grid / calendar of its assets.
+  const [flowView, setFlowView] = useState<'flow' | 'grid' | 'calendar'>('flow')
+  // The Flows section opens on an all-flows landing page; picking a flow (or New flow)
+  // drops into the canvas. The "Flows" breadcrumb returns here.
+  const [flowScreen, setFlowScreen] = useState<'home' | 'canvas'>('home')
+  // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
+  const [viewName, setViewName] = useState<string | null>(null)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  // Canvas controls (the bottom toolbar).
+  const [zoom, setZoom] = useState(100)
+  const [zoomOpen, setZoomOpen] = useState(false)
+  const [tool, setTool] = useState<'select' | 'pan'>('select')
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
+  const spaceHeld = useRef(false)
+  const [spaceCursor, setSpaceCursor] = useState(false)
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const marqueeStart = useRef<{ x0: number; y0: number } | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Free-move: per-card translate offsets, applied on top of the layout. Dragging a
+  // selected card moves the whole selection.
+  const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({})
+  const dragging = useRef<{ ids: string[]; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
+  // Connectors between nodes, plus the in-progress drag and measured node rects.
+  const canvasRef = useRef<HTMLDivElement>(null)
+  // Zoom + pan mirrored into refs so the wheel handler reads the latest values without a
+  // re-render lag between rapid events (cursor-anchored zoom needs both at once).
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const offsetRef = useRef(offset)
+  offsetRef.current = offset
+  // Zoom to a target percent while keeping the screen point (screenX/screenY) fixed. The
+  // stack scales from its top-left (transform-origin 0 0), so only offset moves its
+  // top-left: we shift offset so the anchor point stays put. This is what makes zoom feel
+  // smooth (it grows toward the cursor) instead of lurching away from it.
+  const zoomAt = (target: number, screenX: number, screenY: number) => {
+    const s0 = zoomRef.current / 100
+    const z1 = Math.min(200, Math.max(25, target))
+    const s1 = z1 / 100
+    const sRect = canvasRef.current?.querySelector('.flow-stack')?.getBoundingClientRect()
+    const o0 = offsetRef.current
+    let no = o0
+    if (sRect) {
+      const ax = screenX - sRect.left
+      const ay = screenY - sRect.top
+      no = { x: o0.x + ax * (1 - s1 / s0), y: o0.y + ay * (1 - s1 / s0) }
+    }
+    zoomRef.current = z1
+    offsetRef.current = no
+    setZoom(z1)
+    setOffset(no)
+  }
+  // Native, non-passive wheel handler (React's onWheel is passive, so it can't
+  // preventDefault). This matches how Attio's canvas zooms: pinch (ctrlKey) or Cmd+scroll
+  // zooms toward the cursor, and we suppress the browser's own page zoom / back-swipe.
+  // Pinch deltas are tiny so they get a stronger step; a plain scroll pans.
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (e.ctrlKey || e.metaKey) {
+        const d = Math.max(-100, Math.min(100, e.deltaY))
+        zoomAt(zoomRef.current * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.006)), e.clientX, e.clientY)
+      } else {
+        const o0 = offsetRef.current
+        offsetRef.current = { x: o0.x - e.deltaX, y: o0.y - e.deltaY }
+        setOffset(offsetRef.current)
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+  const [connectors, setConnectors] = useState<{ from: string; to: string }[]>([])
+  const [drawing, setDrawing] = useState<{ from: string; x: number; y: number } | null>(null)
+  const drawingFrom = useRef<string | null>(null)
+  const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
+  // Canvas "add": drag out of a node's +, drop to open a block picker; the new card is
+  // created at the drop point and connected back to the source node.
+  const [addMenu, setAddMenu] = useState<{ at: number; from: string; x: number; y: number } | null>(null)
+  const [addSearch, setAddSearch] = useState('')
+  const [audOpen, setAudOpen] = useState(false)
+  const addDrag = useRef<{ from: string; at: number } | null>(null)
+  const pendingPlace = useRef<{ id: string; x: number; y: number } | null>(null)
+  const startConnect = (e: ReactMouseEvent, from: string) => {
+    if (spaceHeld.current) return
+    e.stopPropagation()
+    const cv = canvasRef.current
+    if (!cv) return
+    const cr = cv.getBoundingClientRect()
+    drawingFrom.current = from
+    setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+  }
+  const startDrag = (e: ReactMouseEvent, id: string) => {
+    if (tool !== 'select' || spaceHeld.current) return
+    if ((e.target as HTMLElement).closest('input, textarea, button, select')) return
+    e.stopPropagation()
+    const ids = selected.has(id) && selected.size ? [...selected] : [id]
+    if (!selected.has(id)) setSelected(new Set(ids))
+    const start: Record<string, { x: number; y: number }> = {}
+    ids.forEach((i) => {
+      start[i] = pos[i] ?? { x: 0, y: 0 }
+    })
+    dragging.current = { ids, x: e.clientX, y: e.clientY, start }
+  }
+
+  // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === ' ') {
+        e.preventDefault()
+        if (!spaceHeld.current) {
+          spaceHeld.current = true
+          setSpaceCursor(true)
+        }
+        return
+      }
+      if (e.key.toLowerCase() === 'b' && viewName === null) {
+        e.preventDefault()
+        setPickAt(nodes.length)
+        setSel(null)
+      }
+    }
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        spaceHeld.current = false
+        setSpaceCursor(false)
+      }
+    }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+    }
+  }, [nodes.length, viewName])
+
+  const audSelection = audiences.length ? audiences : audienceNames
+
+  // Campaign-level generation inputs held in refs so the debounced redraft-all reads
+  // the LATEST values (no stale closures in the timer callback).
+  const subjectRef = useRef(subject)
+  subjectRef.current = subject
+  const flightRef = useRef(flightWeeks)
+  flightRef.current = flightWeeks
+  const audRef = useRef(audSelection)
+  audRef.current = audSelection
+  const writeCopyRef = useRef(writeCopy)
+  writeCopyRef.current = writeCopy
+  const nodesRef = useRef(nodes)
+  nodesRef.current = nodes
+  const lastSubjectRef = useRef(subject)
+
+  // Generate live draft copy for a deliverable node (all its post slots in one call).
+  // Fires when the node is added and on redraft; a no-op when copy is toggled off or no
+  // brand is bound. Each post is anchored to the campaign brief — its subject is the
+  // THEME, its flight the TIMEFRAME, plus the selected audiences and the post's own
+  // brief. Runs against Claude when connected, the heuristic otherwise.
+  const genPreview = async (node: FlowDeliverable) => {
+    if (!writeCopyRef.current || !brand) return
+    const p = presetByKey(node.presetKey)
+    if (!p) return
+    const slots = Math.max(1, subcardCount(p, node.perMonth))
+    const briefs = Array.from({ length: slots }, (_, i) => node.briefs?.[i] ?? node.description ?? '')
+    const auds = node.audience ? [node.audience] : audRef.current
+    setPreview((pv) => ({ ...pv, [node.id]: { loading: true, source: pv[node.id]?.source ?? null, posts: pv[node.id]?.posts ?? [] } }))
+    try {
+      const res = await previewFlowCopy({
+        client: brand,
+        channel: p.channel,
+        assetType: p.assetType,
+        briefs,
+        audiences: auds,
+        theme: subjectRef.current.trim() || undefined,
+        flightWeeks: flightRef.current,
+      })
+      setPreview((pv) => ({ ...pv, [node.id]: { loading: false, source: res?.source ?? null, posts: res?.posts ?? [] } }))
+    } catch {
+      setPreview((pv) => ({ ...pv, [node.id]: { loading: false, source: null, posts: [] } }))
+    }
+  }
+  // Redraft every deliverable against the current campaign brief. Debounced so rapid
+  // changes (flight ±, audience toggles) coalesce into ONE regeneration pass.
+  const redraftTimer = useRef<number | null>(null)
+  const scheduleRedraftAll = () => {
+    if (redraftTimer.current) window.clearTimeout(redraftTimer.current)
+    redraftTimer.current = window.setTimeout(() => {
+      for (const n of nodesRef.current) void genPreview(n)
+    }, 500)
+  }
+  // Subject is a text field: redraft when you leave it, and only if it actually changed.
+  const onSubjectCommit = () => {
+    if (subject.trim() === lastSubjectRef.current.trim()) return
+    lastSubjectRef.current = subject
+    scheduleRedraftAll()
+  }
+  // The draft-copy block shown under a deliverable / post card. Shimmer while the
+  // first draft is generating, then headline + body for that slot.
+  const renderCopy = (nodeId: string, slot: number) => {
+    if (!writeCopy) return null
+    const pv = preview[nodeId]
+    const post = pv?.posts?.[slot]
+    if (pv?.loading && !(post?.headline || post?.primary)) {
+      return (
+        <div className="flow-copy loading" aria-hidden="true">
+          <span className="flow-copy-shim" />
+          <span className="flow-copy-shim short" />
+        </div>
+      )
+    }
+    if (!post || (!post.headline && !post.primary)) return null
+    return (
+      <div className="flow-copy">
+        {post.headline && <div className="flow-copy-head">{post.headline}</div>}
+        {post.primary && <div className="flow-copy-body">{post.primary}</div>}
+      </div>
+    )
+  }
+
+  // The brand's existing campaigns (for the switcher).
+  const brandCampaigns = useMemo(
+    () =>
+      canvases
+        .filter((c) => c.client === brand && c.name !== CONTENT_LIBRARY_CAMPAIGN)
+        .map((c) => ({ name: c.name, count: c.rows.filter((r) => !r.archivedAt).length }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [canvases, brand],
+  )
+
+  const viewCanvas = viewName ? canvases.find((c) => c.name === viewName) : null
+  const viewRows = useMemo(() => (viewCanvas ? viewCanvas.rows.filter((r) => !r.archivedAt) : []), [viewCanvas])
+  const viewDelivs: ViewDeliverable[] = useMemo(() => {
+    const map = new Map<string, ViewDeliverable>()
+    for (const r of viewRows) {
+      const key = `${r.channel}|${r.assetType}`
+      const cur = map.get(key)
+      if (cur) cur.count++
+      else {
+        const preset = DELIVERABLE_PRESETS.find((p) => p.channel === r.channel && p.assetType === r.assetType)
+        const label = preset?.label ?? `${CHANNELS[r.channel as ChannelId]?.label ?? r.channel} · ${r.assetType || 'asset'}`
+        const tone = preset ? TONE_HEX[preset.tone] : CHANNELS[r.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue
+        map.set(key, { key, label, tone, channel: r.channel as ChannelId, assetType: r.assetType ?? '', count: 1 })
+      }
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count)
+  }, [viewRows])
+  const viewAudiences = useMemo(() => [...new Set(viewRows.map((r) => (r.audience ?? '').trim()).filter(Boolean))], [viewRows])
+  const viewFlight = campaignList.find((c) => c.name === viewName)?.durationWeeks
+  const viewShort = viewName ? viewName.replace(`${brand} — `, '') : ''
+
+  const addPreset = (p: DeliverablePreset) => {
+    const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: startCount(p) }
+    const at = pickAt ?? nodes.length
+    setNodes((n) => {
+      const copy = [...n]
+      copy.splice(Math.min(at, copy.length), 0, node)
+      return copy
+    })
+    setPickAt(null)
+    setSel(node.id)
+    void genPreview(node)
+  }
+  // Start dragging a new-block connector out of a node's +.
+  const startAdd = (e: ReactMouseEvent, at: number, from: string) => {
+    e.stopPropagation()
+    const cr = canvasRef.current?.getBoundingClientRect()
+    if (!cr) return
+    addDrag.current = { from, at }
+    drawingFrom.current = from
+    setPickAt(null)
+    setSel(null)
+    setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+  }
+  const addFromMenu = (p: DeliverablePreset) => {
+    if (!addMenu) return
+    const id = freshNodeId()
+    const node: FlowDeliverable = { id, presetKey: p.key, perMonth: startCount(p) }
+    const { at, from, x, y } = addMenu
+    setNodes((n) => {
+      const c = [...n]
+      c.splice(Math.min(at, c.length), 0, node)
+      return c
+    })
+    setConnectors((c) => [...c, { from, to: id }])
+    pendingPlace.current = { id, x, y }
+    setAddMenu(null)
+    setSel(id)
+    void genPreview(node)
+  }
+  const menuGroups = useMemo(() => {
+    const q = addSearch.trim().toLowerCase()
+    const filtered = q ? DELIVERABLE_PRESETS.filter((p) => p.label.toLowerCase().includes(q) || p.group.toLowerCase().includes(q)) : DELIVERABLE_PRESETS
+    const map = new Map<string, DeliverablePreset[]>()
+    for (const p of filtered) {
+      const a = map.get(p.group) ?? []
+      a.push(p)
+      map.set(p.group, a)
+    }
+    return [...map.entries()]
+  }, [addSearch])
+  const removeNode = (id: string) => {
+    setNodes((n) => n.filter((x) => x.id !== id))
+    if (sel === id) setSel(null)
+  }
+  const setCadence = (id: string, perMonth: number) => setNodes((n) => n.map((x) => (x.id === id ? { ...x, perMonth: Math.max(1, perMonth) } : x)))
+  const setNodeField = (id: string, patch: Partial<FlowDeliverable>) => setNodes((n) => n.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  const setBrief = (id: string, i: number, val: string) =>
+    setNodes((n) =>
+      n.map((x) => {
+        if (x.id !== id) return x
+        const briefs = [...(x.briefs ?? [])]
+        briefs[i] = val
+        return { ...x, briefs }
+      }),
+    )
+  const toggleAud = (a: string) => {
+    setAudiences((cur) => (cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a]))
+    scheduleRedraftAll()
+  }
+  // The channels currently on the canvas (a channel is "on" if any deliverable uses it).
+  const channelsOnCanvas = useMemo(
+    () => new Set(nodes.map((n) => presetByKey(n.presetKey)?.channel).filter(Boolean) as ChannelId[]),
+    [nodes],
+  )
+  // Toggle a whole channel from the brief: add its default deliverable (and draft copy for
+  // it), or strip every deliverable on that channel.
+  const toggleChannel = (ch: ChannelId) => {
+    if (channelsOnCanvas.has(ch)) {
+      setNodes((ns) => ns.filter((n) => presetByKey(n.presetKey)?.channel !== ch))
+      return
+    }
+    const preset = DELIVERABLE_PRESETS.find((p) => p.channel === ch)
+    if (!preset) return
+    const node: FlowDeliverable = { id: freshNodeId(), presetKey: preset.key, perMonth: startCount(preset) }
+    setNodes((ns) => [...ns, node])
+    void genPreview(node)
+  }
+
+  const startNew = () => {
+    setViewName(null)
+    setBuilt(null)
+    setNodes([])
+    setPreview({})
+    setName('')
+    setSubject('')
+    lastSubjectRef.current = ''
+    setSel('campaign')
+    setPickAt(null)
+  }
+  const openView = (n: string) => {
+    setViewName(n)
+    setBuilt(null)
+    setPickAt(null)
+    setSel('campaign')
+  }
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, DeliverablePreset[]>()
+    for (const p of DELIVERABLE_PRESETS) {
+      const arr = map.get(p.group) ?? []
+      arr.push(p)
+      map.set(p.group, arr)
+    }
+    return [...map.entries()]
+  }, [])
+
+  // Every deliverable is pre-wired to each of its per-month post cards (the same SVG
+  // connectors you can draw by hand), so they arrive connected to the main card.
+  const implicitConnectors = useMemo(() => {
+    const out: { from: string; to: string }[] = []
+    for (const n of nodes) {
+      // Every deliverable hangs off the campaign card.
+      out.push({ from: 'campaign', to: n.id })
+      const p = presetByKey(n.presetKey)
+      if (!p || p.brand || p.runtime === 'one-off') continue
+      const slots = Math.min(n.perMonth, 12)
+      for (let bi = 0; bi < slots; bi++) out.push({ from: n.id, to: `${n.id}:${bi}` })
+    }
+    return out
+  }, [nodes])
+
+  // The campaign name this flow builds into (must match build()'s naming) — used to scope
+  // the real Grid / Calendar to just this flow's assets.
+  const flowCampaign = viewName ?? `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
+  // Whether this campaign has any built rows yet (so the grid/calendar can hint to Build).
+  const hasBuiltRows = useTrafficStore((s) => s.rows.some((r) => r.campaign === flowCampaign))
+
+  // Measure node positions (canvas-local) so the SVG connectors track them as nodes
+  // move, pan, and zoom.
+  useLayoutEffect(() => {
+    const cv = canvasRef.current
+    if (!cv) return
+    const cr = cv.getBoundingClientRect()
+    const next: Record<string, { x: number; y: number; w: number; h: number }> = {}
+    cv.querySelectorAll('.flow-node[data-node-id]').forEach((el) => {
+      const r = el.getBoundingClientRect()
+      const id = (el as HTMLElement).dataset.nodeId
+      if (id) next[id] = { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
+    })
+    setRects(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, pos, offset, zoom, selected, connectors, viewName])
+
+  // Once a just-created card is measured, nudge it to where it was dropped.
+  useEffect(() => {
+    const pp = pendingPlace.current
+    if (pp && rects[pp.id]) {
+      const r = rects[pp.id]
+      setPos((prev) => ({ ...prev, [pp.id]: { x: (prev[pp.id]?.x ?? 0) + (pp.x - r.x), y: (prev[pp.id]?.y ?? 0) + (pp.y - r.y) } }))
+      pendingPlace.current = null
+    }
+  }, [rects])
+
+  const build = async () => {
+    if (!nodes.length || building) return
+    setBuilding(true)
+    const campaignName = `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
+    try {
+      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: subject.trim() || undefined, durationWeeks: flightWeeks })
+      // Seed one deliverable at a time so we can tie each asset back to its mini brief:
+      // the briefs rotate across the deliverable's assets (post i -> brief i mod N), the
+      // brief names the asset AND rides in `lineage` so the copy writer writes to it.
+      const allNewIds: string[] = []
+      for (const n of nodes) {
+        const p = presetByKey(n.presetKey)
+        if (!p) continue
+        const auds = n.audience ? [n.audience] : audSelection
+        const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: n.perMonth, runtime: p.runtime, brand: p.brand }
+        const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName).map((r) => r.id))
+        await seedCampaignAssets(campaignName, [d], { flightWeeks, audiences: auds })
+        const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !before.has(r.id))
+        const briefs = (n.briefs ?? []).map((b) => b.trim()).filter(Boolean)
+        if (briefs.length) {
+          const ordered = [...fresh].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
+          for (let i = 0; i < ordered.length; i++) {
+            const brief = briefs[i % briefs.length]
+            await updateRow(ordered[i].id, {
+              assetName: `${ordered[i].assetName} · ${brief}`,
+              lineage: { ...(ordered[i].lineage ?? {}), brief },
+            })
+          }
+        }
+        allNewIds.push(...fresh.map((r) => r.id))
+      }
+      // Capture which writer produced the copy so the result card can badge the source
+      // (Claude vs the offline heuristic fallback when the API has no key/credits).
+      let source: CopySource | null = null
+      if (writeCopy && allNewIds.length) source = await draftCopy(allNewIds)
+      setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source })
+    } finally {
+      setBuilding(false)
+    }
+  }
+
+  const viewing = viewName !== null
+  const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
+  const menuAnchor =
+    addMenu && rects[addMenu.from]
+      ? (() => {
+          const r = rects[addMenu.from]
+          const cw = canvasRef.current?.clientWidth ?? 900
+          const ch = canvasRef.current?.clientHeight ?? 700
+          return {
+            x: Math.min(Math.max(addMenu.x, 8), cw - 292),
+            y: Math.min(Math.max(addMenu.y - 20, 8), ch - 300),
+            sx: r.x + r.w,
+            sy: r.y + r.h / 2,
+          }
+        })()
+      : null
+
+  // The all-flows landing page. Picking a flow opens it in the canvas; New flow starts a
+  // fresh builder. (A remount when you re-enter the Flows section returns you here.)
+  if (flowScreen === 'home') {
+    return (
+      <FlowsHome
+        brand={brand}
+        onOpen={(name) => {
+          openView(name)
+          setFlowView('flow')
+          setFlowScreen('canvas')
+        }}
+        onNew={() => {
+          startNew()
+          setFlowView('flow')
+          setFlowScreen('canvas')
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="flow">
+      <header className="flow-top">
+        <div className="flow-crumb">
+          <span className="flow-crumb-ic" aria-hidden="true">
+            ⋔
+          </span>
+          <button className="flow-crumb-home" onClick={() => setFlowScreen('home')} title="All flows">
+            Flows
+          </button>
+          <span className="flow-crumb-sep">/</span>
+          <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
+            {viewing ? viewShort : name.trim() || 'New campaign'}
+            <span className="flow-switcher-caret">▾</span>
+          </button>
+          {switcherOpen && (
+            <>
+              <div className="flow-switch-scrim" onClick={() => setSwitcherOpen(false)} />
+              <div className="flow-switch-menu">
+                <button className="flow-switch-item flow-switch-new" onClick={() => { startNew(); setSwitcherOpen(false) }}>
+                  + New campaign
+                </button>
+                {brandCampaigns.length > 0 && <div className="flow-switch-sep" />}
+                {brandCampaigns.map((c) => (
+                  <button key={c.name} className={`flow-switch-item${viewName === c.name ? ' active' : ''}`} onClick={() => { openView(c.name); setSwitcherOpen(false) }}>
+                    <span className="flow-switch-name">{c.name.replace(`${brand} — `, '')}</span>
+                    <span className="flow-switch-count">{c.count}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flow-top-right">
+          <div className="flow-viewtabs">
+            {(['flow', 'grid', 'calendar'] as const).map((v) => (
+              <button key={v} className={`flow-viewtab${flowView === v ? ' on' : ''}`} onClick={() => setFlowView(v)}>
+                {v === 'flow' ? 'Flow' : v === 'grid' ? 'Grid' : 'Calendar'}
+              </button>
+            ))}
+          </div>
+          {viewing ? (
+            <button className="flow-top-build" onClick={() => openCampaign(viewName!)}>
+              Open on canvas ↗
+            </button>
+          ) : (
+            <button className="flow-top-build" onClick={build} disabled={!nodes.length || building}>
+              {building ? 'Building…' : writeCopy ? 'Build & write copy' : 'Build campaign'}
+            </button>
+          )}
+        </div>
+      </header>
+
+      {built && (
+        <div className="flow-built">
+          <div className="flow-built-card">
+            <div className="flow-built-check" aria-hidden="true">
+              ✓
+            </div>
+            <div className="flow-built-title">Campaign built</div>
+            <div className="flow-built-sub">
+              {built.name.replace(`${brand} — `, '')} · {built.count} draft asset{built.count === 1 ? '' : 's'}
+            </div>
+            {built.copy && built.source && (
+              <div className={`flow-built-badge ${built.source}`}>
+                {built.source === 'claude' ? (
+                  <>
+                    <span className="flow-built-badge-dot" aria-hidden="true" />
+                    {built.count} draft{built.count === 1 ? '' : 's'} written by Claude
+                  </>
+                ) : (
+                  <>
+                    <span className="flow-built-badge-dot" aria-hidden="true" />
+                    Written offline · add Anthropic API credits for Claude drafts
+                  </>
+                )}
+              </div>
+            )}
+            <div className="flow-built-actions">
+              <button className="flow-built-open" onClick={() => openCampaign(built.name)}>
+                Open on canvas ↗
+              </button>
+              <button className="flow-built-new" onClick={startNew}>
+                Start another
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {flowView === 'flow' && (
+        <>
+      <div className="flow-body">
+        <div
+          ref={canvasRef}
+          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}`}
+          onMouseDown={(e) => {
+            // Hand tool (or held space) pans; arrow tool drags a selection box on empty canvas.
+            const t = e.target as HTMLElement
+            const onBackground = !t.closest('.flow-node, .flow-brief-card, button, input, textarea, select')
+            if (tool === 'pan' || spaceHeld.current) {
+              pan.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y }
+            } else if (onBackground) {
+              const r = e.currentTarget.getBoundingClientRect()
+              const x = e.clientX - r.left
+              const y = e.clientY - r.top
+              marqueeStart.current = { x0: x, y0: y }
+              setMarquee({ x0: x, y0: y, x1: x, y1: y })
+              setSelected(new Set())
+              setSel(null)
+            }
+          }}
+          onMouseMove={(e) => {
+            if (drawingFrom.current) {
+              const cr = e.currentTarget.getBoundingClientRect()
+              setDrawing({ from: drawingFrom.current, x: e.clientX - cr.left, y: e.clientY - cr.top })
+            } else if (dragging.current) {
+              const scale = zoom / 100
+              const dx = (e.clientX - dragging.current.x) / scale
+              const dy = (e.clientY - dragging.current.y) / scale
+              const d = dragging.current
+              setPos((prev) => {
+                const next = { ...prev }
+                d.ids.forEach((i) => {
+                  next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
+                })
+                return next
+              })
+            } else if (pan.current) {
+              setOffset({ x: pan.current.ox + (e.clientX - pan.current.x), y: pan.current.oy + (e.clientY - pan.current.y) })
+            } else if (marqueeStart.current) {
+              const r = e.currentTarget.getBoundingClientRect()
+              setMarquee({ x0: marqueeStart.current.x0, y0: marqueeStart.current.y0, x1: e.clientX - r.left, y1: e.clientY - r.top })
+            }
+          }}
+          onMouseUp={(e) => {
+            if (addDrag.current) {
+              const cr = e.currentTarget.getBoundingClientRect()
+              setAddMenu({ at: addDrag.current.at, from: addDrag.current.from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+              setAddSearch('')
+              addDrag.current = null
+              drawingFrom.current = null
+              setDrawing(null)
+            } else if (drawingFrom.current) {
+              const from = drawingFrom.current
+              const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.flow-node[data-node-id]') as HTMLElement | null
+              const to = el?.dataset.nodeId
+              if (to && to !== from) setConnectors((c) => (c.some((x) => x.from === from && x.to === to) ? c : [...c, { from, to }]))
+              drawingFrom.current = null
+              setDrawing(null)
+            }
+            if (marqueeStart.current) {
+              const r = e.currentTarget.getBoundingClientRect()
+              const s = marqueeStart.current
+              const ex = e.clientX - r.left
+              const ey = e.clientY - r.top
+              const l = Math.min(s.x0, ex)
+              const tp = Math.min(s.y0, ey)
+              const rr = Math.max(s.x0, ex)
+              const bt = Math.max(s.y0, ey)
+              const ids = new Set<string>()
+              e.currentTarget.querySelectorAll('.flow-node[data-node-id]').forEach((el) => {
+                const nr = el.getBoundingClientRect()
+                if (nr.left - r.left < rr && nr.right - r.left > l && nr.top - r.top < bt && nr.bottom - r.top > tp) {
+                  const id = (el as HTMLElement).dataset.nodeId
+                  if (id) ids.add(id)
+                }
+              })
+              setSelected(ids)
+              marqueeStart.current = null
+              setMarquee(null)
+            }
+            pan.current = null
+            dragging.current = null
+          }}
+          onMouseLeave={() => {
+            pan.current = null
+            marqueeStart.current = null
+            dragging.current = null
+            drawingFrom.current = null
+            addDrag.current = null
+            setMarquee(null)
+            setDrawing(null)
+          }}
+        >
+          <svg className="flow-edges" width="100%" height="100%">
+            <defs>
+              <marker id="flow-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <circle cx="5" cy="5" r="3.5" fill="var(--text-faint)" />
+              </marker>
+            </defs>
+            {!viewing &&
+              implicitConnectors.map((cn) => {
+                const a = rects[cn.from]
+                const b = rects[cn.to]
+                if (!a || !b) return null
+                return <path key={`imp-${cn.from}-${cn.to}`} className="flow-edge implicit" d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)} />
+              })}
+            {connectors.map((cn, i) => {
+              const a = rects[cn.from]
+              const b = rects[cn.to]
+              if (!a || !b) return null
+              return (
+                <path
+                  key={`${cn.from}-${cn.to}-${i}`}
+                  className="flow-edge"
+                  d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)}
+                  onClick={() => setConnectors((c) => c.filter((_, j) => j !== i))}
+                />
+              )
+            })}
+            {drawing &&
+              rects[drawing.from] &&
+              (() => {
+                const a = rects[drawing.from]
+                return <path className="flow-edge drawing" d={elbowPath(a.x + a.w, a.y + a.h / 2, drawing.x, drawing.y)} markerEnd="url(#flow-arrow)" />
+              })()}
+            {menuAnchor && <path className="flow-edge drawing" d={elbowPath(menuAnchor.sx, menuAnchor.sy, menuAnchor.x, menuAnchor.y + 26)} markerEnd="url(#flow-arrow)" />}
+          </svg>
+          {menuAnchor && (
+            <>
+              <div className="flow-addmenu-scrim" onMouseDown={() => setAddMenu(null)} />
+              <div className="flow-addmenu" style={{ left: menuAnchor.x, top: menuAnchor.y }} onMouseDown={(e) => e.stopPropagation()}>
+                <input className="flow-addmenu-search" autoFocus placeholder="Search deliverables" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
+                <div className="flow-addmenu-list">
+                  {menuGroups.map(([group, presets]) => (
+                    <div key={group}>
+                      <div className="flow-addmenu-group">{group}</div>
+                      {presets.map((p) => (
+                        <button key={p.key} className="flow-addmenu-item" onClick={() => addFromMenu(p)}>
+                          <PresetTile tone={TONE_HEX[p.tone]} />
+                          <span>{p.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                  {menuGroups.length === 0 && <div className="flow-addmenu-empty">No matches</div>}
+                </div>
+              </div>
+            </>
+          )}
+          {audOpen && rects['campaign'] && (() => {
+            const r = rects['campaign']
+            const cw = canvasRef.current?.clientWidth ?? 900
+            const x = Math.min(Math.max(r.x, 8), cw - 292)
+            const y = r.y + r.h + 8
+            return (
+              <>
+                <div className="flow-addmenu-scrim" onMouseDown={() => setAudOpen(false)} />
+                <div className="flow-addmenu flow-audmenu" style={{ left: x, top: y }} onMouseDown={(e) => e.stopPropagation()}>
+                  <div className="flow-addmenu-list">
+                    <div className="flow-addmenu-group">Company segments</div>
+                    {companySegments.length === 0 && <div className="flow-addmenu-empty">No segments yet — add them in Records › Companies.</div>}
+                    {companySegments.map((seg) => (
+                      <label key={seg} className="flow-audmenu-item">
+                        <input type="checkbox" checked={audSelection.includes(seg)} onChange={() => toggleAud(seg)} />
+                        <span>{seg}</span>
+                      </label>
+                    ))}
+                    <div className="flow-addmenu-group">Brand audiences</div>
+                    {audienceNames.map((a) => (
+                      <label key={a} className="flow-audmenu-item">
+                        <input type="checkbox" checked={audSelection.includes(a)} onChange={() => toggleAud(a)} />
+                        <span>{a}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
+          {marquee && (
+            <div
+              className="flow-marquee"
+              style={{
+                left: Math.min(marquee.x0, marquee.x1),
+                top: Math.min(marquee.y0, marquee.y1),
+                width: Math.abs(marquee.x1 - marquee.x0),
+                height: Math.abs(marquee.y1 - marquee.y0),
+              }}
+            />
+          )}
+          <div className="flow-stack" style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
+            {/* Campaign brief node */}
+            <div
+              className={`flow-node${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
+              data-node-id="campaign"
+              style={{ transform: `translate(${pos['campaign']?.x ?? 0}px, ${pos['campaign']?.y ?? 0}px)` }}
+              onMouseDown={(e) => startDrag(e, 'campaign')}
+              onClick={() => { setSel('campaign'); setPickAt(null) }}
+            >
+              <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
+                Campaign
+              </span>
+              <div className="flow-node-main">
+                <CampaignTile />
+                <div className="flow-node-text">
+                  <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
+                  <div className="flow-node-desc">
+                    {viewing ? (
+                      `${viewRows.length} assets · ${viewAudiences.length} audience${viewAudiences.length === 1 ? '' : 's'}`
+                    ) : (
+                      <>
+                        {flightWeeks}-week flight ·{' '}
+                        <button
+                          className="flow-aud-btn"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); setAudOpen((o) => !o); setSel('campaign') }}
+                        >
+                          {audSelection.length} audience{audSelection.length === 1 ? '' : 's'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {!viewing && (
+                <div className="flow-hover">
+                  <span className="flow-port" />
+                  <button className="flow-plus" title="Drag out to add" onMouseDown={(e) => startAdd(e, nodes.length, 'campaign')}>
+                    +
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* View mode: reverse-engineered deliverables (read-only) */}
+            {viewing
+              ? viewDelivs.map((d) => (
+                  <div key={d.key}>
+                    <div className="flow-link" />
+                    <div className={`flow-node${sel === d.key ? ' sel' : ''}`} onClick={() => setSel(d.key)}>
+                      <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 16%, transparent)` }}>
+                        Deliverable
+                      </span>
+                      <div className="flow-node-main">
+                        <PresetTile tone={d.tone} />
+                        <div className="flow-node-text">
+                          <div className="flow-node-label">{d.label}</div>
+                          <div className="flow-node-desc">×{d.count}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              : nodes.map((n) => {
+                  const p = presetByKey(n.presetKey)
+                  if (!p) return null
+                  const cadence = !(p.brand || p.runtime === 'one-off')
+                  const slots = subcardCount(p, n.perMonth)
+                  return (
+                    <div key={n.id}>
+                      <div className="flow-link" />
+                      <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 152}px` : undefined }}>
+                        <div
+                          className={`flow-node${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
+                          data-node-id={n.id}
+                          onMouseDown={(e) => startDrag(e, n.id)}
+                          onClick={() => { setSel(n.id); setPickAt(null) }}
+                        >
+                          <span className="flow-node-kind" style={{ color: TONE_HEX[p.tone], background: `color-mix(in srgb, ${TONE_HEX[p.tone]} 16%, transparent)` }}>
+                            Deliverable
+                          </span>
+                          <div className="flow-node-main">
+                            <PresetTile tone={TONE_HEX[p.tone]} />
+                            <div className="flow-node-text">
+                              <div className="flow-node-label">{p.label}</div>
+                              <div className="flow-node-desc">
+                                {cadence ? `×${n.perMonth} / month` : p.channel === 'lead-magnet' ? `${n.perMonth} sections` : 'one-off'}
+                                {n.audience ? ` · ${n.audience.split(/[ &]/)[0]}` : ''}
+                              </div>
+                            </div>
+                            {writeCopy && (
+                              <button
+                                className={`flow-node-regen${preview[n.id]?.loading ? ' spin' : ''}`}
+                                title="Redraft copy from the current briefs"
+                                onClick={(e) => { e.stopPropagation(); void genPreview(n) }}
+                              >
+                                ↻
+                              </button>
+                            )}
+                            <button className="flow-node-x" title="Remove" onClick={(e) => { e.stopPropagation(); removeNode(n.id) }}>
+                              ✕
+                            </button>
+                          </div>
+                          {slots === 0 && renderCopy(n.id, 0)}
+                          <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, n.id)} />
+                        </div>
+                        {slots > 0 && (
+                          <div className="flow-branch-list">
+                            {Array.from({ length: slots }).map((_, bi) => (
+                              <div className="flow-branch-row" key={bi}>
+                                <span className="flow-branch-port" style={{ borderColor: TONE_HEX[p.tone] }} />
+                                <div
+                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}`}
+                                  data-node-id={`${n.id}:${bi}`}
+                                  style={{ transform: `translate(${pos[`${n.id}:${bi}`]?.x ?? 0}px, ${pos[`${n.id}:${bi}`]?.y ?? 0}px)` }}
+                                  onMouseDown={(e) => startDrag(e, `${n.id}:${bi}`)}
+                                  onClick={(e) => { e.stopPropagation(); setSel(`${n.id}:${bi}`); setPickAt(null) }}
+                                >
+                                  <div className="flow-node-main">
+                                    <PresetTile tone={TONE_HEX[p.tone]} />
+                                    <div className="flow-node-text">
+                                      <div className="flow-node-label">{subcardWord(p)} {bi + 1}</div>
+                                      <input
+                                        className="flow-brief-sub"
+                                        placeholder="What's this post about?"
+                                        value={n.briefs?.[bi] || ''}
+                                        onChange={(e) => setBrief(n.id, bi, e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </div>
+                                  </div>
+                                  {renderCopy(n.id, bi)}
+                                  <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, `${n.id}:${bi}`)} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+
+          </div>
+          {/* Connector endpoint dots, redrawn on a layer ABOVE the cards so they sit on
+              top of each card's edge instead of tucking behind it. */}
+          <svg className="flow-edges-top" width="100%" height="100%">
+            {!viewing &&
+              implicitConnectors.map((cn) => {
+                const b = rects[cn.to]
+                if (!b) return null
+                return <circle key={`d-${cn.from}-${cn.to}`} className="flow-edge-dot" cx={b.x} cy={b.y + b.h / 2} r={2.5} />
+              })}
+            {connectors.map((cn, i) => {
+              const b = rects[cn.to]
+              if (!b) return null
+              return <circle key={`dm-${cn.from}-${cn.to}-${i}`} className="flow-edge-dot" cx={b.x} cy={b.y + b.h / 2} r={2.5} />
+            })}
+          </svg>
+        </div>
+
+        <aside className="flow-panel">
+          {viewing ? (
+            selDeliv ? (
+              <>
+                <div className="flow-panel-head">
+                  <PresetTile tone={selDeliv.tone} />
+                  <span className="flow-panel-title">{selDeliv.label}</span>
+                  <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
+                    ✕
+                  </button>
+                </div>
+                <div className="flow-inspect">
+                  <p className="flow-inspect-desc">
+                    {selDeliv.channel} · {selDeliv.assetType}
+                  </p>
+                  <div className="flow-inspect-note">{selDeliv.count} asset{selDeliv.count === 1 ? '' : 's'} in this campaign.</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flow-panel-head">
+                  <CampaignTile />
+                  <span className="flow-panel-title">{viewShort}</span>
+                </div>
+                <div className="flow-inspect">
+                  <p className="flow-inspect-desc">
+                    {viewRows.length} assets · {viewDelivs.length} deliverable type{viewDelivs.length === 1 ? '' : 's'}
+                    {viewFlight ? ` · ${viewFlight}-week flight` : ''}
+                  </p>
+                  <label className="flow-inspect-label">Audiences</label>
+                  {viewAudiences.length === 0 && <div className="flow-inspect-note">No audiences tagged.</div>}
+                  {viewAudiences.map((a) => (
+                    <div key={a} className="flow-check" style={{ cursor: 'default' }}>
+                      <span>{a}</span>
+                    </div>
+                  ))}
+                  <button className="flow-inspect-del" style={{ color: 'var(--accent)', borderColor: 'var(--accent)', marginTop: 18 }} onClick={() => openCampaign(viewName!)}>
+                    Open on canvas ↗
+                  </button>
+                  <div className="flow-inspect-note" style={{ marginTop: 12 }}>
+                    Editing assets (copy, schedule, coherence) happens on the canvas for now.
+                  </div>
+                </div>
+              </>
+            )
+          ) : pickAt !== null ? (
+            <>
+              <div className="flow-panel-head">
+                <button className="flow-back" onClick={() => setPickAt(null)}>
+                  ‹ Back
+                </button>
+                <span className="flow-panel-title">Add deliverable</span>
+              </div>
+              <div className="flow-picker-list">
+                {grouped.map(([group, presets]) => (
+                  <div key={group} className="flow-pgroup">
+                    <div className="flow-pgroup-h">{group}</div>
+                    {presets.map((p) => (
+                      <button key={p.key} className="flow-pitem" onClick={() => addPreset(p)}>
+                        <PresetTile tone={TONE_HEX[p.tone]} />
+                        <div className="flow-pitem-text">
+                          <div className="flow-pitem-label">{p.label}</div>
+                          <div className="flow-pitem-desc">{p.brand || p.runtime === 'one-off' ? 'one-off' : `${p.perMonth} / month`}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : sel === 'campaign' ? (
+            <>
+              <div className="flow-panel-head">
+                <CampaignTile />
+                <span className="flow-panel-title">Campaign brief</span>
+              </div>
+              <div className="flow-inspect">
+                <label className="flow-inspect-label">Name</label>
+                <input className="flow-inspect-input" value={name} placeholder="e.g. Q3 Always-On" onChange={(e) => setName(e.target.value)} />
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                  Goal / subject
+                </label>
+                <textarea className="flow-inspect-input" rows={2} value={subject} placeholder="What is this campaign for?" onChange={(e) => setSubject(e.target.value)} onBlur={onSubjectCommit} />
+                <div className="flow-inspect-note" style={{ marginTop: 4 }}>The campaign theme. Every asset's copy is written to it; changing it redrafts them all.</div>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                  Flight length
+                </label>
+                <div className="flow-step">
+                  <button onClick={() => { setFlightWeeks((w) => Math.max(1, w - 1)); scheduleRedraftAll() }}>−</button>
+                  <span>{flightWeeks} weeks</span>
+                  <button onClick={() => { setFlightWeeks((w) => w + 1); scheduleRedraftAll() }}>+</button>
+                </div>
+                <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                  Audiences
+                </label>
+                {audienceNames.length === 0 && <div className="flow-inspect-note">No audiences defined for {brand || 'this brand'} yet.</div>}
+                {audienceNames.map((a) => (
+                  <label key={a} className="flow-check">
+                    <input type="checkbox" checked={audSelection.includes(a)} onChange={() => toggleAud(a)} />
+                    <span>{a}</span>
+                  </label>
+                ))}
+                <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                  Channels{channelsOnCanvas.size ? ` · ${channelsOnCanvas.size}` : ''}
+                </label>
+                {CHANNEL_GROUPS.map((g) => {
+                  const chs = CHANNEL_PICKS.filter((ch) => CHANNELS[ch]?.kind === g.kind)
+                  if (!chs.length) return null
+                  return (
+                    <div key={g.kind} className="flow-chan-group">
+                      <div className="flow-chan-group-h">{g.label}</div>
+                      <div className="flow-chan-grid">
+                        {chs.map((ch) => (
+                          <button
+                            key={ch}
+                            type="button"
+                            className={`flow-chan-chip${channelsOnCanvas.has(ch) ? ' on' : ''}`}
+                            onClick={() => toggleChannel(ch)}
+                          >
+                            {CHANNEL_LABEL[ch] ?? CHANNELS[ch]?.label ?? ch}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="flow-inspect-note" style={{ marginTop: 6 }}>
+                  Pick channels to scaffold a starter deliverable for each. Tune cadence or add more per deliverable.
+                </div>
+                <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                  On build
+                </label>
+                <label className="flow-check">
+                  <input type="checkbox" checked={writeCopy} onChange={() => setWriteCopy((v) => !v)} />
+                  <span>Write copy for each asset</span>
+                </label>
+                <div className="flow-inspect-note">
+                  Composes on-brand messaging (headline, body, CTA, proof) from {brand || 'the brand'}'s audiences and proof points. Turn off to build empty structure.
+                </div>
+              </div>
+            </>
+          ) : sel && sel.includes(':') ? (
+            (() => {
+              // A post/brief card is selected (id is "nodeId:index"): show its detail —
+              // brief, the full generated draft copy, and a redraft, in the right panel.
+              const [nid, bstr] = sel.split(':')
+              const node = nodes.find((n) => n.id === nid)
+              const p = node && presetByKey(node.presetKey)
+              if (!node || !p) {
+                return (
+                  <>
+                    <div className="flow-panel-head">
+                      <span className="flow-panel-title">Post</span>
+                    </div>
+                    <div className="flow-overview">
+                      <div className="flow-ov-note">This post is no longer on the canvas.</div>
+                    </div>
+                  </>
+                )
+              }
+              const bi = Number(bstr)
+              const pv = preview[node.id]
+              const post = pv?.posts?.[bi]
+              const loading = !!pv?.loading && !(post?.headline || post?.primary)
+              return (
+                <>
+                  <div className="flow-panel-head">
+                    <PresetTile tone={TONE_HEX[p.tone]} />
+                    <span className="flow-panel-title">Post {bi + 1}</span>
+                    <button className="flow-back flow-close" onClick={() => setSel(null)}>
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flow-inspect">
+                    <button className="flow-back" onClick={() => setSel(node.id)}>
+                      ‹ {p.label}
+                    </button>
+                    <label className="flow-inspect-label" style={{ marginTop: 12 }}>
+                      What's this post about?
+                    </label>
+                    <textarea
+                      className="flow-inspect-input"
+                      rows={2}
+                      placeholder="Brief for this post"
+                      value={node.briefs?.[bi] || ''}
+                      onChange={(e) => setBrief(node.id, bi, e.target.value)}
+                    />
+                    <div className="flow-cfg-h">Draft copy</div>
+                    {loading ? (
+                      <div className="flow-inspect-note">Generating…</div>
+                    ) : post && (post.headline || post.primary) ? (
+                      <div className="flow-post-detail">
+                        {post.headline && <div className="flow-post-detail-head">{post.headline}</div>}
+                        {post.primary && <div className="flow-post-detail-body">{post.primary}</div>}
+                        {pv?.source && (
+                          <div className={`flow-built-badge ${pv.source}`} style={{ marginTop: 4 }}>
+                            <span className="flow-built-badge-dot" aria-hidden="true" />
+                            {pv.source === 'claude' ? 'Written by Claude' : 'Written offline'}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flow-inspect-note">
+                        {writeCopy ? 'No copy yet. Redraft to generate.' : 'Turn on "Write copy for each asset" to generate.'}
+                      </div>
+                    )}
+                    <button className="flow-inspect-regen" onClick={() => void genPreview(node)} disabled={!writeCopy}>
+                      ↻ Redraft this deliverable
+                    </button>
+                    <div className="flow-inspect-note" style={{ marginTop: 12 }}>
+                      {p.channel} · {p.assetType}
+                      {node.audience ? ` · ${node.audience}` : ''}
+                    </div>
+                  </div>
+                </>
+              )
+            })()
+          ) : sel && presetByKey((nodes.find((n) => n.id === sel) || ({} as FlowDeliverable)).presetKey || '') ? (
+            (() => {
+              const node = nodes.find((n) => n.id === sel)!
+              const p = presetByKey(node.presetKey)!
+              return (
+                <>
+                  <div className="flow-panel-head">
+                    <PresetTile tone={TONE_HEX[p.tone]} />
+                    <span className="flow-panel-title">{p.label}</span>
+                    <button className="flow-back flow-close" onClick={() => setSel(null)}>
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flow-inspect">
+                    <textarea
+                      className="flow-desc"
+                      rows={2}
+                      placeholder="What is this deliverable about?"
+                      value={node.description || ''}
+                      onChange={(e) => setNodeField(node.id, { description: e.target.value })}
+                    />
+                    <div className="flow-cfg-h">Configuration</div>
+                    <label className="flow-inspect-label">Audience</label>
+                    <select className="flow-inspect-input flow-select" value={node.audience || ''} onChange={(e) => setNodeField(node.id, { audience: e.target.value })}>
+                      <option value="">All campaign audiences</option>
+                      {audienceNames.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+                    {p.channel === 'lead-magnet' ? (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                          Sections
+                        </label>
+                        <div className="flow-step">
+                          <button onClick={() => setCadence(node.id, node.perMonth - 1)}>−</button>
+                          <span>{node.perMonth} sections</span>
+                          <button onClick={() => setCadence(node.id, node.perMonth + 1)}>+</button>
+                        </div>
+                        <div className="flow-inspect-note" style={{ marginTop: 8 }}>
+                          One creative brief per section (the cards under this deliverable). Empty briefs get generic on-brand copy.
+                        </div>
+                      </>
+                    ) : p.brand || p.runtime === 'one-off' ? (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                          Focus
+                        </label>
+                        <input className="flow-inspect-input" placeholder="What this piece is about" value={node.briefs?.[0] || ''} onChange={(e) => setBrief(node.id, 0, e.target.value)} />
+                        <div className="flow-inspect-note" style={{ marginTop: 10 }}>Built once for the campaign.</div>
+                      </>
+                    ) : (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                          Per month
+                        </label>
+                        <div className="flow-step">
+                          <button onClick={() => setCadence(node.id, node.perMonth - 1)}>−</button>
+                          <span>{node.perMonth} / month</span>
+                          <button onClick={() => setCadence(node.id, node.perMonth + 1)}>+</button>
+                        </div>
+                        <div className="flow-inspect-note" style={{ marginTop: 8 }}>
+                          ≈ {nodeAssetCount(p, node.perMonth, flightWeeks)} assets · one creative brief per monthly post (the cards under this deliverable). Empty briefs get generic on-brand copy.
+                        </div>
+                      </>
+                    )}
+                    <div className="flow-inspect-note" style={{ marginTop: 12 }}>
+                      {p.channel} · {p.assetType}
+                    </div>
+                    <button className="flow-inspect-del" onClick={() => removeNode(node.id)}>
+                      Remove deliverable
+                    </button>
+                  </div>
+                </>
+              )
+            })()
+          ) : (
+            <>
+              <div className="flow-panel-head">
+                <span className="flow-panel-title">{name.trim() || 'Untitled campaign'}</span>
+              </div>
+              <div className="flow-overview">
+                <div className="flow-ov-note">Pick the campaign brief to set audiences and flight, or add deliverables. When it looks right, build it into a real draft campaign.</div>
+              </div>
+            </>
+          )}
+        </aside>
+      </div>
+
+      <div className="flow-toolbar">
+        <div className="flow-tb-zoom-wrap">
+          <button className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)} title="Zoom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            {Math.round(zoom)}%
+            <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {zoomOpen && (
+            <>
+              <div className="flow-tb-zoom-scrim" onClick={() => setZoomOpen(false)} />
+              <div className="flow-tb-zoom-menu">
+                {[150, 125, 100, 75, 50].map((z) => (
+                  <button
+                    key={z}
+                    className={`flow-tb-zoom-item${Math.round(zoom) === z ? ' on' : ''}`}
+                    onClick={() => {
+                      // Anchor a preset to the canvas center so it zooms about the middle.
+                      const r = canvasRef.current?.getBoundingClientRect()
+                      if (r) zoomAt(z, r.left + r.width / 2, r.top + r.height / 2)
+                      else setZoom(z)
+                      setZoomOpen(false)
+                    }}
+                  >
+                    {z}%
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flow-tb-tools">
+          <button className={`flow-tb-tool${tool === 'pan' ? ' on' : ''}`} onClick={() => setTool('pan')} title="Pan" aria-label="Pan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V12M11 11V5.5a1.5 1.5 0 0 1 3 0V12M14 12V8a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6 5 5 0 0 1-4-2l-3-4a1.5 1.5 0 0 1 2.3-1.9L8 14" />
+            </svg>
+          </button>
+          <button className={`flow-tb-tool${tool === 'select' ? ' on' : ''}`} onClick={() => setTool('select')} title="Select" aria-label="Select">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5 3.5 19 10l-6.3 1.9L10 19z" />
+            </svg>
+          </button>
+        </div>
+        <span className="flow-tb-divider" />
+        <button className="flow-tb-add" onClick={() => { setPickAt(nodes.length); setSel(null) }} disabled={viewing}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="6" width="14" height="14" rx="3" />
+            <path d="M11 12h6M14 9v6" />
+          </svg>
+          Add deliverable
+          <span className="flow-tb-kbd">B</span>
+        </button>
+      </div>
+        </>
+      )}
+
+      {(flowView === 'grid' || flowView === 'calendar') && (
+        <div className="flow-real">
+          {!hasBuiltRows && (
+            <div className="flow-real-hint">
+              This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}, it shows built assets. Click "Build & write copy" to populate it.
+            </div>
+          )}
+          <div className="flow-real-view">
+            {flowView === 'grid' ? (
+              <SheetGrid scopeClient={brand || undefined} scopeCampaign={flowCampaign} />
+            ) : (
+              <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

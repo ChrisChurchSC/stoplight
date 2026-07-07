@@ -6,6 +6,7 @@ import { journeyPerformance } from '../domain/journeyPerf'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
 import { computePriorities, PriorityList } from './PrioritiesView'
+import { HomeHero } from './HomeHero'
 
 /**
  * The Cockpit — a marketing director's cross-brand home. Every campaign in the
@@ -121,6 +122,7 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
 
   return (
     <div className="ckpt">
+      {embedded && <HomeHero />}
       <header className="ckpt-head">
         <div>
           {!embedded && <h1 className="ckpt-title">Cockpit</h1>}
