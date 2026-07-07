@@ -85,6 +85,7 @@ function canvasStartMs(name: string, rows: { scheduledAt?: string }[]): number {
 export function ClientsOverview() {
   const { canvases } = useHomeCanvases()
   const filter = useTrafficStore((s) => s.homeFilter)
+  const setHomeFilter = useTrafficStore((s) => s.setHomeFilter)
   const openCampaign = useTrafficStore((s) => s.openCampaign)
   const openOnboard = useTrafficStore((s) => s.openOnboard)
   const loadSample = useTrafficStore((s) => s.loadSample)
@@ -117,6 +118,17 @@ export function ClientsOverview() {
   // Messaging.
   const brandFolder = filter.startsWith('brand:') ? filter.slice(6) : null
   const [folderTab, setFolderTab] = useState<'canvases' | 'grid' | 'calendar'>('canvases')
+
+  // With a single brand, "All canvases" (filter 'all') and that brand's gallery are the
+  // same set of campaigns under two titles. Collapse them: coerce 'all' to the brand so
+  // there is one campaigns page, always titled by the brand.
+  const brandNames = useMemo(
+    () => [...new Set(canvases.map((c) => c.client).filter((b) => b && b !== DRAFTS_SPACE))],
+    [canvases],
+  )
+  useEffect(() => {
+    if (brandNames.length === 1 && filter === 'all') setHomeFilter(`brand:${brandNames[0]}`)
+  }, [brandNames, filter, setHomeFilter])
   // Leaving a brand folder (or switching brands) snaps back to Canvases and clears any
   // folder scoping so the new brand shows all its folders.
   useEffect(() => {
