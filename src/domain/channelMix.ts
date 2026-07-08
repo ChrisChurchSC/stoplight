@@ -88,6 +88,8 @@ export interface MediaMix {
   overrides: MixOverrides
   /** User-added channels beyond the default benchmark set. */
   extraChannels?: MixChannel[]
+  /** Default benchmark channels the user removed from this mix. */
+  hiddenChannels?: ChannelId[]
 }
 export interface MixResult {
   allocations: MixAllocation[]
@@ -103,17 +105,20 @@ export interface MixInput {
   perf: ChannelPerf[]
   overrides?: MixOverrides
   extraChannels?: MixChannel[]
+  hiddenChannels?: ChannelId[]
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 export function recommendChannelMix(input: MixInput): MixResult {
   const perfBy = new Map(input.perf.map((p) => [p.channel, p]))
-  // Apply overrides to the default benchmarks, then append any user-added channels.
+  const hidden = new Set(input.hiddenChannels ?? [])
+  // Apply overrides to the default benchmarks, then append any user-added channels,
+  // and drop any channel the user removed from this mix.
   const bench: MixChannel[] = [
     ...BENCH.map((b) => ({ ...b, ...(input.overrides?.[b.channel] ?? {}) })),
     ...(input.extraChannels ?? []),
-  ]
+  ].filter((b) => !hidden.has(b.channel))
   const totalReach = input.perf.reduce((a, p) => a + p.reach, 0) || 1
   const engd = input.perf.filter((p) => p.engRate > 0)
   const avgEng = engd.length ? engd.reduce((a, p) => a + p.engRate, 0) / engd.length : 0.01

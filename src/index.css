@@ -21834,22 +21834,17 @@ table.aud-sheet td.stick .aud-cell {
 .mplan-foot { font-size: 12px; color: var(--text-faint); margin-top: 20px; line-height: 1.5; }
 
 /* ---- Media mix: saved-mix picker + one labeled card ---- */
-.mplan { padding: 26px 30px 60px; }
-.mplan-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; row-gap: 12px; margin-bottom: 22px; }
-.mplan-h2 { font-size: 21px; font-weight: 800; letter-spacing: -0.015em; color: var(--text); margin: 0; }
-.mplan-h2-sub { font-size: 13px; color: var(--text-muted); margin: 5px 0 0; line-height: 1.5; max-width: 560px; }
-.mplan-new { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 9px; padding: 9px 15px; cursor: pointer; flex: 0 0 auto; }
-.mplan-new:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
-.mplan-item { margin-bottom: 34px; }
+.mplan { padding: 26px 30px 60px; max-width: 100%; box-sizing: border-box; }
+.mplan-item { margin-bottom: 26px; }
 .mplan-item:last-child { margin-bottom: 0; }
-.mplan-card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 20px 22px 18px; box-shadow: var(--shadow); }
-.mplan-card-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; row-gap: 14px; margin-bottom: 16px; }
+.mplan-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 16px 18px 16px; }
+.mplan-card-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; row-gap: 14px; margin-bottom: 14px; }
 .mplan-params-row th { background: var(--surface); padding: 2px 6px 16px; border-bottom: 1px solid var(--border); cursor: default; position: static; font-weight: 400; }
 .mplan-params-row th:hover { color: var(--text-muted); }
-.mplan-title { display: flex; align-items: center; gap: 10px; }
-.mplan-title-ic { width: 26px; height: 26px; color: var(--accent); flex: 0 0 auto; }
-.mplan-title-ic svg { width: 26px; height: 26px; }
-.mplan-name { font: inherit; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); border: 1px solid transparent; background: none; outline: none; padding: 3px 6px; border-radius: 7px; min-width: 120px; max-width: 340px; }
+.mplan-title { display: flex; align-items: center; gap: 9px; }
+.mplan-title-ic { width: 20px; height: 20px; color: var(--accent); flex: 0 0 auto; }
+.mplan-title-ic svg { width: 20px; height: 20px; }
+.mplan-name { font: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); border: 1px solid transparent; background: none; outline: none; padding: 3px 6px; border-radius: 7px; min-width: 120px; max-width: 340px; }
 .mplan-name:hover { background: var(--surface-2); }
 .mplan-name:focus { background: var(--surface); border-color: var(--accent); }
 .mplan-card .mplan-summary { gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 18px; }

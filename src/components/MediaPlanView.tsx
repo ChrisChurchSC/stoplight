@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { recommendChannelMix, BENCH_CHANNEL_IDS, type ChannelPerf, type MediaMix, type MixChannel, type MixGoal, type MixRisk } from '../domain/channelMix'
 import type { ChannelId } from '../domain/types'
-import { generateMediaMix } from '../adapters/ask/generateMediaMix'
-import type { MixGenContext, MixGenPlan } from '../domain/mediaMixGen'
-import { Markdown } from '../lib/miniMarkdown'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -13,7 +10,6 @@ const DEFAULT_BENCH = {
   organic: { cpm: 5, ctr: 0.012, cvr: 0.01 },
   owned: { cpm: 2, ctr: 0.025, cvr: 0.04 },
 } as const
-const REACH_FACTOR = 0.75
 
 /**
  * Media mix — channel-mix recommenders as saved spreadsheets. One page shows ALL of a
@@ -82,14 +78,25 @@ export function MediaPlanView({ scopeClient }: { scopeClient?: string }) {
 
   return (
     <div className="mplan">
-      <div className="mplan-head">
-        <div>
-          <h2 className="mplan-h2">Media mixes</h2>
-          <p className="mplan-h2-sub">Channel-mix plans for {brand}, weighted by real performance. Add as many scenarios as you like.</p>
+      <header className="rec-head">
+        <div className="rec-title">
+          <span className="rec-title-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              {ICON}
+            </svg>
+          </span>
+          Media mixes
         </div>
-        <button className="mplan-new" onClick={() => addMediaMix(brand)}>
-          ＋ New mix
+        <button className="rec-new" onClick={() => addMediaMix(brand)}>
+          + New mix
         </button>
+      </header>
+
+      <div className="rec-sub">
+        <span className="rec-sub-count">
+          {brandMixes.length} {brandMixes.length === 1 ? 'mix' : 'mixes'}
+        </span>
+        <span className="rec-sub-sort">Weighted by real performance</span>
       </div>
 
       {brandMixes.map((m) => (
@@ -100,15 +107,11 @@ export function MediaPlanView({ scopeClient }: { scopeClient?: string }) {
 }
 
 function MediaMixCard({ mix, brand, perf, canDelete }: { mix: MediaMix; brand: string; perf: ChannelPerf[]; canDelete: boolean }) {
-  const addMediaMix = useTrafficStore((s) => s.addMediaMix)
   const updateMediaMix = useTrafficStore((s) => s.updateMediaMix)
   const deleteMediaMix = useTrafficStore((s) => s.deleteMediaMix)
 
-  const [genPlan, setGenPlan] = useState<(MixGenPlan & { live: boolean }) | null>(null)
-  const [genLoading, setGenLoading] = useState(false)
-
   const result = useMemo(
-    () => recommendChannelMix({ goal: mix.goal, budget: mix.budget, risk: mix.risk, perf, overrides: mix.overrides, extraChannels: mix.extraChannels }),
+    () => recommendChannelMix({ goal: mix.goal, budget: mix.budget, risk: mix.risk, perf, overrides: mix.overrides, extraChannels: mix.extraChannels, hiddenChannels: mix.hiddenChannels }),
     [mix, perf],
   )
 
@@ -127,62 +130,23 @@ function MediaMixCard({ mix, brand, perf, canDelete }: { mix: MediaMix; brand: s
   const addChannel = (id: ChannelId) => {
     const c = CHANNELS[id]
     if (!c) return
+    // Re-adding a default benchmark channel just unhides it (restoring its real benchmark).
+    if (BENCH_CHANNEL_IDS.includes(id)) {
+      patch({ hiddenChannels: (mix.hiddenChannels ?? []).filter((h) => h !== id) })
+      return
+    }
     const d = DEFAULT_BENCH[c.kind]
     const mc: MixChannel = { channel: id, label: c.label, kind: c.kind, cpm: d.cpm, ctr: d.ctr, cvr: d.cvr, provenFrom: [id] }
     patch({ extraChannels: [...(mix.extraChannels ?? []), mc] })
   }
-  const removeChannel = (id: ChannelId) => patch({ extraChannels: (mix.extraChannels ?? []).filter((c) => c.channel !== id) })
-
-  const onGenerate = async () => {
-    setGenLoading(true)
-    const ctx: MixGenContext = {
-      brand,
-      goal: mix.goal,
-      budget: mix.budget,
-      risk: mix.risk,
-      performance: perf.map((p) => ({ channel: p.channel, label: CHANNELS[p.channel]?.label ?? p.channel, reach: p.reach, engRate: p.engRate, posts: p.posts })),
-      baseline: result.allocations.map((a) => ({ channel: a.channel, label: a.label, kind: a.kind, sharePct: a.pct, dollars: a.dollars, reach: a.reach, conversions: a.conversions })),
-    }
-    try {
-      setGenPlan(await generateMediaMix(ctx))
-    } finally {
-      setGenLoading(false)
+  // Remove a channel: drop a user-added one, or hide a default benchmark one.
+  const removeChannel = (id: ChannelId) => {
+    if (extraIds.has(id)) {
+      patch({ extraChannels: (mix.extraChannels ?? []).filter((c) => c.channel !== id) })
+    } else {
+      patch({ hiddenChannels: [...(mix.hiddenChannels ?? []), id] })
     }
   }
-
-  // Turn Claude's plan into a real, saved mix: adopt its goal/risk and add any recommended
-  // channel that isn't already a default benchmark row. It appears as a new card on the page.
-  const saveGenAsMix = () => {
-    if (!genPlan) return
-    const id = addMediaMix(brand)
-    const extras: MixChannel[] = genPlan.channels
-      .filter((c) => !BENCH_CHANNEL_IDS.includes(c.channel as ChannelId) && CHANNELS[c.channel as ChannelId])
-      .map((c) => {
-        const ch = CHANNELS[c.channel as ChannelId]
-        const d = DEFAULT_BENCH[ch.kind]
-        return { channel: ch.id, label: ch.label, kind: ch.kind, cpm: d.cpm, ctr: d.ctr, cvr: d.cvr, provenFrom: [ch.id] }
-      })
-    updateMediaMix(id, { name: 'Claude plan', goal: genPlan.goal, risk: genPlan.risk, extraChannels: extras.length ? extras : undefined })
-  }
-
-  // Render Claude's plan as the same spreadsheet as above: derive CPM/CTR/CVR/Budget/Reach/
-  // Conv from its shares and the tool's own benchmarks so the columns match.
-  const benchByChannel = new Map(result.allocations.map((a) => [a.channel, a]))
-  const genRows = genPlan
-    ? [...genPlan.channels]
-        .sort((a, b) => b.sharePct - a.sharePct)
-        .map((c) => {
-          const b = benchByChannel.get(c.channel as ChannelId)
-          const kind = (b?.kind ?? 'paid') as keyof typeof DEFAULT_BENCH
-          const d = DEFAULT_BENCH[kind] ?? DEFAULT_BENCH.paid
-          const cpm = b?.cpm ?? d.cpm
-          const ctr = b?.ctr ?? d.ctr
-          const cvr = b?.cvr ?? d.cvr
-          const dollars = (Math.max(0, c.sharePct) / 100) * mix.budget
-          const impressions = cpm > 0 ? (dollars / cpm) * 1000 : 0
-          return { channel: c.channel, label: c.label, kind, cpm, ctr, cvr, pct: c.sharePct, dollars, reach: impressions * REACH_FACTOR, conversions: impressions * ctr * cvr, rationale: c.rationale }
-        })
-    : []
 
   return (
     <div className="mplan-item">
@@ -265,11 +229,9 @@ function MediaMixCard({ mix, brand, perf, canDelete }: { mix: MediaMix; brand: s
                   <td className="rec-td mplan-out">{a.reach ? fmt(a.reach) : '—'}</td>
                   <td className="rec-td mplan-out">{a.conversions ? fmt(a.conversions) : '—'}</td>
                   <td className="rec-td rec-td-del">
-                    {extraIds.has(a.channel) && (
-                      <button className="rec-del" title="Remove channel" aria-label="Remove channel" onClick={() => removeChannel(a.channel)}>
-                        ✕
-                      </button>
-                    )}
+                    <button className="rec-del" title="Remove channel" aria-label="Remove channel" onClick={() => removeChannel(a.channel)}>
+                      ✕
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -307,71 +269,6 @@ function MediaMixCard({ mix, brand, perf, canDelete }: { mix: MediaMix; brand: s
             </button>
           )}
         </div>
-      </section>
-
-      <section className="mplan-gen">
-        <div className="mplan-gen-head">
-          <div>
-            <h3 className="mplan-gen-title">
-              <span className="mplan-gen-spark" aria-hidden="true">✦</span> Generate a mix with Claude
-            </h3>
-            <p className="mplan-gen-sub">Claude reads {brand}&rsquo;s real Summer performance and proposes a split, weighted toward what already works.</p>
-          </div>
-          <button className="mplan-gen-btn" onClick={onGenerate} disabled={genLoading}>
-            {genLoading ? 'Generating…' : genPlan ? 'Regenerate' : 'Generate with Claude'}
-          </button>
-        </div>
-
-        {genPlan && (
-          <div className="mplan-gen-out">
-            <Markdown text={genPlan.summary} className="mplan-gen-summary" />
-            <div className="rec-table-wrap mplan-gen-tablewrap">
-              <table className="rec-table" style={{ minWidth: 780 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 210 }}><span className="rec-th-label">Channel</span></th>
-                    <th style={{ width: 74 }}><span className="rec-th-label">Type</span></th>
-                    <th style={{ width: 84 }}><span className="rec-th-label">CPM $</span></th>
-                    <th style={{ width: 80 }}><span className="rec-th-label">CTR %</span></th>
-                    <th style={{ width: 80 }}><span className="rec-th-label">CVR %</span></th>
-                    <th style={{ width: 100 }}><span className="rec-th-label">Mix</span></th>
-                    <th style={{ width: 100 }}><span className="rec-th-label">Budget</span></th>
-                    <th style={{ width: 90 }}><span className="rec-th-label">Reach</span></th>
-                    <th style={{ width: 90 }}><span className="rec-th-label">Conv.</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {genRows.map((a) => (
-                    <tr key={a.channel} title={a.rationale}>
-                      <td className="rec-td"><span className="mplan-cell-name">{a.label}</span></td>
-                      <td className="rec-td"><span className={`mplan-kind k-${a.kind}`}>{a.kind}</span></td>
-                      <td className="rec-td mplan-out mplan-num">{a.cpm}</td>
-                      <td className="rec-td mplan-out mplan-num">{+(a.ctr * 100).toFixed(2)}</td>
-                      <td className="rec-td mplan-out mplan-num">{+(a.cvr * 100).toFixed(2)}</td>
-                      <td className="rec-td mplan-out">
-                        {a.kind === 'paid' ? (
-                          <div className="mplan-mix">
-                            <span className="mplan-mix-bar"><span style={{ width: `${Math.min(100, Math.max(0, a.pct))}%` }} /></span>
-                            <span className="mplan-mix-pct">{Math.round(a.pct)}%</span>
-                          </div>
-                        ) : (
-                          <span className="mplan-earned">Earned</span>
-                        )}
-                      </td>
-                      <td className="rec-td mplan-out mplan-money">{a.kind !== 'paid' ? '$0' : a.dollars ? usd(a.dollars) : '—'}</td>
-                      <td className="rec-td mplan-out">{a.reach ? fmt(a.reach) : '—'}</td>
-                      <td className="rec-td mplan-out">{a.conversions ? fmt(a.conversions) : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mplan-gen-foot">
-              <span className="mplan-gen-src">{genPlan.live ? 'Generated by Claude from your Summer data' : 'Built from your Summer-backed baseline'}</span>
-              <button className="mplan-gen-save" onClick={saveGenAsMix}>Save as new mix</button>
-            </div>
-          </div>
-        )}
       </section>
     </div>
   )
