@@ -21785,6 +21785,7 @@ table.aud-sheet td.stick .aud-cell {
 .mplan .rec-td:has(> .mplan-cell-name),
 .mplan .rec-td:has(> .mplan-kind) { padding: 13px 16px; }
 .mplan-cell-name { font-size: 13.5px; font-weight: 600; }
+.mplan-earned { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
 .mplan-mix { display: flex; align-items: center; gap: 8px; }
 .mplan-mix-bar { flex: 1; min-width: 26px; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .mplan-mix-bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }

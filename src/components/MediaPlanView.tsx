@@ -252,12 +252,16 @@ function MediaMixCard({ mix, brand, perf, canDelete }: { mix: MediaMix; brand: s
                   <td className="rec-td"><input className="rec-cell mplan-num" value={+(a.ctr * 100).toFixed(2)} onChange={(e) => setBench(a.channel, 'ctr', Math.max(0, (+e.target.value || 0) / 100))} /></td>
                   <td className="rec-td"><input className="rec-cell mplan-num" value={+(a.cvr * 100).toFixed(2)} onChange={(e) => setBench(a.channel, 'cvr', Math.max(0, (+e.target.value || 0) / 100))} /></td>
                   <td className="rec-td mplan-out">
-                    <div className="mplan-mix">
-                      <span className="mplan-mix-bar"><span style={{ width: `${a.pct}%` }} /></span>
-                      <span className="mplan-mix-pct">{a.pct}%</span>
-                    </div>
+                    {a.kind === 'paid' ? (
+                      <div className="mplan-mix">
+                        <span className="mplan-mix-bar"><span style={{ width: `${a.pct}%` }} /></span>
+                        <span className="mplan-mix-pct">{a.pct}%</span>
+                      </div>
+                    ) : (
+                      <span className="mplan-earned">Earned</span>
+                    )}
                   </td>
-                  <td className="rec-td mplan-out mplan-money">{a.dollars ? usd(a.dollars) : '—'}</td>
+                  <td className="rec-td mplan-out mplan-money">{a.kind !== 'paid' ? '$0' : a.dollars ? usd(a.dollars) : '—'}</td>
                   <td className="rec-td mplan-out">{a.reach ? fmt(a.reach) : '—'}</td>
                   <td className="rec-td mplan-out">{a.conversions ? fmt(a.conversions) : '—'}</td>
                   <td className="rec-td rec-td-del">
@@ -345,12 +349,16 @@ function MediaMixCard({ mix, brand, perf, canDelete }: { mix: MediaMix; brand: s
                       <td className="rec-td mplan-out mplan-num">{+(a.ctr * 100).toFixed(2)}</td>
                       <td className="rec-td mplan-out mplan-num">{+(a.cvr * 100).toFixed(2)}</td>
                       <td className="rec-td mplan-out">
-                        <div className="mplan-mix">
-                          <span className="mplan-mix-bar"><span style={{ width: `${Math.min(100, Math.max(0, a.pct))}%` }} /></span>
-                          <span className="mplan-mix-pct">{Math.round(a.pct)}%</span>
-                        </div>
+                        {a.kind === 'paid' ? (
+                          <div className="mplan-mix">
+                            <span className="mplan-mix-bar"><span style={{ width: `${Math.min(100, Math.max(0, a.pct))}%` }} /></span>
+                            <span className="mplan-mix-pct">{Math.round(a.pct)}%</span>
+                          </div>
+                        ) : (
+                          <span className="mplan-earned">Earned</span>
+                        )}
                       </td>
-                      <td className="rec-td mplan-out mplan-money">{a.dollars ? usd(a.dollars) : '—'}</td>
+                      <td className="rec-td mplan-out mplan-money">{a.kind !== 'paid' ? '$0' : a.dollars ? usd(a.dollars) : '—'}</td>
                       <td className="rec-td mplan-out">{a.reach ? fmt(a.reach) : '—'}</td>
                       <td className="rec-td mplan-out">{a.conversions ? fmt(a.conversions) : '—'}</td>
                     </tr>

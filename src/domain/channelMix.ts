@@ -54,7 +54,9 @@ export const BENCH_CHANNEL_IDS: ChannelId[] = BENCH.map((b) => b.channel)
 
 const RISK_POWER: Record<MixRisk, number> = { conservative: 2, balanced: 1.3, aggressive: 0.85 }
 const MAX_SHARE = 0.45
-const MIN_SHARE = 0.05
+// No minimum floor: every channel keeps its computed share rather than being zeroed,
+// so the plan never shows a channel with no spend (raise this to concentrate budget).
+const MIN_SHARE = 0
 const REACH_FACTOR = 0.75 // impressions -> unique reach
 
 export interface MixAllocation {
@@ -139,7 +141,13 @@ export function recommendChannelMix(input: MixInput): MixResult {
   }
 
   const pw = RISK_POWER[input.risk]
-  const weighted = bench.map((b) => ({ b, w: Math.pow(score(b), pw) }))
+  // Media spend goes ONLY to paid channels (the ones you actually buy). Owned/organic
+  // channels are earned reach: $0 media spend, shown for context, and their strength
+  // still weights the paid channels they feed (via provenFrom).
+  const paid = bench.filter((b) => b.kind === 'paid')
+  const earned = bench.filter((b) => b.kind !== 'paid')
+
+  const weighted = paid.map((b) => ({ b, w: Math.pow(score(b), pw) }))
   const wSum = weighted.reduce((a, x) => a + x.w, 0) || 1
   let shares = weighted.map((x) => ({ b: x.b, s: x.w / wSum }))
   shares = shares.map((x) => ({ b: x.b, s: Math.min(MAX_SHARE, x.s) }))
@@ -147,26 +155,45 @@ export function recommendChannelMix(input: MixInput): MixResult {
   const s2 = shares.reduce((a, x) => a + x.s, 0) || 1
   shares = shares.map((x) => ({ b: x.b, s: x.s / s2 }))
 
-  const allocations = shares
-    .map((x): MixAllocation => {
-      const dollars = x.s * input.budget
-      const impressions = dollars / x.b.cpm * 1000
-      return {
-        channel: x.b.channel,
-        label: x.b.label,
-        kind: x.b.kind,
-        cpm: x.b.cpm,
-        ctr: x.b.ctr,
-        cvr: x.b.cvr,
-        pct: +(x.s * 100).toFixed(1),
-        dollars: Math.round(dollars),
-        impressions: Math.round(impressions),
-        reach: Math.round(impressions * REACH_FACTOR),
-        conversions: Math.round(impressions * x.b.ctr * x.b.cvr),
-        rationale: rationaleFor(x.b, perfBy, totalReach),
-      }
-    })
-    .sort((a, b) => b.dollars - a.dollars)
+  const paidAllocations = shares.map((x): MixAllocation => {
+    const dollars = x.s * input.budget
+    const impressions = x.b.cpm > 0 ? (dollars / x.b.cpm) * 1000 : 0
+    return {
+      channel: x.b.channel,
+      label: x.b.label,
+      kind: x.b.kind,
+      cpm: x.b.cpm,
+      ctr: x.b.ctr,
+      cvr: x.b.cvr,
+      pct: +(x.s * 100).toFixed(1),
+      dollars: Math.round(dollars),
+      impressions: Math.round(impressions),
+      reach: Math.round(impressions * REACH_FACTOR),
+      conversions: Math.round(impressions * x.b.ctr * x.b.cvr),
+      rationale: rationaleFor(x.b, perfBy, totalReach),
+    }
+  })
+
+  const earnedAllocations = earned.map((b): MixAllocation => {
+    const reach = b.provenFrom.reduce((a, c) => a + (perfBy.get(c)?.reach ?? 0), 0)
+    return {
+      channel: b.channel,
+      label: b.label,
+      kind: b.kind,
+      cpm: b.cpm,
+      ctr: b.ctr,
+      cvr: b.cvr,
+      pct: 0,
+      dollars: 0,
+      impressions: 0,
+      reach,
+      conversions: Math.round(reach * b.ctr * b.cvr),
+      rationale: earnedRationale(b, perfBy, totalReach),
+    }
+  })
+
+  // Paid first (by spend), then earned rows (by free reach) at the bottom.
+  const allocations = [...paidAllocations, ...earnedAllocations].sort((a, b) => b.dollars - a.dollars || b.reach - a.reach)
 
   const totalReachOut = allocations.reduce((a, x) => a + x.reach, 0)
   const totalConversions = allocations.reduce((a, x) => a + x.conversions, 0)
@@ -176,6 +203,16 @@ export function recommendChannelMix(input: MixInput): MixResult {
     totalConversions,
     costPerConversion: totalConversions ? Math.round(input.budget / totalConversions) : 0,
   }
+}
+
+function earnedRationale(b: Bench, perfBy: Map<ChannelId, ChannelPerf>, totalReach: number): string {
+  const reach = b.provenFrom.reduce((a, c) => a + (perfBy.get(c)?.reach ?? 0), 0)
+  if (b.kind === 'owned') return 'Owned channel, no media spend. Free reach to your list; the media budget funds paid amplification instead.'
+  if (reach > 0) {
+    const share = Math.round((reach / totalReach) * 100)
+    return `Organic reach at no media cost (${share}% of your proven reach). Its strength weights the paid channels it feeds, rather than taking spend itself.`
+  }
+  return 'Organic channel, no media spend. Earned reach shown for context.'
 }
 
 function rationaleFor(b: Bench, perfBy: Map<ChannelId, ChannelPerf>, totalReach: number): string {
