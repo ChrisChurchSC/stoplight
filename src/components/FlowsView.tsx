@@ -129,18 +129,23 @@ function roundedPath(pts: { x: number; y: number }[], r: number): string {
   return d
 }
 
-function elbowPath(sx: number, sy: number, tx: number, ty: number): string {
-  const r = 14
+// `scale` (the canvas zoom, 1 = 100%) keeps the elbow geometry proportional to the
+// zoomed node spacing: the corner radius and lane offsets are screen pixels, so without
+// scaling they overwhelm the shrunken gaps between nodes when zoomed out and the routing
+// looks busy and overshoots.
+function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): string {
+  const s = Math.max(0.25, Math.min(1, scale))
+  const r = 14 * s
   // Straight run when the ports line up and the target is to the right.
   if (Math.abs(ty - sy) < 3 && tx > sx) return `M ${sx} ${sy} H ${tx}`
   // Target at or to the LEFT of the source's exit port: the same right-angle elbow,
   // flopped. The source port faces right, so exit rightward, drop to a lane, run left,
   // then come back into the target's left edge going right. All right angles (rounded),
   // matching the forward elbow — no double-back bend, arrowhead still points inward.
-  if (tx <= sx + 24) {
-    const gap = 40
+  if (tx <= sx + 24 * s) {
+    const gap = 40 * s
     const sep = Math.abs(ty - sy)
-    const laneY = sep >= 96 ? (sy + ty) / 2 : Math.max(sy, ty) + 56
+    const laneY = sep >= 96 * s ? (sy + ty) / 2 : Math.max(sy, ty) + 56 * s
     return roundedPath(
       [
         { x: sx, y: sy },
@@ -154,7 +159,7 @@ function elbowPath(sx: number, sy: number, tx: number, ty: number): string {
     )
   }
   // Forward (left-to-right): a rounded right-angle elbow.
-  const midX = tx > sx + 80 ? (sx + tx) / 2 : sx + 40
+  const midX = tx > sx + 80 * s ? (sx + tx) / 2 : sx + 40 * s
   const dir = ty > sy ? 1 : -1
   return `M ${sx} ${sy} H ${midX - r} Q ${midX} ${sy} ${midX} ${sy + r * dir} V ${ty - r * dir} Q ${midX} ${ty} ${midX + r} ${ty} H ${tx}`
 }
@@ -1034,7 +1039,7 @@ export function FlowsView() {
               const a = rects[cn.from]
               const b = rects[cn.to]
               if (!a || !b) return null
-              return <path key={`imp-${cn.from}-${cn.to}`} className="flow-edge implicit" d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)} />
+              return <path key={`imp-${cn.from}-${cn.to}`} className="flow-edge implicit" d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)} />
             })}
             {connectors.map((cn, i) => {
               const a = rects[cn.from]
@@ -1044,7 +1049,7 @@ export function FlowsView() {
                 <path
                   key={`${cn.from}-${cn.to}-${i}`}
                   className="flow-edge"
-                  d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)}
+                  d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)}
                   onClick={() => setConnectors((c) => c.filter((_, j) => j !== i))}
                 />
               )
@@ -1053,7 +1058,7 @@ export function FlowsView() {
               rects[drawing.from] &&
               (() => {
                 const a = rects[drawing.from]
-                return <path className="flow-edge drawing" d={elbowPath(a.x + a.w, a.y + a.h / 2, drawing.x, drawing.y)} markerEnd="url(#flow-arrow)" />
+                return <path className="flow-edge drawing" d={elbowPath(a.x + a.w, a.y + a.h / 2, drawing.x, drawing.y, zoom / 100)} markerEnd="url(#flow-arrow)" />
               })()}
             {menuAnchor && <path className="flow-edge drawing" d={elbowPath(menuAnchor.sx, menuAnchor.sy, menuAnchor.x, menuAnchor.y + 26)} markerEnd="url(#flow-arrow)" />}
           </svg>
@@ -1834,8 +1839,8 @@ export function FlowsView() {
         <span className="flow-tb-divider" />
         <button className="flow-tb-add" onClick={() => { setPickAt(viewing ? viewDelivs.length : nodes.length); setSel(null) }} disabled={addingDeliv}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="4" y="6" width="14" height="14" rx="3" />
-            <path d="M11 12h6M14 9v6" />
+            <rect x="3" y="3" width="18" height="18" rx="4" />
+            <path d="M12 8v8M8 12h8" />
           </svg>
           Add deliverable
           <span className="flow-tb-kbd">B</span>

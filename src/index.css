@@ -4236,6 +4236,7 @@ button {
 }
 /* Each branched post reads like a deliverable card (kind tab + tile + focus). */
 .flow-brief-node {
+  position: relative;
   min-width: 214px;
   max-width: 250px;
   padding: 7px 10px 10px;
@@ -4243,6 +4244,21 @@ button {
 }
 .flow-brief-node:hover {
   border-color: var(--text-faint);
+}
+/* Post cards stack the icon above the headline. */
+.flow-brief-node .flow-node-main {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+.flow-brief-node .flow-node-text {
+  flex: none;
+  width: 100%;
+}
+.flow-brief-node .flow-spend-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
 .flow-brief-focus {
   flex: 1;
