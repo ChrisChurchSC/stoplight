@@ -77,6 +77,18 @@ const postReach = (r: TrafficRow): number => {
   const m = r.socialMetrics ?? {}
   return (typeof m.views === 'number' ? m.views : 0) || (typeof m.impressions === 'number' ? m.impressions : 0)
 }
+// A post has media spend if it carries a paid budget or logged spend, or sits on a paid channel.
+const hasMediaSpend = (r: TrafficRow): boolean =>
+  (r.budget?.amount ?? 0) > 0 || (r.spend?.toDate ?? 0) > 0 || CHANNELS[r.channel as ChannelId]?.kind === 'paid'
+const usdShort = (n: number): string => '$' + n.toLocaleString()
+// Compact label of a post's media budget / spend, for the chip on paid posts.
+const spendLabel = (r: TrafficRow): string => {
+  if ((r.spend?.toDate ?? 0) > 0) return usdShort(r.spend!.toDate)
+  if ((r.budget?.amount ?? 0) > 0) return r.budget!.type === 'daily' ? `${usdShort(r.budget!.amount)}/day` : usdShort(r.budget!.amount)
+  return 'Paid'
+}
+const spendTitle = (r: TrafficRow): string =>
+  (r.spend?.toDate ?? 0) > 0 ? `Media spend: ${usdShort(r.spend!.toDate)}` : (r.budget?.amount ?? 0) > 0 ? `Media budget: ${usdShort(r.budget!.amount)}` : 'Paid media placement'
 
 // The lead line + a body preview for a viewed asset, pulled from whatever fields its
 // channel actually uses (subject/headline/title lead; body/caption/etc. as the body), so
@@ -161,7 +173,6 @@ export function FlowsView() {
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
-  const redraftAssets = useTrafficStore((s) => s.redraftAssets)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
@@ -481,11 +492,17 @@ export function FlowsView() {
     setRefsDirty(true)
   }
   // Regenerate the flow's asset copy so it reflects the newly referenced records.
+  // draftCopy only fills EMPTY fields and de-duplicates what it writes, so clear each
+  // post's copy first: that forces a real rewrite and lets the anti-repetition pass keep
+  // every post distinct, unlike the template redraft that collapses same-audience posts.
   const regenerateFlow = async () => {
     if (!viewName || regenerating) return
+    const ids = viewRows.map((r) => r.id)
+    if (!ids.length) return
     setRegenerating(true)
     try {
-      await redraftAssets({ campaign: viewName })
+      await Promise.all(ids.map((id) => updateRow(id, { messaging: {} })))
+      await draftCopy(ids)
     } finally {
       setRegenerating(false)
       setRefsDirty(false)
@@ -1193,6 +1210,9 @@ export function FlowsView() {
                                     <div className="flow-node-text">
                                       <div className="flow-node-label">{c.head}</div>
                                     </div>
+                                    {hasMediaSpend(r) && (
+                                      <span className="flow-spend-tag" title={spendTitle(r)}>{spendLabel(r)}</span>
+                                    )}
                                   </div>
                                   {c.body && (
                                     <div className="flow-copy">
