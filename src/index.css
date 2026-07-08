@@ -3614,6 +3614,28 @@ button {
   margin: 0 auto;
   padding: 48px 16px 120px;
 }
+/* View mode lays out as a left-to-right tree: campaign column, then a deliverables
+   column (each branching to its posts), so it doesn't open as one narrow stacked blob. */
+.flow-stack-view {
+  max-width: none;
+  width: max-content;
+  display: flex;
+  align-items: flex-start;
+  gap: 96px;
+}
+.flow-stack-view > .flow-node[data-node-id='campaign'] {
+  width: 340px;
+  flex: 0 0 auto;
+}
+.flow-vcol {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  flex: 0 0 auto;
+}
+.flow-vcol .flow-branched {
+  width: 100%;
+}
 .flow-node {
   position: relative;
   background: var(--surface);
@@ -4255,10 +4277,26 @@ button {
   flex: none;
   width: 100%;
 }
-.flow-brief-node .flow-spend-tag {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+/* Media-spend tag at the bottom of a post card, showing the spend amount. */
+.flow-spend-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #b07d18;
+  font-variant-numeric: tabular-nums;
+}
+.flow-spend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #d9a520;
+  flex: 0 0 auto;
 }
 .flow-brief-focus {
   flex: 1;

@@ -1125,7 +1125,7 @@ export function FlowsView() {
               }}
             />
           )}
-          <div className="flow-stack" style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
+          <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
             {/* Campaign brief node */}
             <div
               className={`flow-node${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
@@ -1171,7 +1171,9 @@ export function FlowsView() {
 
             {/* View mode: reverse-engineered deliverables, draggable + connected like build */}
             {viewing
-              ? viewDelivs.map((d) => {
+              ? (
+                <div className="flow-vcol">
+                  {viewDelivs.map((d) => {
                   const posts = [...d.rows].sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''))
                   return (
                     <div key={d.key}>
@@ -1215,13 +1217,16 @@ export function FlowsView() {
                                     <div className="flow-node-text">
                                       <div className="flow-node-label">{c.head}</div>
                                     </div>
-                                    {hasMediaSpend(r) && (
-                                      <span className="flow-spend-tag" title={spendTitle(r)}>{spendLabel(r)}</span>
-                                    )}
                                   </div>
                                   {c.body && (
                                     <div className="flow-copy">
                                       <div className="flow-copy-body">{c.body}</div>
+                                    </div>
+                                  )}
+                                  {hasMediaSpend(r) && (
+                                    <div className="flow-spend-foot" title={spendTitle(r)}>
+                                      <span className="flow-spend-dot" aria-hidden="true" />
+                                      {spendLabel(r) === 'Paid' ? 'Paid media' : `Media spend · ${spendLabel(r)}`}
                                     </div>
                                   )}
                                 </div>
@@ -1232,7 +1237,9 @@ export function FlowsView() {
                       </div>
                     </div>
                   )
-                })
+                })}
+                </div>
+              )
               : nodes.map((n) => {
                   const p = presetByKey(n.presetKey)
                   if (!p) return null

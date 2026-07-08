@@ -9,12 +9,10 @@ import { useTrafficStore } from '../store/useTrafficStore'
  */
 export function CanvasProjectTabs() {
   const rows = useTrafficStore((s) => s.rows)
-  const page = useTrafficStore((s) => s.page)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const openProjects = useTrafficStore((s) => s.openProjects)
   const openProject = useTrafficStore((s) => s.openProject)
   const closeProject = useTrafficStore((s) => s.closeProject)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
 
@@ -39,13 +37,6 @@ export function CanvasProjectTabs() {
     if (campaignFilter !== 'all') openProject(campaignFilter)
   }, [campaignFilter, openProject])
 
-  // The bar always carries the Home tab (left) — the way back to the Overview.
-  const homeActive = page === 'portfolio'
-  const goHome = () => {
-    setPage('portfolio')
-    setClientFilter('all')
-  }
-
   // A tab opens its campaign as a flow (not the legacy canvas).
   const switchTo = (campaign: string) => {
     if (campaign === campaignFilter) return
@@ -63,15 +54,6 @@ export function CanvasProjectTabs() {
 
   return (
     <div className="cv-projects">
-      <span
-        className={`cv-project-tab cv-project-tab-home${homeActive ? ' active' : ''}`}
-        role="button"
-        tabIndex={0}
-        title="Home — all canvases"
-        onClick={goHome}
-      >
-        ⌂
-      </span>
       {projects.map((p) => (
         <span
           key={p.campaign}
