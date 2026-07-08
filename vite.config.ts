@@ -237,6 +237,39 @@ function askApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server endpoint for "Generate a media mix with Claude". Keeps the Anthropic
+ * key server-side; mirrors /api/claude-ask.
+ */
+function mediaMixApi(): PluginOption {
+  return {
+    name: 'media-mix-api',
+    configureServer(server) {
+      server.middlewares.use('/api/media-mix', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runMediaMix } = await import('./server/mediaMixHandler')
+            const result = await runMediaMix(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 // Server-side secrets read by the /api middleware. These are NOT VITE_-prefixed,
 // so Vite won't expose them to the browser; we load them from .env into
 // process.env here so the handlers (icp-review, draft-copy, setup, claude-ask,
@@ -708,6 +741,7 @@ export default defineConfig(({ mode }) => {
       draftCellApi(),
       setupApi(),
       askApi(),
+      mediaMixApi(),
       coherenceApi(),
       agentApi(),
       siteMapApi(),

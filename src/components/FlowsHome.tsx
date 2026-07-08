@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type DragEvent } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { clientForCampaign } from '../domain/clients'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
@@ -30,11 +30,34 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const createCampaignFolder = useTrafficStore((s) => s.createCampaignFolder)
   const setCampaignFolder = useTrafficStore((s) => s.setCampaignFolder)
   const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
+  const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolder, setNewFolder] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  // Drag a flow card onto a folder section to file it there (replaces the folder dropdown).
+  const [dragName, setDragName] = useState<string | null>(null)
+  const [dropKey, setDropKey] = useState<string | null>(null)
+  const sectionDrop = (folder: string | undefined) => {
+    const key = folder ?? '__unfiled__'
+    return {
+      active: dropKey === key,
+      onDragOver: (e: DragEvent) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (dropKey !== key) setDropKey(key)
+      },
+      onDrop: (e: DragEvent) => {
+        e.preventDefault()
+        const n = e.dataTransfer.getData('text/plain')
+        if (n) setCampaignFolder(n, folder)
+        setDropKey(null)
+        setDragName(null)
+      },
+    }
+  }
 
   const folders = campaignFolders[brand] ?? []
-  const brandRows = rows.filter((r) => clientForCampaign(r.campaign) === brand)
+  const brandRows = rows.filter((r) => !r.archivedAt && clientForCampaign(r.campaign) === brand)
   const forBrand = campaignList.filter((c) => c.client === brand && !c.archivedAt)
   const meta = new Map(forBrand.map((c) => [c.name, c] as const))
   const names = [
@@ -65,20 +88,25 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   }
 
   const renderCard = (c: FlowCard) => (
-    <div key={c.name} className="flow-home-card">
-      <select
-        className="flow-home-move"
-        value={c.folder && folders.includes(c.folder) ? c.folder : ''}
-        onChange={(e) => setCampaignFolder(c.name, e.target.value || undefined)}
-        title="Move to folder"
-      >
-        <option value="">Unfiled</option>
-        {folders.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-      </select>
+    <div
+      key={c.name}
+      className={`flow-home-card${dragName === c.name ? ' dragging' : ''}`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', c.name)
+        e.dataTransfer.effectAllowed = 'move'
+        setDragName(c.name)
+      }}
+      onDragEnd={() => {
+        setDragName(null)
+        setDropKey(null)
+      }}
+    >
+      <div className="flow-home-card-actions">
+        <button className="flow-home-del" title="Delete flow" aria-label="Delete flow" onClick={() => setConfirmDelete(c.name)}>
+          ✕
+        </button>
+      </div>
       <button className="flow-home-card-open" onClick={() => onOpen(c.name)}>
         <div className="flow-home-card-name">
           <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
@@ -139,8 +167,9 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       <div className="flow-home-groups">
         {folders.map((folder) => {
           const group = sortCards(cards.filter((c) => c.folder === folder))
+          const drop = sectionDrop(folder)
           return (
-            <section key={folder} className="flow-home-group">
+            <section key={folder} className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
               <div className="flow-home-group-h">
                 <span className="flow-home-folder-ico" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -154,7 +183,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
                 </button>
               </div>
               {group.length === 0 ? (
-                <div className="flow-home-empty-folder">Empty. Use the folder menu on a flow card to file it here.</div>
+                <div className="flow-home-empty-folder">Empty. Drag a flow card here to file it.</div>
               ) : (
                 <div className="flow-home-grid">{group.map(renderCard)}</div>
               )}
@@ -162,18 +191,48 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           )
         })}
 
-        <section className="flow-home-group">
-          <div className="flow-home-group-h">
-            {folders.length ? 'Unfiled' : 'All flows'}
-            <span className="flow-home-group-n">{unfiled.length}</span>
-          </div>
-          {unfiled.length === 0 ? (
-            <div className="flow-home-empty-folder">No flows here yet.</div>
-          ) : (
-            <div className="flow-home-grid">{unfiled.map(renderCard)}</div>
-          )}
-        </section>
+        {(() => {
+          const drop = sectionDrop(undefined)
+          return (
+            <section className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
+              <div className="flow-home-group-h">
+                {folders.length ? 'Unfiled' : 'All flows'}
+                <span className="flow-home-group-n">{unfiled.length}</span>
+              </div>
+              {unfiled.length === 0 ? (
+                <div className="flow-home-empty-folder">No flows here yet.</div>
+              ) : (
+                <div className="flow-home-grid">{unfiled.map(renderCard)}</div>
+              )}
+            </section>
+          )
+        })()}
       </div>
+
+      {confirmDelete && (
+        <>
+          <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
+          <div className="confirm-modal" role="dialog" aria-label="Delete flow">
+            <strong className="confirm-title">Delete {confirmDelete.replace(`${brand} — `, '')}?</strong>
+            <p className="confirm-text">This archives the flow and all its assets. It won't show here anymore.</p>
+            <div className="confirm-foot">
+              <button className="btn sm" onClick={() => setConfirmDelete(null)}>
+                Cancel
+              </button>
+              <span className="spacer" />
+              <button
+                className="btn sm danger"
+                onClick={() => {
+                  void deleteCampaign(confirmDelete)
+                  setConfirmDelete(null)
+                }}
+              >
+                Delete flow
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

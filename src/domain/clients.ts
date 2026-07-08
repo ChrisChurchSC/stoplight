@@ -172,6 +172,14 @@ export interface ClientProfile {
   region?: string
 }
 
+/** A record from one of the Records pages that a flow references (and generation reads). */
+export type FlowRefType = 'company' | 'person' | 'segment' | 'media-mix'
+export interface FlowReference {
+  type: FlowRefType
+  id: string
+  label: string
+}
+
 export interface Campaign {
   name: string
   client: string
@@ -185,6 +193,8 @@ export interface Campaign {
   goalMessage?: string
   goalKpi?: string
   goalTarget?: number
+  /** Records this flow references (Companies / People / Segments / Media mix). Read when generating assets. */
+  references?: FlowReference[]
   /** Flight length in weeks; omitted/0 = ongoing. */
   durationWeeks?: number
   /** Overall campaign budget (media + content/production). Drives mediaBudget. */

@@ -82,6 +82,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M6 8.4v3a2 2 0 0 0 2 2h2.4M18 8.4v3a2 2 0 0 1-2 2h-2.4" />
     </>
   ),
+  media: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v9h9" />
+    </>
+  ),
   connect: (
     <>
       <path d="M9.5 14.5 14.5 9.5" />
@@ -183,7 +189,7 @@ export function HomeSidebar() {
   const go = (filter: string) => {
     setHomeFilter(filter)
     setClientFilter('all')
-    if (!brandCtx || filter === 'all' || filter === 'drafts') setPage('clients')
+    if (!brandCtx || filter === 'all' || filter === 'drafts') setPage('portfolio')
   }
 
   // A brand's campaign folders, nested under its Campaigns entry. Only shown while that
@@ -198,7 +204,7 @@ export function HomeSidebar() {
       setHomeFilter(`brand:${brand}`)
       setClientFilter('all')
       setCampaignFolderView(val)
-      setPage('clients')
+      setPage('portfolio')
     }
     return (
       <div className="nav-sub">
@@ -343,12 +349,12 @@ export function HomeSidebar() {
         <button
           className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
           onClick={() => setPage('portfolio')}
-          title="Overview — what needs attention and what's due next across every campaign"
+          title="Home — ask anything, what's due next, and what needs attention"
         >
           <span className="nav-ico">
             <Ico name="home" />
           </span>
-          <span className="nav-label">Overview</span>
+          <span className="nav-label">Home</span>
         </button>
         <button
           className={`nav-item${page === 'content' && libraryMode === 'catalog' ? ' active' : ''}`}
@@ -452,6 +458,12 @@ export function HomeSidebar() {
                   <Ico name="segments" />
                 </span>
                 <span className="nav-label">Segments</span>
+              </button>
+              <button className={`nav-item${page === 'media' ? ' active' : ''}`} onClick={() => setPage('media')} title="Media mix — recommend a channel split for a goal and budget">
+                <span className="nav-ico">
+                  <Ico name="media" />
+                </span>
+                <span className="nav-label">Media mix</span>
               </button>
             </div>
           )}

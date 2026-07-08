@@ -10,7 +10,6 @@ import { useTrafficStore } from '../store/useTrafficStore'
 export function CanvasProjectTabs() {
   const rows = useTrafficStore((s) => s.rows)
   const page = useTrafficStore((s) => s.page)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const openProjects = useTrafficStore((s) => s.openProjects)
   const openProject = useTrafficStore((s) => s.openProject)
@@ -40,11 +39,10 @@ export function CanvasProjectTabs() {
     if (campaignFilter !== 'all') openProject(campaignFilter)
   }, [campaignFilter, openProject])
 
-  // The bar always carries the Home tab (left), even with no open canvases — it's
-  // the way back to the files browser from inside a canvas.
-  const homeActive = page === 'clients' && clientFilter === 'all'
+  // The bar always carries the Home tab (left) — the way back to the Overview.
+  const homeActive = page === 'portfolio'
   const goHome = () => {
-    setPage('clients')
+    setPage('portfolio')
     setClientFilter('all')
   }
 

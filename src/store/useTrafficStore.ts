@@ -8,7 +8,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
-import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile } from '../domain/clients'
+import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
@@ -98,6 +98,7 @@ import {
 } from '../domain/importAssets'
 import { type SavedView, newSavedView } from '../domain/savedViews'
 import type { BrandReport } from '../domain/reports'
+import type { MediaMix } from '../domain/channelMix'
 import { type Company, freshCompanyId, seedCompanies } from '../domain/companies'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
@@ -579,6 +580,24 @@ function loadSegments(): Segment[] {
 function saveSegments(list: Segment[]): void {
   try {
     localStorage.setItem(SEGMENTS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Saved media mixes (channel-split scenarios), persisted per brand.
+const MEDIA_MIXES_KEY = 'stoplight.mediaMixes.v1'
+function loadMediaMixes(): MediaMix[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(MEDIA_MIXES_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveMediaMixes(list: MediaMix[]): void {
+  try {
+    localStorage.setItem(MEDIA_MIXES_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1135,7 +1154,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows' | 'media'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -1249,6 +1268,14 @@ interface TrafficState {
   updateSegment: (id: string, patch: Partial<Segment>) => void
   /** Delete a segment row by id. */
   deleteSegment: (id: string) => void
+  /** Records › Media mix — saved channel-split scenarios, selectable per brand. */
+  mediaMixes: MediaMix[]
+  /** Create a new named mix for a brand; returns its id. */
+  addMediaMix: (brand: string) => string
+  /** Patch a saved mix by id. */
+  updateMediaMix: (id: string, patch: Partial<MediaMix>) => void
+  /** Delete a saved mix by id. */
+  deleteMediaMix: (id: string) => void
   /** Insights pinned out of a report, kept in view on the Overview (newest first). */
   pinnedInsights: PinnedInsight[]
   /** Pin a finding lifted from a report; returns its id. */
@@ -1286,6 +1313,12 @@ interface TrafficState {
   askSeed?: string
   openAsk: (seed?: string) => void
   closeAsk: () => void
+  /** The Home conversational chat: a full-page thread opened from the Home ask box.
+   *  `homeChatSeed` is the first question to run when it opens. */
+  homeChatOpen: boolean
+  homeChatSeed: string | null
+  openHomeChat: (q: string) => void
+  closeHomeChat: () => void
   /** Sharing & access: the current session role and the owner's share links. */
   role: Role
   sharedSession: SharedSession | null
@@ -1357,6 +1390,8 @@ interface TrafficState {
   setBrandStrategy: (brand: string, strategy: string) => void
   /** Swap a campaign's subject (what it's about) — the Subject card picker. */
   setCampaignSubject: (name: string, subject: string) => void
+  /** Set the records a flow references (Companies / People / Segments / Media mix). Read when generating assets. */
+  setCampaignReferences: (name: string, references: FlowReference[]) => void
   /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
   setCampaignGoal: (name: string, goal: string) => void
   /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
@@ -1480,7 +1515,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows' | 'media') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -1825,13 +1860,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   perfMode: false,
   brandView: 'campaigns',
   timeRange: 'all',
-  page: 'clients',
+  page: 'portfolio',
   libraryMode: 'catalog',
   brandTab: 'about',
   brandGuides: loadBrandGuides(),
   readinessOpen: false,
   diagnosisOpen: false,
   askOpen: false,
+  homeChatOpen: false,
+  homeChatSeed: null,
   role: initialShare?.role ?? 'owner',
   sharedSession: initialShare,
   shares: loadShares(),
@@ -1853,6 +1890,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   companies: loadCompanies(),
   people: loadPeople(),
   segments: loadSegments(),
+  mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
   actualsRefreshing: null,
   contentIngesting: null,
@@ -2167,6 +2205,28 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { segments }
     }),
 
+  addMediaMix: (brand) => {
+    const id = `mix_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+    const n = get().mediaMixes.filter((m) => m.brand === brand).length + 1
+    const mix: MediaMix = { id, brand, name: `Plan ${n}`, goal: 'reach', budget: 50000, risk: 'balanced', overrides: {} }
+    const mediaMixes = [...get().mediaMixes, mix]
+    saveMediaMixes(mediaMixes)
+    set({ mediaMixes })
+    return id
+  },
+  updateMediaMix: (id, patch) =>
+    set((s) => {
+      const mediaMixes = s.mediaMixes.map((m) => (m.id === id ? { ...m, ...patch } : m))
+      saveMediaMixes(mediaMixes)
+      return { mediaMixes }
+    }),
+  deleteMediaMix: (id) =>
+    set((s) => {
+      const mediaMixes = s.mediaMixes.filter((m) => m.id !== id)
+      saveMediaMixes(mediaMixes)
+      return { mediaMixes }
+    }),
+
   addPinnedInsight: (input) => {
     const id = `pin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
     const pin: PinnedInsight = {
@@ -2326,6 +2386,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeDiagnosis: () => set({ diagnosisOpen: false }),
   openAsk: (seed) => set({ askOpen: true, askSeed: seed }),
   closeAsk: () => set({ askOpen: false, askSeed: undefined }),
+  openHomeChat: (q) => set({ homeChatOpen: true, homeChatSeed: q, page: 'portfolio' }),
+  closeHomeChat: () => set({ homeChatOpen: false, homeChatSeed: null }),
   openShareDialog: () => set({ shareDialogOpen: true }),
   closeShareDialog: () => set({ shareDialogOpen: false }),
   createShare: (client, role) => {
@@ -2651,25 +2713,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { campaignList }
     }),
 
+  // Campaigns live in Flows now: every "open this campaign" path (deep-links, the
+  // portfolio, the agent bridge) routes to the Flows view instead of the legacy canvas.
   openCampaign: (name) => {
-    const campaign = name.trim()
-    if (!campaign) return
-    const client = clientForCampaign(campaign)
-    // Honor a shared session's client lock (a guest can't jump into another brand).
-    const ss = get().sharedSession
-    if (ss && client !== ss.client) return
-    registerCampaign(campaign, client)
-    get().openProject(campaign)
-    set({
-      page: 'clients',
-      clientFilter: client,
-      campaignFilter: campaign,
-      view: 'canvas',
-      proofFilter: 'all',
-      ctaFilter: 'all',
-      audienceFilter: 'all',
-      cardFilter: 'all',
-    })
+    get().openFlow(name)
   },
   // Open a campaign in the Flows view instead of the legacy canvas — the project tabs use
   // this so a tab opens the flow. An empty name opens a fresh flow builder.
@@ -2765,6 +2812,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const client = clientForCampaign(name)
         registerCampaign(name, client)
         campaignList = [...s.campaignList, { name, client, strategy: 'Current state', subject }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  setCampaignReferences: (name, references) =>
+    set((s) => {
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, references } : c))
+      } else {
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', references }]
       }
       saveCampaigns(campaignList)
       return { campaignList }

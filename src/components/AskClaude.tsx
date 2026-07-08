@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { buildAskContext, type AskAnswer, type AskIntent } from '../domain/askClaude'
+import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -136,7 +137,7 @@ export function AskClaude() {
               <span className={`ask-intent i-${answer.intent}`}>{INTENT_LABEL[answer.intent]}</span>
               <span className="ask-source">{answer.live ? 'Claude' : 'offline estimate'}</span>
             </div>
-            <p className="ask-text">{answer.answer}</p>
+            <Markdown text={answer.answer} className="ask-text" />
             <div className="ask-actions">
               {chips.map((c) => (
                 <button key={c.label} className="ask-action" onClick={c.go}>

@@ -44,9 +44,8 @@ interface CockpitRow {
 export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const { canvases } = useHomeCanvases()
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
-  const setView = useTrafficStore((s) => s.setView)
   const setPage = useTrafficStore((s) => s.setPage)
+  const openFlow = useTrafficStore((s) => s.openFlow)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const pinnedInsights = useTrafficStore((s) => s.pinnedInsights)
@@ -113,11 +112,9 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const overdueCount = unposted.filter((x) => x.due < dayStart).length
   const upNext = unposted.filter((x) => x.due >= dayStart).slice(0, 7)
 
-  const openCampaign = (brand: string, name: string) => {
-    setClientFilter(brand)
-    setCampaignFilter(name)
-    setView('canvas')
-    setPage('clients')
+  // Campaigns open in Flows now, not the legacy canvas.
+  const openCampaign = (_brand: string, name: string) => {
+    openFlow(name)
   }
 
   return (

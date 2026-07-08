@@ -26,7 +26,7 @@ const CHIPS: { icon: string; label: string; seed: string }[] = [
 ]
 
 export function HomeHero() {
-  const openAsk = useTrafficStore((s) => s.openAsk)
+  const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const reports = useTrafficStore((s) => s.reports)
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
@@ -38,7 +38,7 @@ export function HomeHero() {
   const submit = () => {
     const text = q.trim()
     if (!text) return
-    openAsk(text)
+    openHomeChat(text)
     setQ('')
   }
 
@@ -93,7 +93,7 @@ export function HomeHero() {
 
       <div className="hh-chips">
         {CHIPS.map((c) => (
-          <button key={c.label} className="hh-chip" onClick={() => openAsk(c.seed)}>
+          <button key={c.label} className="hh-chip" onClick={() => openHomeChat(c.seed)}>
             <span className="hh-chip-ic" aria-hidden="true">
               {c.icon}
             </span>

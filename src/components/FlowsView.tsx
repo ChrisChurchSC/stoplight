@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
+import type { FlowRefType } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -68,6 +69,14 @@ const CampaignTile = () => (
 )
 
 type ViewDeliverable = { key: string; label: string; tone: string; channel: ChannelId; assetType: string; count: number; rows: TrafficRow[] }
+
+// An ingested / real posted asset (from the Library), as opposed to a generated idea.
+const isIngestedPost = (r: TrafficRow): boolean =>
+  r.status === 'posted' || !!r.postedAt || (!!r.sourceUrl && r.source !== 'generated')
+const postReach = (r: TrafficRow): number => {
+  const m = r.socialMetrics ?? {}
+  return (typeof m.views === 'number' ? m.views : 0) || (typeof m.impressions === 'number' ? m.impressions : 0)
+}
 
 // The lead line + a body preview for a viewed asset, pulled from whatever fields its
 // channel actually uses (subject/headline/title lead; body/caption/etc. as the body), so
@@ -142,15 +151,23 @@ export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const companies = useTrafficStore((s) => s.companies)
+  const people = useTrafficStore((s) => s.people)
+  const segments = useTrafficStore((s) => s.segments)
+  const mediaMixes = useTrafficStore((s) => s.mediaMixes)
+  const addSegment = useTrafficStore((s) => s.addSegment)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
+  const redraftAssets = useTrafficStore((s) => s.redraftAssets)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
+  const openProject = useTrafficStore((s) => s.openProject)
+  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const audienceNames = useMemo(() => (clientAudiences[brand] ?? []).map((a) => a.name), [clientAudiences, brand])
@@ -178,6 +195,15 @@ export function FlowsView() {
   // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
   const [viewName, setViewName] = useState<string | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  // View-mode Audiences record selector (which segment records this flow targets).
+  const [audMenuOpen, setAudMenuOpen] = useState(false)
+  const [newAudName, setNewAudName] = useState('')
+  // Swap a generated-idea post for a real ingested post from the library.
+  const [swapOpen, setSwapOpen] = useState(false)
+  const [swapSearch, setSwapSearch] = useState('')
+  // References changed since the last generation → offer a Regenerate button.
+  const [refsDirty, setRefsDirty] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   // Canvas controls (the bottom toolbar).
   const [zoom, setZoom] = useState(100)
   const [zoomOpen, setZoomOpen] = useState(false)
@@ -425,6 +451,54 @@ export function FlowsView() {
   const viewFlight = campaignList.find((c) => c.name === viewName)?.durationWeeks
   const viewShort = viewName ? viewName.replace(`${brand} — `, '') : ''
 
+  // The records this flow references, drawn from the Records pages (Companies / People /
+  // Segments / Media mix). These references drive asset generation.
+  const viewCampaign = useMemo(() => campaignList.find((c) => c.name === viewName), [campaignList, viewName])
+  const flowRefs = viewCampaign?.references ?? []
+  const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
+  const recordGroups = useMemo(
+    () => [
+      { type: 'company' as FlowRefType, label: 'Companies', items: companies.map((c) => ({ id: c.id, label: c.name })) },
+      { type: 'person' as FlowRefType, label: 'People', items: people.map((p) => ({ id: p.id, label: p.name })) },
+      { type: 'segment' as FlowRefType, label: 'Segments', items: segments.map((sg) => ({ id: sg.id, label: sg.name })) },
+      { type: 'media-mix' as FlowRefType, label: 'Media mix', items: brandMixesForRefs.map((m) => ({ id: m.id, label: m.name })) },
+    ],
+    [companies, people, segments, brandMixesForRefs],
+  )
+  const hasRef = (type: FlowRefType, id: string) => flowRefs.some((r) => r.type === type && r.id === id)
+  const toggleRef = (type: FlowRefType, id: string, label: string) => {
+    if (!viewName) return
+    const on = hasRef(type, id)
+    setCampaignReferences(viewName, on ? flowRefs.filter((r) => !(r.type === type && r.id === id)) : [...flowRefs, { type, id, label }])
+    setRefsDirty(true)
+  }
+  const addSegmentRecord = () => {
+    const nm = newAudName.trim()
+    if (!nm || !viewName) return
+    const id = addSegment({ name: nm })
+    setCampaignReferences(viewName, [...flowRefs, { type: 'segment', id, label: nm }])
+    setNewAudName('')
+    setRefsDirty(true)
+  }
+  // Regenerate the flow's asset copy so it reflects the newly referenced records.
+  const regenerateFlow = async () => {
+    if (!viewName || regenerating) return
+    setRegenerating(true)
+    try {
+      await redraftAssets({ campaign: viewName })
+    } finally {
+      setRegenerating(false)
+      setRefsDirty(false)
+    }
+  }
+
+  // The brand's real ingested posts (from the Library), most-reached first — the pool a
+  // generated-idea post can be swapped for.
+  const ingestedPosts = useMemo(
+    () => canvases.filter((c) => c.client === brand).flatMap((c) => c.rows).filter(isIngestedPost).sort((a, b) => postReach(b) - postReach(a)),
+    [canvases, brand],
+  )
+
   const addPreset = (p: DeliverablePreset) => {
     const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: startCount(p) }
     const at = pickAt ?? nodes.length
@@ -445,7 +519,7 @@ export function FlowsView() {
     setPickAt(null)
     setAddingDeliv(true)
     try {
-      const auds = viewAudiences.length ? viewAudiences : audSelection
+      const auds = flowRefs.length ? flowRefs.map((r) => r.label) : viewAudiences.length ? viewAudiences : audSelection
       const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: startCount(p), runtime: p.runtime, brand: p.brand }
       const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === viewName).map((r) => r.id))
       await seedCampaignAssets(viewName, [d], { flightWeeks: viewFlight ?? flightWeeks, audiences: auds })
@@ -541,12 +615,17 @@ export function FlowsView() {
     lastSubjectRef.current = ''
     setSel('campaign')
     setPickAt(null)
+    setCampaignFilter('all')
   }
   const openView = (n: string) => {
     setViewName(n)
     setBuilt(null)
     setPickAt(null)
     setSel('campaign')
+    // Opening a flow also opens a tab for it (and lights that tab as active), so the
+    // top strip tracks the flow you're in, matching how a tab click opens a flow.
+    openProject(n)
+    setCampaignFilter(n)
   }
 
   // A project tab (or any openFlow caller) asked to open a specific flow here. Consume the
@@ -672,6 +751,46 @@ export function FlowsView() {
   const viewing = viewName !== null
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
   const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
+
+  // Candidates for a swap: ingested posts on the same channel as the selected post first,
+  // filtered by the search box; excludes the post itself.
+  const swapCandidates = useMemo(() => {
+    if (!selPost) return []
+    const q = swapSearch.trim().toLowerCase()
+    const sameChannel = ingestedPosts.filter((r) => r.channel === selPost.channel && r.id !== selPost.id)
+    const pool = sameChannel.length ? sameChannel : ingestedPosts.filter((r) => r.id !== selPost.id)
+    if (!q) return pool
+    return pool.filter((r) => (r.assetName ?? '').toLowerCase().includes(q) || Object.values((r.messaging ?? {}) as Record<string, string>).some((v) => v?.toLowerCase().includes(q)))
+  }, [selPost, ingestedPosts, swapSearch])
+
+  // Replace the selected generated-idea post's content with a real ingested post, keeping
+  // its slot in the flow (id, campaign, schedule, audience) so it stays in place.
+  const swapForIngested = async (cand: TrafficRow) => {
+    if (!selPost) return
+    await updateRow(selPost.id, {
+      assetName: cand.assetName,
+      channel: cand.channel,
+      assetType: cand.assetType,
+      mediaType: cand.mediaType,
+      messaging: cand.messaging,
+      source: cand.source,
+      sourceUrl: cand.sourceUrl,
+      socialMetrics: cand.socialMetrics,
+      engagement: cand.engagement,
+      status: 'posted',
+      postedAt: cand.postedAt,
+      publishedAt: cand.publishedAt,
+    })
+    setSwapOpen(false)
+    setSwapSearch('')
+  }
+  useEffect(() => {
+    setSwapOpen(false)
+    setSwapSearch('')
+  }, [sel])
+  useEffect(() => {
+    setRefsDirty(false)
+  }, [viewName])
   const menuAnchor =
     addMenu && rects[addMenu.from]
       ? (() => {
@@ -1228,6 +1347,55 @@ export function FlowsView() {
                     {selPost.audience ? ` · ${selPost.audience}` : ''}
                     {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
                   </p>
+                  <div className="flow-swap">
+                    <div className="flow-swap-tag">
+                      {isIngestedPost(selPost) ? (
+                        <>
+                          <span className="flow-swap-badge ingested">Ingested post</span>
+                          {selPost.sourceUrl && (
+                            <a className="flow-swap-link" href={selPost.sourceUrl} target="_blank" rel="noreferrer">
+                              View original ↗
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <span className="flow-swap-badge">Generated idea</span>
+                      )}
+                    </div>
+                    <button className="flow-swap-btn" onClick={() => setSwapOpen((o) => !o)}>
+                      ⇄ Swap for an ingested post
+                    </button>
+                    {swapOpen && (
+                      <div className="flow-swap-panel">
+                        <input
+                          className="flow-swap-search"
+                          value={swapSearch}
+                          placeholder={`Search ${brand || 'brand'} ingested posts…`}
+                          onChange={(e) => setSwapSearch(e.target.value)}
+                          autoFocus
+                        />
+                        {swapCandidates.length === 0 ? (
+                          <div className="flow-swap-empty">No ingested posts to swap in yet. Ingest content into the Library first.</div>
+                        ) : (
+                          <div className="flow-swap-list">
+                            {swapCandidates.slice(0, 50).map((r) => {
+                              const reach = postReach(r)
+                              const reachTxt = reach >= 1e6 ? (reach / 1e6).toFixed(1) + 'M' : reach >= 1e3 ? Math.round(reach / 1e3) + 'k' : reach ? String(reach) : ''
+                              return (
+                                <button key={r.id} className="flow-swap-item" onClick={() => swapForIngested(r)}>
+                                  <span className="flow-swap-item-title">{r.assetName}</span>
+                                  <span className="flow-swap-item-meta">
+                                    {CHANNELS[r.channel as ChannelId]?.label ?? r.channel}
+                                    {reachTxt ? ` · ${reachTxt} reach` : ''}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {Object.entries((selPost.messaging ?? {}) as Record<string, string>)
                     .filter(([, v]) => v && v.trim())
                     .map(([k, v]) => (
@@ -1265,15 +1433,70 @@ export function FlowsView() {
                     {viewRows.length} assets · {viewDelivs.length} deliverable type{viewDelivs.length === 1 ? '' : 's'}
                     {viewFlight ? ` · ${viewFlight}-week flight` : ''}
                   </p>
-                  <label className="flow-inspect-label">Audiences</label>
-                  {viewAudiences.length === 0 && <div className="flow-inspect-note">No audiences tagged.</div>}
-                  {viewAudiences.map((a) => (
-                    <div key={a} className="flow-check" style={{ cursor: 'default' }}>
-                      <span>{a}</span>
-                    </div>
-                  ))}
+                  <label className="flow-inspect-label">Records</label>
+                  <div className="flow-aud">
+                    <button className="flow-aud-btn" onClick={() => setAudMenuOpen((o) => !o)}>
+                      <span className="flow-aud-btn-txt">{flowRefs.length ? flowRefs.map((r) => r.label).join(', ') : 'Reference records'}</span>
+                      <span className="flow-aud-caret" aria-hidden="true">▾</span>
+                    </button>
+                    {audMenuOpen && (
+                      <>
+                        <div className="flow-aud-scrim" onClick={() => setAudMenuOpen(false)} />
+                        <div className="flow-aud-menu">
+                          {recordGroups.map((g) => (
+                            <div key={g.type} className="flow-aud-group">
+                              <div className="flow-aud-grouphead">{g.label}</div>
+                              {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
+                              {g.items.map((it) => {
+                                const on = hasRef(g.type, it.id)
+                                return (
+                                  <button key={it.id} className={`flow-aud-item${on ? ' on' : ''}`} onClick={() => toggleRef(g.type, it.id, it.label)}>
+                                    <span className="flow-aud-check" aria-hidden="true">{on ? '✓' : ''}</span>
+                                    <span>{it.label}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ))}
+                          <div className="flow-aud-add">
+                            <input
+                              className="flow-aud-input"
+                              value={newAudName}
+                              placeholder="New segment…"
+                              onChange={(e) => setNewAudName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') addSegmentRecord()
+                              }}
+                            />
+                            <button className="flow-aud-add-btn" onClick={addSegmentRecord} disabled={!newAudName.trim()}>
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {refsDirty && (
+                    <button className="flow-regen" onClick={regenerateFlow} disabled={regenerating}>
+                      {regenerating ? 'Regenerating…' : '↻ Regenerate assets with these records'}
+                    </button>
+                  )}
+
+                  <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
+                  <div className="flow-deliv-list">
+                    {viewDelivs.map((d) => (
+                      <button key={d.key} className="flow-pitem" onClick={() => setSel(d.key)}>
+                        <PresetTile tone={d.tone} />
+                        <div className="flow-pitem-text">
+                          <div className="flow-pitem-label">{d.label}</div>
+                          <div className="flow-pitem-desc">{d.count} asset{d.count === 1 ? '' : 's'}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                    Click a post to see its copy, or use the Grid and Calendar tabs above.
+                    Referenced records (companies, people, segments, media mix) inform generated copy. Click a post to see its copy, or use the Grid and Calendar tabs above.
                   </div>
                 </div>
               </>
