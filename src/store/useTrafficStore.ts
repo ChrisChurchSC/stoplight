@@ -1333,6 +1333,12 @@ interface TrafficState {
   openProjects: string[]
   openProject: (campaign: string) => void
   closeProject: (campaign: string) => void
+  /** A campaign the Flows view should open in view mode (the project tabs set this so a
+   *  tab opens the flow, not the legacy canvas). '' means open a fresh flow builder.
+   *  FlowsView consumes it and calls clearFlowOpen. */
+  flowOpen: string | null
+  openFlow: (campaign: string) => void
+  clearFlowOpen: () => void
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
@@ -1874,6 +1880,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   artboards: loadArtboards(),
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
+  flowOpen: null,
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
   campaignFolderView: null,
@@ -2664,6 +2671,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       cardFilter: 'all',
     })
   },
+  // Open a campaign in the Flows view instead of the legacy canvas — the project tabs use
+  // this so a tab opens the flow. An empty name opens a fresh flow builder.
+  openFlow: (name) => {
+    const campaign = name.trim()
+    if (!campaign) {
+      set({ page: 'flows', flowOpen: '' })
+      return
+    }
+    const client = clientForCampaign(campaign)
+    const ss = get().sharedSession
+    if (ss && client !== ss.client) return
+    registerCampaign(campaign, client)
+    get().openProject(campaign)
+    // campaignFilter tracks the active tab; it's inert on the Flows page (FlowsView scopes
+    // by its own viewName), so setting it only drives the tab highlight.
+    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign })
+  },
+  clearFlowOpen: () => set({ flowOpen: null }),
 
   createCanvas: () => {
     // A unique "Untitled canvas [N]" so repeated New-canvas clicks don't collide.

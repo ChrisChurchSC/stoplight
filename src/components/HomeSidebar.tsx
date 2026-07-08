@@ -104,6 +104,42 @@ const ICONS: Record<string, ReactNode> = {
   ),
   spark: <path d="M12 4l1.7 4.8L18.5 12l-4.8 1.7L12 18.5l-1.7-4.8L5.5 12l4.8-1.7z" />,
   caret: <path d="m6 9 6 6 6-6" />,
+  check: <path d="m5 12.5 4.5 4.5L19 6" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.4" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+    </>
+  ),
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 2.6v2.6M12 18.8v2.6M4 7.6l2.2 1.3M17.8 15.1l2.2 1.3M4 16.4l2.2-1.3M17.8 8.9 20 7.6" />
+    </>
+  ),
+  userplus: (
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20a5.5 5.5 0 0 1 11 0" />
+      <path d="M18 8.5v5M15.5 11h5" />
+    </>
+  ),
+  apps: (
+    <>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.8" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
+    </>
+  ),
+  signout: (
+    <>
+      <path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" />
+      <path d="m10 8-4 4 4 4" />
+      <path d="M16 12H6" />
+    </>
+  ),
 }
 
 function Ico({ name }: { name: string }) {
@@ -123,8 +159,6 @@ export function HomeSidebar() {
   const setPage = useTrafficStore((s) => s.setPage)
   const libraryMode = useTrafficStore((s) => s.libraryMode)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
-  const brandTab = useTrafficStore((s) => s.brandTab)
-  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
   const campaignFolders = useTrafficStore((s) => s.campaignFolders)
   const campaignFolderView = useTrafficStore((s) => s.campaignFolderView)
   const setCampaignFolderView = useTrafficStore((s) => s.setCampaignFolderView)
@@ -137,6 +171,7 @@ export function HomeSidebar() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [recordsOpen, setRecordsOpen] = useState(true)
+  const [wsOpen, setWsOpen] = useState(false)
 
   const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
 
@@ -179,13 +214,116 @@ export function HomeSidebar() {
   return (
     <aside className="sidebar home-sidebar hsb">
       <div className="hsb-top">
-        <button className="hsb-ws" onClick={() => setPage('portfolio')} title="Home">
+        <button
+          className={`hsb-ws${wsOpen ? ' open' : ''}`}
+          onClick={() => setWsOpen((o) => !o)}
+          title="Workspace menu"
+          aria-haspopup="menu"
+          aria-expanded={wsOpen}
+        >
           <span className="hsb-ws-chip">{WORKSPACE[0]}</span>
           <span className="hsb-ws-name">{WORKSPACE}</span>
           <span className="hsb-ws-caret">
             <Ico name="caret" />
           </span>
         </button>
+
+        {wsOpen && (
+          <>
+            <div className="hsb-ws-scrim" onClick={() => setWsOpen(false)} />
+            <div className="hsb-ws-menu" role="menu">
+              <button
+                className="hsb-ws-mi hsb-ws-mi-head"
+                role="menuitemradio"
+                aria-checked="true"
+                onClick={() => {
+                  setPage('portfolio')
+                  setWsOpen(false)
+                }}
+              >
+                <span className="hsb-ws-chip sm">{WORKSPACE[0]}</span>
+                <span className="hsb-ws-mi-name">{WORKSPACE}</span>
+                <span className="hsb-ws-mi-check">
+                  <Ico name="check" />
+                </span>
+              </button>
+              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
+                <span className="hsb-ws-mi-ic">
+                  <Ico name="plus" />
+                </span>
+                New workspace
+              </button>
+
+              <div className="hsb-ws-sep" />
+
+              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
+                <span className="hsb-ws-mi-ic">
+                  <Ico name="user" />
+                </span>
+                Account settings
+              </button>
+              <button
+                className="hsb-ws-mi"
+                role="menuitem"
+                onClick={() => {
+                  setPage('brand')
+                  setWsOpen(false)
+                }}
+              >
+                <span className="hsb-ws-mi-ic">
+                  <Ico name="gear" />
+                </span>
+                Brand settings
+              </button>
+
+              <div className="hsb-ws-sep" />
+
+              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
+                <span className="hsb-ws-mi-ic">
+                  <Ico name="userplus" />
+                </span>
+                Invite team members
+              </button>
+              {can(role, 'billing') && (
+                <button
+                  className="hsb-ws-mi"
+                  role="menuitem"
+                  onClick={() => {
+                    setPage('billing')
+                    setWsOpen(false)
+                  }}
+                >
+                  <span className="hsb-ws-mi-ic">
+                    <Ico name="billing" />
+                  </span>
+                  Billing
+                </button>
+              )}
+              <button
+                className="hsb-ws-mi"
+                role="menuitem"
+                onClick={() => {
+                  setPage('connectors')
+                  setWsOpen(false)
+                }}
+              >
+                <span className="hsb-ws-mi-ic">
+                  <Ico name="apps" />
+                </span>
+                Apps and integrations
+              </button>
+
+              <div className="hsb-ws-sep" />
+
+              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
+                <span className="hsb-ws-mi-ic">
+                  <Ico name="signout" />
+                </span>
+                Sign out
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="hsb-actions">
@@ -212,35 +350,6 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Overview</span>
         </button>
-        <button
-          className={`nav-item${page === 'brand' ? ' active' : ''}`}
-          onClick={() => setPage('brand')}
-          title="Brand — the brand's About, Voice, and Messaging system"
-        >
-          <span className="nav-ico">
-            <Ico name="brand" />
-          </span>
-          <span className="nav-label">Brand</span>
-        </button>
-        {page === 'brand' && (
-          <div className="nav-sub">
-            {(
-              [
-                ['about', 'About'],
-                ['goal', 'Goal'],
-                ['voice', 'Voice'],
-                ['audiences', 'Audiences'],
-                ['strategy', 'Strategy'],
-                ['messaging', 'Messaging'],
-                ['channels', 'Channels'],
-              ] as const
-            ).map(([t, label]) => (
-              <button key={t} className={`nav-subitem${brandTab === t ? ' active' : ''}`} onClick={() => setBrandTab(t)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
         <button
           className={`nav-item${page === 'content' && libraryMode === 'catalog' ? ' active' : ''}`}
           onClick={() => setLibraryMode('catalog')}
@@ -283,27 +392,9 @@ export function HomeSidebar() {
         </button>
 
         {brands.length === 1 ? (
-          // One brand: a single clean "Campaigns" destination (its canvases). Lit only
-          // on that gallery, not on the brand-scoped pages (Brand/Metrics/Library/…),
-          // so it doesn't stay highlighted alongside the tab you actually opened.
-          <>
-            <button
-              className={`nav-item${onGallery && homeFilter === `brand:${brands[0].name}` ? ' active' : ''}`}
-              onClick={() => {
-                setHomeFilter(`brand:${brands[0].name}`)
-                setClientFilter('all')
-                setPage('clients')
-              }}
-              title={`${brands[0].name}'s campaigns`}
-            >
-              <span className="nav-ico">
-                <Ico name="campaigns" />
-              </span>
-              <span className="nav-label">Campaigns</span>
-              <span className="nav-count">{brands[0].count}</span>
-            </button>
-            {campaignFolderNav(brands[0].name)}
-          </>
+          // Campaigns live under Flows now; the single-brand workspace no longer shows a
+          // separate Campaigns nav item.
+          null
         ) : (
           <>
             <div className="nav-section">Campaigns</div>

@@ -16,9 +16,8 @@ export function CanvasProjectTabs() {
   const openProject = useTrafficStore((s) => s.openProject)
   const closeProject = useTrafficStore((s) => s.closeProject)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setPage = useTrafficStore((s) => s.setPage)
-  const createCanvas = useTrafficStore((s) => s.createCanvas)
+  const openFlow = useTrafficStore((s) => s.openFlow)
 
   const assetCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -49,22 +48,18 @@ export function CanvasProjectTabs() {
     setClientFilter('all')
   }
 
-  const switchTo = (client: string, campaign: string) => {
+  // A tab opens its campaign as a flow (not the legacy canvas).
+  const switchTo = (campaign: string) => {
     if (campaign === campaignFilter) return
-    setClientFilter(client)
-    setCampaignFilter(campaign)
+    openFlow(campaign)
   }
   const close = (e: React.MouseEvent, campaign: string) => {
     e.stopPropagation()
     closeProject(campaign)
     if (campaign === campaignFilter) {
       const next = projects.find((p) => p.campaign !== campaign)
-      if (next) {
-        setClientFilter(next.client)
-        setCampaignFilter(next.campaign)
-      } else {
-        setPage('clients')
-      }
+      if (next) openFlow(next.campaign)
+      else setPage('flows')
     }
   }
 
@@ -86,7 +81,7 @@ export function CanvasProjectTabs() {
           title={`${p.client} · ${p.campaign} (${p.count} assets)`}
           role="button"
           tabIndex={0}
-          onClick={() => switchTo(p.client, p.campaign)}
+          onClick={() => switchTo(p.campaign)}
         >
           <span className="cv-project-tab-body">
             <span className="cv-project-tab-client">{p.client}</span>
@@ -101,8 +96,8 @@ export function CanvasProjectTabs() {
         className="cv-project-tab cv-project-tab-new"
         role="button"
         tabIndex={0}
-        title="New canvas"
-        onClick={createCanvas}
+        title="New flow"
+        onClick={() => openFlow('')}
       >
         ＋
       </span>

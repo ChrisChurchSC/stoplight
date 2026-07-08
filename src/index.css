@@ -2605,6 +2605,7 @@ button {
   display: flex;
   align-items: center;
   padding: 0 0 10px;
+  position: relative;
 }
 .hsb-ws {
   display: flex;
@@ -2657,6 +2658,104 @@ button {
 .hsb-ws-caret svg {
   width: 14px;
   height: 14px;
+}
+.hsb-ws.open {
+  background: var(--surface-2);
+}
+.hsb-ws.open .hsb-ws-caret {
+  color: var(--text-muted);
+}
+
+/* Attio-style workspace dropdown */
+.hsb-ws-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.hsb-ws-menu {
+  position: absolute;
+  z-index: 61;
+  top: calc(100% - 4px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.08);
+  animation: hsb-ws-pop 0.12s ease-out;
+}
+@keyframes hsb-ws-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.hsb-ws-mi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 8px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+}
+.hsb-ws-mi:hover {
+  background: var(--surface-2);
+}
+.hsb-ws-mi-ic {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.hsb-ws-mi-ic svg {
+  width: 18px;
+  height: 18px;
+}
+.hsb-ws-mi-head {
+  padding: 7px 8px;
+}
+.hsb-ws-chip.sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.hsb-ws-mi-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hsb-ws-mi-check {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--accent-2);
+}
+.hsb-ws-mi-check svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.6;
+}
+.hsb-ws-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
 }
 .hsb-actions {
   display: flex;
@@ -2919,9 +3018,27 @@ button {
 .rec-table-wrap {
   width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  /* Keep a visible, grabbable horizontal scrollbar (macOS hides overlay ones). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-faint) transparent;
+}
+.rec-table-wrap::-webkit-scrollbar {
+  height: 11px;
+}
+.rec-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rec-table-wrap::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-faint) 60%, transparent);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+.rec-table-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
 }
 .rec-table {
   border-collapse: collapse;
@@ -4120,6 +4237,17 @@ button {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+/* Post detail in the flow inspect panel: every messaging field, full text. */
+.flow-post-field {
+  margin-top: 12px;
+}
+.flow-post-value {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
 }
 .flow-copy.loading {
   gap: 6px;
@@ -5592,6 +5720,16 @@ button {
 .folder-tab.active {
   background: var(--accent-soft);
   color: var(--accent);
+}
+/* Brand settings page: title on top, the section tabs as a wrapping pill row below. */
+.brand-page-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.brand-subtabs {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 /* Brand folder's combined Grid / Calendar: the head keeps the page's padding, the
    view below fills the rest of the column and owns its own scroll. */

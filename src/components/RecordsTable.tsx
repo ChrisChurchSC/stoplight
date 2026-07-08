@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
 import { RecordDrawer } from './RecordDrawer'
 
@@ -35,6 +35,27 @@ export function RecordsTable<T extends { id: string }>({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [openId, setOpenId] = useState<string | null>(null)
   const openRecord = openId ? rows.find((r) => r.id === openId) ?? null : null
+
+  // Wide records tables are painful to scroll sideways (trackpad two-finger only). Turn a
+  // plain vertical wheel into horizontal scroll while there's room, then hand vertical back
+  // at the edges so the page still scrolls. Native + non-passive so we can preventDefault.
+  const wrapRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+      if (el.scrollWidth <= el.clientWidth) return
+      const atStart = el.scrollLeft <= 0
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+      if ((e.deltaY > 0 && !atEnd) || (e.deltaY < 0 && !atStart)) {
+        el.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   const val = (r: T, k: string) => ((r as Record<string, unknown>)[k] ?? '').toString()
 
@@ -87,7 +108,7 @@ export function RecordsTable<T extends { id: string }>({
         </span>
       </div>
 
-      <div className="rec-table-wrap">
+      <div className="rec-table-wrap" ref={wrapRef}>
         <table className="rec-table" style={{ minWidth: totalWidth }}>
           <thead>
             <tr>

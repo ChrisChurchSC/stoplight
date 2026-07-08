@@ -4,7 +4,7 @@ import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, fres
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
-import type { ChannelId } from '../domain/types'
+import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { SheetGrid } from './SheetGrid'
@@ -67,7 +67,21 @@ const CampaignTile = () => (
   </span>
 )
 
-type ViewDeliverable = { key: string; label: string; tone: string; channel: ChannelId; assetType: string; count: number }
+type ViewDeliverable = { key: string; label: string; tone: string; channel: ChannelId; assetType: string; count: number; rows: TrafficRow[] }
+
+// The lead line + a body preview for a viewed asset, pulled from whatever fields its
+// channel actually uses (subject/headline/title lead; body/caption/etc. as the body), so
+// the flow shows the real generated copy rather than an empty count.
+function viewPostCopy(r: TrafficRow): { head: string; body: string } {
+  const m = (r.messaging ?? {}) as Record<string, string>
+  const head = m.subject || m.headline || m.title || r.assetName || ''
+  let body = ''
+  for (const k of ['body', 'caption', 'primary', 'description', 'preview']) {
+    if (m[k]?.trim()) { body = m[k]; break }
+  }
+  if (!body) body = Object.values(m).find((v) => v && v.trim() && v !== head) ?? ''
+  return { head, body }
+}
 
 // A rounded right-angle connector from a source port (exits right) to a target (enters left).
 /** Draw a path through an axis-aligned polyline, rounding each interior corner by r
@@ -132,10 +146,11 @@ export function FlowsView() {
   const companies = useTrafficStore((s) => s.companies)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
-  const openCampaign = useTrafficStore((s) => s.openCampaign)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
+  const flowOpen = useTrafficStore((s) => s.flowOpen)
+  const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const audienceNames = useMemo(() => (clientAudiences[brand] ?? []).map((a) => a.name), [clientAudiences, brand])
@@ -227,7 +242,10 @@ export function FlowsView() {
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+    // Re-attach when the canvas (re)mounts: Flows opens on the home where canvasRef is
+    // null, so the listener must bind once you enter a flow, not only on first mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowScreen, flowView])
   const [connectors, setConnectors] = useState<{ from: string; to: string }[]>([])
   const [drawing, setDrawing] = useState<{ from: string; x: number; y: number } | null>(null)
   const drawingFrom = useRef<string | null>(null)
@@ -393,12 +411,12 @@ export function FlowsView() {
     for (const r of viewRows) {
       const key = `${r.channel}|${r.assetType}`
       const cur = map.get(key)
-      if (cur) cur.count++
+      if (cur) { cur.count++; cur.rows.push(r) }
       else {
         const preset = DELIVERABLE_PRESETS.find((p) => p.channel === r.channel && p.assetType === r.assetType)
         const label = preset?.label ?? `${CHANNELS[r.channel as ChannelId]?.label ?? r.channel} · ${r.assetType || 'asset'}`
         const tone = preset ? TONE_HEX[preset.tone] : CHANNELS[r.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue
-        map.set(key, { key, label, tone, channel: r.channel as ChannelId, assetType: r.assetType ?? '', count: 1 })
+        map.set(key, { key, label, tone, channel: r.channel as ChannelId, assetType: r.assetType ?? '', count: 1, rows: [r] })
       }
     }
     return [...map.values()].sort((a, b) => b.count - a.count)
@@ -418,6 +436,24 @@ export function FlowsView() {
     setPickAt(null)
     setSel(node.id)
     void genPreview(node)
+  }
+  // View mode: add a deliverable straight into the opened flow's campaign (seed its rows
+  // and write their copy), so an existing flow can grow without leaving Flows or rebuilding.
+  const [addingDeliv, setAddingDeliv] = useState(false)
+  const addViewDeliverable = async (p: DeliverablePreset) => {
+    if (!viewName || addingDeliv) return
+    setPickAt(null)
+    setAddingDeliv(true)
+    try {
+      const auds = viewAudiences.length ? viewAudiences : audSelection
+      const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: startCount(p), runtime: p.runtime, brand: p.brand }
+      const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === viewName).map((r) => r.id))
+      await seedCampaignAssets(viewName, [d], { flightWeeks: viewFlight ?? flightWeeks, audiences: auds })
+      const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === viewName && !before.has(r.id))
+      if (fresh.length) await draftCopy(fresh.map((r) => r.id))
+    } finally {
+      setAddingDeliv(false)
+    }
   }
   // Start dragging a new-block connector out of a node's +.
   const startAdd = (e: ReactMouseEvent, at: number, from: string) => {
@@ -513,6 +549,20 @@ export function FlowsView() {
     setSel('campaign')
   }
 
+  // A project tab (or any openFlow caller) asked to open a specific flow here. Consume the
+  // signal: '' opens a fresh builder, a name opens that campaign in view mode.
+  useEffect(() => {
+    if (flowOpen === null) return
+    if (flowOpen === '') startNew()
+    else {
+      openView(flowOpen)
+      setFlowView('flow')
+    }
+    setFlowScreen('canvas')
+    clearFlowOpen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowOpen])
+
   const grouped = useMemo(() => {
     const map = new Map<string, DeliverablePreset[]>()
     for (const p of DELIVERABLE_PRESETS) {
@@ -527,6 +577,14 @@ export function FlowsView() {
   // connectors you can draw by hand), so they arrive connected to the main card.
   const implicitConnectors = useMemo(() => {
     const out: { from: string; to: string }[] = []
+    if (viewName !== null) {
+      // A viewed flow wires campaign → each deliverable → each of its posts.
+      for (const d of viewDelivs) {
+        out.push({ from: 'campaign', to: d.key })
+        for (const r of d.rows) out.push({ from: d.key, to: r.id })
+      }
+      return out
+    }
     for (const n of nodes) {
       // Every deliverable hangs off the campaign card.
       out.push({ from: 'campaign', to: n.id })
@@ -536,7 +594,7 @@ export function FlowsView() {
       for (let bi = 0; bi < slots; bi++) out.push({ from: n.id, to: `${n.id}:${bi}` })
     }
     return out
-  }, [nodes])
+  }, [nodes, viewName, viewDelivs])
 
   // The campaign name this flow builds into (must match build()'s naming) — used to scope
   // the real Grid / Calendar to just this flow's assets.
@@ -613,6 +671,7 @@ export function FlowsView() {
 
   const viewing = viewName !== null
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
+  const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
   const menuAnchor =
     addMenu && rects[addMenu.from]
       ? (() => {
@@ -689,11 +748,7 @@ export function FlowsView() {
               </button>
             ))}
           </div>
-          {viewing ? (
-            <button className="flow-top-build" onClick={() => openCampaign(viewName!)}>
-              Open on canvas ↗
-            </button>
-          ) : (
+          {!viewing && (
             <button className="flow-top-build" onClick={build} disabled={!nodes.length || building}>
               {building ? 'Building…' : writeCopy ? 'Build & write copy' : 'Build campaign'}
             </button>
@@ -727,8 +782,8 @@ export function FlowsView() {
               </div>
             )}
             <div className="flow-built-actions">
-              <button className="flow-built-open" onClick={() => openCampaign(built.name)}>
-                Open on canvas ↗
+              <button className="flow-built-open" onClick={() => { openView(built.name); setFlowView('flow') }}>
+                Open flow
               </button>
               <button className="flow-built-new" onClick={startNew}>
                 Start another
@@ -839,13 +894,12 @@ export function FlowsView() {
                 <circle cx="5" cy="5" r="3.5" fill="var(--text-faint)" />
               </marker>
             </defs>
-            {!viewing &&
-              implicitConnectors.map((cn) => {
-                const a = rects[cn.from]
-                const b = rects[cn.to]
-                if (!a || !b) return null
-                return <path key={`imp-${cn.from}-${cn.to}`} className="flow-edge implicit" d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)} />
-              })}
+            {implicitConnectors.map((cn) => {
+              const a = rects[cn.from]
+              const b = rects[cn.to]
+              if (!a || !b) return null
+              return <path key={`imp-${cn.from}-${cn.to}`} className="flow-edge implicit" d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)} />
+            })}
             {connectors.map((cn, i) => {
               const a = rects[cn.from]
               const b = rects[cn.to]
@@ -974,25 +1028,67 @@ export function FlowsView() {
               )}
             </div>
 
-            {/* View mode: reverse-engineered deliverables (read-only) */}
+            {/* View mode: reverse-engineered deliverables, draggable + connected like build */}
             {viewing
-              ? viewDelivs.map((d) => (
-                  <div key={d.key}>
-                    <div className="flow-link" />
-                    <div className={`flow-node${sel === d.key ? ' sel' : ''}`} onClick={() => setSel(d.key)}>
-                      <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 16%, transparent)` }}>
-                        Deliverable
-                      </span>
-                      <div className="flow-node-main">
-                        <PresetTile tone={d.tone} />
-                        <div className="flow-node-text">
-                          <div className="flow-node-label">{d.label}</div>
-                          <div className="flow-node-desc">×{d.count}</div>
+              ? viewDelivs.map((d) => {
+                  const posts = [...d.rows].sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''))
+                  return (
+                    <div key={d.key}>
+                      <div className="flow-link" />
+                      <div
+                        className="flow-branched"
+                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: posts.length > 0 ? `${posts.length * 152}px` : undefined }}
+                      >
+                        <div
+                          className={`flow-node${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
+                          data-node-id={d.key}
+                          onMouseDown={(e) => startDrag(e, d.key)}
+                          onClick={() => { setSel(d.key); setPickAt(null) }}
+                        >
+                          <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 16%, transparent)` }}>
+                            Deliverable
+                          </span>
+                          <div className="flow-node-main">
+                            <PresetTile tone={d.tone} />
+                            <div className="flow-node-text">
+                              <div className="flow-node-label">{d.label}</div>
+                              <div className="flow-node-desc">×{d.count}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flow-branch-list">
+                          {posts.map((r) => {
+                            const c = viewPostCopy(r)
+                            return (
+                              <div className="flow-branch-row" key={r.id}>
+                                <span className="flow-branch-port" style={{ borderColor: d.tone }} />
+                                <div
+                                  className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}`}
+                                  data-node-id={r.id}
+                                  style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
+                                  onMouseDown={(e) => startDrag(e, r.id)}
+                                  onClick={(e) => { e.stopPropagation(); setSel(r.id) }}
+                                >
+                                  <div className="flow-node-main">
+                                    <PresetTile tone={d.tone} />
+                                    <div className="flow-node-text">
+                                      <div className="flow-node-label">{c.head}</div>
+                                    </div>
+                                  </div>
+                                  {c.body && (
+                                    <div className="flow-copy">
+                                      <div className="flow-copy-body">{c.body}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               : nodes.map((n) => {
                   const p = presetByKey(n.presetKey)
                   if (!p) return null
@@ -1077,12 +1173,11 @@ export function FlowsView() {
           {/* Connector endpoint dots, redrawn on a layer ABOVE the cards so they sit on
               top of each card's edge instead of tucking behind it. */}
           <svg className="flow-edges-top" width="100%" height="100%">
-            {!viewing &&
-              implicitConnectors.map((cn) => {
-                const b = rects[cn.to]
-                if (!b) return null
-                return <circle key={`d-${cn.from}-${cn.to}`} className="flow-edge-dot" cx={b.x} cy={b.y + b.h / 2} r={2.5} />
-              })}
+            {implicitConnectors.map((cn) => {
+              const b = rects[cn.to]
+              if (!b) return null
+              return <circle key={`d-${cn.from}-${cn.to}`} className="flow-edge-dot" cx={b.x} cy={b.y + b.h / 2} r={2.5} />
+            })}
             {connectors.map((cn, i) => {
               const b = rects[cn.to]
               if (!b) return null
@@ -1093,7 +1188,57 @@ export function FlowsView() {
 
         <aside className="flow-panel">
           {viewing ? (
-            selDeliv ? (
+            pickAt !== null ? (
+              <>
+                <div className="flow-panel-head">
+                  <button className="flow-back" onClick={() => setPickAt(null)}>
+                    ‹ Back
+                  </button>
+                  <span className="flow-panel-title">Add deliverable</span>
+                </div>
+                <div className="flow-picker-list">
+                  {grouped.map(([group, presets]) => (
+                    <div key={group} className="flow-pgroup">
+                      <div className="flow-pgroup-h">{group}</div>
+                      {presets.map((p) => (
+                        <button key={p.key} className="flow-pitem" disabled={addingDeliv} onClick={() => void addViewDeliverable(p)}>
+                          <PresetTile tone={TONE_HEX[p.tone]} />
+                          <div className="flow-pitem-text">
+                            <div className="flow-pitem-label">{p.label}</div>
+                            <div className="flow-pitem-desc">{addingDeliv ? 'Adding…' : p.brand || p.runtime === 'one-off' ? 'one-off' : `${p.perMonth} / month`}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : selPost ? (
+              <>
+                <div className="flow-panel-head">
+                  <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} />
+                  <span className="flow-panel-title">{selPost.assetName}</span>
+                  <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
+                    ✕
+                  </button>
+                </div>
+                <div className="flow-inspect">
+                  <p className="flow-inspect-desc">
+                    {CHANNELS[selPost.channel as ChannelId]?.label ?? selPost.channel}
+                    {selPost.audience ? ` · ${selPost.audience}` : ''}
+                    {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
+                  </p>
+                  {Object.entries((selPost.messaging ?? {}) as Record<string, string>)
+                    .filter(([, v]) => v && v.trim())
+                    .map(([k, v]) => (
+                      <div key={k} className="flow-post-field">
+                        <label className="flow-inspect-label">{k}</label>
+                        <div className="flow-post-value">{v}</div>
+                      </div>
+                    ))}
+                </div>
+              </>
+            ) : selDeliv ? (
               <>
                 <div className="flow-panel-head">
                   <PresetTile tone={selDeliv.tone} />
@@ -1106,7 +1251,7 @@ export function FlowsView() {
                   <p className="flow-inspect-desc">
                     {selDeliv.channel} · {selDeliv.assetType}
                   </p>
-                  <div className="flow-inspect-note">{selDeliv.count} asset{selDeliv.count === 1 ? '' : 's'} in this campaign.</div>
+                  <div className="flow-inspect-note">{selDeliv.count} asset{selDeliv.count === 1 ? '' : 's'} in this flow. Click a post to see its copy.</div>
                 </div>
               </>
             ) : (
@@ -1127,11 +1272,8 @@ export function FlowsView() {
                       <span>{a}</span>
                     </div>
                   ))}
-                  <button className="flow-inspect-del" style={{ color: 'var(--accent)', borderColor: 'var(--accent)', marginTop: 18 }} onClick={() => openCampaign(viewName!)}>
-                    Open on canvas ↗
-                  </button>
-                  <div className="flow-inspect-note" style={{ marginTop: 12 }}>
-                    Editing assets (copy, schedule, coherence) happens on the canvas for now.
+                  <div className="flow-inspect-note" style={{ marginTop: 14 }}>
+                    Click a post to see its copy, or use the Grid and Calendar tabs above.
                   </div>
                 </div>
               </>
@@ -1447,7 +1589,7 @@ export function FlowsView() {
           </button>
         </div>
         <span className="flow-tb-divider" />
-        <button className="flow-tb-add" onClick={() => { setPickAt(nodes.length); setSel(null) }} disabled={viewing}>
+        <button className="flow-tb-add" onClick={() => { setPickAt(viewing ? viewDelivs.length : nodes.length); setSel(null) }} disabled={addingDeliv}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <rect x="4" y="6" width="14" height="14" rx="3" />
             <path d="M11 12h6M14 9v6" />
