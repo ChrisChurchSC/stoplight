@@ -340,6 +340,10 @@ const lifecyclePhrase = (v: string) => {
 /** The place/time-like context value that reads well as a headline lead. */
 const headLead = (ctx: Record<string, string>) =>
   ctx.location || ctx.time || ctx.season || ctx.moment || ctx.account || ''
+// Context keys that STEER generation (a blueprint's brief / framework / subject formula /
+// allowed levers, and blueprint meta) but are never content — they must not be woven into
+// the copy. The catch-all below would otherwise dump a whole page brief into the body.
+const GUIDANCE_KEYS = new Set(['brief', 'framework', 'subjectformula', 'levers', 'cta', 'bpkey', 'bpstep', 'bptiming', 'audience', 'journey'])
 /** A natural clause naming the full context, so every variant differs. */
 function contextClause(ctx: Record<string, string>): string {
   const parts: string[] = []
@@ -349,6 +353,8 @@ function contextClause(ctx: Record<string, string>): string {
   if (ctx.lifecycle) parts.push(lifecyclePhrase(ctx.lifecycle))
   for (const [k, val] of Object.entries(ctx)) {
     if (['location', 'time', 'season', 'moment', 'lifecycle', 'account'].includes(k)) continue
+    // Skip generation-guidance keys, and any long value (a brief, not a personalizer).
+    if (GUIDANCE_KEYS.has(k.toLowerCase()) || val.length > 48) continue
     parts.push(lower(val))
   }
   if (ctx.account) parts.push(`for ${ctx.account}`)
