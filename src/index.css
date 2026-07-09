@@ -4021,10 +4021,34 @@ button {
 .flow-aud-caret { color: var(--text-faint); font-size: 11px; flex: 0 0 auto; }
 .flow-aud-scrim { position: fixed; inset: 0; z-index: 30; }
 .flow-aud-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 31; background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 11px; box-shadow: 0 16px 40px rgba(16, 24, 40, 0.2); padding: 6px; max-height: 300px; overflow-y: auto; }
-/* Build-brief: one dropdown per record type (Companies / People / Segments / Media mix) */
-.flow-tagdd { margin-top: 10px; }
-.flow-tagdd:first-of-type { margin-top: 4px; }
-.flow-tagdd-label { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+/* Build-brief: campaign budget input */
+.flow-budget { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: 0 11px; }
+.flow-budget:focus-within { border-color: var(--accent); }
+.flow-budget-cur { color: var(--text-muted); font-size: 13px; flex: 0 0 auto; }
+.flow-budget-input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font: inherit; font-size: 13px; color: var(--text); padding: 9px 0; }
+/* Build-brief: record-tag rows (type icon + dropdown box + remove), plus an add row */
+.flow-tagrow { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.flow-tagrow:first-of-type { margin-top: 4px; }
+.flow-tagrow-ic { flex: 0 0 auto; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+.flow-tagrow-ic svg { width: 14px; height: 14px; }
+.flow-tagrow-ic-add { color: var(--text-faint); font-size: 15px; font-weight: 600; }
+.flow-tagrow-dd { flex: 1; min-width: 0; }
+.flow-tagrow-del { flex: 0 0 auto; width: 24px; height: 24px; border: 0; background: none; color: var(--text-faint); font-size: 13px; cursor: pointer; border-radius: 6px; }
+.flow-tagrow-del:hover { background: var(--surface-2); color: var(--red); }
+.flow-tagrow-add-txt { color: var(--text-faint); }
+.flow-tagrow-add .flow-aud-btn { border-style: dashed; }
+.flow-aud-tic { flex: 0 0 auto; width: 15px; height: 15px; display: inline-flex; color: var(--text-faint); }
+.flow-aud-tic svg { width: 15px; height: 15px; }
+/* Record-tag chips listed on the campaign card (small, single-line, ellipsis) */
+.flow-node-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.flow-node-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; max-width: 130px; }
+.flow-node-tag-ic { flex: 0 0 auto; width: 11px; height: 11px; display: inline-flex; color: var(--text-faint); }
+.flow-node-tag-ic svg { width: 11px; height: 11px; }
+.flow-node-tag-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Build button relocated into the brief's On build section */
+.flow-brief-build { width: 100%; margin-top: 14px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 700; padding: 10px 14px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.flow-brief-build:hover:not(:disabled) { filter: brightness(1.06); }
+.flow-brief-build:disabled { opacity: .5; cursor: default; }
 .flow-aud-group { padding: 2px 0; }
 .flow-aud-group + .flow-aud-group { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
 .flow-aud-grouphead { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); padding: 6px 9px 3px; }

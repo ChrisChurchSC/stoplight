@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import type { FlowRefType, FlowReference } from '../domain/clients'
@@ -23,20 +23,43 @@ import { FlowsHome } from './FlowsHome'
 
 const CAMPAIGN_TONE = '#ff6347'
 
-// Every channel that has a scaffoldable deliverable, derived from the preset list so it
-// never drifts. Picking one scaffolds its default deliverable onto the canvas (the first
-// preset for that channel); un-picking removes that channel's deliverables. Grouped by
-// kind in the picker so the full set stays organized.
-const CHANNEL_PICKS: ChannelId[] = [...new Set(DELIVERABLE_PRESETS.map((p) => p.channel))]
-const CHANNEL_GROUPS: { kind: string; label: string }[] = [
-  { kind: 'organic', label: 'Social' },
-  { kind: 'paid', label: 'Paid' },
-  { kind: 'owned', label: 'Owned' },
-]
-// Cleaner chip labels only where the raw channel label reads as an asset type.
-const CHANNEL_LABEL: Partial<Record<ChannelId, string>> = {
-  linkedin: 'LinkedIn', blog: 'Blog', x: 'X',
+// Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
+// Segments / Media mix), so a tag reads the same as the page it comes from.
+const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
+  company: (
+    <>
+      <rect x="4" y="3" width="9" height="18" rx="1.4" />
+      <path d="M13 8h7v13H4" />
+      <path d="M7 7h3M7 11h3M7 15h3M16 12h0M16 16h0" />
+    </>
+  ),
+  person: (
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M4 20a5 5 0 0 1 10 0" />
+      <path d="M16 5.2a3 3 0 0 1 0 5.6" />
+      <path d="M17 14.5a5 5 0 0 1 3 5.5" />
+    </>
+  ),
+  segment: (
+    <>
+      <path d="M12 3 2 8l10 5 10-5-10-5Z" />
+      <path d="m2 13 10 5 10-5" />
+    </>
+  ),
+  'media-mix': (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v9h9" />
+    </>
+  ),
 }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Segment', 'media-mix': 'Media mix' }
+const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    {RECORD_TYPE_ICON[type]}
+  </svg>
+)
 
 // A recurring deliverable (newsletter, social) breaks into monthly posts. A lead magnet
 // (ebook, whitepaper) breaks into sections. Both show briefable sub-cards; other one-offs
@@ -192,6 +215,7 @@ export function FlowsView() {
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
+  const [budget, setBudget] = useState('')
   const [flightWeeks, setFlightWeeks] = useState(12)
   // Build-mode record-tag selection (Companies / People / Segments / Media mix). null =
   // not touched yet, so it defaults to all of the brand's segments.
@@ -200,7 +224,9 @@ export function FlowsView() {
   const [sel, setSel] = useState<'campaign' | string | null>('campaign')
   const [pickAt, setPickAt] = useState<number | null>(null)
   const [building, setBuilding] = useState(false)
-  const [writeCopy, setWriteCopy] = useState(true)
+  // Build always writes copy now (the toggle was removed); kept as a constant so the
+  // preview + build paths that reference it stay unchanged.
+  const writeCopy = true
   const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null } | null>(null)
   // Live draft copy per deliverable node, generated when it's added (and on redraft).
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
@@ -216,8 +242,8 @@ export function FlowsView() {
   // View-mode Audiences record selector (which segment records this flow targets).
   const [audMenuOpen, setAudMenuOpen] = useState(false)
   const [newAudName, setNewAudName] = useState('')
-  // Build-brief: which record-tag dropdown (Companies / People / …) is open.
-  const [openTagGroup, setOpenTagGroup] = useState<FlowRefType | null>(null)
+  // Build-brief: which record-tag row's dropdown is open ("<type>:<id>" or "add").
+  const [openTagKey, setOpenTagKey] = useState<string | null>(null)
   // Swap a generated-idea post for a real ingested post from the library.
   const [swapOpen, setSwapOpen] = useState(false)
   const [swapSearch, setSwapSearch] = useState('')
@@ -300,7 +326,6 @@ export function FlowsView() {
   // created at the drop point and connected back to the source node.
   const [addMenu, setAddMenu] = useState<{ at: number; from: string; x: number; y: number } | null>(null)
   const [addSearch, setAddSearch] = useState('')
-  const [audOpen, setAudOpen] = useState(false)
   const addDrag = useRef<{ from: string; at: number } | null>(null)
   const pendingPlace = useRef<{ id: string; x: number; y: number } | null>(null)
   const startConnect = (e: ReactMouseEvent, from: string) => {
@@ -362,12 +387,19 @@ export function FlowsView() {
   const defaultBriefRefs: FlowReference[] = brandSegments.map((a) => ({ type: 'segment', id: a.id, label: a.name }))
   const briefRefsEffective = briefRefs ?? defaultBriefRefs
   const audSelection = briefRefsEffective.length ? briefRefsEffective.map((r) => r.label) : audienceNames
+  const refKey = (r: { type: FlowRefType; id: string }) => `${r.type}:${r.id}`
   const hasBriefRef = (type: FlowRefType, id: string) => briefRefsEffective.some((r) => r.type === type && r.id === id)
-  const toggleBriefRef = (type: FlowRefType, id: string, label: string) => {
-    const on = hasBriefRef(type, id)
-    setBriefRefs(on ? briefRefsEffective.filter((r) => !(r.type === type && r.id === id)) : [...briefRefsEffective, { type, id, label }])
+  const commitBriefRefs = (next: FlowReference[]) => {
+    setBriefRefs(next)
     scheduleRedraftAll()
   }
+  // Add a record tag (skip if already tagged); remove one; or swap which record a row points to.
+  const addBriefRef = (type: FlowRefType, id: string, label: string) => {
+    if (!hasBriefRef(type, id)) commitBriefRefs([...briefRefsEffective, { type, id, label }])
+  }
+  const removeBriefRef = (key: string) => commitBriefRefs(briefRefsEffective.filter((r) => refKey(r) !== key))
+  const replaceBriefRef = (key: string, type: FlowRefType, id: string, label: string) =>
+    commitBriefRefs(briefRefsEffective.map((r) => (refKey(r) === key ? { type, id, label } : r)))
 
   // Campaign-level generation inputs held in refs so the debounced redraft-all reads
   // the LATEST values (no stale closures in the timer callback).
@@ -620,25 +652,6 @@ export function FlowsView() {
         return { ...x, briefs }
       }),
     )
-  // The channels currently on the canvas (a channel is "on" if any deliverable uses it).
-  const channelsOnCanvas = useMemo(
-    () => new Set(nodes.map((n) => presetByKey(n.presetKey)?.channel).filter(Boolean) as ChannelId[]),
-    [nodes],
-  )
-  // Toggle a whole channel from the brief: add its default deliverable (and draft copy for
-  // it), or strip every deliverable on that channel.
-  const toggleChannel = (ch: ChannelId) => {
-    if (channelsOnCanvas.has(ch)) {
-      setNodes((ns) => ns.filter((n) => presetByKey(n.presetKey)?.channel !== ch))
-      return
-    }
-    const preset = DELIVERABLE_PRESETS.find((p) => p.channel === ch)
-    if (!preset) return
-    const node: FlowDeliverable = { id: freshNodeId(), presetKey: preset.key, perMonth: startCount(preset) }
-    setNodes((ns) => [...ns, node])
-    void genPreview(node)
-  }
-
   const startNew = () => {
     setViewName(null)
     setBuilt(null)
@@ -646,6 +659,7 @@ export function FlowsView() {
     setPreview({})
     setName('')
     setSubject('')
+    setBudget('')
     setBriefRefs(null)
     lastSubjectRef.current = ''
     setSel('campaign')
@@ -747,7 +761,7 @@ export function FlowsView() {
     setBuilding(true)
     const campaignName = `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
     try {
-      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: subject.trim() || undefined, durationWeeks: flightWeeks })
+      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: subject.trim() || undefined, durationWeeks: flightWeeks, overallBudget: budget ? Math.max(0, +budget || 0) : undefined })
       // Persist the tagged records so the built flow keeps its Companies/People/Segments/
       // Media-mix references (the view-mode Records selector reads these).
       if (briefRefsEffective.length) setCampaignReferences(campaignName, briefRefsEffective)
@@ -905,11 +919,6 @@ export function FlowsView() {
               </button>
             ))}
           </div>
-          {!viewing && (
-            <button className="flow-top-build" onClick={build} disabled={!nodes.length || building}>
-              {building ? 'Building…' : writeCopy ? 'Build & write copy' : 'Build campaign'}
-            </button>
-          )}
         </div>
       </header>
 
@@ -1100,33 +1109,6 @@ export function FlowsView() {
               </div>
             </>
           )}
-          {audOpen && rects['campaign'] && (() => {
-            const r = rects['campaign']
-            const cw = canvasRef.current?.clientWidth ?? 900
-            const x = Math.min(Math.max(r.x, 8), cw - 292)
-            const y = r.y + r.h + 8
-            return (
-              <>
-                <div className="flow-addmenu-scrim" onMouseDown={() => setAudOpen(false)} />
-                <div className="flow-addmenu flow-audmenu" style={{ left: x, top: y }} onMouseDown={(e) => e.stopPropagation()}>
-                  <div className="flow-addmenu-list">
-                    {recordGroups.map((g) => (
-                      <div key={g.type}>
-                        <div className="flow-addmenu-group">{g.label}</div>
-                        {g.items.length === 0 && <div className="flow-addmenu-empty">None yet</div>}
-                        {g.items.map((it) => (
-                          <label key={it.id} className="flow-audmenu-item">
-                            <input type="checkbox" checked={hasBriefRef(g.type, it.id)} onChange={() => toggleBriefRef(g.type, it.id, it.label)} />
-                            <span>{it.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )
-          })()}
           {marquee && (
             <div
               className="flow-marquee"
@@ -1155,21 +1137,22 @@ export function FlowsView() {
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
                   <div className="flow-node-desc">
-                    {viewing ? (
-                      `${viewRows.length} assets · ${viewAudiences.length} audience${viewAudiences.length === 1 ? '' : 's'}`
-                    ) : (
-                      <>
-                        {flightWeeks}-week flight ·{' '}
-                        <button
-                          className="flow-aud-btn"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); setAudOpen((o) => !o); setSel('campaign') }}
-                        >
-                          {audSelection.length} record tag{audSelection.length === 1 ? '' : 's'}
-                        </button>
-                      </>
-                    )}
+                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week flight`}
                   </div>
+                  {(() => {
+                    const tags = viewing ? flowRefs : briefRefsEffective
+                    if (!tags.length) return null
+                    return (
+                      <div className="flow-node-tags">
+                        {tags.map((r) => (
+                          <span key={refKey(r)} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
+                            <span className="flow-node-tag-ic" aria-hidden="true"><RecordTypeIcon type={r.type} /></span>
+                            <span className="flow-node-tag-txt">{r.label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
               {!viewing && (
@@ -1593,78 +1576,101 @@ export function FlowsView() {
                   <span>{flightWeeks} weeks</span>
                   <button onClick={() => { setFlightWeeks((w) => w + 1); scheduleRedraftAll() }}>+</button>
                 </div>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                  Budget
+                </label>
+                <div className="flow-budget">
+                  <span className="flow-budget-cur">$</span>
+                  <input
+                    className="flow-budget-input"
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={budget}
+                    placeholder="Total campaign budget"
+                    onChange={(e) => setBudget(e.target.value)}
+                  />
+                </div>
                 <label className="flow-inspect-label" style={{ marginTop: 16 }}>
                   Record Tags{briefRefsEffective.length ? ` · ${briefRefsEffective.length}` : ''}
                 </label>
-                {recordGroups.map((g) => {
-                  const selected = briefRefsEffective.filter((r) => r.type === g.type)
-                  const open = openTagGroup === g.type
+                {briefRefsEffective.map((ref) => {
+                  const key = refKey(ref)
+                  const open = openTagKey === key
                   return (
-                    <div key={g.type} className="flow-tagdd">
-                      <span className="flow-tagdd-label">{g.label}</span>
-                      <div className="flow-aud">
-                        <button className="flow-aud-btn" onClick={() => setOpenTagGroup(open ? null : g.type)}>
-                          <span className="flow-aud-btn-txt">{selected.length ? selected.map((r) => r.label).join(', ') : `Select ${g.label.toLowerCase()}`}</span>
+                    <div key={key} className="flow-tagrow">
+                      <span className="flow-tagrow-ic" title={RECORD_TYPE_LABEL[ref.type]} aria-hidden="true">
+                        <RecordTypeIcon type={ref.type} />
+                      </span>
+                      <div className="flow-aud flow-tagrow-dd">
+                        <button className="flow-aud-btn" onClick={() => setOpenTagKey(open ? null : key)}>
+                          <span className="flow-aud-btn-txt">{ref.label}</span>
                           <span className="flow-aud-caret" aria-hidden="true">▾</span>
                         </button>
                         {open && (
                           <>
-                            <div className="flow-aud-scrim" onClick={() => setOpenTagGroup(null)} />
+                            <div className="flow-aud-scrim" onClick={() => setOpenTagKey(null)} />
                             <div className="flow-aud-menu">
-                              {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
-                              {g.items.map((it) => {
-                                const on = hasBriefRef(g.type, it.id)
-                                return (
-                                  <button key={it.id} className={`flow-aud-item${on ? ' on' : ''}`} onClick={() => toggleBriefRef(g.type, it.id, it.label)}>
-                                    <span className="flow-aud-check" aria-hidden="true">{on ? '✓' : ''}</span>
-                                    <span>{it.label}</span>
-                                  </button>
-                                )
-                              })}
+                              {recordGroups.map((g) => (
+                                <div key={g.type} className="flow-aud-group">
+                                  <div className="flow-aud-grouphead">{g.label}</div>
+                                  {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
+                                  {g.items.map((it) => {
+                                    const on = hasBriefRef(g.type, it.id)
+                                    return (
+                                      <button key={it.id} className={`flow-aud-item${refKey({ type: g.type, id: it.id }) === key ? ' on' : ''}`} disabled={on && refKey({ type: g.type, id: it.id }) !== key} onClick={() => { replaceBriefRef(key, g.type, it.id, it.label); setOpenTagKey(null) }}>
+                                        <span className="flow-aud-check" aria-hidden="true">{refKey({ type: g.type, id: it.id }) === key ? '✓' : ''}</span>
+                                        <span>{it.label}</span>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              ))}
                             </div>
                           </>
                         )}
                       </div>
+                      <button className="flow-tagrow-del" title="Remove tag" aria-label="Remove tag" onClick={() => removeBriefRef(key)}>✕</button>
                     </div>
                   )
                 })}
-                <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                  Channels{channelsOnCanvas.size ? ` · ${channelsOnCanvas.size}` : ''}
-                </label>
-                {CHANNEL_GROUPS.map((g) => {
-                  const chs = CHANNEL_PICKS.filter((ch) => CHANNELS[ch]?.kind === g.kind)
-                  if (!chs.length) return null
-                  return (
-                    <div key={g.kind} className="flow-chan-group">
-                      <div className="flow-chan-group-h">{g.label}</div>
-                      <div className="flow-chan-grid">
-                        {chs.map((ch) => (
-                          <button
-                            key={ch}
-                            type="button"
-                            className={`flow-chan-chip${channelsOnCanvas.has(ch) ? ' on' : ''}`}
-                            onClick={() => toggleChannel(ch)}
-                          >
-                            {CHANNEL_LABEL[ch] ?? CHANNELS[ch]?.label ?? ch}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-                <div className="flow-inspect-note" style={{ marginTop: 6 }}>
-                  Pick channels to scaffold a starter deliverable for each. Tune cadence or add more per deliverable.
+                <div className="flow-tagrow flow-tagrow-add">
+                  <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
+                  <div className="flow-aud flow-tagrow-dd">
+                    <button className="flow-aud-btn" onClick={() => setOpenTagKey(openTagKey === 'add' ? null : 'add')}>
+                      <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
+                      <span className="flow-aud-caret" aria-hidden="true">▾</span>
+                    </button>
+                    {openTagKey === 'add' && (
+                      <>
+                        <div className="flow-aud-scrim" onClick={() => setOpenTagKey(null)} />
+                        <div className="flow-aud-menu">
+                          {recordGroups.map((g) => {
+                            const items = g.items.filter((it) => !hasBriefRef(g.type, it.id))
+                            if (!items.length) return null
+                            return (
+                              <div key={g.type} className="flow-aud-group">
+                                <div className="flow-aud-grouphead">{g.label}</div>
+                                {items.map((it) => (
+                                  <button key={it.id} className="flow-aud-item" onClick={() => { addBriefRef(g.type, it.id, it.label); setOpenTagKey(null) }}>
+                                    <span className="flow-aud-tic" aria-hidden="true"><RecordTypeIcon type={g.type} /></span>
+                                    <span>{it.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                  On build
-                </label>
-                <label className="flow-check">
-                  <input type="checkbox" checked={writeCopy} onChange={() => setWriteCopy((v) => !v)} />
-                  <span>Write copy for each asset</span>
-                </label>
-                <div className="flow-inspect-note">
-                  Composes on-brand messaging (headline, body, CTA, proof) from {brand || 'the brand'}'s audiences and proof points. Turn off to build empty structure.
+                <div className="flow-inspect-note" style={{ marginTop: 14 }}>
+                  Add deliverables from the canvas toolbar, then Build.
                 </div>
+                <button className="flow-brief-build" onClick={build} disabled={!nodes.length || building}>
+                  {building ? 'Building…' : 'Build & write copy'}
+                </button>
               </div>
             </>
           ) : sel && sel.includes(':') ? (
