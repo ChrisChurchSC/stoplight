@@ -311,6 +311,14 @@ function componentCopy(fl: MessagingField, ctx: Ctx, v: number): string {
     const head = formula && formula !== '—' ? fillSubjectFormula(formula, ctx) : ctx.assetHook ? cap(ctx.assetHook) : ctx.format.head(ctx, ctx.i + v)
     return localizeHead(head, ctx.context)
   }
+  // Page section fields (proof / stat / FAQ) get section-appropriate content instead of a
+  // generic body dup, so a landing page's sections read distinctly.
+  if (/social|logo|trust/.test(k)) return localizeHead(`Trusted by ${ctx.who}. ${cap(ctx.proof.label)}.`.trim(), ctx.context)
+  if (/proof|stat/.test(k)) return localizeHead((ctx.proof.detail?.trim() || `${cap(ctx.proof.label)}, proven with ${ctx.who}.`), ctx.context)
+  if (/faq|objection|question/.test(k)) {
+    const pain = painAt(ctx, ctx.i + v)
+    return localizeBody(`Worried ${pain || 'it won’t fit'}? ${cap(ctx.proof.detail?.trim() || ctx.proof.label)} — built for ${ctx.who}.`, ctx.context)
+  }
   // primary / body / intro / post / caption / message … -> the chosen execution format,
   // opened on the conditioned hook when one is set.
   const body = ctx.format.body(ctx, ctx.i + v)
