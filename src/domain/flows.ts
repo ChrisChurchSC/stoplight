@@ -97,6 +97,7 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'checklist', label: 'Checklist', channel: 'lead-magnet', assetType: 'checklist', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Lead magnets', tone: 'green', brand: true },
   { key: 'whitepaper', label: 'Whitepaper', channel: 'lead-magnet', assetType: 'whitepaper', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Lead magnets', tone: 'green', brand: true },
   // Web (built once)
+  { key: 'homepage', label: 'Homepage', channel: 'website', assetType: 'homepage', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', tone: 'gold', brand: true },
   { key: 'landing', label: 'Landing page', channel: 'landing-page', assetType: 'lead-capture', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', tone: 'gold', brand: true },
   { key: 'sales-page', label: 'Sales / offer page', channel: 'landing-page', assetType: 'sales', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', tone: 'gold', brand: true },
   { key: 'case-study', label: 'Case study', channel: 'blog', assetType: 'case-study', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Web', tone: 'gold', brand: true },

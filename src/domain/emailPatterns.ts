@@ -453,7 +453,33 @@ const LEADGEN_PAGE: EmailBlueprint = {
   ],
 }
 
-export const PAGE_BLUEPRINTS: EmailBlueprint[] = [SALES_PAGE, LEADGEN_PAGE]
+const HOMEPAGE: EmailBlueprint = {
+  key: 'homepage',
+  name: 'Corporate homepage',
+  channel: 'website',
+  assetType: 'homepage',
+  kind: 'page',
+  summary: 'A brand-led homepage that commits to ONE outcome above the fold, then proves it, with multiple entry points below.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero', timing: 'Above the fold', subjectFormula: 'The {category} for {audience}', framework: 'Category', cta: 'Get started', levers: ['none'], brief: 'Commit to ONE outcome above the fold (do not cram every ICP). A bold category-led headline, a subheadline that names the audience, a dominant primary CTA plus a low-commitment secondary, and a real product visual.' },
+    { label: 'Social proof bar', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'A recognizable customer logo strip within the first scroll to establish credibility immediately.' },
+    { label: 'Value proposition', timing: 'Section 2', subjectFormula: '—', framework: 'JTBD', cta: '—', levers: ['none'], brief: 'What the company does and the job it gets done for the customer, in plain language.' },
+    { label: 'Products / features', timing: 'Section 3', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'The product areas as benefits (a bento or grid). Multiple entry points are fine, but keep one clear primary path.' },
+    { label: 'Use cases', timing: 'Section 4', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'How different audiences use it, each addressed specifically rather than genericized.' },
+    { label: 'Deeper proof', timing: 'Section 5', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'Testimonials with names and outcomes, case-study metrics, ratings, or press. Near a CTA.' },
+    { label: 'Differentiation', timing: 'Section 6', subjectFormula: '—', framework: 'BAB', cta: '—', levers: ['none'], brief: 'Why us over the old way — one differentiator angle (price, better solution, values, or innovation).' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'Get started', levers: ['none'], brief: 'A sharp restatement of the primary ask with a fresh angle.' },
+  ],
+  guardrails: [
+    'Commit to ONE outcome above the fold; do not cram every ICP.',
+    'Full nav, but one dominant hero CTA.',
+    'Logo bar within the first scroll.',
+    'Multiple product entry points are fine, but keep one clear primary path.',
+  ],
+}
+
+export const PAGE_BLUEPRINTS: EmailBlueprint[] = [HOMEPAGE, SALES_PAGE, LEADGEN_PAGE]
 
 // ---- Blog / content blueprints ----
 // A content piece is ONE deliverable; its steps are the ordered sections of the article.
