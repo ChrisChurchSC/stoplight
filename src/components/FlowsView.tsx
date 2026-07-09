@@ -3,7 +3,7 @@ import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
-import { blueprintsFor, blueprintByKey, stepAt, stepLineage, stepFromLineage, type EmailBlueprint } from '../domain/emailPatterns'
+import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
@@ -534,9 +534,9 @@ export function FlowsView() {
     setBlueprintBusy(true)
     try {
       const ordered = [...rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
+      const briefs = blueprintBriefs(bp)
       for (let i = 0; i < ordered.length; i++) {
-        const st = stepAt(bp, i)
-        const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: st.brief, ...stepLineage(bp, i) }
+        const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: briefs[i % briefs.length], ...stepLineage(bp, i) }
         await updateRow(ordered[i].id, { messaging: {}, lineage })
       }
       await draftCopy(ordered.map((r) => r.id))
@@ -712,7 +712,7 @@ export function FlowsView() {
       n.map((x) => {
         if (x.id !== id) return x
         if (!bp) { const { blueprint: _b, ...rest } = x; target = rest; return rest }
-        const briefs = bp.kind === 'sequence' ? bp.steps.map((s) => s.brief) : [bp.steps[0].brief]
+        const briefs = blueprintBriefs(bp)
         const perMonth = bp.kind === 'sequence' ? bp.steps.length : x.perMonth
         target = { ...x, blueprint: bp.key, briefs, perMonth }
         return target

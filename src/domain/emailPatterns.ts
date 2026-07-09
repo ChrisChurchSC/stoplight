@@ -1,17 +1,18 @@
 import type { ChannelId } from './types'
 
 /**
- * Email pattern library — reusable structures for email/newsletter deliverables. A
- * blueprint codifies a campaign type's recommended shape: a sequence of emails (or, for a
- * newsletter, one email's content blocks), each with a message-arc label, timing, a subject
- * formula, a copy framework, one dominant CTA, and the persuasion levers that are honest to
- * use. Applying a blueprint to a deliverable seeds its per-slot briefs, which the copy
- * writer already turns into distinct, on-arc copy.
+ * Content pattern library — reusable structures for email and web-page deliverables. A
+ * blueprint codifies a type's recommended shape: an email SEQUENCE (welcome, cart, launch,
+ * …), a SINGLE email's blocks (newsletter), or a web PAGE's ordered sections (sales /
+ * lead-gen landing page). Each step carries a label, timing/position, a fill-in-the-blank
+ * subject or value-prop formula, a copy framework, one dominant CTA, and the persuasion
+ * levers that are honest to use. Applying a blueprint seeds a deliverable's per-slot briefs,
+ * which the copy writer turns into distinct, on-structure copy.
  *
- * Grounded in the marketing-email research brief (welcome + newsletter first).
+ * Grounded in the marketing-email and tech-website research briefs.
  */
 
-export type CopyFramework = 'AIDA' | 'PAS' | 'BAB' | 'FAB' | '4Ps' | 'Scannable'
+export type CopyFramework = 'AIDA' | 'PAS' | 'BAB' | 'FAB' | '4Ps' | 'Scannable' | 'JTBD' | 'Category'
 export type PersuasionLever = 'social-proof' | 'time-scarcity' | 'quantity-scarcity' | 'exclusivity' | 'none'
 
 export interface EmailStep {
@@ -34,8 +35,9 @@ export interface EmailBlueprint {
   name: string
   channel: ChannelId
   assetType: string
-  /** 'sequence' = each step is its own email; 'single' = steps are blocks inside one email. */
-  kind: 'sequence' | 'single'
+  /** 'sequence' = each step is its own email; 'single' = blocks inside one email;
+   *  'page' = ordered sections inside one web page (the whole page is one deliverable). */
+  kind: 'sequence' | 'single' | 'page'
   summary: string
   /** Human cadence note, e.g. "3-5 emails over 7-14 days". */
   cadence: string
@@ -396,14 +398,85 @@ export const EMAIL_BLUEPRINTS: EmailBlueprint[] = [
   BIRTHDAY,
 ]
 
-/** Blueprints available for a given channel + assetType (email welcome / newsletter for now). */
+// ---- Web page blueprints (the tech-website pattern library) ----
+// A page is ONE deliverable; its steps are the ordered sections of the page.
+
+const SALES_PAGE: EmailBlueprint = {
+  key: 'sales-page',
+  name: 'Product / sales page',
+  channel: 'landing-page',
+  assetType: 'sales',
+  kind: 'page',
+  summary: 'A benefit-led product page: promise → proof → action, top to bottom. The hero carries most of the load.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero', timing: 'Above the fold', subjectFormula: 'For {audience} who {need}, {brand} is the {category} that {benefit}', framework: 'Category', cta: 'Get started free', levers: ['none'], brief: 'The hero. One outcome-led headline that passes the 5-second what/who/do test, a subheadline that clarifies the mechanism or names the audience, a dominant primary CTA plus a low-commitment secondary, and a real product visual.' },
+    { label: 'Social proof bar', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'A logo strip or a hard stat ("Trusted by…", "Join 5,000+ teams") right under the hero to kill the credibility objection before it forms.' },
+    { label: 'Problem / value', timing: 'Section 2', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'Name the pain or the outcome and set up why the product exists. Problem-led for pain-aware buyers.' },
+    { label: 'Features as benefits', timing: 'Section 3', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'Translate each capability into an outcome (pain → feature → quantified result). Two to three sentences per block, scannable.' },
+    { label: 'How it works', timing: 'Section 4', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'A 3-step sequence that reduces perceived effort ("Sign up → Connect → Ship").' },
+    { label: 'Deeper proof', timing: 'Section 5', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'Testimonials with a name, title, photo and a specific outcome, plus case-study metrics or ratings. Place it next to a CTA.' },
+    { label: 'Offer / pricing', timing: 'Section 6', subjectFormula: '—', framework: 'Scannable', cta: 'See pricing', levers: ['none'], brief: 'The offer or a pricing summary. Three tiers, a highlighted middle, annual default, and a "starting at" anchor for enterprise.' },
+    { label: 'FAQ', timing: 'Section 7', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Handle the top objections. Doubles as SEO / schema real estate.' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'Get started free', levers: ['none'], brief: 'A sharper restatement of the primary ask with a fresh angle, not a verbatim repeat of the hero button.' },
+  ],
+  guardrails: [
+    'One dominant primary CTA plus a low-commitment secondary.',
+    'Keep the hero headline to 2 lines on mobile so the CTA stays above the fold.',
+    'Put the strongest proof near CTAs, never only at the bottom.',
+    'Benefit before feature; 2-3 sentence paragraphs.',
+    'Repeat the same primary CTA at hero, mid-page, and footer.',
+  ],
+}
+
+const LEADGEN_PAGE: EmailBlueprint = {
+  key: 'leadgen-page',
+  name: 'Campaign / lead-gen page',
+  channel: 'landing-page',
+  assetType: 'lead-capture',
+  kind: 'page',
+  summary: 'A single-offer PPC landing page: navigation stripped, message-matched to the ad, one conversion goal.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero + form', timing: 'Above the fold', subjectFormula: 'We help {audience} {outcome} by {mechanism}', framework: 'JTBD', cta: 'Get the {offer}', levers: ['none'], brief: 'A message-matched hero that mirrors the ad that drove the click. Outcome headline, a short subheadline, and the form in the hero (keep it to ~3 fields).' },
+    { label: 'Social proof', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'A logo strip or a stat to reduce risk right at the decision moment.' },
+    { label: 'Benefits', timing: 'Section 2', subjectFormula: '—', framework: 'BAB', cta: '—', levers: ['none'], brief: 'Three to four benefit blocks, each a from → to transformation tied to the offer. Benefit before feature.' },
+    { label: 'Objection handling', timing: 'Section 3', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'Address the top one or two objections to converting on this specific offer.' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'Get the {offer}', levers: ['none'], brief: 'Repeat the single conversion action with risk-reducer microcopy under the button.' },
+  ],
+  guardrails: [
+    'Strip the nav to remove exits — one conversion goal only.',
+    'Message-match the hero to the ad that drove the click.',
+    'Keep the form to ~3 fields; short forms convert far better than long ones.',
+    'Repeat the same single CTA; add a sticky CTA on mobile.',
+    'Risk-reducer microcopy under every CTA ("No credit card required").',
+  ],
+}
+
+export const PAGE_BLUEPRINTS: EmailBlueprint[] = [SALES_PAGE, LEADGEN_PAGE]
+
+const ALL_BLUEPRINTS: EmailBlueprint[] = [...EMAIL_BLUEPRINTS, ...PAGE_BLUEPRINTS]
+
+/** Blueprints available for a given channel + assetType (email + landing-page). */
 export function blueprintsFor(channel: ChannelId, assetType?: string): EmailBlueprint[] {
-  if (channel !== 'email') return []
-  return EMAIL_BLUEPRINTS.filter((b) => !assetType || b.assetType === assetType)
+  return ALL_BLUEPRINTS.filter((b) => b.channel === channel && (!assetType || b.assetType === assetType))
 }
 
 export function blueprintByKey(key: string): EmailBlueprint | undefined {
-  return EMAIL_BLUEPRINTS.find((b) => b.key === key)
+  return ALL_BLUEPRINTS.find((b) => b.key === key)
+}
+
+/** Compose a whole-page brief from a page blueprint's sections (one deliverable, in order). */
+export function composePageBrief(bp: EmailBlueprint): string {
+  const sections = bp.steps.map((s, i) => `${i + 1}. ${s.label}${s.timing && s.timing !== '—' ? ` (${s.timing})` : ''}: ${s.brief}`).join('\n')
+  return `Write a ${bp.name.toLowerCase()} with these sections, in order:\n${sections}`
+}
+
+/** The per-slot briefs a blueprint seeds onto a deliverable's slots. */
+export function blueprintBriefs(bp: EmailBlueprint): string[] {
+  if (bp.kind === 'sequence') return bp.steps.map((s) => s.brief)
+  if (bp.kind === 'page') return [composePageBrief(bp)]
+  return [bp.steps[0].brief]
 }
 
 /** The blueprint step for slot `i` (rotates for a single-email blueprint). */
