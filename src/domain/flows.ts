@@ -45,6 +45,8 @@ export interface FlowDeliverable {
   description?: string
   /** Target a single audience for this deliverable; empty = the campaign's audiences. */
   audience?: string
+  /** Applied email blueprint key (welcome / newsletter); drives the per-slot briefs. */
+  blueprint?: string
 }
 
 export const DELIVERABLE_PRESETS: DeliverablePreset[] = [

@@ -4244,6 +4244,32 @@ button {
   cursor: pointer;
   appearance: none;
 }
+/* Email blueprint picker in the deliverable inspector */
+.flow-bp-pick { display: block; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 11px 12px; cursor: pointer; margin-bottom: 8px; }
+.flow-bp-pick:hover { border-color: var(--accent); }
+.flow-bp-pick-name { display: block; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.flow-bp-pick-cadence { display: block; font-size: 11.5px; font-weight: 600; color: var(--accent); margin-top: 1px; }
+.flow-bp-pick-sum { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 5px; }
+.flow-bp-active { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.flow-bp-active-name { font-size: 14px; font-weight: 800; color: var(--text); }
+.flow-bp-active-cadence { font-size: 11.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 2px 7px; }
+.flow-bp-clear { margin-left: auto; border: 0; background: none; color: var(--text-faint); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.flow-bp-clear:hover { color: var(--red); }
+.flow-bp-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: bp; }
+.flow-bp-step { position: relative; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px 9px 30px; }
+.flow-bp-step::before { counter-increment: bp; content: counter(bp); position: absolute; left: 9px; top: 9px; width: 16px; height: 16px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.flow-bp-step-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.flow-bp-step-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.flow-bp-step-timing { font-size: 11px; color: var(--text-faint); font-weight: 600; }
+.flow-bp-step-subj { font-size: 12px; color: var(--text-muted); font-style: italic; margin: 3px 0 5px; }
+.flow-bp-step-meta { display: flex; flex-wrap: wrap; gap: 4px; }
+.flow-bp-tag { font-size: 10.5px; font-weight: 700; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+.flow-bp-tag-cta { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.flow-bp-tag-lever { color: #b07d18; border-color: color-mix(in srgb, #d9a520 40%, var(--border)); text-transform: capitalize; }
+.flow-bp-rules { margin-top: 10px; }
+.flow-bp-rules summary { font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.flow-bp-rules ul { margin: 6px 0 0; padding-left: 18px; }
+.flow-bp-rules li { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 2px 0; }
 .flow-briefs-h {
   display: flex;
   align-items: baseline;

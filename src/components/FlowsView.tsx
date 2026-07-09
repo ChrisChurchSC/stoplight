@@ -3,6 +3,7 @@ import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
+import { blueprintsFor, blueprintByKey, type EmailBlueprint } from '../domain/emailPatterns'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
@@ -671,6 +672,23 @@ export function FlowsView() {
         return { ...x, briefs }
       }),
     )
+  // Apply an email blueprint to a deliverable: a sequence expands into its steps (one email
+  // per arc step, each brief seeded); a single (newsletter) applies its structure brief to
+  // every issue. Then re-preview so the copy reflects the new structure.
+  const applyBlueprint = (id: string, bp: EmailBlueprint | null) => {
+    let target: FlowDeliverable | null = null
+    setNodes((n) =>
+      n.map((x) => {
+        if (x.id !== id) return x
+        if (!bp) { const { blueprint: _b, ...rest } = x; target = rest; return rest }
+        const briefs = bp.kind === 'sequence' ? bp.steps.map((s) => s.brief) : [bp.steps[0].brief]
+        const perMonth = bp.kind === 'sequence' ? bp.steps.length : x.perMonth
+        target = { ...x, blueprint: bp.key, briefs, perMonth }
+        return target
+      }),
+    )
+    if (target) void genPreview(target)
+  }
   const startNew = () => {
     setViewName(null)
     setBuilt(null)
@@ -2009,6 +2027,64 @@ export function FlowsView() {
                       value={node.description || ''}
                       onChange={(e) => setNodeField(node.id, { description: e.target.value })}
                     />
+                    {(() => {
+                      const bps = blueprintsFor(p.channel, p.assetType)
+                      if (!bps.length) return null
+                      const active = node.blueprint ? blueprintByKey(node.blueprint) : null
+                      return (
+                        <div className="flow-bp">
+                          <div className="flow-cfg-h">Blueprint</div>
+                          {!active ? (
+                            <>
+                              <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>
+                                Apply a proven email structure. It seeds each email’s focus so the copy follows the arc.
+                              </div>
+                              {bps.map((bp) => (
+                                <button key={bp.key} className="flow-bp-pick" onClick={() => applyBlueprint(node.id, bp)}>
+                                  <span className="flow-bp-pick-name">{bp.name}</span>
+                                  <span className="flow-bp-pick-cadence">{bp.cadence}</span>
+                                  <span className="flow-bp-pick-sum">{bp.summary}</span>
+                                </button>
+                              ))}
+                            </>
+                          ) : (
+                            <>
+                              <div className="flow-bp-active">
+                                <span className="flow-bp-active-name">{active.name}</span>
+                                <span className="flow-bp-active-cadence">{active.cadence}</span>
+                                <button className="flow-bp-clear" onClick={() => applyBlueprint(node.id, null)}>Remove</button>
+                              </div>
+                              <ol className="flow-bp-steps">
+                                {active.steps.map((s, i) => (
+                                  <li key={i} className="flow-bp-step">
+                                    <div className="flow-bp-step-top">
+                                      <span className="flow-bp-step-label">{s.label}</span>
+                                      <span className="flow-bp-step-timing">{s.timing}</span>
+                                    </div>
+                                    {s.subjectFormula !== '—' && <div className="flow-bp-step-subj">“{s.subjectFormula}”</div>}
+                                    <div className="flow-bp-step-meta">
+                                      <span className="flow-bp-tag">{s.framework}</span>
+                                      <span className="flow-bp-tag flow-bp-tag-cta">{s.cta}</span>
+                                      {s.levers.filter((l) => l !== 'none').map((l) => (
+                                        <span key={l} className="flow-bp-tag flow-bp-tag-lever">{l.replace('-', ' ')}</span>
+                                      ))}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ol>
+                              <details className="flow-bp-rules">
+                                <summary>Guardrails</summary>
+                                <ul>
+                                  {active.guardrails.map((g, i) => (
+                                    <li key={i}>{g}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
                     <div className="flow-cfg-h">Configuration</div>
                     <label className="flow-inspect-label">Audience</label>
                     <select className="flow-inspect-input flow-select" value={node.audience || ''} onChange={(e) => setNodeField(node.id, { audience: e.target.value })}>
