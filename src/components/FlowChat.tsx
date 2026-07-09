@@ -39,6 +39,8 @@ export function FlowChat({
   busy,
   flowMode,
   history,
+  collapsed,
+  onCollapse,
   onSend,
   onApply,
   onDiscard,
@@ -50,6 +52,8 @@ export function FlowChat({
   busy: boolean
   flowMode: 'build' | 'view'
   history: SavedFlowChat[]
+  collapsed: boolean
+  onCollapse: (v: boolean) => void
   onSend: (text: string, intent: ChatIntent) => void
   onApply: (msgId: string) => void
   onDiscard: (msgId: string) => void
@@ -75,6 +79,16 @@ export function FlowChat({
   }
   const examples = flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
 
+  if (collapsed) {
+    return (
+      <div className="fchat-rail">
+        <button className="fchat-rail-btn" title="Open flow assistant" aria-label="Open flow assistant" onClick={() => onCollapse(false)}>
+          <span className="fchat-spark" aria-hidden="true">✦</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <aside className="fchat">
       <header className="fchat-head">
@@ -83,6 +97,11 @@ export function FlowChat({
         <span className="fchat-beta">Beta</span>
         <div className="fchat-head-actions">
           <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={() => (messages.length ? setConfirmNew(true) : onNewChat())}>+</button>
+          <button className="fchat-hbtn" title="Collapse panel" aria-label="Collapse panel" onClick={() => onCollapse(true)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="M14 9l-2 3 2 3" />
+            </svg>
+          </button>
           <div className="fchat-hist-wrap">
             <button className="fchat-hbtn" title="Chat history" aria-label="Chat history" onClick={() => setHistOpen((o) => !o)}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

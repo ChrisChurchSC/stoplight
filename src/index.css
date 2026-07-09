@@ -1924,7 +1924,7 @@ button {
 .hsb-rail .hsb-qa,
 .hsb-rail .hsb-srch,
 .hsb-rail .hsb-ws { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; width: 100%; }
-.hsb-rail .hsb-actions { flex-direction: column; gap: 6px; align-items: stretch; }
+.hsb-rail .hsb-actions { display: none; }
 .hsb-rail .hsb-chats { display: none; }
 /* The ✕ that closes the filter popover (top-right of the panel). */
 .sidebar-collapse {
@@ -3709,6 +3709,15 @@ button {
 .fchat-modal-cancel:hover { background: var(--surface-2); }
 .fchat-modal-go { border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 700; border-radius: 9px; padding: 9px 20px; cursor: pointer; }
 .fchat-modal-go:hover { filter: brightness(1.06); }
+/* Collapsed chat: a thin rail with a reopen button */
+.fchat-rail { width: 48px; flex: 0 0 auto; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
+.fchat-rail-btn { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
+.fchat-rail-btn:hover { border-color: var(--accent); }
+.fchat-rail .fchat-spark { font-size: 15px; }
+/* Keep the toolbar centered over the canvas as panels collapse (48px rail vs 360px panel).
+   Offset from 50% is (leftWidth - rightWidth)/2; equal panels cancel out. */
+.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 156px); }
+.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
 .flow-canvas {
   flex: 1;
   min-width: 0;
@@ -3975,7 +3984,17 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
+/* Collapse button pinned to the panel's top-right; sits above the panel content. */
+.flow-panel-collapse { position: absolute; top: 14px; right: 12px; z-index: 3; width: 28px; height: 28px; border: 0; background: none; color: var(--text-faint); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.flow-panel-collapse:hover { background: var(--surface-2); color: var(--text); }
+.flow-panel-collapse svg { width: 15px; height: 15px; }
+/* Collapsed brief: a thin rail with a reopen button */
+.flow-panel-rail { width: 48px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
+.flow-panel-rail-btn { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.flow-panel-rail-btn:hover { border-color: var(--accent); color: var(--accent); }
+.flow-panel-rail-btn svg { width: 16px; height: 16px; }
 .flow-panel-head {
   display: flex;
   align-items: center;
@@ -5162,7 +5181,9 @@ button {
 /* Bottom canvas controls: zoom · pan/select tools · Add block. */
 .flow-toolbar {
   position: absolute;
-  left: calc(50% - 180px);
+  /* Centered over the canvas: the left chat panel and right brief panel are both 360px,
+     so they cancel out and the flow's 50% is the canvas center. */
+  left: 50%;
   bottom: 20px;
   transform: translateX(-50%);
   display: flex;

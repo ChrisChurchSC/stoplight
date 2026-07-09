@@ -251,6 +251,8 @@ export function FlowsView() {
   // Flow-canvas AI chat (agentic: it edits the flow from chat).
   const [chatMsgs, setChatMsgs] = useState<FlowChatMsg[]>([])
   const [chatBusy, setChatBusy] = useState(false)
+  const [chatCollapsed, setChatCollapsed] = useState(false)
+  const [briefCollapsed, setBriefCollapsed] = useState(false)
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
   // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
@@ -761,7 +763,7 @@ export function FlowsView() {
     })
     setRects(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, pos, offset, zoom, selected, connectors, viewName])
+  }, [nodes, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, briefCollapsed])
 
   // Once a just-created card is measured, nudge it to where it was dropped.
   useEffect(() => {
@@ -1088,7 +1090,7 @@ export function FlowsView() {
   }
 
   return (
-    <div className="flow">
+    <div className={`flow${chatCollapsed ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}`}>
       <header className="flow-top">
         <div className="flow-crumb">
           <span className="flow-crumb-ic" aria-hidden="true">
@@ -1176,6 +1178,8 @@ export function FlowsView() {
           busy={chatBusy}
           flowMode={viewing ? 'view' : 'build'}
           history={flowHistory}
+          collapsed={chatCollapsed}
+          onCollapse={setChatCollapsed}
           onSend={runFlowChat}
           onApply={applyPendingChat}
           onDiscard={discardPendingChat}
@@ -1554,7 +1558,21 @@ export function FlowsView() {
           </svg>
         </div>
 
+        {briefCollapsed ? (
+          <div className="flow-panel-rail">
+            <button className="flow-panel-rail-btn" title="Open panel" aria-label="Open panel" onClick={() => setBriefCollapsed(false)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d="M10 9l2 3-2 3" />
+              </svg>
+            </button>
+          </div>
+        ) : (
         <aside className="flow-panel">
+          <button className="flow-panel-collapse" title="Collapse panel" aria-label="Collapse panel" onClick={() => setBriefCollapsed(true)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d="M9 9l2 3-2 3" />
+            </svg>
+          </button>
           {viewing ? (
             pickAt !== null ? (
               <>
@@ -2059,6 +2077,7 @@ export function FlowsView() {
             </>
           )}
         </aside>
+        )}
       </div>
 
       <div className="flow-toolbar">

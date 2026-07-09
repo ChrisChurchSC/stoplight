@@ -174,6 +174,10 @@ export function HomeSidebar() {
   const reports = useTrafficStore((s) => s.reports)
   const openAsk = useTrafficStore((s) => s.openAsk)
   const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
+  const sidebarCollapsed = useTrafficStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useTrafficStore((s) => s.toggleSidebar)
+  // A flow canvas forces the rail; otherwise the user's manual toggle decides.
+  const railed = flowCanvasOpen || sidebarCollapsed
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [chatsOpen, setChatsOpen] = useState(true)
@@ -219,7 +223,7 @@ export function HomeSidebar() {
   }
 
   return (
-    <aside className={`sidebar home-sidebar hsb${flowCanvasOpen ? ' hsb-rail' : ''}`}>
+    <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
       <div className="hsb-top">
         <button
           className={`hsb-ws${wsOpen ? ' open' : ''}`}
@@ -523,6 +527,22 @@ export function HomeSidebar() {
               <Ico name="billing" />
             </span>
             <span className="nav-label">Billing</span>
+          </button>
+        )}
+        {!flowCanvasOpen && (
+          <button
+            className="nav-item hsb-collapse"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={toggleSidebar}
+          >
+            <span className="nav-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" />
+                <path d={sidebarCollapsed ? 'M13 9l2 3-2 3' : 'M15 9l-2 3 2 3'} />
+              </svg>
+            </span>
+            <span className="nav-label">{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
           </button>
         )}
       </div>

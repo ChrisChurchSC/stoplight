@@ -1427,6 +1427,9 @@ interface TrafficState {
   /** True while a flow canvas (build or view) is open — collapses the sidebar to a rail. */
   flowCanvasOpen: boolean
   setFlowCanvasOpen: (open: boolean) => void
+  /** User-toggled sidebar collapse (persists; works on every page). */
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
   /** Saved flow-chat conversations, per flow (newest first). */
   flowChats: SavedFlowChat[]
   /** Upsert a saved flow chat by id. */
@@ -1982,6 +1985,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openProjects: loadOpenProjects(),
   flowOpen: null,
   flowCanvasOpen: false,
+  sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
   flowChats: loadFlowChats(),
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
@@ -2826,6 +2830,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   clearFlowOpen: () => set({ flowOpen: null }),
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
+  toggleSidebar: () =>
+    set((s) => {
+      const sidebarCollapsed = !s.sidebarCollapsed
+      try { localStorage.setItem('stoplight.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch { /* ignore */ }
+      return { sidebarCollapsed }
+    }),
   saveFlowChat: (chat) =>
     set((s) => {
       const rest = s.flowChats.filter((c) => c.id !== chat.id)
