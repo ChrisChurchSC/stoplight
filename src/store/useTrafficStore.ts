@@ -102,6 +102,7 @@ import type { MediaMix } from '../domain/channelMix'
 import { type Company, freshCompanyId, seedCompanies } from '../domain/companies'
 import { type ChannelRecord, freshChannelRecordId, seedChannelRecords } from '../domain/channelRecords'
 import type { SavedFlowChat } from '../domain/flowAgent'
+import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import type { PinnedInsight } from '../domain/pinnedInsights'
@@ -4674,7 +4675,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           // so fanned variants localize and stay distinct. audience/journey are already
           // structural fields, so exclude them here.
           const context: Record<string, string> = {}
-          for (const [k, val] of Object.entries(r.lineage ?? {})) if (k !== 'audience' && k !== 'journey') context[k] = val
+          for (const [k, val] of Object.entries(r.lineage ?? {})) if (k !== 'audience' && k !== 'journey' && !BLUEPRINT_META_KEYS.includes(k as (typeof BLUEPRINT_META_KEYS)[number])) context[k] = val
           // An account variant carries the account's real situation (segment, ambition,
           // lead concern) so BlackRock and Robinhood variants differ on substance.
           const acct = context.account ? accountByName.get(context.account.toLowerCase()) : undefined

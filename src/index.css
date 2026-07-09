@@ -4270,6 +4270,14 @@ button {
 .flow-bp-rules summary { font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
 .flow-bp-rules ul { margin: 6px 0 0; padding-left: 18px; }
 .flow-bp-rules li { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 2px 0; }
+/* Blueprint step badge on a post card + the step section in the post inspector */
+.flow-node-step { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); margin-bottom: 2px; }
+.flow-bp-emailstep { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 10px 12px; margin: 4px 0 14px; }
+.flow-bp-emailstep-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.flow-bp-emailstep-name { font-size: 13px; font-weight: 800; color: var(--text); }
+.flow-bp-emailstep-bp { font-size: 11px; color: var(--text-faint); font-weight: 600; text-align: right; }
+.flow-bp-emailstep-subj { font-size: 12px; color: var(--text-muted); font-style: italic; margin: 5px 0 7px; }
+.flow-bp-emailstep-meta { display: flex; flex-wrap: wrap; gap: 4px; }
 .flow-briefs-h {
   display: flex;
   align-items: baseline;

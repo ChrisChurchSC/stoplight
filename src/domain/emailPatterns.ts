@@ -405,3 +405,33 @@ export function blueprintsFor(channel: ChannelId, assetType?: string): EmailBlue
 export function blueprintByKey(key: string): EmailBlueprint | undefined {
   return EMAIL_BLUEPRINTS.find((b) => b.key === key)
 }
+
+/** The blueprint step for slot `i` (rotates for a single-email blueprint). */
+export function stepAt(bp: EmailBlueprint, i: number): EmailStep {
+  return bp.kind === 'sequence' ? bp.steps[i % bp.steps.length] : bp.steps[0]
+}
+
+/** Lineage fields to seed on an email so it carries its blueprint step. `bp*` keys are
+ *  display-only (excluded from the copy context); framework/subjectFormula/levers shape copy. */
+export function stepLineage(bp: EmailBlueprint, i: number): Record<string, string> {
+  const st = stepAt(bp, i)
+  const out: Record<string, string> = { framework: st.framework, bpKey: bp.key, bpStep: st.label, bpTiming: st.timing }
+  if (st.subjectFormula && st.subjectFormula !== '—') out.subjectFormula = st.subjectFormula
+  const levers = st.levers.filter((l) => l !== 'none')
+  if (levers.length) out.levers = levers.join(', ')
+  return out
+}
+
+/** Lineage keys that are display-only and must NOT be fed into the copy context. */
+export const BLUEPRINT_META_KEYS = ['bpKey', 'bpStep', 'bpTiming'] as const
+
+/** Resolve a row's lineage back to its blueprint + step, for display. */
+export function stepFromLineage(lineage?: Record<string, string>): { blueprint: EmailBlueprint; step: EmailStep } | null {
+  const key = lineage?.bpKey
+  const label = lineage?.bpStep
+  if (!key) return null
+  const bp = blueprintByKey(key)
+  if (!bp) return null
+  const step = bp.steps.find((s) => s.label === label) ?? bp.steps[0]
+  return { blueprint: bp, step }
+}

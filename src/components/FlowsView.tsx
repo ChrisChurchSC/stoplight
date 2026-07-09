@@ -3,7 +3,7 @@ import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
-import { blueprintsFor, blueprintByKey, type EmailBlueprint } from '../domain/emailPatterns'
+import { blueprintsFor, blueprintByKey, stepAt, stepLineage, stepFromLineage, type EmailBlueprint } from '../domain/emailPatterns'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
@@ -535,12 +535,8 @@ export function FlowsView() {
     try {
       const ordered = [...rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
       for (let i = 0; i < ordered.length; i++) {
-        const st = bp.kind === 'sequence' ? bp.steps[i % bp.steps.length] : bp.steps[0]
-        const levers = st.levers.filter((l) => l !== 'none')
-        const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: st.brief, framework: st.framework }
-        if (st.subjectFormula && st.subjectFormula !== '—') lineage.subjectFormula = st.subjectFormula
-        if (levers.length) lineage.levers = levers.join(', ')
-        else delete lineage.levers
+        const st = stepAt(bp, i)
+        const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: st.brief, ...stepLineage(bp, i) }
         await updateRow(ordered[i].id, { messaging: {}, lineage })
       }
       await draftCopy(ordered.map((r) => r.id))
@@ -863,14 +859,7 @@ export function FlowsView() {
           const ordered = [...fresh].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
           for (let i = 0; i < ordered.length; i++) {
             const brief = briefs[i % briefs.length]
-            const st = bp ? (bp.kind === 'sequence' ? bp.steps[i % bp.steps.length] : bp.steps[0]) : null
-            const bpLineage: Record<string, string> = {}
-            if (st) {
-              bpLineage.framework = st.framework
-              if (st.subjectFormula && st.subjectFormula !== '—') bpLineage.subjectFormula = st.subjectFormula
-              const levers = st.levers.filter((l) => l !== 'none')
-              if (levers.length) bpLineage.levers = levers.join(', ')
-            }
+            const bpLineage = bp ? stepLineage(bp, i) : {}
             await updateRow(ordered[i].id, {
               assetName: `${ordered[i].assetName} · ${brief}`,
               lineage: { ...(ordered[i].lineage ?? {}), brief, ...bpLineage },
@@ -1500,6 +1489,7 @@ export function FlowsView() {
                                   <div className="flow-node-main">
                                     <PresetTile tone={d.tone} />
                                     <div className="flow-node-text">
+                                      {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
                                     </div>
                                   </div>
@@ -1678,6 +1668,27 @@ export function FlowsView() {
                     {selPost.audience ? ` · ${selPost.audience}` : ''}
                     {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
                   </p>
+                  {(() => {
+                    const s = stepFromLineage(selPost.lineage)
+                    if (!s) return null
+                    const levers = s.step.levers.filter((l) => l !== 'none')
+                    return (
+                      <div className="flow-bp-emailstep">
+                        <div className="flow-bp-emailstep-top">
+                          <span className="flow-bp-emailstep-name">{s.step.label}</span>
+                          <span className="flow-bp-emailstep-bp">{s.blueprint.name} · {s.step.timing}</span>
+                        </div>
+                        {s.step.subjectFormula !== '—' && <div className="flow-bp-emailstep-subj">Subject formula: “{s.step.subjectFormula}”</div>}
+                        <div className="flow-bp-emailstep-meta">
+                          <span className="flow-bp-tag">{s.step.framework}</span>
+                          <span className="flow-bp-tag flow-bp-tag-cta">{s.step.cta}</span>
+                          {levers.map((l) => (
+                            <span key={l} className="flow-bp-tag flow-bp-tag-lever">{l.replace('-', ' ')}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
                   <div className="flow-swap">
                     <div className="flow-swap-tag">
                       {isIngestedPost(selPost) ? (
