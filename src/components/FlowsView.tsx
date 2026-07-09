@@ -4,6 +4,7 @@ import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, fres
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
+import { messagingFields } from '../domain/messaging'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
@@ -534,7 +535,8 @@ export function FlowsView() {
     setBlueprintBusy(true)
     try {
       const ordered = [...rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
-      const briefs = blueprintBriefs(bp)
+      const fieldKeys = ordered[0] ? messagingFields(ordered[0].channel, ordered[0].assetType).map((f) => f.key) : undefined
+      const briefs = blueprintBriefs(bp, fieldKeys)
       for (let i = 0; i < ordered.length; i++) {
         const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: briefs[i % briefs.length], ...stepLineage(bp, i) }
         await updateRow(ordered[i].id, { messaging: {}, lineage })
@@ -712,7 +714,9 @@ export function FlowsView() {
       n.map((x) => {
         if (x.id !== id) return x
         if (!bp) { const { blueprint: _b, ...rest } = x; target = rest; return rest }
-        const briefs = blueprintBriefs(bp)
+        const p = presetByKey(x.presetKey)
+        const fieldKeys = p ? messagingFields(p.channel, p.assetType).map((f) => f.key) : undefined
+        const briefs = blueprintBriefs(bp, fieldKeys)
         const perMonth = bp.kind === 'sequence' ? bp.steps.length : x.perMonth
         target = { ...x, blueprint: bp.key, briefs, perMonth }
         return target

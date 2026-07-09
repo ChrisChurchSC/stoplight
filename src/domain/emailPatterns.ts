@@ -589,16 +589,58 @@ export function blueprintByKey(key: string): EmailBlueprint | undefined {
   return ALL_BLUEPRINTS.find((b) => b.key === key)
 }
 
-/** Compose a whole-page brief from a page blueprint's sections (one deliverable, in order). */
-export function composePageBrief(bp: EmailBlueprint): string {
-  const sections = bp.steps.map((s, i) => `${i + 1}. ${s.label}${s.timing && s.timing !== '—' ? ` (${s.timing})` : ''}: ${s.brief}`).join('\n')
-  return `Write a ${bp.name.toLowerCase()} with these sections, in order:\n${sections}`
+/**
+ * Compose a whole-page brief from a page blueprint's sections. When the deliverable's real
+ * messaging field keys are provided, it maps each section to its EXACT field (hero → the
+ * headline field, social proof → the proof-logos field, FAQ → the faq field, and the
+ * narrative sections into the body field), so the copy writer fills each field from its
+ * section rather than blending everything into one blob.
+ */
+export function composePageBrief(bp: EmailBlueprint, fieldKeys?: string[]): string {
+  const numbered = () => bp.steps.map((s, i) => `${i + 1}. ${s.label}${s.timing && s.timing !== '—' ? ` (${s.timing})` : ''}: ${s.brief}`).join('\n')
+  if (!fieldKeys || !fieldKeys.length) return `Write a ${bp.name.toLowerCase()} with these sections, in order:\n${numbered()}`
+
+  const has = (re: RegExp) => fieldKeys.find((k) => re.test(k))
+  const headlineKey = has(/headline|^title$/)
+  const subheadKey = has(/subhead|subtitle/)
+  const socialKey = has(/social|logo/)
+  const statKey = has(/stat/)
+  const proofKey = has(/^proof$/)
+  const faqKey = has(/faq/)
+  const takeawayKey = has(/takeaway/)
+  const bodyKey = has(/^body$|content|primary/)
+  const ctaKeys = fieldKeys.filter((k) => /cta|^link$/.test(k))
+
+  const find = (re: RegExp) => bp.steps.find((s) => re.test(s.label))
+  const hero = find(/hero/i) ?? bp.steps[0]
+  const social = find(/social proof|logo/i)
+  const proofSec = find(/deeper proof|results/i)
+  const faqSec = find(/faq|objection/i)
+  const takeawaySec = find(/takeaway|mistakes|resources/i)
+  const finalCta = find(/final cta/i) ?? bp.steps[bp.steps.length - 1]
+  const claimed = new Set([hero, social, proofSec, faqSec, takeawaySec, finalCta].filter(Boolean))
+  const narrative = bp.steps.filter((s) => !claimed.has(s))
+
+  const lines: string[] = []
+  if (headlineKey) lines.push(`- ${headlineKey}: the hero. Write to the value-prop formula "${hero.subjectFormula}", filling every {slot} with a real specific (never leave a literal {slot}).`)
+  if (subheadKey) lines.push(`- ${subheadKey}: a subheadline that clarifies the mechanism or names the audience.`)
+  if (socialKey && social) lines.push(`- ${socialKey}: ${social.brief}`)
+  if (statKey && proofSec) lines.push(`- ${statKey}: ${proofSec.brief}`)
+  else if (statKey && social) lines.push(`- ${statKey}: a quantified proof point or stat.`)
+  if (proofKey && proofSec) lines.push(`- ${proofKey}: ${proofSec.brief}`)
+  if (faqKey && faqSec) lines.push(`- ${faqKey}: ${faqSec.brief}`)
+  if (takeawayKey && takeawaySec) lines.push(`- ${takeawayKey}: ${takeawaySec.brief}`)
+  if (ctaKeys.length) lines.push(`- ${ctaKeys.join(' / ')}: the primary call to action (${finalCta.cta}), repeated. ${finalCta.brief}`)
+  if (bodyKey && narrative.length) lines.push(`- ${bodyKey}: the narrative, in this order — ${narrative.map((s) => `${s.label} (${s.brief})`).join('; ')}`)
+
+  return `Write a ${bp.name.toLowerCase()}. Fill each field from its section:\n${lines.join('\n')}`
 }
 
-/** The per-slot briefs a blueprint seeds onto a deliverable's slots. */
-export function blueprintBriefs(bp: EmailBlueprint): string[] {
+/** The per-slot briefs a blueprint seeds onto a deliverable's slots. `fieldKeys` (the
+ *  deliverable's messaging field keys) lets a page brief map sections to exact fields. */
+export function blueprintBriefs(bp: EmailBlueprint, fieldKeys?: string[]): string[] {
   if (bp.kind === 'sequence') return bp.steps.map((s) => s.brief)
-  if (bp.kind === 'page') return [composePageBrief(bp)]
+  if (bp.kind === 'page') return [composePageBrief(bp, fieldKeys)]
   return [bp.steps[0].brief]
 }
 
