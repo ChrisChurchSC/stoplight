@@ -67,17 +67,23 @@ const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
 )
 
 // A recurring deliverable (newsletter, social) breaks into monthly posts. A lead magnet
-// (ebook, whitepaper) breaks into sections. Both show briefable sub-cards; other one-offs
-// (landing page, event) stay a single asset.
+// (ebook, whitepaper) breaks into sections, and a web page (homepage, pricing, landing)
+// into a page card that carries its copy. Other one-offs (events) stay a single asset.
+const PAGE_CHANNELS = new Set<ChannelId>(['website', 'landing-page'])
 const hasSubcards = (p: DeliverablePreset): boolean =>
-  !(p.brand || p.runtime === 'one-off') || p.channel === 'lead-magnet'
-// The word for a sub-card: monthly posts vs ebook sections.
-const subcardWord = (p: DeliverablePreset): string => (p.channel === 'lead-magnet' ? 'Section' : 'Post')
+  !(p.brand || p.runtime === 'one-off') || p.channel === 'lead-magnet' || PAGE_CHANNELS.has(p.channel)
+// The word for a sub-card: monthly posts, ebook sections, or a page.
+const subcardWord = (p: DeliverablePreset): string =>
+  p.channel === 'lead-magnet' ? 'Section' : PAGE_CHANNELS.has(p.channel) ? 'Page' : 'Post'
 // Sub-cards a deliverable shows: monthly cadence, or a lead magnet's sections (default 4).
 const subcardCount = (p: DeliverablePreset, perMonth: number): number =>
   hasSubcards(p) ? Math.min(perMonth, 12) : 0
 // Count a freshly-added deliverable starts with (lead magnets get a few sections).
 const startCount = (p: DeliverablePreset): number => (p.channel === 'lead-magnet' ? 4 : p.perMonth)
+// The noun for a blueprint's deliverable, so the picker's help text fits the channel
+// (the picker now serves emails, pages, articles and ads — not just emails).
+const blueprintNoun = (channel: ChannelId): string =>
+  PAGE_CHANNELS.has(channel) ? 'page' : channel === 'email' ? 'email' : channel === 'blog' ? 'article' : channel === 'linkedin-ads' ? 'ad' : 'asset'
 
 const PresetTile = ({ tone }: { tone: string }) => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${tone} 20%, transparent)`, color: tone }}>
@@ -239,7 +245,7 @@ export function FlowsView() {
   const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null } | null>(null)
   // Live draft copy per deliverable node, generated when it's added (and on redraft).
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
-  const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string }[] }>>({})
+  const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
   // How the flow-in-progress is shown: the canvas, or a grid / calendar of its assets.
   const [flowView, setFlowView] = useState<'flow' | 'grid' | 'calendar'>('flow')
   // The Flows section opens on an all-flows landing page; picking a flow (or New flow)
@@ -491,13 +497,18 @@ export function FlowsView() {
     lastSubjectRef.current = subject
     scheduleRedraftAll()
   }
-  // The draft-copy block shown under a deliverable / post card. Shimmer while the
-  // first draft is generating, then headline + body for that slot.
+  // The draft-copy block shown under a deliverable / post card. Shimmer while the first
+  // draft generates, then the copy for that slot. A page shows every field as a labeled
+  // component (headline / subhead / proof / body / cta); a post shows headline + body.
   const renderCopy = (nodeId: string, slot: number) => {
     if (!writeCopy) return null
     const pv = preview[nodeId]
     const post = pv?.posts?.[slot]
-    if (pv?.loading && !(post?.headline || post?.primary)) {
+    const node = nodes.find((n) => n.id === nodeId)
+    const p = node ? presetByKey(node.presetKey) : undefined
+    const asFields = !!p && PAGE_CHANNELS.has(p.channel)
+    const empty = !post || (!post.headline && !post.primary && !post.components?.length)
+    if (pv?.loading && empty) {
       return (
         <div className="flow-copy loading" aria-hidden="true">
           <span className="flow-copy-shim" />
@@ -505,11 +516,23 @@ export function FlowsView() {
         </div>
       )
     }
-    if (!post || (!post.headline && !post.primary)) return null
+    if (empty) return null
+    if (asFields && post!.components?.length) {
+      return (
+        <div className="flow-copy flow-copy-fields">
+          {post!.components.map((c) => (
+            <div className="flow-copy-field" key={c.key}>
+              <div className="flow-copy-flabel">{c.label}</div>
+              <div className="flow-copy-fval">{c.value}</div>
+            </div>
+          ))}
+        </div>
+      )
+    }
     return (
       <div className="flow-copy">
-        {post.headline && <div className="flow-copy-head">{post.headline}</div>}
-        {post.primary && <div className="flow-copy-body">{post.primary}</div>}
+        {post!.headline && <div className="flow-copy-head">{post!.headline}</div>}
+        {post!.primary && <div className="flow-copy-body">{post!.primary}</div>}
       </div>
     )
   }
@@ -789,8 +812,9 @@ export function FlowsView() {
       // Every deliverable hangs off the campaign card.
       out.push({ from: 'campaign', to: n.id })
       const p = presetByKey(n.presetKey)
-      if (!p || p.brand || p.runtime === 'one-off') continue
-      const slots = Math.min(n.perMonth, 12)
+      if (!p) continue
+      // Wire the deliverable to each sub-card it renders (posts, sections, or a page card).
+      const slots = subcardCount(p, n.perMonth)
       for (let bi = 0; bi < slots; bi++) out.push({ from: n.id, to: `${n.id}:${bi}` })
     }
     return out
@@ -1577,14 +1601,18 @@ export function FlowsView() {
                                   <div className="flow-node-main">
                                     <PresetTile tone={TONE_HEX[p.tone]} />
                                     <div className="flow-node-text">
-                                      <div className="flow-node-label">{subcardWord(p)} {bi + 1}</div>
-                                      <input
-                                        className="flow-brief-sub"
-                                        placeholder="What's this post about?"
-                                        value={n.briefs?.[bi] || ''}
-                                        onChange={(e) => setBrief(n.id, bi, e.target.value)}
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
+                                      <div className="flow-node-label">{PAGE_CHANNELS.has(p.channel) ? 'Page' : `${subcardWord(p)} ${bi + 1}`}</div>
+                                      {PAGE_CHANNELS.has(p.channel) ? (
+                                        n.description?.trim() ? <div className="flow-node-desc">{n.description}</div> : null
+                                      ) : (
+                                        <input
+                                          className="flow-brief-sub"
+                                          placeholder={`What's this ${subcardWord(p).toLowerCase()} about?`}
+                                          value={n.briefs?.[bi] || ''}
+                                          onChange={(e) => setBrief(n.id, bi, e.target.value)}
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                      )}
                                     </div>
                                   </div>
                                   {renderCopy(n.id, bi)}
@@ -1773,7 +1801,7 @@ export function FlowsView() {
                       <div className="flow-bp" style={{ marginTop: 4 }}>
                         <div className="flow-cfg-h">Blueprint</div>
                         <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>
-                          Apply a proven email structure to these {selDeliv.count} email{selDeliv.count === 1 ? '' : 's'}. This rewrites their copy to the arc.
+                          Apply a proven structure to {selDeliv.count === 1 ? 'this' : `these ${selDeliv.count}`} {blueprintNoun(selDeliv.channel)}{selDeliv.count === 1 ? '' : 's'}. This rewrites their copy to the arc.
                         </div>
                         {bps.map((bp) => (
                           <button key={bp.key} className="flow-bp-pick" disabled={blueprintBusy} onClick={() => void applyBlueprintView(selDeliv.rows, bp)}>
@@ -2030,14 +2058,15 @@ export function FlowsView() {
                 )
               }
               const bi = Number(bstr)
+              const isPage = PAGE_CHANNELS.has(p.channel)
               const pv = preview[node.id]
               const post = pv?.posts?.[bi]
-              const loading = !!pv?.loading && !(post?.headline || post?.primary)
+              const loading = !!pv?.loading && !(post?.headline || post?.primary || post?.components?.length)
               return (
                 <>
                   <div className="flow-panel-head">
                     <PresetTile tone={TONE_HEX[p.tone]} />
-                    <span className="flow-panel-title">Post {bi + 1}</span>
+                    <span className="flow-panel-title">{isPage ? 'Page' : `Post ${bi + 1}`}</span>
                     <button className="flow-back flow-close" onClick={() => setSel(null)}>
                       ✕
                     </button>
@@ -2047,7 +2076,7 @@ export function FlowsView() {
                       ‹ {p.label}
                     </button>
                     <label className="flow-inspect-label" style={{ marginTop: 12 }}>
-                      What's this post about?
+                      What's this {isPage ? 'page' : 'post'} about?
                     </label>
                     <textarea
                       className="flow-inspect-input"
@@ -2059,10 +2088,21 @@ export function FlowsView() {
                     <div className="flow-cfg-h">Draft copy</div>
                     {loading ? (
                       <div className="flow-inspect-note">Generating…</div>
-                    ) : post && (post.headline || post.primary) ? (
+                    ) : post && (post.headline || post.primary || post.components?.length) ? (
                       <div className="flow-post-detail">
-                        {post.headline && <div className="flow-post-detail-head">{post.headline}</div>}
-                        {post.primary && <div className="flow-post-detail-body">{post.primary}</div>}
+                        {isPage && post.components?.length ? (
+                          post.components.map((c) => (
+                            <div className="flow-post-detail-field" key={c.key}>
+                              <div className="flow-post-detail-flabel">{c.label}</div>
+                              <div className="flow-post-detail-fval">{c.value}</div>
+                            </div>
+                          ))
+                        ) : (
+                          <>
+                            {post.headline && <div className="flow-post-detail-head">{post.headline}</div>}
+                            {post.primary && <div className="flow-post-detail-body">{post.primary}</div>}
+                          </>
+                        )}
                         {pv?.source && (
                           <div className={`flow-built-badge ${pv.source}`} style={{ marginTop: 4 }}>
                             <span className="flow-built-badge-dot" aria-hidden="true" />
@@ -2117,7 +2157,7 @@ export function FlowsView() {
                           {!active ? (
                             <>
                               <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>
-                                Apply a proven email structure. It seeds each email’s focus so the copy follows the arc.
+                                Apply a proven {blueprintNoun(p.channel)} structure so the copy follows a deliberate arc.
                               </div>
                               {bps.map((bp) => (
                                 <button key={bp.key} className="flow-bp-pick" onClick={() => applyBlueprint(node.id, bp)}>

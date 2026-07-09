@@ -1752,7 +1752,7 @@ interface TrafficState {
     flightWeeks?: number
     /** Optional email-blueprint guidance per slot (framework / subject formula / CTA / levers). */
     steps?: ({ framework?: string; subjectFormula?: string; cta?: string; levers?: string } | undefined)[]
-  }) => Promise<{ source: CopySource | null; posts: { headline: string; primary: string }[] } | null>
+  }) => Promise<{ source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] } | null>
   /** Plan a personalization fan-out without committing (count-before-commit). */
   fanOutPreview: (
     campaign: string,
@@ -4817,7 +4817,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const posts = assets.map((a) => {
       const d = byRow.get(a.rowId)
       const val = (k?: string) => (k ? d?.components.find((c) => c.key === k)?.value ?? '' : '')
-      return { headline: val(headKey), primary: val(primKey) }
+      // Every field, labeled and in schema order, so a page can show its copy as
+      // organized components (headline / subhead / proof / body / cta) not a text wall.
+      const components = fields.map((f) => ({ key: f.key, label: f.label, value: val(f.key) })).filter((c) => c.value.trim())
+      return { headline: val(headKey), primary: val(primKey), components }
     })
     return { source: result.source ?? null, posts }
   },
