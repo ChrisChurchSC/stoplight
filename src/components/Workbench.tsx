@@ -21,6 +21,7 @@ import { LibraryPage } from './LibraryPage'
 import { LibraryView } from './LibraryView'
 import { PrioritiesView } from './PrioritiesView'
 import { ChannelsView } from './ChannelsView'
+import { ChannelRecordsView } from './ChannelRecordsView'
 import { ReportsView } from './ReportsView'
 import { CompaniesView } from './CompaniesView'
 import { PeopleView } from './PeopleView'
@@ -224,6 +225,10 @@ export function Workbench() {
           ) : page === 'records' ? (
             <div className="home-main-scroll">
               <CompaniesView />
+            </div>
+          ) : page === 'channelrecords' ? (
+            <div className="home-main-scroll">
+              <ChannelRecordsView />
             </div>
           ) : page === 'people' ? (
             <div className="home-main-scroll">

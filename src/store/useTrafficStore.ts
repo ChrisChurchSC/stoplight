@@ -100,6 +100,7 @@ import { type SavedView, newSavedView } from '../domain/savedViews'
 import type { BrandReport } from '../domain/reports'
 import type { MediaMix } from '../domain/channelMix'
 import { type Company, freshCompanyId, seedCompanies } from '../domain/companies'
+import { type ChannelRecord, freshChannelRecordId, seedChannelRecords } from '../domain/channelRecords'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import type { PinnedInsight } from '../domain/pinnedInsights'
@@ -534,6 +535,30 @@ function loadCompanies(): Company[] {
 function saveCompanies(list: Company[]): void {
   try {
     localStorage.setItem(COMPANIES_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Records › Channels — the channel taxonomy as records, seeded once from CHANNEL_LIST.
+const CHANNEL_RECORDS_KEY = 'stoplight.channelRecords.v1'
+function loadChannelRecords(): ChannelRecord[] {
+  try {
+    const raw = localStorage.getItem(CHANNEL_RECORDS_KEY)
+    if (raw == null) {
+      const seeded = seedChannelRecords()
+      localStorage.setItem(CHANNEL_RECORDS_KEY, JSON.stringify(seeded))
+      return seeded
+    }
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveChannelRecords(list: ChannelRecord[]): void {
+  try {
+    localStorage.setItem(CHANNEL_RECORDS_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1154,7 +1179,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows' | 'media'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'flows' | 'media'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -1252,6 +1277,14 @@ interface TrafficState {
   updateCompany: (id: string, patch: Partial<Company>) => void
   /** Delete a company row by id. */
   deleteCompany: (id: string) => void
+  /** Records › Channels — the channel taxonomy as records (paid / organic / owned + benchmarks). */
+  channelRecords: ChannelRecord[]
+  /** Add a channel record (blank defaults unless overridden); returns its id. */
+  addChannelRecord: (partial?: Partial<ChannelRecord>) => string
+  /** Patch a channel record by id. */
+  updateChannelRecord: (id: string, patch: Partial<ChannelRecord>) => void
+  /** Delete a channel record by id. */
+  deleteChannelRecord: (id: string) => void
   /** Records › People — the contacts table. */
   people: Person[]
   /** Add a person row (blank defaults unless overridden); returns its id. */
@@ -1515,7 +1548,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'people' | 'segments' | 'flows' | 'media') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'flows' | 'media') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -1888,6 +1921,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandActuals: loadBrandActuals(),
   reports: loadReports(),
   companies: loadCompanies(),
+  channelRecords: loadChannelRecords(),
   people: loadPeople(),
   segments: loadSegments(),
   mediaMixes: loadMediaMixes(),
@@ -2153,6 +2187,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const companies = s.companies.filter((c) => c.id !== id)
       saveCompanies(companies)
       return { companies }
+    }),
+
+  addChannelRecord: (partial) => {
+    const id = freshChannelRecordId()
+    const rec: ChannelRecord = { name: 'New channel', ...(partial ?? {}), id }
+    set((s) => {
+      const channelRecords = [rec, ...s.channelRecords]
+      saveChannelRecords(channelRecords)
+      return { channelRecords }
+    })
+    return id
+  },
+
+  updateChannelRecord: (id, patch) =>
+    set((s) => {
+      const channelRecords = s.channelRecords.map((c) => (c.id === id ? { ...c, ...patch } : c))
+      saveChannelRecords(channelRecords)
+      return { channelRecords }
+    }),
+
+  deleteChannelRecord: (id) =>
+    set((s) => {
+      const channelRecords = s.channelRecords.filter((c) => c.id !== id)
+      saveChannelRecords(channelRecords)
+      return { channelRecords }
     }),
 
   addPerson: (partial) => {
