@@ -455,7 +455,104 @@ const LEADGEN_PAGE: EmailBlueprint = {
 
 export const PAGE_BLUEPRINTS: EmailBlueprint[] = [SALES_PAGE, LEADGEN_PAGE]
 
-const ALL_BLUEPRINTS: EmailBlueprint[] = [...EMAIL_BLUEPRINTS, ...PAGE_BLUEPRINTS]
+// ---- Blog / content blueprints ----
+// A content piece is ONE deliverable; its steps are the ordered sections of the article.
+
+const SEO_ARTICLE: EmailBlueprint = {
+  key: 'seo-article',
+  name: 'SEO article',
+  channel: 'blog',
+  assetType: 'article',
+  kind: 'page',
+  summary: 'A search-intent article that leads with value: hook, context, substantive body, takeaways, a soft CTA.',
+  cadence: 'One article, section by section',
+  steps: [
+    { label: 'Hook / intro', timing: 'Opening', subjectFormula: 'How to {outcome} (without {pain})', framework: 'AIDA', cta: '—', levers: ['none'], brief: 'Open with a hook that names the reader’s problem or the promise, and say what the article delivers. Front-load the value; don’t bury the answer.' },
+    { label: 'Context / problem', timing: 'Section 1', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'Frame the problem and why it matters now, so the rest of the piece earns its attention.' },
+    { label: 'Main body', timing: 'Sections 2-4', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'The substance: 3-5 H2 sections, each one clear point backed by an example or data. One idea per section, scannable.' },
+    { label: 'Practical takeaways', timing: 'Section 5', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Actionable takeaways the reader can apply today, as a short list.' },
+    { label: 'CTA', timing: 'Close', subjectFormula: '—', framework: 'AIDA', cta: 'Learn more', levers: ['none'], brief: 'A relevant, soft in-article CTA tied to the topic, not a hard sell.' },
+  ],
+  guardrails: [
+    'Write for the search intent behind the target keyword.',
+    'One idea per section, scannable H2s.',
+    'Lead with value; don’t bury the answer.',
+    'A soft, relevant CTA, not a hard pitch.',
+  ],
+}
+
+const PILLAR_GUIDE: EmailBlueprint = {
+  key: 'pillar-guide',
+  name: 'Pillar guide',
+  channel: 'blog',
+  assetType: 'pillar',
+  kind: 'page',
+  summary: 'A comprehensive, authority-building guide that covers the whole topic and links to supporting content.',
+  cadence: 'One guide, section by section',
+  steps: [
+    { label: 'Overview + TOC', timing: 'Opening', subjectFormula: 'The complete guide to {topic}', framework: 'Category', cta: '—', levers: ['none'], brief: 'A short overview of what the guide covers and who it’s for, with a clear table of contents.' },
+    { label: 'What & why', timing: 'Section 1', subjectFormula: '—', framework: 'JTBD', cta: '—', levers: ['none'], brief: 'Define the topic in plain language and why it matters. Set the foundation.' },
+    { label: 'Core sub-topics', timing: 'Sections 2-5', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'The main sub-topics, each an H2 section that can link out to cluster / supporting content.' },
+    { label: 'Step-by-step', timing: 'Section 6', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'A practical how-to walkthrough the reader can follow.' },
+    { label: 'Mistakes + resources', timing: 'Section 7', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Common mistakes to avoid and a short list of tools / resources.' },
+    { label: 'Conclusion + CTA', timing: 'Close', subjectFormula: '—', framework: 'AIDA', cta: 'Get started', levers: ['none'], brief: 'Wrap up the throughline and point to the natural next step.' },
+  ],
+  guardrails: [
+    'Be comprehensive — cover the whole topic so it ranks as the authority.',
+    'Link out to cluster / supporting content.',
+    'Use a clear TOC and scannable H2/H3.',
+    'Long-form but skimmable.',
+  ],
+}
+
+const LISTICLE: EmailBlueprint = {
+  key: 'listicle',
+  name: 'Listicle',
+  channel: 'blog',
+  assetType: 'listicle',
+  kind: 'page',
+  summary: 'A skimmable numbered list that delivers on the number in the title, each item self-contained.',
+  cadence: 'One listicle, section by section',
+  steps: [
+    { label: 'Intro', timing: 'Opening', subjectFormula: '{number} {things} to {outcome}', framework: 'AIDA', cta: '—', levers: ['none'], brief: 'A short intro framing why this list is worth the reader’s time.' },
+    { label: 'List items', timing: 'Body', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'Each item: a clear name / heading, why it matters in a sentence, and a bit of detail. Consistent structure per item, skimmable.' },
+    { label: 'Wrap-up + CTA', timing: 'Close', subjectFormula: '—', framework: 'AIDA', cta: 'Learn more', levers: ['none'], brief: 'A brief wrap-up and a relevant next step.' },
+  ],
+  guardrails: [
+    'Deliver on the number in the title.',
+    'Each item is self-contained and skimmable.',
+    'Odd numbers under 10 tend to perform.',
+    'Keep a consistent structure per item.',
+  ],
+}
+
+const CASE_STUDY: EmailBlueprint = {
+  key: 'case-study',
+  name: 'Case study',
+  channel: 'blog',
+  assetType: 'case-study',
+  kind: 'page',
+  summary: 'A results-led proof story a champion can forward: challenge → approach → solution → quantified results.',
+  cadence: 'One case study, section by section',
+  steps: [
+    { label: 'Snapshot', timing: 'Opening', subjectFormula: 'How {customer} {achieved result} with {brand}', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'The customer and the headline result up top, so the payoff is clear before any detail.' },
+    { label: 'Challenge', timing: 'Section 1', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'The problem the customer faced and why it mattered.' },
+    { label: 'Approach', timing: 'Section 2', subjectFormula: '—', framework: 'BAB', cta: '—', levers: ['none'], brief: 'What you did and why — the plan and the reasoning.' },
+    { label: 'Solution', timing: 'Section 3', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'The specific solution in action, tied to the customer’s situation.' },
+    { label: 'Results', timing: 'Section 4', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'Quantified outcomes with real metrics, plus a customer quote with name and title.' },
+    { label: 'CTA', timing: 'Close', subjectFormula: '—', framework: 'AIDA', cta: 'Book a demo', levers: ['none'], brief: 'A clear next step for a reader who wants the same result.' },
+  ],
+  guardrails: [
+    'Lead with the headline result.',
+    'Quantify the outcome with real metrics.',
+    'Include a customer quote with name and title.',
+    'Make it forwardable — a champion shares it internally.',
+  ],
+}
+
+export const BLOG_BLUEPRINTS: EmailBlueprint[] = [SEO_ARTICLE, PILLAR_GUIDE, LISTICLE, CASE_STUDY]
+
+const ALL_BLUEPRINTS: EmailBlueprint[] = [...EMAIL_BLUEPRINTS, ...PAGE_BLUEPRINTS, ...BLOG_BLUEPRINTS]
 
 /** Blueprints available for a given channel + assetType (email + landing-page). */
 export function blueprintsFor(channel: ChannelId, assetType?: string): EmailBlueprint[] {
