@@ -479,7 +479,113 @@ const HOMEPAGE: EmailBlueprint = {
   ],
 }
 
-export const PAGE_BLUEPRINTS: EmailBlueprint[] = [HOMEPAGE, SALES_PAGE, LEADGEN_PAGE]
+const PRODUCT_PAGE: EmailBlueprint = {
+  key: 'product-page',
+  name: 'Product / feature page',
+  channel: 'website',
+  assetType: 'product',
+  kind: 'page',
+  summary: 'One product, sold on outcomes: what job it does, each feature as a benefit, how it works, proof. Depth without a hard sell.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero', timing: 'Above the fold', subjectFormula: '{product}: the {category} that {benefit}', framework: 'JTBD', cta: 'Get started', levers: ['none'], brief: 'Name the product and the one job it gets done. Outcome-led headline, a subheadline naming the mechanism or audience, a dominant primary CTA plus a low-commitment secondary (watch demo), and a real product visual.' },
+    { label: 'Social proof bar', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'A logo strip or a hard usage stat under the hero to establish credibility before the pitch.' },
+    { label: 'Problem / job', timing: 'Section 2', subjectFormula: '—', framework: 'JTBD', cta: '—', levers: ['none'], brief: 'The job the buyer is trying to get done today and why the current way falls short. Sets up the product.' },
+    { label: 'Features as benefits', timing: 'Section 3', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'Two to four capability blocks, each translated to an outcome (feature → advantage → quantified benefit). Scannable, benefit before feature.' },
+    { label: 'How it works', timing: 'Section 4', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'A 3-step sequence that lowers perceived effort ("Connect → Configure → Ship").' },
+    { label: 'Integrations / specs', timing: 'Section 5', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Where it fits in the stack: integrations, security, or the one or two specs that matter to this buyer.' },
+    { label: 'Deeper proof', timing: 'Section 6', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'A testimonial or mini case study with a name, title and a specific outcome, next to a CTA.' },
+    { label: 'FAQ', timing: 'Section 7', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'The top objections to this product. Doubles as SEO / schema real estate.' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'Get started', levers: ['none'], brief: 'A sharper restatement of the primary ask with a fresh angle, not a verbatim repeat of the hero button.' },
+  ],
+  guardrails: [
+    'One product per page — do not blend the whole platform in.',
+    'Benefit before feature; 2-3 sentence blocks.',
+    'Put the strongest proof next to a CTA, not only at the bottom.',
+    'Show the product (real UI), do not just describe it.',
+  ],
+}
+
+const PRICING_PAGE: EmailBlueprint = {
+  key: 'pricing-page',
+  name: 'Pricing page',
+  channel: 'website',
+  assetType: 'pricing',
+  kind: 'page',
+  summary: 'Make the choice easy: name who each tier is for, anchor high, highlight the middle, and disarm the billing objections.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero', timing: 'Above the fold', subjectFormula: 'Pricing that scales with {audience}', framework: 'Category', cta: 'Start free', levers: ['none'], brief: 'A short value-framing headline (not "Pricing"), a subheadline on what drives cost (seats, usage), and the billing toggle. Reassure with a free trial or "no credit card".' },
+    { label: 'Social proof bar', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'A logo strip or customer count to justify the price before the reader reads it.' },
+    { label: 'Plan tiers', timing: 'Section 2', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Three tiers, each with a one-line "best for {who}", the price, and 3-5 outcome-led inclusions. Highlight the middle tier as recommended; annual as the default.' },
+    { label: 'What’s included / comparison', timing: 'Section 3', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'A feature-comparison table across tiers for the detail-oriented buyer. Group by outcome, not by internal module names.' },
+    { label: 'Guarantee / risk reversal', timing: 'Section 4', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'A money-back guarantee, free migration, or a customer stat that reverses the risk of committing.' },
+    { label: 'Billing FAQ', timing: 'Section 5', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Handle the money objections directly: overages, cancellation, upgrades, seat changes, what counts as a "seat".' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'Start free', levers: ['none'], brief: 'Restate the low-risk primary ask (start free / book a demo) with risk-reducer microcopy beneath it.' },
+  ],
+  guardrails: [
+    'Name who each tier is for; do not make the buyer guess.',
+    'Anchor with a high tier, highlight the recommended middle, default to annual.',
+    'Reserve "Contact us" for enterprise only — never for a self-serve tier.',
+    'Put the guarantee / risk-reversal near the tiers, not buried.',
+    'Group features by outcome, not by internal module names.',
+  ],
+}
+
+const SOLUTIONS_PAGE: EmailBlueprint = {
+  key: 'solutions-page',
+  name: 'Solutions / use-case page',
+  channel: 'website',
+  assetType: 'solutions',
+  kind: 'page',
+  summary: 'One segment, one page. Speak their language, map their specific problem to your capability, lead with their outcome. A reusable template per industry or role.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero', timing: 'Above the fold', subjectFormula: 'For {audience}, {brand} {outcome}', framework: 'JTBD', cta: 'See how', levers: ['none'], brief: 'A segment-specific outcome headline that mirrors how this audience describes their goal. Subheadline names the segment; primary CTA. Do not reuse the generic homepage hero.' },
+    { label: 'Social proof bar', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'Logos or a stat from THIS segment ("Trusted by 200+ {segment} teams") — same-industry proof beats generic proof.' },
+    { label: 'The problem / stakes', timing: 'Section 2', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'Name the specific problem this segment feels and what it costs them, in their vocabulary.' },
+    { label: 'How we solve it', timing: 'Section 3', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'Map each capability to this segment’s problem (their pain → your feature → their outcome). Only the features that matter to them.' },
+    { label: 'Use-case detail', timing: 'Section 4', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'A concrete workflow or scenario the way this segment actually operates, so they see themselves in it.' },
+    { label: 'Deeper proof', timing: 'Section 5', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'A same-segment case study with a named customer and a quantified outcome, next to a CTA.' },
+    { label: 'FAQ', timing: 'Section 6', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'The objections specific to this segment (compliance, integrations, migration).' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'See how', levers: ['none'], brief: 'Restate the ask in the segment’s terms with a fresh angle.' },
+  ],
+  guardrails: [
+    'One segment per page (an industry or a role) — a reusable template, not a catch-all.',
+    'Speak their language, not yours; mirror how the segment names its own problem.',
+    'Same-industry proof beats generic proof — swap logos and case studies per segment.',
+    'Lead with their outcome, not your feature list.',
+  ],
+}
+
+const COMPARISON_PAGE: EmailBlueprint = {
+  key: 'comparison-page',
+  name: 'Comparison / vs page',
+  channel: 'website',
+  assetType: 'comparison',
+  kind: 'page',
+  summary: 'Bottom-funnel "vs / alternative" intent. Win on the buyer’s real criteria with an honest table — conceding where the other side wins is what builds the trust that converts.',
+  cadence: 'One page, section by section',
+  steps: [
+    { label: 'Hero', timing: 'Above the fold', subjectFormula: '{brand} vs {competitor}: the honest comparison', framework: 'Category', cta: 'Start free', levers: ['none'], brief: 'Name both sides and frame it as an honest, buyer-first comparison. Subheadline states who {brand} is the better fit for. Primary CTA.' },
+    { label: 'Social proof bar', timing: 'Below hero', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['social-proof'], brief: 'Logos or a "switched from {competitor}" stat to signal others made this exact call.' },
+    { label: 'Why teams switch', timing: 'Section 2', subjectFormula: '—', framework: 'BAB', cta: '—', levers: ['none'], brief: 'The two or three decision criteria that actually drive the switch (before → after), framed around the buyer’s job, not a feature dump.' },
+    { label: 'The comparison', timing: 'Section 3', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'A real side-by-side table on the criteria that matter. Be specific and accurate — a table the buyer can trust, not vague checkmarks.' },
+    { label: 'Where each wins', timing: 'Section 4', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Concede honestly where {competitor} is the better pick, and name exactly who {brand} is right for. Fairness is what makes the rest credible.' },
+    { label: 'Migration / ease', timing: 'Section 5', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'Lower the switching cost: migration support, import tools, time-to-value. Removes the biggest objection to switching.' },
+    { label: 'Deeper proof', timing: 'Section 6', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'A switcher’s story — a named customer who moved from {competitor} and the outcome. Next to a CTA.' },
+    { label: 'FAQ', timing: 'Section 7', subjectFormula: '—', framework: 'Scannable', cta: '—', levers: ['none'], brief: 'The switching objections: data migration, contracts, learning curve, pricing differences.' },
+    { label: 'Final CTA', timing: 'Bottom', subjectFormula: '—', framework: 'AIDA', cta: 'Start free', levers: ['none'], brief: 'Restate the low-risk ask (start free / book a migration call) with a fresh angle.' },
+  ],
+  guardrails: [
+    'Be honest — concede where the alternative wins; it is what makes the page credible.',
+    'Lead with the buyer’s decision criteria, not a one-sided feature dump.',
+    'Name the specific alternative and target "vs / alternative" search intent.',
+    'Use a real, accurate comparison table — never vague or unverifiable claims.',
+  ],
+}
+
+export const PAGE_BLUEPRINTS: EmailBlueprint[] = [HOMEPAGE, PRODUCT_PAGE, PRICING_PAGE, SOLUTIONS_PAGE, COMPARISON_PAGE, SALES_PAGE, LEADGEN_PAGE]
 
 // ---- Blog / content blueprints ----
 // A content piece is ONE deliverable; its steps are the ordered sections of the article.
