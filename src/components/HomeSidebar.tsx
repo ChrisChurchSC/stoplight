@@ -446,6 +446,12 @@ export function HomeSidebar() {
           </button>
           {recordsOpen && (
             <div className="hsb-chat-list">
+              <button className={`nav-item${page === 'brandrecords' ? ' active' : ''}`} onClick={() => setPage('brandrecords')} title="Brand">
+                <span className="nav-ico">
+                  <Ico name="brand" />
+                </span>
+                <span className="nav-label">Brand</span>
+              </button>
               <button className={`nav-item${page === 'records' ? ' active' : ''}`} onClick={() => setPage('records')} title="Companies">
                 <span className="nav-ico">
                   <Ico name="companies" />

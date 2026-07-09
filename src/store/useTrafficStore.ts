@@ -1199,7 +1199,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'flows' | 'media'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'brandrecords' | 'flows' | 'media'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -1278,6 +1278,8 @@ interface TrafficState {
   clientProfiles: Record<string, ClientProfile>
   /** Save (merge) a client's profile. */
   setClientProfile: (name: string, profile: ClientProfile) => void
+  /** Remove a brand's profile record (used by the Brand records page). */
+  removeClientProfile: (name: string) => void
   /** Measured actuals per brand, pulled from a connected analytics source (read-only,
    *  refreshed out of band). Read by the Metrics tab beside the projected plan. */
   brandActuals: Record<string, BrandActuals>
@@ -1580,7 +1582,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'flows' | 'media') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'brandrecords' | 'flows' | 'media') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2161,6 +2163,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const n = name.trim()
       if (!n) return {}
       const clientProfiles = { ...s.clientProfiles, [n]: { ...s.clientProfiles[n], ...profile } }
+      saveClientProfiles(clientProfiles)
+      return { clientProfiles }
+    }),
+
+  removeClientProfile: (name) =>
+    set((s) => {
+      if (!(name in s.clientProfiles)) return {}
+      const clientProfiles = { ...s.clientProfiles }
+      delete clientProfiles[name]
       saveClientProfiles(clientProfiles)
       return { clientProfiles }
     }),
