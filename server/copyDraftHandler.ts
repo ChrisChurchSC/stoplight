@@ -61,6 +61,13 @@ Each asset arrives with four inputs that MUST shape its copy:
 - proof: the proof point (RTB) this asset substantiates. Name or lean on it. Proof is a SHARED pool reused across many assets by design.
 - context (optional): personalization the variant was fanned to (location, time/season, lifecycle, …). When present, LOCALIZE the copy to it so each variant is distinct and speaks to that context (a Belmar variant must not read identically to an Asbury one).
 
+Some assets carry an EMAIL BLUEPRINT in their context, which MUST shape the copy:
+- context.brief: the focus for this specific email (its step in the sequence). Write the email to this focus.
+- context.framework: the copy framework to structure the body — AIDA (Attention→Interest→Desire→Action), PAS (Problem→Agitate→Solution), BAB (Before→After→Bridge), FAB (Features→Advantages→Benefits), 4Ps (Picture→Promise→Proof→Push), or Scannable (a short skimmable block: heading + a sentence + a link). Build the body along this framework.
+- context.subjectFormula: a fill-in-the-blank subject template with {slots}. Write the subject to this formula, replacing every {slot} with a real, specific value from the brand/campaign (never leave a literal {slot} in the output). Keep it under ~50 characters and front-load the offer.
+- context.levers: the ONLY persuasion levers allowed for this email (time-scarcity, quantity-scarcity, social-proof, exclusivity). Use only these, and only if the campaign genuinely supports them. If absent or "none", use no urgency/scarcity at all.
+Keep one dominant CTA per email.
+
 Write copy for EVERY component of EVERY asset, respecting each component's character limit. Headlines are tight; primary text can breathe; CTAs are short action labels, not sentences.
 
 UNIQUENESS is a hard requirement. Across the whole campaign: no two assets may share the same headline, no two may share the same primary text, and CTAs must not repeat. Vary the opening, structure, and angle, not just the noun that names the audience. If an AVOID list is provided, do not reuse any string in it.

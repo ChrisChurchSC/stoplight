@@ -1,4 +1,4 @@
-import { clientForCampaign, type ClientProfile } from '../../domain/clients'
+import { clientForCampaign, UNASSIGNED, type ClientProfile } from '../../domain/clients'
 import { funnelStageFor, type FunnelStage } from '../../domain/funnel'
 import type { MessagingField } from '../../domain/messaging'
 import type { BrandGuide } from '../../domain/readiness'
@@ -203,7 +203,10 @@ interface Ctx {
 export class HeuristicCopyWriter implements CopyWriter {
   async draft(req: DraftRequest): Promise<DraftResult> {
     const { campaign, assets, proofPool, hooks, avoid, brand } = req
-    const client = clientForCampaign(campaign) ?? campaign.split(/—|-/).pop()?.trim() ?? 'We'
+    // clientForCampaign maps a campaign NAME to its brand; when the "campaign" is itself a
+    // brand name (the preview path) it returns UNASSIGNED, so fall back to the name.
+    const resolved = clientForCampaign(campaign)
+    const client = (resolved && resolved !== UNASSIGNED ? resolved : campaign.split(/—|-/).pop()?.trim()) || 'We'
     const oneLiner = brand?.oneLiner?.trim() || brand?.mission?.trim() || undefined
     const brandHooks = (hooks ?? []).map((h) => h.trim()).filter(Boolean)
 
@@ -226,9 +229,12 @@ export class HeuristicCopyWriter implements CopyWriter {
       const stage = a.stage ?? funnelStageFor(a.channel, a.type)
       const proof = a.proof ?? rtbs[i % rtbs.length]
       const who = a.audience?.name?.trim() || `${client} customers`
-      const format = FORMATS.reduce((best, f) =>
-        (fmtUse.get(f.key) ?? 0) < (fmtUse.get(best.key) ?? 0) ? f : best,
-      )
+      // A blueprint framework (AIDA/PAS/…) maps to an execution format so the heuristic
+      // body follows the framework; otherwise rotate to the least-used format.
+      const bpFormatKey = FRAMEWORK_FORMAT[(a.context?.framework ?? '').toUpperCase()]
+      const format =
+        (bpFormatKey && FORMATS.find((f) => f.key === bpFormatKey)) ||
+        FORMATS.reduce((best, f) => ((fmtUse.get(f.key) ?? 0) < (fmtUse.get(best.key) ?? 0) ? f : best))
       fmtUse.set(format.key, (fmtUse.get(format.key) ?? 0) + 1)
       const ctx: Ctx = {
         stage,
@@ -384,6 +390,17 @@ const who2 = (c: Ctx) => asPlural(c) || `${c.brandName} people`
  * brand get copy in THEIR own terms, never a borrowed voice. This is the contamination
  * fix at the writer: substance comes from the bound brand, structure from the format.
  */
+// Map an email-blueprint copy framework to the closest execution format, so the offline
+// heuristic still follows the framework's shape when a blueprint is applied.
+const FRAMEWORK_FORMAT: Record<string, string> = {
+  AIDA: 'story',
+  PAS: 'myth-bust',
+  BAB: 'before-after',
+  FAB: 'how-to',
+  '4PS': 'testimonial',
+  SCANNABLE: 'one-liner',
+}
+
 const FORMATS: Fmt[] = [
   {
     key: 'question',
@@ -461,7 +478,39 @@ function descFor(ctx: Ctx, v: number): string {
   return cap(pool[r % pool.length] || ctx.proof.label)
 }
 
+// Fill a blueprint subject formula's {slots} with the best available values; strip any
+// slot we can't fill and tidy the result. Keeps the formula's shape without leaving braces.
+function fillSubjectFormula(formula: string, ctx: Ctx): string {
+  const fills: Record<string, string> = {
+    brand: ctx.brandName,
+    first_name: '',
+    name: '',
+    offer: 'welcome offer',
+    discount: 'a deal',
+    gift: 'gift',
+    perk: 'members perk',
+    product: 'pick',
+    category: 'favorites',
+    hook: firstClause(ctx.oneLiner || ctx.proof.label),
+    number: '3',
+    points: 'points',
+    tier: 'the next tier',
+  }
+  let s = formula.replace(/\{(\w+)\}/g, (_m, k: string) => fills[k.toLowerCase()] ?? '')
+  s = s
+    .replace(/\b(\w+)\s+\1\b/gi, '$1') // collapse an accidental repeated word ("your your")
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?:;])/g, '$1')
+    .replace(/^[\s,:—-]+/, '')
+    .replace(/[\s,]+$/, '')
+    .replace(/,\s*,/g, ',')
+    .trim()
+  return cap(s)
+}
+
 function subjectFor(ctx: Ctx, v: number): string {
+  const formula = ctx.context?.subjectFormula?.trim()
+  if (formula && formula !== '—') return fillSubjectFormula(formula, ctx)
   const r = ctx.i + v
   const pain = painAt(ctx, r)
   const pool = [

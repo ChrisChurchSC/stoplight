@@ -447,6 +447,16 @@ export function FlowsView() {
     const slots = Math.max(1, subcardCount(p, node.perMonth))
     const briefs = Array.from({ length: slots }, (_, i) => node.briefs?.[i] ?? node.description ?? '')
     const auds = node.audience ? [node.audience] : audRef.current
+    // If a blueprint is applied, pass each slot's framework / subject formula / CTA / levers.
+    const bp = node.blueprint ? blueprintByKey(node.blueprint) : null
+    const steps = bp
+      ? Array.from({ length: slots }, (_, i) => {
+          const s = bp.kind === 'sequence' ? bp.steps[i] : bp.steps[0]
+          if (!s) return undefined
+          const levers = s.levers.filter((l) => l !== 'none')
+          return { framework: s.framework, subjectFormula: s.subjectFormula, cta: s.cta, levers: levers.length ? levers.join(', ') : undefined }
+        })
+      : undefined
     setPreview((pv) => ({ ...pv, [node.id]: { loading: true, source: pv[node.id]?.source ?? null, posts: pv[node.id]?.posts ?? [] } }))
     try {
       const res = await previewFlowCopy({
@@ -457,6 +467,7 @@ export function FlowsView() {
         audiences: auds,
         theme: subjectRef.current.trim() || undefined,
         flightWeeks: flightRef.current,
+        steps,
       })
       setPreview((pv) => ({ ...pv, [node.id]: { loading: false, source: res?.source ?? null, posts: res?.posts ?? [] } }))
     } catch {
@@ -821,13 +832,24 @@ export function FlowsView() {
         await seedCampaignAssets(campaignName, [d], { flightWeeks: cfg.flightWeeks, audiences: auds })
         const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !before.has(r.id))
         const briefs = (n.briefs ?? []).map((b) => b.trim()).filter(Boolean)
+        // A blueprint carries per-email guidance (framework / subject formula / levers) that
+        // rides in `lineage`; draftCopy copies lineage into the copy context automatically.
+        const bp = n.blueprint ? blueprintByKey(n.blueprint) : null
         if (briefs.length) {
           const ordered = [...fresh].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
           for (let i = 0; i < ordered.length; i++) {
             const brief = briefs[i % briefs.length]
+            const st = bp ? (bp.kind === 'sequence' ? bp.steps[i % bp.steps.length] : bp.steps[0]) : null
+            const bpLineage: Record<string, string> = {}
+            if (st) {
+              bpLineage.framework = st.framework
+              if (st.subjectFormula && st.subjectFormula !== '—') bpLineage.subjectFormula = st.subjectFormula
+              const levers = st.levers.filter((l) => l !== 'none')
+              if (levers.length) bpLineage.levers = levers.join(', ')
+            }
             await updateRow(ordered[i].id, {
               assetName: `${ordered[i].assetName} · ${brief}`,
-              lineage: { ...(ordered[i].lineage ?? {}), brief },
+              lineage: { ...(ordered[i].lineage ?? {}), brief, ...bpLineage },
             })
           }
         }

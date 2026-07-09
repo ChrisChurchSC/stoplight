@@ -1749,6 +1749,8 @@ interface TrafficState {
     theme?: string
     /** Flight length in weeks — the campaign timeframe, so copy paces to it. */
     flightWeeks?: number
+    /** Optional email-blueprint guidance per slot (framework / subject formula / CTA / levers). */
+    steps?: ({ framework?: string; subjectFormula?: string; cta?: string; levers?: string } | undefined)[]
   }) => Promise<{ source: CopySource | null; posts: { headline: string; primary: string }[] } | null>
   /** Plan a personalization fan-out without committing (count-before-commit). */
   fanOutPreview: (
@@ -4752,7 +4754,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     return copySource
   },
 
-  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, theme, flightWeeks }) => {
+  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, theme, flightWeeks, steps }) => {
     if (!briefs.length) return null
     // Same hard boundary as draftCopy: a brand must be bound to generate. A brandless
     // (or non-draft-brandless) client has no voice/proof to write from.
@@ -4786,10 +4788,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           : audName
             ? { name: audName }
             : undefined,
-        ctaSeed: sys.ctas.length ? sys.ctas[i % sys.ctas.length].label : undefined,
+        // A blueprint step's CTA wins over the rotated library CTA when present.
+        ctaSeed: steps?.[i]?.cta || (sys.ctas.length ? sys.ctas[i % sys.ctas.length].label : undefined),
         proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
-        // The mini brief drives this slot's copy (mirrors lineage.brief on a real build).
-        context: b ? { brief: b } : undefined,
+        // The mini brief drives this slot's copy (mirrors lineage.brief on a real build),
+        // plus any blueprint guidance (framework / subject formula / allowed levers).
+        context: (() => {
+          const st = steps?.[i]
+          const ctx: Record<string, string> = {}
+          if (b) ctx.brief = b
+          if (st?.framework) ctx.framework = st.framework
+          if (st?.subjectFormula && st.subjectFormula !== '—') ctx.subjectFormula = st.subjectFormula
+          if (st?.levers) ctx.levers = st.levers
+          return Object.keys(ctx).length ? ctx : undefined
+        })(),
         index: i,
       }
     })
