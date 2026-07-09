@@ -310,6 +310,8 @@ function flowAgentApi(): PluginOption {
 // own env vars. A real key flips every Claude feature from heuristic to live.
 const SERVER_SECRETS = [
   'ANTHROPIC_API_KEY',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_MODEL',
   'BUFFER_ACCESS_TOKEN',
   'BUFFER_PROFILE_IDS',
   'RESEND_API_KEY',
