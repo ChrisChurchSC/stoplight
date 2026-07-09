@@ -89,7 +89,10 @@ const SPECS: Spec[] = [
 ]
 
 const NAME_COL: RecordColumn = { key: 'name', label: 'Brand', kind: 'name', width: 190 }
-const BRAND_COLUMNS: RecordColumn[] = [NAME_COL, ...SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col! }))]
+// Every field is a column (the drawer holds the same set). A field's own `col` width wins;
+// otherwise size by kind so long fields get room and short ones stay tight.
+const colWidth = (s: Spec): number => s.col ?? (s.kind === 'multiline' ? 260 : s.kind === 'url' ? 200 : s.kind === 'colors' ? 150 : 170)
+const BRAND_COLUMNS: RecordColumn[] = [NAME_COL, ...SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: colWidth(s) }))]
 const BRAND_FIELDS: RecordField[] = [{ key: 'name', label: 'Brand', kind: 'name', group: 'Identity' }, ...SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: s.group }))]
 
 type BrandRow = { id: string } & Record<string, string>
