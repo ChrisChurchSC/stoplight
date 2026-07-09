@@ -1,0 +1,207 @@
+import { useEffect, useRef, useState } from 'react'
+import { Markdown } from '../lib/miniMarkdown'
+import type { FlowChatMsg, SavedFlowChat } from '../domain/flowAgent'
+
+export type { FlowChatMsg }
+export type ChatIntent = 'build' | 'analyze'
+
+const SparkIco = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
+  </svg>
+)
+const AnalyzeIco = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19V5M4 19h16M8 16v-4M12 16V8M16 16v-6" />
+  </svg>
+)
+
+interface Example { title: string; desc: string; prompt: string; mode?: ChatIntent }
+const BUILD_EXAMPLES: Example[] = [
+  { title: 'Build a Giving Tuesday push', desc: 'A short fundraising burst tagged to your donors, copy written.', prompt: 'Build a 2-week Giving Tuesday push' },
+  { title: 'Add a weekly newsletter + socials', desc: 'Add a newsletter and 4 Instagram posts a month.', prompt: 'Add a weekly newsletter and 4 Instagram posts a month' },
+  { title: 'Tag the right records', desc: 'Point this flow at the segments it targets.', prompt: 'Tag this flow to the impact investor segment' },
+]
+const VIEW_EXAMPLES: Example[] = [
+  { title: 'Regenerate the copy', desc: 'Rewrite every asset so they read distinct and on-brand.', prompt: 'Regenerate the copy for this flow' },
+  { title: 'Add a deliverable', desc: 'Grow the flow with another channel.', prompt: 'Add a LinkedIn post to this flow' },
+  { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this flow?", mode: 'analyze' },
+]
+
+/**
+ * The flow-canvas AI chat panel. Presentational: it renders the conversation, a Build /
+ * Analyze mode toggle, example cards, chat history, and the pending-suggestions queue. All
+ * actions (send, apply/discard suggestions, new chat, open/delete history) call up to the
+ * parent (FlowsView), which owns the agent call + applies the approved commands.
+ */
+export function FlowChat({
+  messages,
+  busy,
+  flowMode,
+  history,
+  onSend,
+  onApply,
+  onDiscard,
+  onNewChat,
+  onOpenHistory,
+  onDeleteHistory,
+}: {
+  messages: FlowChatMsg[]
+  busy: boolean
+  flowMode: 'build' | 'view'
+  history: SavedFlowChat[]
+  onSend: (text: string, intent: ChatIntent) => void
+  onApply: (msgId: string) => void
+  onDiscard: (msgId: string) => void
+  onNewChat: () => void
+  onOpenHistory: (id: string) => void
+  onDeleteHistory: (id: string) => void
+}) {
+  const [q, setQ] = useState('')
+  const [intent, setIntent] = useState<ChatIntent>('build')
+  const [histOpen, setHistOpen] = useState(false)
+  const [confirmNew, setConfirmNew] = useState(false)
+  const threadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages, busy])
+
+  const send = () => {
+    const t = q.trim()
+    if (!t || busy) return
+    setQ('')
+    onSend(t, intent)
+  }
+  const examples = flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
+
+  return (
+    <aside className="fchat">
+      <header className="fchat-head">
+        <span className="fchat-spark" aria-hidden="true">✦</span>
+        <span className="fchat-title">Flow assistant</span>
+        <span className="fchat-beta">Beta</span>
+        <div className="fchat-head-actions">
+          <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={() => (messages.length ? setConfirmNew(true) : onNewChat())}>+</button>
+          <div className="fchat-hist-wrap">
+            <button className="fchat-hbtn" title="Chat history" aria-label="Chat history" onClick={() => setHistOpen((o) => !o)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 4v4h4" /><path d="M12 8v4l3 2" />
+              </svg>
+            </button>
+            {histOpen && (
+              <>
+                <div className="fchat-hist-scrim" onClick={() => setHistOpen(false)} />
+                <div className="fchat-hist-menu">
+                  <div className="fchat-hist-head">Chat history</div>
+                  {history.length === 0 && <div className="fchat-hist-empty">No past chats for this flow yet.</div>}
+                  {history.map((h) => (
+                    <div key={h.id} className="fchat-hist-row">
+                      <button className="fchat-hist-open" onClick={() => { onOpenHistory(h.id); setHistOpen(false) }}>
+                        <span className="fchat-hist-title">{h.title || 'Untitled chat'}</span>
+                        <span className="fchat-hist-meta">{h.messages.length} message{h.messages.length === 1 ? '' : 's'}</span>
+                      </button>
+                      <button className="fchat-hist-del" title="Delete" aria-label="Delete chat" onClick={() => onDeleteHistory(h.id)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div className="fchat-thread" ref={threadRef}>
+        {messages.length === 0 && (
+          <div className="fchat-empty">
+            <p className="fchat-empty-lead">I&rsquo;m your flow assistant.</p>
+            <p className="fchat-empty-sub">In <strong>Build</strong> I edit this flow (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
+            <div className="fchat-cards">
+              {examples.map((ex) => (
+                <button key={ex.title} className="fchat-card" disabled={busy} onClick={() => onSend(ex.prompt, ex.mode ?? intent)}>
+                  <span className="fchat-card-ic" aria-hidden="true">{ex.mode === 'analyze' ? <AnalyzeIco /> : <SparkIco />}</span>
+                  <span className="fchat-card-txt">
+                    <span className="fchat-card-title">{ex.title}</span>
+                    <span className="fchat-card-desc">{ex.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {messages.map((m) =>
+          m.role === 'user' ? (
+            <div key={m.id} className="fchat-user">{m.text}</div>
+          ) : (
+            <div key={m.id} className="fchat-ai">
+              <Markdown text={m.text} className="fchat-ai-md" />
+              {m.suggestions && m.suggestions.length > 0 && (
+                <div className="fchat-sugg-box">
+                  <div className="fchat-sugg-head">{m.resolved ? (m.resolved === 'applied' ? 'Applied' : 'Discarded') : `Suggestions · ${m.suggestions.length}`}</div>
+                  <ul className="fchat-sugg-list">
+                    {m.suggestions.map((s, i) => (
+                      <li key={i} className={`fchat-sugg-item${m.resolved === 'applied' ? ' done' : ''}`}>
+                        <span className="fchat-sugg-check" aria-hidden="true">{m.resolved === 'applied' ? '✓' : '•'}</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                  {!m.resolved && (
+                    <div className="fchat-sugg-foot">
+                      <button className="fchat-sugg-apply" onClick={() => onApply(m.id)} disabled={busy}>Apply all</button>
+                      <button className="fchat-sugg-discard" onClick={() => onDiscard(m.id)} disabled={busy}>Discard</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ),
+        )}
+        {busy && (
+          <div className="fchat-ai fchat-thinking">
+            <span className="fchat-dot" /><span className="fchat-dot" /><span className="fchat-dot" />
+          </div>
+        )}
+      </div>
+
+      <div className="fchat-disclaim">The assistant can make mistakes. Review its suggestions before applying.</div>
+      <div className="fchat-composer">
+        <div className="fchat-mode">
+          <button className={`fchat-mode-btn${intent === 'build' ? ' on' : ''}`} onClick={() => setIntent('build')}>
+            <SparkIco /> Build
+          </button>
+          <button className={`fchat-mode-btn${intent === 'analyze' ? ' on' : ''}`} onClick={() => setIntent('analyze')}>
+            <AnalyzeIco /> Analyze
+          </button>
+        </div>
+        <div className="fchat-inputrow">
+          <textarea
+            className="fchat-input"
+            rows={2}
+            value={q}
+            placeholder={intent === 'build' ? 'Describe an edit to make…' : 'Ask about this flow…'}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+            }}
+          />
+          <button className="fchat-send" onClick={send} disabled={busy || !q.trim()} aria-label="Send">↑</button>
+        </div>
+      </div>
+
+      {confirmNew && (
+        <>
+          <div className="fchat-modal-scrim" onClick={() => setConfirmNew(false)} />
+          <div className="fchat-modal" role="dialog" aria-label="Start new chat">
+            <strong className="fchat-modal-title">Start new chat</strong>
+            <p className="fchat-modal-text">If you continue, this chat will close and a new chat will start. You can find it later in chat history.</p>
+            <div className="fchat-modal-foot">
+              <button className="fchat-modal-cancel" onClick={() => setConfirmNew(false)}>Cancel</button>
+              <button className="fchat-modal-go" onClick={() => { setConfirmNew(false); onNewChat() }}>Continue</button>
+            </div>
+          </div>
+        </>
+      )}
+    </aside>
+  )
+}

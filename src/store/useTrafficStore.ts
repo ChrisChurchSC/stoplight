@@ -101,6 +101,7 @@ import type { BrandReport } from '../domain/reports'
 import type { MediaMix } from '../domain/channelMix'
 import { type Company, freshCompanyId, seedCompanies } from '../domain/companies'
 import { type ChannelRecord, freshChannelRecordId, seedChannelRecords } from '../domain/channelRecords'
+import type { SavedFlowChat } from '../domain/flowAgent'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import type { PinnedInsight } from '../domain/pinnedInsights'
@@ -559,6 +560,24 @@ function loadChannelRecords(): ChannelRecord[] {
 function saveChannelRecords(list: ChannelRecord[]): void {
   try {
     localStorage.setItem(CHANNEL_RECORDS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+// Flow-canvas chat history — past conversations per flow.
+const FLOW_CHATS_KEY = 'stoplight.flowChats.v1'
+function loadFlowChats(): SavedFlowChat[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FLOW_CHATS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveFlowChats(list: SavedFlowChat[]): void {
+  try {
+    localStorage.setItem(FLOW_CHATS_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1405,6 +1424,15 @@ interface TrafficState {
   flowOpen: string | null
   openFlow: (campaign: string) => void
   clearFlowOpen: () => void
+  /** True while a flow canvas (build or view) is open — collapses the sidebar to a rail. */
+  flowCanvasOpen: boolean
+  setFlowCanvasOpen: (open: boolean) => void
+  /** Saved flow-chat conversations, per flow (newest first). */
+  flowChats: SavedFlowChat[]
+  /** Upsert a saved flow chat by id. */
+  saveFlowChat: (chat: SavedFlowChat) => void
+  /** Delete a saved flow chat by id. */
+  deleteFlowChat: (id: string) => void
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
@@ -1953,6 +1981,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
   flowOpen: null,
+  flowCanvasOpen: false,
+  flowChats: loadFlowChats(),
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
   campaignFolderView: null,
@@ -2795,6 +2825,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign })
   },
   clearFlowOpen: () => set({ flowOpen: null }),
+  setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
+  saveFlowChat: (chat) =>
+    set((s) => {
+      const rest = s.flowChats.filter((c) => c.id !== chat.id)
+      const flowChats = [chat, ...rest].sort((a, b) => b.createdAt - a.createdAt)
+      saveFlowChats(flowChats)
+      return { flowChats }
+    }),
+  deleteFlowChat: (id) =>
+    set((s) => {
+      const flowChats = s.flowChats.filter((c) => c.id !== id)
+      saveFlowChats(flowChats)
+      return { flowChats }
+    }),
 
   createCanvas: () => {
     // A unique "Untitled canvas [N]" so repeated New-canvas clicks don't collide.

@@ -3,6 +3,9 @@ import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
+import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
+import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
+import { FlowChat, type ChatIntent } from './FlowChat'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -205,6 +208,10 @@ export function FlowsView() {
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
+  const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
+  const flowChats = useTrafficStore((s) => s.flowChats)
+  const saveFlowChat = useTrafficStore((s) => s.saveFlowChat)
+  const deleteFlowChat = useTrafficStore((s) => s.deleteFlowChat)
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
 
@@ -236,6 +243,16 @@ export function FlowsView() {
   // The Flows section opens on an all-flows landing page; picking a flow (or New flow)
   // drops into the canvas. The "Flows" breadcrumb returns here.
   const [flowScreen, setFlowScreen] = useState<'home' | 'canvas'>('home')
+  // Collapse the sidebar (to a rail) whenever a flow canvas is open; restore on leave/unmount.
+  useEffect(() => {
+    setFlowCanvasOpen(flowScreen === 'canvas')
+    return () => setFlowCanvasOpen(false)
+  }, [flowScreen, setFlowCanvasOpen])
+  // Flow-canvas AI chat (agentic: it edits the flow from chat).
+  const [chatMsgs, setChatMsgs] = useState<FlowChatMsg[]>([])
+  const [chatBusy, setChatBusy] = useState(false)
+  const chatIdRef = useRef(0)
+  const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
   // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
   const [viewName, setViewName] = useState<string | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -756,26 +773,32 @@ export function FlowsView() {
     }
   }, [rects])
 
-  const build = async () => {
-    if (!nodes.length || building) return
+  // Core build: seed a campaign + its deliverables + copy from an EXPLICIT config, so the
+  // AI agent can build from a computed snapshot without racing React state. The UI button
+  // wraps this with the builder's current state.
+  const buildFlow = async (cfg: {
+    name: string
+    subject: string
+    budget: string
+    flightWeeks: number
+    refs: FlowReference[]
+    audiences: string[]
+    nodes: FlowDeliverable[]
+  }) => {
+    if (!cfg.nodes.length || building) return
     setBuilding(true)
-    const campaignName = `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
+    const campaignName = `${brand ? `${brand} — ` : ''}${cfg.name.trim() || 'New campaign'}`
     try {
-      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: subject.trim() || undefined, durationWeeks: flightWeeks, overallBudget: budget ? Math.max(0, +budget || 0) : undefined })
-      // Persist the tagged records so the built flow keeps its Companies/People/Segments/
-      // Media-mix references (the view-mode Records selector reads these).
-      if (briefRefsEffective.length) setCampaignReferences(campaignName, briefRefsEffective)
-      // Seed one deliverable at a time so we can tie each asset back to its mini brief:
-      // the briefs rotate across the deliverable's assets (post i -> brief i mod N), the
-      // brief names the asset AND rides in `lineage` so the copy writer writes to it.
+      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined })
+      if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       const allNewIds: string[] = []
-      for (const n of nodes) {
+      for (const n of cfg.nodes) {
         const p = presetByKey(n.presetKey)
         if (!p) continue
-        const auds = n.audience ? [n.audience] : audSelection
+        const auds = n.audience ? [n.audience] : cfg.audiences
         const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: n.perMonth, runtime: p.runtime, brand: p.brand }
         const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName).map((r) => r.id))
-        await seedCampaignAssets(campaignName, [d], { flightWeeks, audiences: auds })
+        await seedCampaignAssets(campaignName, [d], { flightWeeks: cfg.flightWeeks, audiences: auds })
         const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !before.has(r.id))
         const briefs = (n.briefs ?? []).map((b) => b.trim()).filter(Boolean)
         if (briefs.length) {
@@ -790,14 +813,200 @@ export function FlowsView() {
         }
         allNewIds.push(...fresh.map((r) => r.id))
       }
-      // Capture which writer produced the copy so the result card can badge the source
-      // (Claude vs the offline heuristic fallback when the API has no key/credits).
       let source: CopySource | null = null
       if (writeCopy && allNewIds.length) source = await draftCopy(allNewIds)
       setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source })
+      return campaignName
     } finally {
       setBuilding(false)
     }
+  }
+  const build = () =>
+    buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes })
+
+  // Resolve record-tag labels back to structured references via the record groups.
+  const labelsToRefs = (labels: string[]): FlowReference[] => {
+    const out: FlowReference[] = []
+    for (const l of labels) {
+      for (const g of recordGroups) {
+        const it = g.items.find((i) => i.label === l)
+        if (it) { out.push({ type: g.type, id: it.id, label: it.label }); break }
+      }
+    }
+    return out
+  }
+
+  // Apply the AI's commands to the flow. Build-mode commands mutate the builder (and the
+  // canvas) and can end in a `build`; view-mode commands edit the open flow in place.
+  // Returns human-readable summaries of what was applied.
+  const applyFlowCommands = async (cmds: FlowCommand[]): Promise<string[]> => {
+    const applied: string[] = []
+    if (viewName !== null) {
+      for (const c of cmds) {
+        if (c.op === 'addDeliverable') {
+          const p = presetByKey(c.preset)
+          if (p) { await addViewDeliverable(p); applied.push(`Added ${p.label}`) }
+        } else if (c.op === 'setRecordTags') {
+          const refs = labelsToRefs(c.labels)
+          setCampaignReferences(viewName, refs)
+          setRefsDirty(true)
+          applied.push(`Tagged ${refs.length} record${refs.length === 1 ? '' : 's'}`)
+        } else if (c.op === 'regenerate') {
+          await regenerateFlow()
+          applied.push('Regenerated the copy')
+        }
+      }
+      return applied
+    }
+    // Build mode: keep a working copy so a same-turn `build` sees every prior edit.
+    let wName = name, wSubject = subject, wBudget = budget, wFlight = flightWeeks
+    let wNodes = [...nodesRef.current]
+    let wRefs = [...briefRefsEffective]
+    for (const c of cmds) {
+      switch (c.op) {
+        case 'setName': setName(c.value); wName = c.value; applied.push(`Named it "${c.value}"`); break
+        case 'setSubject': setSubject(c.value); wSubject = c.value; applied.push('Set the theme'); break
+        case 'setBudget': setBudget(String(c.value)); wBudget = String(c.value); applied.push(`Set budget $${Math.round(c.value).toLocaleString()}`); break
+        case 'setFlight': setFlightWeeks(c.weeks); wFlight = c.weeks; applied.push(`Set flight to ${c.weeks} week${c.weeks === 1 ? '' : 's'}`); break
+        case 'addDeliverable': {
+          const p = presetByKey(c.preset)
+          if (!p) break
+          const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: c.perMonth ?? startCount(p) }
+          wNodes = [...wNodes, node]
+          setNodes((ns) => [...ns, node])
+          void genPreview(node)
+          applied.push(`Added ${p.label}${!(p.brand || p.runtime === 'one-off') ? ` (${node.perMonth}/month)` : ''}`)
+          break
+        }
+        case 'removeDeliverable': {
+          const p = presetByKey(c.preset)
+          wNodes = wNodes.filter((n) => n.presetKey !== c.preset)
+          setNodes((ns) => ns.filter((n) => n.presetKey !== c.preset))
+          if (p) applied.push(`Removed ${p.label}`)
+          break
+        }
+        case 'setRecordTags': {
+          const refs = labelsToRefs(c.labels)
+          wRefs = refs
+          setBriefRefs(refs)
+          applied.push(`Tagged ${refs.length} record${refs.length === 1 ? '' : 's'}`)
+          break
+        }
+        case 'build': {
+          const auds = wRefs.length ? wRefs.map((r) => r.label) : audienceNames
+          const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes })
+          if (nm) applied.push(`Built ${wNodes.length} deliverable${wNodes.length === 1 ? '' : 's'} and wrote the copy`)
+          break
+        }
+      }
+    }
+    return applied
+  }
+
+  // A human-readable one-liner for a pending command (shown in the Suggestions block).
+  const describeCommand = (c: FlowCommand): string => {
+    switch (c.op) {
+      case 'setName': return `Name it "${c.value}"`
+      case 'setSubject': return 'Set the campaign theme'
+      case 'setBudget': return `Set budget to $${Math.round(c.value).toLocaleString()}`
+      case 'setFlight': return `Set flight to ${c.weeks} week${c.weeks === 1 ? '' : 's'}`
+      case 'addDeliverable': { const p = presetByKey(c.preset); return `Add ${p?.label ?? c.preset}${c.perMonth ? ` (${c.perMonth}/month)` : ''}` }
+      case 'removeDeliverable': { const p = presetByKey(c.preset); return `Remove ${p?.label ?? c.preset}` }
+      case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
+      case 'build': return 'Build the flow and write the copy'
+      case 'regenerate': return 'Regenerate the copy'
+    }
+  }
+
+  const runFlowChat = async (text: string, intent: ChatIntent) => {
+    const t = text.trim()
+    if (!t || chatBusy) return
+    setChatMsgs((m) => [...m, { id: nextChatId(), role: 'user', text: t }])
+    setChatBusy(true)
+    try {
+      const presets = DELIVERABLE_PRESETS.map((p) => ({ key: p.key, label: p.label, channel: p.channel, group: p.group }))
+      const records = {
+        companies: companies.map((c) => c.name),
+        people: people.map((p) => p.name),
+        segments: brandSegments.map((a) => a.name),
+        mediaMixes: brandMixesForRefs.map((m) => m.name),
+      }
+      const flow = viewName !== null
+        ? {
+            mode: 'view' as const,
+            name: viewShort,
+            subject: viewCampaign?.subject ?? '',
+            budget: viewCampaign?.overallBudget ?? null,
+            flightWeeks: viewFlight ?? flightWeeks,
+            deliverables: viewDelivs.map((d) => {
+              const p = DELIVERABLE_PRESETS.find((x) => x.channel === d.channel && x.assetType === d.assetType)
+              return { preset: p?.key ?? d.key, label: d.label, perMonth: d.count }
+            }),
+            recordTags: flowRefs.map((r) => r.label),
+          }
+        : {
+            mode: 'build' as const,
+            name,
+            subject,
+            budget: budget ? +budget : null,
+            flightWeeks,
+            deliverables: nodesRef.current.map((n) => ({ preset: n.presetKey, label: presetByKey(n.presetKey)?.label ?? n.presetKey, perMonth: n.perMonth })),
+            recordTags: briefRefsEffective.map((r) => r.label),
+          }
+      const res = await generateFlowEdit({
+        brand,
+        intent,
+        flow,
+        presets,
+        records,
+        message: t,
+        history: chatMsgs.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+      })
+      // Analyze (or no edits proposed) is answer-only. Build proposes edits as a pending
+      // Suggestions block the user approves before they apply.
+      const commands = intent === 'analyze' ? [] : res.commands
+      const suggestions = commands.map(describeCommand)
+      setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: res.reply, live: res.live, commands: commands.length ? commands : undefined, suggestions: suggestions.length ? suggestions : undefined }])
+    } catch {
+      setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: 'Something went wrong. Try rephrasing.', live: false }])
+    } finally {
+      setChatBusy(false)
+    }
+  }
+
+  // Apply / discard a message's pending suggestions.
+  const applyPendingChat = async (msgId: string) => {
+    const msg = chatMsgs.find((m) => m.id === msgId)
+    if (!msg?.commands || chatBusy) return
+    setChatBusy(true)
+    try {
+      await applyFlowCommands(msg.commands)
+      setChatMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, resolved: 'applied' } : x)))
+    } finally {
+      setChatBusy(false)
+    }
+  }
+  const discardPendingChat = (msgId: string) =>
+    setChatMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, resolved: 'discarded' } : x)))
+
+  // New chat + history. The active chat is saved to history (keyed by the flow) before
+  // it's cleared or another is opened.
+  const chatFlowKey = viewName ?? '__new-flow__'
+  const flowHistory = useMemo(() => flowChats.filter((c) => c.flowKey === chatFlowKey), [flowChats, chatFlowKey])
+  const persistActiveChat = () => {
+    if (!chatMsgs.length) return
+    const firstUser = chatMsgs.find((m) => m.role === 'user')
+    saveFlowChat({ id: `chat_${chatMsgs[0].id}`, flowKey: chatFlowKey, title: (firstUser?.text ?? 'Chat').slice(0, 60), messages: chatMsgs, createdAt: Date.now() })
+  }
+  const newFlowChat = () => {
+    persistActiveChat()
+    setChatMsgs([])
+  }
+  const openHistoryChat = (id: string) => {
+    const h = flowChats.find((c) => c.id === id)
+    if (!h) return
+    persistActiveChat()
+    setChatMsgs(h.messages)
   }
 
   const viewing = viewName !== null
@@ -962,6 +1171,18 @@ export function FlowsView() {
       {flowView === 'flow' && (
         <>
       <div className="flow-body">
+        <FlowChat
+          messages={chatMsgs}
+          busy={chatBusy}
+          flowMode={viewing ? 'view' : 'build'}
+          history={flowHistory}
+          onSend={runFlowChat}
+          onApply={applyPendingChat}
+          onDiscard={discardPendingChat}
+          onNewChat={newFlowChat}
+          onOpenHistory={openHistoryChat}
+          onDeleteHistory={deleteFlowChat}
+        />
         <div
           ref={canvasRef}
           className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}`}

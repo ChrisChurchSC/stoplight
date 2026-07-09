@@ -173,6 +173,7 @@ export function HomeSidebar() {
   const role = useTrafficStore((s) => s.role)
   const reports = useTrafficStore((s) => s.reports)
   const openAsk = useTrafficStore((s) => s.openAsk)
+  const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [chatsOpen, setChatsOpen] = useState(true)
@@ -218,7 +219,7 @@ export function HomeSidebar() {
   }
 
   return (
-    <aside className="sidebar home-sidebar hsb">
+    <aside className={`sidebar home-sidebar hsb${flowCanvasOpen ? ' hsb-rail' : ''}`}>
       <div className="hsb-top">
         <button
           className={`hsb-ws${wsOpen ? ' open' : ''}`}
