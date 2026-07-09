@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
 import { RecordDrawer } from './RecordDrawer'
+import { BufferedInput } from './BufferedInput'
 
 /**
  * A generic spreadsheet-style Records table. Every text cell edits inline; Status is a
@@ -141,7 +142,7 @@ export function RecordsTable<T extends { id: string }>({
                             >
                               {(name.trim()[0] || '?').toUpperCase()}
                             </button>
-                            <input className="rec-cell rec-cell-name" value={v} onChange={(e) => set(r.id, col.key, e.target.value)} />
+                            <BufferedInput className="rec-cell rec-cell-name" value={v} onCommit={(nv) => set(r.id, col.key, nv)} />
                             <button className="rec-open" title="Open details" aria-label="Open details" onClick={() => setOpenId(r.id)}>
                               ⤢
                             </button>
@@ -162,15 +163,22 @@ export function RecordsTable<T extends { id: string }>({
                           </select>
                         ) : col.kind === 'url' ? (
                           <div className="rec-url">
-                            <input className="rec-cell rec-cell-url" placeholder="—" value={v} onChange={(e) => set(r.id, col.key, e.target.value)} />
+                            <BufferedInput className="rec-cell rec-cell-url" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} />
                             {v && (
                               <a className="rec-url-go" href={`https://${v.replace(/^https?:\/\//, '')}`} target="_blank" rel="noopener noreferrer" title="Open">
                                 ↗
                               </a>
                             )}
                           </div>
+                        ) : col.kind === 'colors' ? (
+                          <button className="rec-colors" title="Edit in details" onClick={() => setOpenId(r.id)}>
+                            {v.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean).map((c, j) => (
+                              <span key={j} className="rec-swatch" style={{ background: c }} title={c} />
+                            ))}
+                            {!v.trim() && <span className="rec-cell-muted">—</span>}
+                          </button>
                         ) : (
-                          <input className="rec-cell" placeholder="—" value={v} onChange={(e) => set(r.id, col.key, e.target.value)} />
+                          <BufferedInput className="rec-cell" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} />
                         )}
                       </td>
                     )

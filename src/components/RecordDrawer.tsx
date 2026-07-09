@@ -1,4 +1,9 @@
+import { Fragment } from 'react'
 import { recordTint, type RecordField } from '../domain/records'
+import { BufferedInput, BufferedTextarea } from './BufferedInput'
+
+/** Split a colors field value ("#FAF, #3EC") into individual swatches. */
+const parseColors = (v: string): string[] => v.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean)
 
 /**
  * A record's detail panel — a right-side sheet showing every attribute of one record
@@ -32,7 +37,7 @@ export function RecordDrawer<T extends { id: string }>({
           <span className="rd-ava" style={{ background: recordTint(name) }}>
             {(name.trim()[0] || '?').toUpperCase()}
           </span>
-          <input className="rd-name" value={name} onChange={(e) => set('name', e.target.value)} placeholder="Name" />
+          <BufferedInput className="rd-name" value={name} onCommit={(v) => set('name', v)} placeholder="Name" />
           <button className="rd-x" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -41,13 +46,28 @@ export function RecordDrawer<T extends { id: string }>({
         <div className="rd-fields">
           {fields
             .filter((f) => f.key !== 'name')
-            .map((f) => {
+            .map((f, i, arr) => {
               const v = val(f.key)
+              const showHeader = !!f.group && f.group !== (i > 0 ? arr[i - 1].group : undefined)
+              const block = f.kind === 'multiline' || f.kind === 'colors'
               return (
-                <div className={`rd-field${f.kind === 'multiline' ? ' rd-field-block' : ''}`} key={f.key}>
+                <Fragment key={f.key}>
+                  {showHeader && <div className="rd-group">{f.group}</div>}
+                <div className={`rd-field${block ? ' rd-field-block' : ''}`}>
                   <label className="rd-label">{f.label}</label>
                   {f.kind === 'multiline' ? (
-                    <textarea className="rd-input rd-textarea" value={v} onChange={(e) => set(f.key, e.target.value)} rows={3} placeholder="Empty" />
+                    <BufferedTextarea className="rd-input rd-textarea" value={v} onCommit={(nv) => set(f.key, nv)} rows={3} placeholder="Empty" />
+                  ) : f.kind === 'colors' ? (
+                    <div className="rd-colors">
+                      {parseColors(v).length > 0 && (
+                        <div className="rd-swatches">
+                          {parseColors(v).map((c, j) => (
+                            <span key={j} className="rd-swatch" style={{ background: c }} title={c} />
+                          ))}
+                        </div>
+                      )}
+                      <BufferedInput className="rd-input" value={v} onCommit={(nv) => set(f.key, nv)} placeholder="#FAF6F0, #3ECBA0" />
+                    </div>
                   ) : f.kind === 'status' ? (
                     <select className="rd-input rd-select" style={{ color: v ? recordTint(v) : undefined }} value={v} onChange={(e) => set(f.key, e.target.value)}>
                       <option value="">—</option>
@@ -59,7 +79,7 @@ export function RecordDrawer<T extends { id: string }>({
                     </select>
                   ) : f.kind === 'url' ? (
                     <div className="rd-url">
-                      <input className="rd-input rd-cell-url" value={v} onChange={(e) => set(f.key, e.target.value)} placeholder="Empty" />
+                      <BufferedInput className="rd-input rd-cell-url" value={v} onCommit={(nv) => set(f.key, nv)} placeholder="Empty" />
                       {v && (
                         <a className="rd-url-go" href={`https://${v.replace(/^https?:\/\//, '')}`} target="_blank" rel="noopener noreferrer" title="Open">
                           ↗
@@ -67,9 +87,10 @@ export function RecordDrawer<T extends { id: string }>({
                       )}
                     </div>
                   ) : (
-                    <input className="rd-input" value={v} onChange={(e) => set(f.key, e.target.value)} placeholder="Empty" />
+                    <BufferedInput className="rd-input" value={v} onCommit={(nv) => set(f.key, nv)} placeholder="Empty" />
                   )}
                 </div>
+                </Fragment>
               )
             })}
         </div>

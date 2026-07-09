@@ -146,6 +146,29 @@ export interface ClientProfile {
   values?: string[]
   /** Traction in their words: a key stat or milestone (e.g. "2M downloads"). */
   traction?: string
+  // ---- Brand book (the Brand records page) ----
+  /** The market category the brand plays in (e.g. "impact investing"). */
+  category?: string
+  /** The one-sentence elevator pitch. */
+  elevatorPitch?: string
+  /** Signature taglines / rallying cries. */
+  taglines?: string[]
+  /** The approved boilerplate paragraph (the "about us" block). */
+  boilerplate?: string
+  /** Core value propositions — the promises the brand makes. */
+  valueProps?: string[]
+  /** Messaging pillars — the few themes every message ladders up to. */
+  pillars?: string[]
+  /** Headline proof points, in plain language (the reasons to believe). */
+  proofPoints?: string[]
+  /** Logo asset URL. */
+  logo?: string
+  /** Brand colors, as hex values. */
+  colors?: string[]
+  /** Brand typefaces. */
+  fonts?: string[]
+  /** Imagery / art-direction notes. */
+  imageryStyle?: string
   /** Connected channel profile URLs (social accounts) to re-gather on refresh. */
   channels?: string[]
   /** Quick-access console / admin URLs per channel id (YouTube Studio, ad managers,

@@ -3,13 +3,15 @@
  * with a string `id` and string-ish fields; a column maps a field key to a label and a
  * render kind. Kept generic so one <RecordsTable> renders every record type.
  */
-export type RecordFieldKind = 'name' | 'text' | 'url' | 'status' | 'multiline'
+export type RecordFieldKind = 'name' | 'text' | 'url' | 'status' | 'multiline' | 'colors'
 
 /** A field in a record's detail panel: a key, a label, and how to render it. */
 export interface RecordField {
   key: string
   label: string
   kind: RecordFieldKind
+  /** Optional section heading; consecutive fields sharing a group render under one header. */
+  group?: string
 }
 
 /** A field that also appears as a table column (adds a pixel width). */
