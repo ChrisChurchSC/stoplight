@@ -305,8 +305,10 @@ function componentCopy(fl: MessagingField, ctx: Ctx, v: number): string {
   if (/subhead|sub-head|subtitle/.test(k)) return localizeHead(descFor(ctx, v), ctx.context)
   if (/preview|desc/.test(k)) return localizeHead(descFor(ctx, v), ctx.context)
   if (/headline|^h\d|title|long-headline/.test(k)) {
-    // A conditioned hook leads the headline; otherwise the chosen format's headline.
-    const head = ctx.assetHook ? cap(ctx.assetHook) : ctx.format.head(ctx, ctx.i + v)
+    // A blueprint's hero value-prop / title formula leads the headline (pages, blog);
+    // else a conditioned hook; else the chosen format's headline.
+    const formula = ctx.context?.subjectFormula?.trim()
+    const head = formula && formula !== '—' ? fillSubjectFormula(formula, ctx) : ctx.assetHook ? cap(ctx.assetHook) : ctx.format.head(ctx, ctx.i + v)
     return localizeHead(head, ctx.context)
   }
   // primary / body / intro / post / caption / message … -> the chosen execution format,
@@ -481,6 +483,8 @@ function descFor(ctx: Ctx, v: number): string {
 // Fill a blueprint subject formula's {slots} with the best available values; strip any
 // slot we can't fill and tidy the result. Keeps the formula's shape without leaving braces.
 function fillSubjectFormula(formula: string, ctx: Ctx): string {
+  const need = ctx.pains[0] ? firstClause(ctx.pains[0]) : 'get the job done'
+  const value = firstClause(ctx.oneLiner || ctx.proof.detail || ctx.proof.label)
   const fills: Record<string, string> = {
     brand: ctx.brandName,
     first_name: '',
@@ -490,11 +494,21 @@ function fillSubjectFormula(formula: string, ctx: Ctx): string {
     gift: 'gift',
     perk: 'members perk',
     product: 'pick',
-    category: 'favorites',
-    hook: firstClause(ctx.oneLiner || ctx.proof.label),
+    category: 'platform',
+    hook: value,
     number: '3',
     points: 'points',
     tier: 'the next tier',
+    // page / blog value-prop + title slots
+    audience: ctx.who,
+    customer: ctx.who,
+    need,
+    pain: need,
+    benefit: value,
+    outcome: value,
+    mechanism: 'in one place',
+    topic: value,
+    things: 'ways',
   }
   let s = formula.replace(/\{(\w+)\}/g, (_m, k: string) => fills[k.toLowerCase()] ?? '')
   s = s
