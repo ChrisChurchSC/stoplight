@@ -4543,25 +4543,25 @@ button {
   overflow: hidden;
 }
 /* A page's copy shown as labeled components (headline / subhead / proof / body / cta)
-   on the canvas card — styled like the deliverable palette rows: a semibold label
-   over a muted value, so it reads as structured fields instead of one text wall. */
+   on the canvas card. Same hierarchy the inspector uses everywhere: a muted semibold
+   label over a dark, readable value, so it reads as structured fields not a text wall. */
 .flow-copy-fields {
-  gap: 10px;
+  gap: 11px;
 }
 .flow-copy-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .flow-copy-flabel {
-  font-size: 12.5px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-muted);
 }
 .flow-copy-fval {
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.4;
-  color: var(--text-muted);
+  color: var(--text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -4642,21 +4642,21 @@ button {
   white-space: pre-wrap;
 }
 /* A page's copy in the panel: every field, labeled, full text (no clamp).
-   Same palette-row hierarchy — a semibold label over a muted value. */
+   Same hierarchy as the rest of the inspector: a muted label over a dark value. */
 .flow-post-detail-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .flow-post-detail-flabel {
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-muted);
 }
 .flow-post-detail-fval {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
-  color: var(--text-muted);
+  color: var(--text);
   white-space: pre-wrap;
 }
 .flow-inspect-regen {

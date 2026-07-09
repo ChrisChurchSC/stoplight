@@ -1770,14 +1770,21 @@ export function FlowsView() {
                       </div>
                     )}
                   </div>
-                  {Object.entries((selPost.messaging ?? {}) as Record<string, string>)
-                    .filter(([, v]) => v && v.trim())
-                    .map(([k, v]) => (
+                  {(() => {
+                    // Show each field in schema order with its proper label (not the raw
+                    // key), then any messaging keys the schema doesn't know about.
+                    const flds = messagingFields(selPost.channel, selPost.assetType)
+                    const m = (selPost.messaging ?? {}) as Record<string, string>
+                    const known = new Set(flds.map((f) => f.key))
+                    const rows: [string, string, string][] = flds.filter((f) => m[f.key]?.trim()).map((f) => [f.key, f.label, m[f.key]])
+                    for (const [k, v] of Object.entries(m)) if (!known.has(k) && v?.trim()) rows.push([k, k, v])
+                    return rows.map(([k, label, v]) => (
                       <div key={k} className="flow-post-field">
-                        <label className="flow-inspect-label">{k}</label>
+                        <label className="flow-inspect-label">{label}</label>
                         <div className="flow-post-value">{v}</div>
                       </div>
-                    ))}
+                    ))
+                  })()}
                 </div>
               </>
             ) : selDeliv ? (
