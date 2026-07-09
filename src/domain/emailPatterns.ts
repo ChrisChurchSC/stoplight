@@ -578,7 +578,118 @@ const CASE_STUDY: EmailBlueprint = {
 
 export const BLOG_BLUEPRINTS: EmailBlueprint[] = [SEO_ARTICLE, PILLAR_GUIDE, LISTICLE, CASE_STUDY]
 
-const ALL_BLUEPRINTS: EmailBlueprint[] = [...EMAIL_BLUEPRINTS, ...PAGE_BLUEPRINTS, ...BLOG_BLUEPRINTS]
+// ---- LinkedIn ad blueprints (the LinkedIn Ads pattern library) ----
+// B2B-native: organized by funnel stage. The cardinal rule is match the ask to the stage —
+// never a hard demo CTA at a cold audience. Each is one ad (hook → body → CTA).
+
+const LI_TOFU_THOUGHT: EmailBlueprint = {
+  key: 'li-tofu-thought',
+  name: 'TOFU: Thought leadership',
+  channel: 'linkedin-ads',
+  assetType: 'single-image',
+  kind: 'single',
+  summary: 'Cold-audience trust play. Authentic exec/employee insight, give before ask, no hard CTA. The efficiency leader on LinkedIn.',
+  cadence: 'Cold audience · thought-leadership angle',
+  steps: [
+    { label: 'Hook', timing: 'First 150 chars', subjectFormula: '{belief} is wrong. Here’s what actually {outcome}.', framework: 'BAB', cta: 'Learn More', levers: ['none'], brief: 'The opening line is the whole game (mobile truncates at ~150 chars). Lead with a contrarian take, a specific stat, or a first-person confession. One persona, one pain.' },
+    { label: 'Body', timing: 'After the fold', subjectFormula: '—', framework: 'BAB', cta: '—', levers: ['none'], brief: 'An educational, give-before-ask insight. Before → after → bridge, in the voice of a real person. Break every 2-3 lines for mobile.' },
+    { label: 'CTA', timing: 'Close + button', subjectFormula: '—', framework: 'BAB', cta: 'Learn More', levers: ['none'], brief: 'A soft, ungated ask — read the framework, see the report. No demo or contact-sales for a cold audience.' },
+  ],
+  guardrails: [
+    'Never run a hard-conversion CTA (demo / contact sales) to a cold audience.',
+    'The first ~150 characters carry the whole ad; make the opening line the sharpest.',
+    'One persona, one pain, one use case per ad.',
+    'Feature real people; boost an individual’s post (needs their permission).',
+  ],
+}
+
+const LI_TOFU_CONTRARIAN: EmailBlueprint = {
+  key: 'li-tofu-contrarian',
+  name: 'TOFU: Contrarian insight',
+  channel: 'linkedin-ads',
+  assetType: 'single-image',
+  kind: 'single',
+  summary: 'A scroll-stopping myth-bust for a cold audience. Challenge a common belief, then deliver the real insight.',
+  cadence: 'Cold audience · contrarian angle',
+  steps: [
+    { label: 'Hook', timing: 'First 150 chars', subjectFormula: 'Your {metric} looks fine. Your {hidden problem} isn’t.', framework: 'PAS', cta: 'Learn More', levers: ['none'], brief: 'A blunt, specific myth-bust in the first line. Name the hidden problem the reader doesn’t know they have.' },
+    { label: 'Body', timing: 'After the fold', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'Insight → implication. Show why the common belief costs them, then the better way. Specific over clever.' },
+    { label: 'CTA', timing: 'Close + button', subjectFormula: '—', framework: 'PAS', cta: 'Learn More', levers: ['none'], brief: 'A soft ask to see the full thinking. Ungated.' },
+  ],
+  guardrails: [
+    'Specificity beats cleverness — a real number in the first line raises stop-rate.',
+    'No hard CTA on a cold audience.',
+    'One pain, one persona.',
+    'Break every 2-3 lines for mobile.',
+  ],
+}
+
+const LI_MOFU_REPORT: EmailBlueprint = {
+  key: 'li-mofu-report',
+  name: 'MOFU: Gated report',
+  channel: 'linkedin-ads',
+  assetType: 'single-image',
+  kind: 'single',
+  summary: 'A named research asset for an engaged audience, gated behind a Lead Gen Form. Authority plus lead capture.',
+  cadence: 'Engaged audience · gated report',
+  steps: [
+    { label: 'Hook', timing: 'First 150 chars', subjectFormula: 'We analyzed {number} {things}. {surprising finding}.', framework: 'PAS', cta: 'Download', levers: ['none'], brief: 'A data/benchmark tease in the first line. Lead with the surprising finding, not the methodology.' },
+    { label: 'Body', timing: 'After the fold', subjectFormula: '—', framework: 'PAS', cta: '—', levers: ['none'], brief: 'Name the exact deliverable ("The 2026 {industry} Benchmark Report"), and one reason it’s worth the reader’s email. Specific offers convert far better than generic.' },
+    { label: 'CTA', timing: 'Lead Gen Form', subjectFormula: '—', framework: 'PAS', cta: 'Download', levers: ['none'], brief: 'Download via a native Lead Gen Form (3-4 fields). Match the CTA to the named asset.' },
+  ],
+  guardrails: [
+    'Name the exact deliverable, not "a free resource".',
+    'Use a native Lead Gen Form (3-4 fields) — it converts ~3-4x a landing page.',
+    'The asset itself is the conversion driver; make the cover/first line the hook.',
+    'One persona, one pain.',
+  ],
+}
+
+const LI_MOFU_WEBINAR: EmailBlueprint = {
+  key: 'li-mofu-webinar',
+  name: 'MOFU: Webinar / guide',
+  channel: 'linkedin-ads',
+  assetType: 'single-image',
+  kind: 'single',
+  summary: 'A gated guide or webinar for an engaged, qualifying audience. Call out the ICP and name the deliverable.',
+  cadence: 'Engaged audience · gated guide / webinar',
+  steps: [
+    { label: 'Hook', timing: 'First 150 chars', subjectFormula: 'If you’re a {role} at a {company_type} dealing with {pain}, read this.', framework: 'FAB', cta: 'Register', levers: ['none'], brief: 'A callout hook that qualifies the exact ICP in the first line, so the right person self-selects.' },
+    { label: 'Body', timing: 'After the fold', subjectFormula: '—', framework: 'FAB', cta: '—', levers: ['none'], brief: 'What they’ll get and why it’s worth the time. Features → advantages → the benefit to them.' },
+    { label: 'CTA', timing: 'Lead Gen Form', subjectFormula: '—', framework: 'FAB', cta: 'Register', levers: ['time-scarcity'], brief: 'Register / save your seat via a Lead Gen Form. A real date makes it deadline-driven.' },
+  ],
+  guardrails: [
+    'Call out one ICP in the first line.',
+    'Name the exact guide / webinar.',
+    'Lead Gen Form, 3-4 fields.',
+    'Only use the deadline lever if the webinar has a real date.',
+  ],
+}
+
+const LI_BOFU_CASESTUDY: EmailBlueprint = {
+  key: 'li-bofu-casestudy',
+  name: 'BOFU: Case study / demo',
+  channel: 'linkedin-ads',
+  assetType: 'single-image',
+  kind: 'single',
+  summary: 'A warm, retargeted audience only. Named proof and a hard CTA — the demo/pricing ask is finally allowed.',
+  cadence: 'Warm / retargeted audience · proof-led',
+  steps: [
+    { label: 'Hook', timing: 'First 150 chars', subjectFormula: 'How {customer} {achieved result} with {brand}.', framework: '4Ps', cta: 'Request Demo', levers: ['social-proof'], brief: 'Lead with named social proof and a specific metric in the first line. Warm audiences only (retargeting / Matched Audiences).' },
+    { label: 'Body', timing: 'After the fold', subjectFormula: '—', framework: '4Ps', cta: '—', levers: ['social-proof'], brief: 'Picture → promise → proof → push. The customer’s situation, the outcome with real numbers, then the ask.' },
+    { label: 'CTA', timing: 'Close + button', subjectFormula: '—', framework: '4Ps', cta: 'Request Demo', levers: ['none'], brief: 'The hard CTA is allowed here: request a demo, see pricing, or get the ROI case study.' },
+  ],
+  guardrails: [
+    'Warm / retargeted audiences only — exclude cold prospecting.',
+    'Lead with a named customer and a specific metric.',
+    'The hard CTA (demo / pricing) is allowed at this stage, not before.',
+    'Optimize on cost-per-SAL / opportunity, not CTR.',
+  ],
+}
+
+export const LINKEDIN_AD_BLUEPRINTS: EmailBlueprint[] = [LI_TOFU_THOUGHT, LI_TOFU_CONTRARIAN, LI_MOFU_REPORT, LI_MOFU_WEBINAR, LI_BOFU_CASESTUDY]
+
+const ALL_BLUEPRINTS: EmailBlueprint[] = [...EMAIL_BLUEPRINTS, ...PAGE_BLUEPRINTS, ...BLOG_BLUEPRINTS, ...LINKEDIN_AD_BLUEPRINTS]
 
 /** Blueprints available for a given channel + assetType (email + landing-page). */
 export function blueprintsFor(channel: ChannelId, assetType?: string): EmailBlueprint[] {
@@ -641,7 +752,9 @@ export function composePageBrief(bp: EmailBlueprint, fieldKeys?: string[]): stri
 export function blueprintBriefs(bp: EmailBlueprint, fieldKeys?: string[]): string[] {
   if (bp.kind === 'sequence') return bp.steps.map((s) => s.brief)
   if (bp.kind === 'page') return [composePageBrief(bp, fieldKeys)]
-  return [bp.steps[0].brief]
+  // 'single' — one asset composed from its parts (newsletter blocks, ad hook/body/CTA).
+  if (bp.steps.length <= 1) return [bp.steps[0].brief]
+  return [`Write one ${bp.name.toLowerCase()}:\n${bp.steps.map((s) => `- ${s.label}: ${s.brief}`).join('\n')}`]
 }
 
 /** The blueprint step for slot `i` (rotates for a single-email blueprint). */
