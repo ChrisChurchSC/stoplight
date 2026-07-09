@@ -254,6 +254,7 @@ export function FlowsView() {
   const [chatBusy, setChatBusy] = useState(false)
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
+  const [blueprintBusy, setBlueprintBusy] = useState(false)
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
   // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
@@ -524,6 +525,29 @@ export function FlowsView() {
 
   const viewCanvas = viewName ? canvases.find((c) => c.name === viewName) : null
   const viewRows = useMemo(() => (viewCanvas ? viewCanvas.rows.filter((r) => !r.archivedAt) : []), [viewCanvas])
+
+  // Apply an email blueprint to an existing deliverable's emails: seed each email's brief
+  // + framework/subject/levers (rotating steps across the emails), clear its copy, and
+  // regenerate so the emails follow the blueprint arc.
+  const applyBlueprintView = async (rows: TrafficRow[], bp: EmailBlueprint) => {
+    if (blueprintBusy || !rows.length) return
+    setBlueprintBusy(true)
+    try {
+      const ordered = [...rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
+      for (let i = 0; i < ordered.length; i++) {
+        const st = bp.kind === 'sequence' ? bp.steps[i % bp.steps.length] : bp.steps[0]
+        const levers = st.levers.filter((l) => l !== 'none')
+        const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: st.brief, framework: st.framework }
+        if (st.subjectFormula && st.subjectFormula !== '—') lineage.subjectFormula = st.subjectFormula
+        if (levers.length) lineage.levers = levers.join(', ')
+        else delete lineage.levers
+        await updateRow(ordered[i].id, { messaging: {}, lineage })
+      }
+      await draftCopy(ordered.map((r) => r.id))
+    } finally {
+      setBlueprintBusy(false)
+    }
+  }
   const viewDelivs: ViewDeliverable[] = useMemo(() => {
     const map = new Map<string, ViewDeliverable>()
     for (const r of viewRows) {
@@ -1727,6 +1751,25 @@ export function FlowsView() {
                     {selDeliv.channel} · {selDeliv.assetType}
                   </p>
                   <div className="flow-inspect-note">{selDeliv.count} asset{selDeliv.count === 1 ? '' : 's'} in this flow. Click a post to see its copy.</div>
+                  {(() => {
+                    const bps = blueprintsFor(selDeliv.channel, selDeliv.assetType)
+                    if (!bps.length) return null
+                    return (
+                      <div className="flow-bp" style={{ marginTop: 4 }}>
+                        <div className="flow-cfg-h">Blueprint</div>
+                        <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>
+                          Apply a proven email structure to these {selDeliv.count} email{selDeliv.count === 1 ? '' : 's'}. This rewrites their copy to the arc.
+                        </div>
+                        {bps.map((bp) => (
+                          <button key={bp.key} className="flow-bp-pick" disabled={blueprintBusy} onClick={() => void applyBlueprintView(selDeliv.rows, bp)}>
+                            <span className="flow-bp-pick-name">{bp.name}</span>
+                            <span className="flow-bp-pick-cadence">{blueprintBusy ? 'Applying…' : bp.cadence}</span>
+                            <span className="flow-bp-pick-sum">{bp.summary}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               </>
             ) : (
