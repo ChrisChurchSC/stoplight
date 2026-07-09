@@ -476,12 +476,6 @@ export function HomeSidebar() {
                 </span>
                 <span className="nav-label">Channels</span>
               </button>
-              <button className={`nav-item${page === 'media' ? ' active' : ''}`} onClick={() => setPage('media')} title="Media mix — recommend a channel split for a goal and budget">
-                <span className="nav-ico">
-                  <Ico name="media" />
-                </span>
-                <span className="nav-label">Media mix</span>
-              </button>
             </div>
           )}
         </div>

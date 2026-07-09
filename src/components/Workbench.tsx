@@ -28,7 +28,6 @@ import { BrandRecordsView } from './BrandRecordsView'
 import { PeopleView } from './PeopleView'
 import { SegmentsView } from './SegmentsView'
 import { FlowsView } from './FlowsView'
-import { MediaPlanView } from './MediaPlanView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
@@ -246,10 +245,6 @@ export function Workbench() {
           ) : page === 'flows' ? (
             <div className="home-main-page">
               <FlowsView />
-            </div>
-          ) : page === 'media' ? (
-            <div className="home-main-scroll">
-              <MediaPlanView scopeClient={scopedBrand} />
             </div>
           ) : (
             <div className="home-main-page">
