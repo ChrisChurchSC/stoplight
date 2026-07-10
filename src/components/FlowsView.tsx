@@ -5,6 +5,7 @@ import { resolveBrandScope } from '../domain/brand'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
+import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
@@ -663,6 +664,17 @@ export function FlowsView() {
   // Segments / Media mix). These references drive asset generation.
   const viewCampaign = useMemo(() => campaignList.find((c) => c.name === viewName), [campaignList, viewName])
   const flowRefs = viewCampaign?.references ?? []
+  // Estimated media spend PER paid placement: the campaign's paid-media budget (explicit
+  // mediaBudget, else the strategy's media share of the overall budget) split evenly across
+  // its paid assets. Lets a paid card show a spend figure even when none was logged per-asset.
+  const paidSpendEach = useMemo(() => {
+    const paid = viewRows.filter((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid')
+    if (!paid.length) return 0
+    const strat = GTM_STRATEGIES.find((s) => s.key === viewCampaign?.strategy)
+    const share = (strat ? mediaSharePct(strat) : null) ?? 50
+    const pool = viewCampaign?.mediaBudget ?? Math.round(((viewCampaign?.overallBudget ?? 0) * share) / 100)
+    return pool > 0 ? Math.round(pool / paid.length) : 0
+  }, [viewRows, viewCampaign])
   const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
   // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
   const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
@@ -1738,7 +1750,11 @@ export function FlowsView() {
                                   {hasMediaSpend(r) && (
                                     <div className="flow-spend-foot" title={spendTitle(r)}>
                                       <span className="flow-spend-dot" aria-hidden="true" />
-                                      {spendLabel(r) === 'Paid' ? 'Paid media' : `Media spend · ${spendLabel(r)}`}
+                                      {(() => {
+                                        const explicit = spendLabel(r)
+                                        if (explicit !== 'Paid') return `Media spend · ${explicit}`
+                                        return paidSpendEach > 0 ? `Paid media · ${usdShort(paidSpendEach)}` : 'Paid media'
+                                      })()}
                                     </div>
                                   )}
                                 </div>
