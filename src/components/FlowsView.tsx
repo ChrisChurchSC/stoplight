@@ -439,7 +439,14 @@ export function FlowsView() {
   // Default the new flow to all of the brand's segments; the record labels feed generation.
   const defaultBriefRefs: FlowReference[] = brandSegments.map((a) => ({ type: 'segment', id: a.id, label: a.name }))
   const briefRefsEffective = briefRefs ?? defaultBriefRefs
-  const audSelection = briefRefsEffective.length ? briefRefsEffective.map((r) => r.label) : audienceNames
+  // The audiences a build/preview writes to are the checked SEGMENT tags only (segments ARE
+  // the brand's audiences). Proof / company / person / channel tags aren't audiences — folding
+  // their labels in here used to pollute the audience rotation with proof-point strings.
+  const segmentRefLabels = briefRefsEffective.filter((r) => r.type === 'segment').map((r) => r.label)
+  const audSelection = segmentRefLabels.length ? segmentRefLabels : audienceNames
+  // The proof points every card should lean on: the checked proof tags (labels), passed to the
+  // preview so canvas cards match what Build writes. Empty = the brand's whole proof library.
+  const proofRefLabels = briefRefsEffective.filter((r) => r.type === 'proof').map((r) => r.label)
   const refKey = (r: { type: FlowRefType; id: string }) => `${r.type}:${r.id}`
   const hasBriefRef = (type: FlowRefType, id: string) => briefRefsEffective.some((r) => r.type === type && r.id === id)
   const commitBriefRefs = (next: FlowReference[]) => {
@@ -462,6 +469,8 @@ export function FlowsView() {
   flightRef.current = flightWeeks
   const audRef = useRef(audSelection)
   audRef.current = audSelection
+  const proofRef = useRef(proofRefLabels)
+  proofRef.current = proofRefLabels
   const writeCopyRef = useRef(writeCopy)
   writeCopyRef.current = writeCopy
   const nodesRef = useRef(nodes)
@@ -498,6 +507,7 @@ export function FlowsView() {
         assetType: p.assetType,
         briefs,
         audiences: auds,
+        proof: proofRef.current,
         theme: subjectRef.current.trim() || undefined,
         flightWeeks: flightRef.current,
         steps,

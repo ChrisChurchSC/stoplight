@@ -1748,6 +1748,9 @@ interface TrafficState {
     briefs: (string | undefined)[]
     /** Audience names to write to, rotated across slots; empty = the brand's own list. */
     audiences: string[]
+    /** Proof-point labels every slot should lean on (the checked proof tags); empty = the
+     *  brand's whole proof library. Pins preview proof to match what a build writes. */
+    proof?: string[]
     /** Campaign theme — the throughline every slot orients around. */
     theme?: string
     /** Flight length in weeks — the campaign timeframe, so copy paces to it. */
@@ -4652,6 +4655,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const libAudiences = sys.audiences
         const libCtas = sys.ctas
         const proofPool: Rtb[] = sys.rtbs
+        // Record Tags checked on the campaign brief PIN the messaging inputs so every card
+        // the campaign is connected to reflects them: each asset speaks to the referenced
+        // segment(s) and leans on the referenced proof point(s), instead of rotating the
+        // brand's whole library. With none checked, both pools fall back to the full library
+        // (unchanged behavior). Company / person / channel tags are structural references
+        // (who/where, not copy content), so they don't constrain the pools here.
+        const refs = get().campaignList.find((c) => c.name === campaign)?.references ?? []
+        const segIds = new Set(refs.filter((x) => x.type === 'segment').map((x) => x.id))
+        const segNames = new Set(refs.filter((x) => x.type === 'segment').map((x) => x.label))
+        const pinnedAudiences = libAudiences.filter((a) => segIds.has(a.id) || segNames.has(a.name))
+        const audiencePool = pinnedAudiences.length ? pinnedAudiences : libAudiences
+        const proofIds = new Set(refs.filter((x) => x.type === 'proof').map((x) => x.id))
+        const proofLabels = new Set(refs.filter((x) => x.type === 'proof').map((x) => x.label))
+        const pinnedProof = proofPool.filter((p) => proofIds.has(p.id) || proofLabels.has(p.label))
+        const activeProof = pinnedProof.length ? pinnedProof : proofPool
         // CTAs are VERBATIM from the brand's list and DISTRIBUTED across the set:
         // pick the globally least-used CTA, preferring a stage match among ties. This
         // caps repetition (no one CTA dominates) even when a stage has few CTAs, while
@@ -4679,9 +4697,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const assets: DraftAsset[] = crows.map((r, i) => {
           const stage = funnelStageFor(r.channel, r.assetType)
           const aud =
-            libAudiences.find((x) => x.name === r.audience) ??
-            (libAudiences.length ? libAudiences[i % libAudiences.length] : undefined)
-          const rotated = proofPool.length ? proofPool[i % proofPool.length] : undefined
+            audiencePool.find((x) => x.name === r.audience) ??
+            (audiencePool.length ? audiencePool[i % audiencePool.length] : undefined)
+          const rotated = activeProof.length ? activeProof[i % activeProof.length] : undefined
           // Non-structural lineage (location, time, lifecycle, …) becomes copy context
           // so fanned variants localize and stay distinct. audience/journey are already
           // structural fields, so exclude them here.
@@ -4718,7 +4736,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // duration the timeframe (both authored on the campaign at build time).
         const campMeta = get().campaignList.find((c) => c.name === campaign)
         // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
-        const baseReq = { icp, campaign, theme: campMeta?.subject, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+        const baseReq = { icp, campaign, theme: campMeta?.subject, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: activeProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
@@ -4766,7 +4784,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     return copySource
   },
 
-  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, theme, flightWeeks, steps }) => {
+  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, proof: proofRefLabels, theme, flightWeeks, steps }) => {
     if (!briefs.length) return null
     // Same hard boundary as draftCopy: a brand must be bound to generate. A brandless
     // (or non-draft-brandless) client has no voice/proof to write from.
@@ -4778,7 +4796,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // scoped read path draftCopy uses, so preview copy matches what a build would write.
     const sys = resolveBrandScope(client, get().brandSystems, get().brandMeta).library
     const libAudiences = sys.audiences
-    const proofPool: Rtb[] = sys.rtbs
+    // Pin proof to the checked proof tags so preview cards lean on the same reasons-to-believe
+    // a build would write; empty = the brand's whole proof library (unchanged behavior).
+    const pinnedProof = proofRefLabels?.length ? sys.rtbs.filter((p) => proofRefLabels.includes(p.label)) : []
+    const proofPool: Rtb[] = pinnedProof.length ? pinnedProof : sys.rtbs
     const fields = messagingFields(channel, assetType)
     const stage = funnelStageFor(channel, assetType)
     // Which audiences to write to (selected names, else the brand's own), rotated per slot.
