@@ -1751,7 +1751,6 @@ export function FlowsView() {
                 Campaign
               </span>
               <div className="flow-node-main">
-                <CampaignTile />
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
                   <div className="flow-node-desc">
@@ -1793,7 +1792,6 @@ export function FlowsView() {
                             Deliverable
                           </span>
                           <div className="flow-node-main">
-                            <PresetTile tone={d.tone} />
                             <div className="flow-node-text">
                               <div className="flow-node-label">{d.label}</div>
                               <div className="flow-node-desc">×{d.count}</div>
@@ -1866,7 +1864,6 @@ export function FlowsView() {
                             Deliverable
                           </span>
                           <div className="flow-node-main">
-                            <PresetTile tone={TONE_HEX[p.tone]} />
                             <div className="flow-node-text">
                               <div className="flow-node-label">{p.label}</div>
                               <div className="flow-node-desc">
