@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
+import { resolveBrandScope } from '../domain/brand'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
@@ -52,6 +53,15 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
       <path d="m2 13 10 5 10-5" />
     </>
   ),
+  channel: (
+    <>
+      <circle cx="6" cy="6" r="2.4" />
+      <circle cx="18" cy="6" r="2.4" />
+      <circle cx="12" cy="18" r="2.4" />
+      <path d="M6 8.4v3a2 2 0 0 0 2 2h2.4M18 8.4v3a2 2 0 0 1-2 2h-2.4" />
+    </>
+  ),
+  proof: <path d="m5 12.5 4.5 4.5L19 6" />,
   'media-mix': (
     <>
       <circle cx="12" cy="12" r="9" />
@@ -59,7 +69,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Segment', 'media-mix': 'Media mix' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Segment', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix' }
 const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {RECORD_TYPE_ICON[type]}
@@ -208,6 +218,9 @@ export function FlowsView() {
   const campaignList = useTrafficStore((s) => s.campaignList)
   const companies = useTrafficStore((s) => s.companies)
   const people = useTrafficStore((s) => s.people)
+  const channelRecords = useTrafficStore((s) => s.channelRecords)
+  const brandSystems = useTrafficStore((s) => s.brandSystems)
+  const brandMeta = useTrafficStore((s) => s.brandMeta)
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
@@ -593,16 +606,20 @@ export function FlowsView() {
   const viewCampaign = useMemo(() => campaignList.find((c) => c.name === viewName), [campaignList, viewName])
   const flowRefs = viewCampaign?.references ?? []
   const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
-  // The four Records pages, as selectable tag groups. Segments ARE the brand's audiences
-  // (that's what the Segments records page shows), so they come from clientAudiences.
+  // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
+  const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
+  // Every Records page, as selectable tag groups: Companies / People / Segments / Channels /
+  // Proof points / Media mix. Segments ARE the brand's audiences (from clientAudiences).
   const recordGroups = useMemo(
     () => [
       { type: 'company' as FlowRefType, label: 'Companies', items: companies.map((c) => ({ id: c.id, label: c.name })) },
       { type: 'person' as FlowRefType, label: 'People', items: people.map((p) => ({ id: p.id, label: p.name })) },
       { type: 'segment' as FlowRefType, label: 'Segments', items: brandSegments.map((a) => ({ id: a.id, label: a.name })) },
+      { type: 'channel' as FlowRefType, label: 'Channels', items: channelRecords.map((c) => ({ id: c.id, label: c.name })) },
+      { type: 'proof' as FlowRefType, label: 'Proof points', items: brandProof.map((r) => ({ id: r.id, label: r.label })) },
       { type: 'media-mix' as FlowRefType, label: 'Media mix', items: brandMixesForRefs.map((m) => ({ id: m.id, label: m.name })) },
     ],
-    [companies, people, brandSegments, brandMixesForRefs],
+    [companies, people, brandSegments, channelRecords, brandProof, brandMixesForRefs],
   )
   const hasRef = (type: FlowRefType, id: string) => flowRefs.some((r) => r.type === type && r.id === id)
   const toggleRef = (type: FlowRefType, id: string, label: string) => {
