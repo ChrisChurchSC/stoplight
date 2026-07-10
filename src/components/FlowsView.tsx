@@ -188,6 +188,19 @@ const postReach = (r: TrafficRow): number => {
   const m = r.socialMetrics ?? {}
   return (typeof m.views === 'number' ? m.views : 0) || (typeof m.impressions === 'number' ? m.impressions : 0)
 }
+const fmtCount = (n: number): string => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(Math.round(n)))
+// The live-metrics line for an ingested post (reach + engagement), for the card footer.
+const ingestedMetricsText = (r: TrafficRow): string => {
+  const parts: string[] = []
+  const reach = postReach(r)
+  if (reach) parts.push(`${fmtCount(reach)} reach`)
+  const eng = r.engagement
+  if (eng?.likes) parts.push(`${fmtCount(eng.likes)} likes`)
+  else if (eng?.comments) parts.push(`${fmtCount(eng.comments)} comments`)
+  const er = r.socialMetrics?.engagementRate
+  if (!parts.length && typeof er === 'number') parts.push(`${er.toFixed(1)}% eng`)
+  return parts.join(' · ') || 'Live post'
+}
 // A post has media spend if it carries a paid budget or logged spend, or sits on a paid channel.
 const hasMediaSpend = (r: TrafficRow): boolean =>
   (r.budget?.amount ?? 0) > 0 || (r.spend?.toDate ?? 0) > 0 || CHANNELS[r.channel as ChannelId]?.kind === 'paid'
@@ -1836,7 +1849,12 @@ export function FlowsView() {
                                       <div className="flow-copy-body">{c.body}</div>
                                     </div>
                                   )}
-                                  {hasMediaSpend(r) && (
+                                  {isIngestedPost(r) ? (
+                                    <div className="flow-spend-foot" title="Live post metrics">
+                                      <span className="flow-spend-dot" aria-hidden="true" />
+                                      {ingestedMetricsText(r)}
+                                    </div>
+                                  ) : hasMediaSpend(r) ? (
                                     <div className="flow-spend-foot" title={spendTitle(r)}>
                                       <span className="flow-spend-dot" aria-hidden="true" />
                                       {(() => {
@@ -1845,7 +1863,7 @@ export function FlowsView() {
                                         return paidSpendEach > 0 ? `Paid media · ${usdShort(paidSpendEach)}` : 'Paid media'
                                       })()}
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             )
