@@ -3778,7 +3778,7 @@ button {
   overflow: hidden;
   background:
     radial-gradient(circle, color-mix(in srgb, var(--text-faint) 45%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
-    var(--bg);
+    var(--surface);
 }
 .flow-stack {
   max-width: 360px;
@@ -4531,14 +4531,14 @@ button {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: #b07d18;
+  color: #8a34d6;
   font-variant-numeric: tabular-nums;
 }
 .flow-spend-dot {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #d9a520;
+  background: #8a34d6;
   flex: 0 0 auto;
 }
 .flow-brief-focus {
@@ -22650,3 +22650,6 @@ table.aud-sheet td.stick .aud-cell {
 .flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--accent-3) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent-3) 40%, var(--border)); }
 .flow-node.flow-brief-node { background: color-mix(in srgb, var(--accent-2) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent-2) 18%, var(--border)); }
+/* Selected glow matches the card's tier hue (campaign tomato is the .flow-node.sel default). */
+.flow-node.flow-tier-deliv.sel { border-color: #2f6fe0; box-shadow: 0 0 0 3px color-mix(in srgb, #2f6fe0 24%, transparent); }
+.flow-node.flow-brief-node.sel { border-color: #8a34d6; box-shadow: 0 0 0 3px color-mix(in srgb, #8a34d6 24%, transparent); }
