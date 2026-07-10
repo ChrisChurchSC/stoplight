@@ -226,6 +226,8 @@ export function FlowsView() {
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
+  const duplicateRow = useTrafficStore((s) => s.duplicateRow)
+  const removeRow = useTrafficStore((s) => s.removeRow)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
@@ -590,6 +592,38 @@ export function FlowsView() {
   // Apply an email blueprint to an existing deliverable's emails: seed each email's brief
   // + framework/subject/levers (rotating steps across the emails), clear its copy, and
   // regenerate so the emails follow the blueprint arc.
+  // Change how many assets sit under a deliverable in a BUILT flow: add one more (clone the
+  // latest asset into a fresh draft, one slot later, and rewrite its copy) or drop the latest.
+  // Build-mode uses the per-month stepper instead (assets aren't seeded yet).
+  const [countBusy, setCountBusy] = useState(false)
+  const changeDelivCount = async (deliv: { key: string; rows: TrafficRow[] }, delta: number) => {
+    if (countBusy || !deliv.rows.length) return
+    const ordered = [...deliv.rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
+    const last = ordered[ordered.length - 1]
+    if (!last) return
+    setCountBusy(true)
+    try {
+      if (delta > 0) {
+        const before = new Set(useTrafficStore.getState().rows.map((r) => r.id))
+        await duplicateRow(last.id)
+        const fresh = useTrafficStore.getState().rows.find((r) => !before.has(r.id))
+        if (fresh) {
+          // A genuinely new asset: clear the cloned copy so it drafts anew, and push its slot
+          // one week past the last so it doesn't stack on the same date.
+          const next = new Date(last.scheduledAt ? Date.parse(last.scheduledAt) : Date.now())
+          next.setDate(next.getDate() + 7)
+          await updateRow(fresh.id, { messaging: {}, scheduledAt: next.toISOString() })
+          await draftCopy([fresh.id])
+        }
+      } else if (ordered.length > 1) {
+        await removeRow(last.id)
+      }
+    } finally {
+      setCountBusy(false)
+      // Keep this deliverable selected so the inspector stays open on it after the refresh.
+      setSel(deliv.key)
+    }
+  }
   const applyBlueprintView = async (rows: TrafficRow[], bp: EmailBlueprint) => {
     if (blueprintBusy || !rows.length) return
     setBlueprintBusy(true)
@@ -1975,7 +2009,13 @@ export function FlowsView() {
                   <p className="flow-inspect-desc">
                     {selDeliv.channel} · {selDeliv.assetType}
                   </p>
-                  <div className="flow-inspect-note">{selDeliv.count} asset{selDeliv.count === 1 ? '' : 's'} in this flow. Click a post to see its copy.</div>
+                  <label className="flow-inspect-label">Assets</label>
+                  <div className="flow-step">
+                    <button onClick={() => void changeDelivCount(selDeliv, -1)} disabled={countBusy || selDeliv.count <= 1} aria-label="Remove one asset">−</button>
+                    <span>{countBusy ? '…' : `×${selDeliv.count}`}</span>
+                    <button onClick={() => void changeDelivCount(selDeliv, 1)} disabled={countBusy} aria-label="Add one asset">+</button>
+                  </div>
+                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>{countBusy ? 'Updating…' : 'Add or remove assets under this deliverable. New ones draft fresh copy. Click a post to see its copy.'}</div>
                   {(() => {
                     const bps = blueprintsFor(selDeliv.channel, selDeliv.assetType)
                     if (!bps.length) return null
