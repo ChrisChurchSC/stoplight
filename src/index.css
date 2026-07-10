@@ -22616,3 +22616,6 @@ table.aud-sheet td.stick .aud-cell {
 .gs-pill-count { font-size: 13px; font-weight: 600; color: var(--text-faint); }
 .gs-pill-bar { position: absolute; left: 16px; right: 16px; bottom: 6px; height: 3px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
 .gs-pill-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 2px; transition: width .2s ease; }
+
+.flow-reset-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.flow-reset-link:hover { filter: brightness(1.05); }

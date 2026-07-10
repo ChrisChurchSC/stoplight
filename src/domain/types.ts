@@ -3,6 +3,7 @@
 // The "sheet" is the source of truth. Each ingested asset, targeted at one
 // channel, becomes one TrafficRow. The schema here is what the (mock) sheet
 // adapter persists and what a downstream publisher reads.
+import type { FlowReference } from './clients'
 
 /** Kind of media an asset carries. Detected on ingest, drives channel fit. */
 export type MediaType = 'image' | 'video' | 'text' | 'link'
@@ -159,6 +160,10 @@ export interface TrafficRow {
    *  'Convert' }). Built up as fan-out cards stack, so outcomes attribute to the exact
    *  combination and feed performance profiles. */
   lineage?: Record<string, string>
+  /** Per-deliverable record-tag OVERRIDE: when set, this asset's copy is pinned to these
+   *  records (segments → audience, proof → reason-to-believe) instead of inheriting the
+   *  campaign's references. Set from a deliverable's Record Tags in the flow inspector. */
+  references?: FlowReference[]
   /** Destination this unit drives to — the next asset in the journey (by asset
    *  name), e.g. an ad → its landing page, a lead magnet → its nurture email. */
   linksTo?: string

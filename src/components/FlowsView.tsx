@@ -29,6 +29,17 @@ import { FlowsHome } from './FlowsHome'
 
 const CAMPAIGN_TONE = '#ff6347'
 
+// The callbacks the shared Record-Tags block edits through, so the same UI can target the
+// campaign brief OR a single deliverable's per-asset override.
+type TagOps = {
+  refs: FlowReference[]
+  has: (type: FlowRefType, id: string) => boolean
+  add: (type: FlowRefType, id: string, label: string) => void
+  remove: (key: string) => void
+  replace: (key: string, type: FlowRefType, id: string, label: string) => void
+  openPicker: () => void
+}
+
 // Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
 // Segments / Media mix), so a tag reads the same as the page it comes from.
 const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
@@ -229,6 +240,7 @@ export function FlowsView() {
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
+  const updateRows = useTrafficStore((s) => s.updateRows)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
@@ -292,6 +304,9 @@ export function FlowsView() {
   const [openTagKey, setOpenTagKey] = useState<string | null>(null)
   // The "Add a record" slide-out drawer (search + all record groups).
   const [pickerOpen, setPickerOpen] = useState(false)
+  // Which target the picker edits: null = the campaign brief, else a deliverable key (its
+  // per-asset record-tag override).
+  const [pickerDeliv, setPickerDeliv] = useState<string | null>(null)
   const [pickerQuery, setPickerQuery] = useState('')
   // Which record categories are expanded in the drawer (collapsed by default — the lists
   // get long, so you open the one you want).
@@ -713,15 +728,44 @@ export function FlowsView() {
     setCampaignReferences(viewName, flowRefs.map((r) => (refKey(r) === key ? { type, id, label } : r)))
     setRefsDirty(true)
   }
-  // The Record Tags block (label + one row per tag with a swap dropdown + remove, then
-  // "Add a record"), shared by the build brief and the built-flow brief so both read/edit
-  // the campaign's records the same way.
-  const renderRecordTags = () => (
+  // Editing the CAMPAIGN's records (the brief).
+  const campaignTagOps: TagOps = {
+    refs: activeRefs,
+    has: hasActiveRef,
+    add: addActiveRef,
+    remove: removeActiveRef,
+    replace: replaceActiveRef,
+    openPicker: () => { setPickerDeliv(null); setPickerQuery(''); setOpenTagKey(null); setPickerOpen(true) },
+  }
+  // A deliverable's effective records: its per-asset OVERRIDE if any row carries one, else the
+  // campaign's (inherited). Editing writes the full resulting set onto every asset of the
+  // deliverable (materializing the override) and flags a regenerate.
+  const delivEffRefs = (deliv: ViewDeliverable): FlowReference[] =>
+    deliv.rows.find((r) => r.references && r.references.length)?.references ?? flowRefs
+  const writeDelivRefs = (deliv: ViewDeliverable, next: FlowReference[]) => {
+    void updateRows(deliv.rows.map((r) => ({ id: r.id, patch: { references: next } })))
+    setRefsDirty(true)
+  }
+  const delivTagOps = (deliv: ViewDeliverable): TagOps => ({
+    refs: delivEffRefs(deliv),
+    has: (type, id) => delivEffRefs(deliv).some((r) => r.type === type && r.id === id),
+    add: (type, id, label) => {
+      const cur = delivEffRefs(deliv)
+      if (cur.some((r) => r.type === type && r.id === id)) return
+      writeDelivRefs(deliv, [...cur, { type, id, label }])
+    },
+    remove: (key) => writeDelivRefs(deliv, delivEffRefs(deliv).filter((r) => refKey(r) !== key)),
+    replace: (key, type, id, label) => writeDelivRefs(deliv, delivEffRefs(deliv).map((r) => (refKey(r) === key ? { type, id, label } : r))),
+    openPicker: () => { setPickerDeliv(deliv.key); setPickerQuery(''); setOpenTagKey(null); setPickerOpen(true) },
+  })
+  // The Record Tags block (label + one row per tag with a swap dropdown + remove, then "Add a
+  // record"), shared by the build brief, the built-flow brief, and a deliverable's override.
+  const renderRecordTags = (ops: TagOps) => (
     <>
       <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-        Record Tags{activeRefs.length ? ` · ${activeRefs.length}` : ''}
+        Record Tags{ops.refs.length ? ` · ${ops.refs.length}` : ''}
       </label>
-      {activeRefs.map((ref) => {
+      {ops.refs.map((ref) => {
         const key = refKey(ref)
         const open = openTagKey === key
         return (
@@ -743,9 +787,9 @@ export function FlowsView() {
                         <div className="flow-aud-grouphead">{g.label}</div>
                         {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
                         {g.items.map((it) => {
-                          const on = hasActiveRef(g.type, it.id)
+                          const on = ops.has(g.type, it.id)
                           return (
-                            <button key={it.id} className={`flow-aud-item${refKey({ type: g.type, id: it.id }) === key ? ' on' : ''}`} disabled={on && refKey({ type: g.type, id: it.id }) !== key} onClick={() => { replaceActiveRef(key, g.type, it.id, it.label); setOpenTagKey(null) }}>
+                            <button key={it.id} className={`flow-aud-item${refKey({ type: g.type, id: it.id }) === key ? ' on' : ''}`} disabled={on && refKey({ type: g.type, id: it.id }) !== key} onClick={() => { ops.replace(key, g.type, it.id, it.label); setOpenTagKey(null) }}>
                               <span className="flow-aud-check" aria-hidden="true">{refKey({ type: g.type, id: it.id }) === key ? '✓' : ''}</span>
                               <span>{it.label}</span>
                             </button>
@@ -757,25 +801,22 @@ export function FlowsView() {
                 </>
               )}
             </div>
-            <button className="flow-tagrow-del" title="Remove tag" aria-label="Remove tag" onClick={() => removeActiveRef(key)}>✕</button>
+            <button className="flow-tagrow-del" title="Remove tag" aria-label="Remove tag" onClick={() => ops.remove(key)}>✕</button>
           </div>
         )
       })}
       <div className="flow-tagrow flow-tagrow-add">
         <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
-        <button
-          className="flow-aud-btn flow-tagrow-addbtn"
-          onClick={() => {
-            setPickerQuery('')
-            setOpenTagKey(null)
-            setPickerOpen(true)
-          }}
-        >
+        <button className="flow-aud-btn flow-tagrow-addbtn" onClick={ops.openPicker}>
           <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
         </button>
       </div>
     </>
   )
+  // The "Add a record" drawer edits whatever opened it: the campaign, or a deliverable's
+  // override. Resolve the deliverable fresh each render so it stays reactive after edits.
+  const pickerTargetDeliv = pickerDeliv ? viewDelivs.find((d) => d.key === pickerDeliv) : undefined
+  const pickerOps: TagOps = pickerTargetDeliv ? delivTagOps(pickerTargetDeliv) : campaignTagOps
   // Regenerate the flow's asset copy so it reflects the newly referenced records.
   // draftCopy only fills EMPTY fields and de-duplicates what it writes, so clear each
   // post's copy first: that forces a real rewrite and lets the anti-repetition pass keep
@@ -2032,6 +2073,22 @@ export function FlowsView() {
                     <button onClick={() => void changeDelivCount(selDeliv, 1)} disabled={countBusy} aria-label="Add one asset">+</button>
                   </div>
                   <div className="flow-inspect-note" style={{ marginTop: 8 }}>{countBusy ? 'Updating…' : 'Add or remove assets under this deliverable. New ones draft fresh copy. Click a post to see its copy.'}</div>
+                  {renderRecordTags(delivTagOps(selDeliv))}
+                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>
+                    {selDeliv.rows.some((r) => r.references && r.references.length) ? (
+                      <>
+                        Overriding the campaign for just this deliverable.{' '}
+                        <button
+                          className="flow-reset-link"
+                          onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
+                        >
+                          Reset to campaign
+                        </button>
+                      </>
+                    ) : (
+                      'Inherited from the campaign. Edit to target different records for just this deliverable, then Regenerate.'
+                    )}
+                  </div>
                   {(() => {
                     const bps = blueprintsFor(selDeliv.channel, selDeliv.assetType)
                     if (!bps.length) return null
@@ -2098,7 +2155,7 @@ export function FlowsView() {
                       onBlur={commitViewBudget}
                     />
                   </div>
-                  {renderRecordTags()}
+                  {renderRecordTags(campaignTagOps)}
                   <button className="flow-brief-build" onClick={regenerateFlow} disabled={regenerating || !viewRows.length}>
                     {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with these records' : '↻ Regenerate copy'}
                   </button>
@@ -2182,7 +2239,7 @@ export function FlowsView() {
                     onChange={(e) => setBudget(e.target.value)}
                   />
                 </div>
-                {renderRecordTags()}
+                {renderRecordTags(campaignTagOps)}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
                     ? `Build writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
@@ -2513,7 +2570,7 @@ export function FlowsView() {
           <div className="flow-recdrawer-scrim" onClick={() => setPickerOpen(false)} />
           <aside className="flow-recdrawer" role="dialog" aria-label="Add a record">
             <header className="flow-recdrawer-head">
-              <span className="flow-recdrawer-title">Add a record</span>
+              <span className="flow-recdrawer-title">{pickerTargetDeliv ? `Records · ${pickerTargetDeliv.label}` : 'Add a record'}</span>
               <button className="flow-recdrawer-x" onClick={() => setPickerOpen(false)} aria-label="Close">
                 ✕
               </button>
@@ -2547,12 +2604,12 @@ export function FlowsView() {
                       </button>
                       {!collapsed &&
                         g.items.map((it) => {
-                          const on = hasActiveRef(g.type, it.id)
+                          const on = pickerOps.has(g.type, it.id)
                           return (
                             <button
                               key={it.id}
                               className={`flow-recdrawer-item${on ? ' on' : ''}`}
-                              onClick={() => (on ? removeActiveRef(refKey({ type: g.type, id: it.id })) : addActiveRef(g.type, it.id, it.label))}
+                              onClick={() => (on ? pickerOps.remove(refKey({ type: g.type, id: it.id })) : pickerOps.add(g.type, it.id, it.label))}
                             >
                               <span className="flow-recdrawer-item-ic">
                                 <RecordTypeIcon type={g.type} />

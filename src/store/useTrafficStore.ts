@@ -4743,15 +4743,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // brand's whole library. With none checked, both pools fall back to the full library
         // (unchanged behavior). Company / person / channel tags are structural references
         // (who/where, not copy content), so they don't constrain the pools here.
-        const refs = get().campaignList.find((c) => c.name === campaign)?.references ?? []
-        const segIds = new Set(refs.filter((x) => x.type === 'segment').map((x) => x.id))
-        const segNames = new Set(refs.filter((x) => x.type === 'segment').map((x) => x.label))
-        const pinnedAudiences = libAudiences.filter((a) => segIds.has(a.id) || segNames.has(a.name))
-        const audiencePool = pinnedAudiences.length ? pinnedAudiences : libAudiences
-        const proofIds = new Set(refs.filter((x) => x.type === 'proof').map((x) => x.id))
-        const proofLabels = new Set(refs.filter((x) => x.type === 'proof').map((x) => x.label))
-        const pinnedProof = proofPool.filter((p) => proofIds.has(p.id) || proofLabels.has(p.label))
-        const activeProof = pinnedProof.length ? pinnedProof : proofPool
+        const campaignRefs = get().campaignList.find((c) => c.name === campaign)?.references ?? []
+        // Compute the pinned audience + proof pools from a reference list. A deliverable can
+        // OVERRIDE the campaign's refs per-asset (row.references), so each row pins from its own
+        // effective set — one deliverable can target a different segment/proof than the rest.
+        const poolsFrom = (refList: FlowReference[]) => {
+          const segIds = new Set(refList.filter((x) => x.type === 'segment').map((x) => x.id))
+          const segNames = new Set(refList.filter((x) => x.type === 'segment').map((x) => x.label))
+          const auds = libAudiences.filter((a) => segIds.has(a.id) || segNames.has(a.name))
+          const prIds = new Set(refList.filter((x) => x.type === 'proof').map((x) => x.id))
+          const prLabels = new Set(refList.filter((x) => x.type === 'proof').map((x) => x.label))
+          const prf = proofPool.filter((p) => prIds.has(p.id) || prLabels.has(p.label))
+          return { audiencePool: auds.length ? auds : libAudiences, activeProof: prf.length ? prf : proofPool }
+        }
+        const campaignPools = poolsFrom(campaignRefs)
+        const activeProof = campaignPools.activeProof
         // CTAs are VERBATIM from the brand's list and DISTRIBUTED across the set:
         // pick the globally least-used CTA, preferring a stage match among ties. This
         // caps repetition (no one CTA dominates) even when a stage has few CTAs, while
@@ -4778,10 +4784,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const accountByName = new Map((get().accountsByBrand[client] ?? []).map((acc) => [acc.name.toLowerCase(), acc]))
         const assets: DraftAsset[] = crows.map((r, i) => {
           const stage = funnelStageFor(r.channel, r.assetType)
+          // Per-row effective pools: the row's own record-tag override if it has one, else the
+          // campaign's. Lets a single deliverable speak to a different segment/proof.
+          const eff = r.references && r.references.length ? poolsFrom(r.references) : campaignPools
           const aud =
-            audiencePool.find((x) => x.name === r.audience) ??
-            (audiencePool.length ? audiencePool[i % audiencePool.length] : undefined)
-          const rotated = activeProof.length ? activeProof[i % activeProof.length] : undefined
+            eff.audiencePool.find((x) => x.name === r.audience) ??
+            (eff.audiencePool.length ? eff.audiencePool[i % eff.audiencePool.length] : undefined)
+          const rotated = eff.activeProof.length ? eff.activeProof[i % eff.activeProof.length] : undefined
           // Non-structural lineage (location, time, lifecycle, …) becomes copy context
           // so fanned variants localize and stay distinct. audience/journey are already
           // structural fields, so exclude them here.
