@@ -50,11 +50,12 @@ function StepIcon({ id }: { id: OnboardingStepId }) {
           <path d="M7 12h3l7-5.5M10 12l7 5.5" />
         </svg>
       )
-    case 'build':
+    case 'connect':
       return (
         <svg {...common}>
-          <path d="m4 20 6.5-6.5" />
-          <path d="M14 4.5l1.3 2.9L18 8.6l-2.7 1.2L14 12.7l-1.3-2.9L10 8.6l2.7-1.2z" />
+          <path d="M9 15l6-6" />
+          <path d="M11 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1" />
+          <path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1" />
         </svg>
       )
     case 'review':
@@ -82,7 +83,6 @@ export function GettingStarted() {
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const brandMeta = useTrafficStore((s) => s.brandMeta)
   const campaignList = useTrafficStore((s) => s.campaignList)
-  const rows = useTrafficStore((s) => s.rows)
   const [menuOpen, setMenuOpen] = useState(false)
 
   // The workspace's primary brand: the client with the most real (non-archived, non-library)
@@ -104,19 +104,19 @@ export function GettingStarted() {
     const segCount = (scope?.audiences.length ?? 0) || (clientAudiences[brand]?.length ?? 0)
     const proofCount = scope?.rtbs.length ?? 0
     const camps = campaignList.filter((c) => !c.archivedAt && c.client === brand && c.name !== CONTENT_LIBRARY_CAMPAIGN)
-    const campNames = new Set(camps.map((c) => c.name))
-    const hasCopy = rows.some((r) => campNames.has(r.campaign ?? '') && Object.values(r.messaging ?? {}).some((v) => (v ?? '').trim()))
     const hasBrand = !!(profile?.voice?.trim() || profile?.oneLiner?.trim() || (profile?.voiceGuide?.traits?.length ?? 0) > 0)
     const map: Record<OnboardingStepId, boolean> = {
       brand: hasBrand,
       segments: segCount > 0,
       proof: proofCount > 0,
       flow: camps.length > 0,
-      build: hasCopy,
-      review: false, // recorded as a teaching action when the calendar/grid is opened
+      // Connect / review can't be read from client state (the Claude key lives server-side),
+      // so they complete as teaching actions: checked off by hand, or when the calendar opens.
+      connect: false,
+      review: false,
     }
     return { brandCampaigns: camps, auto: map }
-  }, [brand, clientProfiles, brandSystems, brandMeta, clientAudiences, campaignList, rows])
+  }, [brand, clientProfiles, brandSystems, brandMeta, clientAudiences, campaignList])
 
   const isDone = (id: OnboardingStepId) => auto[id] || onboarding.done.includes(id)
   const steps = ONBOARDING_STEPS.map((s) => ({ ...s, done: isDone(s.id) }))
@@ -132,7 +132,7 @@ export function GettingStarted() {
       case 'segments': setPage('segments'); break
       case 'proof': setPage('proofpoints'); break
       case 'flow': openFlow(''); break
-      case 'build': openFlow(latestCampaign || ''); break
+      case 'connect': setPage('connectors'); break
       case 'review': openFlow(latestCampaign || ''); break
     }
   }

@@ -10,7 +10,7 @@ export type OnboardingStepId =
   | 'segments'
   | 'proof'
   | 'flow'
-  | 'build'
+  | 'connect'
   | 'review'
 
 export interface OnboardingStep {
@@ -27,7 +27,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'segments', title: 'Define your audiences', hint: 'Add the segments your campaigns speak to.' },
   { id: 'proof', title: 'Add proof points', hint: 'The reasons-to-believe every asset leans on.' },
   { id: 'flow', title: 'Create your first flow', hint: 'Start a campaign on the canvas.' },
-  { id: 'build', title: 'Build & write copy', hint: 'Generate on-brand drafts for every deliverable.' },
+  { id: 'connect', title: 'Connect Claude', hint: 'Connect Claude so drafts are written by AI, not the offline fallback.' },
   { id: 'review', title: 'Review your calendar', hint: 'See the campaign as a schedule, then ship it.' },
 ]
 
