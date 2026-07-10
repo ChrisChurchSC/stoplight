@@ -22625,13 +22625,14 @@ table.aud-sheet td.stick .aud-cell {
    chips recede, so the only thing that earns color is a missing required category. */
 .flow-node-taggroups { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; padding-top: 9px; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
 .flow-node-taggroup { display: flex; align-items: flex-start; gap: 8px; }
-.flow-node-taggroup-label { flex: 0 0 auto; width: 50px; margin-top: 3px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
+/* One icon per category (audience / channel / proof) leads each row. */
+.flow-node-taggroup-ic { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 2px; display: inline-flex; color: var(--text-faint); }
+.flow-node-taggroup-ic svg { width: 15px; height: 15px; }
 .flow-node-taggroup-chips { display: flex; flex-wrap: wrap; gap: 4px 5px; min-width: 0; }
-/* Chips recede: borderless, subtle fill, faint type icon. */
+/* Chips recede: borderless, subtle fill. */
 .flow-node-taggroups .flow-node-tag { border: 0; background: var(--surface-2); color: var(--text-muted); font-weight: 500; }
-.flow-node-taggroups .flow-node-tag-ic { color: var(--text-faint); }
 /* The one thing that earns color: a required category with no tag. */
-.flow-node-taggroup.missing .flow-node-taggroup-label { color: color-mix(in srgb, var(--amber) 50%, var(--text-muted)); }
+.flow-node-taggroup.missing .flow-node-taggroup-ic { color: var(--amber); }
 .flow-node-tag.missing-tag { background: color-mix(in srgb, var(--amber) 13%, var(--surface)); color: color-mix(in srgb, var(--amber) 62%, var(--text)); font-weight: 600; }
 /* A deliverable overriding the campaign's records: tint the chips so it reads as customized. */
 .flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) { background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 55%, var(--text)); }

@@ -85,11 +85,11 @@ const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', per
 // the WHO at three granularities; Channel is the where; Proof the why. A card shows one row per
 // category. Required categories (an audience + a proof) read in the accent color, and a required
 // category with no tag shows an amber "Needs …" flag so the gap is obvious.
-type CardGroup = { key: string; label: string; need: string; types: FlowRefType[]; required: boolean }
+type CardGroup = { key: string; label: string; need: string; types: FlowRefType[]; required: boolean; icon: ReactNode }
 const CARD_GROUPS: CardGroup[] = [
-  { key: 'audience', label: 'Audience', need: 'an audience', types: ['segment', 'company', 'person'], required: true },
-  { key: 'channel', label: 'Channel', need: 'a channel', types: ['channel'], required: false },
-  { key: 'proof', label: 'Proof', need: 'a proof point', types: ['proof'], required: true },
+  { key: 'audience', label: 'Audience', need: 'an audience', types: ['segment', 'company', 'person'], required: true, icon: RECORD_TYPE_ICON.person },
+  { key: 'channel', label: 'Channel', need: 'a channel', types: ['channel'], required: false, icon: RECORD_TYPE_ICON.channel },
+  { key: 'proof', label: 'Proof', need: 'a proof point', types: ['proof'], required: true, icon: RECORD_TYPE_ICON.proof },
 ]
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
@@ -117,13 +117,14 @@ function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
         const missing = g.required && !g.items.length
         return (
           <div key={g.key} className={`flow-node-taggroup${g.required ? ' required' : ''}${missing ? ' missing' : ''}`}>
-            <span className="flow-node-taggroup-label">{g.label}</span>
+            <span className="flow-node-taggroup-ic" title={g.label} aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{g.icon}</svg>
+            </span>
             <div className="flow-node-taggroup-chips">
               {g.items.length ? (
                 g.items.map((r) => (
-                  <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
-                    <span className="flow-node-tag-ic" aria-hidden="true"><RecordTypeIcon type={r.type} /></span>
-                    <span className="flow-node-tag-txt">{r.label}</span>
+                  <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${g.label} · ${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
+                    {r.label}
                   </span>
                 ))
               ) : (
