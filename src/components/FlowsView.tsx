@@ -27,7 +27,10 @@ import { FlowsHome } from './FlowsHome'
  * campaign (optionally writing copy), staying in the flow. Campaigns + canvas stay intact.
  */
 
+// Per-tier tones — the card badge matches its tier tint: campaign (tomato), deliverable
+// (blue), post (purple, applied to the HOOK/HERO step label via .flow-node-step in CSS).
 const CAMPAIGN_TONE = '#ff6347'
+const DELIV_TONE = '#2f6fe0'
 
 // The callbacks the shared Record-Tags block edits through, so the same UI can target the
 // campaign brief OR a single deliverable's per-asset override.
@@ -263,10 +266,14 @@ function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): s
       r,
     )
   }
-  // Forward (left-to-right): a rounded right-angle elbow.
+  // Forward (left-to-right): a rounded right-angle elbow. Clamp the corner radius to half the
+  // vertical separation, so a small offset can't make the two rounded corners overshoot each
+  // other into a spike — they just meet in the middle for a clean S instead.
+  const sep = Math.abs(ty - sy)
   const midX = tx > sx + 80 * s ? (sx + tx) / 2 : sx + 40 * s
   const dir = ty > sy ? 1 : -1
-  return `M ${sx} ${sy} H ${midX - r} Q ${midX} ${sy} ${midX} ${sy + r * dir} V ${ty - r * dir} Q ${midX} ${ty} ${midX + r} ${ty} H ${tx}`
+  const rr = Math.min(r, sep / 2)
+  return `M ${sx} ${sy} H ${midX - rr} Q ${midX} ${sy} ${midX} ${sy + rr * dir} V ${ty - rr * dir} Q ${midX} ${ty} ${midX + rr} ${ty} H ${tx}`
 }
 
 export function FlowsView() {
@@ -1787,7 +1794,7 @@ export function FlowsView() {
                           onMouseDown={(e) => startDrag(e, d.key)}
                           onClick={() => { setSel(d.key); setPickAt(null) }}
                         >
-                          <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 16%, transparent)` }}>
+                          <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
                             Deliverable
                           </span>
                           <div className="flow-node-main">
@@ -1859,7 +1866,7 @@ export function FlowsView() {
                           onMouseDown={(e) => startDrag(e, n.id)}
                           onClick={() => { setSel(n.id); setPickAt(null) }}
                         >
-                          <span className="flow-node-kind" style={{ color: TONE_HEX[p.tone], background: `color-mix(in srgb, ${TONE_HEX[p.tone]} 16%, transparent)` }}>
+                          <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
                             Deliverable
                           </span>
                           <div className="flow-node-main">
