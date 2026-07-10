@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { clientForCampaign } from '../domain/clients'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import type { ChannelId } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -65,7 +66,10 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       ...brandRows.map((r) => (r.campaign ?? '').trim()).filter(Boolean),
       ...forBrand.map((c) => c.name),
     ]),
-  ]
+    // The content library archive ("Published content") isn't a flow — it's where every
+    // ingested/published asset lives, so keep it out of the Flows list (delete it here
+    // would archive the whole library). It stays reachable under Library.
+  ].filter((n) => n !== CONTENT_LIBRARY_CAMPAIGN)
   const cards: FlowCard[] = names.map((name) => {
     const cRows = brandRows.filter((r) => (r.campaign ?? '').trim() === name)
     return {
