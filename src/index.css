@@ -22650,6 +22650,6 @@ table.aud-sheet td.stick .aud-cell {
 .flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--accent-3) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent-3) 40%, var(--border)); }
 .flow-node.flow-brief-node { background: color-mix(in srgb, var(--accent-2) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent-2) 18%, var(--border)); }
-/* Selected glow matches the card's tier hue (campaign tomato is the .flow-node.sel default). */
-.flow-node.flow-tier-deliv.sel { border-color: #2f6fe0; box-shadow: 0 0 0 3px color-mix(in srgb, #2f6fe0 24%, transparent); }
-.flow-node.flow-brief-node.sel { border-color: #8a34d6; box-shadow: 0 0 0 3px color-mix(in srgb, #8a34d6 24%, transparent); }
+/* Selected + click-held (drag) glow match the card's tier hue (campaign tomato is the default). */
+.flow-node.flow-tier-deliv.sel, .flow-node.flow-tier-deliv.multi { border-color: #2f6fe0; box-shadow: 0 0 0 3px color-mix(in srgb, #2f6fe0 24%, transparent); }
+.flow-node.flow-brief-node.sel, .flow-node.flow-brief-node.multi { border-color: #8a34d6; box-shadow: 0 0 0 3px color-mix(in srgb, #8a34d6 24%, transparent); }
