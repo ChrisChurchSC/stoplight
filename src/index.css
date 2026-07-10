@@ -22628,15 +22628,16 @@ table.aud-sheet td.stick .aud-cell {
 /* One icon per category (audience / channel / proof) leads each row. */
 .flow-node-taggroup-ic { flex: 0 0 auto; width: 15px; height: 15px; display: inline-flex; color: var(--text-faint); }
 .flow-node-taggroup-ic svg { width: 15px; height: 15px; }
-/* Each category is a single line of comma-joined values, truncated with an ellipsis. */
-.flow-node-taggroup-chips { flex: 1 1 auto; min-width: 0; }
-.flow-node-tagline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-weight: 500; color: var(--text-muted); }
-.flow-node-taggroups .flow-node-tag { border: 0; background: var(--surface-2); color: var(--text-muted); font-weight: 500; }
+/* Each category is a single row of pill tags: solid white fill + dark ink so they read as
+   tags with good contrast on the tinted cards; the row stays on one line and clips at the
+   card edge, each pill truncating if a single value is long. */
+.flow-node-taggroup-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 4px; overflow: hidden; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
+.flow-node-taggroups .flow-node-tag { flex: 0 0 auto; max-width: 128px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 600; }
 /* The one thing that earns color: a required category with no tag. */
 .flow-node-taggroup.missing .flow-node-taggroup-ic { color: var(--amber); }
-.flow-node-tag.missing-tag { background: color-mix(in srgb, var(--amber) 13%, var(--surface)); color: color-mix(in srgb, var(--amber) 62%, var(--text)); font-weight: 600; }
-/* A deliverable overriding the campaign's records: tint the rows so it reads as customized. */
-.flow-node-taggroups.overridden .flow-node-tagline { color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
+.flow-node-tag.missing-tag { max-width: none; background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 40%, var(--border)); color: color-mix(in srgb, var(--amber) 70%, var(--text)); font-weight: 600; }
+/* A deliverable overriding the campaign's records: tint the pills so it reads as customized. */
+.flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 62%, var(--text)); }
 .flow-node-taggroups.overridden .flow-node-taggroup:not(.missing) .flow-node-taggroup-ic { color: var(--accent); }
 
 /* Cap deliverable/campaign cards so their single-line tag rows truncate with an ellipsis.

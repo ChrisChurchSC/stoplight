@@ -126,9 +126,11 @@ function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
             </span>
             <div className="flow-node-taggroup-chips">
               {g.items.length ? (
-                <span className="flow-node-tagline" title={g.items.map((r) => `${RECORD_TYPE_LABEL[r.type]}: ${r.label}`).join(', ')}>
-                  {g.items.map((r) => r.label).join(', ')}
-                </span>
+                g.items.map((r) => (
+                  <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${g.label} · ${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
+                    {r.label}
+                  </span>
+                ))
               ) : (
                 <span className="flow-node-tag missing-tag">Needs {g.need}</span>
               )}
