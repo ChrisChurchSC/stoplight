@@ -24,10 +24,10 @@ export interface OnboardingStep {
 // Order matters: the first not-yet-complete step is highlighted as "what to do next".
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'brand', title: 'Set up your brand', hint: 'Add your voice and one-liner so every draft sounds like you.' },
+  { id: 'connect', title: 'Connect Claude', hint: 'Connect Claude so drafts are written by AI, not the offline fallback.' },
   { id: 'segments', title: 'Define your audiences', hint: 'Add the segments your campaigns speak to.' },
   { id: 'proof', title: 'Add proof points', hint: 'The reasons-to-believe every asset leans on.' },
   { id: 'flow', title: 'Create your first flow', hint: 'Start a campaign on the canvas.' },
-  { id: 'connect', title: 'Connect Claude', hint: 'Connect Claude so drafts are written by AI, not the offline fallback.' },
   { id: 'review', title: 'Review your calendar', hint: 'See the campaign as a schedule, then ship it.' },
 ]
 
