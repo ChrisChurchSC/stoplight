@@ -25,12 +25,10 @@ const SPECS: Spec[] = [
   { key: 'detail', label: 'Detail', kind: 'multiline', col: 340, get: (r) => r.detail || '', set: (r, v) => { r.detail = v } },
   { key: 'metric', label: 'Metric', kind: 'text', col: 160, get: (r) => r.metric || '', set: (r, v) => { r.metric = v } },
   { key: 'source', label: 'Source', kind: 'text', col: 180, get: (r) => r.source || '', set: (r, v) => { r.source = v } },
-  { key: 'status', label: 'Status', kind: 'status', col: 120, get: (r) => (r.approved === false ? 'Draft' : 'Approved'), set: (r, v) => { r.approved = v !== 'Draft' } },
 ]
 
 const COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col! }))
 const FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind }))
-const STATUSES = ['Approved', 'Draft']
 
 type Row = { id: string } & Record<string, string>
 
@@ -62,7 +60,7 @@ export function ProofPointsView() {
       icon={ICON}
       columns={COLUMNS}
       fields={FIELDS}
-      statuses={STATUSES}
+      statuses={[]}
       rows={rows}
       noun={['proof point', 'proof points']}
       onAdd={() => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: 'New proof point', detail: '', approved: false })}
