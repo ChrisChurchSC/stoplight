@@ -27,10 +27,11 @@ import { FlowsHome } from './FlowsHome'
  * campaign (optionally writing copy), staying in the flow. Campaigns + canvas stay intact.
  */
 
-// Per-tier tones — the card badge matches its tier tint: campaign (tomato), deliverable
-// (blue), post (purple, applied to the HOOK/HERO step label via .flow-node-step in CSS).
+// Per-tier tones — the card badge + tile match its tier tint: campaign (tomato), deliverable
+// (blue), post (purple).
 const CAMPAIGN_TONE = '#ff6347'
 const DELIV_TONE = '#2f6fe0'
+const POST_TONE = '#8a34d6'
 
 // The callbacks the shared Record-Tags block edits through, so the same UI can target the
 // campaign brief OR a single deliverable's per-asset override.
@@ -1819,6 +1820,7 @@ export function FlowsView() {
                                   onClick={(e) => { e.stopPropagation(); setSel(r.id) }}
                                 >
                                   <div className="flow-node-main">
+                                    <PresetTile tone={POST_TONE} />
                                     <div className="flow-node-text">
                                       {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
@@ -1905,6 +1907,7 @@ export function FlowsView() {
                                   onClick={(e) => { e.stopPropagation(); setSel(`${n.id}:${bi}`); setPickAt(null) }}
                                 >
                                   <div className="flow-node-main">
+                                    <PresetTile tone={POST_TONE} />
                                     <div className="flow-node-text">
                                       <div className="flow-node-label">{PAGE_CHANNELS.has(p.channel) ? 'Page' : `${subcardWord(p)} ${bi + 1}`}</div>
                                       {PAGE_CHANNELS.has(p.channel) ? (
