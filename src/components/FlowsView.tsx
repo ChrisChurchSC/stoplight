@@ -81,45 +81,53 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   ),
 }
 const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Segment', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix' }
-// The order record types read in on a card, and which ones a deliverable is expected to carry
-// at least one of (its audience and its reason-to-believe drive the copy). A required type with
-// no tag is flagged on the card so the gap is obvious. Required-first so the flags lead.
-const REF_TYPE_ORDER: FlowRefType[] = ['segment', 'proof', 'channel', 'company', 'person', 'media-mix']
-const REQUIRED_REF_TYPES = new Set<FlowRefType>(['segment', 'proof'])
+// Record types roll up into a few card categories. Audience (segment / company / person) is
+// the WHO at three granularities; Channel is the where; Proof the why. A card shows one row per
+// category. Required categories (an audience + a proof) read in the accent color, and a required
+// category with no tag shows an amber "Needs …" flag so the gap is obvious.
+type CardGroup = { key: string; label: string; need: string; types: FlowRefType[]; required: boolean }
+const CARD_GROUPS: CardGroup[] = [
+  { key: 'audience', label: 'Audience', need: 'an audience', types: ['segment', 'company', 'person'], required: true },
+  { key: 'channel', label: 'Channel', need: 'a channel', types: ['channel'], required: false },
+  { key: 'proof', label: 'Proof', need: 'a proof point', types: ['proof'], required: true },
+]
+// The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
+const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
+  { label: 'Audience', types: ['segment', 'company', 'person'] },
+  { label: 'Channels', types: ['channel'] },
+  { label: 'Proof points', types: ['proof'] },
+]
 const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {RECORD_TYPE_ICON[type]}
   </svg>
 )
 
-// A node card's record tags, grouped by record type (one row per type, in REF_TYPE_ORDER) and
-// flagging the REQUIRED types: a required type reads in the accent color, and a required type
-// with no tag shows an amber "Needs a …" so the gap is obvious. `overridden` tints a
-// deliverable whose records differ from the campaign's.
+// A node card's record tags, grouped into card categories (Audience / Channel / Proof). Each
+// chip carries its own record-type icon so a mixed Audience row still shows segment vs company
+// vs person. `overridden` tints a deliverable whose records differ from the campaign's.
 function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
-  const groups = REF_TYPE_ORDER
-    .map((type) => ({ type, items: tags.filter((t) => t.type === type) }))
-    .filter((g) => g.items.length || REQUIRED_REF_TYPES.has(g.type))
+  const groups = CARD_GROUPS
+    .map((g) => ({ ...g, items: tags.filter((t) => g.types.includes(t.type)) }))
+    .filter((g) => g.items.length || g.required)
   if (!groups.length) return null
   return (
     <div className={`flow-node-taggroups${overridden ? ' overridden' : ''}`} title={overridden ? 'Overriding the campaign records' : undefined}>
       {groups.map((g) => {
-        const required = REQUIRED_REF_TYPES.has(g.type)
-        const missing = required && !g.items.length
+        const missing = g.required && !g.items.length
         return (
-          <div key={g.type} className={`flow-node-taggroup${required ? ' required' : ''}${missing ? ' missing' : ''}`}>
-            <span className="flow-node-taggroup-ic" title={`${RECORD_TYPE_LABEL[g.type]}${required ? ' (required)' : ''}`} aria-hidden="true">
-              <RecordTypeIcon type={g.type} />
-            </span>
+          <div key={g.key} className={`flow-node-taggroup${g.required ? ' required' : ''}${missing ? ' missing' : ''}`}>
+            <span className="flow-node-taggroup-label">{g.label}</span>
             <div className="flow-node-taggroup-chips">
               {g.items.length ? (
                 g.items.map((r) => (
                   <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
-                    {r.label}
+                    <span className="flow-node-tag-ic" aria-hidden="true"><RecordTypeIcon type={r.type} /></span>
+                    <span className="flow-node-tag-txt">{r.label}</span>
                   </span>
                 ))
               ) : (
-                <span className="flow-node-tag missing-tag">Needs a {RECORD_TYPE_LABEL[g.type].toLowerCase()}</span>
+                <span className="flow-node-tag missing-tag">Needs {g.need}</span>
               )}
             </div>
           </div>
@@ -2615,34 +2623,38 @@ export function FlowsView() {
             <div className="flow-recdrawer-list">
               {(() => {
                 const pq = pickerQuery.trim().toLowerCase()
-                const groups = recordGroups
-                  .map((g) => ({ ...g, items: pq ? g.items.filter((it) => it.label.toLowerCase().includes(pq)) : g.items }))
-                  .filter((g) => g.items.length)
-                if (!groups.length) return <div className="flow-recdrawer-empty">No records match.</div>
-                return groups.map((g) => {
+                // Each picker section (Audience nests segment/company/person) gathers its record
+                // types' items, tagged with their real type so a chip still shows what it is.
+                const sections = PICKER_SECTIONS.map((s) => ({
+                  ...s,
+                  items: s.types.flatMap((type) => (recordGroups.find((rg) => rg.type === type)?.items ?? []).map((it) => ({ ...it, type })))
+                    .filter((it) => (pq ? it.label.toLowerCase().includes(pq) : true)),
+                })).filter((s) => s.items.length)
+                if (!sections.length) return <div className="flow-recdrawer-empty">No records match.</div>
+                return sections.map((s) => {
                   // A search auto-expands so matches are always visible.
-                  const collapsed = !pq && !expandedCats.has(g.type)
+                  const collapsed = !pq && !expandedCats.has(s.label)
                   return (
-                    <div key={g.type} className="flow-recdrawer-group">
-                      <button className="flow-recdrawer-grouphead" onClick={() => toggleCat(g.type)} aria-expanded={!collapsed}>
+                    <div key={s.label} className="flow-recdrawer-group">
+                      <button className="flow-recdrawer-grouphead" onClick={() => toggleCat(s.label)} aria-expanded={!collapsed}>
                         <span className={`flow-recdrawer-chev${collapsed ? '' : ' open'}`} aria-hidden="true">▸</span>
                         <span className="flow-recdrawer-gic">
-                          <RecordTypeIcon type={g.type} />
+                          <RecordTypeIcon type={s.types[0]} />
                         </span>
-                        {g.label}
-                        <span className="flow-recdrawer-count">{g.items.length}</span>
+                        {s.label}
+                        <span className="flow-recdrawer-count">{s.items.length}</span>
                       </button>
                       {!collapsed &&
-                        g.items.map((it) => {
-                          const on = pickerOps.has(g.type, it.id)
+                        s.items.map((it) => {
+                          const on = pickerOps.has(it.type, it.id)
                           return (
                             <button
-                              key={it.id}
+                              key={`${it.type}:${it.id}`}
                               className={`flow-recdrawer-item${on ? ' on' : ''}`}
-                              onClick={() => (on ? pickerOps.remove(refKey({ type: g.type, id: it.id })) : pickerOps.add(g.type, it.id, it.label))}
+                              onClick={() => (on ? pickerOps.remove(refKey({ type: it.type, id: it.id })) : pickerOps.add(it.type, it.id, it.label))}
                             >
                               <span className="flow-recdrawer-item-ic">
-                                <RecordTypeIcon type={g.type} />
+                                <RecordTypeIcon type={it.type} />
                               </span>
                               <span className="flow-recdrawer-item-label">{it.label}</span>
                               {on && <span className="flow-recdrawer-check" aria-hidden="true">✓</span>}

@@ -22620,16 +22620,16 @@ table.aud-sheet td.stick .aud-cell {
 .flow-reset-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .flow-reset-link:hover { filter: brightness(1.05); }
 
-/* Card record tags, grouped by record type (one row per type). */
-.flow-node-taggroups { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.flow-node-taggroup { display: flex; align-items: flex-start; gap: 6px; }
-.flow-node-taggroup-ic { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; display: inline-flex; color: var(--text-faint); }
-.flow-node-taggroup-ic svg { width: 14px; height: 14px; }
+/* Card record tags, grouped into card categories (Audience / Channel / Proof), one row each. */
+.flow-node-taggroups { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.flow-node-taggroup { display: flex; align-items: flex-start; gap: 7px; }
+.flow-node-taggroup-label { flex: 0 0 auto; min-width: 46px; margin-top: 3px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
 .flow-node-taggroup-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-/* Required record types read in the accent color so they're flagged at a glance. */
-.flow-node-taggroup.required .flow-node-taggroup-ic { color: var(--accent); }
-/* A required type with no tag: amber "needs one" flag. */
-.flow-node-taggroup.missing .flow-node-taggroup-ic { color: var(--amber); }
-.flow-node-tag.missing-tag { background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); color: color-mix(in srgb, var(--amber) 60%, var(--text)); font-style: normal; }
+/* Required categories (an audience, a proof) read in the accent color so they're flagged. */
+.flow-node-taggroup.required .flow-node-taggroup-label { color: var(--accent); }
+/* A required category with no tag: amber label + "needs one" flag. */
+.flow-node-taggroup.missing .flow-node-taggroup-label { color: var(--amber); }
+.flow-node-tag.missing-tag { background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); color: color-mix(in srgb, var(--amber) 60%, var(--text)); }
 /* A deliverable overriding the campaign's records: tint the chips so it reads as customized. */
 .flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); color: color-mix(in srgb, var(--accent) 55%, var(--text)); }
+.flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) .flow-node-tag-ic { color: var(--accent); }
