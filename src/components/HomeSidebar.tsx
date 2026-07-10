@@ -267,24 +267,18 @@ export function HomeSidebar() {
 
               <div className="hsb-ws-sep" />
 
-              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
-                <span className="hsb-ws-mi-ic">
-                  <Ico name="user" />
-                </span>
-                Account settings
-              </button>
               <button
                 className="hsb-ws-mi"
                 role="menuitem"
                 onClick={() => {
-                  setPage('brand')
+                  setPage('account')
                   setWsOpen(false)
                 }}
               >
                 <span className="hsb-ws-mi-ic">
-                  <Ico name="gear" />
+                  <Ico name="user" />
                 </span>
-                Brand settings
+                Account settings
               </button>
 
               <div className="hsb-ws-sep" />

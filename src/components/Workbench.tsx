@@ -4,6 +4,7 @@ import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { GlobalNav } from './GlobalNav'
 import { HomeShell } from './HomeShell'
+import { AccountSettings } from './AccountSettings'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
 import { BrandWorkspace } from './BrandWorkspace'
@@ -123,6 +124,8 @@ export function Workbench() {
       addAssets([urlToAsset(text)])
     }
   }
+
+  if (page === 'account') return <AccountSettings />
 
   return (
     <div className={`workspace${canvasMode ? ` canvas-mode view-${view}` : ''}`}>
