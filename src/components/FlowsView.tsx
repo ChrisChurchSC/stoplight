@@ -1760,6 +1760,21 @@ export function FlowsView() {
                             <div className="flow-node-text">
                               <div className="flow-node-label">{d.label}</div>
                               <div className="flow-node-desc">×{d.count}</div>
+                              {(() => {
+                                const tags = delivEffRefs(d)
+                                if (!tags.length) return null
+                                const overridden = d.rows.some((r) => r.references && r.references.length)
+                                return (
+                                  <div className={`flow-node-tags${overridden ? ' overridden' : ''}`} title={overridden ? 'Overriding the campaign records' : 'Inherited from the campaign'}>
+                                    {tags.map((r) => (
+                                      <span key={refKey(r)} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
+                                        <span className="flow-node-tag-ic" aria-hidden="true"><RecordTypeIcon type={r.type} /></span>
+                                        <span className="flow-node-tag-txt">{r.label}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </div>
                         </div>
