@@ -71,6 +71,15 @@ export function BrandVoice({ brand }: { brand: string }) {
     setDirty(false)
   }
 
+  // Auto-save: debounce writes so the voice guide persists without a Save button
+  // (the guide has many custom inputs, so a per-field blur handler isn't practical).
+  useEffect(() => {
+    if (!dirty) return
+    const t = window.setTimeout(save, 700)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary, guide, dirty])
+
   const toneVal = (key: keyof VoiceTone) => guide.tone?.[key] ?? 50
 
   // Text areas edit list fields as one-item-per-line; keep the raw text local so a
@@ -258,13 +267,6 @@ export function BrandVoice({ brand }: { brand: string }) {
           onChange={(e) => setG('examples', lines(e.target.value))}
         />
       </section>
-
-      <div className={`brand-savebar${dirty ? ' dirty' : ''}`}>
-        <span className="brand-savebar-status">{dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
-        <button className="btn primary sm" onClick={save} disabled={!dirty}>
-          {dirty ? 'Save voice guide' : 'Saved'}
-        </button>
-      </div>
     </div>
   )
 }

@@ -30,6 +30,7 @@ export function BrandGoal({ brand }: { brand: string }) {
   }, [brand])
 
   const save = () => {
+    if (!dirty) return
     setClientProfile(brand, {
       businessGoal: goal.trim() || undefined,
       businessKpi: kpi.trim() || undefined,
@@ -110,6 +111,7 @@ export function BrandGoal({ brand }: { brand: string }) {
             setGoal(e.target.value)
             setDirty(true)
           }}
+          onBlur={save}
         />
       </section>
 
@@ -129,6 +131,7 @@ export function BrandGoal({ brand }: { brand: string }) {
                 setKpi(e.target.value)
                 setDirty(true)
               }}
+              onBlur={save}
             />
           </label>
           <label className="library-field">
@@ -143,6 +146,7 @@ export function BrandGoal({ brand }: { brand: string }) {
                 setTarget(e.target.value)
                 setDirty(true)
               }}
+              onBlur={save}
             />
           </label>
         </div>
@@ -160,12 +164,6 @@ export function BrandGoal({ brand }: { brand: string }) {
         ) : null}
       </section>
 
-      <div className={`brand-savebar${dirty ? ' dirty' : ''}`}>
-        <span className="brand-savebar-status">{dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
-        <button className="btn primary sm" onClick={save} disabled={!dirty}>
-          {dirty ? 'Save goal' : 'Saved'}
-        </button>
-      </div>
     </div>
   )
 }

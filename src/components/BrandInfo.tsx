@@ -75,7 +75,9 @@ export function BrandInfo({ brand }: { brand: string }) {
     setDirty(true)
   }
 
+  // Auto-save on blur; skip when nothing changed.
   const save = () => {
+    if (!dirty) return
     const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
     const patch: Record<string, unknown> = {}
     for (const f of FIELDS) {
@@ -102,6 +104,7 @@ export function BrandInfo({ brand }: { brand: string }) {
                 placeholder={f.placeholder}
                 value={info[f.key] ?? ''}
                 onChange={(e) => set(f.key, e.target.value)}
+                onBlur={save}
               />
             ) : (
               <input
@@ -111,16 +114,11 @@ export function BrandInfo({ brand }: { brand: string }) {
                 placeholder={f.placeholder}
                 value={info[f.key] ?? ''}
                 onChange={(e) => set(f.key, e.target.value)}
+                onBlur={save}
               />
             )}
           </label>
         ))}
-      </div>
-      <div className={`brand-savebar${dirty ? ' dirty' : ''}`}>
-        <span className="brand-savebar-status">{dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
-        <button className="btn primary sm" onClick={save} disabled={!dirty}>
-          {dirty ? 'Save brand info' : 'Saved'}
-        </button>
       </div>
     </div>
   )

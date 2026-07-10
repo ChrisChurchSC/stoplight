@@ -32,7 +32,9 @@ export function BrandVisual({ brand }: { brand: string }) {
 
   const mark = (fn: (v: string) => void) => (v: string) => { fn(v); setDirty(true) }
 
+  // Auto-save on blur; skip when nothing changed.
   const save = () => {
+    if (!dirty) return
     setClientProfile(brand, {
       colors: parseColors(colors),
       fonts: lines(fonts),
@@ -56,26 +58,20 @@ export function BrandVisual({ brand }: { brand: string }) {
               ))}
             </div>
           )}
-          <input className="library-input" placeholder="#FAF6F0, #3ECBA0, #1C2340" value={colors} onChange={(e) => mark(setColors)(e.target.value)} />
+          <input className="library-input" placeholder="#FAF6F0, #3ECBA0, #1C2340" value={colors} onChange={(e) => mark(setColors)(e.target.value)} onBlur={save} />
         </label>
         <label className="library-field">
           <span className="library-field-label">Logo URL</span>
-          <input className="library-input" placeholder="https://…/logo.svg" value={logo} onChange={(e) => mark(setLogo)(e.target.value)} />
+          <input className="library-input" placeholder="https://…/logo.svg" value={logo} onChange={(e) => mark(setLogo)(e.target.value)} onBlur={save} />
         </label>
         <label className="library-field brand-info-wide">
           <span className="library-field-label">Fonts</span>
-          <textarea className="library-input" rows={3} placeholder="One per line" value={fonts} onChange={(e) => mark(setFonts)(e.target.value)} />
+          <textarea className="library-input" rows={3} placeholder="One per line" value={fonts} onChange={(e) => mark(setFonts)(e.target.value)} onBlur={save} />
         </label>
         <label className="library-field brand-info-wide">
           <span className="library-field-label">Imagery style</span>
-          <textarea className="library-input" rows={3} placeholder="Art-direction notes" value={imagery} onChange={(e) => mark(setImagery)(e.target.value)} />
+          <textarea className="library-input" rows={3} placeholder="Art-direction notes" value={imagery} onChange={(e) => mark(setImagery)(e.target.value)} onBlur={save} />
         </label>
-      </div>
-      <div className={`brand-savebar${dirty ? ' dirty' : ''}`}>
-        <span className="brand-savebar-status">{dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
-        <button className="btn primary sm" onClick={save} disabled={!dirty}>
-          {dirty ? 'Save visual identity' : 'Saved'}
-        </button>
       </div>
     </div>
   )
