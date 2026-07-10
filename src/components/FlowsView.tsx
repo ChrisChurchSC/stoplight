@@ -81,11 +81,53 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   ),
 }
 const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Segment', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix' }
+// The order record types read in on a card, and which ones a deliverable is expected to carry
+// at least one of (its audience and its reason-to-believe drive the copy). A required type with
+// no tag is flagged on the card so the gap is obvious. Required-first so the flags lead.
+const REF_TYPE_ORDER: FlowRefType[] = ['segment', 'proof', 'channel', 'company', 'person', 'media-mix']
+const REQUIRED_REF_TYPES = new Set<FlowRefType>(['segment', 'proof'])
 const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {RECORD_TYPE_ICON[type]}
   </svg>
 )
+
+// A node card's record tags, grouped by record type (one row per type, in REF_TYPE_ORDER) and
+// flagging the REQUIRED types: a required type reads in the accent color, and a required type
+// with no tag shows an amber "Needs a …" so the gap is obvious. `overridden` tints a
+// deliverable whose records differ from the campaign's.
+function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
+  const groups = REF_TYPE_ORDER
+    .map((type) => ({ type, items: tags.filter((t) => t.type === type) }))
+    .filter((g) => g.items.length || REQUIRED_REF_TYPES.has(g.type))
+  if (!groups.length) return null
+  return (
+    <div className={`flow-node-taggroups${overridden ? ' overridden' : ''}`} title={overridden ? 'Overriding the campaign records' : undefined}>
+      {groups.map((g) => {
+        const required = REQUIRED_REF_TYPES.has(g.type)
+        const missing = required && !g.items.length
+        return (
+          <div key={g.type} className={`flow-node-taggroup${required ? ' required' : ''}${missing ? ' missing' : ''}`}>
+            <span className="flow-node-taggroup-ic" title={`${RECORD_TYPE_LABEL[g.type]}${required ? ' (required)' : ''}`} aria-hidden="true">
+              <RecordTypeIcon type={g.type} />
+            </span>
+            <div className="flow-node-taggroup-chips">
+              {g.items.length ? (
+                g.items.map((r) => (
+                  <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
+                    {r.label}
+                  </span>
+                ))
+              ) : (
+                <span className="flow-node-tag missing-tag">Needs a {RECORD_TYPE_LABEL[g.type].toLowerCase()}</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 // A recurring deliverable (newsletter, social) breaks into monthly posts. A lead magnet
 // (ebook, whitepaper) breaks into sections, and a web page (homepage, pricing, landing)
@@ -1707,20 +1749,7 @@ export function FlowsView() {
                   <div className="flow-node-desc">
                     {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week flight`}
                   </div>
-                  {(() => {
-                    const tags = viewing ? flowRefs : briefRefsEffective
-                    if (!tags.length) return null
-                    return (
-                      <div className="flow-node-tags">
-                        {tags.map((r) => (
-                          <span key={refKey(r)} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
-                            <span className="flow-node-tag-ic" aria-hidden="true"><RecordTypeIcon type={r.type} /></span>
-                            <span className="flow-node-tag-txt">{r.label}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )
-                  })()}
+                  {renderCardTags(viewing ? flowRefs : briefRefsEffective, false)}
                 </div>
               </div>
               {!viewing && (
@@ -1760,21 +1789,7 @@ export function FlowsView() {
                             <div className="flow-node-text">
                               <div className="flow-node-label">{d.label}</div>
                               <div className="flow-node-desc">×{d.count}</div>
-                              {(() => {
-                                const tags = delivEffRefs(d)
-                                if (!tags.length) return null
-                                const overridden = d.rows.some((r) => r.references && r.references.length)
-                                return (
-                                  <div className={`flow-node-tags${overridden ? ' overridden' : ''}`} title={overridden ? 'Overriding the campaign records' : 'Inherited from the campaign'}>
-                                    {tags.map((r) => (
-                                      <span key={refKey(r)} className="flow-node-tag" title={`${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
-                                        <span className="flow-node-tag-ic" aria-hidden="true"><RecordTypeIcon type={r.type} /></span>
-                                        <span className="flow-node-tag-txt">{r.label}</span>
-                                      </span>
-                                    ))}
-                                  </div>
-                                )
-                              })()}
+                              {renderCardTags(delivEffRefs(d), d.rows.some((r) => r.references && r.references.length))}
                             </div>
                           </div>
                         </div>

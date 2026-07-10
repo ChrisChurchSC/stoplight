@@ -22620,6 +22620,16 @@ table.aud-sheet td.stick .aud-cell {
 .flow-reset-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .flow-reset-link:hover { filter: brightness(1.05); }
 
-/* A deliverable overriding the campaign's records: tint its tag chips so it reads as customized. */
-.flow-node-tags.overridden .flow-node-tag { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); color: color-mix(in srgb, var(--accent) 55%, var(--text)); }
-.flow-node-tags.overridden .flow-node-tag-ic { color: var(--accent); }
+/* Card record tags, grouped by record type (one row per type). */
+.flow-node-taggroups { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.flow-node-taggroup { display: flex; align-items: flex-start; gap: 6px; }
+.flow-node-taggroup-ic { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; display: inline-flex; color: var(--text-faint); }
+.flow-node-taggroup-ic svg { width: 14px; height: 14px; }
+.flow-node-taggroup-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+/* Required record types read in the accent color so they're flagged at a glance. */
+.flow-node-taggroup.required .flow-node-taggroup-ic { color: var(--accent); }
+/* A required type with no tag: amber "needs one" flag. */
+.flow-node-taggroup.missing .flow-node-taggroup-ic { color: var(--amber); }
+.flow-node-tag.missing-tag { background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); color: color-mix(in srgb, var(--amber) 60%, var(--text)); font-style: normal; }
+/* A deliverable overriding the campaign's records: tint the chips so it reads as customized. */
+.flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); color: color-mix(in srgb, var(--accent) 55%, var(--text)); }
