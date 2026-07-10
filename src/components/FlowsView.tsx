@@ -932,8 +932,51 @@ export function FlowsView() {
       setBuilding(false)
     }
   }
-  const build = () =>
-    buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes })
+  // A channel / page Record Tag (Email, Website, Landing page, Blog article, YouTube Ads, …)
+  // names a channel to build for. Map each such tag to that channel's primary deliverable
+  // preset, so tagging a channel and hitting Build seeds + writes that asset — no need to
+  // also add the deliverable from the toolbar. Company / person / segment / proof tags stay
+  // pure references; only channel tags name something to build.
+  const channelLabelToId = useMemo(() => {
+    const m = new Map<string, ChannelId>()
+    for (const id of Object.keys(CHANNELS) as ChannelId[]) m.set(CHANNELS[id].label.trim().toLowerCase(), id)
+    return m
+  }, [])
+  const presetForChannelTag = (recId: string): DeliverablePreset | undefined => {
+    const rec = channelRecords.find((c) => c.id === recId)
+    if (!rec) return undefined
+    const chId = channelLabelToId.get(rec.name.trim().toLowerCase())
+    return chId ? DELIVERABLE_PRESETS.find((p) => p.channel === chId) : undefined
+  }
+  // Channel tags not already covered by an explicit deliverable node — each becomes a
+  // synthesized deliverable at Build time (deduped by channel so two email tags don't double
+  // up, and an explicit email node wins over an "Email" tag).
+  const channelTagPresets = useMemo(() => {
+    const covered = new Set(nodes.map((n) => presetByKey(n.presetKey)?.channel).filter(Boolean))
+    const out: DeliverablePreset[] = []
+    const seen = new Set<ChannelId>()
+    for (const r of briefRefsEffective) {
+      if (r.type !== 'channel') continue
+      const p = presetForChannelTag(r.id)
+      if (!p || covered.has(p.channel) || seen.has(p.channel)) continue
+      seen.add(p.channel)
+      out.push(p)
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [briefRefsEffective, nodes, channelRecords])
+
+  const build = () => {
+    // Materialize any channel tags into real deliverable nodes first (so they appear on the
+    // canvas and a re-build won't duplicate them), then build the union of node + tag delivs.
+    const extra = channelTagPresets.map((p) => ({ id: freshNodeId(), presetKey: p.key, perMonth: startCount(p) }) as FlowDeliverable)
+    const effective = [...nodes, ...extra]
+    if (extra.length) {
+      setNodes(effective)
+      for (const n of extra) void genPreview(n)
+    }
+    return buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes: effective })
+  }
 
   // Resolve record-tag labels back to structured references via the record groups.
   const labelsToRefs = (labels: string[]): FlowReference[] => {
@@ -2048,9 +2091,11 @@ export function FlowsView() {
                   </button>
                 </div>
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                  Add deliverables from the canvas toolbar, then Build.
+                  {channelTagPresets.length && !nodes.length
+                    ? `Build writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
+                    : 'Add deliverables from the canvas toolbar (or tag channels above), then Build.'}
                 </div>
-                <button className="flow-brief-build" onClick={build} disabled={!nodes.length || building}>
+                <button className="flow-brief-build" onClick={build} disabled={(!nodes.length && !channelTagPresets.length) || building}>
                   {building ? 'Building…' : 'Build & write copy'}
                 </button>
               </div>
