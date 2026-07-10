@@ -55,6 +55,7 @@ import { CommentInbox } from './CommentInbox'
 import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
+import { GettingStarted } from './GettingStarted'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -287,6 +288,7 @@ export function Workbench() {
       <SetupWizard />
       <AudienceWizard />
       <ConnectDataNudge />
+      <GettingStarted />
     </div>
   )
 }

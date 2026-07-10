@@ -101,6 +101,7 @@ import type { BrandReport } from '../domain/reports'
 import type { MediaMix } from '../domain/channelMix'
 import { type Company, freshCompanyId, seedCompanies } from '../domain/companies'
 import { type ChannelRecord, freshChannelRecordId, seedChannelRecords } from '../domain/channelRecords'
+import { type OnboardingState, type OnboardingStepId, DEFAULT_ONBOARDING } from '../domain/onboarding'
 import type { SavedFlowChat } from '../domain/flowAgent'
 import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
@@ -561,6 +562,29 @@ function loadChannelRecords(): ChannelRecord[] {
 function saveChannelRecords(list: ChannelRecord[]): void {
   try {
     localStorage.setItem(CHANNEL_RECORDS_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+const ONBOARDING_KEY = 'stoplight.onboarding.v1'
+function loadOnboarding(): OnboardingState {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_KEY)
+    if (raw == null) return { ...DEFAULT_ONBOARDING }
+    const v = JSON.parse(raw)
+    return {
+      collapsed: !!v.collapsed,
+      dismissed: !!v.dismissed,
+      done: Array.isArray(v.done) ? (v.done as OnboardingStepId[]) : [],
+    }
+  } catch {
+    return { ...DEFAULT_ONBOARDING }
+  }
+}
+function saveOnboarding(state: OnboardingState): void {
+  try {
+    localStorage.setItem(ONBOARDING_KEY, JSON.stringify(state))
   } catch {
     /* ignore */
   }
@@ -1178,6 +1202,18 @@ interface TrafficState {
   audienceFilter: string
   /** Status / governance card filter (flagged / draft / live / unvetted). */
   cardFilter: CardFilter
+  /** "Getting started" checklist UI state (collapsed / dismissed / hand-checked steps). */
+  onboarding: OnboardingState
+  /** Collapse the checklist to the compact pill, or expand it. */
+  setOnboardingCollapsed: (collapsed: boolean) => void
+  /** Hide the checklist entirely (until reset). */
+  dismissOnboarding: () => void
+  /** Bring the checklist back (and expand it). */
+  resetOnboarding: () => void
+  /** Toggle a step's hand-checked state (an override on top of auto-detection). */
+  toggleOnboardingStep: (id: OnboardingStepId) => void
+  /** Mark a step done (idempotent) — used to record teaching actions like opening the calendar. */
+  markOnboardingDone: (id: OnboardingStepId) => void
   /** The files-browser home filter (all / drafts / flagged / live / `brand:<name>`),
    *  owned here so the files sidebar can drive it from any page. */
   homeFilter: string
@@ -1964,6 +2000,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   reports: loadReports(),
   companies: loadCompanies(),
   channelRecords: loadChannelRecords(),
+  onboarding: loadOnboarding(),
   people: loadPeople(),
   segments: loadSegments(),
   mediaMixes: loadMediaMixes(),
@@ -2044,6 +2081,39 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setCtaFilter: (ctaFilter) => set({ ctaFilter }),
   setAudienceFilter: (audienceFilter) => set({ audienceFilter }),
   setCardFilter: (cardFilter) => set({ cardFilter }),
+  setOnboardingCollapsed: (collapsed) =>
+    set((s) => {
+      const onboarding = { ...s.onboarding, collapsed }
+      saveOnboarding(onboarding)
+      return { onboarding }
+    }),
+  dismissOnboarding: () =>
+    set((s) => {
+      const onboarding = { ...s.onboarding, dismissed: true }
+      saveOnboarding(onboarding)
+      return { onboarding }
+    }),
+  resetOnboarding: () =>
+    set(() => {
+      const onboarding = { ...DEFAULT_ONBOARDING }
+      saveOnboarding(onboarding)
+      return { onboarding }
+    }),
+  toggleOnboardingStep: (id) =>
+    set((s) => {
+      const has = s.onboarding.done.includes(id)
+      const done = has ? s.onboarding.done.filter((x) => x !== id) : [...s.onboarding.done, id]
+      const onboarding = { ...s.onboarding, done }
+      saveOnboarding(onboarding)
+      return { onboarding }
+    }),
+  markOnboardingDone: (id) =>
+    set((s) => {
+      if (s.onboarding.done.includes(id)) return {}
+      const onboarding = { ...s.onboarding, done: [...s.onboarding.done, id] }
+      saveOnboarding(onboarding)
+      return { onboarding }
+    }),
   setHomeFilter: (homeFilter) => set({ homeFilter }),
   setQuery: (query) => set({ query }),
   // Switching client resets the campaign scope (campaigns belong to a client).

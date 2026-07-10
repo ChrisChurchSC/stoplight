@@ -215,6 +215,7 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaign = useTrafficStore((s) => s.patchCampaign)
+  const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const companies = useTrafficStore((s) => s.companies)
   const people = useTrafficStore((s) => s.people)
@@ -1380,7 +1381,7 @@ export function FlowsView() {
         <div className="flow-top-right">
           <div className="flow-viewtabs">
             {(['flow', 'grid', 'calendar'] as const).map((v) => (
-              <button key={v} className={`flow-viewtab${flowView === v ? ' on' : ''}`} onClick={() => setFlowView(v)}>
+              <button key={v} className={`flow-viewtab${flowView === v ? ' on' : ''}`} onClick={() => { setFlowView(v); if (v !== 'flow') markOnboardingDone('review') }}>
                 {v === 'flow' ? 'Flow' : v === 'grid' ? 'Grid' : 'Calendar'}
               </button>
             ))}
