@@ -4302,6 +4302,8 @@ button {
 /* Email blueprint picker in the deliverable inspector */
 .flow-bp-pick { display: block; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 11px 12px; cursor: pointer; margin-bottom: 8px; }
 .flow-bp-pick:hover { border-color: var(--accent); }
+.flow-bp-pick.on { border-color: var(--accent); background: var(--accent-soft); }
+.flow-bp-pick:disabled { opacity: .6; cursor: default; }
 .flow-bp-pick-name { display: block; font-size: 13.5px; font-weight: 700; color: var(--text); }
 .flow-bp-pick-cadence { display: block; font-size: 11.5px; font-weight: 600; color: var(--accent); margin-top: 1px; }
 .flow-bp-pick-sum { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 5px; }

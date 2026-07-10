@@ -393,6 +393,7 @@ export function FlowsView() {
   const [swapOpen, setSwapOpen] = useState(false)
   const [swapSearch, setSwapSearch] = useState('')
   const [replacing, setReplacing] = useState(false)
+  const [patternBusy, setPatternBusy] = useState(false)
   // References changed since the last generation → offer a Regenerate button.
   const [refsDirty, setRefsDirty] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
@@ -1488,6 +1489,23 @@ export function FlowsView() {
       setSwapOpen(false)
     }
   }
+  // Change the copy PATTERN (blueprint) on a single asset: reapply the blueprint's step at this
+  // asset's position, keeping its slot, then rewrite its copy to the new framework/CTA/levers.
+  const applyPatternToPost = async (row: TrafficRow, bp: EmailBlueprint) => {
+    if (patternBusy) return
+    setPatternBusy(true)
+    try {
+      const cur = stepFromLineage(row.lineage)
+      const i = cur ? Math.max(0, cur.blueprint.steps.findIndex((s) => s.label === cur.step.label)) : 0
+      const fieldKeys = messagingFields(row.channel, row.assetType).map((f) => f.key)
+      const briefs = blueprintBriefs(bp, fieldKeys)
+      const lineage: Record<string, string> = { ...(row.lineage ?? {}), brief: briefs[i % briefs.length], ...stepLineage(bp, i) }
+      await updateRow(row.id, { messaging: {}, lineage })
+      await draftCopy([row.id])
+    } finally {
+      setPatternBusy(false)
+    }
+  }
   useEffect(() => {
     setSwapOpen(false)
     setSwapSearch('')
@@ -2072,6 +2090,30 @@ export function FlowsView() {
                             <span key={l} className="flow-bp-tag flow-bp-tag-lever">{l.replace('-', ' ')}</span>
                           ))}
                         </div>
+                      </div>
+                    )
+                  })()}
+                  {(() => {
+                    // Alternatives come from the pattern the asset is USING (its blueprint's
+                    // channel), so a post keeps its pattern family even if its row channel drifted.
+                    const curBp = stepFromLineage(selPost.lineage)?.blueprint
+                    const chan = (curBp?.channel ?? selPost.channel) as ChannelId
+                    const bps = blueprintsFor(chan, curBp?.assetType ?? selPost.assetType)
+                    // Changing the pattern rewrites the copy, so only for generated posts — an
+                    // ingested (live) post keeps its real copy until you Replace it.
+                    if (bps.length < 2 || isIngestedPost(selPost)) return null
+                    const cur = curBp?.key
+                    return (
+                      <div className="flow-bp" style={{ marginTop: 12 }}>
+                        <div className="flow-cfg-h">Pattern</div>
+                        <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>Change the copy pattern for just this asset. This rewrites its copy.</div>
+                        {bps.map((bp) => (
+                          <button key={bp.key} className={`flow-bp-pick${cur === bp.key ? ' on' : ''}`} disabled={patternBusy} onClick={() => void applyPatternToPost(selPost, bp)}>
+                            <span className="flow-bp-pick-name">{bp.name}</span>
+                            <span className="flow-bp-pick-cadence">{patternBusy ? 'Applying…' : cur === bp.key ? 'Current' : bp.cadence}</span>
+                            <span className="flow-bp-pick-sum">{bp.summary}</span>
+                          </button>
+                        ))}
                       </div>
                     )
                   })()}
