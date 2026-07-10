@@ -285,6 +285,18 @@ export function FlowsView() {
   const [newAudName, setNewAudName] = useState('')
   // Build-brief: which record-tag row's dropdown is open ("<type>:<id>" or "add").
   const [openTagKey, setOpenTagKey] = useState<string | null>(null)
+  // The "Add a record" slide-out drawer (search + all record groups).
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerQuery, setPickerQuery] = useState('')
+  // Which record categories are expanded in the drawer (collapsed by default — the lists
+  // get long, so you open the one you want).
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
+  const toggleCat = (type: string) =>
+    setExpandedCats((prev) => {
+      const next = new Set(prev)
+      next.has(type) ? next.delete(type) : next.add(type)
+      return next
+    })
   // Swap a generated-idea post for a real ingested post from the library.
   const [swapOpen, setSwapOpen] = useState(false)
   const [swapSearch, setSwapSearch] = useState('')
@@ -2024,34 +2036,16 @@ export function FlowsView() {
                 })}
                 <div className="flow-tagrow flow-tagrow-add">
                   <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
-                  <div className="flow-aud flow-tagrow-dd">
-                    <button className="flow-aud-btn" onClick={() => setOpenTagKey(openTagKey === 'add' ? null : 'add')}>
-                      <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
-                      <span className="flow-aud-caret" aria-hidden="true">▾</span>
-                    </button>
-                    {openTagKey === 'add' && (
-                      <>
-                        <div className="flow-aud-scrim" onClick={() => setOpenTagKey(null)} />
-                        <div className="flow-aud-menu">
-                          {recordGroups.map((g) => {
-                            const items = g.items.filter((it) => !hasBriefRef(g.type, it.id))
-                            if (!items.length) return null
-                            return (
-                              <div key={g.type} className="flow-aud-group">
-                                <div className="flow-aud-grouphead">{g.label}</div>
-                                {items.map((it) => (
-                                  <button key={it.id} className="flow-aud-item" onClick={() => { addBriefRef(g.type, it.id, it.label); setOpenTagKey(null) }}>
-                                    <span className="flow-aud-tic" aria-hidden="true"><RecordTypeIcon type={g.type} /></span>
-                                    <span>{it.label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <button
+                    className="flow-aud-btn flow-tagrow-addbtn"
+                    onClick={() => {
+                      setPickerQuery('')
+                      setOpenTagKey(null)
+                      setPickerOpen(true)
+                    }}
+                  >
+                    <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
+                  </button>
                 </div>
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   Add deliverables from the canvas toolbar, then Build.
@@ -2374,6 +2368,69 @@ export function FlowsView() {
             )}
           </div>
         </div>
+      )}
+
+      {pickerOpen && (
+        <>
+          <div className="flow-recdrawer-scrim" onClick={() => setPickerOpen(false)} />
+          <aside className="flow-recdrawer" role="dialog" aria-label="Add a record">
+            <header className="flow-recdrawer-head">
+              <span className="flow-recdrawer-title">Add a record</span>
+              <button className="flow-recdrawer-x" onClick={() => setPickerOpen(false)} aria-label="Close">
+                ✕
+              </button>
+            </header>
+            <input
+              className="flow-recdrawer-search"
+              placeholder="Search records…"
+              value={pickerQuery}
+              onChange={(e) => setPickerQuery(e.target.value)}
+              autoFocus
+            />
+            <div className="flow-recdrawer-list">
+              {(() => {
+                const pq = pickerQuery.trim().toLowerCase()
+                const groups = recordGroups
+                  .map((g) => ({ ...g, items: pq ? g.items.filter((it) => it.label.toLowerCase().includes(pq)) : g.items }))
+                  .filter((g) => g.items.length)
+                if (!groups.length) return <div className="flow-recdrawer-empty">No records match.</div>
+                return groups.map((g) => {
+                  // A search auto-expands so matches are always visible.
+                  const collapsed = !pq && !expandedCats.has(g.type)
+                  return (
+                    <div key={g.type} className="flow-recdrawer-group">
+                      <button className="flow-recdrawer-grouphead" onClick={() => toggleCat(g.type)} aria-expanded={!collapsed}>
+                        <span className={`flow-recdrawer-chev${collapsed ? '' : ' open'}`} aria-hidden="true">▸</span>
+                        <span className="flow-recdrawer-gic">
+                          <RecordTypeIcon type={g.type} />
+                        </span>
+                        {g.label}
+                        <span className="flow-recdrawer-count">{g.items.length}</span>
+                      </button>
+                      {!collapsed &&
+                        g.items.map((it) => {
+                          const on = hasBriefRef(g.type, it.id)
+                          return (
+                            <button
+                              key={it.id}
+                              className={`flow-recdrawer-item${on ? ' on' : ''}`}
+                              onClick={() => (on ? removeBriefRef(refKey({ type: g.type, id: it.id })) : addBriefRef(g.type, it.id, it.label))}
+                            >
+                              <span className="flow-recdrawer-item-ic">
+                                <RecordTypeIcon type={g.type} />
+                              </span>
+                              <span className="flow-recdrawer-item-label">{it.label}</span>
+                              {on && <span className="flow-recdrawer-check" aria-hidden="true">✓</span>}
+                            </button>
+                          )
+                        })}
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          </aside>
+        </>
       )}
     </div>
   )
