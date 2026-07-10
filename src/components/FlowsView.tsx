@@ -1819,7 +1819,6 @@ export function FlowsView() {
                                   onClick={(e) => { e.stopPropagation(); setSel(r.id) }}
                                 >
                                   <div className="flow-node-main">
-                                    <PresetTile tone={d.tone} />
                                     <div className="flow-node-text">
                                       {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
@@ -1906,7 +1905,6 @@ export function FlowsView() {
                                   onClick={(e) => { e.stopPropagation(); setSel(`${n.id}:${bi}`); setPickAt(null) }}
                                 >
                                   <div className="flow-node-main">
-                                    <PresetTile tone={TONE_HEX[p.tone]} />
                                     <div className="flow-node-text">
                                       <div className="flow-node-label">{PAGE_CHANNELS.has(p.channel) ? 'Page' : `${subcardWord(p)} ${bi + 1}`}</div>
                                       {PAGE_CHANNELS.has(p.channel) ? (
