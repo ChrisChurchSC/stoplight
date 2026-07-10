@@ -392,6 +392,7 @@ export function FlowsView() {
   // Swap a generated-idea post for a real ingested post from the library.
   const [swapOpen, setSwapOpen] = useState(false)
   const [swapSearch, setSwapSearch] = useState('')
+  const [replacing, setReplacing] = useState(false)
   // References changed since the last generation → offer a Regenerate button.
   const [refsDirty, setRefsDirty] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
@@ -1465,6 +1466,28 @@ export function FlowsView() {
     setSwapOpen(false)
     setSwapSearch('')
   }
+  // The reverse of a swap: drop the ingested post's live fields (source, url, metrics, posted
+  // status) back to a generated draft, then write fresh AI copy for the slot.
+  const replaceWithGenerated = async () => {
+    if (!selPost || replacing) return
+    setReplacing(true)
+    try {
+      await updateRow(selPost.id, {
+        messaging: {},
+        source: 'generated',
+        sourceUrl: undefined,
+        socialMetrics: undefined,
+        engagement: undefined,
+        status: 'draft',
+        postedAt: undefined,
+        publishedAt: undefined,
+      })
+      await draftCopy([selPost.id])
+    } finally {
+      setReplacing(false)
+      setSwapOpen(false)
+    }
+  }
   useEffect(() => {
     setSwapOpen(false)
     setSwapSearch('')
@@ -2070,6 +2093,11 @@ export function FlowsView() {
                     <button className="flow-swap-btn" onClick={() => setSwapOpen((o) => !o)}>
                       ⇄ Swap for an ingested post
                     </button>
+                    {isIngestedPost(selPost) && (
+                      <button className="flow-swap-btn flow-swap-regen" onClick={() => void replaceWithGenerated()} disabled={replacing}>
+                        {replacing ? 'Generating…' : '✦ Replace with a generated post'}
+                      </button>
+                    )}
                     {swapOpen && (
                       <div className="flow-swap-panel">
                         <input
