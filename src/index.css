@@ -22643,3 +22643,9 @@ table.aud-sheet td.stick .aud-cell {
    Copy/post cards (.flow-brief-node) keep their natural width so the headline stays readable. */
 .flow-node:not(.flow-brief-node) { max-width: 252px; }
 .flow-node:not(.flow-brief-node) .flow-node-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tier backgrounds — read the flow hierarchy at a glance: campaign (warm) → deliverable
+   (white) → post/copy (faint grey). Kept subtle so the title stays the focal point. */
+.flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, var(--border)); }
+.flow-node.flow-tier-deliv { background: var(--surface); }
+.flow-node.flow-brief-node { background: var(--surface-2); }

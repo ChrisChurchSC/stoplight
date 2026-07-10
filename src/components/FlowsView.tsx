@@ -1740,7 +1740,7 @@ export function FlowsView() {
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
             {/* Campaign brief node */}
             <div
-              className={`flow-node${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
+              className={`flow-node flow-tier-campaign${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
               data-node-id="campaign"
               style={{ transform: `translate(${pos['campaign']?.x ?? 0}px, ${pos['campaign']?.y ?? 0}px)` }}
               onMouseDown={(e) => startDrag(e, 'campaign')}
@@ -1782,7 +1782,7 @@ export function FlowsView() {
                         style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: posts.length > 0 ? `${posts.length * 152}px` : undefined }}
                       >
                         <div
-                          className={`flow-node${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
+                          className={`flow-node flow-tier-deliv${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
                           data-node-id={d.key}
                           onMouseDown={(e) => startDrag(e, d.key)}
                           onClick={() => { setSel(d.key); setPickAt(null) }}
@@ -1854,7 +1854,7 @@ export function FlowsView() {
                       <div className="flow-link" />
                       <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 152}px` : undefined }}>
                         <div
-                          className={`flow-node${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
+                          className={`flow-node flow-tier-deliv${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
                           data-node-id={n.id}
                           onMouseDown={(e) => startDrag(e, n.id)}
                           onClick={() => { setSel(n.id); setPickAt(null) }}
