@@ -1417,15 +1417,18 @@ export function FlowsView() {
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
   const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
 
-  // Candidates for a swap: ingested posts on the same channel as the selected post first,
-  // filtered by the search box; excludes the post itself.
+  // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
+  // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
+  // can never stand in for a LinkedIn ad). No cross-platform fallback. Filtered by the search box.
   const swapCandidates = useMemo(() => {
     if (!selPost) return []
     const q = swapSearch.trim().toLowerCase()
-    const sameChannel = ingestedPosts.filter((r) => r.channel === selPost.channel && r.id !== selPost.id)
-    const pool = sameChannel.length ? sameChannel : ingestedPosts.filter((r) => r.id !== selPost.id)
-    if (!q) return pool
-    return pool.filter((r) => (r.assetName ?? '').toLowerCase().includes(q) || Object.values((r.messaging ?? {}) as Record<string, string>).some((v) => v?.toLowerCase().includes(q)))
+    const platform = CHANNELS[selPost.channel as ChannelId]?.platform
+    const matches = ingestedPosts.filter(
+      (r) => r.id !== selPost.id && (r.channel === selPost.channel || (!!platform && CHANNELS[r.channel as ChannelId]?.platform === platform)),
+    )
+    if (!q) return matches
+    return matches.filter((r) => (r.assetName ?? '').toLowerCase().includes(q) || Object.values((r.messaging ?? {}) as Record<string, string>).some((v) => v?.toLowerCase().includes(q)))
   }, [selPost, ingestedPosts, swapSearch])
 
   // Replace the selected generated-idea post's content with a real ingested post, keeping
@@ -2059,7 +2062,13 @@ export function FlowsView() {
                           autoFocus
                         />
                         {swapCandidates.length === 0 ? (
-                          <div className="flow-swap-empty">No ingested posts to swap in yet. Ingest content into the Library first.</div>
+                          <div className="flow-swap-empty">
+                            {swapSearch.trim()
+                              ? 'No matches.'
+                              : ingestedPosts.length
+                                ? `No live ${CHANNELS[selPost.channel as ChannelId]?.platform ?? 'matching'} posts in your Library to swap in for this deliverable.`
+                                : 'No ingested posts to swap in yet. Ingest content into the Library first.'}
+                          </div>
                         ) : (
                           <div className="flow-swap-list">
                             {swapCandidates.slice(0, 50).map((r) => {
