@@ -617,9 +617,8 @@ export function FlowsView() {
       { type: 'segment' as FlowRefType, label: 'Segments', items: brandSegments.map((a) => ({ id: a.id, label: a.name })) },
       { type: 'channel' as FlowRefType, label: 'Channels', items: channelRecords.map((c) => ({ id: c.id, label: c.name })) },
       { type: 'proof' as FlowRefType, label: 'Proof points', items: brandProof.map((r) => ({ id: r.id, label: r.label })) },
-      { type: 'media-mix' as FlowRefType, label: 'Media mix', items: brandMixesForRefs.map((m) => ({ id: m.id, label: m.name })) },
     ],
-    [companies, people, brandSegments, channelRecords, brandProof, brandMixesForRefs],
+    [companies, people, brandSegments, channelRecords, brandProof],
   )
   const hasRef = (type: FlowRefType, id: string) => flowRefs.some((r) => r.type === type && r.id === id)
   const toggleRef = (type: FlowRefType, id: string, label: string) => {
