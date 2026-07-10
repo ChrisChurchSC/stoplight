@@ -470,6 +470,12 @@ export function HomeSidebar() {
                 </span>
                 <span className="nav-label">Channels</span>
               </button>
+              <button className={`nav-item${page === 'proofpoints' ? ' active' : ''}`} onClick={() => setPage('proofpoints')} title="Proof points">
+                <span className="nav-ico">
+                  <Ico name="check" />
+                </span>
+                <span className="nav-label">Proof points</span>
+              </button>
             </div>
           )}
         </div>

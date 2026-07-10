@@ -1,0 +1,82 @@
+import { useEffect } from 'react'
+import type { Rtb } from '../domain/rtb'
+import { freshRecordId, type RecordColumn, type RecordField, type RecordFieldKind } from '../domain/records'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
+import { useTrafficStore } from '../store/useTrafficStore'
+import { RecordsTable } from './RecordsTable'
+
+// A checkmark — proof / reason to believe.
+const ICON = <path d="m5 12.5 4.5 4.5L19 6" />
+
+// Proof points (RTBs) surfaced as records. Unlike the singular brand, these are a
+// collection of reusable proof — so they get the same records-table shape as
+// Companies / People / Segments. One spec drives the columns, the drawer fields, and
+// the write-back to the brand's messaging library.
+interface Spec {
+  key: string
+  label: string
+  kind: RecordFieldKind
+  col?: number
+  get: (r: Rtb) => string
+  set: (r: Rtb, v: string) => void
+}
+const SPECS: Spec[] = [
+  { key: 'name', label: 'Proof point', kind: 'name', col: 240, get: (r) => r.label, set: (r, v) => { r.label = v } },
+  { key: 'detail', label: 'Detail', kind: 'multiline', col: 340, get: (r) => r.detail || '', set: (r, v) => { r.detail = v } },
+  { key: 'metric', label: 'Metric', kind: 'text', col: 160, get: (r) => r.metric || '', set: (r, v) => { r.metric = v } },
+  { key: 'source', label: 'Source', kind: 'text', col: 180, get: (r) => r.source || '', set: (r, v) => { r.source = v } },
+  { key: 'status', label: 'Status', kind: 'status', col: 120, get: (r) => (r.approved === false ? 'Draft' : 'Approved'), set: (r, v) => { r.approved = v !== 'Draft' } },
+]
+
+const COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col! }))
+const FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind }))
+const STATUSES = ['Approved', 'Draft']
+
+type Row = { id: string } & Record<string, string>
+
+export function ProofPointsView() {
+  const { brands } = useHomeCanvases()
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
+  const library = useTrafficStore((s) => s.library)
+  const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
+  const updateLibraryItem = useTrafficStore((s) => s.updateLibraryItem)
+  const removeLibraryItem = useTrafficStore((s) => s.removeLibraryItem)
+  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+
+  // Point the messaging library at this brand so reads + writes target it.
+  useEffect(() => {
+    if (brand) setMessagingBrand(brand)
+  }, [brand, setMessagingBrand])
+
+  const rtbs = library.rtbs
+  const rows: Row[] = rtbs.map((r) => {
+    const row: Row = { id: r.id }
+    for (const s of SPECS) row[s.key] = s.get(r)
+    return row
+  })
+
+  return (
+    <RecordsTable
+      title="Proof points"
+      icon={ICON}
+      columns={COLUMNS}
+      fields={FIELDS}
+      statuses={STATUSES}
+      rows={rows}
+      noun={['proof point', 'proof points']}
+      onAdd={() => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: 'New proof point', detail: '', approved: false })}
+      onUpdate={(id, patch) => {
+        const rtb = rtbs.find((r) => r.id === id)
+        if (!rtb) return
+        const next: Rtb = { ...rtb }
+        for (const s of SPECS) {
+          const v = patch[s.key]
+          if (v !== undefined) s.set(next, v)
+        }
+        updateLibraryItem('rtbs', id, next as unknown as Record<string, unknown>)
+      }}
+      onDelete={(id) => removeLibraryItem('rtbs', id)}
+    />
+  )
+}

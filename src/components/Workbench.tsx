@@ -26,6 +26,7 @@ import { ReportsView } from './ReportsView'
 import { CompaniesView } from './CompaniesView'
 import { PeopleView } from './PeopleView'
 import { SegmentsView } from './SegmentsView'
+import { ProofPointsView } from './ProofPointsView'
 import { FlowsView } from './FlowsView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
@@ -236,6 +237,10 @@ export function Workbench() {
           ) : page === 'segments' ? (
             <div className="home-main-scroll">
               <SegmentsView />
+            </div>
+          ) : page === 'proofpoints' ? (
+            <div className="home-main-scroll">
+              <ProofPointsView />
             </div>
           ) : page === 'flows' ? (
             <div className="home-main-page">

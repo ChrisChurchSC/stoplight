@@ -5,21 +5,18 @@ import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { BrandVisual } from './BrandVisual'
-import { LibraryPage } from './LibraryPage'
 
 /**
  * Brand — a brand's foundation in one place, grouped under sub-tabs: About (the
- * profile), Voice (how it sounds), and Messaging (its messaging library). Reached
- * from the workspace dropdown as "Brand settings"; the sub-tabs live in a page
- * tab bar here (no longer in the sidebar). The Messaging tab drives LibraryPage,
- * so opening it points the messaging library at this brand.
+ * profile), Voice, Visual, and Strategy. Reached from the workspace dropdown as
+ * "Brand settings". Proof points / CTAs / hooks moved out to Records → Proof points
+ * (a collection, not a settings tab).
  */
 const BRAND_TABS = [
   ['about', 'About'],
   ['voice', 'Voice'],
   ['visual', 'Visual'],
   ['strategy', 'Strategy'],
-  ['messaging', 'Messaging'],
 ] as const
 
 export function BrandPage({ brand }: { brand?: string }) {
@@ -29,11 +26,14 @@ export function BrandPage({ brand }: { brand?: string }) {
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   // Audiences moved to Records → Segments, and Goal folded into About; fall back to
   // About if either of those tabs is still persisted.
-  const tab = storedTab === 'audiences' || storedTab === 'goal' || storedTab === 'channels' ? 'about' : storedTab
+  const tab =
+    storedTab === 'audiences' || storedTab === 'goal' || storedTab === 'channels' || storedTab === 'messaging'
+      ? 'about'
+      : storedTab
 
-  // Any library-backed tab needs the messaging system pointed at this brand.
+  // The Strategy tab reads the brand's messaging system — point it at this brand.
   useEffect(() => {
-    if ((tab === 'strategy' || tab === 'messaging') && brand) setMessagingBrand(brand)
+    if (tab === 'strategy' && brand) setMessagingBrand(brand)
   }, [tab, brand, setMessagingBrand])
 
   if (!brand) {
@@ -71,10 +71,8 @@ export function BrandPage({ brand }: { brand?: string }) {
         <BrandVoice brand={brand} />
       ) : tab === 'visual' ? (
         <BrandVisual brand={brand} />
-      ) : tab === 'strategy' ? (
-        <BrandStrategy key="brand-strategy" brand={brand} />
       ) : (
-        <LibraryPage key="brand-messaging" inline kinds={['rtbs', 'ctas', 'hooks']} />
+        <BrandStrategy key="brand-strategy" brand={brand} />
       )}
     </div>
   )
