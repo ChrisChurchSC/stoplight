@@ -24,7 +24,6 @@ import { ChannelsView } from './ChannelsView'
 import { ChannelRecordsView } from './ChannelRecordsView'
 import { ReportsView } from './ReportsView'
 import { CompaniesView } from './CompaniesView'
-import { BrandRecordsView } from './BrandRecordsView'
 import { PeopleView } from './PeopleView'
 import { SegmentsView } from './SegmentsView'
 import { FlowsView } from './FlowsView'
@@ -221,10 +220,6 @@ export function Workbench() {
           ) : page === 'reports' ? (
             <div className="home-main-scroll">
               <ReportsView scopeClient={scopedBrand} />
-            </div>
-          ) : page === 'brandrecords' ? (
-            <div className="home-main-scroll">
-              <BrandRecordsView />
             </div>
           ) : page === 'records' ? (
             <div className="home-main-scroll">

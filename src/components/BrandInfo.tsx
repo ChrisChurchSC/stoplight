@@ -20,6 +20,7 @@ interface InfoField {
 }
 const FIELDS: InfoField[] = [
   { key: 'oneLiner', label: 'One-liner', placeholder: 'What the brand does, in one line' },
+  { key: 'category', label: 'Category', placeholder: 'The market category the brand plays in' },
   { key: 'website', label: 'Website', placeholder: 'example.com' },
   { key: 'industry', label: 'Industry' },
   { key: 'founded', label: 'Founded' },
@@ -31,6 +32,12 @@ const FIELDS: InfoField[] = [
   { key: 'products', label: 'Products / offerings', type: 'textarea', list: true, placeholder: 'One per line' },
   { key: 'differentiators', label: 'Differentiators', type: 'textarea', list: true, placeholder: 'One per line' },
   { key: 'values', label: 'Values', type: 'textarea', list: true, placeholder: 'One per line' },
+  // Brand book — the messaging foundation (proof points live in the Messaging tab).
+  { key: 'elevatorPitch', label: 'Elevator pitch', type: 'textarea', placeholder: 'The one-sentence pitch' },
+  { key: 'valueProps', label: 'Value propositions', type: 'textarea', list: true, placeholder: 'One per line' },
+  { key: 'pillars', label: 'Messaging pillars', type: 'textarea', list: true, placeholder: 'One per line' },
+  { key: 'taglines', label: 'Taglines', type: 'textarea', list: true, placeholder: 'One per line' },
+  { key: 'boilerplate', label: 'Boilerplate', type: 'textarea', placeholder: 'The approved about-us paragraph' },
 ]
 
 type Info = Record<string, string>

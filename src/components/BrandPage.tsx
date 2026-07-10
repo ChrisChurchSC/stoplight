@@ -4,6 +4,7 @@ import { BrandGoal } from './BrandGoal'
 import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
+import { BrandVisual } from './BrandVisual'
 import { ChannelsView } from './ChannelsView'
 import { LibraryPage } from './LibraryPage'
 
@@ -17,6 +18,7 @@ import { LibraryPage } from './LibraryPage'
 const BRAND_TABS = [
   ['about', 'About'],
   ['voice', 'Voice'],
+  ['visual', 'Visual'],
   ['strategy', 'Strategy'],
   ['messaging', 'Messaging'],
   ['channels', 'Channels'],
@@ -69,6 +71,8 @@ export function BrandPage({ brand }: { brand?: string }) {
         </>
       ) : tab === 'voice' ? (
         <BrandVoice brand={brand} />
+      ) : tab === 'visual' ? (
+        <BrandVisual brand={brand} />
       ) : tab === 'strategy' ? (
         <BrandStrategy key="brand-strategy" brand={brand} />
       ) : tab === 'channels' ? (

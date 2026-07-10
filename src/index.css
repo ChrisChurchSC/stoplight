@@ -16856,6 +16856,19 @@ button.cv-board-tab {
 .brand-info-wide {
   grid-column: 1 / -1;
 }
+/* ---- Visual tab: brand color swatches ---- */
+.brand-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.brand-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
 /* ---- Voice tab: the detailed brand-voice guide ---- */
 .brand-voice {
   max-width: 900px;
