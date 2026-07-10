@@ -5,7 +5,6 @@ import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { BrandVisual } from './BrandVisual'
-import { ChannelsView } from './ChannelsView'
 import { LibraryPage } from './LibraryPage'
 
 /**
@@ -21,7 +20,6 @@ const BRAND_TABS = [
   ['visual', 'Visual'],
   ['strategy', 'Strategy'],
   ['messaging', 'Messaging'],
-  ['channels', 'Channels'],
 ] as const
 
 export function BrandPage({ brand }: { brand?: string }) {
@@ -31,7 +29,7 @@ export function BrandPage({ brand }: { brand?: string }) {
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   // Audiences moved to Records → Segments, and Goal folded into About; fall back to
   // About if either of those tabs is still persisted.
-  const tab = storedTab === 'audiences' || storedTab === 'goal' ? 'about' : storedTab
+  const tab = storedTab === 'audiences' || storedTab === 'goal' || storedTab === 'channels' ? 'about' : storedTab
 
   // Any library-backed tab needs the messaging system pointed at this brand.
   useEffect(() => {
@@ -75,8 +73,6 @@ export function BrandPage({ brand }: { brand?: string }) {
         <BrandVisual brand={brand} />
       ) : tab === 'strategy' ? (
         <BrandStrategy key="brand-strategy" brand={brand} />
-      ) : tab === 'channels' ? (
-        <ChannelsView key={`brand-channels-${brand}`} scopeClient={brand} />
       ) : (
         <LibraryPage key="brand-messaging" inline kinds={['rtbs', 'ctas', 'hooks']} />
       )}
