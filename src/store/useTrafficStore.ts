@@ -1459,6 +1459,9 @@ interface TrafficState {
   setCampaignSubject: (name: string, subject: string) => void
   /** Set the records a flow references (Companies / People / Segments / Media mix). Read when generating assets. */
   setCampaignReferences: (name: string, references: FlowReference[]) => void
+  /** Patch arbitrary campaign metadata (flight length, budget, …) on an existing campaign.
+   *  A no-op if the campaign isn't found (only meaningful for built flows). */
+  patchCampaign: (name: string, patch: Partial<Campaign>) => void
   /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
   setCampaignGoal: (name: string, goal: string) => void
   /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
@@ -2958,6 +2961,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         registerCampaign(name, client)
         campaignList = [...s.campaignList, { name, client, strategy: 'Current state', references }]
       }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  patchCampaign: (name, patch) =>
+    set((s) => {
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      if (idx < 0) return {}
+      const campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, ...patch } : c))
       saveCampaigns(campaignList)
       return { campaignList }
     }),

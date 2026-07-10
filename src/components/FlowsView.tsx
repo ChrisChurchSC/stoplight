@@ -3,7 +3,6 @@ import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { resolveBrandScope } from '../domain/brand'
 import type { FlowRefType, FlowReference } from '../domain/clients'
-import { newAudience } from '../domain/audiences'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
@@ -213,8 +212,9 @@ export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
+  const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
+  const patchCampaign = useTrafficStore((s) => s.patchCampaign)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const companies = useTrafficStore((s) => s.companies)
   const people = useTrafficStore((s) => s.people)
@@ -280,9 +280,10 @@ export function FlowsView() {
   // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
   const [viewName, setViewName] = useState<string | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  // View-mode Audiences record selector (which segment records this flow targets).
-  const [audMenuOpen, setAudMenuOpen] = useState(false)
-  const [newAudName, setNewAudName] = useState('')
+  // View-mode brief drafts: subject + budget buffered so a built flow's brief edits commit on
+  // blur (reseeded whenever you open a different flow).
+  const [viewSubjectDraft, setViewSubjectDraft] = useState('')
+  const [viewBudgetDraft, setViewBudgetDraft] = useState('')
   // Build-brief: which record-tag row's dropdown is open ("<type>:<id>" or "add").
   const [openTagKey, setOpenTagKey] = useState<string | null>(null)
   // The "Add a record" slide-out drawer (search + all record groups).
@@ -643,21 +644,91 @@ export function FlowsView() {
     [companies, people, brandSegments, channelRecords, brandProof],
   )
   const hasRef = (type: FlowRefType, id: string) => flowRefs.some((r) => r.type === type && r.id === id)
-  const toggleRef = (type: FlowRefType, id: string, label: string) => {
-    if (!viewName) return
-    const on = hasRef(type, id)
-    setCampaignReferences(viewName, on ? flowRefs.filter((r) => !(r.type === type && r.id === id)) : [...flowRefs, { type, id, label }])
+  // Record Tags edit in BOTH modes through one set of ops, so the same tag-row + picker UI
+  // works whether you're building a new flow or clicking the campaign card of a built one.
+  // Build edits the local brief refs; a viewed (built) flow edits the campaign's stored
+  // references and flags a regenerate.
+  const activeRefs = viewName !== null ? flowRefs : briefRefsEffective
+  const hasActiveRef = (type: FlowRefType, id: string) => (viewName !== null ? hasRef(type, id) : hasBriefRef(type, id))
+  const addActiveRef = (type: FlowRefType, id: string, label: string) => {
+    if (viewName === null) return addBriefRef(type, id, label)
+    if (hasRef(type, id)) return
+    setCampaignReferences(viewName, [...flowRefs, { type, id, label }])
     setRefsDirty(true)
   }
-  const addSegmentRecord = () => {
-    const nm = newAudName.trim()
-    if (!nm || !viewName || !brand) return
-    const seg = newAudience({ name: nm })
-    setClientAudiences(brand, [...brandSegments, seg])
-    setCampaignReferences(viewName, [...flowRefs, { type: 'segment', id: seg.id, label: nm }])
-    setNewAudName('')
+  const removeActiveRef = (key: string) => {
+    if (viewName === null) return removeBriefRef(key)
+    setCampaignReferences(viewName, flowRefs.filter((r) => refKey(r) !== key))
     setRefsDirty(true)
   }
+  const replaceActiveRef = (key: string, type: FlowRefType, id: string, label: string) => {
+    if (viewName === null) return replaceBriefRef(key, type, id, label)
+    setCampaignReferences(viewName, flowRefs.map((r) => (refKey(r) === key ? { type, id, label } : r)))
+    setRefsDirty(true)
+  }
+  // The Record Tags block (label + one row per tag with a swap dropdown + remove, then
+  // "Add a record"), shared by the build brief and the built-flow brief so both read/edit
+  // the campaign's records the same way.
+  const renderRecordTags = () => (
+    <>
+      <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+        Record Tags{activeRefs.length ? ` · ${activeRefs.length}` : ''}
+      </label>
+      {activeRefs.map((ref) => {
+        const key = refKey(ref)
+        const open = openTagKey === key
+        return (
+          <div key={key} className="flow-tagrow">
+            <span className="flow-tagrow-ic" title={RECORD_TYPE_LABEL[ref.type]} aria-hidden="true">
+              <RecordTypeIcon type={ref.type} />
+            </span>
+            <div className="flow-aud flow-tagrow-dd">
+              <button className="flow-aud-btn" onClick={() => setOpenTagKey(open ? null : key)}>
+                <span className="flow-aud-btn-txt">{ref.label}</span>
+                <span className="flow-aud-caret" aria-hidden="true">▾</span>
+              </button>
+              {open && (
+                <>
+                  <div className="flow-aud-scrim" onClick={() => setOpenTagKey(null)} />
+                  <div className="flow-aud-menu">
+                    {recordGroups.map((g) => (
+                      <div key={g.type} className="flow-aud-group">
+                        <div className="flow-aud-grouphead">{g.label}</div>
+                        {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
+                        {g.items.map((it) => {
+                          const on = hasActiveRef(g.type, it.id)
+                          return (
+                            <button key={it.id} className={`flow-aud-item${refKey({ type: g.type, id: it.id }) === key ? ' on' : ''}`} disabled={on && refKey({ type: g.type, id: it.id }) !== key} onClick={() => { replaceActiveRef(key, g.type, it.id, it.label); setOpenTagKey(null) }}>
+                              <span className="flow-aud-check" aria-hidden="true">{refKey({ type: g.type, id: it.id }) === key ? '✓' : ''}</span>
+                              <span>{it.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <button className="flow-tagrow-del" title="Remove tag" aria-label="Remove tag" onClick={() => removeActiveRef(key)}>✕</button>
+          </div>
+        )
+      })}
+      <div className="flow-tagrow flow-tagrow-add">
+        <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
+        <button
+          className="flow-aud-btn flow-tagrow-addbtn"
+          onClick={() => {
+            setPickerQuery('')
+            setOpenTagKey(null)
+            setPickerOpen(true)
+          }}
+        >
+          <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
+        </button>
+      </div>
+    </>
+  )
   // Regenerate the flow's asset copy so it reflects the newly referenced records.
   // draftCopy only fills EMPTY fields and de-duplicates what it writes, so clear each
   // post's copy first: that forces a real rewrite and lets the anti-repetition pass keep
@@ -674,6 +745,28 @@ export function FlowsView() {
       setRegenerating(false)
       setRefsDirty(false)
     }
+  }
+  // Reseed the view-mode brief drafts when you open a different built flow.
+  useEffect(() => {
+    const c = useTrafficStore.getState().campaignList.find((x) => x.name === viewName)
+    setViewSubjectDraft(c?.subject ?? '')
+    setViewBudgetDraft(c?.overallBudget != null ? String(c.overallBudget) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewName])
+  // Commit a built flow's subject/budget edits on blur; a subject change flags a regenerate
+  // (the copy is written to the theme, so it needs a rewrite to reflect the new one).
+  const commitViewSubject = () => {
+    if (!viewName) return
+    const next = viewSubjectDraft.trim()
+    if (next === (viewCampaign?.subject ?? '').trim()) return
+    setCampaignSubject(viewName, next)
+    setRefsDirty(true)
+  }
+  const commitViewBudget = () => {
+    if (!viewName) return
+    const n = viewBudgetDraft.trim() === '' ? undefined : Math.max(0, Number(viewBudgetDraft) || 0)
+    if (n === viewCampaign?.overallBudget) return
+    patchCampaign(viewName, { overallBudget: n })
   }
 
   // The brand's real ingested posts (from the Library), most-reached first — the pool a
@@ -1907,62 +2000,51 @@ export function FlowsView() {
               <>
                 <div className="flow-panel-head">
                   <CampaignTile />
-                  <span className="flow-panel-title">{viewShort}</span>
+                  <span className="flow-panel-title">Campaign brief</span>
                 </div>
                 <div className="flow-inspect">
-                  <p className="flow-inspect-desc">
-                    {viewRows.length} assets · {viewDelivs.length} deliverable type{viewDelivs.length === 1 ? '' : 's'}
-                    {viewFlight ? ` · ${viewFlight}-week flight` : ''}
-                  </p>
-                  <label className="flow-inspect-label">Records</label>
-                  <div className="flow-aud">
-                    <button className="flow-aud-btn" onClick={() => setAudMenuOpen((o) => !o)}>
-                      <span className="flow-aud-btn-txt">{flowRefs.length ? flowRefs.map((r) => r.label).join(', ') : 'Reference records'}</span>
-                      <span className="flow-aud-caret" aria-hidden="true">▾</span>
-                    </button>
-                    {audMenuOpen && (
-                      <>
-                        <div className="flow-aud-scrim" onClick={() => setAudMenuOpen(false)} />
-                        <div className="flow-aud-menu">
-                          {recordGroups.map((g) => (
-                            <div key={g.type} className="flow-aud-group">
-                              <div className="flow-aud-grouphead">{g.label}</div>
-                              {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
-                              {g.items.map((it) => {
-                                const on = hasRef(g.type, it.id)
-                                return (
-                                  <button key={it.id} className={`flow-aud-item${on ? ' on' : ''}`} onClick={() => toggleRef(g.type, it.id, it.label)}>
-                                    <span className="flow-aud-check" aria-hidden="true">{on ? '✓' : ''}</span>
-                                    <span>{it.label}</span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          ))}
-                          <div className="flow-aud-add">
-                            <input
-                              className="flow-aud-input"
-                              value={newAudName}
-                              placeholder="New segment…"
-                              onChange={(e) => setNewAudName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') addSegmentRecord()
-                              }}
-                            />
-                            <button className="flow-aud-add-btn" onClick={addSegmentRecord} disabled={!newAudName.trim()}>
-                              Add
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                  <label className="flow-inspect-label">Name</label>
+                  <input className="flow-inspect-input" value={viewShort} readOnly title="Renaming a built flow isn't available yet" />
+                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                    Goal / subject
+                  </label>
+                  <textarea
+                    className="flow-inspect-input"
+                    rows={2}
+                    value={viewSubjectDraft}
+                    placeholder="What is this campaign for?"
+                    onChange={(e) => setViewSubjectDraft(e.target.value)}
+                    onBlur={commitViewSubject}
+                  />
+                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>The campaign theme. Every asset's copy is written to it; change it, then Regenerate to redraft them all.</div>
+                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                    Flight length
+                  </label>
+                  <div className="flow-step">
+                    <button onClick={() => patchCampaign(viewName, { durationWeeks: Math.max(1, (viewFlight ?? 1) - 1) })}>−</button>
+                    <span>{viewFlight ?? 1} weeks</span>
+                    <button onClick={() => patchCampaign(viewName, { durationWeeks: (viewFlight ?? 1) + 1 })}>+</button>
                   </div>
-                  {refsDirty && (
-                    <button className="flow-regen" onClick={regenerateFlow} disabled={regenerating}>
-                      {regenerating ? 'Regenerating…' : '↻ Regenerate assets with these records'}
-                    </button>
-                  )}
-
+                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                    Budget
+                  </label>
+                  <div className="flow-budget">
+                    <span className="flow-budget-cur">$</span>
+                    <input
+                      className="flow-budget-input"
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={viewBudgetDraft}
+                      placeholder="Total campaign budget"
+                      onChange={(e) => setViewBudgetDraft(e.target.value)}
+                      onBlur={commitViewBudget}
+                    />
+                  </div>
+                  {renderRecordTags()}
+                  <button className="flow-brief-build" onClick={regenerateFlow} disabled={regenerating || !viewRows.length}>
+                    {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with these records' : '↻ Regenerate copy'}
+                  </button>
                   <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
                   <div className="flow-deliv-list">
                     {viewDelivs.map((d) => (
@@ -1975,9 +2057,8 @@ export function FlowsView() {
                       </button>
                     ))}
                   </div>
-
                   <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                    Referenced records (companies, people, segments, media mix) inform generated copy. Click a post to see its copy, or use the Grid and Calendar tabs above.
+                    {viewRows.length} assets · {viewDelivs.length} deliverable type{viewDelivs.length === 1 ? '' : 's'}. Click a post to see its copy, or use the Grid and Calendar tabs above.
                   </div>
                 </div>
               </>
@@ -2044,62 +2125,7 @@ export function FlowsView() {
                     onChange={(e) => setBudget(e.target.value)}
                   />
                 </div>
-                <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                  Record Tags{briefRefsEffective.length ? ` · ${briefRefsEffective.length}` : ''}
-                </label>
-                {briefRefsEffective.map((ref) => {
-                  const key = refKey(ref)
-                  const open = openTagKey === key
-                  return (
-                    <div key={key} className="flow-tagrow">
-                      <span className="flow-tagrow-ic" title={RECORD_TYPE_LABEL[ref.type]} aria-hidden="true">
-                        <RecordTypeIcon type={ref.type} />
-                      </span>
-                      <div className="flow-aud flow-tagrow-dd">
-                        <button className="flow-aud-btn" onClick={() => setOpenTagKey(open ? null : key)}>
-                          <span className="flow-aud-btn-txt">{ref.label}</span>
-                          <span className="flow-aud-caret" aria-hidden="true">▾</span>
-                        </button>
-                        {open && (
-                          <>
-                            <div className="flow-aud-scrim" onClick={() => setOpenTagKey(null)} />
-                            <div className="flow-aud-menu">
-                              {recordGroups.map((g) => (
-                                <div key={g.type} className="flow-aud-group">
-                                  <div className="flow-aud-grouphead">{g.label}</div>
-                                  {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
-                                  {g.items.map((it) => {
-                                    const on = hasBriefRef(g.type, it.id)
-                                    return (
-                                      <button key={it.id} className={`flow-aud-item${refKey({ type: g.type, id: it.id }) === key ? ' on' : ''}`} disabled={on && refKey({ type: g.type, id: it.id }) !== key} onClick={() => { replaceBriefRef(key, g.type, it.id, it.label); setOpenTagKey(null) }}>
-                                        <span className="flow-aud-check" aria-hidden="true">{refKey({ type: g.type, id: it.id }) === key ? '✓' : ''}</span>
-                                        <span>{it.label}</span>
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      <button className="flow-tagrow-del" title="Remove tag" aria-label="Remove tag" onClick={() => removeBriefRef(key)}>✕</button>
-                    </div>
-                  )
-                })}
-                <div className="flow-tagrow flow-tagrow-add">
-                  <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
-                  <button
-                    className="flow-aud-btn flow-tagrow-addbtn"
-                    onClick={() => {
-                      setPickerQuery('')
-                      setOpenTagKey(null)
-                      setPickerOpen(true)
-                    }}
-                  >
-                    <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
-                  </button>
-                </div>
+                {renderRecordTags()}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
                     ? `Build writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
@@ -2464,12 +2490,12 @@ export function FlowsView() {
                       </button>
                       {!collapsed &&
                         g.items.map((it) => {
-                          const on = hasBriefRef(g.type, it.id)
+                          const on = hasActiveRef(g.type, it.id)
                           return (
                             <button
                               key={it.id}
                               className={`flow-recdrawer-item${on ? ' on' : ''}`}
-                              onClick={() => (on ? removeBriefRef(refKey({ type: g.type, id: it.id })) : addBriefRef(g.type, it.id, it.label))}
+                              onClick={() => (on ? removeActiveRef(refKey({ type: g.type, id: it.id })) : addActiveRef(g.type, it.id, it.label))}
                             >
                               <span className="flow-recdrawer-item-ic">
                                 <RecordTypeIcon type={g.type} />
