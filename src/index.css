@@ -22624,16 +22624,22 @@ table.aud-sheet td.stick .aud-cell {
    A hairline separates "what it is" from "who / where / why"; labels align in a left column and
    chips recede, so the only thing that earns color is a missing required category. */
 .flow-node-taggroups { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; padding-top: 9px; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
-.flow-node-taggroup { display: flex; align-items: flex-start; gap: 8px; }
+.flow-node-taggroup { display: flex; align-items: center; gap: 8px; }
 /* One icon per category (audience / channel / proof) leads each row. */
-.flow-node-taggroup-ic { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 2px; display: inline-flex; color: var(--text-faint); }
+.flow-node-taggroup-ic { flex: 0 0 auto; width: 15px; height: 15px; display: inline-flex; color: var(--text-faint); }
 .flow-node-taggroup-ic svg { width: 15px; height: 15px; }
-.flow-node-taggroup-chips { display: flex; flex-wrap: wrap; gap: 4px 5px; min-width: 0; }
-/* Chips recede: borderless, subtle fill. */
+/* Each category is a single line of comma-joined values, truncated with an ellipsis. */
+.flow-node-taggroup-chips { flex: 1 1 auto; min-width: 0; }
+.flow-node-tagline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; font-weight: 500; color: var(--text-muted); }
 .flow-node-taggroups .flow-node-tag { border: 0; background: var(--surface-2); color: var(--text-muted); font-weight: 500; }
 /* The one thing that earns color: a required category with no tag. */
 .flow-node-taggroup.missing .flow-node-taggroup-ic { color: var(--amber); }
 .flow-node-tag.missing-tag { background: color-mix(in srgb, var(--amber) 13%, var(--surface)); color: color-mix(in srgb, var(--amber) 62%, var(--text)); font-weight: 600; }
-/* A deliverable overriding the campaign's records: tint the chips so it reads as customized. */
-.flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) { background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 55%, var(--text)); }
-.flow-node-taggroups.overridden .flow-node-tag:not(.missing-tag) .flow-node-tag-ic { color: var(--accent); }
+/* A deliverable overriding the campaign's records: tint the rows so it reads as customized. */
+.flow-node-taggroups.overridden .flow-node-tagline { color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
+.flow-node-taggroups.overridden .flow-node-taggroup:not(.missing) .flow-node-taggroup-ic { color: var(--accent); }
+
+/* Cap deliverable/campaign cards so their single-line tag rows truncate with an ellipsis.
+   Copy/post cards (.flow-brief-node) keep their natural width so the headline stays readable. */
+.flow-node:not(.flow-brief-node) { max-width: 252px; }
+.flow-node:not(.flow-brief-node) .flow-node-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
