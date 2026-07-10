@@ -753,6 +753,28 @@ function agentApi(): PluginOption {
   }
 }
 
+/**
+ * Dev-server status endpoint: reports whether a model key is configured server-side
+ * (OpenRouter preferred, else Anthropic), so the client can tell if Claude is connected
+ * without exposing the key. The "Connect Claude" onboarding step reads this. GET only.
+ */
+function aiStatusApi(): PluginOption {
+  return {
+    name: 'ai-status-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ai-status', (req, res) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405
+          return res.end()
+        }
+        const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : process.env.ANTHROPIC_API_KEY ? 'anthropic' : null
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ connected: !!provider, provider }))
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   for (const key of SERVER_SECRETS) {
@@ -790,6 +812,7 @@ export default defineConfig(({ mode }) => {
       ingestNeonApi(),
       extractCopyApi(),
       agentBridgeApi(),
+      aiStatusApi(),
     ],
   }
 })

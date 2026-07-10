@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ONBOARDING_STEPS, type OnboardingStepId } from '../domain/onboarding'
 import { resolveBrandScope } from '../domain/brand'
@@ -14,6 +14,11 @@ import { UNASSIGNED } from '../domain/clients'
  *
  * Hidden on the Flows canvas, which has its own inline assistant, so it never covers the brief.
  */
+
+// Ask the dev server once per page load whether a Claude/OpenRouter key is configured, so the
+// "Connect Claude" step auto-completes when it actually is. Module-level so page switches (which
+// remount the widget) don't refetch.
+let aiStatusChecked = false
 
 function StepIcon({ id }: { id: OnboardingStepId }) {
   const common = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -75,6 +80,7 @@ export function GettingStarted() {
   const dismiss = useTrafficStore((s) => s.dismissOnboarding)
   const reset = useTrafficStore((s) => s.resetOnboarding)
   const toggleStep = useTrafficStore((s) => s.toggleOnboardingStep)
+  const markDone = useTrafficStore((s) => s.markOnboardingDone)
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
 
@@ -84,6 +90,16 @@ export function GettingStarted() {
   const brandMeta = useTrafficStore((s) => s.brandMeta)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Auto-complete "Connect Claude" when the server actually has a model key configured.
+  useEffect(() => {
+    if (aiStatusChecked) return
+    aiStatusChecked = true
+    fetch('/api/ai-status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.connected) markDone('connect') })
+      .catch(() => { aiStatusChecked = false })
+  }, [markDone])
 
   // The workspace's primary brand: the client with the most real (non-archived, non-library)
   // campaigns, falling back to the first brand that has a profile. Detection is scoped to it.

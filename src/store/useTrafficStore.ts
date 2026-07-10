@@ -4863,6 +4863,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ drafting: false })
       await get().refresh()
     }
+    // Copy actually written by Claude is proof the connection works — complete that step.
+    if (copySource === 'claude') get().markOnboardingDone('connect')
     return copySource
   },
 
