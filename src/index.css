@@ -22675,3 +22675,10 @@ table.aud-sheet td.stick .aud-cell {
 .flow-budget-assign { margin-top: 6px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); background: var(--surface); color: color-mix(in srgb, var(--amber) 72%, var(--text)); font: inherit; font-size: 11.5px; font-weight: 700; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
 .flow-budget-assign:hover { background: color-mix(in srgb, var(--amber) 10%, var(--surface)); }
 .flow-budget-ok { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: color-mix(in srgb, var(--green) 70%, var(--text)); background: color-mix(in srgb, var(--green) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border)); border-radius: 8px; padding: 7px 9px; }
+
+/* Regenerate-copy floating action button, pinned to the canvas's bottom-right (just left of the
+   brief panel, or the rail when it's collapsed). */
+.flow-regen-fab { position: absolute; bottom: 20px; right: 380px; z-index: 6; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 11px; background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 700; padding: 10px 16px; cursor: pointer; box-shadow: 0 4px 14px rgba(255,99,71,.32), 0 1px 2px rgba(16,24,40,.12); transition: right .16s ease, filter .12s ease; }
+.flow-regen-fab:hover:not(:disabled) { filter: brightness(1.06); }
+.flow-regen-fab:disabled { opacity: .6; cursor: default; }
+.flow.brief-collapsed .flow-regen-fab { right: 68px; }

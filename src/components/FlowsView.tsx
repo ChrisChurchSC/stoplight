@@ -2375,9 +2375,6 @@ export function FlowsView() {
                     <div className="flow-budget-ok">✓ ${campaignBudget.toLocaleString()} fully assigned across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}.</div>
                   ))}
                   {renderRecordTags(campaignTagOps)}
-                  <button className="flow-brief-build" onClick={regenerateFlow} disabled={regenerating || !viewRows.length}>
-                    {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with these records' : '↻ Regenerate copy'}
-                  </button>
                   <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
                   <div className="flow-deliv-list">
                     {viewDelivs.map((d) => (
@@ -2773,6 +2770,11 @@ export function FlowsView() {
           <span className="flow-tb-kbd">B</span>
         </button>
       </div>
+      {viewing && viewRows.length > 0 && (
+        <button className="flow-regen-fab" onClick={regenerateFlow} disabled={regenerating} title="Rewrite every asset's copy">
+          {regenerating ? 'Regenerating…' : refsDirty ? '↻ Regenerate with records' : '↻ Regenerate copy'}
+        </button>
+      )}
         </>
       )}
 
