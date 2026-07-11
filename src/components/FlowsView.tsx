@@ -2839,12 +2839,18 @@ export function FlowsView() {
           Add deliverable
           <span className="flow-tb-kbd">B</span>
         </button>
+        {viewing && viewRows.length > 0 && (
+          <>
+            <span className="flow-tb-divider" />
+            <button className="flow-tb-regen" onClick={regenerateFlow} disabled={regenerating} title="Rewrite every asset's copy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+              </svg>
+              {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with records' : 'Regenerate copy'}
+            </button>
+          </>
+        )}
       </div>
-      {viewing && viewRows.length > 0 && (
-        <button className="flow-regen-fab" onClick={regenerateFlow} disabled={regenerating} title="Rewrite every asset's copy">
-          {regenerating ? 'Regenerating…' : refsDirty ? '↻ Regenerate with records' : '↻ Regenerate copy'}
-        </button>
-      )}
         </>
       )}
 
