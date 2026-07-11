@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { sourceLabel } from '../domain/analyticsSources'
 import { CHANNELS } from '../domain/channels'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { formatReach } from '../domain/journeyPerf'
@@ -125,7 +124,6 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const brandActuals = useTrafficStore((s) => s.brandActuals)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const contentIngesting = useTrafficStore((s) => s.contentIngesting)
-  const contentIngest = useTrafficStore((s) => s.contentIngest)
   const ingestContent = useTrafficStore((s) => s.ingestContent)
 
   // Catalog (browse every published asset) vs Signals (what's working — the read
@@ -186,7 +184,6 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const measured = brandActuals[brand]
   const connectedSources = measured?.sources ?? []
   const busy = contentIngesting === brand
-  const last = contentIngest[brand]
 
   // Meeting notes (from Granola) are a distinct kind of asset, not published content, so
   // they're grouped on their own and kept out of the published count / reach roll-up.
@@ -336,6 +333,16 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
             ? `${num(published.length)} published ${published.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date${meetings.length ? ` · ${meetings.length} meeting ${meetings.length === 1 ? 'note' : 'notes'}` : ''}`
             : 'Everything this brand has published, pulled from its connected channels'}
         </span>
+        {mode === 'catalog' && (
+          <button
+            className="lib-ingest-mini"
+            onClick={() => ingestContent(brand)}
+            disabled={busy}
+            title="Pull every post, video, and page from the connected channels. Safe to re-run: refreshes what it has and skips duplicates."
+          >
+            {busy ? 'Ingesting…' : items.length ? '↺ Re-ingest' : '⤓ Ingest'}
+          </button>
+        )}
       </header>
 
       {mode !== 'catalog' ? (
@@ -351,55 +358,9 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
         />
       ) : (
         <>
-          {/* Ingest control — one pull backfills the whole body of work. */}
-          <section className="lib-ingest">
-        <div className="lib-ingest-main">
-          <div className="lib-ingest-copy">
-            <strong>Ingest everything to date</strong>
-            <span>
-              Pull every post, video, and page from the connected channels into the library as posted
-              content with its real metrics. Safe to re-run: it refreshes what it already has and skips
-              duplicates.
-            </span>
-          </div>
-          <button className="lib-ingest-btn" onClick={() => ingestContent(brand)} disabled={busy}>
-            {busy ? 'Ingesting…' : items.length ? '↺ Re-ingest' : '⤓ Ingest everything to date'}
-          </button>
-        </div>
-        <div className="lib-ingest-foot">
-          {connectedSources.length > 0 ? (
-            <span className="lib-src">⛁ Pulls from {connectedSources.map(sourceLabel).join(' · ')}</span>
-          ) : (
-            <span className="lib-src off">Connect a source in Summer to backfill this brand's content.</span>
-          )}
-          {last && (
-            <span className="lib-last">
-              Last run {fmtDate(undefined, last.at)}: {last.imported} new · {last.updated} refreshed
-              {last.skipped ? ` · ${last.skipped} duplicate` : ''}
-              {last.sources.length ? ` (${last.sources.join(', ')})` : ''}
-            </span>
-          )}
-        </div>
-      </section>
-
-      {/* Add a one-off creative through Claude — it reads the copy off the art and
-          writes it here as an asset, no API credits and the sharpest read on
-          stylized creatives. The channel-level backfill above stays automatic. */}
-      <div className="lib-claude">
-        <span className="lib-claude-ico">✦</span>
-        <div className="lib-claude-copy">
-          <strong>Add a creative through Claude</strong>
-          <span>
-            Drop a creative into your Claude chat, or point Claude at a post, and it reads the copy off
-            it and stores it here as an asset. Best for one-offs and stylized art the channel backfill
-            can't reach.
-          </span>
-        </div>
-      </div>
-
-      {items.length === 0 ? (
+          {items.length === 0 ? (
         <div className="mtx-empty">
-          Nothing ingested yet. Run the backfill above to fill the library with everything this brand has
+          Nothing ingested yet. Use Ingest in the header to fill the library with everything this brand has
           published.
         </div>
       ) : (

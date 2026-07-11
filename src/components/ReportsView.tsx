@@ -19,7 +19,6 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
   const reports = useTrafficStore((s) => s.reports)
   const deleteReport = useTrafficStore((s) => s.deleteReport)
   const addPinnedInsight = useTrafficStore((s) => s.addPinnedInsight)
-  const openAsk = useTrafficStore((s) => s.openAsk)
   const [openId, setOpenId] = useState<string | null>(null)
   // Transient feedback under the report toolbar after a pin attempt.
   const [pinMsg, setPinMsg] = useState<string | null>(null)
@@ -108,22 +107,6 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
           Saved analyses over this brand's library. Insights is the live read; a report is a dated synthesis you keep.
         </span>
       </header>
-
-      <div className="report-new">
-        <div className="report-new-copy">
-          <span className="report-new-ico">✦</span>
-          <div>
-            <strong>Generate a report with Claude</strong>
-            <span>
-              Ask Claude to read this brand's library and write one up: content patterns, a messaging read, or
-              recommendations. It saves here, dated, and renders in the app.
-            </span>
-          </div>
-        </div>
-        <button className="report-new-btn" onClick={() => openAsk()}>
-          ✦ Ask Claude
-        </button>
-      </div>
 
       {mine.length === 0 ? (
         <div className="mtx-empty">

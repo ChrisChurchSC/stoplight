@@ -209,6 +209,7 @@ export function HomeSidebar() {
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [chatsOpen, setChatsOpen] = useState(true)
+  const [dataOpen, setDataOpen] = useState(true)
   const [recordsOpen, setRecordsOpen] = useState(true)
   // Which record groups (Audience / Message / Activation) are expanded in the sidebar tree. The
   // group holding the current page is always shown; this tracks manual toggles on top of that.
@@ -386,36 +387,49 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
-        <button
-          className={`nav-item${page === 'content' && libraryMode === 'catalog' ? ' active' : ''}`}
-          onClick={() => setLibraryMode('catalog')}
-          title="Library — every published post, video, and page a brand has shipped"
-        >
-          <span className="nav-ico">
-            <Ico name="library" />
-          </span>
-          <span className="nav-label">Library</span>
-        </button>
-        <button
-          className={`nav-item${page === 'content' && libraryMode !== 'catalog' ? ' active' : ''}`}
-          onClick={() => setLibraryMode('data')}
-          title="Insights — the read over this brand's library: headline metrics, charts, and findings"
-        >
-          <span className="nav-ico">
-            <Ico name="insights" />
-          </span>
-          <span className="nav-label">Insights</span>
-        </button>
-        <button
-          className={`nav-item${page === 'reports' ? ' active' : ''}`}
-          onClick={() => setPage('reports')}
-          title="Reports — saved Claude write-ups over the brand's library"
-        >
-          <span className="nav-ico">
-            <Ico name="reports" />
-          </span>
-          <span className="nav-label">Reports</span>
-        </button>
+        <div className="hsb-chats">
+          <button className="hsb-sec" onClick={() => setDataOpen((o) => !o)}>
+            <span className={`hsb-sec-chev${dataOpen ? ' open' : ''}`}>
+              <Ico name="caret" />
+            </span>
+            Data
+          </button>
+          {dataOpen && (
+            <div className="hsb-chat-list">
+              <button
+                className={`nav-item${page === 'content' && libraryMode === 'catalog' ? ' active' : ''}`}
+                onClick={() => setLibraryMode('catalog')}
+                title="Library — every published post, video, and page a brand has shipped"
+              >
+                <span className="nav-ico">
+                  <Ico name="library" />
+                </span>
+                <span className="nav-label">Library</span>
+              </button>
+              <button
+                className={`nav-item${page === 'content' && libraryMode !== 'catalog' ? ' active' : ''}`}
+                onClick={() => setLibraryMode('data')}
+                title="Insights — the read over this brand's library: headline metrics, charts, and findings"
+              >
+                <span className="nav-ico">
+                  <Ico name="insights" />
+                </span>
+                <span className="nav-label">Insights</span>
+              </button>
+              <button
+                className={`nav-item${page === 'reports' ? ' active' : ''}`}
+                onClick={() => setPage('reports')}
+                title="Reports — saved Claude write-ups over the brand's library"
+              >
+                <span className="nav-ico">
+                  <Ico name="reports" />
+                </span>
+                <span className="nav-label">Reports</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <button
           className={`nav-item${page === 'flows' ? ' active' : ''}`}
           onClick={() => setPage('flows')}
