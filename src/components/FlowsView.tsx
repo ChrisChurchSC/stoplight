@@ -513,6 +513,9 @@ export function FlowsView() {
     if (tool !== 'select' || spaceHeld.current) return
     if ((e.target as HTMLElement).closest('input, textarea, button, select')) return
     e.stopPropagation()
+    // Shift/Cmd-click is a multi-select toggle (handled on click) — don't reset the selection or
+    // start a drag on that gesture.
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return
     const ids = selected.has(id) && selected.size ? [...selected] : [id]
     if (!selected.has(id)) setSelected(new Set(ids))
     const start: Record<string, { x: number; y: number }> = {}
@@ -520,6 +523,24 @@ export function FlowsView() {
       start[i] = pos[i] ?? { x: 0, y: 0 }
     })
     dragging.current = { ids, x: e.clientX, y: e.clientY, start }
+  }
+  // Click a card to select it; Shift/Cmd-click toggles it into a multi-selection (for group drag /
+  // bulk moves). The first modifier-click folds in whatever was already singly selected.
+  const clickSelect = (e: ReactMouseEvent, id: string) => {
+    e.stopPropagation()
+    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        if (!next.size && typeof sel === 'string') next.add(sel)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+      setSel(id)
+      return
+    }
+    setSel(id)
+    setPickAt(null)
   }
 
   // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
@@ -1975,7 +1996,7 @@ export function FlowsView() {
               data-node-id="campaign"
               style={{ transform: `translate(${pos['campaign']?.x ?? 0}px, ${pos['campaign']?.y ?? 0}px)` }}
               onMouseDown={(e) => startDrag(e, 'campaign')}
-              onClick={() => { setSel('campaign'); setPickAt(null) }}
+              onClick={(e) => clickSelect(e, 'campaign')}
             >
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
                 Campaign
@@ -2016,7 +2037,7 @@ export function FlowsView() {
                           className={`flow-node flow-tier-deliv${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
                           data-node-id={d.key}
                           onMouseDown={(e) => startDrag(e, d.key)}
-                          onClick={() => { setSel(d.key); setPickAt(null) }}
+                          onClick={(e) => clickSelect(e, d.key)}
                         >
                           <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
                             Deliverable
@@ -2040,7 +2061,7 @@ export function FlowsView() {
                                   data-node-id={r.id}
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
                                   onMouseDown={(e) => startDrag(e, r.id)}
-                                  onClick={(e) => { e.stopPropagation(); setSel(r.id) }}
+                                  onClick={(e) => clickSelect(e, r.id)}
                                 >
                                   <div className="flow-node-main">
                                     <PresetTile tone={POST_TONE} />
@@ -2110,7 +2131,7 @@ export function FlowsView() {
                           className={`flow-node flow-tier-deliv${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
                           data-node-id={n.id}
                           onMouseDown={(e) => startDrag(e, n.id)}
-                          onClick={() => { setSel(n.id); setPickAt(null) }}
+                          onClick={(e) => clickSelect(e, n.id)}
                         >
                           <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
                             Deliverable
@@ -2149,7 +2170,7 @@ export function FlowsView() {
                                   data-node-id={`${n.id}:${bi}`}
                                   style={{ transform: `translate(${pos[`${n.id}:${bi}`]?.x ?? 0}px, ${pos[`${n.id}:${bi}`]?.y ?? 0}px)` }}
                                   onMouseDown={(e) => startDrag(e, `${n.id}:${bi}`)}
-                                  onClick={(e) => { e.stopPropagation(); setSel(`${n.id}:${bi}`); setPickAt(null) }}
+                                  onClick={(e) => clickSelect(e, `${n.id}:${bi}`)}
                                 >
                                   <div className="flow-node-main">
                                     <PresetTile tone={POST_TONE} />
