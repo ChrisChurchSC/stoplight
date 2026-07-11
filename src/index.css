@@ -2873,10 +2873,10 @@ button {
   gap: 2px;
 }
 .hsb .nav-item {
-  gap: 11px;
-  padding: 8px 10px;
+  gap: 9px;
+  padding: 6px 10px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text);
 }
 .hsb .nav-item:hover {
@@ -2888,16 +2888,16 @@ button {
   font-weight: 600;
 }
 .hsb .nav-ico {
-  width: 19px;
-  height: 19px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
 }
 .hsb .nav-ico svg {
-  width: 19px;
-  height: 19px;
+  width: 16px;
+  height: 16px;
 }
 .hsb .nav-item.active .nav-ico {
   color: var(--text);
@@ -2962,7 +2962,6 @@ button {
 }
 .hsb-rec-parent {
   padding-left: 16px;
-  font-weight: 650;
   gap: 6px;
 }
 .hsb-rec-parent.active-in {
