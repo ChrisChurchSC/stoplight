@@ -108,6 +108,9 @@ const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   </svg>
 )
 
+// Most chips a record-tag row shows before collapsing the rest into a "+N" pill, so a card stays
+// one clean line per category instead of clipping tags mid-word.
+const TAG_CAP = 2
 // A node card's record tags, grouped into card categories (Audience / Channel / Proof). Each
 // chip carries its own record-type icon so a mixed Audience row still shows segment vs company
 // vs person. `overridden` tints a deliverable whose records differ from the campaign's.
@@ -127,11 +130,18 @@ function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
             </span>
             <div className="flow-node-taggroup-chips">
               {g.items.length ? (
-                g.items.map((r) => (
-                  <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${g.label} · ${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
-                    {r.label}
-                  </span>
-                ))
+                <>
+                  {g.items.slice(0, TAG_CAP).map((r) => (
+                    <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${g.label} · ${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
+                      {r.label}
+                    </span>
+                  ))}
+                  {g.items.length > TAG_CAP && (
+                    <span className="flow-node-tag flow-node-tag-more" title={g.items.slice(TAG_CAP).map((r) => r.label).join(', ')}>
+                      +{g.items.length - TAG_CAP}
+                    </span>
+                  )}
+                </>
               ) : (
                 <span className="flow-node-tag missing-tag">Needs {g.need}</span>
               )}
@@ -1048,6 +1058,26 @@ export function FlowsView() {
     } finally {
       setAddingDeliv(false)
     }
+  }
+  // Open the deliverable picker. In a viewed flow, if a card is selected the new deliverable
+  // branches off it (an asset branches directly; a deliverable branches off its last asset) so it
+  // lands to the RIGHT of that card instead of dropping back to the top-level column.
+  const openAddDeliverable = () => {
+    if (viewing && typeof sel === 'string' && sel !== 'campaign') {
+      const asset = viewRows.find((r) => r.id === sel)
+      const deliv = asset ? undefined : viewDelivs.find((d) => d.key === sel)
+      const anchor =
+        asset ??
+        (deliv && deliv.rows.length
+          ? [...deliv.rows].sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''))[deliv.rows.length - 1]
+          : undefined)
+      setConnectFrom(anchor ? anchor.id : null)
+    } else {
+      setConnectFrom(null)
+      setSel(null)
+    }
+    setBriefCollapsed(false)
+    setPickAt(viewing ? viewDelivs.length : nodes.length)
   }
   // Start dragging a new-block connector out of a node's +.
   const startAdd = (e: ReactMouseEvent, at: number, from: string) => {
@@ -2869,7 +2899,7 @@ export function FlowsView() {
           </button>
         </div>
         <span className="flow-tb-divider" />
-        <button className="flow-tb-add" onClick={() => { setPickAt(viewing ? viewDelivs.length : nodes.length); setSel(null) }} disabled={addingDeliv}>
+        <button className="flow-tb-add" onClick={() => { openAddDeliverable() }} disabled={addingDeliv}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="4" />
             <path d="M12 8v8M8 12h8" />

@@ -9603,6 +9603,20 @@ button {
 .cv-project-tab-new:hover {
   color: var(--accent);
 }
+/* The new-flow "+" reads as a standalone button, not another tab fused to the strip: full
+   radius, its own border on all sides, and floated in the bar with a clear gap from the last tab
+   instead of butting against it. */
+.cv-project-tab-new {
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0 0 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+}
 .canvas-mode .cv-boards {
   position: fixed;
   top: 98px;
@@ -22732,8 +22746,10 @@ table.aud-sheet td.stick .aud-cell {
 /* Each category is a single row of pill tags: solid white fill + dark ink so they read as
    tags with good contrast on the tinted cards; the row stays on one line and clips at the
    card edge, each pill truncating if a single value is long. */
-.flow-node-taggroup-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 4px; overflow: hidden; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
-.flow-node-taggroups .flow-node-tag { flex: 0 0 auto; max-width: 128px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 600; }
+.flow-node-taggroup-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 4px; overflow: hidden; }
+.flow-node-taggroups .flow-node-tag { flex: 0 0 auto; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 600; }
+/* The collapsed-count pill at the end of a row: a quiet "+N" that never truncates. */
+.flow-node-tag.flow-node-tag-more { max-width: none; color: var(--text-muted); background: var(--surface-2); font-variant-numeric: tabular-nums; }
 /* The one thing that earns color: a required category with no tag. */
 .flow-node-taggroup.missing .flow-node-taggroup-ic { color: var(--amber); }
 .flow-node-tag.missing-tag { max-width: none; background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-color: color-mix(in srgb, var(--amber) 40%, var(--border)); color: color-mix(in srgb, var(--amber) 70%, var(--text)); font-weight: 600; }
