@@ -22790,9 +22790,35 @@ table.aud-sheet td.stick .aud-cell {
 .flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--accent-3) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent-3) 40%, var(--border)); }
 .flow-node.flow-brief-node { background: color-mix(in srgb, var(--accent-2) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent-2) 18%, var(--border)); }
-/* Selected + click-held (drag) glow match the card's tier hue (campaign tomato is the default). */
-.flow-node.flow-tier-deliv.sel, .flow-node.flow-tier-deliv.multi { border-color: #2f6fe0; box-shadow: 0 0 0 3px color-mix(in srgb, #2f6fe0 24%, transparent); }
-.flow-node.flow-brief-node.sel, .flow-node.flow-brief-node.multi { border-color: #8a34d6; box-shadow: 0 0 0 3px color-mix(in srgb, #8a34d6 24%, transparent); }
+/* Selected + click-held (drag) glow match the card's tier hue (campaign tomato is the default). A
+   bold 2px ring + soft outer glow + a lightly tinted body make a selection read at a glance. */
+.flow-node.flow-tier-campaign.sel, .flow-node.flow-tier-campaign.multi { border-color: #ff6347; background: color-mix(in srgb, #ff6347 12%, var(--surface)); box-shadow: 0 0 0 2px #ff6347, 0 0 0 6px color-mix(in srgb, #ff6347 22%, transparent); }
+.flow-node.flow-tier-deliv.sel, .flow-node.flow-tier-deliv.multi { border-color: #2f6fe0; background: color-mix(in srgb, #2f6fe0 12%, var(--surface)); box-shadow: 0 0 0 2px #2f6fe0, 0 0 0 6px color-mix(in srgb, #2f6fe0 22%, transparent); }
+.flow-node.flow-brief-node.sel, .flow-node.flow-brief-node.multi { border-color: #8a34d6; background: color-mix(in srgb, #8a34d6 12%, var(--surface)); box-shadow: 0 0 0 2px #8a34d6, 0 0 0 6px color-mix(in srgb, #8a34d6 22%, transparent); }
+/* A marquee / shift multi-selection (2+ cards) also gets a check badge in the corner, so the whole
+   set is obvious, not just the one active card. */
+.flow.has-multi .flow-node.multi::after {
+  content: '✓';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.3);
+  z-index: 5;
+  pointer-events: none;
+}
+.flow.has-multi .flow-node.flow-tier-campaign.multi::after { background: #ff6347; }
+.flow.has-multi .flow-node.flow-tier-deliv.multi::after { background: #2f6fe0; }
+.flow.has-multi .flow-node.flow-brief-node.multi::after { background: #8a34d6; }
 
 /* Transient bottom toast for lightweight recommendations. */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(520px, calc(100vw - 40px)); background: var(--text); color: var(--surface); border-radius: 11px; box-shadow: 0 8px 28px rgba(16,24,40,.24); padding: 11px 12px 11px 14px; cursor: pointer; animation: toast-in .18s ease-out; }

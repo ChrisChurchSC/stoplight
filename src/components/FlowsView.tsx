@@ -1763,7 +1763,7 @@ export function FlowsView() {
   }
 
   return (
-    <div className={`flow${chatCollapsed ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}`}>
+    <div className={`flow${chatCollapsed ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}`}>
       <header className="flow-top">
         <div className="flow-crumb">
           <span className="flow-crumb-ic" aria-hidden="true">
