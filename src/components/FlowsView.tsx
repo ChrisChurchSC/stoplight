@@ -496,6 +496,13 @@ export function FlowsView() {
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
   const placedRef = useRef<Set<string>>(new Set())
+  // Undo / redo timeline for the canvas (Cmd+Z / Cmd+Shift+Z). Each entry snapshots the card
+  // layout, plus the flow rows for data actions, so moves, Tidy, add, and Generate all reverse.
+  type HistEntry = { pos: Record<string, { x: number; y: number }>; rows: TrafficRow[] | null }
+  const undoStackRef = useRef<HistEntry[]>([])
+  const redoStackRef = useRef<HistEntry[]>([])
+  const dragSnapRef = useRef<Record<string, { x: number; y: number }> | null>(null)
+  const dragMovedRef = useRef(false)
   // Canvas "add": drag out of a node's +, drop to open a block picker; the new card is
   // created at the drop point and connected back to the source node.
   const [addMenu, setAddMenu] = useState<{ at: number; from: string; x: number; y: number } | null>(null)
@@ -525,6 +532,8 @@ export function FlowsView() {
       start[i] = pos[i] ?? { x: 0, y: 0 }
     })
     dragging.current = { ids, x: e.clientX, y: e.clientY, start }
+    dragSnapRef.current = { ...pos } // layout before this drag, committed to undo history on drop
+    dragMovedRef.current = false
   }
   // Click a card to select it; Shift/Cmd-click toggles it into a multi-selection (for group drag /
   // bulk moves). The first modifier-click folds in whatever was already singly selected.
@@ -544,9 +553,36 @@ export function FlowsView() {
     setSel(id)
     setPickAt(null)
   }
+  const posRef = useRef(pos)
+  posRef.current = pos
+  const snapRows = () => useTrafficStore.getState().rows.map((r) => ({ ...r }))
+  // Record the state BEFORE an action so it can be undone. captureRows for data actions.
+  const recordHistory = (captureRows: boolean) => {
+    undoStackRef.current.push({ pos: { ...posRef.current }, rows: captureRows ? snapRows() : null })
+    if (undoStackRef.current.length > 40) undoStackRef.current.shift()
+    redoStackRef.current = []
+  }
+  const restoreSnap = async (entry: HistEntry) => {
+    placedRef.current = new Set(Object.keys(entry.pos)) // keep restored branches put, don't re-place
+    setPos(entry.pos)
+    if (entry.rows) await useTrafficStore.getState().applyRowsSnapshot(entry.rows)
+  }
+  const doUndo = async () => {
+    const entry = undoStackRef.current.pop()
+    if (!entry) return
+    redoStackRef.current.push({ pos: { ...posRef.current }, rows: entry.rows ? snapRows() : null })
+    await restoreSnap(entry)
+  }
+  const doRedo = async () => {
+    const entry = redoStackRef.current.pop()
+    if (!entry) return
+    undoStackRef.current.push({ pos: { ...posRef.current }, rows: entry.rows ? snapRows() : null })
+    await restoreSnap(entry)
+  }
   // "Tidy layout": drop every manual offset so the column and the auto-placed branches re-derive
   // into a clean arrangement. Cards animate back into place via the card transition.
   const organizeCards = () => {
+    recordHistory(false)
     placedRef.current = new Set()
     setPos({})
     setSelected(new Set())
@@ -566,6 +602,13 @@ export function FlowsView() {
       }
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      // Cmd/Ctrl+Z undoes the last canvas action (move, Tidy, add, Generate); +Shift redoes.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) void doRedo()
+        else void doUndo()
+        return
+      }
       if (e.key === ' ') {
         e.preventDefault()
         if (!spaceHeld.current) {
@@ -1029,6 +1072,7 @@ export function FlowsView() {
     if (!viewName || regenerating) return
     const targetIds = ids && ids.length ? ids : viewRows.map((r) => r.id)
     if (!targetIds.length) return
+    recordHistory(true)
     setRegenerating(true)
     try {
       await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
@@ -1107,6 +1151,7 @@ export function FlowsView() {
   const [addingDeliv, setAddingDeliv] = useState(false)
   const addViewDeliverable = async (p: DeliverablePreset) => {
     if (!viewName || addingDeliv) return
+    recordHistory(true)
     // If the picker was opened from an asset's "+", link the new rows back to that asset so the
     // canvas draws the journey edge (asset → this deliverable).
     const src = connectFromRef.current
@@ -1899,6 +1944,7 @@ export function FlowsView() {
               const dx = (e.clientX - dragging.current.x) / scale
               const dy = (e.clientY - dragging.current.y) / scale
               const d = dragging.current
+              dragMovedRef.current = true
               setPos((prev) => {
                 const next = { ...prev }
                 d.ids.forEach((i) => {
@@ -1950,6 +1996,14 @@ export function FlowsView() {
               marqueeStart.current = null
               setMarquee(null)
             }
+            // A drag that actually moved cards records its pre-drag layout for undo.
+            if (dragging.current && dragMovedRef.current && dragSnapRef.current) {
+              undoStackRef.current.push({ pos: dragSnapRef.current, rows: null })
+              if (undoStackRef.current.length > 40) undoStackRef.current.shift()
+              redoStackRef.current = []
+            }
+            dragSnapRef.current = null
+            dragMovedRef.current = false
             pan.current = null
             dragging.current = null
           }}

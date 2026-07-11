@@ -1695,6 +1695,8 @@ interface TrafficState {
   pasteAsset: (id: string) => Promise<void>
   /** Undo the last sheet mutation (swap, restage, connect, paste, delete) — Cmd/Ctrl+Z. */
   undo: () => Promise<void>
+  /** Replace all rows with a snapshot — used by the flow canvas's own undo/redo timeline. */
+  applyRowsSnapshot: (rows: TrafficRow[]) => Promise<void>
   approveAll: () => Promise<void>
   publishRow: (id: string) => Promise<void>
   clearSheet: () => Promise<void>
@@ -4174,6 +4176,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const prev = undoStack.pop()
     if (!prev) return
     await sheet.replaceAll(prev)
+    await get().refresh()
+  },
+
+  applyRowsSnapshot: async (rows) => {
+    await sheet.replaceAll(rows)
     await get().refresh()
   },
 
