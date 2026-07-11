@@ -1025,19 +1025,35 @@ export function FlowsView() {
   // draftCopy only fills EMPTY fields and de-duplicates what it writes, so clear each
   // post's copy first: that forces a real rewrite and lets the anti-repetition pass keep
   // every post distinct, unlike the template redraft that collapses same-audience posts.
-  const regenerateFlow = async () => {
+  const regenerateFlow = async (ids?: string[]) => {
     if (!viewName || regenerating) return
-    const ids = viewRows.map((r) => r.id)
-    if (!ids.length) return
+    const targetIds = ids && ids.length ? ids : viewRows.map((r) => r.id)
+    if (!targetIds.length) return
     setRegenerating(true)
     try {
-      await Promise.all(ids.map((id) => updateRow(id, { messaging: {} })))
-      await draftCopy(ids)
+      await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
+      await draftCopy(targetIds)
     } finally {
       setRegenerating(false)
       setRefsDirty(false)
     }
   }
+  // The asset ids the Generate button acts on, from the current selection: the campaign card means
+  // the whole flow, a deliverable means its assets, an asset means just itself. Empty when nothing
+  // is selected, which disables the button.
+  const genIds = useMemo(() => {
+    if (viewName === null) return [] as string[]
+    const collect = (id: string): string[] => {
+      if (id === 'campaign') return viewRows.map((r) => r.id)
+      const deliv = viewDelivs.find((d) => d.key === id)
+      if (deliv) return deliv.rows.map((r) => r.id)
+      const row = viewRows.find((r) => r.id === id)
+      return row ? [row.id] : []
+    }
+    if (selected.size) return [...new Set([...selected].flatMap(collect))]
+    if (typeof sel === 'string') return collect(sel)
+    return []
+  }, [viewName, sel, selected, viewRows, viewDelivs])
   // Reseed the view-mode brief drafts when you open a different built flow.
   useEffect(() => {
     const c = useTrafficStore.getState().campaignList.find((x) => x.name === viewName)
@@ -2973,7 +2989,12 @@ export function FlowsView() {
         {viewing && viewRows.length > 0 && (
           <>
             <span className="flow-tb-divider" />
-            <button className="flow-tb-regen" onClick={regenerateFlow} disabled={regenerating} title="Generate copy for every asset">
+            <button
+              className="flow-tb-regen"
+              onClick={() => regenerateFlow(genIds)}
+              disabled={regenerating || genIds.length === 0}
+              title={genIds.length ? 'Generate copy for the selected card(s)' : 'Select a card to generate its copy'}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
               </svg>
