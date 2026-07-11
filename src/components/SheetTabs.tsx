@@ -1,42 +1,76 @@
+import { useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 type SheetPage = 'brand' | 'records' | 'people' | 'segments' | 'channelrecords' | 'proofpoints'
 
-// The record pages, presented as spreadsheet "sheets" you flip between along a bottom tab bar
-// (like Google Sheets), in addition to the left sidebar. Brand is first: the single source of truth.
-const SHEETS: { page: SheetPage; label: string }[] = [
-  { page: 'brand', label: 'Brand' },
+// Segments / Companies / People are facets of the same thing — the brand's audiences — so they
+// nest under one "Audiences" tab (a dropdown). Channels, Proof points, and Brand are their own sheets.
+const AUDIENCE: { page: SheetPage; label: string }[] = [
   { page: 'segments', label: 'Segments' },
-  { page: 'people', label: 'People' },
   { page: 'records', label: 'Companies' },
+  { page: 'people', label: 'People' },
+]
+const TOP: { page: SheetPage; label: string }[] = [
   { page: 'channelrecords', label: 'Channels' },
   { page: 'proofpoints', label: 'Proof points' },
+  { page: 'brand', label: 'Brand' },
 ]
 
 /**
- * A workbook-style tab strip pinned to the bottom of the records area. Only shows while a record
- * sheet is open; clicking a tab switches sheets. Mirrors the spreadsheet muscle memory of flipping
- * tabs at the bottom of a Google Sheet.
+ * Workbook tabs attached to the bottom of a record sheet (like Google Sheets). Audiences nests its
+ * three record types behind a dropdown; everything else is a flat tab. Rendered inside each sheet
+ * so it reads as part of the spreadsheet, not a floating page footer.
  */
 export function SheetTabs() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
-  if (!SHEETS.some((s) => s.page === page)) return null
+  const [open, setOpen] = useState(false)
+  const inAudience = AUDIENCE.some((s) => s.page === page)
+  const audienceLabel = AUDIENCE.find((s) => s.page === page)?.label
   return (
     <div className="sheet-tabs" role="tablist" aria-label="Record sheets">
-      <div className="sheet-tab-list">
-        {SHEETS.map((s) => (
-          <button
-            key={s.page}
-            className={`sheet-tab${s.page === page ? ' on' : ''}`}
-            role="tab"
-            aria-selected={s.page === page}
-            onClick={() => setPage(s.page)}
-          >
-            {s.label}
-          </button>
-        ))}
+      <div className="sheet-tab-drop">
+        <button
+          className={`sheet-tab sheet-tab-parent${inAudience ? ' on' : ''}`}
+          aria-haspopup="true"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {inAudience && audienceLabel ? `Audiences · ${audienceLabel}` : 'Audiences'}
+          <span className="sheet-caret" aria-hidden="true">▾</span>
+        </button>
+        {open && (
+          <>
+            <div className="sheet-drop-scrim" onClick={() => setOpen(false)} />
+            <div className="sheet-drop-menu" role="menu">
+              {AUDIENCE.map((s) => (
+                <button
+                  key={s.page}
+                  className={`sheet-drop-item${s.page === page ? ' on' : ''}`}
+                  role="menuitem"
+                  onClick={() => {
+                    setPage(s.page)
+                    setOpen(false)
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
+      {TOP.map((s) => (
+        <button
+          key={s.page}
+          className={`sheet-tab${s.page === page ? ' on' : ''}`}
+          role="tab"
+          aria-selected={s.page === page}
+          onClick={() => setPage(s.page)}
+        >
+          {s.label}
+        </button>
+      ))}
     </div>
   )
 }

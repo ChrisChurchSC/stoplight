@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEven
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
 import { RecordDrawer } from './RecordDrawer'
 import { BufferedInput } from './BufferedInput'
+import { SheetTabs } from './SheetTabs'
 
 /**
  * A generic spreadsheet-style Records table. Every text cell edits inline; Status is a
@@ -273,6 +274,8 @@ export function RecordsTable<T extends { id: string }>({
           </tbody>
         </table>
       </div>
+
+      <SheetTabs />
 
       {openRecord && (
         <RecordDrawer

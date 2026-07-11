@@ -5,6 +5,7 @@ import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { BrandVisual } from './BrandVisual'
+import { SheetTabs } from './SheetTabs'
 
 /**
  * Brand — a brand's foundation in one place, grouped under sub-tabs: About (the
@@ -74,6 +75,7 @@ export function BrandPage({ brand }: { brand?: string }) {
       ) : (
         <BrandStrategy key="brand-strategy" brand={brand} />
       )}
+      <SheetTabs />
     </div>
   )
 }

@@ -6252,38 +6252,36 @@ button {
   flex-direction: column;
   overflow: auto;
 }
-/* Workbook-style sheet tabs pinned to the bottom of the records area (like Google Sheets). */
+/* Workbook sheet tabs attached to the bottom edge of a record sheet (like Google Sheets). */
 .sheet-tabs {
-  flex: 0 0 auto;
   display: flex;
-  align-items: stretch;
-  height: 40px;
-  border-top: 1px solid var(--border);
+  align-items: center;
+  gap: 3px;
+  margin-top: -1px;
+  border: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
   background: var(--surface-2);
-  padding: 0 10px;
+  padding: 5px 8px;
 }
-.sheet-tab-list {
+.sheet-tab-drop {
+  position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.sheet-tab-list::-webkit-scrollbar {
-  display: none;
 }
 .sheet-tab {
   flex: 0 0 auto;
   border: 0;
-  border-top: 2px solid transparent;
   background: none;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
-  padding: 0 16px;
+  padding: 6px 14px;
+  border-radius: 7px;
   cursor: pointer;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .sheet-tab:hover {
   color: var(--text);
@@ -6291,8 +6289,50 @@ button {
 }
 .sheet-tab.on {
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.sheet-caret {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.sheet-drop-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.sheet-drop-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 31;
+  min-width: 160px;
   background: var(--surface);
-  border-top-color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sheet-drop-item {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.sheet-drop-item:hover {
+  background: var(--surface-2);
+}
+.sheet-drop-item.on {
+  color: var(--accent);
+  font-weight: 600;
 }
 .home-main-head {
   display: flex;
