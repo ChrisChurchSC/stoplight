@@ -210,6 +210,9 @@ export function HomeSidebar() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [recordsOpen, setRecordsOpen] = useState(true)
+  // Which record groups (Audience / Message / Activation) are expanded in the sidebar tree. The
+  // group holding the current page is always shown; this tracks manual toggles on top of that.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(RECORD_GROUPS.map((g) => g.label)))
   const [wsOpen, setWsOpen] = useState(false)
 
   const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
@@ -468,24 +471,44 @@ export function HomeSidebar() {
           </button>
           {recordsOpen && (
             <div className="hsb-chat-list">
-              {RECORD_GROUPS.map((g) => (
-                <div key={g.label} className="hsb-rec-group">
-                  <div className="hsb-rec-grouplabel">{g.label}</div>
-                  {g.items.map((it) => (
+              {RECORD_GROUPS.map((g) => {
+                const activeInGroup = g.items.some((it) => it.page === page)
+                const expanded = openGroups.has(g.label) || activeInGroup
+                return (
+                  <div key={g.label} className="hsb-rec-group">
                     <button
-                      key={it.page}
-                      className={`nav-item${page === it.page ? ' active' : ''}`}
-                      onClick={() => setPage(it.page)}
-                      title={it.label}
+                      className={`nav-item hsb-rec-parent${activeInGroup ? ' active-in' : ''}`}
+                      aria-expanded={expanded}
+                      onClick={() =>
+                        setOpenGroups((prev) => {
+                          const next = new Set(prev)
+                          next.has(g.label) ? next.delete(g.label) : next.add(g.label)
+                          return next
+                        })
+                      }
                     >
-                      <span className="nav-ico">
-                        <Ico name={it.ico} />
+                      <span className={`hsb-rec-chev${expanded ? ' open' : ''}`}>
+                        <Ico name="caret" />
                       </span>
-                      <span className="nav-label">{it.label}</span>
+                      <span className="nav-label">{g.label}</span>
                     </button>
-                  ))}
-                </div>
-              ))}
+                    {expanded &&
+                      g.items.map((it) => (
+                        <button
+                          key={it.page}
+                          className={`nav-item hsb-rec-child${page === it.page ? ' active' : ''}`}
+                          onClick={() => setPage(it.page)}
+                          title={it.label}
+                        >
+                          <span className="nav-ico">
+                            <Ico name={it.ico} />
+                          </span>
+                          <span className="nav-label">{it.label}</span>
+                        </button>
+                      ))}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

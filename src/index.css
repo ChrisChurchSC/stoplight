@@ -2954,17 +2954,36 @@ button {
   flex-direction: column;
   gap: 1px;
 }
-/* Sub-group labels in the Records nav (Audience / Message / Activation). */
+/* Records nav tree: Audience / Message / Activation are the primary items; their sheets nest
+   under them, expandable. */
 .hsb-rec-group + .hsb-rec-group {
-  margin-top: 8px;
+  margin-top: 2px;
 }
-.hsb-rec-grouplabel {
-  font-size: 9.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+.hsb-rec-parent {
+  font-weight: 650;
+  gap: 6px;
+}
+.hsb-rec-parent.active-in {
+  color: var(--text);
+}
+.hsb-rec-chev {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
   color: var(--text-faint);
-  padding: 5px 12px 3px;
+}
+.hsb-rec-chev.open {
+  transform: rotate(0deg);
+}
+.hsb-rec-chev svg {
+  width: 12px;
+  height: 12px;
+}
+.hsb-rec-child {
+  padding-left: 30px;
 }
 .hsb-chat {
   display: flex;
