@@ -316,6 +316,8 @@ export function FlowsView() {
   const companies = useTrafficStore((s) => s.companies)
   const people = useTrafficStore((s) => s.people)
   const channelRecords = useTrafficStore((s) => s.channelRecords)
+  const objectives = useTrafficStore((s) => s.objectives)
+  const messages = useTrafficStore((s) => s.messages)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const brandMeta = useTrafficStore((s) => s.brandMeta)
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
@@ -347,6 +349,20 @@ export function FlowsView() {
   const [subject, setSubject] = useState('')
   const [budget, setBudget] = useState('')
   const [flightWeeks, setFlightWeeks] = useState(12)
+  // Records that seed the brief: an Objective sets the flow's measurable goal; a Message fills the
+  // theme every asset is written to (its angle). Both are optional pulls from the Records pages.
+  const [objectiveId, setObjectiveId] = useState('')
+  const [messageId, setMessageId] = useState('')
+  const linkedObjective = objectives.find((o) => o.id === objectiveId)
+  // The linked objective mapped onto the campaign's goal fields — the metric becomes the KPI and
+  // the target's leading number becomes the goal target.
+  const objectiveCfg = linkedObjective
+    ? {
+        text: linkedObjective.name,
+        kpi: linkedObjective.metric?.trim() || undefined,
+        target: linkedObjective.target ? Number(String(linkedObjective.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
+      }
+    : undefined
   // Build-mode record-tag selection (Companies / People / Segments / Media mix). null =
   // not touched yet, so it defaults to all of the brand's segments.
   const [briefRefs, setBriefRefs] = useState<FlowReference[] | null>(null)
@@ -1275,6 +1291,8 @@ export function FlowsView() {
     setName('')
     setSubject('')
     setBudget('')
+    setObjectiveId('')
+    setMessageId('')
     setBriefRefs(null)
     lastSubjectRef.current = ''
     setSel('campaign')
@@ -1409,12 +1427,13 @@ export function FlowsView() {
     refs: FlowReference[]
     audiences: string[]
     nodes: FlowDeliverable[]
+    objective?: { text: string; kpi?: string; target?: number }
   }) => {
     if (!cfg.nodes.length || building) return
     setBuilding(true)
     const campaignName = `${brand ? `${brand} — ` : ''}${cfg.name.trim() || 'New campaign'}`
     try {
-      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined })
+      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       const allNewIds: string[] = []
       for (const n of cfg.nodes) {
@@ -1499,7 +1518,7 @@ export function FlowsView() {
       setNodes(effective)
       for (const n of extra) void genPreview(n)
     }
-    return buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes: effective })
+    return buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes: effective, objective: objectiveCfg })
   }
 
   // Resolve record-tag labels back to structured references via the record groups.
@@ -1572,7 +1591,7 @@ export function FlowsView() {
         }
         case 'build': {
           const auds = wRefs.length ? wRefs.map((r) => r.label) : audienceNames
-          const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes })
+          const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg })
           if (nm) applied.push(`Built ${wNodes.length} deliverable${wNodes.length === 1 ? '' : 's'} and wrote the copy`)
           break
         }
@@ -2690,11 +2709,60 @@ export function FlowsView() {
               <div className="flow-inspect">
                 <label className="flow-inspect-label">Name</label>
                 <input className="flow-inspect-input" value={name} placeholder="e.g. Q3 Always-On" onChange={(e) => setName(e.target.value)} />
+                {messages.length > 0 && (
+                  <>
+                    <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                      Message angle
+                    </label>
+                    <select
+                      className="flow-inspect-input flow-inspect-select"
+                      value={messageId}
+                      onChange={(e) => {
+                        const id = e.target.value
+                        setMessageId(id)
+                        const m = messages.find((x) => x.id === id)
+                        if (m?.angle) {
+                          setSubject(m.angle)
+                          lastSubjectRef.current = m.angle
+                          scheduleRedraftAll()
+                        }
+                      }}
+                    >
+                      <option value="">Start from a message…</option>
+                      {messages.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Goal / subject
+                  Theme / angle
                 </label>
                 <textarea className="flow-inspect-input" rows={2} value={subject} placeholder="What is this campaign for?" onChange={(e) => setSubject(e.target.value)} onBlur={onSubjectCommit} />
-                <div className="flow-inspect-note" style={{ marginTop: 4 }}>The campaign theme. Every asset's copy is written to it; changing it redrafts them all.</div>
+                <div className="flow-inspect-note" style={{ marginTop: 4 }}>The angle every asset's copy is written to; changing it redrafts them all.</div>
+                {objectives.length > 0 && (
+                  <>
+                    <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                      Objective
+                    </label>
+                    <select className="flow-inspect-input flow-inspect-select" value={objectiveId} onChange={(e) => setObjectiveId(e.target.value)}>
+                      <option value="">Link an objective…</option>
+                      {objectives.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                    {linkedObjective && (linkedObjective.metric || linkedObjective.target) && (
+                      <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+                        Goal: {[linkedObjective.metric, linkedObjective.target].filter(Boolean).join(' · ')}
+                        {linkedObjective.timeframe ? ` · ${linkedObjective.timeframe}` : ''}
+                      </div>
+                    )}
+                  </>
+                )}
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                   Flight length
                 </label>
