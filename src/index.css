@@ -6227,6 +6227,48 @@ button {
   flex-direction: column;
   overflow: auto;
 }
+/* Workbook-style sheet tabs pinned to the bottom of the records area (like Google Sheets). */
+.sheet-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0 10px;
+}
+.sheet-tab-list {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sheet-tab-list::-webkit-scrollbar {
+  display: none;
+}
+.sheet-tab {
+  flex: 0 0 auto;
+  border: 0;
+  border-top: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sheet-tab:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.sheet-tab.on {
+  color: var(--accent);
+  background: var(--surface);
+  border-top-color: var(--accent);
+}
 .home-main-head {
   display: flex;
   align-items: center;
