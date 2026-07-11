@@ -23,24 +23,24 @@ export interface ChannelRecord {
 }
 
 export const CHANNEL_RECORD_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Channel', kind: 'name', width: 200 },
-  { key: 'type', label: 'Type', kind: 'status', width: 110 },
-  { key: 'platform', label: 'Platform', kind: 'text', width: 140 },
-  { key: 'cpm', label: 'CPM $', kind: 'text', width: 100 },
-  { key: 'ctr', label: 'CTR %', kind: 'text', width: 100 },
-  { key: 'cvr', label: 'CVR %', kind: 'text', width: 100 },
-  { key: 'formats', label: 'Formats', kind: 'text', width: 200 },
+  { key: 'name', label: 'Channel', kind: 'name', width: 200, group: 'Channel' },
+  { key: 'type', label: 'Type', kind: 'status', width: 110, group: 'Channel' },
+  { key: 'platform', label: 'Platform', kind: 'text', width: 140, group: 'Channel' },
+  { key: 'cpm', label: 'CPM $', kind: 'text', width: 100, group: 'Benchmarks' },
+  { key: 'ctr', label: 'CTR %', kind: 'text', width: 100, group: 'Benchmarks' },
+  { key: 'cvr', label: 'CVR %', kind: 'text', width: 100, group: 'Benchmarks' },
+  { key: 'formats', label: 'Formats', kind: 'text', width: 200, group: 'Delivery' },
 ]
 
 export const CHANNEL_RECORD_FIELDS: RecordField[] = [
-  { key: 'name', label: 'Channel', kind: 'name' },
-  { key: 'type', label: 'Type', kind: 'status' },
-  { key: 'platform', label: 'Platform', kind: 'text' },
-  { key: 'cpm', label: 'CPM $', kind: 'text' },
-  { key: 'ctr', label: 'CTR %', kind: 'text' },
-  { key: 'cvr', label: 'CVR %', kind: 'text' },
-  { key: 'formats', label: 'Accepted formats', kind: 'text' },
-  { key: 'notes', label: 'Notes', kind: 'multiline' },
+  { key: 'name', label: 'Channel', kind: 'name', group: 'Channel' },
+  { key: 'type', label: 'Type', kind: 'status', group: 'Channel' },
+  { key: 'platform', label: 'Platform', kind: 'text', group: 'Channel' },
+  { key: 'cpm', label: 'CPM $', kind: 'text', group: 'Benchmarks' },
+  { key: 'ctr', label: 'CTR %', kind: 'text', group: 'Benchmarks' },
+  { key: 'cvr', label: 'CVR %', kind: 'text', group: 'Benchmarks' },
+  { key: 'formats', label: 'Accepted formats', kind: 'text', group: 'Delivery' },
+  { key: 'notes', label: 'Notes', kind: 'multiline', group: 'Delivery' },
 ]
 
 export const CHANNEL_RECORD_STATUSES: NonNullable<ChannelRecord['type']>[] = ['paid', 'organic', 'owned']

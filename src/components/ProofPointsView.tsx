@@ -16,19 +16,20 @@ interface Spec {
   key: string
   label: string
   kind: RecordFieldKind
+  group: string
   col?: number
   get: (r: Rtb) => string
   set: (r: Rtb, v: string) => void
 }
 const SPECS: Spec[] = [
-  { key: 'name', label: 'Proof point', kind: 'name', col: 240, get: (r) => r.label, set: (r, v) => { r.label = v } },
-  { key: 'detail', label: 'Detail', kind: 'multiline', col: 340, get: (r) => r.detail || '', set: (r, v) => { r.detail = v } },
-  { key: 'metric', label: 'Metric', kind: 'text', col: 160, get: (r) => r.metric || '', set: (r, v) => { r.metric = v } },
-  { key: 'source', label: 'Source', kind: 'text', col: 180, get: (r) => r.source || '', set: (r, v) => { r.source = v } },
+  { key: 'name', label: 'Proof point', kind: 'name', group: 'Claim', col: 240, get: (r) => r.label, set: (r, v) => { r.label = v } },
+  { key: 'detail', label: 'Detail', kind: 'multiline', group: 'Claim', col: 340, get: (r) => r.detail || '', set: (r, v) => { r.detail = v } },
+  { key: 'metric', label: 'Metric', kind: 'text', group: 'Evidence', col: 160, get: (r) => r.metric || '', set: (r, v) => { r.metric = v } },
+  { key: 'source', label: 'Source', kind: 'text', group: 'Evidence', col: 180, get: (r) => r.source || '', set: (r, v) => { r.source = v } },
 ]
 
-const COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col! }))
-const FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind }))
+const COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: s.group }))
+const FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: s.group }))
 
 type Row = { id: string } & Record<string, string>
 

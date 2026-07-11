@@ -23,29 +23,29 @@ export interface Company {
 }
 
 export const COMPANY_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Company', kind: 'name', width: 220 },
-  { key: 'description', label: 'Description', kind: 'text', width: 300 },
-  { key: 'status', label: 'Status', kind: 'status', width: 120 },
-  { key: 'segment', label: 'Segment', kind: 'text', width: 160 },
-  { key: 'website', label: 'Website', kind: 'url', width: 180 },
-  { key: 'country', label: 'Country', kind: 'text', width: 150 },
-  { key: 'founded', label: 'Founded', kind: 'text', width: 110 },
+  { key: 'name', label: 'Company', kind: 'name', width: 220, group: 'Profile' },
+  { key: 'description', label: 'Description', kind: 'text', width: 300, group: 'Profile' },
+  { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Profile' },
+  { key: 'segment', label: 'Segment', kind: 'text', width: 160, group: 'Firmographics' },
+  { key: 'website', label: 'Website', kind: 'url', width: 180, group: 'Firmographics' },
+  { key: 'country', label: 'Country', kind: 'text', width: 150, group: 'Firmographics' },
+  { key: 'founded', label: 'Founded', kind: 'text', width: 110, group: 'Firmographics' },
 ]
 
 // The full attribute set shown in a company's detail panel (a superset of the columns).
 export const COMPANY_FIELDS: RecordField[] = [
-  { key: 'name', label: 'Company', kind: 'name' },
-  { key: 'status', label: 'Status', kind: 'status' },
-  { key: 'description', label: 'Description', kind: 'multiline' },
-  { key: 'segment', label: 'Segment', kind: 'text' },
-  { key: 'website', label: 'Website', kind: 'url' },
-  { key: 'linkedin', label: 'LinkedIn', kind: 'url' },
-  { key: 'employees', label: 'Employees', kind: 'text' },
-  { key: 'founded', label: 'Founded', kind: 'text' },
-  { key: 'country', label: 'Country / HQ', kind: 'text' },
-  { key: 'phone', label: 'Phone', kind: 'text' },
-  { key: 'owner', label: 'Account owner', kind: 'text' },
-  { key: 'notes', label: 'Notes', kind: 'multiline' },
+  { key: 'name', label: 'Company', kind: 'name', group: 'Profile' },
+  { key: 'status', label: 'Status', kind: 'status', group: 'Profile' },
+  { key: 'description', label: 'Description', kind: 'multiline', group: 'Profile' },
+  { key: 'segment', label: 'Segment', kind: 'text', group: 'Firmographics' },
+  { key: 'website', label: 'Website', kind: 'url', group: 'Firmographics' },
+  { key: 'linkedin', label: 'LinkedIn', kind: 'url', group: 'Firmographics' },
+  { key: 'employees', label: 'Employees', kind: 'text', group: 'Firmographics' },
+  { key: 'founded', label: 'Founded', kind: 'text', group: 'Firmographics' },
+  { key: 'country', label: 'Country / HQ', kind: 'text', group: 'Firmographics' },
+  { key: 'phone', label: 'Phone', kind: 'text', group: 'Relationship' },
+  { key: 'owner', label: 'Account owner', kind: 'text', group: 'Relationship' },
+  { key: 'notes', label: 'Notes', kind: 'multiline', group: 'Relationship' },
 ]
 
 export const COMPANY_STATUSES: NonNullable<Company['status']>[] = ['client', 'prospect', 'partner']
