@@ -4787,6 +4787,36 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // Per-account context (segment, situation, lead concern) so a 1:1 ABM variant
         // reads in terms of the account's real situation, not a name swap.
         const accountByName = new Map((get().accountsByBrand[client] ?? []).map((acc) => [acc.name.toLowerCase(), acc]))
+        // Journey CTAs: when an asset leads to a next step (a deliverable branched off it, or an
+        // explicit linksTo), point that asset's CTA AT the next step so a YouTube ad that leads to
+        // a newsletter actually says "Subscribe to the newsletter" instead of a generic ask.
+        const journeyCta = (ch: ChannelId, ty?: string): string => {
+          const t = (ty ?? '').toLowerCase()
+          switch (ch) {
+            case 'email':
+              return t.includes('newsletter') ? 'Subscribe to the newsletter' : t.includes('welcome') ? 'Join the list' : t.includes('promo') ? 'Unlock the offer' : 'Get it in your inbox'
+            case 'sms': return 'Get text updates'
+            case 'landing-page': return 'See how it works'
+            case 'website': return 'Explore the site'
+            case 'blog': return 'Read the full story'
+            case 'lead-magnet':
+              return t.includes('webinar') ? 'Save your seat' : t.includes('checklist') ? 'Get the checklist' : t.includes('ebook') || t.includes('whitepaper') || t.includes('guide') ? 'Download the guide' : 'Get the free download'
+            case 'events': return 'Save your seat'
+            default: return CHANNELS[ch]?.label ? `Explore ${CHANNELS[ch].label}` : 'See what’s next'
+          }
+        }
+        // Built from the FULL campaign (not just the rows being redrafted) so an asset's CTA still
+        // names its next step when only that asset is regenerated.
+        const campaignRows = get().rows.filter((x) => x.campaign === campaign && !x.archivedAt)
+        const nextStepCta = new Map<string, string>() // source assetName → CTA naming its next step
+        for (const x of campaignRows) {
+          if (x.branchOf && !nextStepCta.has(x.branchOf)) nextStepCta.set(x.branchOf, journeyCta(x.channel, x.assetType))
+        }
+        for (const r of campaignRows) {
+          if (!r.linksTo || nextStepCta.has(r.assetName)) continue
+          const target = campaignRows.find((x) => x.assetName === r.linksTo)
+          if (target) nextStepCta.set(r.assetName, journeyCta(target.channel, target.assetType))
+        }
         const assets: DraftAsset[] = crows.map((r, i) => {
           const stage = funnelStageFor(r.channel, r.assetType)
           // Per-row effective pools: the row's own record-tag override if it has one, else the
@@ -4821,7 +4851,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
               : r.audience
                 ? { name: r.audience }
                 : undefined,
-            ctaSeed: cond.cta ?? pickCta(stage),
+            ctaSeed: cond.cta ?? nextStepCta.get(r.assetName) ?? pickCta(stage),
             proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
