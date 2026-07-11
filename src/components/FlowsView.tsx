@@ -340,6 +340,12 @@ export function FlowsView() {
   const [nodes, setNodes] = useState<FlowDeliverable[]>([])
   const [sel, setSel] = useState<'campaign' | string | null>('campaign')
   const [pickAt, setPickAt] = useState<number | null>(null)
+  // When the deliverable picker is opened FROM an asset card (its "+"), this holds that
+  // source asset's row id. The new deliverable's rows get branchOf = that asset's name, so
+  // the canvas draws a journey edge from the asset to the new deliverable (asset → next step).
+  const [connectFrom, setConnectFrom] = useState<string | null>(null)
+  const connectFromRef = useRef<string | null>(null)
+  connectFromRef.current = connectFrom
   const [building, setBuilding] = useState(false)
   // Build always writes copy now (the toggle was removed); kept as a constant so the
   // preview + build paths that reference it stay unchanged.
@@ -368,6 +374,9 @@ export function FlowsView() {
   chatCollapsedRef.current = chatCollapsed
   const briefCollapsedRef = useRef(briefCollapsed)
   briefCollapsedRef.current = briefCollapsed
+  // When a deliverable is added off an asset's "+", we place it beside that asset once it renders
+  // (rather than letting it stack at the bottom of the column). Holds { delivKey, srcId } until placed.
+  const pendingPlaceRef = useRef<{ key: string; srcId: string } | null>(null)
   const [blueprintBusy, setBlueprintBusy] = useState(false)
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
@@ -748,7 +757,10 @@ export function FlowsView() {
   const viewDelivs: ViewDeliverable[] = useMemo(() => {
     const map = new Map<string, ViewDeliverable>()
     for (const r of viewRows) {
-      const key = `${r.channel}|${r.assetType}`
+      // A deliverable that branches off a specific asset (a downstream journey step) groups
+      // on its own, keyed by its source, so it never merges with the campaign-level deliverables
+      // of the same channel/type.
+      const key = `${r.channel}|${r.assetType}${r.branchOf ? `|↳${r.branchOf}` : ''}`
       const cur = map.get(key)
       if (cur) { cur.count++; cur.rows.push(r) }
       else {
@@ -760,6 +772,28 @@ export function FlowsView() {
     }
     return [...map.values()].sort((a, b) => b.count - a.count)
   }, [viewRows])
+  // Place a just-added "next step" deliverable beside the asset it branches from, so the journey
+  // reads left→right with a short connector — instead of it stacking at the bottom of the column.
+  useLayoutEffect(() => {
+    const pending = pendingPlaceRef.current
+    if (!pending) return
+    const cv = canvasRef.current
+    if (!cv) return
+    const srcEl = cv.querySelector(`[data-node-id="${pending.srcId}"]`)
+    const delivEl = cv.querySelector(`[data-node-id="${pending.key}"]`)
+    if (!srcEl || !delivEl) return
+    pendingPlaceRef.current = null
+    const sr = srcEl.getBoundingClientRect()
+    const dr = delivEl.getBoundingClientRect()
+    const scale = zoom / 100
+    setPos((prev) => ({
+      ...prev,
+      [pending.key]: {
+        x: (prev[pending.key]?.x ?? 0) + (sr.right + 140 * scale - dr.left) / scale,
+        y: (prev[pending.key]?.y ?? 0) + (sr.top - dr.top) / scale,
+      },
+    }))
+  }, [viewDelivs, zoom])
   const viewAudiences = useMemo(() => [...new Set(viewRows.map((r) => (r.audience ?? '').trim()).filter(Boolean))], [viewRows])
   const viewFlight = campaignList.find((c) => c.name === viewName)?.durationWeeks
   const viewShort = viewName ? viewName.replace(`${brand} — `, '') : ''
@@ -988,7 +1022,12 @@ export function FlowsView() {
   const [addingDeliv, setAddingDeliv] = useState(false)
   const addViewDeliverable = async (p: DeliverablePreset) => {
     if (!viewName || addingDeliv) return
+    // If the picker was opened from an asset's "+", link the new rows back to that asset so the
+    // canvas draws the journey edge (asset → this deliverable).
+    const src = connectFromRef.current
+    const srcRow = src ? useTrafficStore.getState().rows.find((r) => r.id === src) : undefined
     setPickAt(null)
+    setConnectFrom(null)
     setAddingDeliv(true)
     try {
       const auds = flowRefs.length ? flowRefs.map((r) => r.label) : viewAudiences.length ? viewAudiences : audSelection
@@ -996,6 +1035,12 @@ export function FlowsView() {
       const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === viewName).map((r) => r.id))
       await seedCampaignAssets(viewName, [d], { flightWeeks: viewFlight ?? flightWeeks, audiences: auds })
       const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === viewName && !before.has(r.id))
+      if (srcRow && fresh.length) {
+        await updateRows(fresh.map((r) => ({ id: r.id, patch: { branchOf: srcRow.assetName } })))
+        // Queue the new deliverable to be placed beside its source asset once it renders.
+        const f = fresh[0]
+        pendingPlaceRef.current = { key: `${f.channel}|${f.assetType}${f.branchOf ? `|↳${f.branchOf}` : `|↳${srcRow.assetName}`}`, srcId: srcRow.id }
+      }
       if (fresh.length) await draftCopy(fresh.map((r) => r.id))
     } finally {
       setAddingDeliv(false)
@@ -1127,9 +1172,13 @@ export function FlowsView() {
   const implicitConnectors = useMemo(() => {
     const out: { from: string; to: string }[] = []
     if (viewName !== null) {
-      // A viewed flow wires campaign → each deliverable → each of its posts.
+      // A viewed flow wires campaign → each deliverable → each of its posts. A deliverable
+      // that was added off an asset card hangs from that asset instead of the campaign, so the
+      // journey (asset → next step) reads as a forward edge on the canvas.
       for (const d of viewDelivs) {
-        out.push({ from: 'campaign', to: d.key })
+        const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
+        const srcRow = branchSrc ? viewRows.find((r) => r.assetName === branchSrc) : undefined
+        out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
         for (const r of d.rows) out.push({ from: d.key, to: r.id })
       }
       return out
@@ -1144,7 +1193,7 @@ export function FlowsView() {
       for (let bi = 0; bi < slots; bi++) out.push({ from: n.id, to: `${n.id}:${bi}` })
     }
     return out
-  }, [nodes, viewName, viewDelivs])
+  }, [nodes, viewName, viewDelivs, viewRows])
 
   // The campaign name this flow builds into (must match build()'s naming) — used to scope
   // the real Grid / Calendar to just this flow's assets.
@@ -1944,6 +1993,20 @@ export function FlowsView() {
                                       })()}
                                     </div>
                                   ) : null}
+                                  <button
+                                    className="flow-branch-plus"
+                                    title="Add a next step from this asset"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setConnectFrom(r.id)
+                                      setSel(null)
+                                      setBriefCollapsed(false)
+                                      setPickAt(viewDelivs.length)
+                                    }}
+                                  >
+                                    +
+                                  </button>
                                 </div>
                               </div>
                             )
@@ -2074,10 +2137,14 @@ export function FlowsView() {
             pickAt !== null ? (
               <>
                 <div className="flow-panel-head">
-                  <button className="flow-back" onClick={() => setPickAt(null)}>
+                  <button className="flow-back" onClick={() => { setPickAt(null); setConnectFrom(null) }}>
                     ‹ Back
                   </button>
-                  <span className="flow-panel-title">Add deliverable</span>
+                  <span className="flow-panel-title">
+                    {connectFrom
+                      ? `Next step after ${viewRows.find((r) => r.id === connectFrom)?.assetName ?? 'this asset'}`
+                      : 'Add deliverable'}
+                  </span>
                 </div>
                 <div className="flow-picker-list">
                   {grouped.map(([group, presets]) => (

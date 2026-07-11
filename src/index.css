@@ -5618,6 +5618,43 @@ button {
 .flow-node.multi .flow-conn-port {
   opacity: 1;
 }
+/* "+" hanging off the right edge of an asset card: spawns a downstream deliverable (a journey
+   step) that branches from this asset instead of the campaign. Absolutely positioned inside the
+   card so it tracks the card's drag transform. Hidden until the card is hovered/selected so cards
+   stay clean; purple to match the asset (post) tier. */
+.flow-branch-plus {
+  position: absolute;
+  right: -30px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.82);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px dashed color-mix(in srgb, #8a34d6 55%, var(--border));
+  background: var(--surface);
+  color: #8a34d6;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 500;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  z-index: 5;
+}
+.flow-brief-node:hover .flow-branch-plus,
+.flow-brief-node.sel .flow-branch-plus,
+.flow-brief-node.multi .flow-branch-plus {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+.flow-branch-plus:hover {
+  background: color-mix(in srgb, #8a34d6 14%, var(--surface));
+  border-color: #8a34d6;
+  border-style: solid;
+}
 /* SVG connector layer (sits behind the nodes via DOM order). */
 .flow-edges {
   position: absolute;
