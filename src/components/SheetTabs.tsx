@@ -9,7 +9,6 @@ type SheetPage =
   | 'proofpoints'
   | 'objectives'
   | 'channelrecords'
-  | 'campaignsheet'
 
 // The record sheets, organized into the three things a campaign is made of: who you reach, what you
 // say, and where it goes out. Each group is a dropdown of nested sheets (like Google Sheets tabs).
@@ -27,14 +26,13 @@ const GROUPS: { label: string; sheets: { page: SheetPage; label: string }[] }[] 
     sheets: [
       { page: 'messages', label: 'Messages' },
       { page: 'proofpoints', label: 'Proof points' },
-      { page: 'objectives', label: 'Objectives' },
     ],
   },
   {
     label: 'Activation',
     sheets: [
       { page: 'channelrecords', label: 'Channels' },
-      { page: 'campaignsheet', label: 'Campaigns' },
+      { page: 'objectives', label: 'Objectives' },
     ],
   },
 ]

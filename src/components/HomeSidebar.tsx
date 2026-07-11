@@ -158,7 +158,7 @@ function Ico({ name }: { name: string }) {
 
 // Records grouped the way a campaign is built — matches the workbook's Audience / Message /
 // Activation sheet groups so the sidebar and the sheet tabs agree.
-type RecordPage = 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords' | 'campaignsheet'
+type RecordPage = 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords'
 const RECORD_GROUPS: { label: string; items: { page: RecordPage; label: string; ico: string }[] }[] = [
   {
     label: 'Audience',
@@ -173,14 +173,13 @@ const RECORD_GROUPS: { label: string; items: { page: RecordPage; label: string; 
     items: [
       { page: 'messages', label: 'Messages', ico: 'reports' },
       { page: 'proofpoints', label: 'Proof points', ico: 'check' },
-      { page: 'objectives', label: 'Objectives', ico: 'insights' },
     ],
   },
   {
     label: 'Activation',
     items: [
       { page: 'channelrecords', label: 'Channels', ico: 'flows' },
-      { page: 'campaignsheet', label: 'Campaigns', ico: 'campaigns' },
+      { page: 'objectives', label: 'Objectives', ico: 'insights' },
     ],
   },
 ]
