@@ -1195,6 +1195,28 @@ export function FlowsView() {
     return out
   }, [nodes, viewName, viewDelivs, viewRows])
 
+  // Card ids (posts, deliverables, build sub-cards) that carry media budget/spend. Connectors
+  // touching one of these are tinted gold so a paid path stands out from organic on the canvas.
+  const paidCardIds = useMemo(() => {
+    const s = new Set<string>()
+    if (viewName !== null) {
+      for (const d of viewDelivs) {
+        const paidRows = d.rows.filter(hasMediaSpend)
+        if (paidRows.length) s.add(d.key)
+        for (const r of paidRows) s.add(r.id)
+      }
+    } else {
+      for (const n of nodes) {
+        const p = presetByKey(n.presetKey)
+        if (!p || CHANNELS[p.channel]?.kind !== 'paid') continue
+        s.add(n.id)
+        const slots = subcardCount(p, n.perMonth)
+        for (let bi = 0; bi < slots; bi++) s.add(`${n.id}:${bi}`)
+      }
+    }
+    return s
+  }, [viewName, viewDelivs, nodes])
+
   // The campaign name this flow builds into (must match build()'s naming) — used to scope
   // the real Grid / Calendar to just this flow's assets.
   const flowCampaign = viewName ?? `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
@@ -1836,16 +1858,18 @@ export function FlowsView() {
               const a = rects[cn.from]
               const b = rects[cn.to]
               if (!a || !b) return null
-              return <path key={`imp-${cn.from}-${cn.to}`} className="flow-edge implicit" d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)} />
+              const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
+              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)} />
             })}
             {connectors.map((cn, i) => {
               const a = rects[cn.from]
               const b = rects[cn.to]
               if (!a || !b) return null
+              const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
               return (
                 <path
                   key={`${cn.from}-${cn.to}-${i}`}
-                  className="flow-edge"
+                  className={`flow-edge${paid ? ' paid' : ''}`}
                   d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)}
                   onClick={() => setConnectors((c) => c.filter((_, j) => j !== i))}
                 />

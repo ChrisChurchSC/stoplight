@@ -5713,6 +5713,12 @@ button {
   stroke: var(--accent);
   stroke-width: 1.5;
 }
+/* A connector that touches a card carrying media budget/spend: gold, so paid paths read at a
+   glance apart from organic ones. */
+.flow-edge.paid {
+  stroke: #eab308;
+  stroke-width: 1.4;
+}
 .flow-edge.drawing {
   stroke: var(--accent);
   stroke-dasharray: 5 4;
