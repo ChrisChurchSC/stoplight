@@ -363,6 +363,11 @@ export function FlowsView() {
   const [chatBusy, setChatBusy] = useState(false)
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
+  // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
+  const chatCollapsedRef = useRef(chatCollapsed)
+  chatCollapsedRef.current = chatCollapsed
+  const briefCollapsedRef = useRef(briefCollapsed)
+  briefCollapsedRef.current = briefCollapsed
   const [blueprintBusy, setBlueprintBusy] = useState(false)
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
@@ -501,6 +506,15 @@ export function FlowsView() {
   // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + . toggles the canvas side panels (Flow assistant + inspector) for a focused,
+      // full-canvas view. Works even while a field is focused, so it's checked before the guard.
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault()
+        const anyOpen = !chatCollapsedRef.current || !briefCollapsedRef.current
+        setChatCollapsed(anyOpen)
+        setBriefCollapsed(anyOpen)
+        return
+      }
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (e.key === ' ') {
