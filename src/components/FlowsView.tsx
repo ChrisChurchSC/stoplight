@@ -494,6 +494,8 @@ export function FlowsView() {
   const [drawing, setDrawing] = useState<{ from: string; x: number; y: number } | null>(null)
   const drawingFrom = useRef<string | null>(null)
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
+  // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
+  const placedRef = useRef<Set<string>>(new Set())
   // Canvas "add": drag out of a node's +, drop to open a block picker; the new card is
   // created at the drop point and connected back to the source node.
   const [addMenu, setAddMenu] = useState<{ at: number; from: string; x: number; y: number } | null>(null)
@@ -541,6 +543,13 @@ export function FlowsView() {
     }
     setSel(id)
     setPickAt(null)
+  }
+  // "Tidy layout": drop every manual offset so the column and the auto-placed branches re-derive
+  // into a clean arrangement. Cards animate back into place via the card transition.
+  const organizeCards = () => {
+    placedRef.current = new Set()
+    setPos({})
+    setSelected(new Set())
   }
 
   // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
@@ -803,28 +812,45 @@ export function FlowsView() {
     }
     return [...map.values()].sort((a, b) => b.count - a.count)
   }, [viewRows])
-  // Keep every branched deliverable pinned just to the RIGHT of the asset it hangs off, so a
-  // journey reads left→right with a short connector instead of the deliverable dropping to the
-  // bottom of the column. Driven by measured rects, so it follows the source if it moves and
-  // covers branches that already existed (not only freshly added ones). Self-converging: once a
-  // deliverable sits at its target the correction is ~0 and no further state update fires.
+  // Auto-place each branched deliverable just to the RIGHT of the asset it hangs off (several
+  // branches off one asset stack down its right side), so a journey reads left→right with a short
+  // connector instead of dropping to the bottom of the column. Corrects toward the target across
+  // frames using freshly measured rects, then LOCKS the deliverable once it settles (recorded in
+  // placedRef) so a hand drag afterwards is respected. Tidy clears placedRef to re-run it.
+  useEffect(() => { placedRef.current = new Set() }, [viewName])
   useLayoutEffect(() => {
     if (viewName === null) return
     const scale = zoom / 100
-    const gap = 90 * scale // canvas-space gap to the right of the source asset
-    const deltas: Record<string, { dx: number; dy: number }> = {}
+    const gap = 130 * scale // canvas-space gap to the right of the source asset
+    const bySource = new Map<string, ViewDeliverable[]>()
     for (const d of viewDelivs) {
-      const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
-      if (!branchSrc) continue
-      const srcRow = viewRows.find((r) => r.assetName === branchSrc)
+      const src = d.rows.find((r) => r.branchOf)?.branchOf
+      if (!src) continue
+      const list = bySource.get(src)
+      if (list) list.push(d)
+      else bySource.set(src, [d])
+    }
+    const deltas: Record<string, { dx: number; dy: number }> = {}
+    for (const [src, list] of bySource) {
+      const srcRow = viewRows.find((r) => r.assetName === src)
       if (!srcRow) continue
       const sr = rects[srcRow.id]
-      const dr = rects[d.key]
-      if (!sr || !dr) continue
-      const dxScreen = sr.x + sr.w + gap - dr.x
-      const dyScreen = sr.y - dr.y
-      if (Math.abs(dxScreen) < 2 && Math.abs(dyScreen) < 2) continue
-      deltas[d.key] = { dx: dxScreen / scale, dy: dyScreen / scale }
+      if (!sr) continue
+      let offset = 0 // canvas-space vertical offset accumulated down the stack
+      for (const d of list) {
+        if (!placedRef.current.has(d.key)) {
+          const dr = rects[d.key]
+          if (dr) {
+            const dxScreen = sr.x + sr.w + gap - dr.x
+            const dyScreen = sr.y + offset * scale - dr.y
+            // Settled: lock it and stop correcting (so a later hand drag sticks). Else nudge it
+            // toward the target; measuring fresh rects each pass keeps this stable.
+            if (Math.abs(dxScreen) < 2 && Math.abs(dyScreen) < 2) placedRef.current.add(d.key)
+            else deltas[d.key] = { dx: dxScreen / scale, dy: dyScreen / scale }
+          }
+        }
+        offset += Math.max(1, d.rows.length) * 168 + 56 // this branch's block height + a gap
+      }
     }
     if (Object.keys(deltas).length) {
       setPos((prev) => {
@@ -2031,7 +2057,7 @@ export function FlowsView() {
                       <div className="flow-link" />
                       <div
                         className="flow-branched"
-                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: posts.length > 0 ? `${posts.length * 152}px` : undefined }}
+                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: posts.length > 0 ? `${posts.length * 168}px` : undefined }}
                       >
                         <div
                           className={`flow-node flow-tier-deliv${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
@@ -2126,7 +2152,7 @@ export function FlowsView() {
                   return (
                     <div key={n.id}>
                       <div className="flow-link" />
-                      <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 152}px` : undefined }}>
+                      <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 168}px` : undefined }}>
                         <div
                           className={`flow-node flow-tier-deliv${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
                           data-node-id={n.id}
@@ -2924,6 +2950,14 @@ export function FlowsView() {
           <button className={`flow-tb-tool${tool === 'select' ? ' on' : ''}`} onClick={() => setTool('select')} title="Select" aria-label="Select">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M5 3.5 19 10l-6.3 1.9L10 19z" />
+            </svg>
+          </button>
+          <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout — arrange the cards cleanly" aria-label="Tidy layout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
             </svg>
           </button>
         </div>

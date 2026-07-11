@@ -3801,6 +3801,7 @@ button {
 .flow-vcol {
   display: flex;
   flex-direction: column;
+  gap: 34px;
   width: 340px;
   flex: 0 0 auto;
 }
@@ -4452,7 +4453,7 @@ button {
 }
 .flow-branch-list {
   position: absolute;
-  left: calc(100% + 46px);
+  left: calc(100% + 68px);
   top: 50%;
   transform: translateY(-50%);
   display: flex;
