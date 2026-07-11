@@ -106,6 +106,9 @@ import type { SavedFlowChat } from '../domain/flowAgent'
 import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
+import { type Message, freshMessageId } from '../domain/message'
+import { type Objective, freshObjectiveId } from '../domain/objective'
+import { type CampaignRecord, freshCampaignRecordId } from '../domain/campaignRecord'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -631,6 +634,28 @@ function savePeople(list: Person[]): void {
     /* ignore */
   }
 }
+// Generic localStorage-backed record list (no seed): the new workbook sheets — Messages,
+// Objectives, Campaigns — all persist the same way.
+function loadRecordList<T>(key: string): T[] {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw == null) return []
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveRecordList<T>(key: string, list: T[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+const MESSAGES_KEY = 'stoplight.messages.v1'
+const OBJECTIVES_KEY = 'stoplight.objectives.v1'
+const CAMPAIGN_RECORDS_KEY = 'stoplight.campaignRecords.v1'
 const SEGMENTS_KEY = 'stoplight.segments.v1'
 function loadSegments(): Segment[] {
   try {
@@ -1235,7 +1260,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'flows'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'campaignsheet' | 'flows'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -1351,6 +1376,21 @@ interface TrafficState {
   updatePerson: (id: string, patch: Partial<Person>) => void
   /** Delete a person row by id. */
   deletePerson: (id: string) => void
+  /** Records › Message › Messages — reusable messages/angles. */
+  messages: Message[]
+  addMessage: (partial?: Partial<Message>) => string
+  updateMessage: (id: string, patch: Partial<Message>) => void
+  deleteMessage: (id: string) => void
+  /** Records › Message › Objectives — what campaigns move + how it's measured. */
+  objectives: Objective[]
+  addObjective: (partial?: Partial<Objective>) => string
+  updateObjective: (id: string, patch: Partial<Objective>) => void
+  deleteObjective: (id: string) => void
+  /** Records › Activation › Campaigns — lightweight campaign planning rows. */
+  campaignRecords: CampaignRecord[]
+  addCampaignRecord: (partial?: Partial<CampaignRecord>) => string
+  updateCampaignRecord: (id: string, patch: Partial<CampaignRecord>) => void
+  deleteCampaignRecord: (id: string) => void
   /** Records › Segments — the account-segments table. */
   segments: Segment[]
   /** Add a segment row (blank defaults unless overridden); returns its id. */
@@ -1621,7 +1661,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'flows') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'campaignsheet' | 'flows') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2007,6 +2047,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   channelRecords: loadChannelRecords(),
   onboarding: loadOnboarding(),
   people: loadPeople(),
+  messages: loadRecordList<Message>(MESSAGES_KEY),
+  objectives: loadRecordList<Objective>(OBJECTIVES_KEY),
+  campaignRecords: loadRecordList<CampaignRecord>(CAMPAIGN_RECORDS_KEY),
   segments: loadSegments(),
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
@@ -2367,6 +2410,75 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const people = s.people.filter((p) => p.id !== id)
       savePeople(people)
       return { people }
+    }),
+
+  addMessage: (partial) => {
+    const id = freshMessageId()
+    const row: Message = { name: 'New message', ...(partial ?? {}), id }
+    set((s) => {
+      const messages = [row, ...s.messages]
+      saveRecordList(MESSAGES_KEY, messages)
+      return { messages }
+    })
+    return id
+  },
+  updateMessage: (id, patch) =>
+    set((s) => {
+      const messages = s.messages.map((m) => (m.id === id ? { ...m, ...patch } : m))
+      saveRecordList(MESSAGES_KEY, messages)
+      return { messages }
+    }),
+  deleteMessage: (id) =>
+    set((s) => {
+      const messages = s.messages.filter((m) => m.id !== id)
+      saveRecordList(MESSAGES_KEY, messages)
+      return { messages }
+    }),
+
+  addObjective: (partial) => {
+    const id = freshObjectiveId()
+    const row: Objective = { name: 'New objective', ...(partial ?? {}), id }
+    set((s) => {
+      const objectives = [row, ...s.objectives]
+      saveRecordList(OBJECTIVES_KEY, objectives)
+      return { objectives }
+    })
+    return id
+  },
+  updateObjective: (id, patch) =>
+    set((s) => {
+      const objectives = s.objectives.map((o) => (o.id === id ? { ...o, ...patch } : o))
+      saveRecordList(OBJECTIVES_KEY, objectives)
+      return { objectives }
+    }),
+  deleteObjective: (id) =>
+    set((s) => {
+      const objectives = s.objectives.filter((o) => o.id !== id)
+      saveRecordList(OBJECTIVES_KEY, objectives)
+      return { objectives }
+    }),
+
+  addCampaignRecord: (partial) => {
+    const id = freshCampaignRecordId()
+    const row: CampaignRecord = { name: 'New campaign', ...(partial ?? {}), id }
+    set((s) => {
+      const campaignRecords = [row, ...s.campaignRecords]
+      saveRecordList(CAMPAIGN_RECORDS_KEY, campaignRecords)
+      return { campaignRecords }
+    })
+    return id
+  },
+  updateCampaignRecord: (id, patch) =>
+    set((s) => {
+      const campaignRecords = s.campaignRecords.map((c) => (c.id === id ? { ...c, ...patch } : c))
+      saveRecordList(CAMPAIGN_RECORDS_KEY, campaignRecords)
+      return { campaignRecords }
+    }),
+  deleteCampaignRecord: (id) =>
+    set((s) => {
+      const campaignRecords = s.campaignRecords.filter((c) => c.id !== id)
+      saveRecordList(CAMPAIGN_RECORDS_KEY, campaignRecords)
+      return { campaignRecords }
     }),
 
   addSegment: (partial) => {
