@@ -84,6 +84,16 @@ export function RecordsTable<T extends { id: string }>({
   const sortLabel = columns.find((c) => c.key === sortKey)?.label ?? title
   const set = (id: string, key: string, value: string) => onUpdate(id, { [key]: value } as Partial<T>)
 
+  // Consecutive columns sharing a group render under one section header (Brand-Foundation style).
+  const hasGroups = columns.some((c) => c.group)
+  const groupSpans = columns.reduce<{ label: string; span: number }[]>((acc, col) => {
+    const g = col.group ?? ''
+    const last = acc[acc.length - 1]
+    if (last && last.label === g) last.span++
+    else acc.push({ label: g, span: 1 })
+    return acc
+  }, [])
+
   // Spreadsheet keyboard nav across the editable text cells. Focusing a new cell blurs the
   // current one, which commits it (BufferedInput commits on blur). Status/colors cells are skipped.
   const navCols = columns.map((c, i) => (c.kind === 'status' || c.kind === 'colors' ? -1 : i)).filter((i) => i >= 0)
@@ -164,8 +174,18 @@ export function RecordsTable<T extends { id: string }>({
       </div>
 
       <div className="rec-table-wrap" ref={wrapRef}>
-        <table className="rec-table" style={{ minWidth: totalWidth }}>
+        <table className={`rec-table${hasGroups ? ' grouped' : ''}`} style={{ minWidth: totalWidth }}>
           <thead>
+            {hasGroups && (
+              <tr className="rec-group-row">
+                {groupSpans.map((g, i) => (
+                  <th key={i} colSpan={g.span} className={`rec-group-th${g.label ? '' : ' rec-group-empty'}`}>
+                    {g.label}
+                  </th>
+                ))}
+                <th className="rec-th-del" aria-hidden="true" />
+              </tr>
+            )}
             <tr>
               {columns.map((col) => (
                 <th key={col.key} style={{ width: col.width }} onClick={() => toggleSort(col.key)}>

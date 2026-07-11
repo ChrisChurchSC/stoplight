@@ -3104,6 +3104,31 @@ button {
 .rec-table th:hover .rec-th-label {
   color: var(--text);
 }
+/* Section header row grouping columns (Brand-Foundation style). Sticks above the column headers. */
+.rec-group-row th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 5px 12px;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-bottom: 1px solid var(--border);
+  border-right: 2px solid var(--surface);
+  cursor: default;
+  white-space: nowrap;
+}
+.rec-group-th.rec-group-empty {
+  background: var(--surface-2);
+  color: transparent;
+  border-right: 0;
+}
+.rec-table.grouped thead tr:not(.rec-group-row) th {
+  top: 27px;
+}
 .rec-th-sort {
   margin-left: 5px;
   color: var(--accent);

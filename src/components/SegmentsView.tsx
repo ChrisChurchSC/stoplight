@@ -66,8 +66,20 @@ const SPECS: Spec[] = [
   { key: 'gender', label: 'Gender', kind: 'text', get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },
 ]
 
-const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col! }))
-const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind }))
+// Section groups so the table columns and the drawer fields organize under Brand-Foundation-style
+// headers (Identity / Messaging / Priority / ...). Groups must stay contiguous in SPEC order.
+const GROUP: Record<string, string> = {
+  name: 'Identity', who: 'Identity', role: 'Identity',
+  angle: 'Messaging', antiMessage: 'Messaging', outcome: 'Messaging',
+  funnel: 'Priority', tier: 'Priority', strategy: 'Priority',
+  pains: 'Motivations', goals: 'Motivations', goalTags: 'Motivations', objections: 'Motivations', triggers: 'Motivations',
+  channels: 'Go-to-market', leadProof: 'Go-to-market',
+  examples: 'References', aliases: 'References',
+  geos: 'Firmographics', functions: 'Firmographics', seniority: 'Firmographics', industry: 'Firmographics', companySize: 'Firmographics',
+  ageRanges: 'Demographics', incomeRanges: 'Demographics', gender: 'Demographics',
+}
+const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: GROUP[s.key] }))
+const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: GROUP[s.key] }))
 
 type SegRow = { id: string } & Record<string, string>
 
