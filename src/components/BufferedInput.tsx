@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
 
 /**
  * A text input / textarea that buffers keystrokes locally and only commits on blur.
@@ -25,12 +25,18 @@ function useBuffer(value: string, onCommit: (v: string) => void) {
   }
 }
 
-export function BufferedInput({ value, onCommit, className, placeholder, style }: {
+export function BufferedInput({ value, onCommit, className, placeholder, style, onKeyDown, onPaste, cellR, cellC }: {
   value: string
   onCommit: (v: string) => void
   className?: string
   placeholder?: string
   style?: CSSProperties
+  /** Spreadsheet keyboard nav (Tab/Enter/Arrow) handled by the table, plus TSV paste. */
+  onKeyDown?: (e: ReactKeyboardEvent<HTMLInputElement>) => void
+  onPaste?: (e: ReactClipboardEvent<HTMLInputElement>) => void
+  /** Cell coordinates so the table can move focus between cells. */
+  cellR?: number
+  cellC?: number
 }) {
   const b = useBuffer(value, onCommit)
   return (
@@ -39,9 +45,13 @@ export function BufferedInput({ value, onCommit, className, placeholder, style }
       style={style}
       placeholder={placeholder}
       value={b.value}
+      data-r={cellR}
+      data-c={cellC}
       onFocus={b.onFocus}
       onChange={(e) => b.onChange(e.target.value)}
       onBlur={b.onBlur}
+      onKeyDown={onKeyDown}
+      onPaste={onPaste}
     />
   )
 }

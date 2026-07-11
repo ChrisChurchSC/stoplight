@@ -103,11 +103,22 @@ export function SegmentsView() {
       statuses={[]}
       rows={rows}
       noun={['segment', 'segments']}
-      onAdd={() => setClientAudiences(brand, [newAudience({ name: 'New segment' }), ...audiences])}
-      onUpdate={(id, patch) =>
-        setClientAudiences(brand, audiences.map((a) => (a.id === id ? patchAudience(a, patch) : a)))
-      }
-      onDelete={(id) => setClientAudiences(brand, audiences.filter((a) => a.id !== id))}
+      onAdd={() => {
+        // Read the live array (not the render closure) so a paste that creates several rows in one
+        // pass appends each one instead of clobbering the last. Return the id so paste can fill it.
+        const a = newAudience({ name: 'New segment' })
+        const cur = useTrafficStore.getState().clientAudiences[brand] ?? []
+        setClientAudiences(brand, [...cur, a])
+        return a.id
+      }}
+      onUpdate={(id, patch) => {
+        const cur = useTrafficStore.getState().clientAudiences[brand] ?? []
+        setClientAudiences(brand, cur.map((a) => (a.id === id ? patchAudience(a, patch) : a)))
+      }}
+      onDelete={(id) => {
+        const cur = useTrafficStore.getState().clientAudiences[brand] ?? []
+        setClientAudiences(brand, cur.filter((a) => a.id !== id))
+      }}
     />
   )
 }

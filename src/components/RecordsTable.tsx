@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
 import { RecordDrawer } from './RecordDrawer'
 import { BufferedInput } from './BufferedInput'
@@ -28,7 +28,7 @@ export function RecordsTable<T extends { id: string }>({
   statuses: string[]
   rows: T[]
   noun: [string, string]
-  onAdd: () => void
+  onAdd: () => string | void
   onUpdate: (id: string, patch: Partial<T>) => void
   onDelete: (id: string) => void
 }) {
@@ -84,6 +84,60 @@ export function RecordsTable<T extends { id: string }>({
   const sortLabel = columns.find((c) => c.key === sortKey)?.label ?? title
   const set = (id: string, key: string, value: string) => onUpdate(id, { [key]: value } as Partial<T>)
 
+  // Spreadsheet keyboard nav across the editable text cells. Focusing a new cell blurs the
+  // current one, which commits it (BufferedInput commits on blur). Status/colors cells are skipped.
+  const navCols = columns.map((c, i) => (c.kind === 'status' || c.kind === 'colors' ? -1 : i)).filter((i) => i >= 0)
+  const focusCell = (r: number, c: number): boolean => {
+    const el = wrapRef.current?.querySelector<HTMLInputElement>(`input[data-r="${r}"][data-c="${c}"]`)
+    if (el) {
+      el.focus()
+      el.select()
+    }
+    return !!el
+  }
+  const stepCol = (c: number, dir: 1 | -1): number => navCols[navCols.indexOf(c) + dir] ?? -1
+  const onCellKey = (e: ReactKeyboardEvent<HTMLInputElement>, r: number, c: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      focusCell(e.shiftKey ? r - 1 : r + 1, c)
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      focusCell(r + 1, c)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      focusCell(r - 1, c)
+    } else if (e.key === 'Tab') {
+      e.preventDefault()
+      const nc = stepCol(c, e.shiftKey ? -1 : 1)
+      if (nc >= 0) focusCell(r, nc)
+      else if (e.shiftKey) focusCell(r - 1, navCols[navCols.length - 1])
+      else focusCell(r + 1, navCols[0])
+    }
+  }
+  // Paste a block copied from a real spreadsheet (tab = columns, newline = rows) starting at the
+  // focused cell: fill existing rows, and spin up new records (onAdd returns the id) for any extra
+  // pasted rows. A plain single-value paste falls through to the browser.
+  const onCellPaste = (e: ReactClipboardEvent<HTMLInputElement>, r: number, c: number) => {
+    const text = e.clipboardData.getData('text/plain')
+    if (!/[\t\n]/.test(text.replace(/\n+$/, ''))) return
+    e.preventDefault()
+    const matrix = text.replace(/\r/g, '').replace(/\n+$/, '').split('\n').map((line) => line.split('\t'))
+    matrix.forEach((cells, ri2) => {
+      const existing = sorted[r + ri2]
+      let id = existing?.id
+      if (!id) {
+        const added = onAdd()
+        if (typeof added !== 'string') return // this record type can't create rows from paste
+        id = added
+      }
+      cells.forEach((cellVal, ci2) => {
+        const col = columns[c + ci2]
+        if (!col || col.kind === 'colors') return
+        onUpdate(id as string, { [col.key]: cellVal } as Partial<T>)
+      })
+    })
+  }
+
   return (
     <div className="rec">
       <header className="rec-head">
@@ -123,11 +177,11 @@ export function RecordsTable<T extends { id: string }>({
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r) => {
+            {sorted.map((r, ri) => {
               const name = val(r, 'name')
               return (
                 <tr key={r.id}>
-                  {columns.map((col) => {
+                  {columns.map((col, ci) => {
                     const v = val(r, col.key)
                     return (
                       <td key={col.key} className={`rec-td rec-td-${col.kind}`}>
@@ -142,7 +196,7 @@ export function RecordsTable<T extends { id: string }>({
                             >
                               {(name.trim()[0] || '?').toUpperCase()}
                             </button>
-                            <BufferedInput className="rec-cell rec-cell-name" value={v} onCommit={(nv) => set(r.id, col.key, nv)} />
+                            <BufferedInput className="rec-cell rec-cell-name" value={v} onCommit={(nv) => set(r.id, col.key, nv)} cellR={ri} cellC={ci} onKeyDown={(e) => onCellKey(e, ri, ci)} onPaste={(e) => onCellPaste(e, ri, ci)} />
                             <button className="rec-open" title="Open details" aria-label="Open details" onClick={() => setOpenId(r.id)}>
                               ⤢
                             </button>
@@ -163,7 +217,7 @@ export function RecordsTable<T extends { id: string }>({
                           </select>
                         ) : col.kind === 'url' ? (
                           <div className="rec-url">
-                            <BufferedInput className="rec-cell rec-cell-url" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} />
+                            <BufferedInput className="rec-cell rec-cell-url" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} cellR={ri} cellC={ci} onKeyDown={(e) => onCellKey(e, ri, ci)} onPaste={(e) => onCellPaste(e, ri, ci)} />
                             {v && (
                               <a className="rec-url-go" href={`https://${v.replace(/^https?:\/\//, '')}`} target="_blank" rel="noopener noreferrer" title="Open">
                                 ↗
@@ -178,7 +232,7 @@ export function RecordsTable<T extends { id: string }>({
                             {!v.trim() && <span className="rec-cell-muted">—</span>}
                           </button>
                         ) : (
-                          <BufferedInput className="rec-cell" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} />
+                          <BufferedInput className="rec-cell" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} cellR={ri} cellC={ci} onKeyDown={(e) => onCellKey(e, ri, ci)} onPaste={(e) => onCellPaste(e, ri, ci)} />
                         )}
                       </td>
                     )

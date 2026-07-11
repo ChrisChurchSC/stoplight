@@ -63,9 +63,15 @@ export function ProofPointsView() {
       statuses={[]}
       rows={rows}
       noun={['proof point', 'proof points']}
-      onAdd={() => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: 'New proof point', detail: '', approved: false })}
+      onAdd={() => {
+        // Return the id (and read live rows in onUpdate) so a paste that spins up several rows can
+        // fill each one it just created.
+        const id = freshRecordId('lrtb')
+        addLibraryItem('rtbs', { id, label: 'New proof point', detail: '', approved: false })
+        return id
+      }}
       onUpdate={(id, patch) => {
-        const rtb = rtbs.find((r) => r.id === id)
+        const rtb = (useTrafficStore.getState().library.rtbs ?? []).find((r) => r.id === id)
         if (!rtb) return
         const next: Rtb = { ...rtb }
         for (const s of SPECS) {
