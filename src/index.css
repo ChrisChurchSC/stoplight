@@ -4845,6 +4845,31 @@ button {
 .flow-top-build:hover:not(:disabled) {
   filter: brightness(1.05);
 }
+/* Share the workspace, sitting beside the view switcher in the header. */
+.flow-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.flow-share-btn svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+.flow-share-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--text-faint);
+}
 /* Flow / Grid / Calendar view switcher in the header. */
 .flow-viewtabs {
   display: inline-flex;

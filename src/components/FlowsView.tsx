@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { resolveBrandScope } from '../domain/brand'
+import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
@@ -318,6 +319,8 @@ export function FlowsView() {
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
+  const role = useTrafficStore((s) => s.role)
+  const openShareDialog = useTrafficStore((s) => s.openShareDialog)
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
   const flowChats = useTrafficStore((s) => s.flowChats)
   const saveFlowChat = useTrafficStore((s) => s.saveFlowChat)
@@ -1692,6 +1695,17 @@ export function FlowsView() {
           )}
         </div>
         <div className="flow-top-right">
+          {can(role, 'share') && (
+            <button className="flow-share-btn" onClick={openShareDialog} title="Share this workspace">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+              </svg>
+              Share
+            </button>
+          )}
           <div className="flow-viewtabs">
             {(['flow', 'grid', 'calendar'] as const).map((v) => (
               <button key={v} className={`flow-viewtab${flowView === v ? ' on' : ''}`} onClick={() => { setFlowView(v); if (v !== 'flow') markOnboardingDone('review') }}>
