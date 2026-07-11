@@ -2481,7 +2481,7 @@ export function FlowsView() {
                         </button>
                       </>
                     ) : (
-                      'Inherited from the campaign. Edit to target different records for just this deliverable, then Regenerate.'
+                      'Inherited from the campaign. Edit to target different records for just this deliverable, then Generate.'
                     )}
                   </div>
                   {(() => {
@@ -2525,7 +2525,7 @@ export function FlowsView() {
                     onChange={(e) => setViewSubjectDraft(e.target.value)}
                     onBlur={commitViewSubject}
                   />
-                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>The campaign theme. Every asset's copy is written to it; change it, then Regenerate to redraft them all.</div>
+                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>The campaign theme. Every asset's copy is written to it; change it, then Generate to redraft them all.</div>
                   <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                     Flight length
                   </label>
@@ -2973,11 +2973,11 @@ export function FlowsView() {
         {viewing && viewRows.length > 0 && (
           <>
             <span className="flow-tb-divider" />
-            <button className="flow-tb-regen" onClick={regenerateFlow} disabled={regenerating} title="Rewrite every asset's copy">
+            <button className="flow-tb-regen" onClick={regenerateFlow} disabled={regenerating} title="Generate copy for every asset">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
               </svg>
-              {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with records' : 'Regenerate copy'}
+              {regenerating ? 'Generating…' : refsDirty ? 'Generate with records' : 'Generate'}
             </button>
           </>
         )}
