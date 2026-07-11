@@ -5634,15 +5634,17 @@ button {
   border: 1.5px dashed color-mix(in srgb, #8a34d6 55%, var(--border));
   background: var(--surface);
   color: #8a34d6;
-  font-size: 16px;
-  line-height: 1;
-  font-weight: 500;
   display: grid;
   place-items: center;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
   z-index: 5;
+}
+.flow-branch-plus svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 .flow-brief-node:hover .flow-branch-plus,
 .flow-brief-node.sel .flow-branch-plus,

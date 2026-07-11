@@ -1996,6 +1996,7 @@ export function FlowsView() {
                                   <button
                                     className="flow-branch-plus"
                                     title="Add a next step from this asset"
+                                    aria-label="Add a next step from this asset"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                       e.stopPropagation()
@@ -2005,7 +2006,9 @@ export function FlowsView() {
                                       setPickAt(viewDelivs.length)
                                     }}
                                   >
-                                    +
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                                      <path d="M12 6v12M6 12h12" />
+                                    </svg>
                                   </button>
                                 </div>
                               </div>
