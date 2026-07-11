@@ -492,20 +492,23 @@ export function HomeSidebar() {
                       </span>
                       <span className="nav-label">{g.label}</span>
                     </button>
-                    {expanded &&
-                      g.items.map((it) => (
-                        <button
-                          key={it.page}
-                          className={`nav-item hsb-rec-child${page === it.page ? ' active' : ''}`}
-                          onClick={() => setPage(it.page)}
-                          title={it.label}
-                        >
-                          <span className="nav-ico">
-                            <Ico name={it.ico} />
-                          </span>
-                          <span className="nav-label">{it.label}</span>
-                        </button>
-                      ))}
+                    {expanded && (
+                      <div className="hsb-rec-children">
+                        {g.items.map((it) => (
+                          <button
+                            key={it.page}
+                            className={`nav-item hsb-rec-child${page === it.page ? ' active' : ''}`}
+                            onClick={() => setPage(it.page)}
+                            title={it.label}
+                          >
+                            <span className="nav-ico">
+                              <Ico name={it.ico} />
+                            </span>
+                            <span className="nav-label">{it.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -2954,12 +2954,14 @@ button {
   flex-direction: column;
   gap: 1px;
 }
-/* Records nav tree: Audience / Message / Activation are the primary items; their sheets nest
-   under them, expandable. */
+/* Records nav tree, three tiers that each step in from the one above so the nesting reads
+   unambiguously: the RECORDS section header, then the Audience / Message / Activation groups
+   indented under it, then each group's sheets indented again under a vertical guide line. */
 .hsb-rec-group + .hsb-rec-group {
   margin-top: 2px;
 }
 .hsb-rec-parent {
+  padding-left: 16px;
   font-weight: 650;
   gap: 6px;
 }
@@ -2982,8 +2984,16 @@ button {
   width: 12px;
   height: 12px;
 }
+/* The sheets under a group, tied to it by a hairline guide that lands beneath the parent caret. */
+.hsb-rec-children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 2px 22px;
+  border-left: 1px solid var(--border);
+}
 .hsb-rec-child {
-  padding-left: 30px;
+  padding-left: 16px;
 }
 .hsb-chat {
   display: flex;
