@@ -31,6 +31,27 @@
   --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
 }
 
+/* --- GT Mechanik TRIAL (Grilli Type), scoped to .flow. Eval license only: replace these files
+   with the licensed webfont before this ships anywhere. --- */
+@font-face { font-family: 'GT Mechanik Poly'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/gt-mechanik/GT-Mechanik-Poly-Regular-Trial.otf') format('opentype'); }
+@font-face { font-family: 'GT Mechanik Poly'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/gt-mechanik/GT-Mechanik-Poly-Medium-Trial.otf') format('opentype'); }
+@font-face { font-family: 'GT Mechanik Poly'; font-weight: 600 800; font-style: normal; font-display: swap;
+  src: url('/fonts/gt-mechanik/GT-Mechanik-Poly-Bold-Trial.otf') format('opentype'); }
+@font-face { font-family: 'GT Mechanik Poly'; font-weight: 900; font-style: normal; font-display: swap;
+  src: url('/fonts/gt-mechanik/GT-Mechanik-Poly-Black-Trial.otf') format('opentype'); }
+@font-face { font-family: 'GT Mechanik Mono'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/gt-mechanik/GT-Mechanik-Mono-Regular-Trial.otf') format('opentype'); }
+@font-face { font-family: 'GT Mechanik Mono'; font-weight: 600 700; font-style: normal; font-display: swap;
+  src: url('/fonts/gt-mechanik/GT-Mechanik-Mono-Bold-Trial.otf') format('opentype'); }
+/* Trial the typeface on just the flow canvas page: re-point the font tokens for this subtree. */
+.flow {
+  --font: 'GT Mechanik Poly', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'GT Mechanik Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-family: var(--font);
+}
+
 * {
   box-sizing: border-box;
 }
