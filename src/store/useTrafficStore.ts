@@ -1518,6 +1518,9 @@ interface TrafficState {
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
+  /** Spawn a Flow from a Campaign planning record: create the campaign pre-filled with its goal,
+   *  audience (matched to a segment), and budget, then open it in the Flows builder. */
+  buildFlowFromCampaignRecord: (rec: CampaignRecord, client: string) => void
   /** Move a campaign through its lifecycle (planning → in-review → active → completed). */
   setCampaignStatus: (name: string, status: CampaignStatus) => void
   /** Open a campaign straight into its workspace (Level 2 canvas) from anywhere —
@@ -2924,6 +2927,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
+
+  buildFlowFromCampaignRecord: (rec, client) => {
+    const name = `${client ? `${client} — ` : ''}${(rec.name || 'New campaign').trim()}`
+    // Match the plan's audience to a real segment so the flow's copy is pinned to it.
+    const auds = get().clientAudiences[client] ?? []
+    const seg = rec.audience ? auds.find((a) => a.name.trim().toLowerCase() === rec.audience!.trim().toLowerCase()) : undefined
+    const references: FlowReference[] = seg ? [{ type: 'segment', id: seg.id, label: seg.name }] : []
+    const budgetNum = rec.budget ? Number(rec.budget.replace(/[^0-9.]/g, '')) : NaN
+    get().addCampaign({
+      name,
+      client,
+      strategy: 'Current state',
+      subject: rec.goal || '',
+      objective: rec.goal || undefined,
+      references,
+      ...(Number.isFinite(budgetNum) && budgetNum > 0 ? { overallBudget: budgetNum } : {}),
+    })
+    get().openFlow(name)
+  },
 
   addCanvas: (client, campaign, name, audiences = []) => {
     const id = `canvas_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`

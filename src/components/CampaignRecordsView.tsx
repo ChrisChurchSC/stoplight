@@ -1,4 +1,5 @@
 import { CAMPAIGN_COLUMNS, CAMPAIGN_FIELDS, CAMPAIGN_STATUSES } from '../domain/campaignRecord'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordsTable } from './RecordsTable'
 
@@ -15,6 +16,10 @@ export function CampaignRecordsView() {
   const addCampaignRecord = useTrafficStore((s) => s.addCampaignRecord)
   const updateCampaignRecord = useTrafficStore((s) => s.updateCampaignRecord)
   const deleteCampaignRecord = useTrafficStore((s) => s.deleteCampaignRecord)
+  const buildFlow = useTrafficStore((s) => s.buildFlowFromCampaignRecord)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const { brands } = useHomeCanvases()
+  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
 
   return (
     <RecordsTable
@@ -28,6 +33,7 @@ export function CampaignRecordsView() {
       onAdd={() => addCampaignRecord()}
       onUpdate={updateCampaignRecord}
       onDelete={deleteCampaignRecord}
+      rowAction={{ label: 'Build flow →', run: (r) => brand && buildFlow(r, brand) }}
     />
   )
 }

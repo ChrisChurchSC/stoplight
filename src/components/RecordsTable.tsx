@@ -21,6 +21,7 @@ export function RecordsTable<T extends { id: string }>({
   onAdd,
   onUpdate,
   onDelete,
+  rowAction,
 }: {
   title: string
   icon: ReactNode
@@ -32,6 +33,8 @@ export function RecordsTable<T extends { id: string }>({
   onAdd: () => string | void
   onUpdate: (id: string, patch: Partial<T>) => void
   onDelete: (id: string) => void
+  /** Optional per-row action button (e.g. "Build flow" on a campaign row). */
+  rowAction?: { label: string; run: (row: T) => void }
 }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -184,6 +187,7 @@ export function RecordsTable<T extends { id: string }>({
                     {g.label}
                   </th>
                 ))}
+                {rowAction && <th className="rec-group-th rec-group-empty" aria-hidden="true" />}
                 <th className="rec-th-del" aria-hidden="true" />
               </tr>
             )}
@@ -194,6 +198,7 @@ export function RecordsTable<T extends { id: string }>({
                   {sortKey === col.key && <span className="rec-th-sort">{sortDir === 'asc' ? '↑' : '↓'}</span>}
                 </th>
               ))}
+              {rowAction && <th className="rec-th-act" aria-hidden="true" />}
               <th className="rec-th-del" aria-hidden="true" />
             </tr>
           </thead>
@@ -258,6 +263,13 @@ export function RecordsTable<T extends { id: string }>({
                       </td>
                     )
                   })}
+                  {rowAction && (
+                    <td className="rec-td rec-td-act">
+                      <button className="rec-rowact" onClick={() => rowAction.run(r)}>
+                        {rowAction.label}
+                      </button>
+                    </td>
+                  )}
                   <td className="rec-td rec-td-del">
                     <button className="rec-del" title={`Delete ${noun[0]}`} aria-label={`Delete ${noun[0]}`} onClick={() => onDelete(r.id)}>
                       ✕
@@ -267,7 +279,7 @@ export function RecordsTable<T extends { id: string }>({
               )
             })}
             <tr className="rec-add-row" onClick={onAdd}>
-              <td colSpan={columns.length + 1} className="rec-add-cell">
+              <td colSpan={columns.length + (rowAction ? 2 : 1)} className="rec-add-cell">
                 + New {noun[0]}
               </td>
             </tr>

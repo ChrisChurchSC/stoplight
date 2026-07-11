@@ -3253,6 +3253,34 @@ button {
   border-right: 0;
   text-align: center;
 }
+.rec-th-act {
+  width: 108px;
+  cursor: default;
+}
+.rec-td-act {
+  text-align: center;
+  white-space: nowrap;
+}
+.rec-rowact {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.rec-table tbody tr:hover .rec-rowact {
+  opacity: 1;
+}
+.rec-rowact:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
 .rec-del {
   border: 0;
   background: none;
