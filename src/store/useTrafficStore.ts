@@ -1823,6 +1823,9 @@ interface TrafficState {
    *  (the brand-less / contamination failure mode). Cleared on the next bound action. */
   brandNotice: string | null
   setBrandNotice: (msg: string | null) => void
+  /** A transient bottom toast for lightweight recommendations (e.g. an unallocated budget). */
+  toast: string | null
+  showToast: (msg: string | null) => void
   /** The inspectable baseline for a brand: which voice / proof set is in force and from
    *  where (self + ancestors + shares). Drives the canvas baseline chip + coherence report. */
   brandBaselineFor: (brand: string) => BrandBaseline
@@ -2020,6 +2023,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandSystems: loadBrandSystems(),
   brandMeta: loadBrandMeta(),
   brandNotice: null,
+  toast: null,
   accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
   targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
   campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
@@ -4488,6 +4492,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   // ---- Brand boundary actions ----
   setBrandNotice: (msg) => set({ brandNotice: msg }),
+  showToast: (msg) => set({ toast: msg }),
 
   brandBaselineFor: (brand) => {
     const s = get()

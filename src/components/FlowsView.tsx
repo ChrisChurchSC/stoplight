@@ -299,6 +299,7 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaign = useTrafficStore((s) => s.patchCampaign)
+  const showToast = useTrafficStore((s) => s.showToast)
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const companies = useTrafficStore((s) => s.companies)
@@ -929,6 +930,10 @@ export function FlowsView() {
     const n = viewBudgetDraft.trim() === '' ? undefined : Math.max(0, Number(viewBudgetDraft) || 0)
     if (n === viewCampaign?.overallBudget) return
     patchCampaign(viewName, { overallBudget: n })
+    // A budget needs paid media to land on. Flag it if there's nowhere to spend it.
+    if (n && n > 0 && !viewRows.some((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid')) {
+      showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+    }
   }
 
   // The brand's real ingested posts (from the Library), most-reached first — the pool a
@@ -1230,6 +1235,12 @@ export function FlowsView() {
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [briefRefsEffective, nodes, channelRecords])
+
+  // Whether the flow being built has any paid-media deliverable (a node or a channel tag) — a
+  // budget needs one of these to land on.
+  const hasPaidBuild =
+    nodes.some((x) => CHANNELS[presetByKey(x.presetKey)?.channel as ChannelId]?.kind === 'paid') ||
+    channelTagPresets.some((p) => CHANNELS[p.channel as ChannelId]?.kind === 'paid')
 
   const build = () => {
     // Materialize any channel tags into real deliverable nodes first (so they appear on the
@@ -2296,6 +2307,11 @@ export function FlowsView() {
                       onBlur={commitViewBudget}
                     />
                   </div>
+                  {(viewCampaign?.overallBudget ?? 0) > 0 && !viewRows.some((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid') && (
+                    <div className="flow-budget-warn">
+                      No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                    </div>
+                  )}
                   {renderRecordTags(campaignTagOps)}
                   <button className="flow-brief-build" onClick={regenerateFlow} disabled={regenerating || !viewRows.length}>
                     {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with these records' : '↻ Regenerate copy'}
@@ -2378,8 +2394,17 @@ export function FlowsView() {
                     value={budget}
                     placeholder="Total campaign budget"
                     onChange={(e) => setBudget(e.target.value)}
+                    onBlur={() => {
+                      const n = Math.max(0, +budget || 0)
+                      if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+                    }}
                   />
                 </div>
+                {(+budget || 0) > 0 && !hasPaidBuild && (
+                  <div className="flow-budget-warn">
+                    No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                  </div>
+                )}
                 {renderRecordTags(campaignTagOps)}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length

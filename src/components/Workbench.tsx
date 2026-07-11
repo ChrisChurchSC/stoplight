@@ -56,6 +56,7 @@ import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 import { GettingStarted } from './GettingStarted'
+import { Toast } from './Toast'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -289,6 +290,7 @@ export function Workbench() {
       <AudienceWizard />
       <ConnectDataNudge />
       <GettingStarted />
+      <Toast />
     </div>
   )
 }
