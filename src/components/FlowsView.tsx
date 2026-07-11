@@ -387,9 +387,6 @@ export function FlowsView() {
   chatCollapsedRef.current = chatCollapsed
   const briefCollapsedRef = useRef(briefCollapsed)
   briefCollapsedRef.current = briefCollapsed
-  // When a deliverable is added off an asset's "+", we place it beside that asset once it renders
-  // (rather than letting it stack at the bottom of the column). Holds { delivKey, srcId } until placed.
-  const pendingPlaceRef = useRef<{ key: string; srcId: string } | null>(null)
   const [blueprintBusy, setBlueprintBusy] = useState(false)
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
@@ -785,28 +782,40 @@ export function FlowsView() {
     }
     return [...map.values()].sort((a, b) => b.count - a.count)
   }, [viewRows])
-  // Place a just-added "next step" deliverable beside the asset it branches from, so the journey
-  // reads left→right with a short connector — instead of it stacking at the bottom of the column.
+  // Keep every branched deliverable pinned just to the RIGHT of the asset it hangs off, so a
+  // journey reads left→right with a short connector instead of the deliverable dropping to the
+  // bottom of the column. Driven by measured rects, so it follows the source if it moves and
+  // covers branches that already existed (not only freshly added ones). Self-converging: once a
+  // deliverable sits at its target the correction is ~0 and no further state update fires.
   useLayoutEffect(() => {
-    const pending = pendingPlaceRef.current
-    if (!pending) return
-    const cv = canvasRef.current
-    if (!cv) return
-    const srcEl = cv.querySelector(`[data-node-id="${pending.srcId}"]`)
-    const delivEl = cv.querySelector(`[data-node-id="${pending.key}"]`)
-    if (!srcEl || !delivEl) return
-    pendingPlaceRef.current = null
-    const sr = srcEl.getBoundingClientRect()
-    const dr = delivEl.getBoundingClientRect()
+    if (viewName === null) return
     const scale = zoom / 100
-    setPos((prev) => ({
-      ...prev,
-      [pending.key]: {
-        x: (prev[pending.key]?.x ?? 0) + (sr.right + 140 * scale - dr.left) / scale,
-        y: (prev[pending.key]?.y ?? 0) + (sr.top - dr.top) / scale,
-      },
-    }))
-  }, [viewDelivs, zoom])
+    const gap = 90 * scale // canvas-space gap to the right of the source asset
+    const deltas: Record<string, { dx: number; dy: number }> = {}
+    for (const d of viewDelivs) {
+      const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
+      if (!branchSrc) continue
+      const srcRow = viewRows.find((r) => r.assetName === branchSrc)
+      if (!srcRow) continue
+      const sr = rects[srcRow.id]
+      const dr = rects[d.key]
+      if (!sr || !dr) continue
+      const dxScreen = sr.x + sr.w + gap - dr.x
+      const dyScreen = sr.y - dr.y
+      if (Math.abs(dxScreen) < 2 && Math.abs(dyScreen) < 2) continue
+      deltas[d.key] = { dx: dxScreen / scale, dy: dyScreen / scale }
+    }
+    if (Object.keys(deltas).length) {
+      setPos((prev) => {
+        const next = { ...prev }
+        for (const [k, dd] of Object.entries(deltas)) {
+          const cur = prev[k] ?? { x: 0, y: 0 }
+          next[k] = { x: cur.x + dd.dx, y: cur.y + dd.dy }
+        }
+        return next
+      })
+    }
+  }, [rects, viewDelivs, viewRows, viewName, zoom])
   const viewAudiences = useMemo(() => [...new Set(viewRows.map((r) => (r.audience ?? '').trim()).filter(Boolean))], [viewRows])
   const viewFlight = campaignList.find((c) => c.name === viewName)?.durationWeeks
   const viewShort = viewName ? viewName.replace(`${brand} — `, '') : ''
@@ -1049,10 +1058,9 @@ export function FlowsView() {
       await seedCampaignAssets(viewName, [d], { flightWeeks: viewFlight ?? flightWeeks, audiences: auds })
       const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === viewName && !before.has(r.id))
       if (srcRow && fresh.length) {
+        // Tag the new rows as branching off the source asset. The layout effect then pins the
+        // deliverable to the right of that asset automatically.
         await updateRows(fresh.map((r) => ({ id: r.id, patch: { branchOf: srcRow.assetName } })))
-        // Queue the new deliverable to be placed beside its source asset once it renders.
-        const f = fresh[0]
-        pendingPlaceRef.current = { key: `${f.channel}|${f.assetType}${f.branchOf ? `|↳${f.branchOf}` : `|↳${srcRow.assetName}`}`, srcId: srcRow.id }
       }
       if (fresh.length) await draftCopy(fresh.map((r) => r.id))
     } finally {
