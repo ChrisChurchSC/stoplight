@@ -2954,6 +2954,18 @@ button {
   flex-direction: column;
   gap: 1px;
 }
+/* Sub-group labels in the Records nav (Audience / Message / Activation). */
+.hsb-rec-group + .hsb-rec-group {
+  margin-top: 8px;
+}
+.hsb-rec-grouplabel {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  padding: 5px 12px 3px;
+}
 .hsb-chat {
   display: flex;
   align-items: center;

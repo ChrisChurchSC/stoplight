@@ -156,6 +156,35 @@ function Ico({ name }: { name: string }) {
   )
 }
 
+// Records grouped the way a campaign is built — matches the workbook's Audience / Message /
+// Activation sheet groups so the sidebar and the sheet tabs agree.
+type RecordPage = 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords' | 'campaignsheet'
+const RECORD_GROUPS: { label: string; items: { page: RecordPage; label: string; ico: string }[] }[] = [
+  {
+    label: 'Audience',
+    items: [
+      { page: 'records', label: 'Companies', ico: 'companies' },
+      { page: 'people', label: 'People', ico: 'people' },
+      { page: 'segments', label: 'Segments', ico: 'segments' },
+    ],
+  },
+  {
+    label: 'Message',
+    items: [
+      { page: 'messages', label: 'Messages', ico: 'reports' },
+      { page: 'proofpoints', label: 'Proof points', ico: 'check' },
+      { page: 'objectives', label: 'Objectives', ico: 'insights' },
+    ],
+  },
+  {
+    label: 'Activation',
+    items: [
+      { page: 'channelrecords', label: 'Channels', ico: 'flows' },
+      { page: 'campaignsheet', label: 'Campaigns', ico: 'campaigns' },
+    ],
+  },
+]
+
 export function HomeSidebar() {
   const { brands } = useHomeCanvases()
   const page = useTrafficStore((s) => s.page)
@@ -440,36 +469,24 @@ export function HomeSidebar() {
           </button>
           {recordsOpen && (
             <div className="hsb-chat-list">
-              <button className={`nav-item${page === 'records' ? ' active' : ''}`} onClick={() => setPage('records')} title="Companies">
-                <span className="nav-ico">
-                  <Ico name="companies" />
-                </span>
-                <span className="nav-label">Companies</span>
-              </button>
-              <button className={`nav-item${page === 'people' ? ' active' : ''}`} onClick={() => setPage('people')} title="People">
-                <span className="nav-ico">
-                  <Ico name="people" />
-                </span>
-                <span className="nav-label">People</span>
-              </button>
-              <button className={`nav-item${page === 'segments' ? ' active' : ''}`} onClick={() => setPage('segments')} title="Segments">
-                <span className="nav-ico">
-                  <Ico name="segments" />
-                </span>
-                <span className="nav-label">Segments</span>
-              </button>
-              <button className={`nav-item${page === 'channelrecords' ? ' active' : ''}`} onClick={() => setPage('channelrecords')} title="Channels">
-                <span className="nav-ico">
-                  <Ico name="flows" />
-                </span>
-                <span className="nav-label">Channels</span>
-              </button>
-              <button className={`nav-item${page === 'proofpoints' ? ' active' : ''}`} onClick={() => setPage('proofpoints')} title="Proof points">
-                <span className="nav-ico">
-                  <Ico name="check" />
-                </span>
-                <span className="nav-label">Proof points</span>
-              </button>
+              {RECORD_GROUPS.map((g) => (
+                <div key={g.label} className="hsb-rec-group">
+                  <div className="hsb-rec-grouplabel">{g.label}</div>
+                  {g.items.map((it) => (
+                    <button
+                      key={it.page}
+                      className={`nav-item${page === it.page ? ' active' : ''}`}
+                      onClick={() => setPage(it.page)}
+                      title={it.label}
+                    >
+                      <span className="nav-ico">
+                        <Ico name={it.ico} />
+                      </span>
+                      <span className="nav-label">{it.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
         </div>
