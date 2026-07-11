@@ -22670,3 +22670,8 @@ table.aud-sheet td.stick .aud-cell {
 
 /* Inline recommendation under the Budget field when a budget has no paid media to land on. */
 .flow-budget-warn { margin-top: 7px; font-size: 11.5px; line-height: 1.4; color: color-mix(in srgb, var(--amber) 68%, var(--text)); background: color-mix(in srgb, var(--amber) 11%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amber) 32%, var(--border)); border-radius: 8px; padding: 7px 9px; }
+
+/* Budget assignment: the "assign evenly" action and the fully-assigned confirmation. */
+.flow-budget-assign { margin-top: 6px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); background: var(--surface); color: color-mix(in srgb, var(--amber) 72%, var(--text)); font: inherit; font-size: 11.5px; font-weight: 700; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+.flow-budget-assign:hover { background: color-mix(in srgb, var(--amber) 10%, var(--surface)); }
+.flow-budget-ok { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: color-mix(in srgb, var(--green) 70%, var(--text)); background: color-mix(in srgb, var(--green) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border)); border-radius: 8px; padding: 7px 9px; }

@@ -765,6 +765,18 @@ export function FlowsView() {
     const pool = viewCampaign?.mediaBudget ?? Math.round(((viewCampaign?.overallBudget ?? 0) * share) / 100)
     return pool > 0 ? Math.round(pool / paid.length) : 0
   }, [viewRows, viewCampaign])
+  // Budget ASSIGNMENT: the campaign budget must land on paid assets. Track how much of it is
+  // assigned (the sum of paid rows' budget.amount) so an under- or over-assigned budget is flagged,
+  // and offer to split it evenly across the paid placements.
+  const viewPaidRows = useMemo(() => viewRows.filter((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid'), [viewRows])
+  const campaignBudget = viewCampaign?.overallBudget ?? 0
+  const assignedBudget = useMemo(() => viewPaidRows.reduce((sum, r) => sum + (r.budget?.amount ?? 0), 0), [viewPaidRows])
+  const assignEvenly = () => {
+    if (!viewPaidRows.length || campaignBudget <= 0) return
+    const each = Math.floor(campaignBudget / viewPaidRows.length)
+    const remainder = campaignBudget - each * viewPaidRows.length
+    void updateRows(viewPaidRows.map((r, i) => ({ id: r.id, patch: { budget: { amount: each + (i === 0 ? remainder : 0), type: 'lifetime' as const } } })))
+  }
   const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
   // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
   const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
@@ -930,9 +942,11 @@ export function FlowsView() {
     const n = viewBudgetDraft.trim() === '' ? undefined : Math.max(0, Number(viewBudgetDraft) || 0)
     if (n === viewCampaign?.overallBudget) return
     patchCampaign(viewName, { overallBudget: n })
-    // A budget needs paid media to land on. Flag it if there's nowhere to spend it.
-    if (n && n > 0 && !viewRows.some((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid')) {
-      showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+    // A budget needs to be assigned to paid assets. Flag it if there's nowhere to put it, or if
+    // it isn't fully assigned across the paid placements yet.
+    if (n && n > 0) {
+      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+      else if (assignedBudget < n) showToast(`$${n.toLocaleString()} budget set — assign it across your paid assets so it's fully allocated.`)
     }
   }
 
@@ -2083,6 +2097,28 @@ export function FlowsView() {
                     {selPost.audience ? ` · ${selPost.audience}` : ''}
                     {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
                   </p>
+                  {CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' && (
+                    <>
+                      <label className="flow-inspect-label">Budget for this asset</label>
+                      <div className="flow-budget">
+                        <span className="flow-budget-cur">$</span>
+                        <input
+                          key={selPost.id}
+                          className="flow-budget-input"
+                          type="number"
+                          min={0}
+                          step={500}
+                          defaultValue={selPost.budget?.amount || ''}
+                          placeholder="0"
+                          onBlur={(e) => {
+                            const v = e.target.value.trim()
+                            void updateRow(selPost.id, { budget: v === '' ? undefined : { amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'lifetime' } })
+                          }}
+                        />
+                      </div>
+                      <div className="flow-inspect-note" style={{ marginTop: 6 }}>Its share of the campaign budget. Assign the full budget across your paid assets.</div>
+                    </>
+                  )}
                   {(() => {
                     const s = stepFromLineage(selPost.lineage)
                     if (!s) return null
@@ -2307,11 +2343,23 @@ export function FlowsView() {
                       onBlur={commitViewBudget}
                     />
                   </div>
-                  {(viewCampaign?.overallBudget ?? 0) > 0 && !viewRows.some((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid') && (
+                  {campaignBudget > 0 && (viewPaidRows.length === 0 ? (
                     <div className="flow-budget-warn">
                       No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
                     </div>
-                  )}
+                  ) : assignedBudget < campaignBudget ? (
+                    <div className="flow-budget-warn">
+                      <div>${assignedBudget.toLocaleString()} of ${campaignBudget.toLocaleString()} assigned to paid assets{assignedBudget > 0 ? ` — $${(campaignBudget - assignedBudget).toLocaleString()} left` : ''}.</div>
+                      <button className="flow-budget-assign" onClick={assignEvenly}>Assign evenly across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}</button>
+                    </div>
+                  ) : assignedBudget > campaignBudget ? (
+                    <div className="flow-budget-warn">
+                      <div>${assignedBudget.toLocaleString()} assigned — ${(assignedBudget - campaignBudget).toLocaleString()} over the ${campaignBudget.toLocaleString()} budget.</div>
+                      <button className="flow-budget-assign" onClick={assignEvenly}>Rebalance evenly</button>
+                    </div>
+                  ) : (
+                    <div className="flow-budget-ok">✓ ${campaignBudget.toLocaleString()} fully assigned across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}.</div>
+                  ))}
                   {renderRecordTags(campaignTagOps)}
                   <button className="flow-brief-build" onClick={regenerateFlow} disabled={regenerating || !viewRows.length}>
                     {regenerating ? 'Regenerating…' : refsDirty ? 'Regenerate with these records' : '↻ Regenerate copy'}
