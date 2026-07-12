@@ -30,7 +30,6 @@ import { SegmentsView } from './SegmentsView'
 import { ProofPointsView } from './ProofPointsView'
 import { MessagesView } from './MessagesView'
 import { ObjectivesView } from './ObjectivesView'
-import { CampaignRecordsView } from './CampaignRecordsView'
 import { FlowsView } from './FlowsView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
@@ -257,10 +256,6 @@ export function Workbench() {
           ) : page === 'objectives' ? (
             <div className="home-main-scroll">
               <ObjectivesView />
-            </div>
-          ) : page === 'campaignsheet' ? (
-            <div className="home-main-scroll">
-              <CampaignRecordsView />
             </div>
           ) : page === 'flows' ? (
             <div className="home-main-page">

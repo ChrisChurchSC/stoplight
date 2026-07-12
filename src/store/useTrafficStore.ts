@@ -108,7 +108,6 @@ import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Objective, freshObjectiveId } from '../domain/objective'
-import { type CampaignRecord, freshCampaignRecordId } from '../domain/campaignRecord'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -655,7 +654,6 @@ function saveRecordList<T>(key: string, list: T[]): void {
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
-const CAMPAIGN_RECORDS_KEY = 'stoplight.campaignRecords.v1'
 const SEGMENTS_KEY = 'stoplight.segments.v1'
 function loadSegments(): Segment[] {
   try {
@@ -1260,7 +1258,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'campaignsheet' | 'flows'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows'
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -1386,11 +1384,6 @@ interface TrafficState {
   addObjective: (partial?: Partial<Objective>) => string
   updateObjective: (id: string, patch: Partial<Objective>) => void
   deleteObjective: (id: string) => void
-  /** Records › Activation › Campaigns — lightweight campaign planning rows. */
-  campaignRecords: CampaignRecord[]
-  addCampaignRecord: (partial?: Partial<CampaignRecord>) => string
-  updateCampaignRecord: (id: string, patch: Partial<CampaignRecord>) => void
-  deleteCampaignRecord: (id: string) => void
   /** Records › Segments — the account-segments table. */
   segments: Segment[]
   /** Add a segment row (blank defaults unless overridden); returns its id. */
@@ -1518,9 +1511,6 @@ interface TrafficState {
   /** Campaigns created via the new-client wizard (persisted). */
   campaignList: Campaign[]
   addCampaign: (campaign: Campaign) => void
-  /** Spawn a Flow from a Campaign planning record: create the campaign pre-filled with its goal,
-   *  audience (matched to a segment), and budget, then open it in the Flows builder. */
-  buildFlowFromCampaignRecord: (rec: CampaignRecord, client: string) => void
   /** Move a campaign through its lifecycle (planning → in-review → active → completed). */
   setCampaignStatus: (name: string, status: CampaignStatus) => void
   /** Open a campaign straight into its workspace (Level 2 canvas) from anywhere —
@@ -1664,7 +1654,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'campaignsheet' | 'flows') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2052,7 +2042,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   people: loadPeople(),
   messages: loadRecordList<Message>(MESSAGES_KEY),
   objectives: loadRecordList<Objective>(OBJECTIVES_KEY),
-  campaignRecords: loadRecordList<CampaignRecord>(CAMPAIGN_RECORDS_KEY),
   segments: loadSegments(),
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
@@ -2459,29 +2448,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const objectives = s.objectives.filter((o) => o.id !== id)
       saveRecordList(OBJECTIVES_KEY, objectives)
       return { objectives }
-    }),
-
-  addCampaignRecord: (partial) => {
-    const id = freshCampaignRecordId()
-    const row: CampaignRecord = { name: 'New campaign', ...(partial ?? {}), id }
-    set((s) => {
-      const campaignRecords = [row, ...s.campaignRecords]
-      saveRecordList(CAMPAIGN_RECORDS_KEY, campaignRecords)
-      return { campaignRecords }
-    })
-    return id
-  },
-  updateCampaignRecord: (id, patch) =>
-    set((s) => {
-      const campaignRecords = s.campaignRecords.map((c) => (c.id === id ? { ...c, ...patch } : c))
-      saveRecordList(CAMPAIGN_RECORDS_KEY, campaignRecords)
-      return { campaignRecords }
-    }),
-  deleteCampaignRecord: (id) =>
-    set((s) => {
-      const campaignRecords = s.campaignRecords.filter((c) => c.id !== id)
-      saveRecordList(CAMPAIGN_RECORDS_KEY, campaignRecords)
-      return { campaignRecords }
     }),
 
   addSegment: (partial) => {
@@ -2927,25 +2893,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
-
-  buildFlowFromCampaignRecord: (rec, client) => {
-    const name = `${client ? `${client} — ` : ''}${(rec.name || 'New campaign').trim()}`
-    // Match the plan's audience to a real segment so the flow's copy is pinned to it.
-    const auds = get().clientAudiences[client] ?? []
-    const seg = rec.audience ? auds.find((a) => a.name.trim().toLowerCase() === rec.audience!.trim().toLowerCase()) : undefined
-    const references: FlowReference[] = seg ? [{ type: 'segment', id: seg.id, label: seg.name }] : []
-    const budgetNum = rec.budget ? Number(rec.budget.replace(/[^0-9.]/g, '')) : NaN
-    get().addCampaign({
-      name,
-      client,
-      strategy: 'Current state',
-      subject: rec.goal || '',
-      objective: rec.goal || undefined,
-      references,
-      ...(Number.isFinite(budgetNum) && budgetNum > 0 ? { overallBudget: budgetNum } : {}),
-    })
-    get().openFlow(name)
-  },
 
   addCanvas: (client, campaign, name, audiences = []) => {
     const id = `canvas_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
