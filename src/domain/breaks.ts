@@ -99,7 +99,7 @@ export interface CoherenceBreak {
 }
 
 /** A coherence flag pushed by the connected Claude app (it ran the check itself,
- *  rather than Magnetic Matter spending its own API credits). The store turns each of
+ *  rather than Hyperfocus spending its own API credits). The store turns each of
  *  these into a full CoherenceBreak against the named asset. `suggestion` is the
  *  one-line fix Claude proposes. */
 export interface ClaudeCoherenceFlag {
