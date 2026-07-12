@@ -3097,12 +3097,12 @@ button {
   border-radius: 7px;
 }
 .rec-sub-group {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 9px;
   border: 1px solid var(--border);
   border-radius: 7px;
-  background: none;
-  font: inherit;
-  font-size: inherit;
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -3115,6 +3115,23 @@ button {
   border-color: transparent;
   color: var(--accent);
   font-weight: 600;
+}
+.rec-sub-group-ic {
+  font-size: 11px;
+  line-height: 1;
+}
+.rec-sub-group-sel {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.rec-sub-group-sel:focus {
+  outline: none;
 }
 /* Row-group divider (Companies grouped by segment, …). */
 .rec-rowgroup td {

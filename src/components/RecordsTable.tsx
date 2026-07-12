@@ -24,7 +24,6 @@ export function RecordsTable<T extends { id: string }>({
   onDelete,
   rowAction,
   relatedSlot,
-  groupBy,
 }: {
   title: string
   icon: ReactNode
@@ -40,15 +39,19 @@ export function RecordsTable<T extends { id: string }>({
   rowAction?: { label: string; run: (row: T) => void }
   /** Optional related-records section shown at the bottom of the drawer (e.g. people at a company). */
   relatedSlot?: (record: T) => ReactNode
-  /** Optional "group rows by this field" toggle (e.g. Companies by segment). */
-  groupBy?: { key: string; label: string }
 }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [grouping, setGrouping] = useState(false)
+  const [groupKey, setGroupKey] = useState<string | null>(null)
   const openRecord = openId ? rows.find((r) => r.id === openId) ?? null : null
-  const groupKey = grouping && groupBy ? groupBy.key : null
+
+  // Any status/text column can organize the sheet into groups (Companies by segment, People by
+  // company, channels by type, …). The name column is unique per row so it's never groupable.
+  const groupCols = useMemo(
+    () => columns.filter((c) => c.key !== 'name' && (c.kind === 'status' || c.kind === 'text')),
+    [columns],
+  )
 
   // A cross-view request to open a specific record (e.g. from a task's linked company). Only the
   // table that actually holds the id reacts, then it clears the signal.
@@ -201,10 +204,23 @@ export function RecordsTable<T extends { id: string }>({
         <span className="rec-sub-sort">
           Sorted by {sortLabel} {sortDir === 'asc' ? '↑' : '↓'}
         </span>
-        {groupBy && (
-          <button className={`rec-sub-group${grouping ? ' on' : ''}`} onClick={() => setGrouping((g) => !g)}>
-            {grouping ? `Grouped by ${groupBy.label}` : `Group by ${groupBy.label}`}
-          </button>
+        {groupCols.length > 0 && (
+          <label className={`rec-sub-group${groupKey ? ' on' : ''}`}>
+            <span className="rec-sub-group-ic" aria-hidden="true">⊟</span>
+            <select
+              className="rec-sub-group-sel"
+              value={groupKey ?? ''}
+              onChange={(e) => setGroupKey(e.target.value || null)}
+              aria-label="Group rows by a field"
+            >
+              <option value="">No grouping</option>
+              {groupCols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  Group by {c.label.toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
       </div>
 
