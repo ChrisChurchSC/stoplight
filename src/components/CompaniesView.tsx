@@ -1,4 +1,5 @@
 import { type Company, COMPANY_COLUMNS, COMPANY_FIELDS, COMPANY_STATUSES } from '../domain/companies'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordsTable } from './RecordsTable'
 import { RelatedList } from './RelatedList'
@@ -22,6 +23,14 @@ export function CompaniesView() {
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const deleteCompany = useTrafficStore((s) => s.deleteCompany)
 
+  // The "Audience segment" field picks from the active brand's Segments (personas), so a company
+  // can be tagged to the persona it belongs to. Scoped to the brand in view since audiences differ.
+  const { brands } = useHomeCanvases()
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  const segmentNames = (clientAudiences[brand] ?? []).map((a) => a.name).filter(Boolean)
+
   return (
     <RecordsTable<Company>
       title="Companies"
@@ -34,6 +43,7 @@ export function CompaniesView() {
       onAdd={() => addCompany()}
       onUpdate={updateCompany}
       onDelete={deleteCompany}
+      fieldOptions={{ audienceSegment: segmentNames }}
       relatedSlot={(company) => {
         const norm = company.name.trim().toLowerCase()
         const atCompany = people.filter((p) => (p.company ?? '').trim().toLowerCase() === norm)

@@ -14,6 +14,7 @@ export function RecordDrawer<T extends { id: string }>({
   record,
   fields,
   statuses,
+  fieldOptions,
   onUpdate,
   onDelete,
   onClose,
@@ -22,6 +23,8 @@ export function RecordDrawer<T extends { id: string }>({
   record: T
   fields: RecordField[]
   statuses: string[]
+  /** Options for `ref`-kind fields, keyed by field key (e.g. the brand's segment names). */
+  fieldOptions?: Record<string, string[]>
   onUpdate: (id: string, patch: Partial<T>) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -79,6 +82,16 @@ export function RecordDrawer<T extends { id: string }>({
                           {s}
                         </option>
                       ))}
+                    </select>
+                  ) : f.kind === 'ref' ? (
+                    <select className="rd-input rd-select" style={{ color: v ? recordTint(v) : undefined }} value={v} onChange={(e) => set(f.key, e.target.value)}>
+                      <option value="">—</option>
+                      {(fieldOptions?.[f.key] ?? []).map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                      {v && !(fieldOptions?.[f.key] ?? []).includes(v) && <option value={v}>{v}</option>}
                     </select>
                   ) : f.kind === 'url' ? (
                     <div className="rd-url">

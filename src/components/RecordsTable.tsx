@@ -25,6 +25,7 @@ export function RecordsTable<T extends { id: string }>({
   onDelete,
   rowAction,
   relatedSlot,
+  fieldOptions,
 }: {
   title: string
   icon: ReactNode
@@ -40,6 +41,8 @@ export function RecordsTable<T extends { id: string }>({
   rowAction?: { label: string; run: (row: T) => void }
   /** Optional related-records section shown at the bottom of the drawer (e.g. people at a company). */
   relatedSlot?: (record: T) => ReactNode
+  /** Options for `ref`-kind fields, keyed by field key (e.g. the brand's segment names). */
+  fieldOptions?: Record<string, string[]>
 }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -49,7 +52,7 @@ export function RecordsTable<T extends { id: string }>({
   // Any status/text column can organize the sheet into groups (Companies by segment, People by
   // company, channels by type, …). The name column is unique per row so it's never groupable.
   const groupCols = useMemo(
-    () => columns.filter((c) => c.key !== 'name' && (c.kind === 'status' || c.kind === 'text')),
+    () => columns.filter((c) => c.key !== 'name' && (c.kind === 'status' || c.kind === 'text' || c.kind === 'ref')),
     [columns],
   )
 
@@ -325,6 +328,21 @@ export function RecordsTable<T extends { id: string }>({
                             ))}
                             {!v.trim() && <span className="rec-cell-muted">—</span>}
                           </button>
+                        ) : col.kind === 'ref' ? (
+                          <select
+                            className="rec-status rec-ref"
+                            style={{ color: v ? recordTint(v) : undefined }}
+                            value={v}
+                            onChange={(e) => set(r.id, col.key, e.target.value)}
+                          >
+                            <option value="">—</option>
+                            {(fieldOptions?.[col.key] ?? []).map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                            {v && !(fieldOptions?.[col.key] ?? []).includes(v) && <option value={v}>{v}</option>}
+                          </select>
                         ) : (
                           <BufferedInput className="rec-cell" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} cellR={ri} cellC={ci} onKeyDown={(e) => onCellKey(e, ri, ci)} onPaste={(e) => onCellPaste(e, ri, ci)} />
                         )}
@@ -363,6 +381,7 @@ export function RecordsTable<T extends { id: string }>({
           record={openRecord}
           fields={fields}
           statuses={statuses}
+          fieldOptions={fieldOptions}
           onUpdate={onUpdate}
           onDelete={onDelete}
           onClose={() => setOpenId(null)}

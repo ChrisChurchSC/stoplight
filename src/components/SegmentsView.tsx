@@ -5,6 +5,7 @@ import type { ChannelId } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordsTable } from './RecordsTable'
+import { RelatedList } from './RelatedList'
 
 const ICON = (
   <>
@@ -88,6 +89,9 @@ export function SegmentsView() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const companies = useTrafficStore((s) => s.companies)
+  const setPage = useTrafficStore((s) => s.setPage)
+  const focusRecord = useTrafficStore((s) => s.focusRecord)
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const audiences = clientAudiences[brand] ?? []
 
@@ -130,6 +134,27 @@ export function SegmentsView() {
       onDelete={(id) => {
         const cur = useTrafficStore.getState().clientAudiences[brand] ?? []
         setClientAudiences(brand, cur.filter((a) => a.id !== id))
+      }}
+      relatedSlot={(seg) => {
+        const norm = (seg.name ?? '').trim().toLowerCase()
+        const inSegment = norm
+          ? companies.filter((c) => (c.audienceSegment ?? '').trim().toLowerCase() === norm)
+          : []
+        return (
+          <RelatedList
+            title="Companies"
+            empty="No companies tagged to this segment yet — set a company's Audience segment to this one."
+            items={inSegment.map((c) => ({
+              id: c.id,
+              name: c.name,
+              sub: c.segment,
+              onOpen: () => {
+                focusRecord(c.id)
+                setPage('records')
+              },
+            }))}
+          />
+        )
       }}
     />
   )

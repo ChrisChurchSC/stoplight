@@ -12,6 +12,9 @@ export interface Company {
   description?: string
   website?: string
   segment?: string
+  /** Which of the active brand's audience segments (personas) this account belongs to. Picked from
+   *  the Segments records, so it joins Companies ↔ Segments; scoped to the brand in view. */
+  audienceSegment?: string
   founded?: string
   country?: string
   status?: 'client' | 'prospect' | 'partner' | ''
@@ -26,6 +29,7 @@ export const COMPANY_COLUMNS: RecordColumn[] = [
   { key: 'name', label: 'Company', kind: 'name', width: 220, group: 'Profile' },
   { key: 'description', label: 'Description', kind: 'text', width: 300, group: 'Profile' },
   { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Profile' },
+  { key: 'audienceSegment', label: 'Audience segment', kind: 'ref', width: 190, group: 'Targeting' },
   { key: 'segment', label: 'Segment', kind: 'text', width: 160, group: 'Firmographics' },
   { key: 'website', label: 'Website', kind: 'url', width: 180, group: 'Firmographics' },
   { key: 'country', label: 'Country', kind: 'text', width: 150, group: 'Firmographics' },
@@ -37,6 +41,7 @@ export const COMPANY_FIELDS: RecordField[] = [
   { key: 'name', label: 'Company', kind: 'name', group: 'Profile' },
   { key: 'status', label: 'Status', kind: 'status', group: 'Profile' },
   { key: 'description', label: 'Description', kind: 'multiline', group: 'Profile' },
+  { key: 'audienceSegment', label: 'Audience segment', kind: 'ref', group: 'Targeting' },
   { key: 'segment', label: 'Segment', kind: 'text', group: 'Firmographics' },
   { key: 'website', label: 'Website', kind: 'url', group: 'Firmographics' },
   { key: 'linkedin', label: 'LinkedIn', kind: 'url', group: 'Firmographics' },

@@ -3,7 +3,9 @@
  * with a string `id` and string-ish fields; a column maps a field key to a label and a
  * render kind. Kept generic so one <RecordsTable> renders every record type.
  */
-export type RecordFieldKind = 'name' | 'text' | 'url' | 'status' | 'multiline' | 'colors'
+// 'ref' is a select whose options come from another record type at render time (e.g. a company's
+// audience segment, picked from the brand's Segments) — the caller supplies the options per field.
+export type RecordFieldKind = 'name' | 'text' | 'url' | 'status' | 'multiline' | 'colors' | 'ref'
 
 /** A field in a record's detail panel: a key, a label, and how to render it. */
 export interface RecordField {
