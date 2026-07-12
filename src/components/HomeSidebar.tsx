@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { can } from '../domain/access'
-import { useHomeCanvases } from '../lib/useHomeCanvases'
+import { recordTint } from '../domain/records'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -180,7 +180,7 @@ function Ico({ name }: { name: string }) {
 
 // Records grouped the way a campaign is built — matches the workbook's Audience / Message /
 // Activation sheet groups so the sidebar and the sheet tabs agree.
-type RecordPage = 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords'
+type RecordPage = 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords'
 const RECORD_GROUPS: { label: string; items: { page: RecordPage; label: string; ico: string }[] }[] = [
   {
     label: 'Audience',
@@ -207,19 +207,14 @@ const RECORD_GROUPS: { label: string; items: { page: RecordPage; label: string; 
 ]
 
 export function HomeSidebar() {
-  const { brands } = useHomeCanvases()
   const page = useTrafficStore((s) => s.page)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const homeFilter = useTrafficStore((s) => s.homeFilter)
-  const setHomeFilter = useTrafficStore((s) => s.setHomeFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const libraryMode = useTrafficStore((s) => s.libraryMode)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
-  const campaignFolders = useTrafficStore((s) => s.campaignFolders)
-  const campaignFolderView = useTrafficStore((s) => s.campaignFolderView)
-  const setCampaignFolderView = useTrafficStore((s) => s.setCampaignFolderView)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const deleteClient = useTrafficStore((s) => s.deleteClient)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const brandRecords = useTrafficStore((s) => s.brandRecords)
+  const focusRecord = useTrafficStore((s) => s.focusRecord)
   const role = useTrafficStore((s) => s.role)
   const reports = useTrafficStore((s) => s.reports)
   const openAsk = useTrafficStore((s) => s.openAsk)
@@ -229,14 +224,13 @@ export function HomeSidebar() {
   // A flow canvas forces the rail; otherwise the user's manual toggle decides.
   const railed = flowCanvasOpen || sidebarCollapsed
 
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [taskCounts, setTaskCounts] = useState(readTaskCounts)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [dataOpen, setDataOpen] = useState(true)
   const [recordsOpen, setRecordsOpen] = useState(true)
   // Which record groups (Audience / Message / Activation) are expanded in the sidebar tree. The
   // group holding the current page is always shown; this tracks manual toggles on top of that.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(RECORD_GROUPS.map((g) => g.label)))
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['Brand', ...RECORD_GROUPS.map((g) => g.label)]))
   const [wsOpen, setWsOpen] = useState(false)
 
   const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
@@ -253,42 +247,6 @@ export function HomeSidebar() {
       window.removeEventListener('focus', update)
     }
   }, [page])
-
-  // On the gallery when we're at the clients overview (page=clients, no client scoped).
-  const onGallery = page === 'clients' && clientFilter === 'all'
-  // Brand / Metrics / Library / Channels are brand-scoped destinations: the Brands list
-  // picks which brand they show, so a brand click keeps you on the page, not leaves it.
-  const brandCtx = page === 'content' || page === 'channels' || page === 'brand' || page === 'reports' || page === 'priorities'
-  const go = (filter: string) => {
-    setHomeFilter(filter)
-    setClientFilter('all')
-    if (!brandCtx || filter === 'all' || filter === 'drafts') setPage('portfolio')
-  }
-
-  // A brand's campaign folders, nested under its Campaigns entry. Only shown while that
-  // brand's gallery is open; each item scopes the gallery to a folder (All / … / Unfiled).
-  const campaignFolderNav = (brand: string) => {
-    const folders = campaignFolders[brand] ?? []
-    if (!folders.length) return null
-    const onThisGallery = page === 'clients' && homeFilter === `brand:${brand}`
-    if (!onThisGallery) return null
-    const items: [string | null, string][] = [[null, 'All'], ...folders.map((f) => [f, f] as [string, string]), ['', 'Unfiled']]
-    const pick = (val: string | null) => {
-      setHomeFilter(`brand:${brand}`)
-      setClientFilter('all')
-      setCampaignFolderView(val)
-      setPage('portfolio')
-    }
-    return (
-      <div className="nav-sub">
-        {items.map(([val, label]) => (
-          <button key={label} className={`nav-subitem${campaignFolderView === val ? ' active' : ''}`} onClick={() => pick(val)}>
-            {label}
-          </button>
-        ))}
-      </div>
-    )
-  }
 
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
@@ -490,41 +448,6 @@ export function HomeSidebar() {
           )}
         </div>
 
-        {brands.length === 1 ? (
-          // Campaigns live under Flows now; the single-brand workspace no longer shows a
-          // separate Campaigns nav item.
-          null
-        ) : (
-          <>
-            <div className="nav-section">Campaigns</div>
-            {brands.map((b) => {
-              const key = `brand:${b.name}`
-              return (
-                <div key={b.name}>
-                  <div className={`nav-item home-sb-brand${(onGallery || brandCtx) && homeFilter === key ? ' active' : ''}`}>
-                    <button className="home-sb-brand-main" onClick={() => go(key)} title={`Show ${b.name}'s canvases`}>
-                      <span className="nav-ico">
-                        <Ico name="campaigns" />
-                      </span>
-                      <span className="nav-label">{b.name}</span>
-                      <span className="nav-count">{b.count}</span>
-                    </button>
-                    <button
-                      className="home-sb-del"
-                      title={`Delete ${b.name}`}
-                      aria-label={`Delete ${b.name}`}
-                      onClick={() => setConfirmDelete(b.name)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {campaignFolderNav(b.name)}
-                </div>
-              )
-            })}
-          </>
-        )}
-
         <div className="hsb-chats">
           <button className="hsb-sec" onClick={() => setRecordsOpen((o) => !o)}>
             <span className={`hsb-sec-chev${recordsOpen ? ' open' : ''}`}>
@@ -534,16 +457,70 @@ export function HomeSidebar() {
           </button>
           {recordsOpen && (
             <div className="hsb-chat-list">
-              <button
-                className={`nav-item${page === 'brands' ? ' active' : ''}`}
-                onClick={() => setPage('brands')}
-                title="Brands — your own brands and clients (who you build for), distinct from the companies you target"
-              >
-                <span className="nav-ico">
-                  <Ico name="brand" />
-                </span>
-                <span className="nav-label">Brands</span>
-              </button>
+              {(() => {
+                // The Brand group lists the individual brands (World Within, Big Buoy, …) rather
+                // than a single sheet — clicking one scopes the workspace to it and opens its record.
+                const label = 'Brand'
+                const activeInGroup = page === 'brands'
+                const expanded = openGroups.has(label) || activeInGroup
+                const list = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
+                return (
+                  <div className="hsb-rec-group">
+                    <button
+                      className={`nav-item hsb-rec-parent${activeInGroup ? ' active-in' : ''}`}
+                      aria-expanded={expanded}
+                      onClick={() =>
+                        setOpenGroups((prev) => {
+                          const next = new Set(prev)
+                          next.has(label) ? next.delete(label) : next.add(label)
+                          return next
+                        })
+                      }
+                    >
+                      <span className={`hsb-rec-chev${expanded ? ' open' : ''}`}>
+                        <Ico name="caret" />
+                      </span>
+                      <span className="nav-label">{label}</span>
+                    </button>
+                    {expanded && (
+                      <div className="hsb-rec-children">
+                        {list.map((b) => (
+                          <button
+                            key={b.id}
+                            className={`nav-item hsb-rec-child${page === 'brands' && clientFilter === b.name ? ' active' : ''}`}
+                            onClick={() => {
+                              setClientFilter(b.name)
+                              focusRecord(b.id)
+                              setPage('brands')
+                            }}
+                            title={b.name}
+                          >
+                            <span className="nav-ico">
+                              <span className="hsb-brand-dot" style={{ background: recordTint(b.name) }}>
+                                {b.name[0]?.toUpperCase() ?? '?'}
+                              </span>
+                            </span>
+                            <span className="nav-label">{b.name}</span>
+                          </button>
+                        ))}
+                        <button
+                          className={`nav-item hsb-rec-child hsb-brand-all${page === 'brands' && clientFilter === 'all' ? ' active' : ''}`}
+                          onClick={() => {
+                            setClientFilter('all')
+                            setPage('brands')
+                          }}
+                          title="All brands"
+                        >
+                          <span className="nav-ico">
+                            <Ico name="brand" />
+                          </span>
+                          <span className="nav-label">All brands</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {RECORD_GROUPS.map((g) => {
                 const activeInGroup = g.items.some((it) => it.page === page)
                 const expanded = openGroups.has(g.label) || activeInGroup
@@ -656,32 +633,6 @@ export function HomeSidebar() {
         )}
       </div>
 
-      {confirmDelete && (
-        <>
-          <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
-          <div className="confirm-modal" role="dialog" aria-label="Delete brand">
-            <strong className="confirm-title">Delete {confirmDelete}?</strong>
-            <p className="confirm-text">This removes the brand and its canvases. This can't be undone.</p>
-            <div className="confirm-foot">
-              <button className="btn sm" onClick={() => setConfirmDelete(null)}>
-                Cancel
-              </button>
-              <span className="spacer" />
-              <button
-                className="btn sm danger"
-                onClick={() => {
-                  const name = confirmDelete
-                  if (homeFilter === `brand:${name}`) setHomeFilter('all')
-                  void deleteClient(name)
-                  setConfirmDelete(null)
-                }}
-              >
-                Delete brand
-              </button>
-            </div>
-          </div>
-        </>
-      )}
     </aside>
   )
 }
