@@ -1259,6 +1259,11 @@ interface TrafficState {
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
   page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks'
+  /** A record id to auto-open in its RecordsTable drawer once that sheet mounts (e.g. clicking a
+   *  task's linked company jumps to Companies and pops that row's details). Consumed + cleared by
+   *  the table that owns the id. */
+  focusRecordId: string | null
+  focusRecord: (id: string | null) => void
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -2010,6 +2015,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandView: 'campaigns',
   timeRange: 'all',
   page: 'portfolio',
+  focusRecordId: null,
   libraryMode: 'catalog',
   brandTab: 'about',
   brandGuides: loadBrandGuides(),
@@ -2178,6 +2184,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ page })
   },
   setLibraryMode: (libraryMode) => set({ libraryMode, page: 'content' }),
+  focusRecord: (focusRecordId) => set({ focusRecordId }),
   setBrandTab: (brandTab) => set({ brandTab, page: 'brand' }),
   setCampaignFolderView: (campaignFolderView) => set({ campaignFolderView }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),

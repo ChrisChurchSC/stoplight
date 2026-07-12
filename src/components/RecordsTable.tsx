@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
+import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
 import { BufferedInput } from './BufferedInput'
 import { SheetTabs } from './SheetTabs'
@@ -40,6 +41,17 @@ export function RecordsTable<T extends { id: string }>({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [openId, setOpenId] = useState<string | null>(null)
   const openRecord = openId ? rows.find((r) => r.id === openId) ?? null : null
+
+  // A cross-view request to open a specific record (e.g. from a task's linked company). Only the
+  // table that actually holds the id reacts, then it clears the signal.
+  const focusRecordId = useTrafficStore((s) => s.focusRecordId)
+  const focusRecord = useTrafficStore((s) => s.focusRecord)
+  useEffect(() => {
+    if (focusRecordId && rows.some((r) => r.id === focusRecordId)) {
+      setOpenId(focusRecordId)
+      focusRecord(null)
+    }
+  }, [focusRecordId, rows, focusRecord])
 
   // Wide records tables are painful to scroll sideways (trackpad two-finger only). Turn a
   // plain vertical wheel into horizontal scroll while there's room, then hand vertical back

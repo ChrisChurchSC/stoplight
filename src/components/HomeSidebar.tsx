@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { can } from '../domain/access'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -155,6 +155,21 @@ const ICONS: Record<string, ReactNode> = {
   ),
 }
 
+// Open / overdue task counts for the sidebar badge. Tasks live in localStorage (see TasksView),
+// so read them straight from there; TasksView fires a 'stoplight:tasks' event on every change.
+function readTaskCounts(): { open: number; overdue: number } {
+  try {
+    const raw = JSON.parse(localStorage.getItem('stoplight.tasks.v1') ?? '[]')
+    if (!Array.isArray(raw)) return { open: 0, overdue: 0 }
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const open = raw.filter((t: { done?: boolean }) => !t.done)
+    return { open: open.length, overdue: open.filter((t: { due?: string }) => t.due && t.due < today).length }
+  } catch {
+    return { open: 0, overdue: 0 }
+  }
+}
+
 function Ico({ name }: { name: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -215,6 +230,7 @@ export function HomeSidebar() {
   const railed = flowCanvasOpen || sidebarCollapsed
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [taskCounts, setTaskCounts] = useState(readTaskCounts)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [dataOpen, setDataOpen] = useState(true)
   const [recordsOpen, setRecordsOpen] = useState(true)
@@ -224,6 +240,19 @@ export function HomeSidebar() {
   const [wsOpen, setWsOpen] = useState(false)
 
   const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
+
+  // Keep the Tasks badge in sync: TasksView writes localStorage + fires 'stoplight:tasks'; also
+  // refresh when the tab regains focus (another tab may have edited) and when the page changes.
+  useEffect(() => {
+    const update = () => setTaskCounts(readTaskCounts())
+    update()
+    window.addEventListener('stoplight:tasks', update)
+    window.addEventListener('focus', update)
+    return () => {
+      window.removeEventListener('stoplight:tasks', update)
+      window.removeEventListener('focus', update)
+    }
+  }, [page])
 
   // On the gallery when we're at the clients overview (page=clients, no client scoped).
   const onGallery = page === 'clients' && clientFilter === 'all'
@@ -423,6 +452,9 @@ export function HomeSidebar() {
             <Ico name="tasks" />
           </span>
           <span className="nav-label">Tasks</span>
+          {taskCounts.open > 0 && (
+            <span className={`nav-count task-badge${taskCounts.overdue > 0 ? ' overdue' : ''}`}>{taskCounts.open}</span>
+          )}
         </button>
 
         <div className="hsb-chats">

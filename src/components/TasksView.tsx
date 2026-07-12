@@ -72,6 +72,8 @@ function Avatar({ name }: { name: string }) {
 
 export function TasksView() {
   const companies = useTrafficStore((s) => s.companies)
+  const setPage = useTrafficStore((s) => s.setPage)
+  const focusRecord = useTrafficStore((s) => s.focusRecord)
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickRec, setPickRec] = useState<string | null>(null)
@@ -80,6 +82,9 @@ export function TasksView() {
 
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(tasks))
+    // Same-tab localStorage writes don't fire a 'storage' event, so tell listeners (the sidebar
+    // count) directly.
+    window.dispatchEvent(new Event('stoplight:tasks'))
   }, [tasks])
 
   const openCount = tasks.filter((t) => !t.done).length
@@ -96,6 +101,11 @@ export function TasksView() {
   }, [tasks, today])
   const doneTasks = useMemo(() => tasks.filter((t) => t.done), [tasks])
 
+  // Jump to Companies and pop the linked company's record drawer.
+  const openCompany = (id: string) => {
+    focusRecord(id)
+    setPage('records')
+  }
   const patch = (id: string, p: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...p } : t)))
   const remove = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id))
   const addTask = () => {
@@ -154,16 +164,23 @@ export function TasksView() {
         )}
       </div>
       <div className="task-cell task-rec-cell">
-        <button className={`task-chip task-chip-btn${t.record ? '' : ' empty'}`} onClick={() => setPickRec(t.id)} title="Link a company">
-          {t.record ? (
-            <>
+        {t.record ? (
+          <span className="task-chip task-chip-set">
+            <button className="task-chip-open" onClick={() => openCompany(t.record!.id)} title={`Open ${t.record.name}`}>
               <Avatar name={t.record.name} />
               <span className="task-chip-name">{t.record.name}</span>
-            </>
-          ) : (
+            </button>
+            <button className="task-chip-edit" onClick={() => setPickRec(t.id)} title="Change company" aria-label="Change company">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          </span>
+        ) : (
+          <button className="task-chip task-chip-btn empty" onClick={() => setPickRec(t.id)} title="Link a company">
             <span className="task-chip-name muted">—</span>
-          )}
-        </button>
+          </button>
+        )}
         {pickRec === t.id && (
           <>
             <div className="task-pick-scrim" onClick={() => setPickRec(null)} />

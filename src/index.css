@@ -2890,6 +2890,15 @@ button {
   font-weight: 700;
   line-height: 18px;
 }
+/* Open-task badge on the Tasks item — neutral, red when anything's overdue. */
+.hsb .nav-count.task-badge {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.hsb .nav-count.task-badge.overdue {
+  background: color-mix(in srgb, var(--red) 16%, transparent);
+  color: var(--red);
+}
 /* Chats section (recent saved reports) */
 .hsb-chats {
   margin-top: 12px;
@@ -18177,6 +18186,50 @@ textarea.library-input {
 .task-chip-btn.empty:hover {
   border-color: var(--border);
   background: var(--surface);
+}
+/* A linked record: name click-through + a caret to change it. */
+.task-chip-set {
+  padding: 2px 2px 2px 4px;
+  gap: 2px;
+}
+.task-chip-set:hover {
+  border-color: var(--accent);
+}
+.task-chip-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 0;
+  padding: 2px 2px;
+  border-radius: 5px;
+}
+.task-chip-open:hover .task-chip-name {
+  text-decoration: underline;
+}
+.task-chip-edit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 5px;
+}
+.task-chip-edit:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.task-chip-edit svg {
+  width: 13px;
+  height: 13px;
 }
 .task-chip-name {
   font-size: 12.5px;
