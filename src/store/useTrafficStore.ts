@@ -3,6 +3,7 @@ import { MockSheetAdapter } from '../adapters/sheet/mockSheetAdapter'
 import { SupabaseSheetAdapter } from '../adapters/sheet/supabaseSheetAdapter'
 import { SupabaseRecordAdapter } from '../adapters/records/supabaseRecordAdapter'
 import { persistState, hydrateState } from '../adapters/state/workspaceState'
+import { RECORD_GROUPING_KEY } from '../domain/recordGrouping'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
@@ -3994,6 +3995,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const state = await hydrateState()
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
+    // UI preferences kept in localStorage (not a store slice) still sync via workspace_state:
+    // write the workspace's copy back so components that read them synchronously (RecordsTable's
+    // grouping) restore the workspace choice on a fresh device.
+    if (RECORD_GROUPING_KEY in state) {
+      try {
+        localStorage.setItem(RECORD_GROUPING_KEY, JSON.stringify(state[RECORD_GROUPING_KEY]))
+      } catch {
+        /* storage unavailable — grouping falls back to whatever's local */
+      }
+    }
     set(patch as Partial<TrafficState>)
   },
 
