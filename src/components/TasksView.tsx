@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { recordTint } from '../domain/records'
+import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
  * Tasks — a standalone, Attio-style task list for the workspace: a row per task with its due date,
@@ -7,11 +8,17 @@ import { recordTint } from '../domain/records'
  * Upcoming / No date). Deliberately self-contained — tasks live in localStorage, so this page owns
  * its own data with no store slice or backend.
  */
+// A task's linked record — a Companies row, by id + name (name cached so the chip renders even if
+// the company is later renamed/removed). Null when the task isn't tied to a company.
+interface TaskRecord {
+  id: string
+  name: string
+}
 interface Task {
   id: string
   text: string
   due: string // 'YYYY-MM-DD' or ''
-  record: string
+  record: TaskRecord | null
   assignee: string
   done: boolean
   createdAt: number
@@ -21,10 +28,15 @@ const KEY = 'stoplight.tasks.v1'
 // The signed-in user, used as the default assignee for a new task.
 const ME = 'Chris Church'
 
+// Normalize a persisted task: `record` used to be a free-text string, so migrate any old value.
+const normRecord = (r: unknown): TaskRecord | null =>
+  r && typeof r === 'object' && 'name' in r ? (r as TaskRecord) : typeof r === 'string' && r ? { id: '', name: r } : null
+
 const load = (): Task[] => {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]')
-    return Array.isArray(raw) ? (raw as Task[]) : []
+    if (!Array.isArray(raw)) return []
+    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record) }))
   } catch {
     return []
   }
@@ -59,8 +71,10 @@ function Avatar({ name }: { name: string }) {
 }
 
 export function TasksView() {
+  const companies = useTrafficStore((s) => s.companies)
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
+  const [pickRec, setPickRec] = useState<string | null>(null)
   const focusId = useRef<string | null>(null)
   const today = localDate()
 
@@ -87,7 +101,7 @@ export function TasksView() {
   const addTask = () => {
     const id = freshId()
     focusId.current = id
-    setTasks((prev) => [...prev, { id, text: '', due: today, record: '', assignee: ME, done: false, createdAt: Date.now() }])
+    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: ME, done: false, createdAt: Date.now() }])
   }
 
   const row = (t: Task) => (
@@ -139,16 +153,52 @@ export function TasksView() {
           </button>
         )}
       </div>
-      <div className="task-cell">
-        <span className={`task-chip${t.record ? '' : ' empty'}`}>
-          {t.record && <Avatar name={t.record} />}
-          <input
-            className="task-input task-chip-input"
-            value={t.record}
-            placeholder="—"
-            onChange={(e) => patch(t.id, { record: e.target.value })}
-          />
-        </span>
+      <div className="task-cell task-rec-cell">
+        <button className={`task-chip task-chip-btn${t.record ? '' : ' empty'}`} onClick={() => setPickRec(t.id)} title="Link a company">
+          {t.record ? (
+            <>
+              <Avatar name={t.record.name} />
+              <span className="task-chip-name">{t.record.name}</span>
+            </>
+          ) : (
+            <span className="task-chip-name muted">—</span>
+          )}
+        </button>
+        {pickRec === t.id && (
+          <>
+            <div className="task-pick-scrim" onClick={() => setPickRec(null)} />
+            <div className="task-pick-menu" role="menu">
+              <div className="task-pick-head">Companies</div>
+              {companies.length === 0 && <div className="task-pick-empty">No companies yet</div>}
+              {companies.map((c) => (
+                <button
+                  key={c.id}
+                  className={`task-pick-item${t.record?.id === c.id ? ' on' : ''}`}
+                  role="menuitem"
+                  onClick={() => {
+                    patch(t.id, { record: { id: c.id, name: c.name } })
+                    setPickRec(null)
+                  }}
+                >
+                  <Avatar name={c.name} />
+                  <span className="task-pick-name">{c.name}</span>
+                </button>
+              ))}
+              {t.record && (
+                <button
+                  className="task-pick-item task-pick-clear"
+                  role="menuitem"
+                  onClick={() => {
+                    patch(t.id, { record: null })
+                    setPickRec(null)
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
       <div className="task-cell">
         <span className={`task-chip${t.assignee ? '' : ' empty'}`}>

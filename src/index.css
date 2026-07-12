@@ -18162,6 +18162,105 @@ textarea.library-input {
   font-size: 10px;
   font-weight: 700;
 }
+/* Record cell: a chip that opens a Companies picker. */
+.task-rec-cell {
+  position: relative;
+}
+.task-chip-btn {
+  cursor: pointer;
+  font: inherit;
+  max-width: 100%;
+}
+.task-chip-btn:hover {
+  border-color: var(--accent);
+}
+.task-chip-btn.empty:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+.task-chip-name {
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 0;
+}
+.task-chip-name.muted {
+  color: var(--text-faint);
+  padding: 2px 4px;
+}
+.task-pick-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.task-pick-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 4px;
+  z-index: 31;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.task-pick-head {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  padding: 5px 10px 4px;
+}
+.task-pick-empty {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  padding: 6px 10px 8px;
+}
+.task-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.task-pick-item:hover {
+  background: var(--surface-2);
+}
+.task-pick-item.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+.task-pick-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-pick-clear {
+  color: var(--text-faint);
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 7px 7px;
+}
+.task-pick-clear:hover {
+  color: var(--red);
+}
 .task-del {
   flex: 0 0 auto;
   border: 0;
