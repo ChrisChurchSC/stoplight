@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- silk thread -->
+  <line x1="50" y1="3" x2="50" y2="32" stroke="#9a9ab2" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- 8 curvy legs, tucked behind the body -->
+  <g fill="none" stroke="#3b3b52" stroke-width="5.5" stroke-linecap="round">
+    <path d="M39 54 C24 47 17 51 11 45"/>
+    <path d="M37 62 C19 59 12 63 7 60"/>
+    <path d="M38 70 C21 72 15 78 11 77"/>
+    <path d="M41 76 C28 82 24 88 20 91"/>
+    <path d="M61 54 C76 47 83 51 89 45"/>
+    <path d="M63 62 C81 59 88 63 93 60"/>
+    <path d="M62 70 C79 72 85 78 89 77"/>
+    <path d="M59 76 C72 82 76 88 80 91"/>
+  </g>
+  <!-- round body -->
+  <circle cx="50" cy="63" r="23" fill="#4b4b66"/>
+  <!-- big cute eyes -->
+  <circle cx="42" cy="59" r="7.5" fill="#ffffff"/>
+  <circle cx="58" cy="59" r="7.5" fill="#ffffff"/>
+  <circle cx="43.5" cy="61" r="3.4" fill="#1e1e2a"/>
+  <circle cx="59.5" cy="61" r="3.4" fill="#1e1e2a"/>
+  <circle cx="41.6" cy="59.4" r="1.5" fill="#ffffff"/>
+  <circle cx="57.6" cy="59.4" r="1.5" fill="#ffffff"/>
+  <!-- rosy cheeks -->
+  <circle cx="34" cy="67" r="3.4" fill="#ff9a9a" opacity="0.8"/>
+  <circle cx="66" cy="67" r="3.4" fill="#ff9a9a" opacity="0.8"/>
+  <!-- little smile -->
+  <path d="M45 71 Q50 76 55 71" fill="none" stroke="#1e1e2a" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

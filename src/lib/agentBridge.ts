@@ -16,7 +16,7 @@ import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 
 /**
  * Browser side of the agent bridge: this tab is the executor. It listens for
- * commands from the dev-server bridge (which the Hyperfocus MCP server, and so
+ * commands from the dev-server bridge (which the ItsyBitsy MCP server, and so
  * Claude Desktop, posts to) and runs the REAL store actions, so a command typed
  * in Desktop adds a client / sets one up / runs a check in this tab, with the UI
  * updating live. Dev only. See server/agentBridge.ts and mcp/hyperfocus-server.mjs.
@@ -377,17 +377,21 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const store = useTrafficStore.getState()
     store.addClient(brand)
     store.setMessagingBrand(brand)
-    store.addLibraryItem(
-      'audiences',
-      newAudience({
-        name,
-        role: str(a.role),
-        messageAngle: str(a.angle),
-        pains: list(a.pains),
-        descriptors: list(a.voice).map((label) => newDescriptor({ label })),
-        approved: false,
-      }),
-    )
+    const aud = newAudience({
+      name,
+      role: str(a.role),
+      messageAngle: str(a.angle),
+      pains: list(a.pains),
+      descriptors: list(a.voice).map((label) => newDescriptor({ label })),
+      approved: false,
+    })
+    store.addLibraryItem('audiences', aud)
+    // Mirror into clientAudiences[brand] — the store the Records › Segments table reads
+    // (Segments IS the brand's audiences, surfaced as records). Dedup by name.
+    const cur = useTrafficStore.getState().clientAudiences[brand] ?? []
+    if (!cur.some((x) => (x.name ?? '').trim().toLowerCase() === name.toLowerCase())) {
+      useTrafficStore.getState().setClientAudiences(brand, [...cur, { ...aud }])
+    }
     return { brand, addedAudience: name }
   },
 
@@ -423,6 +427,16 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       outcome: str(a.outcome) || undefined,
       approved: false,
     })
+    // Mirror into the new Records › Messages store so the Messages table renders it.
+    const stMsg = useTrafficStore.getState()
+    if (!stMsg.messages.some((m) => m.name.trim().toLowerCase() === text.toLowerCase())) {
+      stMsg.addMessage({
+        name: text,
+        angle: str(a.angle) || undefined,
+        notes: str(a.outcome) || undefined,
+        status: 'draft',
+      })
+    }
     return { brand, addedSubject: text }
   },
 
@@ -440,6 +454,16 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       note: str(a.note) || undefined,
       approved: false,
     })
+    // Mirror into the new Records › Messages store so the Messages table renders it.
+    const stMsg = useTrafficStore.getState()
+    if (!stMsg.messages.some((m) => m.name.trim().toLowerCase() === text.toLowerCase())) {
+      stMsg.addMessage({
+        name: text,
+        angle: str(a.kind) || undefined,
+        notes: str(a.note) || undefined,
+        status: 'draft',
+      })
+    }
     return { brand, addedHook: text }
   },
 
@@ -1048,6 +1072,36 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       notes: str(a.notes).trim() || undefined,
       committee,
     })
+    // Mirror into the new Records › Companies + People stores so those tables render it.
+    const stRec = useTrafficStore.getState()
+    if (!stRec.companies.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
+      stRec.addCompany({
+        name,
+        description: str(a.notes).trim() || undefined,
+        website: str(a.domain).trim() || undefined,
+        segment: str(a.segment).trim() || undefined,
+        status: (status === 'won' ? 'client' : 'prospect') as 'client' | 'prospect',
+      })
+    }
+    for (const m of committee ?? []) {
+      const personName = m.role
+      if (
+        personName &&
+        !stRec.people.some(
+          (p) =>
+            p.name.trim().toLowerCase() === personName.toLowerCase() &&
+            (p.company ?? '').trim().toLowerCase() === name.toLowerCase(),
+        )
+      ) {
+        stRec.addPerson({
+          name: personName,
+          title: m.role,
+          company: name,
+          notes: m.concern,
+          status: 'lead',
+        })
+      }
+    }
     return { id: acct.id, name: acct.name, brand, tier: acct.tier, status: acct.status }
   },
 
