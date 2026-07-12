@@ -318,6 +318,29 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
       patch.strategy = resolved
     }
     store.setClientProfile(brand, patch)
+    // Mirror into the Records › Brand sheet (brandRecords), which the Brand page reads —
+    // otherwise the profile is set but the brand page renders empty. Map the About fields
+    // onto the comms-strategy record; only write fields we actually have.
+    const br: Record<string, unknown> = {}
+    const oneLiner = str(a.oneLiner).trim()
+    const mission = str(a.mission).trim()
+    const voice = str(a.voice).trim()
+    const industry = str(a.industry).trim()
+    const website = str(a.website).trim()
+    const diffs = list(a.differentiators)
+    if (oneLiner) { br.descriptor = oneLiner; br.positioning = oneLiner; br.keyMessage = oneLiner }
+    if (mission) br.businessObjective = mission
+    if (voice) br.toneOfVoice = voice
+    if (industry) br.industry = industry
+    if (website) br.website = website
+    if (diffs.length) br.differentiator = diffs.join('; ')
+    if (Object.keys(br).length) {
+      br.status = 'active'
+      const stB = useTrafficStore.getState()
+      const existing = stB.brandRecords.find((b) => b.name.trim().toLowerCase() === brand.toLowerCase())
+      if (existing) stB.updateBrandRecord(existing.id, br)
+      else stB.addBrandRecord({ name: brand, ...br })
+    }
     return { brand, set: Object.keys(patch) }
   },
 
