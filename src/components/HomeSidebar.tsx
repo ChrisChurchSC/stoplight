@@ -47,6 +47,13 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M10 13h6M10 17h5" />
     </>
   ),
+  tasks: (
+    <>
+      <path d="m3 7 2 2 3-3" />
+      <path d="m3 16 2 2 3-3" />
+      <path d="M12 8h9M12 17h9" />
+    </>
+  ),
   campaigns: (
     <>
       <rect x="4" y="4" width="6" height="16" rx="1.4" />
@@ -387,6 +394,37 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
+        <button
+          className={`nav-item${page === 'flows' ? ' active' : ''}`}
+          onClick={() => setPage('flows')}
+          title="Flows — a visual builder for campaign automations (exploratory)"
+        >
+          <span className="nav-ico">
+            <Ico name="flows" />
+          </span>
+          <span className="nav-label">Flows</span>
+        </button>
+        <button
+          className={`nav-item${page === 'reports' ? ' active' : ''}`}
+          onClick={() => setPage('reports')}
+          title="Reports — saved Claude write-ups over the brand's library"
+        >
+          <span className="nav-ico">
+            <Ico name="reports" />
+          </span>
+          <span className="nav-label">Reports</span>
+        </button>
+        <button
+          className={`nav-item${page === 'tasks' ? ' active' : ''}`}
+          onClick={() => setPage('tasks')}
+          title="Tasks — a running to-do list for this workspace"
+        >
+          <span className="nav-ico">
+            <Ico name="tasks" />
+          </span>
+          <span className="nav-label">Tasks</span>
+        </button>
+
         <div className="hsb-chats">
           <button className="hsb-sec" onClick={() => setDataOpen((o) => !o)}>
             <span className={`hsb-sec-chev${dataOpen ? ' open' : ''}`}>
@@ -416,30 +454,9 @@ export function HomeSidebar() {
                 </span>
                 <span className="nav-label">Insights</span>
               </button>
-              <button
-                className={`nav-item${page === 'reports' ? ' active' : ''}`}
-                onClick={() => setPage('reports')}
-                title="Reports — saved Claude write-ups over the brand's library"
-              >
-                <span className="nav-ico">
-                  <Ico name="reports" />
-                </span>
-                <span className="nav-label">Reports</span>
-              </button>
             </div>
           )}
         </div>
-
-        <button
-          className={`nav-item${page === 'flows' ? ' active' : ''}`}
-          onClick={() => setPage('flows')}
-          title="Flows — a visual builder for campaign automations (exploratory)"
-        >
-          <span className="nav-ico">
-            <Ico name="flows" />
-          </span>
-          <span className="nav-label">Flows</span>
-        </button>
 
         {brands.length === 1 ? (
           // Campaigns live under Flows now; the single-brand workspace no longer shows a
