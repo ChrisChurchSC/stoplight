@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { MockSheetAdapter } from '../adapters/sheet/mockSheetAdapter'
 import { SupabaseSheetAdapter } from '../adapters/sheet/supabaseSheetAdapter'
+import { SupabaseRecordAdapter } from '../adapters/records/supabaseRecordAdapter'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
@@ -540,7 +541,7 @@ function loadCompanies(): Company[] {
 }
 function saveCompanies(list: Company[]): void {
   try {
-    localStorage.setItem(COMPANIES_KEY, JSON.stringify(list))
+    saveRecordList(COMPANIES_KEY, list)
   } catch {
     /* ignore */
   }
@@ -564,7 +565,7 @@ function loadChannelRecords(): ChannelRecord[] {
 }
 function saveChannelRecords(list: ChannelRecord[]): void {
   try {
-    localStorage.setItem(CHANNEL_RECORDS_KEY, JSON.stringify(list))
+    saveRecordList(CHANNEL_RECORDS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -629,7 +630,7 @@ function loadPeople(): Person[] {
 }
 function savePeople(list: Person[]): void {
   try {
-    localStorage.setItem(PEOPLE_KEY, JSON.stringify(list))
+    saveRecordList(PEOPLE_KEY, list)
   } catch {
     /* ignore */
   }
@@ -646,11 +647,30 @@ function loadRecordList<T>(key: string): T[] {
     return []
   }
 }
-function saveRecordList<T>(key: string, list: T[]): void {
+// Each record-list localStorage key → its Supabase table. saveRecordList() writes localStorage
+// always (cache/offline) and, when a backend is configured, mirrors the list to the workspace's
+// table. Hydration (hydrateRecords) pulls the same tables back on sign-in. String literals, not the
+// KEY consts, so this can sit above their declarations.
+const RECORD_TABLES: Record<string, string> = {
+  'stoplight.companies.v1': 'companies',
+  'stoplight.people.v1': 'people',
+  'stoplight.channelRecords.v1': 'channels',
+  'stoplight.segments.v1': 'segments',
+  'stoplight.objectives.v1': 'objectives',
+  'stoplight.messages.v1': 'message_records',
+  'stoplight.brandRecords.v1': 'brands',
+}
+const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
+function saveRecordList<T extends { id: string }>(key: string, list: T[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(list))
   } catch {
     /* ignore */
+  }
+  const table = RECORD_TABLES[key]
+  if (table && isSupabaseConfigured) {
+    const adapter = (recordAdapterCache[table] ??= new SupabaseRecordAdapter(table))
+    void adapter.replaceAll(list as unknown as { id: string; name?: string }[])
   }
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
@@ -686,7 +706,7 @@ function loadSegments(): Segment[] {
 }
 function saveSegments(list: Segment[]): void {
   try {
-    localStorage.setItem(SEGMENTS_KEY, JSON.stringify(list))
+    saveRecordList(SEGMENTS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -1698,6 +1718,9 @@ interface TrafficState {
   ingestDriveLink: (client: string) => Promise<void>
 
   refresh: () => Promise<void>
+  /** Pull the record lists (companies, people, brands, …) from the workspace backend into the store
+   *  after sign-in. No-op on localStorage (the slices already loaded synchronously at init). */
+  hydrateRecords: () => Promise<void>
 
   // ingest tray
   addAssets: (assets: Asset[]) => void
@@ -2062,14 +2085,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientProfiles: loadClientProfiles(),
   brandActuals: loadBrandActuals(),
   reports: loadReports(),
-  companies: loadCompanies(),
-  channelRecords: loadChannelRecords(),
+  // Record lists start empty when a backend is configured (hydrateRecords fills them from the
+  // workspace on sign-in), so a real user never sees the local demo seeds flash. On localStorage
+  // they load/seed as before.
+  companies: isSupabaseConfigured ? [] : loadCompanies(),
+  channelRecords: isSupabaseConfigured ? [] : loadChannelRecords(),
   onboarding: loadOnboarding(),
-  people: loadPeople(),
-  messages: loadRecordList<Message>(MESSAGES_KEY),
-  objectives: loadRecordList<Objective>(OBJECTIVES_KEY),
-  brandRecords: loadOrSeedBrandRecords(),
-  segments: loadSegments(),
+  people: isSupabaseConfigured ? [] : loadPeople(),
+  messages: isSupabaseConfigured ? [] : loadRecordList<Message>(MESSAGES_KEY),
+  objectives: isSupabaseConfigured ? [] : loadRecordList<Objective>(OBJECTIVES_KEY),
+  brandRecords: isSupabaseConfigured ? [] : loadOrSeedBrandRecords(),
+  segments: isSupabaseConfigured ? [] : loadSegments(),
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
   actualsRefreshing: null,
@@ -3934,6 +3960,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (auds.length) rows.forEach((r, i) => { if (!r.audience) r.audience = auds[i % auds.length] })
     await sheet.append(rows)
     await get().refresh()
+  },
+
+  hydrateRecords: async () => {
+    if (!isSupabaseConfigured) return
+    const from = <T extends { id: string; name?: string }>(table: string) => new SupabaseRecordAdapter<T>(table).list()
+    const [companies, people, channelRecords, segments, objectives, messages, brandRecords] = await Promise.all([
+      from<Company>('companies'),
+      from<Person>('people'),
+      from<ChannelRecord>('channels'),
+      from<Segment>('segments'),
+      from<Objective>('objectives'),
+      from<Message>('message_records'),
+      from<BrandRecord>('brands'),
+    ])
+    set({ companies, people, channelRecords, segments, objectives, messages, brandRecords })
   },
 
   refresh: async () => {

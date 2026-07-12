@@ -131,6 +131,39 @@ drop policy if exists messages_write on public.messages;
 create policy messages_write on public.messages
   for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
 
--- Further tables (clients, campaigns, versions, shares, break_status, audit_log)
--- follow the same workspace_id + RLS pattern; added as their adapters are wired
--- off the mock localStorage helpers.
+-- ── Record lists (Records › … sheets) ──────────────────────────────────────
+-- One table per record type, all the same shape as assets: (id, workspace_id,
+-- name, data jsonb) with the full record in `data`. Created in a loop so they
+-- stay identical; each gets member-read / editor-write RLS. Backed by
+-- SupabaseRecordAdapter (src/adapters/records). `message_records` is the
+-- Records › Messages sheet — distinct from the inbound `messages` table above.
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'brands', 'companies', 'people', 'segments', 'channels',
+    'objectives', 'message_records', 'tasks', 'proof_points'
+  ] loop
+    execute format($f$
+      create table if not exists public.%1$I (
+        id           text primary key,
+        workspace_id uuid not null references public.workspaces on delete cascade,
+        name         text,
+        data         jsonb not null,
+        updated_at   timestamptz not null default now()
+      )$f$, t);
+    execute format('create index if not exists %I on public.%I (workspace_id)', t || '_workspace_idx', t);
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I on public.%I', t || '_select', t);
+    execute format('create policy %I on public.%I for select using (public.is_member(workspace_id))', t || '_select', t);
+    execute format('drop policy if exists %I on public.%I', t || '_write', t);
+    execute format(
+      'create policy %I on public.%I for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id))',
+      t || '_write', t
+    );
+  end loop;
+end $$;
+
+-- Still on localStorage (their store slices aren't record lists — nested/derived
+-- state): brand systems + profiles + audiences, campaign metadata, reports,
+-- media mixes, coherence, saved views. Wired off the mock helpers next.

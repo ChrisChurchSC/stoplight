@@ -64,6 +64,7 @@ import { Toast } from './Toast'
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
+  const hydrateRecords = useTrafficStore((s) => s.hydrateRecords)
   const addAssets = useTrafficStore((s) => s.addAssets)
   const view = useTrafficStore((s) => s.view)
   const page = useTrafficStore((s) => s.page)
@@ -104,7 +105,8 @@ export function Workbench() {
 
   useEffect(() => {
     refresh()
-  }, [refresh])
+    void hydrateRecords()
+  }, [refresh, hydrateRecords])
 
   // Cmd/Ctrl+K opens Ask Claude from anywhere.
   useEffect(() => {
