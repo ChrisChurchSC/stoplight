@@ -21,7 +21,7 @@ export function BrandsView() {
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const deleteBrandRecord = useTrafficStore((s) => s.deleteBrandRecord)
 
-  // When scoped to one brand, this sheet is that brand's own spreadsheet (a single row).
+  // Scoped to one brand → that brand as its own single-row sheet; "All brands" → the full table.
   const scoped = clientFilter !== 'all' ? brandRecords.find((b) => b.name === clientFilter) : undefined
 
   return (
@@ -34,7 +34,6 @@ export function BrandsView() {
       rows={scoped ? [scoped] : brandRecords}
       noun={['brand', 'brands']}
       onAdd={() => {
-        // Adding from a single-brand view returns to the full list so the new row is visible.
         if (scoped) setClientFilter('all')
         return addBrandRecord()
       }}

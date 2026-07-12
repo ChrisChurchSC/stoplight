@@ -14,22 +14,84 @@ export interface BrandRecord {
   status?: 'active' | 'prospect' | 'paused' | ''
   owner?: string
   notes?: string
+  // ---- Communications strategy (the brand's own strategy document) ----
+  // Overview / header
+  descriptor?: string
+  strategyOwner?: string
+  reviewCycle?: string
+  // Strategic Foundation
+  businessObjective?: string
+  commsObjective?: string
+  positioning?: string
+  primaryAudience?: string
+  audienceInsight?: string
+  competitiveContext?: string
+  differentiator?: string
+  // Message Architecture
+  keyMessage?: string
+  supportingMessages?: string
+  proofPoints?: string
+  toneOfVoice?: string
+  languageDos?: string
+  languageDonts?: string
+  // Execution
+  primaryChannels?: string
+  secondaryChannels?: string
+  contentPillars?: string
+  cadence?: string
+  budgetSplit?: string
+  keyMoments?: string
+  // Measurement & Governance
+  primaryKpis?: string
+  headlineTargets?: string
+  reviewCadence?: string
+  risks?: string
 }
 
+// A curated overview across the strategy sections; the full document lives in the record drawer.
 export const BRAND_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Brand', kind: 'name', width: 240, group: 'Profile' },
-  { key: 'industry', label: 'Industry', kind: 'text', width: 200, group: 'Profile' },
-  { key: 'website', label: 'Website', kind: 'url', width: 220, group: 'Profile' },
-  { key: 'status', label: 'Status', kind: 'status', width: 130, group: 'State' },
+  { key: 'name', label: 'Brand', kind: 'name', width: 220, group: 'Overview' },
+  { key: 'descriptor', label: 'Descriptor', kind: 'text', width: 220, group: 'Overview' },
+  { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Overview' },
+  { key: 'businessObjective', label: 'Business objective', kind: 'text', width: 300, group: 'Strategic Foundation' },
+  { key: 'positioning', label: 'Positioning', kind: 'text', width: 300, group: 'Strategic Foundation' },
+  { key: 'keyMessage', label: 'Key message', kind: 'text', width: 260, group: 'Message Architecture' },
+  { key: 'primaryChannels', label: 'Primary channels', kind: 'text', width: 240, group: 'Execution' },
+  { key: 'primaryKpis', label: 'Primary KPIs', kind: 'text', width: 240, group: 'Measurement' },
 ]
 
+// The full Communications Strategy, grouped into sections (shown in the record drawer).
 export const BRAND_FIELDS: RecordField[] = [
-  { key: 'name', label: 'Brand', kind: 'name', group: 'Profile' },
-  { key: 'industry', label: 'Industry', kind: 'text', group: 'Profile' },
-  { key: 'website', label: 'Website', kind: 'url', group: 'Profile' },
-  { key: 'status', label: 'Status', kind: 'status', group: 'State' },
-  { key: 'owner', label: 'Owner', kind: 'text', group: 'State' },
-  { key: 'notes', label: 'Notes', kind: 'multiline', group: 'State' },
+  { key: 'name', label: 'Brand', kind: 'name', group: 'Overview' },
+  { key: 'descriptor', label: 'Brand descriptor', kind: 'text', group: 'Overview' },
+  { key: 'status', label: 'Status', kind: 'status', group: 'Overview' },
+  { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', group: 'Overview' },
+  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', group: 'Overview' },
+  { key: 'industry', label: 'Industry', kind: 'text', group: 'Overview' },
+  { key: 'website', label: 'Website', kind: 'url', group: 'Overview' },
+  { key: 'businessObjective', label: 'Business objective', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'commsObjective', label: 'Comms objective', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'positioning', label: 'Positioning statement', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'primaryAudience', label: 'Primary audience', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'audienceInsight', label: 'Audience insight', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'competitiveContext', label: 'Competitive context', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'differentiator', label: 'Differentiator', kind: 'multiline', group: 'Strategic Foundation' },
+  { key: 'keyMessage', label: 'Key message', kind: 'multiline', group: 'Message Architecture' },
+  { key: 'supportingMessages', label: 'Supporting messages', kind: 'multiline', group: 'Message Architecture' },
+  { key: 'proofPoints', label: 'Proof points', kind: 'multiline', group: 'Message Architecture' },
+  { key: 'toneOfVoice', label: 'Tone of voice', kind: 'multiline', group: 'Message Architecture' },
+  { key: 'languageDos', label: "Language do's", kind: 'multiline', group: 'Message Architecture' },
+  { key: 'languageDonts', label: "Language don'ts", kind: 'multiline', group: 'Message Architecture' },
+  { key: 'primaryChannels', label: 'Primary channels', kind: 'multiline', group: 'Execution' },
+  { key: 'secondaryChannels', label: 'Secondary channels', kind: 'multiline', group: 'Execution' },
+  { key: 'contentPillars', label: 'Content pillars', kind: 'multiline', group: 'Execution' },
+  { key: 'cadence', label: 'Cadence', kind: 'multiline', group: 'Execution' },
+  { key: 'budgetSplit', label: 'Budget split', kind: 'multiline', group: 'Execution' },
+  { key: 'keyMoments', label: 'Key moments / campaigns', kind: 'multiline', group: 'Execution' },
+  { key: 'primaryKpis', label: 'Primary KPIs', kind: 'multiline', group: 'Measurement' },
+  { key: 'headlineTargets', label: 'Headline targets', kind: 'multiline', group: 'Measurement' },
+  { key: 'reviewCadence', label: 'Review cadence', kind: 'multiline', group: 'Measurement' },
+  { key: 'risks', label: 'Risks & watch-outs', kind: 'multiline', group: 'Measurement' },
 ]
 
 export const BRAND_STATUSES: NonNullable<BrandRecord['status']>[] = ['active', 'prospect', 'paused']
