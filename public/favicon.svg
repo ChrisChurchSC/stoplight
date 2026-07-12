@@ -1,29 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="pinkbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd9ee"/>
+      <stop offset="0.55" stop-color="#ff90c4"/>
+      <stop offset="1" stop-color="#ff5fa8"/>
+    </linearGradient>
+  </defs>
+  <!-- pink gradient tile -->
+  <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#pinkbg)"/>
   <!-- silk thread -->
-  <line x1="50" y1="3" x2="50" y2="32" stroke="#9a9ab2" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="50" y1="8" x2="50" y2="34" stroke="#4b4b66" stroke-width="2.5" stroke-linecap="round"/>
   <!-- 8 curvy legs, tucked behind the body -->
   <g fill="none" stroke="#3b3b52" stroke-width="5.5" stroke-linecap="round">
-    <path d="M39 54 C24 47 17 51 11 45"/>
-    <path d="M37 62 C19 59 12 63 7 60"/>
-    <path d="M38 70 C21 72 15 78 11 77"/>
-    <path d="M41 76 C28 82 24 88 20 91"/>
-    <path d="M61 54 C76 47 83 51 89 45"/>
-    <path d="M63 62 C81 59 88 63 93 60"/>
-    <path d="M62 70 C79 72 85 78 89 77"/>
-    <path d="M59 76 C72 82 76 88 80 91"/>
+    <path d="M40 55 C27 49 21 52 16 47"/>
+    <path d="M38 62 C23 60 17 63 13 60"/>
+    <path d="M39 69 C25 71 20 76 16 75"/>
+    <path d="M42 75 C30 80 27 85 24 87"/>
+    <path d="M60 55 C73 49 79 52 84 47"/>
+    <path d="M62 62 C77 60 83 63 87 60"/>
+    <path d="M61 69 C75 71 80 76 84 75"/>
+    <path d="M58 75 C70 80 73 85 76 87"/>
   </g>
   <!-- round body -->
-  <circle cx="50" cy="63" r="23" fill="#4b4b66"/>
+  <circle cx="50" cy="63" r="22" fill="#4b4b66"/>
   <!-- big cute eyes -->
-  <circle cx="42" cy="59" r="7.5" fill="#ffffff"/>
-  <circle cx="58" cy="59" r="7.5" fill="#ffffff"/>
-  <circle cx="43.5" cy="61" r="3.4" fill="#1e1e2a"/>
-  <circle cx="59.5" cy="61" r="3.4" fill="#1e1e2a"/>
-  <circle cx="41.6" cy="59.4" r="1.5" fill="#ffffff"/>
-  <circle cx="57.6" cy="59.4" r="1.5" fill="#ffffff"/>
+  <circle cx="42.5" cy="59" r="7.2" fill="#ffffff"/>
+  <circle cx="57.5" cy="59" r="7.2" fill="#ffffff"/>
+  <circle cx="44" cy="61" r="3.3" fill="#1e1e2a"/>
+  <circle cx="59" cy="61" r="3.3" fill="#1e1e2a"/>
+  <circle cx="42.1" cy="59.4" r="1.5" fill="#ffffff"/>
+  <circle cx="57.1" cy="59.4" r="1.5" fill="#ffffff"/>
   <!-- rosy cheeks -->
-  <circle cx="34" cy="67" r="3.4" fill="#ff9a9a" opacity="0.8"/>
-  <circle cx="66" cy="67" r="3.4" fill="#ff9a9a" opacity="0.8"/>
+  <circle cx="35" cy="66.5" r="3.3" fill="#ff9ab0" opacity="0.85"/>
+  <circle cx="65" cy="66.5" r="3.3" fill="#ff9ab0" opacity="0.85"/>
   <!-- little smile -->
-  <path d="M45 71 Q50 76 55 71" fill="none" stroke="#1e1e2a" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M45.5 70.5 Q50 75 54.5 70.5" fill="none" stroke="#1e1e2a" stroke-width="2.6" stroke-linecap="round"/>
 </svg>
