@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { recordTint, type RecordField } from '../domain/records'
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
 
@@ -17,6 +17,7 @@ export function RecordDrawer<T extends { id: string }>({
   onUpdate,
   onDelete,
   onClose,
+  related,
 }: {
   record: T
   fields: RecordField[]
@@ -24,6 +25,8 @@ export function RecordDrawer<T extends { id: string }>({
   onUpdate: (id: string, patch: Partial<T>) => void
   onDelete: (id: string) => void
   onClose: () => void
+  /** Related records surfaced at the bottom (e.g. the people at a company). */
+  related?: ReactNode
 }) {
   const val = (k: string) => ((record as Record<string, unknown>)[k] ?? '').toString()
   const set = (k: string, v: string) => onUpdate(record.id, { [k]: v } as Partial<T>)
@@ -93,6 +96,7 @@ export function RecordDrawer<T extends { id: string }>({
                 </Fragment>
               )
             })}
+          {related}
         </div>
 
         <footer className="rd-foot">

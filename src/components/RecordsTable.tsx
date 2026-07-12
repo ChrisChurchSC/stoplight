@@ -23,6 +23,7 @@ export function RecordsTable<T extends { id: string }>({
   onUpdate,
   onDelete,
   rowAction,
+  relatedSlot,
 }: {
   title: string
   icon: ReactNode
@@ -36,6 +37,8 @@ export function RecordsTable<T extends { id: string }>({
   onDelete: (id: string) => void
   /** Optional per-row action button (e.g. "Build flow" on a campaign row). */
   rowAction?: { label: string; run: (row: T) => void }
+  /** Optional related-records section shown at the bottom of the drawer (e.g. people at a company). */
+  relatedSlot?: (record: T) => ReactNode
 }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -309,6 +312,7 @@ export function RecordsTable<T extends { id: string }>({
           onUpdate={onUpdate}
           onDelete={onDelete}
           onClose={() => setOpenId(null)}
+          related={relatedSlot?.(openRecord)}
         />
       )}
     </div>

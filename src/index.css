@@ -3481,6 +3481,76 @@ button {
   margin-top: 0;
   padding-top: 2px;
 }
+/* Related-records block in a drawer (people at a company, colleagues, …). */
+.rd-related {
+  margin-top: 4px;
+}
+.rd-related .rd-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rd-related-count {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+.rd-related-empty {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  padding: 8px 2px 4px;
+}
+.rd-related-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 0 2px;
+}
+.rd-related-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.rd-related-item:hover {
+  background: var(--surface-2);
+}
+.rd-related-ava {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.rd-related-name {
+  font-size: 13.5px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.rd-related-sub {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rd-colors {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,7 @@
-import { PEOPLE_COLUMNS, PEOPLE_FIELDS, PEOPLE_STATUSES } from '../domain/people'
+import { type Person, PEOPLE_COLUMNS, PEOPLE_FIELDS, PEOPLE_STATUSES } from '../domain/people'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordsTable } from './RecordsTable'
+import { RelatedList } from './RelatedList'
 
 const ICON = (
   <>
@@ -11,15 +12,19 @@ const ICON = (
   </>
 )
 
-/** Records › People — the people store rendered through the generic RecordsTable. */
+/** Records › People — the people store rendered through the generic RecordsTable. The drawer links
+ *  the person's company (opens that Companies record) and lists their colleagues there. */
 export function PeopleView() {
   const people = useTrafficStore((s) => s.people)
+  const companies = useTrafficStore((s) => s.companies)
+  const setPage = useTrafficStore((s) => s.setPage)
+  const focusRecord = useTrafficStore((s) => s.focusRecord)
   const addPerson = useTrafficStore((s) => s.addPerson)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const deletePerson = useTrafficStore((s) => s.deletePerson)
 
   return (
-    <RecordsTable
+    <RecordsTable<Person>
       title="People"
       icon={ICON}
       columns={PEOPLE_COLUMNS}
@@ -30,6 +35,50 @@ export function PeopleView() {
       onAdd={() => addPerson()}
       onUpdate={updatePerson}
       onDelete={deletePerson}
+      relatedSlot={(person) => {
+        const co = (person.company ?? '').trim()
+        const norm = co.toLowerCase()
+        const company = co ? companies.find((c) => c.name.trim().toLowerCase() === norm) : undefined
+        const colleagues = norm
+          ? people.filter((p) => p.id !== person.id && (p.company ?? '').trim().toLowerCase() === norm)
+          : []
+        return (
+          <>
+            {co && (
+              <RelatedList
+                title="Company"
+                empty={`"${co}" isn't in Companies yet.`}
+                items={
+                  company
+                    ? [
+                        {
+                          id: company.id,
+                          name: company.name,
+                          sub: company.segment,
+                          onOpen: () => {
+                            focusRecord(company.id)
+                            setPage('records')
+                          },
+                        },
+                      ]
+                    : []
+                }
+              />
+            )}
+            {colleagues.length > 0 && (
+              <RelatedList
+                title="Colleagues"
+                items={colleagues.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  sub: p.title,
+                  onOpen: () => focusRecord(p.id),
+                }))}
+              />
+            )}
+          </>
+        )
+      }}
     />
   )
 }
