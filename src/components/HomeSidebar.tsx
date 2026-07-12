@@ -214,7 +214,6 @@ export function HomeSidebar() {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
-  const focusRecord = useTrafficStore((s) => s.focusRecord)
   const role = useTrafficStore((s) => s.role)
   const reports = useTrafficStore((s) => s.reports)
   const openAsk = useTrafficStore((s) => s.openAsk)
@@ -490,7 +489,6 @@ export function HomeSidebar() {
                             className={`nav-item hsb-rec-child${page === 'brands' && clientFilter === b.name ? ' active' : ''}`}
                             onClick={() => {
                               setClientFilter(b.name)
-                              focusRecord(b.id)
                               setPage('brands')
                             }}
                             title={b.name}
