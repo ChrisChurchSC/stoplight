@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /**
  * Agent bridge: lets an external MCP server (and so Claude Desktop) drive the
- * running Hyperfocus browser tab. The browser is the executor: it holds the real
+ * running ItsyBitsy browser tab. The browser is the executor: it holds the real
  * Zustand store, so a command runs the ACTUAL app action (add a client, set one
  * up with Claude, run a coherence check) and the UI updates live. No backend,
  * single-user, local-only, dev server only.
@@ -85,7 +85,7 @@ export function agentBridgeApi(): PluginOption {
           return res.end(
             JSON.stringify({
               error: 'no-tab',
-              message: 'No Hyperfocus tab is open. Open http://localhost:5173 in a browser and try again.',
+              message: 'No ItsyBitsy tab is open. Open http://localhost:5173 in a browser and try again.',
             }),
           )
         }
@@ -93,7 +93,7 @@ export function agentBridgeApi(): PluginOption {
         const out = await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             pending.delete(id)
-            reject(new Error('timeout waiting for the Hyperfocus tab'))
+            reject(new Error('timeout waiting for the ItsyBitsy tab'))
           }, 180000)
           pending.set(id, { resolve, reject, timer })
           send(stream, 'command', { id, action, args })

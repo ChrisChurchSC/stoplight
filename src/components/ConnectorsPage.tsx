@@ -1,9 +1,9 @@
 import { useState } from 'react'
 
 /**
- * Connect Hyperfocus to Claude — the MCP connect card, in the shape every MCP server
+ * Connect ItsyBitsy to Claude — the MCP connect card, in the shape every MCP server
  * uses: the server reference to copy, a tab per client (Claude Code / Desktop / Claude.ai),
- * and the exact command/config to paste. Hyperfocus runs locally over stdio (the browser
+ * and the exact command/config to paste. ItsyBitsy runs locally over stdio (the browser
  * tab is the executor), so the commands are node-over-stdio, not a hosted HTTP URL.
  */
 
@@ -39,7 +39,7 @@ export function ConnectorsPage() {
     <div className="page">
       <div className="page-body mcpc-body">
         <div className="mcpc">
-          <h1 className="mcpc-title">Connect Hyperfocus to Claude</h1>
+          <h1 className="mcpc-title">Connect ItsyBitsy to Claude</h1>
           <p className="mcpc-sub">Bring your brands into Claude to set them up and run campaigns with AI.</p>
 
           <div className="mcpc-label">MCP Server</div>
@@ -93,7 +93,7 @@ export function ConnectorsPage() {
             </>
           ) : (
             <p className="mcpc-note">
-              Claude.ai connects to hosted (HTTP) servers. Hyperfocus runs locally over stdio, so connect it through{' '}
+              Claude.ai connects to hosted (HTTP) servers. ItsyBitsy runs locally over stdio, so connect it through{' '}
               <strong>Claude Code</strong> or <strong>Desktop</strong>.
             </p>
           )}

@@ -1,4 +1,4 @@
-# Deploying Hyperfocus for a pilot
+# Deploying ItsyBitsy for a pilot
 
 This gets the app in front of a handful of trusted users. Data stays in each user's browser for now
 (no server sync yet — that's the "real product" follow-up); this covers hosting, the AI backend,
