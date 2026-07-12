@@ -164,6 +164,25 @@ begin
   end loop;
 end $$;
 
--- Still on localStorage (their store slices aren't record lists — nested/derived
--- state): brand systems + profiles + audiences, campaign metadata, reports,
--- media mixes, coherence, saved views. Wired off the mock helpers next.
+-- ── Workspace state (per-brand maps + singletons that aren't record lists) ──
+-- Brand systems / profiles / audiences, the client list, campaign metadata,
+-- reports, media mixes, saved chats, etc. are keyed maps or single objects, not
+-- entity lists, so they live as one jsonb value per localStorage key (the same
+-- keys the app already uses). Backed by src/adapters/state.
+create table if not exists public.workspace_state (
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  key          text not null,
+  value        jsonb not null,
+  updated_at   timestamptz not null default now(),
+  primary key (workspace_id, key)
+);
+alter table public.workspace_state enable row level security;
+drop policy if exists workspace_state_select on public.workspace_state;
+create policy workspace_state_select on public.workspace_state
+  for select using (public.is_member(workspace_id));
+drop policy if exists workspace_state_write on public.workspace_state;
+create policy workspace_state_write on public.workspace_state
+  for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
+
+-- Still local (UI/ephemeral): saved views, pinned insights, open projects,
+-- active canvas, break status, onboarding — fine to leave per-browser for now.

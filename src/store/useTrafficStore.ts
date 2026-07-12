@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { MockSheetAdapter } from '../adapters/sheet/mockSheetAdapter'
 import { SupabaseSheetAdapter } from '../adapters/sheet/supabaseSheetAdapter'
 import { SupabaseRecordAdapter } from '../adapters/records/supabaseRecordAdapter'
+import { persistState, hydrateState } from '../adapters/state/workspaceState'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
@@ -459,7 +460,7 @@ function loadClients(): string[] {
 }
 function saveClients(list: string[]): void {
   try {
-    localStorage.setItem(CLIENTS_KEY, JSON.stringify(list))
+    persistState(CLIENTS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -478,7 +479,7 @@ function loadClientProfiles(): Record<string, ClientProfile> {
 }
 function saveClientProfiles(map: Record<string, ClientProfile>): void {
   try {
-    localStorage.setItem(CLIENT_PROFILES_KEY, JSON.stringify(map))
+    persistState(CLIENT_PROFILES_KEY, map)
   } catch {
     /* ignore */
   }
@@ -515,7 +516,7 @@ function loadReports(): BrandReport[] {
 }
 function saveReports(list: BrandReport[]): void {
   try {
-    localStorage.setItem(REPORTS_KEY, JSON.stringify(list))
+    persistState(REPORTS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -606,7 +607,7 @@ function loadFlowChats(): SavedFlowChat[] {
 }
 function saveFlowChats(list: SavedFlowChat[]): void {
   try {
-    localStorage.setItem(FLOW_CHATS_KEY, JSON.stringify(list))
+    persistState(FLOW_CHATS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -724,7 +725,7 @@ function loadMediaMixes(): MediaMix[] {
 }
 function saveMediaMixes(list: MediaMix[]): void {
   try {
-    localStorage.setItem(MEDIA_MIXES_KEY, JSON.stringify(list))
+    persistState(MEDIA_MIXES_KEY, list)
   } catch {
     /* ignore */
   }
@@ -773,7 +774,7 @@ function loadClientAudiences(): Record<string, AudienceType[]> {
 }
 function saveClientAudiences(map: Record<string, AudienceType[]>): void {
   try {
-    localStorage.setItem(CLIENT_AUDIENCES_KEY, JSON.stringify(map))
+    persistState(CLIENT_AUDIENCES_KEY, map)
   } catch {
     /* ignore */
   }
@@ -813,7 +814,7 @@ function loadBrandSystems(): Record<string, MessagingLibrary> {
 }
 function saveBrandSystems(map: Record<string, MessagingLibrary>): void {
   try {
-    localStorage.setItem(BRAND_SYSTEMS_KEY, JSON.stringify(map))
+    persistState(BRAND_SYSTEMS_KEY, map)
   } catch {
     /* ignore */
   }
@@ -848,7 +849,7 @@ function loadBrandMeta(): BrandMetaMap {
 }
 function saveBrandMeta(map: BrandMetaMap): void {
   try {
-    localStorage.setItem(BRAND_META_KEY, JSON.stringify(map))
+    persistState(BRAND_META_KEY, map)
   } catch {
     /* ignore */
   }
@@ -1066,7 +1067,7 @@ function loadBrandGuides(): Record<string, BrandGuideEntry> {
 }
 function saveBrandGuides(map: Record<string, BrandGuideEntry>): void {
   try {
-    localStorage.setItem(BRAND_GUIDES_KEY, JSON.stringify(map))
+    persistState(BRAND_GUIDES_KEY, map)
   } catch {
     /* ignore */
   }
@@ -1105,7 +1106,7 @@ function loadCampaigns(): Campaign[] {
 }
 function saveCampaigns(list: Campaign[]): void {
   try {
-    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(list))
+    persistState(CAMPAIGNS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -1125,7 +1126,7 @@ function loadCampaignFolders(): Record<string, string[]> {
 }
 function saveCampaignFolders(map: Record<string, string[]>): void {
   try {
-    localStorage.setItem(CAMPAIGN_FOLDERS_KEY, JSON.stringify(map))
+    persistState(CAMPAIGN_FOLDERS_KEY, map)
   } catch {
     /* ignore */
   }
@@ -1152,7 +1153,7 @@ function loadCanvases(): CanvasBoard[] {
 }
 function saveCanvases(list: CanvasBoard[]): void {
   try {
-    localStorage.setItem(CANVASES_KEY, JSON.stringify(list))
+    persistState(CANVASES_KEY, list)
   } catch {
     /* ignore */
   }
@@ -3974,7 +3975,26 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       from<Message>('message_records'),
       from<BrandRecord>('brands'),
     ])
-    set({ companies, people, channelRecords, segments, objectives, messages, brandRecords })
+    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, brandRecords }
+    // Non-record state (brand system, client list, campaign metadata, …) from the KV table, mapped
+    // back onto its store slice by the localStorage key it was saved under.
+    const STATE_SLICES: Record<string, string> = {
+      'stoplight.clients.v1': 'clientList',
+      'stoplight.clientProfiles.v1': 'clientProfiles',
+      'stoplight.clientAudiences.v1': 'clientAudiences',
+      'stoplight.brandSystems.v1': 'brandSystems',
+      'stoplight.brandMeta.v1': 'brandMeta',
+      'stoplight.brandGuides.v1': 'brandGuides',
+      'stoplight.campaigns.v1': 'campaignList',
+      'stoplight.campaignFolders.v1': 'campaignFolders',
+      'stoplight.canvases.v1': 'canvases',
+      'stoplight.reports.v1': 'reports',
+      'stoplight.mediaMixes.v1': 'mediaMixes',
+      'stoplight.flowChats.v1': 'flowChats',
+    }
+    const state = await hydrateState()
+    for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
+    set(patch as Partial<TrafficState>)
   },
 
   refresh: async () => {
