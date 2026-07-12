@@ -11,7 +11,7 @@ import { hasSession } from './sessionStore'
  * Current-state messaging map. Given a brand's public site (rendered) + their
  * live ads, Claude extracts the messaging they ALREADY have live, their real
  * headlines, value props, claims, CTAs, audiences, and proof, as structured
- * objects. ItsyBitsy then stores this as the connected map you can see. This is
+ * objects. Magnetic Matter then stores this as the connected map you can see. This is
  * the front door to onboarding-as-diagnosis: map what they have, then show where
  * it does not connect. Dev/server only; NO_KEY (501) when the key is unset.
  */

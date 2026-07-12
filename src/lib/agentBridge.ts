@@ -16,7 +16,7 @@ import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 
 /**
  * Browser side of the agent bridge: this tab is the executor. It listens for
- * commands from the dev-server bridge (which the ItsyBitsy MCP server, and so
+ * commands from the dev-server bridge (which the Magnetic Matter MCP server, and so
  * Claude Desktop, posts to) and runs the REAL store actions, so a command typed
  * in Desktop adds a client / sets one up / runs a check in this tab, with the UI
  * updating live. Dev only. See server/agentBridge.ts and mcp/hyperfocus-server.mjs.

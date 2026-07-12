@@ -1,4 +1,4 @@
-// Core domain model for ItsyBitsy.
+// Core domain model for Magnetic Matter.
 //
 // The "sheet" is the source of truth. Each ingested asset, targeted at one
 // channel, becomes one TrafficRow. The schema here is what the (mock) sheet

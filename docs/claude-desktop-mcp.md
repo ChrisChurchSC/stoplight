@@ -1,6 +1,6 @@
-# Control ItsyBitsy from Claude Desktop (single-user, local)
+# Control Magnetic Matter from Claude Desktop (single-user, local)
 
-Drive the running ItsyBitsy app from Claude Desktop by chat: "add Acme as a client",
+Drive the running Magnetic Matter app from Claude Desktop by chat: "add Acme as a client",
 "set up a client from acme.com", "run a coherence check on Deep Dive". The Desktop
 tools run the REAL app actions in your open browser tab, and the UI updates live.
 
@@ -45,19 +45,19 @@ Pieces:
 
 ## Using it
 
-1. Start ItsyBitsy: `npm run dev`.
-2. Open **one** tab at `http://localhost:5173` and leave it open. (If several ItsyBitsy
+1. Start Magnetic Matter: `npm run dev`.
+2. Open **one** tab at `http://localhost:5173` and leave it open. (If several Magnetic Matter
    tabs are open, the most-recently-loaded one is the executor. Keep one tab to avoid
    confusion.)
 3. In Claude Desktop, just ask. Examples:
-   - "List my ItsyBitsy clients."
+   - "List my Magnetic Matter clients."
    - "Add Acme Co as a client."
-   - "Set up a client in ItsyBitsy from deep-dive.studio."
+   - "Set up a client in Magnetic Matter from deep-dive.studio."
    - "Run a coherence check on Deep Dive."
-   - "Fill in Acme's About info in ItsyBitsy: it's a Series-A devtools company, mission is X, voice is plain and technical."
-   - "Pull Acme's live assets into ItsyBitsy from acme.com."
-   - "Write Acme's messaging in ItsyBitsy: two audiences, three proof points, and a few hooks."
-   - "Generate a demand-gen campaign's assets for Acme in ItsyBitsy from everything connected."
+   - "Fill in Acme's About info in Magnetic Matter: it's a Series-A devtools company, mission is X, voice is plain and technical."
+   - "Pull Acme's live assets into Magnetic Matter from acme.com."
+   - "Write Acme's messaging in Magnetic Matter: two audiences, three proof points, and a few hooks."
+   - "Generate a demand-gen campaign's assets for Acme in Magnetic Matter from everything connected."
 
 ## Tools
 
@@ -101,7 +101,7 @@ These let your own Claude drive the four jobs directly. Everything lands as a dr
 ## Notes
 
 - **Browser tab must be open.** The tab is the executor; if it is closed, a tool returns
-  "No ItsyBitsy tab is open." Open the app and retry.
+  "No Magnetic Matter tab is open." Open the app and retry.
 - **Anthropic key required** for `setup_client` and `run_coherence_check` (they call
   Claude server-side). Set `ANTHROPIC_API_KEY` in `.env`. Without it they fall back to
   the heuristic (`setup_client` still works, just without the site-grounded proposal).

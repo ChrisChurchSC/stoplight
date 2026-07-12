@@ -46,7 +46,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="auth-gate">
       <div className="auth-card">
-        <div className="auth-brand">ItsyBitsy</div>
+        <div className="auth-brand">Magnetic Matter</div>
         <div className="auth-title">{mode === 'in' ? 'Sign in' : 'Create your account'}</div>
         <input
           className="auth-input"

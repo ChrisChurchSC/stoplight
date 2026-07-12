@@ -1819,7 +1819,7 @@ interface TrafficState {
   coherenceUnavailable: boolean
   runCoherenceCheck: () => Promise<void>
   /** The connected Claude app pushes coherence flags it ran itself (so the check
-   *  comes from the live Claude, not ItsyBitsy's own API credits). Injects them
+   *  comes from the live Claude, not Magnetic Matter's own API credits). Injects them
    *  for the current scope and marks the result live. */
   applyClaudeCoherence: (flags: ClaudeCoherenceFlag[]) => void
   /** The Claude engine: reads from sources + publishes to channels via tools. */

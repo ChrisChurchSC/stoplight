@@ -162,7 +162,7 @@ export const TRACKING_KIND_LABEL: Record<TrackingKind, string> = {
 }
 
 const ti = (label: string, kind: TrackingKind): TrackingItem => ({ label, kind })
-/** UTM tagging is universal — ItsyBitsy builds it for every row. */
+/** UTM tagging is universal — Magnetic Matter builds it for every row. */
 const UTM = ti('UTM tagging', 'utm')
 
 export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
