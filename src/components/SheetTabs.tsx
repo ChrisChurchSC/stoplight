@@ -61,15 +61,11 @@ export function SheetTabs() {
   const group = GROUPS.find((g) => g.sheets.some((sh) => sh.page === page)) ?? GROUPS[0]
   const isBrand = group.label === 'Brand'
 
-  // Peer tabs for the active section. Brand is special: its peers are the individual brands
-  // (switched via clientFilter), plus an "All brands" tab — not a single static sheet.
+  const realBrands = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
+  // Peer tabs for the active section. Brand is special: its peers are the individual brands,
+  // switched via clientFilter — not a single static sheet.
   const peers = isBrand
-    ? [
-        ...brandRecords
-          .filter((b) => b.name.trim() && b.name !== 'New brand')
-          .map((b) => ({ key: b.id, label: b.name, on: clientFilter === b.name, go: () => setClientFilter(b.name) })),
-        { key: '__all', label: 'All brands', on: clientFilter === 'all', go: () => setClientFilter('all') },
-      ]
+    ? realBrands.map((b) => ({ key: b.id, label: b.name, on: clientFilter === b.name, go: () => setClientFilter(b.name) }))
     : group.sheets.map((sh) => ({ key: sh.page, label: sh.label, on: sh.page === page, go: () => setPage(sh.page) }))
 
   return (
@@ -96,7 +92,7 @@ export function SheetTabs() {
                   className={`sheet-drop-item${g.label === group.label ? ' on' : ''}`}
                   role="menuitem"
                   onClick={() => {
-                    if (g.label === 'Brand') setClientFilter('all')
+                    if (g.label === 'Brand') setClientFilter(realBrands[0]?.name ?? 'all')
                     setPage(g.sheets[0].page)
                     setOpen(false)
                   }}

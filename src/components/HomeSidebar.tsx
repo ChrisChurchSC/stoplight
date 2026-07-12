@@ -501,19 +501,6 @@ export function HomeSidebar() {
                             <span className="nav-label">{b.name}</span>
                           </button>
                         ))}
-                        <button
-                          className={`nav-item hsb-rec-child hsb-brand-all${page === 'brands' && clientFilter === 'all' ? ' active' : ''}`}
-                          onClick={() => {
-                            setClientFilter('all')
-                            setPage('brands')
-                          }}
-                          title="All brands"
-                        >
-                          <span className="nav-ico">
-                            <Ico name="brand" />
-                          </span>
-                          <span className="nav-label">All brands</span>
-                        </button>
                       </div>
                     )}
                   </div>

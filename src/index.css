@@ -2994,9 +2994,6 @@ button {
   font-size: 9px;
   font-weight: 700;
 }
-.hsb-brand-all .nav-ico {
-  color: var(--text-faint);
-}
 .hsb-chat {
   display: flex;
   align-items: center;
@@ -3104,7 +3101,9 @@ button {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  /* Square bottom: the sheet-tabs bar attaches directly below and carries the bottom radius, so the
+     table + tabs read as one rounded card instead of a rounded corner meeting a square one. */
+  border-radius: 12px 12px 0 0;
   background: var(--surface);
   /* Keep a visible, grabbable horizontal scrollbar (macOS hides overlay ones). */
   scrollbar-width: thin;
