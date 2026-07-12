@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
+import { loadRecordGrouping, saveRecordGrouping } from '../domain/recordGrouping'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
 import { BufferedInput } from './BufferedInput'
@@ -43,7 +44,6 @@ export function RecordsTable<T extends { id: string }>({
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [groupKey, setGroupKey] = useState<string | null>(null)
   const openRecord = openId ? rows.find((r) => r.id === openId) ?? null : null
 
   // Any status/text column can organize the sheet into groups (Companies by segment, People by
@@ -52,6 +52,17 @@ export function RecordsTable<T extends { id: string }>({
     () => columns.filter((c) => c.key !== 'name' && (c.kind === 'status' || c.kind === 'text')),
     [columns],
   )
+
+  // Grouping is remembered per sheet (keyed by title) so the choice survives reloads. Ignore a
+  // saved field that's no longer a groupable column (e.g. after a schema change).
+  const [groupKey, setGroupKey] = useState<string | null>(() => {
+    const saved = loadRecordGrouping(title)
+    return saved && groupCols.some((c) => c.key === saved) ? saved : null
+  })
+  const changeGroup = (v: string | null) => {
+    setGroupKey(v)
+    saveRecordGrouping(title, v)
+  }
 
   // A cross-view request to open a specific record (e.g. from a task's linked company). Only the
   // table that actually holds the id reacts, then it clears the signal.
@@ -210,7 +221,7 @@ export function RecordsTable<T extends { id: string }>({
             <select
               className="rec-sub-group-sel"
               value={groupKey ?? ''}
-              onChange={(e) => setGroupKey(e.target.value || null)}
+              onChange={(e) => changeGroup(e.target.value || null)}
               aria-label="Group rows by a field"
             >
               <option value="">No grouping</option>
