@@ -197,16 +197,6 @@ function resolveId(value: string): string | null {
 // Ensure a pasted console URL is launchable (prepend https:// when missing).
 const withProto = (u: string) => (/^https?:\/\//i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
 
-/** Label + icon for a selected roster id (a real channel or an extra pick). */
-function describeChannel(id: string): { label: string; icon: ReactNode } {
-  if (CHANNEL_LIST.some((c) => c.id === id)) {
-    return { label: CHANNELS[id as ChannelId].label, icon: <ChannelIcon channel={id as ChannelId} size={16} /> }
-  }
-  const extra = ALL_EXTRAS.find((t) => t.id === id)
-  if (extra) return { label: extra.label, icon: <PickIcon path={extra.path} color={extra.color} /> }
-  return { label: id, icon: <PickIcon path={null} color="#9aa1ac" /> }
-}
-
 function PickIcon({ path, color, size = 16 }: { path: string | null; color: string; size?: number }) {
   if (!path) {
     return (

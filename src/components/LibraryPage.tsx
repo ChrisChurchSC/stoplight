@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { audienceProfile, proofProfile, profileLabel } from '../domain/assetProfile'
 import { newAudience } from '../domain/audiences'
 import { newDescriptor } from '../domain/descriptors'
-import { clientForCampaign } from '../domain/clients'
 import { isApproved, newLibraryCta, type LibraryKind } from '../domain/library'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -79,12 +78,7 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
   const removeLibraryItem = useTrafficStore((s) => s.removeLibraryItem)
   const editLibrarySubject = useTrafficStore((s) => s.editLibrarySubject)
   const editLibraryHook = useTrafficStore((s) => s.editLibraryHook)
-  const useLibraryAudience = useTrafficStore((s) => s.useLibraryAudience)
-  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const rows = useTrafficStore((s) => s.rows)
-  const setPage = useTrafficStore((s) => s.setPage)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const messagingBrand = useTrafficStore((s) => s.messagingBrand)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -106,16 +100,6 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
   // sections; a single kind hides the tab bar entirely.
   const visibleTabs = kinds && kinds.length ? TABS.filter((t) => kinds.includes(t.kind)) : TABS
   const [tab, setTab] = useState<LibraryKind>(kinds?.[0] ?? 'audiences')
-
-  // Known clients you can pull a library audience onto.
-  const clients = useMemo(() => {
-    const set = new Set<string>([
-      ...Object.keys(clientProfiles ?? {}),
-      ...Object.keys(clientAudiences ?? {}),
-      ...rows.map((r) => clientForCampaign(r.campaign)).filter(Boolean),
-    ])
-    return [...set].filter(Boolean).sort()
-  }, [clientProfiles, clientAudiences, rows])
 
   // The detailed add form — a field bag keyed by the FORMS config for the active tab.
   const [form, setForm] = useState<Record<string, string>>({})

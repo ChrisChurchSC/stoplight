@@ -2615,7 +2615,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       try {
         const neon = await ingestNeonStream({ brand: n })
         if (neon.items.length) {
-          add(await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, neon.items, 'site'), 'Neon')
+          add(await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, neon.items as unknown as Record<string, unknown>[], 'site'), 'Neon')
         }
       } catch {
         /* Neon not configured / unreachable — leave it out of this pull. */
@@ -2792,7 +2792,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) =>
       activeLibPatch(s, (lib) => {
         const idKey = kind === 'strategies' ? 'key' : 'id'
-        const list = (lib[kind] as Record<string, unknown>[]).map((x) =>
+        const list = (lib[kind] as unknown as Record<string, unknown>[]).map((x) =>
           (x as Record<string, string>)[idKey] === id ? { ...x, ...patch } : x,
         )
         return { ...lib, [kind]: list } as MessagingLibrary
