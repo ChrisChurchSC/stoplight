@@ -34,6 +34,7 @@ export function CompaniesView() {
       onAdd={() => addCompany()}
       onUpdate={updateCompany}
       onDelete={deleteCompany}
+      groupBy={{ key: 'segment', label: 'segment' }}
       relatedSlot={(company) => {
         const norm = company.name.trim().toLowerCase()
         const atCompany = people.filter((p) => (p.company ?? '').trim().toLowerCase() === norm)

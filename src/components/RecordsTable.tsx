@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
@@ -24,6 +24,7 @@ export function RecordsTable<T extends { id: string }>({
   onDelete,
   rowAction,
   relatedSlot,
+  groupBy,
 }: {
   title: string
   icon: ReactNode
@@ -39,11 +40,15 @@ export function RecordsTable<T extends { id: string }>({
   rowAction?: { label: string; run: (row: T) => void }
   /** Optional related-records section shown at the bottom of the drawer (e.g. people at a company). */
   relatedSlot?: (record: T) => ReactNode
+  /** Optional "group rows by this field" toggle (e.g. Companies by segment). */
+  groupBy?: { key: string; label: string }
 }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [openId, setOpenId] = useState<string | null>(null)
+  const [grouping, setGrouping] = useState(false)
   const openRecord = openId ? rows.find((r) => r.id === openId) ?? null : null
+  const groupKey = grouping && groupBy ? groupBy.key : null
 
   // A cross-view request to open a specific record (e.g. from a task's linked company). Only the
   // table that actually holds the id reacts, then it clears the signal.
@@ -82,6 +87,12 @@ export function RecordsTable<T extends { id: string }>({
   const sorted = useMemo(() => {
     const list = [...rows]
     list.sort((a, b) => {
+      // When grouping, keep same-group rows adjacent (empty group values sort last).
+      if (groupKey) {
+        const ga = val(a, groupKey).toLowerCase()
+        const gb = val(b, groupKey).toLowerCase()
+        if (ga !== gb) return !ga ? 1 : !gb ? -1 : ga < gb ? -1 : 1
+      }
       const av = val(a, sortKey).toLowerCase()
       const bv = val(b, sortKey).toLowerCase()
       if (av === bv) return 0
@@ -89,7 +100,7 @@ export function RecordsTable<T extends { id: string }>({
       return sortDir === 'asc' ? cmp : -cmp
     })
     return list
-  }, [rows, sortKey, sortDir])
+  }, [rows, sortKey, sortDir, groupKey])
 
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -190,6 +201,11 @@ export function RecordsTable<T extends { id: string }>({
         <span className="rec-sub-sort">
           Sorted by {sortLabel} {sortDir === 'asc' ? '↑' : '↓'}
         </span>
+        {groupBy && (
+          <button className={`rec-sub-group${grouping ? ' on' : ''}`} onClick={() => setGrouping((g) => !g)}>
+            {grouping ? `Grouped by ${groupBy.label}` : `Group by ${groupBy.label}`}
+          </button>
+        )}
       </div>
 
       <div className="rec-table-wrap" ref={wrapRef}>
@@ -220,8 +236,18 @@ export function RecordsTable<T extends { id: string }>({
           <tbody>
             {sorted.map((r, ri) => {
               const name = val(r, 'name')
+              const groupHead =
+                groupKey && (ri === 0 || val(sorted[ri - 1], groupKey) !== val(r, groupKey))
+                  ? val(r, groupKey) || 'Unassigned'
+                  : null
               return (
-                <tr key={r.id}>
+                <Fragment key={r.id}>
+                  {groupHead != null && (
+                    <tr className="rec-rowgroup">
+                      <td colSpan={columns.length + (rowAction ? 2 : 1)}>{groupHead}</td>
+                    </tr>
+                  )}
+                  <tr>
                   {columns.map((col, ci) => {
                     const v = val(r, col.key)
                     return (
@@ -290,7 +316,8 @@ export function RecordsTable<T extends { id: string }>({
                       ✕
                     </button>
                   </td>
-                </tr>
+                  </tr>
+                </Fragment>
               )
             })}
             <tr className="rec-add-row" onClick={onAdd}>
