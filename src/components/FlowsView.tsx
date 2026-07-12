@@ -2603,8 +2603,35 @@ export function FlowsView() {
                 <div className="flow-inspect">
                   <label className="flow-inspect-label">Name</label>
                   <input className="flow-inspect-input" value={viewShort} readOnly title="Renaming a built flow isn't available yet" />
+                  {messages.length > 0 && (
+                    <>
+                      <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                        Message angle
+                      </label>
+                      <select
+                        className="flow-inspect-input flow-inspect-select"
+                        value={messages.find((m) => (m.angle ?? '').trim() === viewSubjectDraft.trim())?.id ?? ''}
+                        onChange={(e) => {
+                          const m = messages.find((x) => x.id === e.target.value)
+                          if (!m?.angle || !viewName) return
+                          setViewSubjectDraft(m.angle)
+                          if (m.angle.trim() !== (viewCampaign?.subject ?? '').trim()) {
+                            setCampaignSubject(viewName, m.angle.trim())
+                            setRefsDirty(true)
+                          }
+                        }}
+                      >
+                        <option value="">Start from a message…</option>
+                        {messages.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                   <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    Goal / subject
+                    Theme / angle
                   </label>
                   <textarea
                     className="flow-inspect-input"
@@ -2614,7 +2641,43 @@ export function FlowsView() {
                     onChange={(e) => setViewSubjectDraft(e.target.value)}
                     onBlur={commitViewSubject}
                   />
-                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>The campaign theme. Every asset's copy is written to it; change it, then Generate to redraft them all.</div>
+                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>The angle every asset's copy is written to; change it, then Generate to redraft them all.</div>
+                  {objectives.length > 0 && (() => {
+                    const linked = objectives.find((o) => o.name === (viewCampaign?.objective ?? ''))
+                    return (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                          Objective
+                        </label>
+                        <select
+                          className="flow-inspect-input flow-inspect-select"
+                          value={linked?.id ?? ''}
+                          onChange={(e) => {
+                            const o = objectives.find((x) => x.id === e.target.value)
+                            if (!viewName) return
+                            patchCampaign(viewName, {
+                              objective: o?.name || undefined,
+                              goalKpi: o?.metric?.trim() || undefined,
+                              goalTarget: o?.target ? Number(String(o.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
+                            })
+                          }}
+                        >
+                          <option value="">Link an objective…</option>
+                          {objectives.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                        {linked && (linked.metric || linked.target) && (
+                          <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+                            Goal: {[linked.metric, linked.target].filter(Boolean).join(' · ')}
+                            {linked.timeframe ? ` · ${linked.timeframe}` : ''}
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                   <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                     Flight length
                   </label>
