@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 type SheetPage =
+  | 'brands'
   | 'records'
   | 'people'
   | 'segments'
@@ -13,6 +14,10 @@ type SheetPage =
 // The record sheets, organized into the three things a campaign is made of: who you reach, what you
 // say, and where it goes out. Each group is a dropdown of nested sheets (like Google Sheets tabs).
 const GROUPS: { label: string; sheets: { page: SheetPage; label: string }[] }[] = [
+  {
+    label: 'Brand',
+    sheets: [{ page: 'brands', label: 'Brands' }],
+  },
   {
     label: 'Audience',
     sheets: [

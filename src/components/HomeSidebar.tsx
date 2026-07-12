@@ -534,6 +534,16 @@ export function HomeSidebar() {
           </button>
           {recordsOpen && (
             <div className="hsb-chat-list">
+              <button
+                className={`nav-item${page === 'brands' ? ' active' : ''}`}
+                onClick={() => setPage('brands')}
+                title="Brands — your own brands and clients (who you build for), distinct from the companies you target"
+              >
+                <span className="nav-ico">
+                  <Ico name="brand" />
+                </span>
+                <span className="nav-label">Brands</span>
+              </button>
               {RECORD_GROUPS.map((g) => {
                 const activeInGroup = g.items.some((it) => it.page === page)
                 const expanded = openGroups.has(g.label) || activeInGroup

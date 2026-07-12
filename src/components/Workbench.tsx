@@ -31,6 +31,7 @@ import { ProofPointsView } from './ProofPointsView'
 import { MessagesView } from './MessagesView'
 import { ObjectivesView } from './ObjectivesView'
 import { TasksView } from './TasksView'
+import { BrandsView } from './BrandsView'
 import { FlowsView } from './FlowsView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
@@ -261,6 +262,10 @@ export function Workbench() {
           ) : page === 'tasks' ? (
             <div className="home-main-scroll">
               <TasksView />
+            </div>
+          ) : page === 'brands' ? (
+            <div className="home-main-scroll">
+              <BrandsView />
             </div>
           ) : page === 'flows' ? (
             <div className="home-main-page">

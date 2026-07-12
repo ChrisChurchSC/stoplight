@@ -108,6 +108,7 @@ import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Objective, freshObjectiveId } from '../domain/objective'
+import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -654,6 +655,20 @@ function saveRecordList<T>(key: string, list: T[]): void {
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
+const BRAND_RECORDS_KEY = 'stoplight.brandRecords.v1'
+
+// The Brands sheet is seeded once from the real workspace brands (clients + campaign brands) so it
+// opens populated; after that it's an independent, editable record list like the other sheets.
+function loadOrSeedBrandRecords(): BrandRecord[] {
+  if (localStorage.getItem(BRAND_RECORDS_KEY) != null) return loadRecordList<BrandRecord>(BRAND_RECORDS_KEY)
+  const names = new Set<string>()
+  for (const c of loadClients()) if (c && c !== DRAFTS_SPACE) names.add(c)
+  for (const c of loadCampaigns()) if (c.client && c.client !== DRAFTS_SPACE) names.add(c.client)
+  const profiles = loadClientProfiles()
+  const seeded = seedBrandRecords([...names].sort((a, b) => a.localeCompare(b)), profiles)
+  saveRecordList(BRAND_RECORDS_KEY, seeded)
+  return seeded
+}
 const SEGMENTS_KEY = 'stoplight.segments.v1'
 function loadSegments(): Segment[] {
   try {
@@ -1258,7 +1273,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks' | 'brands'
   /** A record id to auto-open in its RecordsTable drawer once that sheet mounts (e.g. clicking a
    *  task's linked company jumps to Companies and pops that row's details). Consumed + cleared by
    *  the table that owns the id. */
@@ -1389,6 +1404,11 @@ interface TrafficState {
   addObjective: (partial?: Partial<Objective>) => string
   updateObjective: (id: string, patch: Partial<Objective>) => void
   deleteObjective: (id: string) => void
+  /** Records › Brands — your own brands/clients. Naming a brand registers it as a real client. */
+  brandRecords: BrandRecord[]
+  addBrandRecord: (partial?: Partial<BrandRecord>) => string
+  updateBrandRecord: (id: string, patch: Partial<BrandRecord>) => void
+  deleteBrandRecord: (id: string) => void
   /** Records › Segments — the account-segments table. */
   segments: Segment[]
   /** Add a segment row (blank defaults unless overridden); returns its id. */
@@ -1659,7 +1679,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks' | 'brands') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2048,6 +2068,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   people: loadPeople(),
   messages: loadRecordList<Message>(MESSAGES_KEY),
   objectives: loadRecordList<Objective>(OBJECTIVES_KEY),
+  brandRecords: loadOrSeedBrandRecords(),
   segments: loadSegments(),
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
@@ -2455,6 +2476,41 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const objectives = s.objectives.filter((o) => o.id !== id)
       saveRecordList(OBJECTIVES_KEY, objectives)
       return { objectives }
+    }),
+
+  addBrandRecord: (partial) => {
+    const id = freshBrandRecordId()
+    const row: BrandRecord = { name: 'New brand', status: 'active', ...(partial ?? {}), id }
+    set((s) => {
+      const brandRecords = [row, ...s.brandRecords]
+      saveRecordList(BRAND_RECORDS_KEY, brandRecords)
+      return { brandRecords }
+    })
+    return id
+  },
+  updateBrandRecord: (id, patch) =>
+    set((s) => {
+      const brandRecords = s.brandRecords.map((b) => (b.id === id ? { ...b, ...patch } : b))
+      saveRecordList(BRAND_RECORDS_KEY, brandRecords)
+      const rec = brandRecords.find((b) => b.id === id)
+      const name = rec?.name.trim() ?? ''
+      // A named brand becomes a real workspace client, with its industry/website mirrored to the
+      // client profile so Flows / Library / Insights can bind to it. (Placeholder rows don't sync.)
+      if (!rec || !name || name === 'New brand') return { brandRecords }
+      const clientList = s.clientList.includes(name) ? s.clientList : [...s.clientList, name]
+      const clientProfiles = {
+        ...s.clientProfiles,
+        [name]: { ...s.clientProfiles[name], industry: rec.industry || undefined, website: rec.website || undefined },
+      }
+      saveClients(clientList)
+      saveClientProfiles(clientProfiles)
+      return { brandRecords, clientList, clientProfiles }
+    }),
+  deleteBrandRecord: (id) =>
+    set((s) => {
+      const brandRecords = s.brandRecords.filter((b) => b.id !== id)
+      saveRecordList(BRAND_RECORDS_KEY, brandRecords)
+      return { brandRecords }
     }),
 
   addSegment: (partial) => {
