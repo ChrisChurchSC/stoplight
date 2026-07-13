@@ -72,6 +72,7 @@ import { composeMessaging } from '../domain/matrixDraft'
 import { ctaFor } from '../domain/matrix'
 import { funnelStageFor, FUNNEL_STAGES } from '../domain/funnel'
 import { dimensionField, dimensionValues, isPruned, planFanout, type FanoutPlan } from '../domain/fanout'
+import { FANOUT_HARD_CEILING, capForChannels, fanoutVerdict, recommendedDimension } from '../domain/fanoutPolicy'
 import { proposeConditions as proposeConditionsDomain, resolveConditions, type FanCondition } from '../domain/conditions'
 import {
   type BrandMeta,
@@ -1897,8 +1898,8 @@ interface TrafficState {
     campaign: string,
     dimension: string,
     values?: string[],
-    opts?: { exclude?: Record<string, string>[]; generate?: boolean; limit?: number },
-  ) => Promise<{ variantCount: number; created: number }>
+    opts?: { exclude?: Record<string, string>[]; generate?: boolean; limit?: number; force?: boolean },
+  ) => Promise<{ variantCount: number; created: number; cap?: number; ceiling?: number; capped?: boolean }>
   /** Propose if/then conditions from the brand library (Claude/heuristic); human approves. */
   proposeConditions: (campaign: string) => FanCondition[]
   setConditionStatus: (campaign: string, id: string, status: 'proposed' | 'approved' | 'rejected') => void
@@ -4599,7 +4600,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         : dimensionValues(dimension, effective, s.clientProfiles[client])
     const vals = values && values.length ? values : libVals
     const plan = planFanout(base, dimension, vals, exclude ?? [])
-    return limit && limit > 0 && plan.variantCount > limit ? { ...plan, variantCount: limit } : plan
+    const count = limit && limit > 0 && plan.variantCount > limit ? limit : plan.variantCount
+    // Channel-aware guardrail: how this count sits against the sensible cap for these
+    // deliverables over the flight (SEO earns thousands; organic social should stay near cadence).
+    const weeks = s.campaignList.find((c) => c.name === campaign)?.durationWeeks || 4
+    const channels = base.map((r) => (r.channel ?? '') as string)
+    const cap = capForChannels(channels, weeks)
+    return { ...plan, variantCount: count, cap, ceiling: FANOUT_HARD_CEILING, verdict: fanoutVerdict(count, cap), recommendedDimension: recommendedDimension(channels) }
   },
 
   fanOut: async (campaign, dimension, values, opts) => {
@@ -4630,7 +4637,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Optional cap on the total variants. Iterate value-OUTER so the cap spreads
     // across every base card (each card gets the first value before any card gets a
     // second), rather than exhausting one card before moving on.
-    const limit = opts?.limit && opts.limit > 0 ? opts.limit : Infinity
+    // Channel-aware soft cap: without an explicit limit or `force`, hold the fan to the sensible
+    // cap for these channels over the flight. `force` lifts the soft cap up to the hard ceiling
+    // (which nothing exceeds, to protect the browser store).
+    const weeks = s.campaignList.find((c) => c.name === campaign)?.durationWeeks || 4
+    const channels = base.map((r) => (r.channel ?? '') as string)
+    const softCap = capForChannels(channels, weeks)
+    const plannedApprox = base.length * vals.length
+    const policyLimit = opts?.force ? FANOUT_HARD_CEILING : Math.min(softCap, FANOUT_HARD_CEILING)
+    const limit = opts?.limit && opts.limit > 0 ? opts.limit : policyLimit
     const variants: TrafficRow[] = []
     for (const value of vals) {
       if (variants.length >= limit) break
@@ -4663,7 +4678,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       get().setCampaignFilter(campaign)
       await get().draftCopy()
     }
-    return { variantCount: variants.length, created: variants.length }
+    return { variantCount: variants.length, created: variants.length, cap: softCap, ceiling: FANOUT_HARD_CEILING, capped: variants.length < plannedApprox }
   },
 
   proposeConditions: (campaign) => {

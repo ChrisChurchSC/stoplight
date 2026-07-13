@@ -957,9 +957,19 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const values = list(a.values)
     const exclude = Array.isArray(a.exclude) ? (a.exclude as Record<string, string>[]) : []
     const plan = useTrafficStore.getState().fanOutPreview(campaign, dimension, values.length ? values : undefined, exclude)
+    const base = `Adding a ${dimension} card creates ${plan.variantCount} variants (${plan.baseCount} base × ${plan.values.length} values${plan.pruned ? `, ${plan.pruned} pruned` : ''}).`
+    const cap = plan.cap ?? 0
+    const guidance =
+      plan.verdict === 'ceiling'
+        ? ` That's past the ${plan.ceiling} hard ceiling — fan a smaller dimension (try "${plan.recommendedDimension}") or a subset of values.`
+        : plan.verdict === 'over'
+          ? ` That's above the ~${cap} you can realistically deploy on these channels — most of these won't ship. Fan "${plan.recommendedDimension}" instead, pick a subset, or pass force:true if you mean it.`
+          : plan.verdict === 'warn'
+            ? ` That's near the ~${cap} cap for these channels.`
+            : ` Within the ~${cap} cap for these channels.`
     return {
       ...plan,
-      note: `Adding a ${dimension} card creates ${plan.variantCount} variants (${plan.baseCount} base × ${plan.values.length} values${plan.pruned ? `, ${plan.pruned} pruned` : ''}). Run the coherence check after to surface only the breaking variants.`,
+      note: `${base}${guidance} Run the coherence check after to surface only the breaking variants.`,
     }
   },
 
@@ -971,10 +981,14 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const values = list(a.values)
     const exclude = Array.isArray(a.exclude) ? (a.exclude as Record<string, string>[]) : []
     const generate = a.generate !== false
+    const force = a.force === true
     const res = await useTrafficStore
       .getState()
-      .fanOut(campaign, dimension, values.length ? values : undefined, { exclude, generate })
-    return { campaign, dimension, ...res }
+      .fanOut(campaign, dimension, values.length ? values : undefined, { exclude, generate, force })
+    const note = res.capped
+      ? `Held to ${res.variantCount} — the sensible cap (~${res.cap}) for these channels over the flight. Pass force:true to fan more, up to the ${res.ceiling} ceiling.`
+      : undefined
+    return { campaign, dimension, ...res, ...(note ? { note } : {}) }
   },
 
   // Propose conditional logic ("if audience = X then proof Y") from the brand's library
