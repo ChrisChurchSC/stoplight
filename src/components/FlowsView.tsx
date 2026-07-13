@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
+import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
@@ -424,6 +425,9 @@ export function FlowsView() {
   // Which record categories are expanded in the drawer (collapsed by default — the lists
   // get long, so you open the one you want).
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
+  // Measured height of each deliverable's expanded variant tree, so the deliverable reserves
+  // enough vertical room and neighbouring flows don't overlap it.
+  const [varTreeH, setVarTreeH] = useState<Record<string, number>>({})
   const toggleCat = (type: string) =>
     setExpandedCats((prev) => {
       const next = new Set(prev)
@@ -2140,13 +2144,17 @@ export function FlowsView() {
               ? (
                 <div className="flow-vcol">
                   {viewDelivs.map((d) => {
-                  const posts = [...d.rows].sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''))
+                  const allPosts = [...d.rows].sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''))
+                  // Base masters render as cards; fanned variants collapse into a browsable tree
+                  // (below) so a deliverable with 1,000+ variants no longer mounts 1,000 cards.
+                  const posts = allPosts.filter((r) => !isVariantRow(r))
+                  const variantRows = allPosts.filter((r) => isVariantRow(r))
                   return (
                     <div key={d.key}>
                       <div className="flow-link" />
                       <div
                         className="flow-branched"
-                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: posts.length > 0 ? `${posts.length * 168}px` : undefined }}
+                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined }}
                       >
                         <div
                           className={`flow-node flow-tier-deliv${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
@@ -2226,6 +2234,14 @@ export function FlowsView() {
                               </div>
                             )
                           })}
+                          {variantRows.length > 0 && (
+                            <FlowVariantTree
+                              rows={variantRows}
+                              tone={d.tone}
+                              copy={viewPostCopy}
+                              onMeasure={(h) => setVarTreeH((prev) => (prev[d.key] === h ? prev : { ...prev, [d.key]: h }))}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
