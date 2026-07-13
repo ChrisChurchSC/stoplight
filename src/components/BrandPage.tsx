@@ -5,6 +5,7 @@ import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { BrandVisual } from './BrandVisual'
+import { BrandPicker } from './BrandPicker'
 
 /**
  * Brand — a brand's foundation in one place, grouped under sub-tabs: About (the
@@ -39,7 +40,7 @@ export function BrandPage({ brand }: { brand?: string }) {
   if (!brand) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">Pick a brand in the sidebar to see its brand system.</div>
+        <BrandPicker verb="see its brand system" />
       </div>
     )
   }

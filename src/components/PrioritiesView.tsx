@@ -11,6 +11,7 @@ import {
 import type { TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { BrandPicker } from './BrandPicker'
 
 /**
  * Priorities — the calm front door. Instead of a dozen dense reads, the top five changes to
@@ -95,7 +96,7 @@ export function PrioritiesView({ scopeClient }: { scopeClient?: string }) {
   if (!brand) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">Pick a brand in the sidebar to see its priorities.</div>
+        <BrandPicker verb="see its priorities" />
       </div>
     )
   }

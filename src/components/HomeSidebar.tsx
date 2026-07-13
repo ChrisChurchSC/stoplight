@@ -178,33 +178,12 @@ function Ico({ name }: { name: string }) {
   )
 }
 
-// Records grouped the way a campaign is built — matches the workbook's Audience / Message /
-// Activation sheet groups so the sidebar and the sheet tabs agree.
-type RecordPage = 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords'
-const RECORD_GROUPS: { label: string; items: { page: RecordPage; label: string; ico: string }[] }[] = [
-  {
-    label: 'Audience',
-    items: [
-      { page: 'records', label: 'Companies', ico: 'companies' },
-      { page: 'people', label: 'People', ico: 'people' },
-      { page: 'segments', label: 'Segments', ico: 'segments' },
-    ],
-  },
-  {
-    label: 'Message',
-    items: [
-      { page: 'messages', label: 'Messages', ico: 'reports' },
-      { page: 'proofpoints', label: 'Proof points', ico: 'check' },
-    ],
-  },
-  {
-    label: 'Activation',
-    items: [
-      { page: 'channelrecords', label: 'Channels', ico: 'flows' },
-      { page: 'objectives', label: 'Objectives', ico: 'insights' },
-    ],
-  },
-]
+// Every top-level nav destination the sidebar can jump to, other than the special Library /
+// Insights (libraryMode) and the Brand group (which lists individual brands). Kept as a page key
+// so the section config below can drive both the click and the active state from one place.
+type NavPage =
+  | 'flows' | 'tasks' | 'reports'
+  | 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords'
 
 export function HomeSidebar() {
   const page = useTrafficStore((s) => s.page)
@@ -225,12 +204,99 @@ export function HomeSidebar() {
 
   const [taskCounts, setTaskCounts] = useState(readTaskCounts)
   const [chatsOpen, setChatsOpen] = useState(true)
-  const [dataOpen, setDataOpen] = useState(true)
-  const [recordsOpen, setRecordsOpen] = useState(true)
-  // Which record groups (Audience / Message / Activation) are expanded in the sidebar tree. The
-  // group holding the current page is always shown; this tracks manual toggles on top of that.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['Brand', ...RECORD_GROUPS.map((g) => g.label)]))
+  // Workflow sections (Build / Foundation / Go-to-market / Measure) — all open by default.
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Build', 'Foundation', 'Go-to-market', 'Measure']))
+  const toggleSection = (label: string) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev)
+      next.has(label) ? next.delete(label) : next.add(label)
+      return next
+    })
+  // The Brands sub-group inside Foundation lists individual brands; expanded by default.
+  const [brandOpen, setBrandOpen] = useState(true)
   const [wsOpen, setWsOpen] = useState(false)
+
+  // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
+  type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
+  const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
+    ({ key, label, ico, page: null, active, onClick, ...extra })
+  const NAV_SECTIONS: { label: string; brandGroup?: boolean; items: NavItem[] }[] = [
+    {
+      label: 'Build',
+      items: [
+        item('flows', 'Flows', 'flows', page === 'flows', () => setPage('flows')),
+        item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
+        item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
+      ],
+    },
+    {
+      label: 'Foundation',
+      brandGroup: true,
+      items: [
+        item('segments', 'Segments', 'segments', page === 'segments', () => setPage('segments')),
+        item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
+        item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),
+      ],
+    },
+    {
+      label: 'Go-to-market',
+      items: [
+        item('channelrecords', 'Channels', 'flows', page === 'channelrecords', () => setPage('channelrecords')),
+        item('objectives', 'Objectives', 'insights', page === 'objectives', () => setPage('objectives')),
+        item('records', 'Companies', 'companies', page === 'records', () => setPage('records')),
+        item('people', 'People', 'people', page === 'people', () => setPage('people')),
+      ],
+    },
+    {
+      label: 'Measure',
+      items: [
+        item('insights', 'Insights', 'insights', page === 'content' && libraryMode !== 'catalog', () => setLibraryMode('data')),
+        item('reports', 'Reports', 'reports', page === 'reports', () => setPage('reports')),
+      ],
+    },
+  ]
+
+  const brandList = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
+  const renderBrandGroup = () => {
+    const activeInGroup = page === 'brands'
+    const expanded = brandOpen || activeInGroup
+    return (
+      <div className="hsb-rec-group">
+        <button
+          className={`nav-item hsb-rec-parent${activeInGroup ? ' active-in' : ''}`}
+          aria-expanded={expanded}
+          onClick={() => setBrandOpen((o) => !o)}
+        >
+          <span className={`hsb-rec-chev${expanded ? ' open' : ''}`}>
+            <Ico name="caret" />
+          </span>
+          <span className="nav-label">Brands</span>
+        </button>
+        {expanded && (
+          <div className="hsb-rec-children">
+            {brandList.map((b) => (
+              <button
+                key={b.id}
+                className={`nav-item hsb-rec-child${page === 'brands' && clientFilter === b.name ? ' active' : ''}`}
+                onClick={() => {
+                  setClientFilter(b.name)
+                  setPage('brands')
+                }}
+                title={b.name}
+              >
+                <span className="nav-ico">
+                  <span className="hsb-brand-dot" style={{ background: recordTint(b.name) }}>
+                    {b.name[0]?.toUpperCase() ?? '?'}
+                  </span>
+                </span>
+                <span className="nav-label">{b.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
 
@@ -380,176 +446,35 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
-        <button
-          className={`nav-item${page === 'flows' ? ' active' : ''}`}
-          onClick={() => setPage('flows')}
-          title="Flows — a visual builder for campaign automations (exploratory)"
-        >
-          <span className="nav-ico">
-            <Ico name="flows" />
-          </span>
-          <span className="nav-label">Flows</span>
-        </button>
-        <button
-          className={`nav-item${page === 'reports' ? ' active' : ''}`}
-          onClick={() => setPage('reports')}
-          title="Reports — saved Claude write-ups over the brand's library"
-        >
-          <span className="nav-ico">
-            <Ico name="reports" />
-          </span>
-          <span className="nav-label">Reports</span>
-        </button>
-        <button
-          className={`nav-item${page === 'tasks' ? ' active' : ''}`}
-          onClick={() => setPage('tasks')}
-          title="Tasks — a running to-do list for this workspace"
-        >
-          <span className="nav-ico">
-            <Ico name="tasks" />
-          </span>
-          <span className="nav-label">Tasks</span>
-          {taskCounts.open > 0 && (
-            <span className={`nav-count task-badge${taskCounts.overdue > 0 ? ' overdue' : ''}`}>{taskCounts.open}</span>
-          )}
-        </button>
-
-        <div className="hsb-chats">
-          <button className="hsb-sec" onClick={() => setDataOpen((o) => !o)}>
-            <span className={`hsb-sec-chev${dataOpen ? ' open' : ''}`}>
-              <Ico name="caret" />
-            </span>
-            Data
-          </button>
-          {dataOpen && (
-            <div className="hsb-chat-list">
-              <button
-                className={`nav-item${page === 'content' && libraryMode === 'catalog' ? ' active' : ''}`}
-                onClick={() => setLibraryMode('catalog')}
-                title="Library — every published post, video, and page a brand has shipped"
-              >
-                <span className="nav-ico">
-                  <Ico name="library" />
+        {NAV_SECTIONS.map((sec) => {
+          const open = openSections.has(sec.label)
+          return (
+            <div className="hsb-chats" key={sec.label}>
+              <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
+                <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
+                  <Ico name="caret" />
                 </span>
-                <span className="nav-label">Library</span>
+                {sec.label}
               </button>
-              <button
-                className={`nav-item${page === 'content' && libraryMode !== 'catalog' ? ' active' : ''}`}
-                onClick={() => setLibraryMode('data')}
-                title="Insights — the read over this brand's library: headline metrics, charts, and findings"
-              >
-                <span className="nav-ico">
-                  <Ico name="insights" />
-                </span>
-                <span className="nav-label">Insights</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="hsb-chats">
-          <button className="hsb-sec" onClick={() => setRecordsOpen((o) => !o)}>
-            <span className={`hsb-sec-chev${recordsOpen ? ' open' : ''}`}>
-              <Ico name="caret" />
-            </span>
-            Records
-          </button>
-          {recordsOpen && (
-            <div className="hsb-chat-list">
-              {(() => {
-                // The Brand group lists the individual brands (World Within, Big Buoy, …) rather
-                // than a single sheet — clicking one scopes the workspace to it and opens its record.
-                const label = 'Brand'
-                const activeInGroup = page === 'brands'
-                const expanded = openGroups.has(label) || activeInGroup
-                const list = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
-                return (
-                  <div className="hsb-rec-group">
-                    <button
-                      className={`nav-item hsb-rec-parent${activeInGroup ? ' active-in' : ''}`}
-                      aria-expanded={expanded}
-                      onClick={() =>
-                        setOpenGroups((prev) => {
-                          const next = new Set(prev)
-                          next.has(label) ? next.delete(label) : next.add(label)
-                          return next
-                        })
-                      }
-                    >
-                      <span className={`hsb-rec-chev${expanded ? ' open' : ''}`}>
-                        <Ico name="caret" />
+              {open && (
+                <div className="hsb-chat-list">
+                  {sec.brandGroup && renderBrandGroup()}
+                  {sec.items.map((it) => (
+                    <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+                      <span className="nav-ico">
+                        <Ico name={it.ico} />
                       </span>
-                      <span className="nav-label">{label}</span>
+                      <span className="nav-label">{it.label}</span>
+                      {it.badge ? (
+                        <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span>
+                      ) : null}
                     </button>
-                    {expanded && (
-                      <div className="hsb-rec-children">
-                        {list.map((b) => (
-                          <button
-                            key={b.id}
-                            className={`nav-item hsb-rec-child${page === 'brands' && clientFilter === b.name ? ' active' : ''}`}
-                            onClick={() => {
-                              setClientFilter(b.name)
-                              setPage('brands')
-                            }}
-                            title={b.name}
-                          >
-                            <span className="nav-ico">
-                              <span className="hsb-brand-dot" style={{ background: recordTint(b.name) }}>
-                                {b.name[0]?.toUpperCase() ?? '?'}
-                              </span>
-                            </span>
-                            <span className="nav-label">{b.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-              {RECORD_GROUPS.map((g) => {
-                const activeInGroup = g.items.some((it) => it.page === page)
-                const expanded = openGroups.has(g.label) || activeInGroup
-                return (
-                  <div key={g.label} className="hsb-rec-group">
-                    <button
-                      className={`nav-item hsb-rec-parent${activeInGroup ? ' active-in' : ''}`}
-                      aria-expanded={expanded}
-                      onClick={() =>
-                        setOpenGroups((prev) => {
-                          const next = new Set(prev)
-                          next.has(g.label) ? next.delete(g.label) : next.add(g.label)
-                          return next
-                        })
-                      }
-                    >
-                      <span className={`hsb-rec-chev${expanded ? ' open' : ''}`}>
-                        <Ico name="caret" />
-                      </span>
-                      <span className="nav-label">{g.label}</span>
-                    </button>
-                    {expanded && (
-                      <div className="hsb-rec-children">
-                        {g.items.map((it) => (
-                          <button
-                            key={it.page}
-                            className={`nav-item hsb-rec-child${page === it.page ? ' active' : ''}`}
-                            onClick={() => setPage(it.page)}
-                            title={it.label}
-                          >
-                            <span className="nav-ico">
-                              <Ico name={it.ico} />
-                            </span>
-                            <span className="nav-label">{it.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          )
+        })}
 
         {recentChats.length > 0 && (
           <div className="hsb-chats">

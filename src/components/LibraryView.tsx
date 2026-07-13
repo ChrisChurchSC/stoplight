@@ -8,6 +8,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { GranolaIcon } from './GranolaIcon'
 import { LibraryData } from './LibraryData'
+import { BrandPicker } from './BrandPicker'
 
 /**
  * Library — a brand's whole published body of work, ingested from its connected
@@ -176,7 +177,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   if (!brand) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">Pick a brand in the sidebar to see its content library.</div>
+        <BrandPicker verb="see its content library" />
       </div>
     )
   }

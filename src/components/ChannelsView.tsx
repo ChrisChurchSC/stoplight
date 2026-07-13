@@ -28,6 +28,7 @@ import type { ChannelId } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { BrandPicker } from './BrandPicker'
 
 /**
  * Channels — pick the channels (and adjacent tools) a brand publishes on. Grouped
@@ -223,7 +224,7 @@ export function ChannelsView({ scopeClient }: { scopeClient?: string }) {
   if (!brand) {
     return (
       <div className="mtx">
-        <div className="mtx-empty">Pick a brand in the sidebar to choose its channels.</div>
+        <BrandPicker verb="choose its channels" />
       </div>
     )
   }
