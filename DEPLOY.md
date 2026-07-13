@@ -1,8 +1,9 @@
 # Deploying Hyperfocus for a pilot
 
-This gets the app in front of a handful of trusted users. Data stays in each user's browser for now
-(no server sync yet — that's the "real product" follow-up); this covers hosting, the AI backend,
-access, and cost control.
+This gets the app in front of a handful of trusted users. It covers hosting, the AI backend, access,
+data sync, and cost control. When Supabase is configured, records and app state sync to Postgres per
+workspace (RLS-protected) and survive across devices; without Supabase the app runs on `localStorage`,
+unchanged.
 
 ## Architecture (what deploys)
 
@@ -10,8 +11,13 @@ access, and cost control.
 - **AI backend** — the `/api/*` endpoints. In local dev these are served by Vite middleware
   (`vite.config.ts`); in production the files in **`api/*.ts`** run as Vercel serverless functions,
   wrapping the same handlers in `server/`. The client calls the same `/api/...` paths either way.
-- **Data** — browser `localStorage`. Nothing is stored server-side yet.
-- **Auth** — `AuthGate` (Supabase). Off by default; turns on when the Supabase env vars are set.
+- **Data** — `localStorage` by default. With Supabase configured, the record lists (companies,
+  people, segments, channels, objectives, messages, brands) persist to normalized Postgres tables and
+  the app state (brand system, client list, campaign metadata, reports, per-sheet grouping, …) to a
+  `workspace_state` KV table — both scoped per workspace and RLS-protected, so data syncs across
+  devices. Tasks are still `localStorage`-only (next follow-up).
+- **Auth** — `AuthGate` (Supabase). Off by default; turns on when the Supabase env vars are set. First
+  sign-in creates the user's workspace, which then scopes all synced data.
 
 ### What works in production vs. local-only
 
@@ -26,17 +32,25 @@ user needs them.
 
 ## Steps
 
-1. **Merge the branch.** Open a PR for `remove-campaigns` → `main`, review, merge. Deploy from `main`.
-2. **Create a Vercel project** and connect the GitHub repo. Vercel auto-detects Vite; `vercel.json`
-   already sets the build command, output dir, and function `maxDuration`.
-3. **Set environment variables** in Vercel (Project → Settings → Environment Variables). See below.
-4. **Turn on access** — set the Supabase vars (step below); `AuthGate` then requires sign-in. Create
-   pilot users in the Supabase dashboard (invite-only). Optionally also enable Vercel **Deployment
-   Protection** for a second lock.
-5. **Set a hard cost cap** in the Anthropic console (a monthly spend limit) — this is the real
-   backstop. The functions also have a best-effort per-instance rate guard (40 req/min).
-6. **Deploy**, sign in, click through the AI features to confirm the key is live (the "Connect
-   Claude" step reads `/api/ai-status`).
+For a quick pilot, deploy a **preview** straight from the working branch (no merge needed) with the
+Vercel CLI; promote to production / `main` once it's proven.
+
+1. **Provision Supabase** (enables auth + data sync). Create a project, open the SQL editor, and run
+   `supabase/schema.sql`. Copy the project **URL** and **anon key** (Project → Settings → API). The
+   anon key is public by design; RLS protects the data.
+2. **Set environment variables** in Vercel (`vercel env add …`, or Project → Settings → Environment
+   Variables). At minimum `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (turns on sign-in + sync) and
+   `ANTHROPIC_API_KEY` (turns on the AI features). See the table below.
+3. **Deploy.** `vercel` for a preview URL, `vercel --prod` to promote. Vercel reads `vercel.json`
+   (framework `vite`, build command, output dir, function `maxDuration`). Preview URLs are unguessable
+   but public; add Vercel **Deployment Protection** if you want a hard lock.
+4. **Create pilot users** in the Supabase dashboard (invite-only) — sign-in is then required and each
+   user gets their own workspace.
+5. **Set a hard cost cap** in the Anthropic console (a monthly spend limit) — the real backstop. The
+   functions also have a best-effort per-instance rate guard (40 req/min).
+6. **Smoke-test.** Sign in; confirm the app loads and records edit. Add a company on one browser,
+   sign in on another, confirm it syncs. Click through the AI features (the "Connect Claude" step
+   reads `/api/ai-status`) to confirm the key is live.
 
 ## Environment variables
 
@@ -60,11 +74,15 @@ Keep real values in Vercel's env settings (and local `.env`, which is git-ignore
 
 ## Known limits for the pilot (say these to users)
 
-- **Data is per-browser.** Clearing site data or switching devices loses it; no teams/sharing yet.
+- **Without Supabase, data is per-browser.** Clearing site data or switching devices loses it. With
+  Supabase configured it syncs per workspace, but there's **no team/sharing UI yet** — each user's
+  workspace is their own.
+- **Tasks don't sync yet** — the Tasks page is still `localStorage`-only.
 - Site-crawl onboarding and channel-connect ingests are disabled in the hosted build (local-only).
 - Rate limiting is best-effort (per warm instance). A real cross-instance limit needs Vercel KV.
 
-## The real-product next step
+## The real-product next steps
 
-Persist app state to Supabase (auth already wires per-user sessions; the data model in
-`useTrafficStore` needs a sync layer to Postgres) so data survives, syncs, and can be shared.
+Record lists and app state already sync to Supabase per workspace (RLS-enforced). Remaining to reach a
+true multi-user product: sync **Tasks**, add a **sharing/teams UI** (invite members to a workspace —
+`workspace_members` + the RLS helpers already exist), and move rate limiting to a cross-instance store.
