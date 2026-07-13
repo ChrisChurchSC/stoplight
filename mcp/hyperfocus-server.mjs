@@ -714,7 +714,7 @@ server.registerTool(
   {
     title: 'Preview a personalization fan-out',
     description:
-      "Count-before-commit for a personalization card: how many variants fanning a campaign across a dimension would create, without committing. Values come from the brand's library (audience -> library audiences, location -> library locations, journey -> funnel stages) or pass them explicitly. Stacking multiplies over existing variants.",
+      "Count-before-commit for a personalization card: how many variants fanning a campaign across a dimension would create, without committing. Values come from the brand's library (audience -> library audiences, location -> library locations, journey -> funnel stages) or pass them explicitly. Stacking multiplies over existing variants. Also returns a channel-aware cap + verdict (ok/warn/over/ceiling) + recommendedDimension — the number you can realistically DEPLOY on these channels (SEO/landing earns thousands; organic social should stay near posting cadence). Prefer the recommended dimension and stay within the cap.",
     inputSchema: {
       campaign: z.string().describe('The campaign to fan out'),
       dimension: z.string().describe('The personalization dimension: audience, location, journey, channel, time, lifecycle, intent, tier, …'),
@@ -730,13 +730,14 @@ server.registerTool(
   {
     title: 'Fan a campaign across a dimension',
     description:
-      "Fan a campaign's base assets into one variant per value of a dimension, each tagged with its lineage (the composition, for attribution), then generate copy per variant. Stacks over existing variants (Audience × Location × Journey). Always preview the count first. Use `values` for selective fan-out and `exclude` for matrix pruning.",
+      "Fan a campaign's base assets into one variant per value of a dimension, each tagged with its lineage (the composition, for attribution), then generate copy per variant. Stacks over existing variants (Audience × Location × Journey). Always preview the count first. Use `values` for selective fan-out and `exclude` for matrix pruning. By default the fan is HELD to the channel-aware cap (the count you can realistically deploy) — the result reports `capped` when that happens. Pass `force: true` to fan past the cap, up to the hard ceiling.",
     inputSchema: {
       campaign: z.string().describe('The campaign to fan out'),
       dimension: z.string().describe('The personalization dimension (audience, location, journey, …)'),
       values: z.array(z.string()).optional().describe('A subset of values (selective fan-out). Omit for all library values.'),
       exclude: z.array(z.record(z.string())).optional().describe('Combinations to prune.'),
       generate: z.boolean().optional().describe('Generate copy per variant after fanning (default true).'),
+      force: z.boolean().optional().describe('Fan past the channel-aware cap (up to the hard ceiling). Default false — the fan is held to the sensible cap for these channels.'),
     },
   },
   async (a) => text(await dispatch('fanOut', a)),

@@ -102,6 +102,14 @@ export interface FanoutPlan {
   /** baseCount * values, minus pruned combinations. */
   variantCount: number
   pruned: number
+  /** Channel-aware cap for these deliverables over the flight (see fanoutPolicy). */
+  cap?: number
+  /** Hard ceiling for total variants per flow. */
+  ceiling?: number
+  /** How variantCount sits against the cap: ok / warn / over / ceiling. */
+  verdict?: 'ok' | 'warn' | 'over' | 'ceiling'
+  /** The fan-out axis that best fits the dominant channel. */
+  recommendedDimension?: string
 }
 
 /** Plan a fan-out without committing: the values, the base size, and the resulting
