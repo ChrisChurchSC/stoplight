@@ -21928,6 +21928,15 @@ table.aud-sheet td.stick .aud-cell {
   background: var(--accent-3-soft);
   color: #2f6fb0;
 }
+.report-card-client {
+  margin-right: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .report-card-date {
   font-size: 11.5px;
   color: var(--text-faint);
@@ -23346,6 +23355,19 @@ table.aud-sheet td.stick .aud-cell {
 .hchat-typing span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes hchat-bounce { 0%,60%,100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 .hchat-source { font-size: 11px; color: var(--text-faint); }
+.hchat-report-open {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hchat-report-open:hover { background: var(--accent); color: #fff; }
 .hchat-composer { flex: 0 0 auto; padding: 8px 0 20px; }
 .hchat-box {
   border: 1px solid var(--border-strong);

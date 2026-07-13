@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { buildAskContext } from '../domain/askClaude'
+import { buildBrandReport } from '../domain/reportGen'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -25,6 +27,9 @@ interface Msg {
   steps?: Step[]
   source?: string
   busy?: boolean
+  /** Set on the message that announces a just-generated report, to render a "View report" link. */
+  reportId?: string
+  reportBrand?: string
 }
 
 let uid = 0
@@ -68,6 +73,10 @@ export function HomeChat() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const homeChatSeed = useTrafficStore((s) => s.homeChatSeed)
   const closeHomeChat = useTrafficStore((s) => s.closeHomeChat)
+  const addReport = useTrafficStore((s) => s.addReport)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const setPage = useTrafficStore((s) => s.setPage)
+  const { brands } = useHomeCanvases()
 
   const [messages, setMessages] = useState<Msg[]>([])
   const [q, setQ] = useState('')
@@ -82,6 +91,52 @@ export function HomeChat() {
   const seededRef = useRef<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const busyRef = useRef(false)
+  // When we've asked "which brand?" for a report, the next message is read as the brand answer.
+  const awaitingBrandRef = useRef(false)
+
+  // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
+  const brandList = useMemo(
+    () => [...new Set([...brands.map((b) => b.name), ...Object.keys(clientAudiences)])].filter((n) => n && n !== 'Drafts'),
+    [brands, clientAudiences],
+  )
+  // Does this message read as a request to generate a report?
+  const isReportRequest = (t: string): boolean =>
+    /\breports?\b/i.test(t) || (/\banaly[sz]e?\b/i.test(t) && /\blibrary\b/i.test(t))
+  // Find a brand named anywhere in the text (exact wins, else the longest name it contains).
+  const resolveBrand = (t: string): string | null => {
+    const lc = t.toLowerCase()
+    let best: string | null = null
+    for (const name of brandList) {
+      const n = name.toLowerCase()
+      if (lc === n) return name
+      if (lc.includes(n) && (!best || n.length > best.length)) best = name
+    }
+    return best
+  }
+  // Build + save the report for a brand, updating the pending assistant message to announce it.
+  const doGenerate = async (brand: string, asstId: string) => {
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === asstId
+          ? { ...x, busy: true, steps: [
+              { kind: 'assets', label: `Reading ${brand}'s library` },
+              { kind: 'segments', label: `Scanning ${brand}'s segments` },
+            ] }
+          : x,
+      ),
+    )
+    await new Promise((r) => setTimeout(r, 550))
+    const scopedRows = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter: brand, campaignFilter: 'all' }))
+    const { title, kind, summary, html } = buildBrandReport({ brand, rows: scopedRows, audiences: clientAudiences[brand] ?? [] })
+    const id = addReport({ client: brand, title, kind, summary, html })
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === asstId
+          ? { ...x, busy: false, steps: undefined, text: `Done — I wrote up **${title}**: ${summary} It's saved to ${brand}'s Reports.`, reportId: id, reportBrand: brand }
+          : x,
+      ),
+    )
+  }
 
   const scope =
     (clientFilter === 'all' ? 'All brands' : clientFilter) +
@@ -114,6 +169,31 @@ export function HomeChat() {
       { id: nid(), role: 'user', text },
       { id: asstId, role: 'assistant', busy: true, steps: buildSteps() },
     ])
+
+    // Report generation, with the brand resolved in the conversation rather than pre-selected.
+    const wasAwaiting = awaitingBrandRef.current
+    if (wasAwaiting || isReportRequest(text)) {
+      const brand = wasAwaiting ? resolveBrand(text) : clientFilter !== 'all' ? clientFilter : resolveBrand(text)
+      if (brand) {
+        awaitingBrandRef.current = false
+        await doGenerate(brand, asstId)
+      } else if (brandList.length) {
+        awaitingBrandRef.current = true
+        const lead = wasAwaiting ? `I couldn't match that to a brand. ` : ``
+        setMessages((m) =>
+          m.map((x) => (x.id === asstId ? { ...x, busy: false, steps: undefined, text: `${lead}Which brand should I write this up for? Pick one: ${brandList.join(', ')}.` } : x)),
+        )
+      } else {
+        awaitingBrandRef.current = false
+        setMessages((m) =>
+          m.map((x) => (x.id === asstId ? { ...x, busy: false, steps: undefined, text: `You don't have any brands set up yet, so there's nothing to report on.` } : x)),
+        )
+      }
+      busyRef.current = false
+      setBusy(false)
+      return
+    }
+
     const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList })
     const res = await askClaude(ctx)
     setMessages((m) =>
@@ -192,6 +272,18 @@ export function HomeChat() {
               ) : (
                 <>
                   <Markdown text={m.text ?? ''} className="hchat-answer" />
+                  {m.reportId && m.reportBrand && (
+                    <button
+                      className="hchat-report-open"
+                      onClick={() => {
+                        setClientFilter(m.reportBrand!)
+                        closeHomeChat()
+                        setPage('reports')
+                      }}
+                    >
+                      View report →
+                    </button>
+                  )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
                 </>
               )}

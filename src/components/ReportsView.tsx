@@ -19,23 +19,18 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
   const reports = useTrafficStore((s) => s.reports)
   const deleteReport = useTrafficStore((s) => s.deleteReport)
   const addPinnedInsight = useTrafficStore((s) => s.addPinnedInsight)
+  const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const [openId, setOpenId] = useState<string | null>(null)
   // Transient feedback under the report toolbar after a pin attempt.
   const [pinMsg, setPinMsg] = useState<string | null>(null)
   const frameRef = useRef<HTMLIFrameElement>(null)
 
+  // A brand may be in scope (sidebar / scopeClient), but it isn't required: with none selected we
+  // show every brand's reports. Generation happens in the chat, which asks the brand there.
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
-
-  if (!brand) {
-    return (
-      <div className="mtx">
-        <div className="mtx-empty">Pick a brand in the sidebar to see its reports.</div>
-      </div>
-    )
-  }
-
-  const mine = reports.filter((r) => r.client === brand).sort((a, b) => b.createdAt - a.createdAt)
-  const open = openId ? mine.find((r) => r.id === openId) : null
+  const allBrands = !brand
+  const list = (brand ? reports.filter((r) => r.client === brand) : reports).sort((a, b) => b.createdAt - a.createdAt)
+  const open = openId ? list.find((r) => r.id === openId) : null
 
   // Pin the highlighted text out of the report. The report renders in a same-origin
   // srcDoc iframe, so its live selection is readable here.
@@ -102,19 +97,37 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
   return (
     <div className="mtx">
       <header className="mtx-head">
-        <h2>{brand} · Reports</h2>
+        <h2>{brand ? `${brand} · Reports` : 'Reports'}</h2>
         <span className="mtx-sub">
-          Saved analyses over this brand's library. Insights is the live read; a report is a dated synthesis you keep.
+          {brand
+            ? "Saved analyses over this brand's library. Insights is the live read; a report is a dated synthesis you keep."
+            : 'Saved analyses across every brand. Generate one below and pick the brand in the conversation.'}
         </span>
       </header>
 
-      {mine.length === 0 ? (
+      <div className="report-new">
+        <div className="report-new-copy">
+          <span className="report-new-ico">✦</span>
+          <div>
+            <strong>Generate a report with Claude</strong>
+            <span>
+              Claude reads a brand's library and writes it up: coverage, segments, and recommendations. It asks which
+              brand in the conversation{brand ? '' : ' (or start it here)'}, then saves the report here, dated.
+            </span>
+          </div>
+        </div>
+        <button className="report-new-btn" onClick={() => openHomeChat(brand ? `Generate a report for ${brand}` : 'Generate a report')}>
+          ✦ Ask Claude
+        </button>
+      </div>
+
+      {list.length === 0 ? (
         <div className="mtx-empty">
-          No reports yet. Ask Claude to analyze {brand}'s library and it lands here as a saved report.
+          No reports yet. Use “Generate a report with Claude” above and it lands here as a saved report.
         </div>
       ) : (
         <div className="report-list">
-          {mine.map((r) => (
+          {list.map((r) => (
             <article
               key={r.id}
               className="report-card"
@@ -130,6 +143,7 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
             >
               <div className="report-card-top">
                 <span className={`report-kind report-kind-${r.kind}`}>{REPORT_KIND_LABEL[r.kind]}</span>
+                {allBrands && <span className="report-card-client">{r.client}</span>}
                 <span className="report-card-date">{fmtWhen(r.createdAt)}</span>
               </div>
               <div className="report-card-title">{r.title}</div>
