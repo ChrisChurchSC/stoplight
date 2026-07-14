@@ -1,17 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
-import { BrandGoal } from './BrandGoal'
-import { BrandInfo } from './BrandInfo'
-import { BrandStrategy } from './BrandStrategy'
-import { BrandVisual } from './BrandVisual'
-import { BrandVoice } from './BrandVoice'
 
 /**
  * Account settings — a full-screen settings surface (left grouped nav + content pane),
- * reached from the workspace dropdown. Brand settings are folded in as their own group,
- * reusing the brand section editors. Rendered outside the HomeShell so it takes over the
- * whole workspace, like a dedicated settings page.
+ * reached from the workspace dropdown. Rendered outside the HomeShell so it takes over the
+ * whole workspace, like a dedicated settings page. (Brand settings live on the dedicated
+ * Brand record page, not here.)
  */
 type Section = { key: string; label: string; desc?: string }
 const GROUPS: { group: string; items: Section[] }[] = [
@@ -29,15 +23,6 @@ const GROUPS: { group: string; items: Section[] }[] = [
       { key: 'general', label: 'General', desc: 'Workspace name and defaults.' },
       { key: 'members', label: 'Members & teams', desc: 'People with access to this workspace.' },
       { key: 'billing', label: 'Billing', desc: 'Plan and payment.' },
-    ],
-  },
-  {
-    group: 'Brand',
-    items: [
-      { key: 'brand-about', label: 'About', desc: "The brand's profile and goal." },
-      { key: 'brand-voice', label: 'Voice', desc: 'How the brand sounds.' },
-      { key: 'brand-visual', label: 'Visual', desc: 'Colors, logo, type, imagery.' },
-      { key: 'brand-strategy', label: 'Strategy', desc: 'The brand’s GTM motion.' },
     ],
   },
 ]
@@ -95,10 +80,7 @@ function Placeholder({ label }: { label: string }) {
 }
 
 export function AccountSettings() {
-  const { brands } = useHomeCanvases()
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
 
   const [section, setSection] = useState('profile')
   const [query, setQuery] = useState('')
@@ -121,19 +103,6 @@ export function AccountSettings() {
     switch (section) {
       case 'profile':
         return <ProfileSection />
-      case 'brand-about':
-        return brand ? (
-          <>
-            <BrandInfo brand={brand} />
-            <BrandGoal key={`brand-goal-${brand}`} brand={brand} />
-          </>
-        ) : <Placeholder label="Brand" />
-      case 'brand-voice':
-        return brand ? <BrandVoice brand={brand} /> : <Placeholder label="Brand" />
-      case 'brand-visual':
-        return brand ? <BrandVisual brand={brand} /> : <Placeholder label="Brand" />
-      case 'brand-strategy':
-        return brand ? <BrandStrategy key="brand-strategy" brand={brand} /> : <Placeholder label="Brand" />
       default:
         return <Placeholder label={current.label} />
     }

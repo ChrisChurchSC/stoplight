@@ -190,8 +190,8 @@ function Row({ c, first, rec }: { c: Connector; first: boolean; rec?: boolean })
   )
 }
 
-const SERVER = 'mcp/hyperfocus-server.mjs'
-const CODE_CMD = 'claude mcp add hyperfocus -- node "$(pwd)/mcp/hyperfocus-server.mjs"'
+const SERVER = 'mcp/breadcrumbs-server.mjs'
+const CODE_CMD = 'claude mcp add breadcrumbs -- node "$(pwd)/mcp/breadcrumbs-server.mjs"'
 
 export function ConnectorsPage() {
   const [copied, setCopied] = useState<string | null>(null)
@@ -247,7 +247,7 @@ export function ConnectorsPage() {
         <div style={{ ...cardStyle, padding: '22px 20px' }}>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 10px', color: 'var(--text,#1a2023)' }}>Drive the whole app from your AI tools</h2>
           <p style={{ fontSize: 14, color: 'var(--text-muted,#5a6b72)', margin: '0 0 16px' }}>
-            Add the Hyperfocus MCP server to Claude and set up brands, generate assets, and run campaigns from chat.
+            Add the Breadcrumbs MCP server to Claude and set up brands, generate assets, and run campaigns from chat.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--hover,#eef2f3)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', maxWidth: 520 }}>
             <code style={{ flex: 1, fontSize: 13, color: 'var(--text,#1a2023)' }}>{SERVER}</code>

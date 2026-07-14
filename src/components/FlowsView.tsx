@@ -331,6 +331,7 @@ export function FlowsView() {
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
   const flowOpen = useTrafficStore((s) => s.flowOpen)
+  const flowOpenView = useTrafficStore((s) => s.flowOpenView)
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
   const role = useTrafficStore((s) => s.role)
   const openShareDialog = useTrafficStore((s) => s.openShareDialog)
@@ -1321,7 +1322,8 @@ export function FlowsView() {
     if (flowOpen === '') startNew()
     else {
       openView(flowOpen)
-      setFlowView('flow')
+      // Honor the requested view (e.g. "Review your calendar" opens straight to the calendar).
+      setFlowView(flowOpenView)
     }
     setFlowScreen('canvas')
     clearFlowOpen()

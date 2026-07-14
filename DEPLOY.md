@@ -1,4 +1,4 @@
-# Deploying Hyperfocus for a pilot
+# Deploying Breadcrumbs for a pilot
 
 This gets the app in front of a handful of trusted users. It covers hosting, the AI backend, access,
 data sync, and cost control. When Supabase is configured, records and app state sync to Postgres per

@@ -151,7 +151,7 @@ export function Sidebar({ onCollapse, popover }: { onCollapse?: () => void; popo
         <div className="sidebar-head">Filters</div>
       ) : (
         <button className="sidebar-logo" onClick={goHome} title="Home — back to all clients">
-          HyperFocus
+          Breadcrumbs
         </button>
       )}
       {/* Time-range horizon — lives in the channel bar, applies to every view. */}

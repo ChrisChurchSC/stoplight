@@ -144,12 +144,14 @@ export function GettingStarted() {
 
   const go = (id: OnboardingStepId) => {
     switch (id) {
-      case 'brand': setPage('account'); break
+      case 'brand': setPage('brand'); break
       case 'segments': setPage('segments'); break
       case 'proof': setPage('proofpoints'); break
       case 'flow': openFlow(''); break
       case 'connect': setPage('connectors'); break
-      case 'review': openFlow(latestCampaign || ''); break
+      // "Review your calendar" — open the latest campaign straight to its calendar view, and mark
+      // the step done (the teaching action completes when the calendar opens).
+      case 'review': openFlow(latestCampaign || '', 'calendar'); markDone('review'); break
     }
   }
 

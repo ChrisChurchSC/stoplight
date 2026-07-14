@@ -18,7 +18,6 @@ import { CanvasView } from './CanvasView'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { InsightsView } from './InsightsView'
 import { ViewToggle } from './ViewToggle'
-import { ConnectDataNudge } from './ConnectDataNudge'
 import { ConnectorsPage } from './ConnectorsPage'
 import { LibraryPage } from './LibraryPage'
 import { LibraryView } from './LibraryView'
@@ -336,7 +335,6 @@ export function Workbench() {
       <SetupWizard />
       <Onboarding />
       <AudienceWizard />
-      <ConnectDataNudge />
       <GettingStarted />
       <Toast />
     </div>

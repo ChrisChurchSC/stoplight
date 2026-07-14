@@ -462,11 +462,11 @@ export function HomeSidebar() {
 
       <div className="sidebar-foot">
         {role === 'owner' && (
-          <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connect Claude">
+          <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connectors">
             <span className="nav-ico">
               <Ico name="connect" />
             </span>
-            <span className="nav-label">Connect Claude</span>
+            <span className="nav-label">Connectors</span>
           </button>
         )}
         {can(role, 'billing') && (

@@ -64,7 +64,7 @@ export function ClaudeHandoff() {
         </ol>
 
         <div className="assist-note">
-          In the Claude desktop app, say <strong>"set up my brand in Hyperfocus"</strong>. Keep this
+          In the Claude desktop app, say <strong>"set up my brand in Breadcrumbs"</strong>. Keep this
           tab open — Claude builds the map here as it connects.
         </div>
 

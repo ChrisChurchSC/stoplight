@@ -1,13 +1,13 @@
-# Control Hyperfocus from Claude Desktop (single-user, local)
+# Control Breadcrumbs from Claude Desktop (single-user, local)
 
-Drive the running Hyperfocus app from Claude Desktop by chat: "add Acme as a client",
+Drive the running Breadcrumbs app from Claude Desktop by chat: "add Acme as a client",
 "set up a client from acme.com", "run a coherence check on Deep Dive". The Desktop
 tools run the REAL app actions in your open browser tab, and the UI updates live.
 
 ## How it works
 
 ```
-Claude Desktop ──MCP(stdio)──▶ mcp/hyperfocus-server.mjs ──HTTP──▶ dev-server bridge ──SSE──▶ Browser tab
+Claude Desktop ──MCP(stdio)──▶ mcp/breadcrumbs-server.mjs ──HTTP──▶ dev-server bridge ──SSE──▶ Browser tab
                                                                                               │
                                                               runs the real store action (add client, set up, coherence)
                                                                                               │
@@ -22,7 +22,7 @@ production build: the bridge mounts only under `vite dev`, and the executor is g
 Pieces:
 - `server/agentBridge.ts` — dev-server endpoints (`/api/agent-bridge` SSE, `/api/agent-command`, `/api/agent-result`).
 - `src/lib/agentBridge.ts` — the browser executor (whitelist of store actions).
-- `mcp/hyperfocus-server.mjs` — the MCP server Claude Desktop launches.
+- `mcp/breadcrumbs-server.mjs` — the MCP server Claude Desktop launches.
 
 ## One-time setup
 
@@ -30,9 +30,9 @@ Pieces:
    ```json
    {
      "mcpServers": {
-       "hyperfocus": {
+       "breadcrumbs": {
          "command": "/usr/local/bin/node",
-         "args": ["/Users/chris/Documents/GitHub/stoplight/mcp/hyperfocus-server.mjs"]
+         "args": ["/Users/chris/Documents/GitHub/stoplight/mcp/breadcrumbs-server.mjs"]
        }
      }
    }
@@ -41,23 +41,23 @@ Pieces:
    must be absolute so Node resolves the repo's `node_modules` (the MCP SDK).
 
 2. **Restart Claude Desktop** so it picks up the new server. The four tools appear under
-   the `hyperfocus` connector.
+   the `breadcrumbs` connector.
 
 ## Using it
 
-1. Start Hyperfocus: `npm run dev`.
-2. Open **one** tab at `http://localhost:5173` and leave it open. (If several Hyperfocus
+1. Start Breadcrumbs: `npm run dev`.
+2. Open **one** tab at `http://localhost:5173` and leave it open. (If several Breadcrumbs
    tabs are open, the most-recently-loaded one is the executor. Keep one tab to avoid
    confusion.)
 3. In Claude Desktop, just ask. Examples:
-   - "List my Hyperfocus clients."
+   - "List my Breadcrumbs clients."
    - "Add Acme Co as a client."
-   - "Set up a client in Hyperfocus from deep-dive.studio."
+   - "Set up a client in Breadcrumbs from deep-dive.studio."
    - "Run a coherence check on Deep Dive."
-   - "Fill in Acme's About info in Hyperfocus: it's a Series-A devtools company, mission is X, voice is plain and technical."
-   - "Pull Acme's live assets into Hyperfocus from acme.com."
-   - "Write Acme's messaging in Hyperfocus: two audiences, three proof points, and a few hooks."
-   - "Generate a demand-gen campaign's assets for Acme in Hyperfocus from everything connected."
+   - "Fill in Acme's About info in Breadcrumbs: it's a Series-A devtools company, mission is X, voice is plain and technical."
+   - "Pull Acme's live assets into Breadcrumbs from acme.com."
+   - "Write Acme's messaging in Breadcrumbs: two audiences, three proof points, and a few hooks."
+   - "Generate a demand-gen campaign's assets for Acme in Breadcrumbs from everything connected."
 
 ## Tools
 
@@ -101,9 +101,9 @@ These let your own Claude drive the four jobs directly. Everything lands as a dr
 ## Notes
 
 - **Browser tab must be open.** The tab is the executor; if it is closed, a tool returns
-  "No Hyperfocus tab is open." Open the app and retry.
+  "No Breadcrumbs tab is open." Open the app and retry.
 - **Anthropic key required** for `setup_client` and `run_coherence_check` (they call
   Claude server-side). Set `ANTHROPIC_API_KEY` in `.env`. Without it they fall back to
   the heuristic (`setup_client` still works, just without the site-grounded proposal).
-- **Bridge URL** defaults to `http://localhost:5173`. Override with `HYPERFOCUS_BRIDGE_URL`
+- **Bridge URL** defaults to `http://localhost:5173`. Override with `BREADCRUMBS_BRIDGE_URL`
   in the MCP server's env if you run the dev server on another port.

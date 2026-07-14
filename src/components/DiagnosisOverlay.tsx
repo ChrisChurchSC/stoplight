@@ -141,7 +141,7 @@ export function DiagnosisOverlay() {
             </div>
 
             <p className="dg-punch">
-              The gap between these two pictures is the whole reason to use HyperFocus. This is what's
+              The gap between these two pictures is the whole reason to use Breadcrumbs. This is what's
               live, and this is what it looks like connected.
             </p>
 

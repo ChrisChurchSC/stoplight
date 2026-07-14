@@ -83,7 +83,7 @@ export function Breadcrumb() {
         {campaignFilter === 'all' ? (
           <>
             <button className="bc-logo" onClick={goHome} title="Home — back to all clients">
-              HyperFocus
+              Breadcrumbs
             </button>
             <BrandTabs />
           </>
@@ -178,7 +178,7 @@ export function Breadcrumb() {
                 className="bc-more-item"
                 disabled={rows.length === 0}
                 onClick={() => {
-                  downloadCsv('hyperfocus-sheet.csv', rowsToCsv(rows))
+                  downloadCsv('breadcrumbs-sheet.csv', rowsToCsv(rows))
                   setMenuOpen(false)
                 }}
               >

@@ -1567,7 +1567,11 @@ interface TrafficState {
    *  tab opens the flow, not the legacy canvas). '' means open a fresh flow builder.
    *  FlowsView consumes it and calls clearFlowOpen. */
   flowOpen: string | null
-  openFlow: (campaign: string) => void
+  /** Which view the flow should open in (flow canvas / grid / calendar). Set alongside flowOpen
+   *  so a caller like "Review your calendar" can land directly on the calendar. FlowsView reads
+   *  it when it consumes flowOpen, then it's reset on clearFlowOpen. */
+  flowOpenView: 'flow' | 'grid' | 'calendar'
+  openFlow: (campaign: string, flowView?: 'flow' | 'grid' | 'calendar') => void
   clearFlowOpen: () => void
   /** True while a flow canvas (build or view) is open — collapses the sidebar to a rail. */
   flowCanvasOpen: boolean
@@ -2169,6 +2173,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
   flowOpen: null,
+  flowOpenView: 'flow',
   flowCanvasOpen: false,
   sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
   recordsChatCollapsed: (() => { try { return localStorage.getItem('stoplight.recordsChatCollapsed') === '1' } catch { return false } })(),
@@ -3185,10 +3190,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   // Open a campaign in the Flows view instead of the legacy canvas — the project tabs use
   // this so a tab opens the flow. An empty name opens a fresh flow builder.
-  openFlow: (name) => {
+  openFlow: (name, flowView = 'flow') => {
     const campaign = name.trim()
     if (!campaign) {
-      set({ page: 'flows', flowOpen: '' })
+      set({ page: 'flows', flowOpen: '', flowOpenView: flowView })
       return
     }
     const client = clientForCampaign(campaign)
@@ -3198,9 +3203,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().openProject(campaign)
     // campaignFilter tracks the active tab; it's inert on the Flows page (FlowsView scopes
     // by its own viewName), so setting it only drives the tab highlight.
-    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign })
+    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView })
   },
-  clearFlowOpen: () => set({ flowOpen: null }),
+  clearFlowOpen: () => set({ flowOpen: null, flowOpenView: 'flow' }),
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
   setRecordsChatCollapsed: (v) => {
     try { localStorage.setItem('stoplight.recordsChatCollapsed', v ? '1' : '0') } catch { /* ignore */ }

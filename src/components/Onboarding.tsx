@@ -14,11 +14,11 @@ export function Onboarding() {
   if (!active) return null
 
   return (
-    <div className="onboarding-root" role="dialog" aria-label="Welcome to Hyperfocus">
+    <div className="onboarding-root" role="dialog" aria-label="Welcome to Breadcrumbs">
       <header className="onboarding-head">
         <div className="onboarding-brand">
           <span className="onboarding-logo">✦</span>
-          Hyperfocus
+          Breadcrumbs
         </div>
         <button className="btn ghost sm" onClick={exit}>
           Skip for now

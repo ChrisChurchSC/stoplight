@@ -4,16 +4,16 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 /**
- * Hyperfocus MCP server. Claude Desktop launches this over stdio; each tool posts
- * a command to the running Hyperfocus dev server's agent bridge, which dispatches
+ * Breadcrumbs MCP server. Claude Desktop launches this over stdio; each tool posts
+ * a command to the running Breadcrumbs dev server's agent bridge, which dispatches
  * it into the open browser tab (the executor) and returns the real result. So
  * "add Acme as a client" in Desktop runs the actual app action and shows up live.
  *
- * Requires: Hyperfocus running (npm run dev) with a browser tab open at the bridge
+ * Requires: Breadcrumbs running (npm run dev) with a browser tab open at the bridge
  * URL. Configure in Claude Desktop -> see docs/claude-desktop-mcp.md.
  */
 
-const BRIDGE = process.env.HYPERFOCUS_BRIDGE_URL || 'http://localhost:5173'
+const BRIDGE = process.env.BREADCRUMBS_BRIDGE_URL || 'http://localhost:5173'
 
 async function dispatch(action, args) {
   let res
@@ -24,24 +24,24 @@ async function dispatch(action, args) {
       body: JSON.stringify({ action, args }),
     })
   } catch {
-    return { ok: false, error: `Cannot reach the Hyperfocus dev server at ${BRIDGE}. Start it with: npm run dev` }
+    return { ok: false, error: `Cannot reach the Breadcrumbs dev server at ${BRIDGE}. Start it with: npm run dev` }
   }
   const data = await res.json().catch(() => ({}))
   if (res.status === 503) {
-    return { ok: false, error: data.message || 'No Hyperfocus tab is open. Open http://localhost:5173 and retry.' }
+    return { ok: false, error: data.message || 'No Breadcrumbs tab is open. Open http://localhost:5173 and retry.' }
   }
   return data
 }
 
 const text = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] })
 
-const server = new McpServer({ name: 'hyperfocus', version: '0.1.0' })
+const server = new McpServer({ name: 'breadcrumbs', version: '0.1.0' })
 
 server.registerTool(
   'list_clients',
   {
     title: 'List clients',
-    description: 'List the clients currently in the Hyperfocus workspace.',
+    description: 'List the clients currently in the Breadcrumbs workspace.',
     inputSchema: {},
   },
   async () => text(await dispatch('listClients', {})),
@@ -51,7 +51,7 @@ server.registerTool(
   'add_client',
   {
     title: 'Add client',
-    description: 'Add a new client by name to the Hyperfocus clients dashboard.',
+    description: 'Add a new client by name to the Breadcrumbs clients dashboard.',
     inputSchema: { name: z.string().describe('The client / company name') },
   },
   async ({ name }) => text(await dispatch('addClient', { name })),
@@ -106,7 +106,7 @@ server.registerTool(
   {
     title: 'Read what is connected for a brand',
     description:
-      "Read back everything connected for a brand in Hyperfocus: its About profile, its messaging system (audiences, proof points, subjects, hooks, CTAs), its campaigns, and asset count. Call this FIRST so you can see what already exists before you populate or write more.",
+      "Read back everything connected for a brand in Breadcrumbs: its About profile, its messaging system (audiences, proof points, subjects, hooks, CTAs), its campaigns, and asset count. Call this FIRST so you can see what already exists before you populate or write more.",
     inputSchema: { brand: z.string().describe('The brand / client name') },
   },
   async ({ brand }) => text(await dispatch('getBrand', { brand })),
