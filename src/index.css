@@ -1897,7 +1897,7 @@ button {
 
 /* ---- sidebar ---- */
 .sidebar {
-  width: 232px;
+  width: 204px;
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -3908,6 +3908,11 @@ button {
   min-height: 0;
   display: flex;
 }
+/* Records-page assistant: the same chat panel docked on the LEFT, exactly like the flow canvas. */
+.rec-with-chat { display: flex; align-items: stretch; height: 100%; min-height: 0; }
+.rec-with-chat > .rec { flex: 1 1 auto; min-width: 0; height: 100%; overflow: auto; }
+.rec-with-chat > .fchat { height: 100%; }
+
 /* Flow-canvas AI chat panel (left of the canvas) */
 .fchat { width: 360px; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
 .fchat-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
@@ -20740,6 +20745,321 @@ textarea.library-input {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
 }
+
+/* ---- Library folders: a left rail of buckets (Your content + competitor folders) ---- */
+.lib-catalog-wrap {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+}
+.lib-folder-rail {
+  flex: 0 0 190px;
+  width: 190px;
+  position: sticky;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lib-catalog-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lib-folder-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.lib-folder-item:hover {
+  background: var(--hover);
+}
+.lib-folder-item.active {
+  background: var(--hover);
+  color: var(--text);
+  font-weight: 600;
+}
+.lib-folder-ic {
+  flex: 0 0 auto;
+  font-size: 13px;
+  opacity: 0.9;
+}
+.lib-folder-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-folder-n {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.lib-folder-sec {
+  margin: 12px 0 4px;
+  padding: 0 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.lib-folder-new {
+  margin-top: 4px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.lib-folder-new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.lib-folder-new-row input {
+  width: 100%;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  box-sizing: border-box;
+}
+
+/* The open folder's header: name, count, rename / delete. */
+.lib-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.lib-folder-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--text);
+  cursor: text;
+}
+.lib-folder-rename {
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 3px 8px;
+  background: var(--surface);
+}
+.lib-folder-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.lib-folder-head-btns {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.lib-folder-rename-btn,
+.lib-folder-del-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.lib-folder-rename-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.lib-folder-del-btn:hover {
+  border-color: #d1495b;
+  color: #d1495b;
+}
+
+/* Add-content actions + panel inside a folder. */
+.libf-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.libf-add-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.libf-add-btn.ghost {
+  background: var(--surface);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.libf-add-btn.ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.libf-flash {
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.libf-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 14px;
+  margin-bottom: 18px;
+}
+.libf-panel-head {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.libf-textarea,
+.libf-field input,
+.libf-field select,
+.libf-field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  box-sizing: border-box;
+}
+.libf-textarea {
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.libf-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.libf-panel-count {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.libf-panel-btns {
+  display: flex;
+  gap: 8px;
+}
+.libf-cancel {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 5px 10px;
+}
+.libf-save {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.libf-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.libf-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.libf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.libf-field > span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.libf-field-wide {
+  grid-column: span 1;
+}
+.libf-field-full {
+  grid-column: 1 / -1;
+}
+.libf-item-del {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.libf-item-del:hover {
+  color: #d1495b;
+  background: var(--hover);
+}
+.lib-add-menu-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.lib-add-menu-item.new {
+  border-top: 1px solid var(--border);
+  color: var(--accent);
+  font-weight: 600;
+}
+.lib-toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(16, 24, 40, 0.22);
+  animation: lib-toast-in 0.16s ease;
+}
+@keyframes lib-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
 /* Meeting notes grouped on their own, below the published content. */
 .lib-meetings {
   margin-top: 26px;
@@ -23202,7 +23522,79 @@ table.aud-sheet td.stick .aud-cell {
   font-weight: 550;
 }
 
-/* ---- Home: centered, calm, Attio-style landing ---- */
+/* ---- Invite-teammate modal ---- */
+.invite-scrim { position: fixed; inset: 0; z-index: 320; background: rgba(16, 24, 40, 0.42); display: flex; align-items: center; justify-content: center; }
+.invite-card { width: 440px; max-width: calc(100vw - 32px); text-align: left; }
+.invite-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.invite-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.invite-x { margin-left: auto; border: none; background: transparent; font-size: 20px; line-height: 1; color: var(--text-faint); cursor: pointer; }
+.invite-sub { font-size: 13.5px; color: var(--text-muted); margin: 0 0 16px; line-height: 1.5; }
+.invite-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.invite-field > span { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.invite-field select { border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface); }
+.invite-generate { width: 100%; }
+.invite-linkrow { display: flex; gap: 8px; }
+.invite-link { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface-2); }
+.invite-copy { flex: 0 0 auto; border: 1px solid var(--accent); background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 600; border-radius: 9px; padding: 0 14px; cursor: pointer; }
+.invite-note { font-size: 12px; color: var(--text-faint); margin: 10px 0 0; }
+
+/* ---- Import-local-data banner (shown after sign-in when a backend is newly connected) ---- */
+.migrate-banner { display: flex; align-items: center; gap: 14px; padding: 10px 18px; background: var(--accent-soft, #e6f0f2); border-bottom: 1px solid var(--border); font-size: 13.5px; color: var(--text); }
+.migrate-banner-text { flex: 1; min-width: 0; }
+.migrate-banner-actions { flex: 0 0 auto; display: flex; gap: 8px; }
+.migrate-dismiss { border: none; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; cursor: pointer; padding: 6px 10px; }
+.migrate-go { border: 1px solid var(--accent); background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.migrate-go:disabled { opacity: .6; cursor: default; }
+
+/* ---- Home: agenda layout (Ask box + Meetings + Tasks) ---- */
+.pf-home { height: 100%; display: flex; min-height: 0; }
+.agenda2 { flex: 1; overflow-y: auto; min-height: 0; }
+.agenda2-inner { max-width: 720px; margin: 0 auto; padding: 44px 24px 80px; }
+.ag2-greet { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 26px; color: var(--text); }
+
+.ag2-ask { margin-bottom: 40px; }
+.ag2-recent { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; cursor: pointer; padding: 0 0 0 2px; margin-bottom: 8px; }
+.ag2-recent:hover { color: var(--accent); }
+.ag2-recent-ic, .ag2-recent-dot { color: var(--text-faint); }
+.ag2-ask-box { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); padding: 14px 16px 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); }
+.ag2-ask-input { width: 100%; border: none; outline: none; resize: none; font: inherit; font-size: 15px; color: var(--text); background: transparent; }
+.ag2-ask-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 4px; }
+.ag2-ask-model { font-size: 13px; color: var(--text-muted); }
+.ag2-ask-send { width: 34px; height: 34px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 16px; cursor: pointer; display: grid; place-items: center; }
+.ag2-ask-send:disabled { opacity: .4; cursor: default; }
+.ag2-chips { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+.ag2-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 8px 15px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+.ag2-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+.ag2-sec { margin-top: 34px; }
+.ag2-sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.ag2-sec-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.ag2-sec-count { color: var(--text-faint); font-weight: 600; margin-left: 2px; }
+.ag2-daynav { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.ag2-daynav-btn { width: 22px; height: 22px; border: none; background: transparent; color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer; border-radius: 6px; }
+.ag2-daynav-btn:hover { background: var(--hover); color: var(--text); }
+.ag2-viewall { border: none; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.ag2-viewall:hover { color: var(--accent); }
+.ag2-viewall-plus { font-size: 15px; }
+.ag2-empty { color: var(--text-muted); font-size: 13.5px; padding: 14px 2px; }
+
+.ag2-mtg-sub { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-faint); margin: 4px 0 10px; }
+.ag2-mtg-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-radius: 8px; cursor: pointer; }
+.ag2-mtg-row:hover { background: var(--hover); }
+.ag2-mtg-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.ag2-mtg-t { flex: 1; min-width: 0; font-size: 14.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag2-mtg-t.past { color: var(--text-faint); text-decoration: line-through; }
+.ag2-mtg-time { flex: 0 0 auto; font-size: 13px; color: var(--text-muted); }
+
+.ag2-task { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+.ag2-task:last-child { border-bottom: none; }
+.ag2-check { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; border: 1.6px solid var(--border-strong, #cdd5d9); background: var(--surface); cursor: pointer; padding: 0; transition: border-color .12s; }
+.ag2-check:hover { border-color: var(--accent); }
+.ag2-task-t { flex: 1; min-width: 0; font-size: 14.5px; color: var(--text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag2-task-due { flex: 0 0 auto; font-size: 13px; color: var(--text-muted); }
+.ag2-task-due.over { color: #d1495b; }
+
+/* ---- Home: centered, calm, Attio-style landing (legacy cockpit) ---- */
 .pf-home .ckpt {
   max-width: 720px;
   margin: 0 auto;

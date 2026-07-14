@@ -112,6 +112,15 @@ import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Objective, freshObjectiveId } from '../domain/objective'
+import {
+  type LibraryFolder,
+  type LibraryFolderItem,
+  type LibraryFolderItemInput,
+  channelFromUrl,
+  freshFolderId,
+  freshFolderItemId,
+  titleFromUrl,
+} from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
@@ -662,6 +671,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.objectives.v1': 'objectives',
   'stoplight.messages.v1': 'message_records',
   'stoplight.brandRecords.v1': 'brands',
+  'stoplight.libraryFolders.v1': 'library_folders',
 }
 const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
 function saveRecordList<T extends { id: string }>(key: string, list: T[]): void {
@@ -678,6 +688,8 @@ function saveRecordList<T extends { id: string }>(key: string, list: T[]): void 
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
+const LIBRARY_FOLDERS_KEY = 'stoplight.libraryFolders.v1'
+const TASKS_KEY = 'stoplight.tasks.v1'
 const BRAND_RECORDS_KEY = 'stoplight.brandRecords.v1'
 
 // The Brands sheet is seeded once from the real workspace brands (clients + campaign brands) so it
@@ -1427,6 +1439,19 @@ interface TrafficState {
   addObjective: (partial?: Partial<Objective>) => string
   updateObjective: (id: string, patch: Partial<Objective>) => void
   deleteObjective: (id: string) => void
+  /** Library › folders — brand-scoped buckets of reference content (e.g. a competitor's posts),
+   *  sat beside the brand's own ingested catalog. Each folder owns its items. */
+  libraryFolders: LibraryFolder[]
+  /** Create a folder for a brand; returns its id. */
+  addLibraryFolder: (brand: string, name: string, kind?: LibraryFolder['kind']) => string
+  /** Rename a folder. */
+  renameLibraryFolder: (id: string, name: string) => void
+  /** Delete a folder and everything filed in it. */
+  deleteLibraryFolder: (id: string) => void
+  /** Add items to a folder (from pasted URLs or hand-entered). Returns how many were added. */
+  addLibraryFolderItems: (folderId: string, items: LibraryFolderItemInput[]) => number
+  /** Remove one item from a folder. */
+  removeLibraryFolderItem: (folderId: string, itemId: string) => void
   /** Records › Brands — your own brands/clients. Naming a brand registers it as a real client. */
   brandRecords: BrandRecord[]
   addBrandRecord: (partial?: Partial<BrandRecord>) => string
@@ -1550,6 +1575,9 @@ interface TrafficState {
   /** User-toggled sidebar collapse (persists; works on every page). */
   sidebarCollapsed: boolean
   toggleSidebar: () => void
+  /** Whether the Records-page AI assistant panel is collapsed to its rail (remembered). */
+  recordsChatCollapsed: boolean
+  setRecordsChatCollapsed: (v: boolean) => void
   /** Saved flow-chat conversations, per flow (newest first). */
   flowChats: SavedFlowChat[]
   /** Upsert a saved flow chat by id. */
@@ -1634,6 +1662,10 @@ interface TrafficState {
   setupOpen: boolean
   openSetup: () => void
   closeSetup: () => void
+  /** The "Invite teammate" modal (share the workspace by link). */
+  inviteOpen: boolean
+  openInvite: () => void
+  closeInvite: () => void
   /** Forked onboarding: pick Do-it-yourself (manual) vs Set-up-with-Claude (assisted). */
   onboardOpen: boolean
   openOnboard: () => void
@@ -1724,6 +1756,9 @@ interface TrafficState {
   /** Pull the record lists (companies, people, brands, …) from the workspace backend into the store
    *  after sign-in. No-op on localStorage (the slices already loaded synchronously at init). */
   hydrateRecords: () => Promise<void>
+  /** One-time: push this browser's localStorage data into the signed-in Supabase workspace, so a
+   *  user's existing work carries over when the backend is turned on. Safe to run once. */
+  migrateLocalToSupabase: () => Promise<{ ok: boolean; error?: string }>
 
   // ingest tray
   addAssets: (assets: Asset[]) => void
@@ -2097,6 +2132,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   people: isSupabaseConfigured ? [] : loadPeople(),
   messages: isSupabaseConfigured ? [] : loadRecordList<Message>(MESSAGES_KEY),
   objectives: isSupabaseConfigured ? [] : loadRecordList<Objective>(OBJECTIVES_KEY),
+  libraryFolders: isSupabaseConfigured ? [] : loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY),
   brandRecords: isSupabaseConfigured ? [] : loadOrSeedBrandRecords(),
   segments: isSupabaseConfigured ? [] : loadSegments(),
   mediaMixes: loadMediaMixes(),
@@ -2131,6 +2167,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   flowOpen: null,
   flowCanvasOpen: false,
   sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
+  recordsChatCollapsed: (() => { try { return localStorage.getItem('stoplight.recordsChatCollapsed') === '1' } catch { return false } })(),
   flowChats: loadFlowChats(),
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
@@ -2139,6 +2176,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   wizardClient: null,
   audienceWizardOpen: false,
   setupOpen: false,
+  inviteOpen: false,
   onboardOpen: false,
   assistedOpen: false,
   reviewRowId: null,
@@ -2505,6 +2543,66 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const objectives = s.objectives.filter((o) => o.id !== id)
       saveRecordList(OBJECTIVES_KEY, objectives)
       return { objectives }
+    }),
+
+  addLibraryFolder: (brand, name, kind = 'competitor') => {
+    const id = freshFolderId()
+    const folder: LibraryFolder = { id, brand, name: name.trim() || 'New folder', kind, createdAt: Date.now(), items: [] }
+    set((s) => {
+      const libraryFolders = [...s.libraryFolders, folder]
+      saveRecordList(LIBRARY_FOLDERS_KEY, libraryFolders)
+      return { libraryFolders }
+    })
+    return id
+  },
+  renameLibraryFolder: (id, name) =>
+    set((s) => {
+      const libraryFolders = s.libraryFolders.map((f) => (f.id === id ? { ...f, name: name.trim() || f.name } : f))
+      saveRecordList(LIBRARY_FOLDERS_KEY, libraryFolders)
+      return { libraryFolders }
+    }),
+  deleteLibraryFolder: (id) =>
+    set((s) => {
+      const libraryFolders = s.libraryFolders.filter((f) => f.id !== id)
+      saveRecordList(LIBRARY_FOLDERS_KEY, libraryFolders)
+      return { libraryFolders }
+    }),
+  addLibraryFolderItems: (folderId, items) => {
+    const folder = get().libraryFolders.find((f) => f.id === folderId)
+    if (!folder) return 0
+    // Skip URLs already filed here, so re-pasting never duplicates.
+    const seen = new Set(folder.items.map((i) => (i.url ?? '').trim().toLowerCase()).filter(Boolean))
+    const next: LibraryFolderItem[] = []
+    for (const it of items) {
+      const url = (it.url ?? '').trim()
+      const key = url.toLowerCase()
+      if (url && seen.has(key)) continue
+      const title = (it.title ?? '').trim() || (url ? titleFromUrl(url) : 'Untitled item')
+      next.push({
+        id: freshFolderItemId(),
+        title,
+        channel: it.channel ?? (url ? channelFromUrl(url) : undefined),
+        url: url || undefined,
+        copy: (it.copy ?? '').trim() || undefined,
+        addedAt: Date.now(),
+      })
+      if (url) seen.add(key)
+    }
+    if (!next.length) return 0
+    set((s) => {
+      const libraryFolders = s.libraryFolders.map((f) => (f.id === folderId ? { ...f, items: [...next, ...f.items] } : f))
+      saveRecordList(LIBRARY_FOLDERS_KEY, libraryFolders)
+      return { libraryFolders }
+    })
+    return next.length
+  },
+  removeLibraryFolderItem: (folderId, itemId) =>
+    set((s) => {
+      const libraryFolders = s.libraryFolders.map((f) =>
+        f.id === folderId ? { ...f, items: f.items.filter((i) => i.id !== itemId) } : f,
+      )
+      saveRecordList(LIBRARY_FOLDERS_KEY, libraryFolders)
+      return { libraryFolders }
     }),
 
   addBrandRecord: (partial) => {
@@ -3099,6 +3197,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   clearFlowOpen: () => set({ flowOpen: null }),
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
+  setRecordsChatCollapsed: (v) => {
+    try { localStorage.setItem('stoplight.recordsChatCollapsed', v ? '1' : '0') } catch { /* ignore */ }
+    set({ recordsChatCollapsed: v })
+  },
   toggleSidebar: () =>
     set((s) => {
       const sidebarCollapsed = !s.sidebarCollapsed
@@ -3494,6 +3596,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   openSetup: () => set({ setupOpen: true }),
   closeSetup: () => set({ setupOpen: false }),
+  openInvite: () => set({ inviteOpen: true }),
+  closeInvite: () => set({ inviteOpen: false }),
   openOnboard: () => set({ onboardOpen: true }),
   closeOnboard: () => set({ onboardOpen: false }),
   // Fork → assisted: leave the fork, open the desktop handoff.
@@ -3968,7 +4072,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   hydrateRecords: async () => {
     if (!isSupabaseConfigured) return
     const from = <T extends { id: string; name?: string }>(table: string) => new SupabaseRecordAdapter<T>(table).list()
-    const [companies, people, channelRecords, segments, objectives, messages, brandRecords] = await Promise.all([
+    const [companies, people, channelRecords, segments, objectives, messages, brandRecords, libraryFolders] = await Promise.all([
       from<Company>('companies'),
       from<Person>('people'),
       from<ChannelRecord>('channels'),
@@ -3976,8 +4080,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       from<Objective>('objectives'),
       from<Message>('message_records'),
       from<BrandRecord>('brands'),
+      from<LibraryFolder>('library_folders'),
     ])
-    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, brandRecords }
+    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, brandRecords, libraryFolders }
     // Non-record state (brand system, client list, campaign metadata, …) from the KV table, mapped
     // back onto its store slice by the localStorage key it was saved under.
     const STATE_SLICES: Record<string, string> = {
@@ -4006,7 +4111,72 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         /* storage unavailable — grouping falls back to whatever's local */
       }
     }
+    // Tasks live in localStorage (TasksView owns them, not a store slice); restore the workspace's
+    // copy so a fresh device shows the right tasks. Notify listeners (sidebar badge, home agenda).
+    if (TASKS_KEY in state) {
+      try {
+        localStorage.setItem(TASKS_KEY, JSON.stringify(state[TASKS_KEY]))
+        window.dispatchEvent(new Event('stoplight:tasks'))
+      } catch {
+        /* storage unavailable — tasks fall back to whatever's local */
+      }
+    }
     set(patch as Partial<TrafficState>)
+  },
+
+  migrateLocalToSupabase: async () => {
+    if (!isSupabaseConfigured) return { ok: false, error: 'No backend configured' }
+    try {
+      // Record lists → their per-row tables (whole array replaced).
+      const RECORD_MIGRATIONS: [string, string][] = [
+        ['stoplight.companies.v1', 'companies'],
+        ['stoplight.people.v1', 'people'],
+        ['stoplight.channelRecords.v1', 'channels'],
+        ['stoplight.segments.v1', 'segments'],
+        ['stoplight.objectives.v1', 'objectives'],
+        ['stoplight.messages.v1', 'message_records'],
+        ['stoplight.brandRecords.v1', 'brands'],
+        [LIBRARY_FOLDERS_KEY, 'library_folders'],
+      ]
+      for (const [key, table] of RECORD_MIGRATIONS) {
+        const arr = loadRecordList<{ id: string; name?: string }>(key)
+        if (arr.length) await new SupabaseRecordAdapter(table).replaceAll(arr)
+      }
+      // Keyed state + tasks + grouping → workspace_state.
+      const STATE_MIGRATIONS = [
+        'stoplight.clients.v1', 'stoplight.clientProfiles.v1', 'stoplight.clientAudiences.v1',
+        'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1',
+        'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.canvases.v1',
+        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1',
+        TASKS_KEY, RECORD_GROUPING_KEY,
+      ]
+      for (const key of STATE_MIGRATIONS) {
+        const raw = localStorage.getItem(key)
+        if (raw != null) {
+          try { persistState(key, JSON.parse(raw)) } catch { /* skip malformed */ }
+        }
+      }
+      // Assets (the sheet) → the Supabase sheet. The mock snapshot is { rows: TrafficRow[] }, so
+      // read `.rows` (tolerate a bare array too). Only append rows not already in the workspace.
+      try {
+        const raw = localStorage.getItem('stoplight.sheet.v1')
+        if (raw) {
+          const snap = JSON.parse(raw)
+          const localRows: TrafficRow[] = Array.isArray(snap?.rows) ? snap.rows : Array.isArray(snap) ? snap : []
+          if (localRows.length) {
+            const existing = new Set((await sheet.list()).map((r) => r.id))
+            const fresh = localRows.filter((r) => !existing.has(r.id))
+            if (fresh.length) await sheet.append(fresh)
+          }
+        }
+      } catch { /* skip malformed sheet */ }
+      localStorage.setItem('stoplight.migrated.v1', '1')
+      await get().hydrateRecords()
+      await get().refresh()
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String((e as Error)?.message ?? e) }
+    }
   },
 
   refresh: async () => {

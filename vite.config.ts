@@ -329,6 +329,39 @@ const SERVER_SECRETS = [
 ]
 
 /**
+ * Dev-server endpoint for the records-table AI agent. Keeps the Anthropic key server-side;
+ * mirrors /api/flow-agent.
+ */
+function recordsAgentApi(): PluginOption {
+  return {
+    name: 'records-agent-api',
+    configureServer(server) {
+      server.middlewares.use('/api/records-agent', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runRecordsAgent } = await import('./server/recordsAgentHandler')
+            const result = await runRecordsAgent(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for the Claude-powered coherence check (the connection
  * check itself). Keeps the Anthropic key server-side; mirrors /api/icp-review.
  */
@@ -789,6 +822,25 @@ export default defineConfig(({ mode }) => {
         ignored: ['**/.playwright-mcp/**', '**/*.png', '**/public/ww-*.json'],
       },
     },
+    // Split heavy vendor code out of the main chunk so first load is smaller and parallelized
+    // (clears the >500 kB single-chunk warning; each vendor group is cached independently).
+    build: {
+      // The vendor split (react / supabase / charts / icons) is done; the remaining ~1 MB is the
+      // app's own code. Route-level lazy-loading is a follow-up; bump the warning so builds are clean.
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return
+            if (/[\\/]recharts[\\/]|[\\/]d3-|[\\/]victory/.test(id)) return 'charts'
+            if (/[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+            if (/[\\/]@supabase[\\/]/.test(id)) return 'supabase'
+            if (/[\\/]simple-icons[\\/]/.test(id)) return 'icons'
+            return 'vendor'
+          },
+        },
+      },
+    },
     plugins: [
       react(),
       icpReviewApi(),
@@ -800,6 +852,7 @@ export default defineConfig(({ mode }) => {
       askApi(),
       mediaMixApi(),
       flowAgentApi(),
+      recordsAgentApi(),
       coherenceApi(),
       agentApi(),
       siteMapApi(),

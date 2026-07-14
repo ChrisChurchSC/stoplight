@@ -8,6 +8,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { GranolaIcon } from './GranolaIcon'
 import { LibraryData } from './LibraryData'
+import { LibraryFolderView } from './LibraryFolderView'
 import { BrandPicker } from './BrandPicker'
 
 /**
@@ -126,6 +127,15 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const contentIngesting = useTrafficStore((s) => s.contentIngesting)
   const ingestContent = useTrafficStore((s) => s.ingestContent)
+  const libraryFolders = useTrafficStore((s) => s.libraryFolders)
+  const addLibraryFolder = useTrafficStore((s) => s.addLibraryFolder)
+  const renameLibraryFolder = useTrafficStore((s) => s.renameLibraryFolder)
+  const deleteLibraryFolder = useTrafficStore((s) => s.deleteLibraryFolder)
+  // Which folder is open: null = the brand's own ingested catalog ("Your content").
+  const [activeFolder, setActiveFolder] = useState<string | null>(null)
+  // Inline "new folder" name entry in the rail; and inline rename of the open folder.
+  const [newFolder, setNewFolder] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState(false)
 
   // Catalog (browse every published asset) vs Signals (what's working — the read
   // over the library that ranks content by what drives subscribers). The mode lives
@@ -142,6 +152,10 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const [ingestedRange, setIngestedRange] = useState('all')
   // The card whose "add to campaign" menu is open.
   const [menuFor, setMenuFor] = useState<string | null>(null)
+  // The card whose "file to folder" menu is open, and a brief confirmation.
+  const [folderMenuFor, setFolderMenuFor] = useState<string | null>(null)
+  const [filedFlash, setFiledFlash] = useState<string | null>(null)
+  const addLibraryFolderItems = useTrafficStore((s) => s.addLibraryFolderItems)
   useEffect(() => {
     if (!detail) return
     const onKey = (e: KeyboardEvent) => {
@@ -152,6 +166,10 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   }, [detail])
 
   const brand = scopeClient ?? (clientFilter !== 'all' ? clientFilter : null)
+
+  // Folders are brand-scoped; an open folder from another brand falls back to Your content.
+  const brandFolders = useMemo(() => libraryFolders.filter((f) => f.brand === brand), [libraryFolders, brand])
+  const openFolder = brandFolders.find((f) => f.id === activeFolder) ?? null
 
   // Every asset the brand has (planned + published), for the Signals channel-mix read.
   const allRows = useMemo(
@@ -186,6 +204,64 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   const connectedSources = measured?.sources ?? []
   const busy = contentIngesting === brand
 
+  const commitNewFolder = () => {
+    const name = (newFolder ?? '').trim()
+    if (!name) return setNewFolder(null)
+    const id = addLibraryFolder(brand, name)
+    setNewFolder(null)
+    setActiveFolder(id)
+  }
+  const removeOpenFolder = () => {
+    if (!openFolder) return
+    deleteLibraryFolder(openFolder.id)
+    setActiveFolder(null)
+    setRenaming(false)
+  }
+
+  // The left rail: Your content (the ingested catalog) + this brand's folders + a create row.
+  const folderRail = (
+    <aside className="lib-folder-rail">
+      <button
+        className={`lib-folder-item${!openFolder ? ' active' : ''}`}
+        onClick={() => { setActiveFolder(null); setRenaming(false) }}
+      >
+        <span className="lib-folder-ic">▤</span>
+        <span className="lib-folder-name">Your content</span>
+        <span className="lib-folder-n">{items.length}</span>
+      </button>
+      <div className="lib-folder-sec">Folders</div>
+      {brandFolders.map((f) => (
+        <button
+          key={f.id}
+          className={`lib-folder-item${openFolder?.id === f.id ? ' active' : ''}`}
+          onClick={() => { setActiveFolder(f.id); setRenaming(false) }}
+          title={f.name}
+        >
+          <span className="lib-folder-ic">📁</span>
+          <span className="lib-folder-name">{f.name}</span>
+          <span className="lib-folder-n">{f.items.length}</span>
+        </button>
+      ))}
+      {newFolder === null ? (
+        <button className="lib-folder-new" onClick={() => setNewFolder('')}>＋ New folder</button>
+      ) : (
+        <div className="lib-folder-new-row">
+          <input
+            autoFocus
+            value={newFolder}
+            placeholder="e.g. Salt Strong"
+            onChange={(e) => setNewFolder(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitNewFolder()
+              if (e.key === 'Escape') setNewFolder(null)
+            }}
+            onBlur={commitNewFolder}
+          />
+        </div>
+      )}
+    </aside>
+  )
+
   // Meeting notes (from Granola) are a distinct kind of asset, not published content, so
   // they're grouped on their own and kept out of the published count / reach roll-up.
   const meetings = items.filter(isMeeting)
@@ -205,6 +281,17 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
 
   const byChannel = new Map<string, number>()
   for (const r of publishedShown) byChannel.set(String(r.channel), (byChannel.get(String(r.channel)) ?? 0) + 1)
+
+  // File a library asset into a folder — copies a lightweight reference (title, channel,
+  // link, copy) into the folder; the original stays in Your content.
+  const fileToFolder = (r: TrafficRow, folderId: string, folderName: string) => {
+    const added = addLibraryFolderItems(folderId, [
+      { title: r.assetName, channel: r.channel as ChannelId, url: r.sourceUrl, copy: itemCopy(r) || undefined },
+    ])
+    setFolderMenuFor(null)
+    setFiledFlash(added ? `Filed to “${folderName}”` : `Already in “${folderName}”`)
+    window.setTimeout(() => setFiledFlash(null), 2000)
+  }
 
   // One catalog card, reused by the published grid and the meeting-notes group.
   const renderCard = (r: TrafficRow) => {
@@ -320,6 +407,53 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
               )}
             </span>
           )}
+          <span className="lib-card-add-wrap">
+            <button
+              className="lib-card-add"
+              title="File this asset into a folder"
+              onClick={(e) => {
+                e.stopPropagation()
+                setFolderMenuFor((m) => (m === r.id ? null : r.id))
+              }}
+            >
+              📁 Folder
+            </button>
+            {folderMenuFor === r.id && (
+              <>
+                <div className="lib-add-scrim" onClick={(e) => { e.stopPropagation(); setFolderMenuFor(null) }} />
+                <div className="lib-add-menu" onClick={(e) => e.stopPropagation()}>
+                  <div className="lib-add-menu-head">File to folder</div>
+                  {brandFolders.length === 0 && (
+                    <div className="lib-add-menu-empty">No folders yet.</div>
+                  )}
+                  {brandFolders.map((f) => (
+                    <button
+                      key={f.id}
+                      className="lib-add-menu-item"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        fileToFolder(r, f.id, f.name)
+                      }}
+                    >
+                      📁 {f.name}
+                    </button>
+                  ))}
+                  <button
+                    className="lib-add-menu-item new"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const name = window.prompt('New folder name')?.trim()
+                      if (!name) return
+                      const id = addLibraryFolder(brand, name)
+                      fileToFolder(r, id, name)
+                    }}
+                  >
+                    ＋ New folder…
+                  </button>
+                </div>
+              </>
+            )}
+          </span>
         </div>
       </article>
     )
@@ -334,7 +468,7 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
             ? `${num(published.length)} published ${published.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date${meetings.length ? ` · ${meetings.length} meeting ${meetings.length === 1 ? 'note' : 'notes'}` : ''}`
             : 'Everything this brand has published, pulled from its connected channels'}
         </span>
-        {mode === 'catalog' && (
+        {mode === 'catalog' && !openFolder && (
           <button
             className="lib-ingest-mini"
             onClick={() => ingestContent(brand)}
@@ -358,7 +492,38 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
           sources={connectedSources}
         />
       ) : (
-        <>
+        <div className="lib-catalog-wrap">
+          {folderRail}
+          <div className="lib-catalog-main">
+          {openFolder ? (
+            <>
+              <div className="lib-folder-head">
+                {renaming ? (
+                  <input
+                    className="lib-folder-rename"
+                    autoFocus
+                    defaultValue={openFolder.name}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { renameLibraryFolder(openFolder.id, (e.target as HTMLInputElement).value); setRenaming(false) }
+                      if (e.key === 'Escape') setRenaming(false)
+                    }}
+                    onBlur={(e) => { renameLibraryFolder(openFolder.id, e.target.value); setRenaming(false) }}
+                  />
+                ) : (
+                  <h3 className="lib-folder-title" onDoubleClick={() => setRenaming(true)}>
+                    📁 {openFolder.name}
+                  </h3>
+                )}
+                <span className="lib-folder-sub">{openFolder.items.length} item{openFolder.items.length === 1 ? '' : 's'} · reference only</span>
+                <span className="lib-folder-head-btns">
+                  <button className="lib-folder-rename-btn" onClick={() => setRenaming(true)}>Rename</button>
+                  <button className="lib-folder-del-btn" onClick={removeOpenFolder}>Delete folder</button>
+                </span>
+              </div>
+              <LibraryFolderView folderId={openFolder.id} />
+            </>
+          ) : (
+          <>
           {items.length === 0 ? (
         <div className="mtx-empty">
           Nothing ingested yet. Use Ingest in the header to fill the library with everything this brand has
@@ -464,7 +629,10 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
             link, so a planned card can later reconcile to the post it became and inherit its measured metrics.
             Click any card to read its full copy.
           </div>
-        </>
+          </>
+          )}
+          </div>
+        </div>
       )}
 
       {detail && (
@@ -517,6 +685,8 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
           </div>
         </div>
       )}
+
+      {filedFlash && <div className="lib-toast">{filedFlash}</div>}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { assetBadge } from '../domain/assetBadge'
 import { campaignFlight } from '../domain/campaignWindow'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -44,6 +44,7 @@ interface CockpitRow {
 export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const { canvases } = useHomeCanvases()
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
@@ -51,7 +52,8 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
   const pinnedInsights = useTrafficStore((s) => s.pinnedInsights)
   const removePinnedInsight = useTrafficStore((s) => s.removePinnedInsight)
 
-  const [brandFilter, setBrandFilter] = useState('all')
+  // Scope follows the brand rail — no separate in-page filter. Guard a transient 'all'.
+  const brandFilter = clientFilter && clientFilter !== 'all' ? clientFilter : 'all'
   const now = Date.now()
 
   const rows = useMemo<CockpitRow[]>(
@@ -124,23 +126,12 @@ export function PortfolioCockpit({ embedded }: { embedded?: boolean }) {
         <div>
           {!embedded && <h1 className="ckpt-title">Cockpit</h1>}
           <p className="ckpt-sub">
-            {shown.length} campaign{shown.length === 1 ? '' : 's'} across {brands.length} brand
-            {brands.length === 1 ? '' : 's'}
+            {brandFilter !== 'all' && <span className="ckpt-sub-brand">{brandFilter} · </span>}
+            {shown.length} campaign{shown.length === 1 ? '' : 's'}
+            {brandFilter === 'all' ? ` across ${brands.length} brand${brands.length === 1 ? '' : 's'}` : ''}
             {` · ${live} live · ${launching} launching ≤7d`}
           </p>
         </div>
-        {brands.length > 1 && (
-          <div className="ckpt-controls">
-            <select className="ckpt-brand" value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>
-              <option value="all">All brands</option>
-              {brands.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </header>
 
       {pins.length > 0 && (

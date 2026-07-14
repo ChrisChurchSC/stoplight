@@ -1,4 +1,5 @@
 import { type Person, PEOPLE_COLUMNS, PEOPLE_FIELDS, PEOPLE_STATUSES } from '../domain/people'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordsTable } from './RecordsTable'
 import { RelatedList } from './RelatedList'
@@ -23,6 +24,12 @@ export function PeopleView() {
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const deletePerson = useTrafficStore((s) => s.deletePerson)
 
+  // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
+  const { brands } = useHomeCanvases()
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  const scoped = people.filter((p) => !p.brand || p.brand === brand)
+
   return (
     <RecordsTable<Person>
       title="People"
@@ -30,9 +37,9 @@ export function PeopleView() {
       columns={PEOPLE_COLUMNS}
       fields={PEOPLE_FIELDS}
       statuses={PEOPLE_STATUSES}
-      rows={people}
+      rows={scoped}
       noun={['person', 'people']}
-      onAdd={() => addPerson()}
+      onAdd={() => addPerson({ brand })}
       onUpdate={updatePerson}
       onDelete={deletePerson}
       relatedSlot={(person) => {

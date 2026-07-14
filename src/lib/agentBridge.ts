@@ -454,6 +454,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const stMsg = useTrafficStore.getState()
     if (!stMsg.messages.some((m) => m.name.trim().toLowerCase() === text.toLowerCase())) {
       stMsg.addMessage({
+        brand,
         name: text,
         angle: str(a.angle) || undefined,
         notes: str(a.outcome) || undefined,
@@ -481,6 +482,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const stMsg = useTrafficStore.getState()
     if (!stMsg.messages.some((m) => m.name.trim().toLowerCase() === text.toLowerCase())) {
       stMsg.addMessage({
+        brand,
         name: text,
         angle: str(a.kind) || undefined,
         notes: str(a.note) || undefined,
@@ -1113,6 +1115,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const stRec = useTrafficStore.getState()
     if (!stRec.companies.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
       stRec.addCompany({
+        brand,
         name,
         description: str(a.notes).trim() || undefined,
         website: str(a.domain).trim() || undefined,
@@ -1131,6 +1134,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
         )
       ) {
         stRec.addPerson({
+          brand,
           name: personName,
           title: m.role,
           company: name,

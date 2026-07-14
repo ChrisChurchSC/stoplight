@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { recordTint } from '../domain/records'
+import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -22,6 +23,7 @@ interface Task {
   assignee: string
   done: boolean
   createdAt: number
+  brand: string // which brand this task belongs to (scoped by the rail)
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -36,7 +38,7 @@ const load = (): Task[] => {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]')
     if (!Array.isArray(raw)) return []
-    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record) }))
+    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record), brand: t.brand ?? '' }))
   } catch {
     return []
   }
@@ -74,6 +76,9 @@ export function TasksView() {
   const companies = useTrafficStore((s) => s.companies)
   const setPage = useTrafficStore((s) => s.setPage)
   const focusRecord = useTrafficStore((s) => s.focusRecord)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  // The rail always lands on a real brand now, but guard against a transient 'all'.
+  const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickRec, setPickRec] = useState<string | null>(null)
@@ -81,25 +86,30 @@ export function TasksView() {
   const today = localDate()
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(tasks))
+    // persistState writes localStorage AND mirrors to the workspace when a backend is configured,
+    // so tasks sync per workspace (falls back to a plain localStorage write otherwise).
+    persistState(KEY, tasks)
     // Same-tab localStorage writes don't fire a 'storage' event, so tell listeners (the sidebar
     // count) directly.
     window.dispatchEvent(new Event('stoplight:tasks'))
   }, [tasks])
 
-  const openCount = tasks.filter((t) => !t.done).length
+  // Everything below is scoped to the brand selected in the rail. Any untagged task (e.g. created
+  // before scoping) shows under every brand rather than silently disappearing.
+  const brandTasks = useMemo(() => tasks.filter((t) => !t.brand || t.brand === brand), [tasks, brand])
+  const openCount = brandTasks.filter((t) => !t.done).length
 
   // Group the open tasks into due-date buckets (done tasks fall to their own section at the end).
   const groups = useMemo(() => {
-    const open = tasks.filter((t) => !t.done)
+    const open = brandTasks.filter((t) => !t.done)
     const map = new Map<Bucket, Task[]>()
     for (const b of BUCKETS) map.set(b, [])
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
     for (const list of map.values())
       list.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [tasks, today])
-  const doneTasks = useMemo(() => tasks.filter((t) => t.done), [tasks])
+  }, [brandTasks, today])
+  const doneTasks = useMemo(() => brandTasks.filter((t) => t.done), [brandTasks])
 
   // Jump to Companies and pop the linked company's record drawer.
   const openCompany = (id: string) => {
@@ -111,7 +121,7 @@ export function TasksView() {
   const addTask = () => {
     const id = freshId()
     focusId.current = id
-    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: ME, done: false, createdAt: Date.now() }])
+    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: ME, done: false, createdAt: Date.now(), brand }])
   }
 
   const row = (t: Task) => (
@@ -235,7 +245,7 @@ export function TasksView() {
     <div className="mtx tasks-view">
       <header className="mtx-head tasks-head">
         <h2>Tasks</h2>
-        <span className="mtx-sub">{openCount > 0 ? `${openCount} open` : 'A running to-do list for this workspace'}</span>
+        <span className="mtx-sub">{openCount > 0 ? `${openCount} open${brand ? ` · ${brand}` : ''}` : `A running to-do list for ${brand || 'this workspace'}`}</span>
         <button className="tasks-new" onClick={addTask}>
           ＋ New task
         </button>
@@ -250,8 +260,8 @@ export function TasksView() {
         <div className="task-cell">Assigned to</div>
       </div>
 
-      {tasks.length === 0 ? (
-        <div className="mtx-empty">No tasks yet. Add one with “＋ New task”.</div>
+      {brandTasks.length === 0 ? (
+        <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Add one with “＋ New task”.</div>
       ) : (
         <>
           {groups.map(([bucket, list]) => (

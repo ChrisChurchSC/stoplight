@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { AuthGate } from './components/AuthGate'
 import { EarlyAccessBanner } from './components/EarlyAccessBanner'
+import { MigrateBanner } from './components/MigrateBanner'
+import { InviteModal } from './components/InviteModal'
 import { Workbench } from './components/Workbench'
 import { useTrafficStore } from './store/useTrafficStore'
 
@@ -18,7 +20,9 @@ export function App() {
 
   return (
     <AuthGate>
+      <MigrateBanner />
       <Workbench />
+      <InviteModal />
       <EarlyAccessBanner />
     </AuthGate>
   )

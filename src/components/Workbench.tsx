@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
+import { claimInvite } from '../lib/session'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { GlobalNav } from './GlobalNav'
 import { HomeShell } from './HomeShell'
@@ -104,8 +106,31 @@ export function Workbench() {
   const scopedBrand = brandFromFilter ?? (brands.length === 1 ? brands[0].name : undefined) ?? undefined
 
   useEffect(() => {
-    refresh()
-    void hydrateRecords()
+    void (async () => {
+      // If the URL carries an invite token, redeem it FIRST so the shared workspace becomes active
+      // before we load data, then strip it from the address bar.
+      if (isSupabaseConfigured) {
+        const params = new URLSearchParams(window.location.search)
+        const invite = params.get('invite')
+        if (invite) {
+          await claimInvite(invite)
+          params.delete('invite')
+          const qs = params.toString()
+          window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+        }
+      }
+      await refresh()
+      await hydrateRecords()
+      // First run: a signed-in user whose workspace has no brands yet gets routed straight into
+      // "Claude sets up your workspace", instead of landing on an empty home. Once (flag-gated).
+      if (!isSupabaseConfigured) return
+      const st = useTrafficStore.getState()
+      const empty = st.brandRecords.length === 0 && st.clientList.length === 0
+      if (empty && !localStorage.getItem('stoplight.welcomed.v1')) {
+        st.openSetup()
+        try { localStorage.setItem('stoplight.welcomed.v1', '1') } catch { /* ignore */ }
+      }
+    })()
   }, [refresh, hydrateRecords])
 
   // Cmd/Ctrl+K opens Ask Claude from anywhere.
@@ -179,7 +204,6 @@ export function Workbench() {
               </>
             )}
             <div className="main">
-
               {overview ? (
                 <>
                   {/* Show freshly-ingested assets here too — otherwise an upload
@@ -234,31 +258,31 @@ export function Workbench() {
               <ReportsView scopeClient={scopedBrand} />
             </div>
           ) : page === 'records' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <CompaniesView />
             </div>
           ) : page === 'channelrecords' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <ChannelRecordsView />
             </div>
           ) : page === 'people' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <PeopleView />
             </div>
           ) : page === 'segments' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <SegmentsView />
             </div>
           ) : page === 'proofpoints' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <ProofPointsView />
             </div>
           ) : page === 'messages' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <MessagesView />
             </div>
           ) : page === 'objectives' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <ObjectivesView />
             </div>
           ) : page === 'tasks' ? (
@@ -266,7 +290,7 @@ export function Workbench() {
               <TasksView />
             </div>
           ) : page === 'brands' ? (
-            <div className="home-main-scroll">
+            <div className="home-main-page">
               <BrandsView />
             </div>
           ) : page === 'flows' ? (

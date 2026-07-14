@@ -70,10 +70,11 @@ alter table public.workspaces        enable row level security;
 alter table public.workspace_members enable row level security;
 alter table public.assets            enable row level security;
 
--- Workspaces: a member can see their workspaces; the creator owns it.
+-- Workspaces: a member can see their workspaces; the creator can also see it (needed so the
+-- INSERT ... RETURNING on first sign-in isn't blocked by RLS before membership exists).
 drop policy if exists workspaces_select on public.workspaces;
 create policy workspaces_select on public.workspaces
-  for select using (public.is_member(id));
+  for select using (public.is_member(id) or created_by = auth.uid());
 drop policy if exists workspaces_insert on public.workspaces;
 create policy workspaces_insert on public.workspaces
   for insert with check (created_by = auth.uid());
@@ -82,10 +83,50 @@ create policy workspaces_insert on public.workspaces
 drop policy if exists members_select on public.workspace_members;
 create policy members_select on public.workspace_members
   for select using (public.is_member(workspace_id));
--- A user may add themselves as the first member (owner) of a workspace they made.
+-- A user may add themselves ONLY to a workspace they created (first sign-in). Joining any other
+-- workspace goes through the claim_invite() function (security definer), so a signed-in user can't
+-- self-join an arbitrary workspace by guessing its id.
 drop policy if exists members_insert_self on public.workspace_members;
 create policy members_insert_self on public.workspace_members
-  for insert with check (user_id = auth.uid());
+  for insert with check (
+    user_id = auth.uid()
+    and workspace_id in (select id from public.workspaces where created_by = auth.uid())
+  );
+
+-- ── Invites (share a workspace by link) ─────────────────────────────────────
+-- A token an owner/editor generates; a signed-in user redeems it via claim_invite() to join the
+-- workspace. No service_role key needed — the redemption runs as a security-definer function.
+create table if not exists public.workspace_invites (
+  token        text primary key,
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  role         public.member_role not null default 'editor',
+  created_by   uuid references auth.users on delete set null,
+  created_at   timestamptz not null default now(),
+  claimed_by   uuid references auth.users on delete set null,
+  claimed_at   timestamptz
+);
+alter table public.workspace_invites enable row level security;
+-- Owners/editors of the workspace can create + see its invites.
+drop policy if exists invites_manage on public.workspace_invites;
+create policy invites_manage on public.workspace_invites
+  for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
+
+-- Redeem an invite: add the caller to the workspace as the invited role. Returns the workspace id.
+create or replace function public.claim_invite(invite_token text)
+returns uuid language plpgsql security definer as $$
+declare inv public.workspace_invites;
+declare uid uuid := auth.uid();
+begin
+  if uid is null then raise exception 'not authenticated'; end if;
+  select * into inv from public.workspace_invites where token = invite_token;
+  if inv.token is null then raise exception 'invalid invite'; end if;
+  if inv.claimed_by is not null and inv.claimed_by <> uid then raise exception 'invite already used'; end if;
+  insert into public.workspace_members (workspace_id, user_id, role)
+    values (inv.workspace_id, uid, inv.role)
+    on conflict (workspace_id, user_id) do nothing;
+  update public.workspace_invites set claimed_by = uid, claimed_at = now() where token = invite_token;
+  return inv.workspace_id;
+end $$;
 
 -- Assets: members read; editors/owners write. (Stakeholders are read-only — the
 -- server enforces the access matrix here, not the UI.)

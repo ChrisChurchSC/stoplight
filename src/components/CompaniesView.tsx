@@ -30,6 +30,8 @@ export function CompaniesView() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const segmentNames = (clientAudiences[brand] ?? []).map((a) => a.name).filter(Boolean)
+  // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
+  const scoped = companies.filter((c) => !c.brand || c.brand === brand)
 
   return (
     <RecordsTable<Company>
@@ -38,9 +40,9 @@ export function CompaniesView() {
       columns={COMPANY_COLUMNS}
       fields={COMPANY_FIELDS}
       statuses={COMPANY_STATUSES}
-      rows={companies}
+      rows={scoped}
       noun={['company', 'companies']}
-      onAdd={() => addCompany()}
+      onAdd={() => addCompany({ brand })}
       onUpdate={updateCompany}
       onDelete={deleteCompany}
       fieldOptions={{ audienceSegment: segmentNames }}

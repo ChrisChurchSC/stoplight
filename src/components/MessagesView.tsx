@@ -1,4 +1,5 @@
 import { MESSAGE_COLUMNS, MESSAGE_FIELDS, MESSAGE_STATUSES } from '../domain/message'
+import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordsTable } from './RecordsTable'
 
@@ -16,6 +17,12 @@ export function MessagesView() {
   const updateMessage = useTrafficStore((s) => s.updateMessage)
   const deleteMessage = useTrafficStore((s) => s.deleteMessage)
 
+  // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
+  const { brands } = useHomeCanvases()
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  const scoped = messages.filter((m) => !m.brand || m.brand === brand)
+
   return (
     <RecordsTable
       title="Messages"
@@ -23,9 +30,9 @@ export function MessagesView() {
       columns={MESSAGE_COLUMNS}
       fields={MESSAGE_FIELDS}
       statuses={MESSAGE_STATUSES}
-      rows={messages}
+      rows={scoped}
       noun={['message', 'messages']}
-      onAdd={() => addMessage()}
+      onAdd={() => addMessage({ brand })}
       onUpdate={updateMessage}
       onDelete={deleteMessage}
     />

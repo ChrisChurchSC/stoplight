@@ -75,14 +75,16 @@ Keep real values in Vercel's env settings (and local `.env`, which is git-ignore
 ## Known limits for the pilot (say these to users)
 
 - **Without Supabase, data is per-browser.** Clearing site data or switching devices loses it. With
-  Supabase configured it syncs per workspace, but there's **no team/sharing UI yet** — each user's
-  workspace is their own.
-- **Tasks don't sync yet** — the Tasks page is still `localStorage`-only.
+  Supabase configured it syncs per workspace. Sharing works via **invite links** (the person icon in
+  the left rail → "Invite a teammate" → share the link; the invitee signs in and joins the workspace).
+- New users are routed into the **setup flow** on first sign-in (paste a site → Claude builds a
+  starting brand + records); existing local data is carried over by the one-time **Import** banner.
 - Site-crawl onboarding and channel-connect ingests are disabled in the hosted build (local-only).
 - Rate limiting is best-effort (per warm instance). A real cross-instance limit needs Vercel KV.
 
 ## The real-product next steps
 
-Record lists and app state already sync to Supabase per workspace (RLS-enforced). Remaining to reach a
-true multi-user product: sync **Tasks**, add a **sharing/teams UI** (invite members to a workspace —
-`workspace_members` + the RLS helpers already exist), and move rate limiting to a cross-instance store.
+Record lists, tasks, library folders, and app state all sync to Supabase per workspace (RLS-enforced),
+and members join a workspace via invite links (`workspace_invites` + the `claim_invite` function).
+Remaining to reach a fuller multi-user product: a workspace switcher (users can belong to several),
+per-member role management UI, and moving rate limiting to a cross-instance store (Vercel KV).

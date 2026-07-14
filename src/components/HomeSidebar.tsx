@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { can } from '../domain/access'
-import { recordTint } from '../domain/records'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -117,6 +116,7 @@ const ICONS: Record<string, ReactNode> = {
   ),
   spark: <path d="M12 4l1.7 4.8L18.5 12l-4.8 1.7L12 18.5l-1.7-4.8L5.5 12l4.8-1.7z" />,
   caret: <path d="m6 9 6 6 6-6" />,
+  updown: <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />,
   check: <path d="m5 12.5 4.5 4.5L19 6" />,
   plus: <path d="M12 5v14M5 12h14" />,
   user: (
@@ -157,13 +157,17 @@ const ICONS: Record<string, ReactNode> = {
 
 // Open / overdue task counts for the sidebar badge. Tasks live in localStorage (see TasksView),
 // so read them straight from there; TasksView fires a 'stoplight:tasks' event on every change.
-function readTaskCounts(): { open: number; overdue: number } {
+function readTaskCounts(brand: string): { open: number; overdue: number } {
   try {
     const raw = JSON.parse(localStorage.getItem('stoplight.tasks.v1') ?? '[]')
     if (!Array.isArray(raw)) return { open: 0, overdue: 0 }
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const open = raw.filter((t: { done?: boolean }) => !t.done)
+    // Scope to the active brand; legacy tasks without a brand still count so nothing silently drops.
+    const scoped = brand
+      ? raw.filter((t: { brand?: string }) => (t.brand ?? '') === brand || !t.brand)
+      : raw
+    const open = scoped.filter((t: { done?: boolean }) => !t.done)
     return { open: open.length, overdue: open.filter((t: { due?: string }) => t.due && t.due < today).length }
   } catch {
     return { open: 0, overdue: 0 }
@@ -192,47 +196,42 @@ export function HomeSidebar() {
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const brandRecords = useTrafficStore((s) => s.brandRecords)
+  const taskBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   const role = useTrafficStore((s) => s.role)
   const reports = useTrafficStore((s) => s.reports)
-  const openAsk = useTrafficStore((s) => s.openAsk)
   const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
   const sidebarCollapsed = useTrafficStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useTrafficStore((s) => s.toggleSidebar)
   // A flow canvas forces the rail; otherwise the user's manual toggle decides.
   const railed = flowCanvasOpen || sidebarCollapsed
 
-  const [taskCounts, setTaskCounts] = useState(readTaskCounts)
+  const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
   const [chatsOpen, setChatsOpen] = useState(true)
   // Workflow sections (Build / Foundation / Go-to-market / Measure) — all open by default.
-  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Build', 'Foundation', 'Go-to-market', 'Measure']))
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Go-to-market', 'Measure']))
   const toggleSection = (label: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
       next.has(label) ? next.delete(label) : next.add(label)
       return next
     })
-  // The Brands sub-group inside Foundation lists individual brands; expanded by default.
-  const [brandOpen, setBrandOpen] = useState(true)
   const [wsOpen, setWsOpen] = useState(false)
 
   // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
   type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
   const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
     ({ key, label, ico, page: null, active, onClick, ...extra })
-  const NAV_SECTIONS: { label: string; brandGroup?: boolean; items: NavItem[] }[] = [
-    {
-      label: 'Build',
-      items: [
-        item('flows', 'Flows', 'flows', page === 'flows', () => setPage('flows')),
-        item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
-        item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
-      ],
-    },
+  // Build lives at the top as flat items (like Home) — not under a collapsible header.
+  const topItems: NavItem[] = [
+    item('flows', 'Flows', 'flows', page === 'flows', () => setPage('flows')),
+    item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
+    item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
+  ]
+  const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     {
       label: 'Foundation',
-      brandGroup: true,
       items: [
+        item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
         item('segments', 'Segments', 'segments', page === 'segments', () => setPage('segments')),
         item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
         item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),
@@ -256,54 +255,12 @@ export function HomeSidebar() {
     },
   ]
 
-  const brandList = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
-  const renderBrandGroup = () => {
-    const activeInGroup = page === 'brands'
-    const expanded = brandOpen || activeInGroup
-    return (
-      <div className="hsb-rec-group">
-        <button
-          className={`nav-item hsb-rec-parent${activeInGroup ? ' active-in' : ''}`}
-          aria-expanded={expanded}
-          onClick={() => setBrandOpen((o) => !o)}
-        >
-          <span className={`hsb-rec-chev${expanded ? ' open' : ''}`}>
-            <Ico name="caret" />
-          </span>
-          <span className="nav-label">Brands</span>
-        </button>
-        {expanded && (
-          <div className="hsb-rec-children">
-            {brandList.map((b) => (
-              <button
-                key={b.id}
-                className={`nav-item hsb-rec-child${page === 'brands' && clientFilter === b.name ? ' active' : ''}`}
-                onClick={() => {
-                  setClientFilter(b.name)
-                  setPage('brands')
-                }}
-                title={b.name}
-              >
-                <span className="nav-ico">
-                  <span className="hsb-brand-dot" style={{ background: recordTint(b.name) }}>
-                    {b.name[0]?.toUpperCase() ?? '?'}
-                  </span>
-                </span>
-                <span className="nav-label">{b.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
 
   // Keep the Tasks badge in sync: TasksView writes localStorage + fires 'stoplight:tasks'; also
   // refresh when the tab regains focus (another tab may have edited) and when the page changes.
   useEffect(() => {
-    const update = () => setTaskCounts(readTaskCounts())
+    const update = () => setTaskCounts(readTaskCounts(taskBrand))
     update()
     window.addEventListener('stoplight:tasks', update)
     window.addEventListener('focus', update)
@@ -311,7 +268,7 @@ export function HomeSidebar() {
       window.removeEventListener('stoplight:tasks', update)
       window.removeEventListener('focus', update)
     }
-  }, [page])
+  }, [page, taskBrand])
 
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
@@ -422,19 +379,6 @@ export function HomeSidebar() {
         )}
       </div>
 
-      <div className="hsb-actions">
-        <button className="hsb-qa" onClick={() => openAsk()} title="Ask Claude / quick actions">
-          <span className="hsb-qa-ic">
-            <Ico name="spark" />
-          </span>
-          <span className="hsb-qa-label">Quick actions</span>
-          <span className="hsb-kbd">⌘K</span>
-        </button>
-        <button className="hsb-srch" onClick={() => openAsk()} title="Search / ask" aria-label="Search">
-          <Ico name="search" />
-        </button>
-      </div>
-
       <nav className="sidebar-nav">
         <button
           className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
@@ -446,6 +390,15 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
+        {topItems.map((it) => (
+          <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+            <span className="nav-ico">
+              <Ico name={it.ico} />
+            </span>
+            <span className="nav-label">{it.label}</span>
+            {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
+          </button>
+        ))}
         {NAV_SECTIONS.map((sec) => {
           const open = openSections.has(sec.label)
           return (
@@ -458,7 +411,6 @@ export function HomeSidebar() {
               </button>
               {open && (
                 <div className="hsb-chat-list">
-                  {sec.brandGroup && renderBrandGroup()}
                   {sec.items.map((it) => (
                     <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
                       <span className="nav-ico">

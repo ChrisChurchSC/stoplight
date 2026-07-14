@@ -3,6 +3,7 @@ import { recordTint, type RecordColumn, type RecordField } from '../domain/recor
 import { loadRecordGrouping, saveRecordGrouping } from '../domain/recordGrouping'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
+import { RecordsChat } from './RecordsChat'
 import { BufferedInput } from './BufferedInput'
 import { SheetTabs } from './SheetTabs'
 
@@ -71,6 +72,9 @@ export function RecordsTable<T extends { id: string }>({
   // table that actually holds the id reacts, then it clears the signal.
   const focusRecordId = useTrafficStore((s) => s.focusRecordId)
   const focusRecord = useTrafficStore((s) => s.focusRecord)
+  // Brand in view (from the rail), so the assistant's edits and answers stay scoped to it.
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const chatBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   useEffect(() => {
     if (focusRecordId && rows.some((r) => r.id === focusRecordId)) {
       setOpenId(focusRecordId)
@@ -196,6 +200,19 @@ export function RecordsTable<T extends { id: string }>({
   }
 
   return (
+    <div className="rec-with-chat">
+    <RecordsChat
+      recordType={title}
+      noun={noun}
+      brand={chatBrand}
+      fields={fields}
+      statuses={statuses}
+      fieldOptions={fieldOptions}
+      rows={rows as unknown as ({ id: string } & Record<string, unknown>)[]}
+      onAdd={onAdd}
+      onUpdate={onUpdate as unknown as (id: string, patch: Partial<Record<string, unknown>>) => void}
+      onDelete={onDelete}
+    />
     <div className="rec">
       <header className="rec-head">
         <div className="rec-title">
@@ -388,6 +405,7 @@ export function RecordsTable<T extends { id: string }>({
           related={relatedSlot?.(openRecord)}
         />
       )}
+    </div>
     </div>
   )
 }

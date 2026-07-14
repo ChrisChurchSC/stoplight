@@ -8,6 +8,8 @@ import { freshRecordId, type RecordColumn, type RecordField } from './records'
  */
 export interface Company {
   id: string
+  /** Which brand's workspace this record belongs to (scoped by the rail). Untagged = shows for all. */
+  brand?: string
   name: string
   description?: string
   website?: string

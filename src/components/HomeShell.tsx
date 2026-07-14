@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { HomeSidebar } from './HomeSidebar'
+import { BrandRail } from './BrandRail'
 
 /**
  * The shared dashboard shell — files sidebar on the left, the open-canvas tab bar
@@ -12,6 +13,7 @@ import { HomeSidebar } from './HomeSidebar'
 export function HomeShell({ children }: { children: ReactNode }) {
   return (
     <div className="home-shell">
+      <BrandRail />
       <HomeSidebar />
       <div className="home-main">
         <CanvasProjectTabs />
