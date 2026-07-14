@@ -48,16 +48,40 @@ export interface BrandRecord {
   risks?: string
 }
 
-// A curated overview across the strategy sections; the full document lives in the record drawer.
+// The full communications strategy as columns, grouped into the same section bands the drawer uses
+// (Overview / Strategic Foundation / Message Architecture / Execution / Measurement) — so the Brand
+// sheet reads like every other record table, with the sections as column-group bands.
 export const BRAND_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Brand', kind: 'name', width: 220, group: 'Overview' },
-  { key: 'descriptor', label: 'Descriptor', kind: 'text', width: 220, group: 'Overview' },
+  { key: 'name', label: 'Brand', kind: 'name', width: 200, group: 'Overview' },
+  { key: 'descriptor', label: 'Descriptor', kind: 'text', width: 240, group: 'Overview' },
   { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Overview' },
+  { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', width: 150, group: 'Overview' },
+  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', width: 150, group: 'Overview' },
+  { key: 'industry', label: 'Industry', kind: 'text', width: 170, group: 'Overview' },
+  { key: 'website', label: 'Website', kind: 'url', width: 180, group: 'Overview' },
   { key: 'businessObjective', label: 'Business objective', kind: 'text', width: 300, group: 'Strategic Foundation' },
+  { key: 'commsObjective', label: 'Comms objective', kind: 'text', width: 280, group: 'Strategic Foundation' },
   { key: 'positioning', label: 'Positioning', kind: 'text', width: 300, group: 'Strategic Foundation' },
-  { key: 'keyMessage', label: 'Key message', kind: 'text', width: 260, group: 'Message Architecture' },
-  { key: 'primaryChannels', label: 'Primary channels', kind: 'text', width: 240, group: 'Execution' },
-  { key: 'primaryKpis', label: 'Primary KPIs', kind: 'text', width: 240, group: 'Measurement' },
+  { key: 'primaryAudience', label: 'Primary audience', kind: 'text', width: 260, group: 'Strategic Foundation' },
+  { key: 'audienceInsight', label: 'Audience insight', kind: 'text', width: 260, group: 'Strategic Foundation' },
+  { key: 'competitiveContext', label: 'Competitive context', kind: 'text', width: 260, group: 'Strategic Foundation' },
+  { key: 'differentiator', label: 'Differentiator', kind: 'text', width: 240, group: 'Strategic Foundation' },
+  { key: 'keyMessage', label: 'Key message', kind: 'text', width: 280, group: 'Message Architecture' },
+  { key: 'supportingMessages', label: 'Supporting messages', kind: 'text', width: 280, group: 'Message Architecture' },
+  { key: 'proofPoints', label: 'Proof points', kind: 'text', width: 280, group: 'Message Architecture' },
+  { key: 'toneOfVoice', label: 'Tone of voice', kind: 'text', width: 220, group: 'Message Architecture' },
+  { key: 'languageDos', label: "Language do's", kind: 'text', width: 200, group: 'Message Architecture' },
+  { key: 'languageDonts', label: "Language don'ts", kind: 'text', width: 200, group: 'Message Architecture' },
+  { key: 'primaryChannels', label: 'Primary channels', kind: 'text', width: 220, group: 'Execution' },
+  { key: 'secondaryChannels', label: 'Secondary channels', kind: 'text', width: 220, group: 'Execution' },
+  { key: 'contentPillars', label: 'Content pillars', kind: 'text', width: 220, group: 'Execution' },
+  { key: 'cadence', label: 'Cadence', kind: 'text', width: 180, group: 'Execution' },
+  { key: 'budgetSplit', label: 'Budget split', kind: 'text', width: 180, group: 'Execution' },
+  { key: 'keyMoments', label: 'Key moments', kind: 'text', width: 240, group: 'Execution' },
+  { key: 'primaryKpis', label: 'Primary KPIs', kind: 'text', width: 220, group: 'Measurement' },
+  { key: 'headlineTargets', label: 'Headline targets', kind: 'text', width: 220, group: 'Measurement' },
+  { key: 'reviewCadence', label: 'Review cadence', kind: 'text', width: 180, group: 'Measurement' },
+  { key: 'risks', label: 'Risks & watch-outs', kind: 'text', width: 240, group: 'Measurement' },
 ]
 
 // The full Communications Strategy, grouped into sections (shown in the record drawer).

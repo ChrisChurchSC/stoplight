@@ -50,6 +50,7 @@ import { NewClientWizard } from './NewClientWizard'
 import { OnboardingFork } from './OnboardingFork'
 import { ClaudeHandoff } from './ClaudeHandoff'
 import { SetupWizard } from './SetupWizard'
+import { Onboarding } from './Onboarding'
 import { AudienceWizard } from './AudienceWizard'
 import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
@@ -127,8 +128,8 @@ export function Workbench() {
       const st = useTrafficStore.getState()
       const empty = st.brandRecords.length === 0 && st.clientList.length === 0
       if (empty && !localStorage.getItem('stoplight.welcomed.v1')) {
-        st.openSetup()
-        try { localStorage.setItem('stoplight.welcomed.v1', '1') } catch { /* ignore */ }
+        // Full-page takeover for new users (exitOnboarding sets the welcomed flag).
+        st.startOnboarding()
       }
     })()
   }, [refresh, hydrateRecords])
@@ -333,6 +334,7 @@ export function Workbench() {
       <OnboardingFork />
       <ClaudeHandoff />
       <SetupWizard />
+      <Onboarding />
       <AudienceWizard />
       <ConnectDataNudge />
       <GettingStarted />

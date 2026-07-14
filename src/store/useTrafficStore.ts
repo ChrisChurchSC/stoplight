@@ -1662,6 +1662,10 @@ interface TrafficState {
   setupOpen: boolean
   openSetup: () => void
   closeSetup: () => void
+  /** Full-page first-run onboarding: a takeover that renders instead of the app for new users. */
+  onboardingActive: boolean
+  startOnboarding: () => void
+  exitOnboarding: () => void
   /** The "Invite teammate" modal (share the workspace by link). */
   inviteOpen: boolean
   openInvite: () => void
@@ -2176,6 +2180,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   wizardClient: null,
   audienceWizardOpen: false,
   setupOpen: false,
+  onboardingActive: false,
   inviteOpen: false,
   onboardOpen: false,
   assistedOpen: false,
@@ -3596,6 +3601,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   openSetup: () => set({ setupOpen: true }),
   closeSetup: () => set({ setupOpen: false }),
+  startOnboarding: () => set({ onboardingActive: true }),
+  exitOnboarding: () => {
+    set({ onboardingActive: false })
+    try {
+      localStorage.setItem('stoplight.welcomed.v1', '1')
+    } catch {
+      /* ignore */
+    }
+  },
   openInvite: () => set({ inviteOpen: true }),
   closeInvite: () => set({ inviteOpen: false }),
   openOnboard: () => set({ onboardOpen: true }),
