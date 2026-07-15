@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { can } from '../domain/access'
 import { recordTint } from '../domain/records'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -31,6 +32,7 @@ export function BrandRail() {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const openInvite = useTrafficStore((s) => s.openInvite)
+  const role = useTrafficStore((s) => s.role)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const brands = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
   const is = (v: string) => clientFilter === v
@@ -42,6 +44,8 @@ export function BrandRail() {
 
   // A short transition overlay when switching scope, so the change reads as "loading this brand".
   const [switching, setSwitching] = useState<string | null>(null)
+  // The account/settings dropdown anchored to the "C" avatar at the foot.
+  const [acctOpen, setAcctOpen] = useState(false)
   const go = (scope: string, label: string) => {
     if (clientFilter === scope) return
     setClientFilter(scope)
@@ -72,13 +76,46 @@ export function BrandRail() {
       <button title="Invite a teammate" onClick={openInvite} style={footBtn}>
         <RailIco size={20}><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco>
       </button>
-      <button title="Settings" onClick={() => setPage('account')} style={footBtn}>
-        <RailIco size={20}><circle cx="12" cy="12" r="3.2" /><path d="M12 2.6v2.6M12 18.8v2.6M4 7.6l2.2 1.3M17.8 15.1l2.2 1.3M4 16.4l2.2-1.3M17.8 8.9 20 7.6" /></RailIco>
-      </button>
-      <button title="Account" onClick={() => setPage('account')} style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', fontWeight: 700, fontSize: 13 }}>
+      <button title="Account & settings" aria-haspopup="menu" aria-expanded={acctOpen} onClick={() => setAcctOpen((o) => !o)} style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', fontWeight: 700, fontSize: 13, boxShadow: acctOpen ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' : undefined }}>
         C
       </button>
     </div>
+
+    {acctOpen && (
+      <>
+        <div onClick={() => setAcctOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+        <div role="menu" style={{ position: 'fixed', left: 58, bottom: 12, zIndex: 61, width: 236, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px' }}>
+            <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', background: 'var(--accent, #0e6d84)', color: '#fff', fontWeight: 800, fontSize: 12, flex: '0 0 auto' }}>C</span>
+            <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>Chris</span>
+          </div>
+          <div className="hsb-ws-sep" />
+          <button className="hsb-ws-mi" role="menuitem" onClick={() => { setPage('account'); setAcctOpen(false) }}>
+            <span className="hsb-ws-mi-ic"><RailIco><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></RailIco></span>
+            Account settings
+          </button>
+          <button className="hsb-ws-mi" role="menuitem" onClick={() => { openInvite(); setAcctOpen(false) }}>
+            <span className="hsb-ws-mi-ic"><RailIco><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco></span>
+            Invite a teammate
+          </button>
+          <button className="hsb-ws-mi" role="menuitem" onClick={() => { setPage('connectors'); setAcctOpen(false) }}>
+            <span className="hsb-ws-mi-ic"><RailIco><rect x="3.5" y="3.5" width="7" height="7" rx="1.6" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.6" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.6" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.6" /></RailIco></span>
+            Apps and integrations
+          </button>
+          {can(role, 'billing') && (
+            <button className="hsb-ws-mi" role="menuitem" onClick={() => { setPage('billing'); setAcctOpen(false) }}>
+              <span className="hsb-ws-mi-ic"><RailIco><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /></RailIco></span>
+              Billing
+            </button>
+          )}
+          <div className="hsb-ws-sep" />
+          <button className="hsb-ws-mi" role="menuitem" onClick={() => setAcctOpen(false)}>
+            <span className="hsb-ws-mi-ic"><RailIco><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></RailIco></span>
+            Sign out
+          </button>
+        </div>
+      </>
+    )}
 
     {switching && (
       <>

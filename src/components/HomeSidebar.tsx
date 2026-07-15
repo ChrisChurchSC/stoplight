@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { can } from '../domain/access'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -10,9 +9,6 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * Connect / Billing foot. Self-contained: reads counts + brands from the shared
  * hook and drives navigation via the store.
  */
-
-// The workspace/org shown in the header (the tenant, above the product). One line to change.
-const WORKSPACE = 'Super-conscious'
 
 // Thin line icons on a 24 grid; they inherit color via currentColor.
 const ICONS: Record<string, ReactNode> = {
@@ -197,7 +193,6 @@ export function HomeSidebar() {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const taskBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
-  const role = useTrafficStore((s) => s.role)
   const reports = useTrafficStore((s) => s.reports)
   const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
   const sidebarCollapsed = useTrafficStore((s) => s.sidebarCollapsed)
@@ -215,8 +210,6 @@ export function HomeSidebar() {
       next.has(label) ? next.delete(label) : next.add(label)
       return next
     })
-  const [wsOpen, setWsOpen] = useState(false)
-
   // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
   type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
   const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
@@ -272,113 +265,6 @@ export function HomeSidebar() {
 
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
-      <div className="hsb-top">
-        <button
-          className={`hsb-ws${wsOpen ? ' open' : ''}`}
-          onClick={() => setWsOpen((o) => !o)}
-          title="Workspace menu"
-          aria-haspopup="menu"
-          aria-expanded={wsOpen}
-        >
-          <span className="hsb-ws-chip">{WORKSPACE[0]}</span>
-          <span className="hsb-ws-name">{WORKSPACE}</span>
-          <span className="hsb-ws-caret">
-            <Ico name="caret" />
-          </span>
-        </button>
-
-        {wsOpen && (
-          <>
-            <div className="hsb-ws-scrim" onClick={() => setWsOpen(false)} />
-            <div className="hsb-ws-menu" role="menu">
-              <button
-                className="hsb-ws-mi hsb-ws-mi-head"
-                role="menuitemradio"
-                aria-checked="true"
-                onClick={() => {
-                  setPage('portfolio')
-                  setWsOpen(false)
-                }}
-              >
-                <span className="hsb-ws-chip sm">{WORKSPACE[0]}</span>
-                <span className="hsb-ws-mi-name">{WORKSPACE}</span>
-                <span className="hsb-ws-mi-check">
-                  <Ico name="check" />
-                </span>
-              </button>
-              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
-                <span className="hsb-ws-mi-ic">
-                  <Ico name="plus" />
-                </span>
-                New workspace
-              </button>
-
-              <div className="hsb-ws-sep" />
-
-              <button
-                className="hsb-ws-mi"
-                role="menuitem"
-                onClick={() => {
-                  setPage('account')
-                  setWsOpen(false)
-                }}
-              >
-                <span className="hsb-ws-mi-ic">
-                  <Ico name="user" />
-                </span>
-                Account settings
-              </button>
-
-              <div className="hsb-ws-sep" />
-
-              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
-                <span className="hsb-ws-mi-ic">
-                  <Ico name="userplus" />
-                </span>
-                Invite team members
-              </button>
-              {can(role, 'billing') && (
-                <button
-                  className="hsb-ws-mi"
-                  role="menuitem"
-                  onClick={() => {
-                    setPage('billing')
-                    setWsOpen(false)
-                  }}
-                >
-                  <span className="hsb-ws-mi-ic">
-                    <Ico name="billing" />
-                  </span>
-                  Billing
-                </button>
-              )}
-              <button
-                className="hsb-ws-mi"
-                role="menuitem"
-                onClick={() => {
-                  setPage('connectors')
-                  setWsOpen(false)
-                }}
-              >
-                <span className="hsb-ws-mi-ic">
-                  <Ico name="apps" />
-                </span>
-                Apps and integrations
-              </button>
-
-              <div className="hsb-ws-sep" />
-
-              <button className="hsb-ws-mi" role="menuitem" onClick={() => setWsOpen(false)}>
-                <span className="hsb-ws-mi-ic">
-                  <Ico name="signout" />
-                </span>
-                Sign out
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
       <nav className="sidebar-nav">
         <button
           className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
@@ -461,22 +347,6 @@ export function HomeSidebar() {
       </nav>
 
       <div className="sidebar-foot">
-        {role === 'owner' && (
-          <button className={`nav-item${page === 'connectors' ? ' active' : ''}`} onClick={() => setPage('connectors')} title="Connectors">
-            <span className="nav-ico">
-              <Ico name="connect" />
-            </span>
-            <span className="nav-label">Connectors</span>
-          </button>
-        )}
-        {can(role, 'billing') && (
-          <button className={`nav-item${page === 'billing' ? ' active' : ''}`} onClick={() => setPage('billing')} title="Billing">
-            <span className="nav-ico">
-              <Ico name="billing" />
-            </span>
-            <span className="nav-label">Billing</span>
-          </button>
-        )}
         {!flowCanvasOpen && (
           <button
             className="nav-item hsb-collapse"
