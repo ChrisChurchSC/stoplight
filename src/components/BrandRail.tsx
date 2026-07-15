@@ -22,7 +22,7 @@ const initials = (name: string) =>
   (name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('') || name[0] || '?').toUpperCase()
 
 const tileBase: React.CSSProperties = {
-  width: TILE, height: TILE, borderRadius: 13, display: 'grid', placeItems: 'center',
+  width: TILE, height: TILE, borderRadius: 9, display: 'grid', placeItems: 'center',
   flex: '0 0 auto', cursor: 'pointer', border: 'none', padding: 0, transition: 'box-shadow .12s, transform .12s',
 }
 const ring = (active: boolean): React.CSSProperties =>
