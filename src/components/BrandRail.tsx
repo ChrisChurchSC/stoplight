@@ -34,6 +34,7 @@ export function BrandRail() {
   const setPage = useTrafficStore((s) => s.setPage)
   const openInvite = useTrafficStore((s) => s.openInvite)
   const role = useTrafficStore((s) => s.role)
+  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const brands = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
   const is = (v: string) => clientFilter === v
@@ -93,7 +94,7 @@ export function BrandRail() {
         </button>
       ))}
 
-      <button title="Create brand" onClick={() => setPage('brands')} style={{ ...tileBase, background: 'transparent', border: '1.5px dashed var(--border-strong, #cdd5d9)', color: 'var(--text-faint, #8a969b)', boxShadow: 'none' }}>
+      <button title="Create brand" onClick={() => { addBrandRecord(); setClientFilter('New brand'); setPage('brands') }} style={{ ...tileBase, background: 'transparent', border: '1.5px dashed var(--border-strong, #cdd5d9)', color: 'var(--text-faint, #8a969b)', boxShadow: 'none' }}>
         <RailIco><path d="M12 5v14M5 12h14" /></RailIco>
       </button>
 
