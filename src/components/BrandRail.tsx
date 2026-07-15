@@ -10,7 +10,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * clientFilter, which the rest of the app filters by.
  */
 
-const TILE = 34
+const TILE = 30
 const RailIco = ({ children, size = 18 }: { children: React.ReactNode; size?: number }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {children}
@@ -53,14 +53,9 @@ export function BrandRail() {
     window.setTimeout(() => setSwitching(null), 550)
   }
 
-  const footBtn: React.CSSProperties = {
-    width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', flex: '0 0 auto',
-    cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-muted, #5a6b72)',
-  }
-
   return (
     <>
-    <div style={{ width: 50, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
+    <div style={{ width: 44, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '9px 0', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
       {brands.map((b) => (
         <button key={b.id} title={b.name} onClick={() => go(b.name, b.name)} style={{ ...tileBase, background: recordTint(b.name), color: '#fff', ...ring(is(b.name)) }}>
           <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.01em' }}>{initials(b.name)}</span>
@@ -73,10 +68,10 @@ export function BrandRail() {
 
       <div style={{ flex: 1 }} />
 
-      <button title="Invite a teammate" onClick={openInvite} style={footBtn}>
-        <RailIco size={20}><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco>
+      <button title="Invite a teammate" onClick={openInvite} style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)' }}>
+        <RailIco size={18}><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco>
       </button>
-      <button title="Account & settings" aria-haspopup="menu" aria-expanded={acctOpen} onClick={() => setAcctOpen((o) => !o)} style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', fontWeight: 700, fontSize: 13, boxShadow: acctOpen ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' : undefined }}>
+      <button title="Account & settings" aria-haspopup="menu" aria-expanded={acctOpen} onClick={() => setAcctOpen((o) => !o)} style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', fontWeight: 700, fontSize: 12, boxShadow: acctOpen ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' : undefined }}>
         C
       </button>
     </div>
@@ -84,7 +79,7 @@ export function BrandRail() {
     {acctOpen && (
       <>
         <div onClick={() => setAcctOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-        <div role="menu" style={{ position: 'fixed', left: 58, bottom: 12, zIndex: 61, width: 236, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
+        <div role="menu" style={{ position: 'fixed', left: 50, bottom: 12, zIndex: 61, width: 236, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px' }}>
             <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', background: 'var(--accent, #0e6d84)', color: '#fff', fontWeight: 800, fontSize: 12, flex: '0 0 auto' }}>C</span>
             <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>Chris</span>
