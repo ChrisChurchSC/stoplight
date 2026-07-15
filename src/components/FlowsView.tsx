@@ -3189,14 +3189,24 @@ export function FlowsView() {
           Add deliverable
           <span className="flow-tb-kbd">B</span>
         </button>
-        {viewing && viewRows.length > 0 && (
+        {viewing && (
           <>
             <span className="flow-tb-divider" />
             <button
               className="flow-tb-regen"
-              onClick={() => regenerateFlow(genIds)}
-              disabled={regenerating || genIds.length === 0}
-              title={genIds.length ? 'Generate copy for the selected card(s)' : 'Select a card to generate its copy'}
+              // A flow with assets regenerates their copy (from the current selection, as before).
+              // An empty flow has nothing to regenerate yet, so Generate seeds its first assets the
+              // same way "Add deliverable" / the AI build does — this keeps AI-built and from-scratch
+              // flows behaving identically instead of hiding the control on empty flows.
+              onClick={() => (viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds))}
+              disabled={regenerating || (viewRows.length > 0 && genIds.length === 0)}
+              title={
+                viewRows.length === 0
+                  ? 'Pick a deliverable to generate its first copy'
+                  : genIds.length
+                    ? 'Generate copy for the selected card(s)'
+                    : 'Select a card to generate its copy'
+              }
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
