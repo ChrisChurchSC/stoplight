@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { can } from '../domain/access'
 import { recordTint } from '../domain/records'
+import { createInvite } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -46,6 +47,36 @@ export function BrandRail() {
   const [switching, setSwitching] = useState<string | null>(null)
   // The account/settings dropdown anchored to the "C" avatar at the foot.
   const [acctOpen, setAcctOpen] = useState(false)
+  // The invite popover anchored to the "add teammate" button — same anchored-card pattern as the C menu.
+  const [inviteMenuOpen, setInviteMenuOpen] = useState(false)
+  const [inviteRole, setInviteRole] = useState<'editor' | 'stakeholder'>('editor')
+  const [inviteLink, setInviteLink] = useState('')
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
+  const [inviteErr, setInviteErr] = useState('')
+  const openInviteMenu = () => {
+    setInviteLink('')
+    setInviteErr('')
+    setInviteCopied(false)
+    setAcctOpen(false)
+    setInviteMenuOpen(true)
+  }
+  const genInvite = async () => {
+    setInviteBusy(true)
+    setInviteErr('')
+    const token = await createInvite(inviteRole)
+    setInviteBusy(false)
+    if (!token) {
+      setInviteErr('Could not create an invite. Make sure the backend is connected.')
+      return
+    }
+    setInviteLink(`${window.location.origin}/?invite=${token}`)
+  }
+  const copyInvite = () => {
+    void navigator.clipboard?.writeText(inviteLink)
+    setInviteCopied(true)
+    window.setTimeout(() => setInviteCopied(false), 1500)
+  }
   const go = (scope: string, label: string) => {
     if (clientFilter === scope) return
     setClientFilter(scope)
@@ -68,7 +99,7 @@ export function BrandRail() {
 
       <div style={{ flex: 1 }} />
 
-      <button title="Invite a teammate" onClick={openInvite} style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)' }}>
+      <button title="Invite a teammate" aria-haspopup="menu" aria-expanded={inviteMenuOpen} onClick={() => (inviteMenuOpen ? setInviteMenuOpen(false) : openInviteMenu())} style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', boxShadow: inviteMenuOpen ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' : undefined }}>
         <RailIco size={18}><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco>
       </button>
       <button title="Account & settings" aria-haspopup="menu" aria-expanded={acctOpen} onClick={() => setAcctOpen((o) => !o)} style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', fontWeight: 700, fontSize: 12, boxShadow: acctOpen ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' : undefined }}>
@@ -108,6 +139,40 @@ export function BrandRail() {
             <span className="hsb-ws-mi-ic"><RailIco><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></RailIco></span>
             Sign out
           </button>
+        </div>
+      </>
+    )}
+
+    {inviteMenuOpen && (
+      <>
+        <div onClick={() => setInviteMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+        <div role="menu" style={{ position: 'fixed', left: 50, bottom: 46, zIndex: 61, width: 248, padding: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', background: 'var(--accent, #0e6d84)', color: '#fff', flex: '0 0 auto' }}>
+              <RailIco size={15}><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco>
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>Invite a teammate</span>
+          </div>
+          <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.4, color: 'var(--text-muted, #5a6b72)' }}>Share a link that lets someone join this workspace. They sign in, and they&rsquo;re in.</p>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted, #5a6b72)', marginBottom: 4 }}>Their role</label>
+          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'editor' | 'stakeholder')} style={{ width: '100%', padding: '7px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, marginBottom: 10 }}>
+            <option value="editor">Editor — can view and edit</option>
+            <option value="stakeholder">Stakeholder — view only</option>
+          </select>
+          {!inviteLink ? (
+            <button className="btn primary" disabled={inviteBusy} onClick={genInvite} style={{ width: '100%' }}>
+              {inviteBusy ? 'Creating…' : 'Create invite link'}
+            </button>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input readOnly value={inviteLink} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1, minWidth: 0, padding: '7px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 12 }} />
+                <button onClick={copyInvite} style={{ flex: '0 0 auto', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>{inviteCopied ? '✓ Copied' : 'Copy'}</button>
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: 11, lineHeight: 1.4, color: 'var(--text-muted, #5a6b72)' }}>Anyone with this link who signs in joins as {inviteRole}. Create a fresh link per person.</p>
+            </>
+          )}
+          {inviteErr && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger, #c0392b)' }}>{inviteErr}</div>}
         </div>
       </>
     )}
