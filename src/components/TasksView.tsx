@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -24,6 +24,7 @@ interface Task {
   done: boolean
   createdAt: number
   brand: string // which brand this task belongs to (scoped by the rail)
+  notes: string // free-form details, shown in the task detail drawer
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -38,7 +39,7 @@ const load = (): Task[] => {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]')
     if (!Array.isArray(raw)) return []
-    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record), brand: t.brand ?? '' }))
+    return (raw as Task[]).map((t) => ({ ...t, record: normRecord(t.record), brand: t.brand ?? '', notes: t.notes ?? '' }))
   } catch {
     return []
   }
@@ -82,7 +83,7 @@ export function TasksView() {
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickRec, setPickRec] = useState<string | null>(null)
-  const focusId = useRef<string | null>(null)
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const today = localDate()
 
   useEffect(() => {
@@ -110,6 +111,8 @@ export function TasksView() {
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
   }, [brandTasks, today])
   const doneTasks = useMemo(() => brandTasks.filter((t) => t.done), [brandTasks])
+  // The task whose detail drawer is open (read live from `tasks` so edits reflect immediately).
+  const openTask = tasks.find((t) => t.id === openTaskId) ?? null
 
   // Jump to Companies and pop the linked company's record drawer.
   const openCompany = (id: string) => {
@@ -120,8 +123,9 @@ export function TasksView() {
   const remove = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id))
   const addTask = () => {
     const id = freshId()
-    focusId.current = id
-    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: ME, done: false, createdAt: Date.now(), brand }])
+    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: ME, done: false, createdAt: Date.now(), brand, notes: '' }])
+    // Open the detail drawer for the fresh task so it can be named and filled in.
+    setOpenTaskId(id)
   }
 
   const row = (t: Task) => (
@@ -138,18 +142,14 @@ export function TasksView() {
             </svg>
           )}
         </button>
-        <input
-          className="task-input task-name-input"
-          value={t.text}
-          placeholder="Task name"
-          ref={(el) => {
-            if (el && focusId.current === t.id) {
-              el.focus()
-              focusId.current = null
-            }
-          }}
-          onChange={(e) => patch(t.id, { text: e.target.value })}
-        />
+        <button
+          className="task-input task-name-input task-name-open"
+          onClick={() => setOpenTaskId(t.id)}
+          title="Open task details"
+          style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: t.text ? 'var(--text)' : 'var(--text-faint, #8a969b)', padding: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {t.text || 'Untitled task'}
+        </button>
         <button className="task-del" onClick={() => remove(t.id)} aria-label="Delete task" title="Delete">
           ✕
         </button>
@@ -241,7 +241,12 @@ export function TasksView() {
     </div>
   )
 
+  const fieldRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
+  const fieldLabel: CSSProperties = { width: 92, flex: '0 0 auto', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }
+  const fieldControl: CSSProperties = { flex: 1, minWidth: 0, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13 }
+
   return (
+    <>
     <div className="mtx tasks-view">
       <header className="mtx-head tasks-head">
         <h2>Tasks</h2>
@@ -283,5 +288,68 @@ export function TasksView() {
         </>
       )}
     </div>
+
+    {openTask && (
+      <>
+        <div onClick={() => setOpenTaskId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,24,40,.28)' }} />
+        <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+            <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => patch(openTask.id, { done: !openTask.done })} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
+              {openTask.done && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 6" /></svg>
+              )}
+            </button>
+            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed task' : 'Task'}</span>
+            <button onClick={() => { remove(openTask.id); setOpenTaskId(null) }} title="Delete task" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 13 }}>Delete</button>
+            <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+          </header>
+
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <input autoFocus value={openTask.text} placeholder="Task name" onFocus={(e) => { e.currentTarget.setSelectionRange(0, 0); e.currentTarget.scrollLeft = 0 }} onChange={(e) => patch(openTask.id, { text: e.target.value })} style={{ fontSize: 18, fontWeight: 700, border: 'none', outline: 'none', background: 'none', color: 'var(--text)', fontFamily: 'inherit', padding: 0 }} />
+
+            <div style={fieldRow}>
+              <span style={fieldLabel}>Status</span>
+              <button onClick={() => patch(openTask.id, { done: !openTask.done })} style={{ ...fieldControl, cursor: 'pointer', textAlign: 'left', color: openTask.done ? 'var(--accent-2, #0e6d84)' : 'var(--text)' }}>{openTask.done ? '✓ Done' : 'Open'}</button>
+            </div>
+
+            <div style={fieldRow}>
+              <span style={fieldLabel}>Due date</span>
+              <input type="date" value={openTask.due} onChange={(e) => patch(openTask.id, { due: e.target.value })} style={fieldControl} />
+            </div>
+
+            <div style={fieldRow}>
+              <span style={fieldLabel}>Company</span>
+              <select value={openTask.record?.id ?? ''} onChange={(e) => { const c = companies.find((c) => c.id === e.target.value); patch(openTask.id, { record: c ? { id: c.id, name: c.name } : null }) }} style={fieldControl}>
+                <option value="">—</option>
+                {openTask.record && openTask.record.id === '' && <option value="">{openTask.record.name}</option>}
+                {companies.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+              </select>
+            </div>
+            {openTask.record?.id && (
+              <div style={fieldRow}>
+                <span style={fieldLabel} />
+                <button onClick={() => { openCompany(openTask.record!.id); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open {openTask.record.name} ↗</button>
+              </div>
+            )}
+
+            <div style={fieldRow}>
+              <span style={fieldLabel}>Assignee</span>
+              <input value={openTask.assignee} placeholder="Unassigned" onChange={(e) => patch(openTask.id, { assignee: e.target.value })} style={fieldControl} />
+            </div>
+
+            <div>
+              <span style={{ ...fieldLabel, display: 'block', width: 'auto', marginBottom: 6 }}>Notes</span>
+              <textarea value={openTask.notes} placeholder="Add details, links, context…" onChange={(e) => patch(openTask.id, { notes: e.target.value })} rows={6} style={{ ...fieldControl, width: '100%', resize: 'vertical', lineHeight: 1.5 }} />
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+              <div>Brand · {openTask.brand || '—'}</div>
+              <div>Created · {new Date(openTask.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            </div>
+          </div>
+        </aside>
+      </>
+    )}
+    </>
   )
 }
