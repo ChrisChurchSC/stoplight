@@ -3899,6 +3899,7 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
 }
 /* Records-page assistant: the same chat panel docked on the LEFT, exactly like the flow canvas. */
 .rec-with-chat { display: flex; align-items: stretch; height: 100%; min-height: 0; }
@@ -3907,6 +3908,44 @@ button {
 
 /* Flow-canvas AI chat panel (left of the canvas) */
 .fchat { width: 360px; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
+/* On the flow canvas the assistant is a FLOATING CARD over the canvas (not a docked column): the
+   canvas runs full-width underneath and the card opens/closes from the launcher button. Scoped to
+   .flow-body so the Records-page assistant (same .fchat classes) keeps its docked layout. */
+.flow-body .fchat {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  width: 360px;
+  /* Stop short of the bottom so the floating card never covers the canvas toolbar (zoom/tools);
+     long chats scroll inside the thread. */
+  max-height: calc(100% - 96px);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.18);
+}
+.flow-body .fchat-head { border-radius: 14px 14px 0 0; }
+.flow-body .fchat-composer { border-radius: 0 0 14px 14px; }
+/* Floating launcher that opens the card (replaces the docked rail on the canvas). */
+.fchat-launch {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--surface);
+  border-radius: 11px;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.10);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+.fchat-launch:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(16, 24, 40, 0.14); }
+.fchat-launch .fchat-spark { font-size: 16px; }
 .fchat-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .fchat-spark { color: var(--accent); font-size: 14px; }
 .fchat-title { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); }
@@ -4001,8 +4040,9 @@ button {
 .fchat-rail .fchat-spark { font-size: 15px; }
 /* Keep the toolbar centered over the canvas as panels collapse (48px rail vs 360px panel).
    Offset from 50% is (leftWidth - rightWidth)/2; equal panels cancel out. */
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 156px); }
-.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
+/* Chat is a floating overlay (no width); when the brief panel collapses to its 48px rail the
+   canvas re-centers, so pull the toolbar back to half the rail width. */
+.flow.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
 .flow-canvas {
   flex: 1;
   min-width: 0;
@@ -4040,6 +4080,65 @@ button {
 .flow-vcol .flow-branched {
   width: 100%;
 }
+/* Goal card — a tiny card tucked just under the campaign brief node (its positioning context), so
+   it reads as attached to the brief and drags with it. A thin connector bridges the small gap. It
+   carries the flow's north-star goal plus a red/amber/green read on whether it'll get there. */
+.flow-goal-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 7px);
+  z-index: 4;
+  /* Same width + campaign-tinted fill as the brief above, so the goal reads as part of it. */
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 10px;
+  padding: 7px 9px 8px;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+  cursor: default;
+}
+/* A caret pointing up from the card's top into the gap, so the goal reads as tethered to the brief
+   above it. ::before is the 1px outline triangle; ::after is the fill, 1px smaller, so only a thin
+   border shows on the slanted edges and the base merges into the card. */
+.flow-goal-card::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.flow-goal-card::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.flow-goal-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.flow-goal-eyebrow {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-2, #0e6d84);
+}
+/* The goal is a clickable tag chip (like the record tags) that opens the objective picker. */
+.flow-goal-tagbtn { display: inline-flex; max-width: 100%; margin-top: 5px; background: none; border: 0; padding: 0; cursor: pointer; }
+.flow-goal-card .flow-goal-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 600; }
+.flow-goal-tagbtn:hover .flow-goal-tag:not(.missing-tag) { border-color: var(--accent); color: var(--accent); }
+.flow-goal-pick { left: 0; right: 0; min-width: 0; }
+.flow-goal-meta { margin-top: 1px; font-size: 10.5px; color: var(--text-muted); }
+.flow-goal-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
+.flow-goal-dot.lvl-green { background: #1f9d55; }
+.flow-goal-dot.lvl-amber { background: #d9a400; }
+.flow-goal-dot.lvl-red { background: #c0392b; }
+.flow-goal-why { margin-top: 5px; font-size: 10.5px; line-height: 1.4; color: var(--text-muted); }
 .flow-node {
   position: relative;
   background: var(--surface);
@@ -5582,9 +5681,9 @@ button {
 /* Bottom canvas controls: zoom · pan/select tools · Add block. */
 .flow-toolbar {
   position: absolute;
-  /* Centered over the canvas: the left chat panel and right brief panel are both 360px,
-     so they cancel out and the flow's 50% is the canvas center. */
-  left: 50%;
+  /* Centered over the canvas. The chat is now a floating overlay (no layout width), so only the
+     right brief panel (360px) shifts the canvas center — pull the toolbar left by half of it. */
+  left: calc(50% - 180px);
   bottom: 20px;
   transform: translateX(-50%);
   display: flex;
@@ -5973,6 +6072,9 @@ button {
   fill: none;
   stroke: var(--text-faint);
   stroke-width: 1;
+  /* Dotted connectors: round caps on a tight dash pattern render as beads along the path. */
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
   pointer-events: stroke;
   cursor: pointer;
 }
@@ -24244,7 +24346,22 @@ table.aud-sheet td.stick .aud-cell {
    A hairline separates "what it is" from "who / where / why"; labels align in a left column and
    chips recede, so the only thing that earns color is a missing required category. */
 .flow-node-taggroups { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; padding-top: 9px; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
-.flow-node-taggroup { display: flex; align-items: center; gap: 8px; }
+.flow-node-taggroup { display: flex; align-items: center; gap: 8px; position: relative; }
+/* The chips row is a button: clicking it opens the record picker for that category on the card. */
+.flow-node-tagedit { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; background: none; border: 0; margin: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.flow-node-tagedit:hover .flow-node-tag:not(.missing-tag) { border-color: var(--accent); color: var(--accent); }
+/* Inline record picker anchored under a card's tag row (and reused by the goal card). */
+.flow-tagpick-scrim { position: fixed; inset: 0; z-index: 40; }
+.flow-tagpick { position: absolute; top: calc(100% + 5px); left: 23px; z-index: 41; min-width: 168px; max-width: 230px; max-height: 244px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 10px; box-shadow: 0 14px 36px rgba(16, 24, 40, 0.2); padding: 5px; cursor: default; }
+.flow-tagpick-group + .flow-tagpick-group { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+.flow-tagpick-head { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); padding: 5px 8px 3px; }
+.flow-tagpick-empty { font-size: 11px; color: var(--text-faint); padding: 3px 8px 5px; }
+.flow-tagpick-item { width: 100%; display: flex; align-items: center; gap: 6px; border: 0; background: none; text-align: left; cursor: pointer; border-radius: 7px; padding: 6px 8px; font: inherit; font-size: 12px; color: var(--text); }
+.flow-tagpick-item:hover { background: var(--surface-2); }
+.flow-tagpick-item.on { color: var(--accent); font-weight: 600; }
+.flow-tagpick-check { flex: 0 0 auto; width: 12px; color: var(--accent); font-size: 11px; }
+.flow-tagpick-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-tagpick-clear { color: var(--text-muted); }
 /* One icon per category (audience / channel / proof) leads each row. */
 .flow-node-taggroup-ic { flex: 0 0 auto; width: 15px; height: 15px; display: inline-flex; color: var(--text-faint); }
 .flow-node-taggroup-ic svg { width: 15px; height: 15px; }

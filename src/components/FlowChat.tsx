@@ -79,13 +79,12 @@ export function FlowChat({
   }
   const examples = flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
 
+  // Collapsed: a floating launcher over the canvas (no sidebar rail), click to open the card.
   if (collapsed) {
     return (
-      <div className="fchat-rail">
-        <button className="fchat-rail-btn" title="Open flow assistant" aria-label="Open flow assistant" onClick={() => onCollapse(false)}>
-          <span className="fchat-spark" aria-hidden="true">✦</span>
-        </button>
-      </div>
+      <button className="fchat-launch" title="Open flow assistant" aria-label="Open flow assistant" onClick={() => onCollapse(false)}>
+        <span className="fchat-spark" aria-hidden="true">✦</span>
+      </button>
     )
   }
 

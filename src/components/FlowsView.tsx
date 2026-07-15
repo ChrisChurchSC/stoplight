@@ -112,10 +112,28 @@ const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
 // Most chips a record-tag row shows before collapsing the rest into a "+N" pill, so a card stays
 // one clean line per category instead of clipping tags mid-word.
 const TAG_CAP = 2
-// A node card's record tags, grouped into card categories (Audience / Channel / Proof). Each
-// chip carries its own record-type icon so a mixed Audience row still shows segment vs company
-// vs person. `overridden` tints a deliverable whose records differ from the campaign's.
-function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
+type RecordOptionGroup = { type: FlowRefType; label: string; items: { id: string; label: string }[] }
+// A node card's record tags, grouped into card categories (Audience / Channel / Proof). Each group
+// is CLICKABLE: clicking its chips (or its "Needs …" flag) opens an inline picker to add/remove the
+// records for that category right on the card. `overridden` tints a deliverable whose records
+// differ from the campaign's. `ops` writes to the right target (campaign brief or a deliverable).
+function CardTags({ tags, overridden, ops, recordGroups }: {
+  tags: FlowReference[]
+  overridden: boolean
+  ops: TagOps
+  recordGroups: RecordOptionGroup[]
+}) {
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const stop = (e: ReactMouseEvent) => e.stopPropagation()
+  // Close the picker on any click outside it. A fixed-position scrim can't cover the viewport from
+  // inside the zoom-transformed canvas, so listen on the document instead.
+  useEffect(() => {
+    if (!openKey) return
+    const onDown = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setOpenKey(null) }
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [openKey])
   const groups = CARD_GROUPS
     .map((g) => ({ ...g, items: tags.filter((t) => g.types.includes(t.type)) }))
     .filter((g) => g.items.length || g.required)
@@ -124,29 +142,59 @@ function renderCardTags(tags: FlowReference[], overridden: boolean): ReactNode {
     <div className={`flow-node-taggroups${overridden ? ' overridden' : ''}`} title={overridden ? 'Overriding the campaign records' : undefined}>
       {groups.map((g) => {
         const missing = g.required && !g.items.length
+        const open = openKey === g.key
+        const optionGroups = recordGroups.filter((rg) => g.types.includes(rg.type))
         return (
           <div key={g.key} className={`flow-node-taggroup${g.required ? ' required' : ''}${missing ? ' missing' : ''}`}>
             <span className="flow-node-taggroup-ic" title={g.label} aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{g.icon}</svg>
             </span>
             <div className="flow-node-taggroup-chips">
-              {g.items.length ? (
-                <>
-                  {g.items.slice(0, TAG_CAP).map((r) => (
-                    <span key={`${r.type}:${r.id}`} className="flow-node-tag" title={`${g.label} · ${RECORD_TYPE_LABEL[r.type]}: ${r.label}`}>
-                      {r.label}
-                    </span>
-                  ))}
-                  {g.items.length > TAG_CAP && (
-                    <span className="flow-node-tag flow-node-tag-more" title={g.items.slice(TAG_CAP).map((r) => r.label).join(', ')}>
-                      +{g.items.length - TAG_CAP}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className="flow-node-tag missing-tag">Needs {g.need}</span>
-              )}
+              <button
+                type="button"
+                className="flow-node-tagedit"
+                title={`Choose ${g.label.toLowerCase()} records`}
+                onMouseDown={stop}
+                onClick={(e) => { stop(e); setOpenKey(open ? null : g.key) }}
+              >
+                {g.items.length ? (
+                  <>
+                    {g.items.slice(0, TAG_CAP).map((r) => (
+                      <span key={`${r.type}:${r.id}`} className="flow-node-tag">{r.label}</span>
+                    ))}
+                    {g.items.length > TAG_CAP && (
+                      <span className="flow-node-tag flow-node-tag-more">+{g.items.length - TAG_CAP}</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="flow-node-tag missing-tag">Needs {g.need}</span>
+                )}
+              </button>
             </div>
+            {open && (
+                  <div className="flow-tagpick" ref={menuRef} onMouseDown={stop} onClick={stop}>
+                    {optionGroups.map((rg) => (
+                      <div key={rg.type} className="flow-tagpick-group">
+                        <div className="flow-tagpick-head">{rg.label}</div>
+                        {rg.items.length === 0 && <div className="flow-tagpick-empty">None yet</div>}
+                        {rg.items.map((it) => {
+                          const on = ops.has(rg.type, it.id)
+                          return (
+                            <button
+                              key={it.id}
+                              type="button"
+                              className={`flow-tagpick-item${on ? ' on' : ''}`}
+                              onClick={(e) => { stop(e); on ? ops.remove(`${rg.type}:${it.id}`) : ops.add(rg.type, it.id, it.label) }}
+                            >
+                              <span className="flow-tagpick-check" aria-hidden="true">{on ? '✓' : ''}</span>
+                              <span className="flow-tagpick-lbl">{it.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+              )}
           </div>
         )
       })}
@@ -378,6 +426,9 @@ export function FlowsView() {
   const connectFromRef = useRef<string | null>(null)
   connectFromRef.current = connectFrom
   const [building, setBuilding] = useState(false)
+  // The goal card's objective picker (open state), so you can link/change the goal on the card.
+  const [goalPickOpen, setGoalPickOpen] = useState(false)
+  const goalPickRef = useRef<HTMLDivElement>(null)
   // Build always writes copy now (the toggle was removed); kept as a constant so the
   // preview + build paths that reference it stay unchanged.
   const writeCopy = true
@@ -398,7 +449,9 @@ export function FlowsView() {
   // Flow-canvas AI chat (agentic: it edits the flow from chat).
   const [chatMsgs, setChatMsgs] = useState<FlowChatMsg[]>([])
   const [chatBusy, setChatBusy] = useState(false)
-  const [chatCollapsed, setChatCollapsed] = useState(false)
+  // Start collapsed: the assistant rests as a floating launcher over the canvas and opens into a
+  // card when clicked, so the canvas is clean by default.
+  const [chatCollapsed, setChatCollapsed] = useState(true)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
   const chatCollapsedRef = useRef(chatCollapsed)
@@ -457,7 +510,14 @@ export function FlowsView() {
   // Free-move: per-card translate offsets, applied on top of the layout. Dragging a
   // selected card moves the whole selection.
   const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({})
-  const dragging = useRef<{ ids: string[]; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
+  // ids = nodes whose OWN pos we move; visualIds = every node that visually shifts by the drag
+  // delta (the moved nodes plus any children carried along inside a moved parent's transform), so
+  // connectors track them all. Splitting the two is what stops nested children double-moving.
+  const dragging = useRef<{ ids: string[]; visualIds: string[]; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
+  // Live drag delta for the nodes currently being dragged, in canvas units. Connectors read this
+  // so their endpoints move in the SAME commit as the cards (see connRect) — instead of waiting on
+  // a per-frame rect remeasure, which rubber-bands the lines behind the cards on a big flow.
+  const [dragDelta, setDragDelta] = useState<{ ids: string[]; dx: number; dy: number } | null>(null)
   // Connectors between nodes, plus the in-progress drag and measured node rects.
   const canvasRef = useRef<HTMLDivElement>(null)
   // Zoom + pan mirrored into refs so the wheel handler reads the latest values without a
@@ -546,13 +606,22 @@ export function FlowsView() {
     // Shift/Cmd-click is a multi-select toggle (handled on click) — don't reset the selection or
     // start a drag on that gesture.
     if (e.shiftKey || e.metaKey || e.ctrlKey) return
-    const ids = selected.has(id) && selected.size ? [...selected] : [id]
-    if (!selected.has(id)) setSelected(new Set(ids))
+    const selIds = selected.has(id) && selected.size ? [...selected] : [id]
+    if (!selected.has(id)) setSelected(new Set(selIds))
+    const selSet = new Set(selIds)
+    // Move only nodes whose parent isn't ALSO in the drag — a child inside a moving parent's
+    // transform is carried along, so moving its own pos too would double it.
+    const moveIds = selIds.filter((i) => { const p = nodeParent.get(i); return !(p && selSet.has(p)) })
+    const moveSet = new Set(moveIds)
+    // Connectors, though, must track every node that visually shifts: the moved nodes plus the
+    // children carried inside them (whether or not those children were selected).
+    const carried: string[] = []
+    for (const [child, parent] of nodeParent) if (moveSet.has(parent) && !moveSet.has(child)) carried.push(child)
     const start: Record<string, { x: number; y: number }> = {}
-    ids.forEach((i) => {
+    moveIds.forEach((i) => {
       start[i] = pos[i] ?? { x: 0, y: 0 }
     })
-    dragging.current = { ids, x: e.clientX, y: e.clientY, start }
+    dragging.current = { ids: moveIds, visualIds: [...moveIds, ...carried], x: e.clientX, y: e.clientY, start }
     dragSnapRef.current = { ...pos } // layout before this drag, committed to undo history on drop
     dragMovedRef.current = false
   }
@@ -952,6 +1021,47 @@ export function FlowsView() {
   const viewPaidRows = useMemo(() => viewRows.filter((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid'), [viewRows])
   const campaignBudget = viewCampaign?.overallBudget ?? 0
   const assignedBudget = useMemo(() => viewPaidRows.reduce((sum, r) => sum + (r.budget?.amount ?? 0), 0), [viewPaidRows])
+  // The Goal card's lightweight readiness read: does this flow plausibly support its goal? A
+  // heuristic (not a forecast) over asset volume, channel spread, paid coverage and budget vs the
+  // goal type — enough to eyeball "will brief → deliverables → goal actually get there?".
+  const goalRead = useMemo(() => {
+    const objective = viewCampaign?.objective?.trim() || ''
+    const kpi = viewCampaign?.goalKpi?.trim() || ''
+    const target = viewCampaign?.goalTarget
+    const text = `${objective} ${kpi}`.toLowerCase()
+    const conversionGoal = /convert|conversion|sign\s?up|signup|\blead|revenue|\bsale|mql|sql|demo|trial|purchas|subscrib|\bbook/.test(text)
+    const assets = viewRows.length
+    const channels = new Set(viewRows.map((r) => r.channel)).size
+    const hasPaid = viewPaidRows.length > 0
+    const budget = viewCampaign?.overallBudget ?? 0
+    let level: 'red' | 'amber' | 'green' = 'green'
+    let why = ''
+    if (!objective) { level = 'amber'; why = 'No goal linked yet — link an objective to judge fit.' }
+    else if (assets === 0) { level = 'red'; why = 'No assets yet — add a deliverable and generate its copy.' }
+    else if (conversionGoal && !hasPaid) { level = 'amber'; why = 'Conversion goal, but no paid media to drive the volume — add a paid channel.' }
+    else if (budget > 0 && !hasPaid) { level = 'amber'; why = `$${budget.toLocaleString()} budget set, but no paid placement to spend it on.` }
+    else if (channels < 2) { level = 'amber'; why = `Only ${channels} channel — diversify to reach the goal more reliably.` }
+    else { level = 'green'; why = `Good coverage: ${assets} assets across ${channels} channels${hasPaid ? ', incl. paid' : ''}.` }
+    return { objective, kpi, target, level, why }
+  }, [viewCampaign, viewRows, viewPaidRows])
+  // Link (or clear) the flow's goal from the goal card: write the objective's name + KPI + target
+  // onto the campaign, exactly like the brief's Objective select does.
+  const linkObjective = (o: (typeof objectives)[number] | null) => {
+    if (!viewName) return
+    patchCampaign(viewName, {
+      objective: o?.name || undefined,
+      goalKpi: o?.metric?.trim() || undefined,
+      goalTarget: o?.target ? Number(String(o.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
+    })
+    setGoalPickOpen(false)
+  }
+  // Close the goal picker on any outside click (a fixed scrim can't cover the zoomed canvas).
+  useEffect(() => {
+    if (!goalPickOpen) return
+    const onDown = (e: MouseEvent) => { if (!goalPickRef.current?.contains(e.target as Node)) setGoalPickOpen(false) }
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [goalPickOpen])
   const assignEvenly = () => {
     if (!viewPaidRows.length || campaignBudget <= 0) return
     const each = Math.floor(campaignBudget / viewPaidRows.length)
@@ -1390,6 +1500,38 @@ export function FlowsView() {
     return s
   }, [viewName, viewDelivs, nodes])
 
+  // Which node's transform CARRIES each nested child. Post cards render inside their deliverable's
+  // translated container (and build sub-cards inside their deliverable's), so a child's on-screen
+  // position already includes its parent's pos. Dragging a parent moves the child for free — the
+  // child must NOT also move its own pos, or it drifts at double speed. This map drives that.
+  const nodeParent = useMemo(() => {
+    const m = new Map<string, string>()
+    if (viewName !== null) {
+      for (const d of viewDelivs) for (const r of d.rows) m.set(r.id, d.key)
+    } else {
+      for (const n of nodes) {
+        const p = presetByKey(n.presetKey)
+        if (!p) continue
+        const slots = subcardCount(p, n.perMonth)
+        for (let bi = 0; bi < slots; bi++) m.set(`${n.id}:${bi}`, n.id)
+      }
+    }
+    return m
+  }, [viewName, viewDelivs, nodes])
+
+  // A node's rect for connector drawing: its measured rect, but while it's being dragged, offset
+  // live by the current drag delta (canvas units → screen px via the zoom scale). This is what
+  // keeps a connector glued to its card mid-drag without a per-frame remeasure.
+  const connRect = (id: string) => {
+    const r = rects[id]
+    if (!r) return undefined
+    if (dragDelta && dragDelta.ids.includes(id)) {
+      const s = zoom / 100
+      return { x: r.x + dragDelta.dx * s, y: r.y + dragDelta.dy * s, w: r.w, h: r.h }
+    }
+    return r
+  }
+
   // The campaign name this flow builds into (must match build()'s naming) — used to scope
   // the real Grid / Calendar to just this flow's assets.
   const flowCampaign = viewName ?? `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
@@ -1397,8 +1539,15 @@ export function FlowsView() {
   const hasBuiltRows = useTrafficStore((s) => s.rows.some((r) => r.campaign === flowCampaign))
 
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
-  // move, pan, and zoom.
+  // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's
+  // bounding rect each frame can't keep 60fps on a large flow, so connectors would trail the
+  // cards. Instead the dragged nodes' endpoints are offset live by dragDelta (see connRect), and
+  // dragDelta flipping back to null on drop re-runs this once to capture the final geometry.
+  // viewDelivs + varTreeH are deps too: adding/removing assets reflows the branch columns, so we
+  // must remeasure IN THE SAME COMMIT (before paint) or the connectors paint against stale rects
+  // for a frame and visibly break-then-reconnect as the layout settles.
   useLayoutEffect(() => {
+    if (dragging.current) return
     const cv = canvasRef.current
     if (!cv) return
     const cr = cv.getBoundingClientRect()
@@ -1410,7 +1559,7 @@ export function FlowsView() {
     })
     setRects(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, briefCollapsed])
+  }, [nodes, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, briefCollapsed, dragDelta, viewDelivs, varTreeH])
 
   // Once a just-created card is measured, nudge it to where it was dropped.
   useEffect(() => {
@@ -1977,6 +2126,10 @@ export function FlowsView() {
                 })
                 return next
               })
+              // Move the connectors in lockstep with the cards this same commit (rect remeasure is
+              // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
+              // visualIds includes carried children so their edges track without moving their pos.
+              setDragDelta({ ids: d.visualIds, dx, dy })
             } else if (pan.current) {
               setOffset({ x: pan.current.ox + (e.clientX - pan.current.x), y: pan.current.oy + (e.clientY - pan.current.y) })
             } else if (marqueeStart.current) {
@@ -2031,6 +2184,8 @@ export function FlowsView() {
             dragMovedRef.current = false
             pan.current = null
             dragging.current = null
+            // Drag done: clearing dragDelta re-runs the remeasure effect to lock in final geometry.
+            if (dragDelta) setDragDelta(null)
           }}
           onMouseLeave={() => {
             pan.current = null
@@ -2040,6 +2195,7 @@ export function FlowsView() {
             addDrag.current = null
             setMarquee(null)
             setDrawing(null)
+            if (dragDelta) setDragDelta(null)
           }}
         >
           <svg className="flow-edges" width="100%" height="100%">
@@ -2049,15 +2205,15 @@ export function FlowsView() {
               </marker>
             </defs>
             {implicitConnectors.map((cn) => {
-              const a = rects[cn.from]
-              const b = rects[cn.to]
+              const a = connRect(cn.from)
+              const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
               return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)} />
             })}
             {connectors.map((cn, i) => {
-              const a = rects[cn.from]
-              const b = rects[cn.to]
+              const a = connRect(cn.from)
+              const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
               return (
@@ -2070,9 +2226,9 @@ export function FlowsView() {
               )
             })}
             {drawing &&
-              rects[drawing.from] &&
+              connRect(drawing.from) &&
               (() => {
-                const a = rects[drawing.from]
+                const a = connRect(drawing.from)!
                 return <path className="flow-edge drawing" d={elbowPath(a.x + a.w, a.y + a.h / 2, drawing.x, drawing.y, zoom / 100)} markerEnd="url(#flow-arrow)" />
               })()}
             {menuAnchor && <path className="flow-edge drawing" d={elbowPath(menuAnchor.sx, menuAnchor.sy, menuAnchor.x, menuAnchor.y + 26)} markerEnd="url(#flow-arrow)" />}
@@ -2128,7 +2284,7 @@ export function FlowsView() {
                   <div className="flow-node-desc">
                     {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week flight`}
                   </div>
-                  {renderCardTags(viewing ? flowRefs : briefRefsEffective, false)}
+                  <CardTags tags={viewing ? flowRefs : briefRefsEffective} overridden={false} ops={campaignTagOps} recordGroups={recordGroups} />
                 </div>
               </div>
               {!viewing && (
@@ -2137,6 +2293,48 @@ export function FlowsView() {
                   <button className="flow-plus" title="Drag out to add" onMouseDown={(e) => startAdd(e, nodes.length, 'campaign')}>
                     +
                   </button>
+                </div>
+              )}
+              {/* Goal: a tiny card tucked just under the brief so it reads as attached to it —
+                  the flow's north-star plus a red/amber/green read on whether it'll get there. */}
+              {viewing && (
+                <div className="flow-goal-card" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                  <div className="flow-goal-head">
+                    <span className="flow-goal-eyebrow">Goal</span>
+                    <span className={`flow-goal-dot lvl-${goalRead.level}`} title={goalRead.why} aria-hidden="true" />
+                  </div>
+                  <button type="button" className="flow-goal-tagbtn" title="Choose the goal for this flow" onClick={() => setGoalPickOpen((o) => !o)}>
+                    <span className={`flow-node-tag flow-goal-tag${goalRead.objective ? '' : ' missing-tag'}`}>{goalRead.objective || 'Needs a goal'}</span>
+                  </button>
+                  {goalRead.objective && (goalRead.kpi || goalRead.target != null) && (
+                    <div className="flow-goal-meta">
+                      {[goalRead.kpi, goalRead.target != null ? `Target ${goalRead.target.toLocaleString()}` : ''].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
+                  <div className="flow-goal-why">{goalRead.why}</div>
+                  {goalPickOpen && (
+                      <div className="flow-tagpick flow-goal-pick" ref={goalPickRef} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                        <div className="flow-tagpick-group">
+                          <div className="flow-tagpick-head">Objectives</div>
+                          {objectives.length === 0 && <div className="flow-tagpick-empty">No objectives yet</div>}
+                          {objectives.map((o) => {
+                            const on = o.name === goalRead.objective
+                            return (
+                              <button key={o.id} type="button" className={`flow-tagpick-item${on ? ' on' : ''}`} onClick={() => linkObjective(o)}>
+                                <span className="flow-tagpick-check" aria-hidden="true">{on ? '✓' : ''}</span>
+                                <span className="flow-tagpick-lbl">{o.name}</span>
+                              </button>
+                            )
+                          })}
+                          {goalRead.objective && (
+                            <button type="button" className="flow-tagpick-item flow-tagpick-clear" onClick={() => linkObjective(null)}>
+                              <span className="flow-tagpick-check" aria-hidden="true" />
+                              <span className="flow-tagpick-lbl">Clear goal</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2171,7 +2369,7 @@ export function FlowsView() {
                             <div className="flow-node-text">
                               <div className="flow-node-label">{d.label}</div>
                               <div className="flow-node-desc">×{d.count}</div>
-                              {renderCardTags(delivEffRefs(d), d.rows.some((r) => r.references && r.references.length))}
+                              <CardTags tags={delivEffRefs(d)} overridden={d.rows.some((r) => r.references && r.references.length)} ops={delivTagOps(d)} recordGroups={recordGroups} />
                             </div>
                           </div>
                         </div>
@@ -2339,12 +2537,12 @@ export function FlowsView() {
               top of each card's edge instead of tucking behind it. */}
           <svg className="flow-edges-top" width="100%" height="100%">
             {implicitConnectors.map((cn) => {
-              const b = rects[cn.to]
+              const b = connRect(cn.to)
               if (!b) return null
               return <circle key={`d-${cn.from}-${cn.to}`} className="flow-edge-dot" cx={b.x} cy={b.y + b.h / 2} r={2.5} />
             })}
             {connectors.map((cn, i) => {
-              const b = rects[cn.to]
+              const b = connRect(cn.to)
               if (!b) return null
               return <circle key={`dm-${cn.from}-${cn.to}-${i}`} className="flow-edge-dot" cx={b.x} cy={b.y + b.h / 2} r={2.5} />
             })}
