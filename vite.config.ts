@@ -411,6 +411,32 @@ function draftChannelsApi(): PluginOption {
   }
 }
 
+/** Dev-server endpoint for "Ingest a brand's site content". Plain fetch, no key needed. */
+function ingestSiteApi(): PluginOption {
+  return {
+    name: 'ingest-site-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ingest-site', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runIngestSite } = await import('./server/ingestSiteHandler')
+            const result = await runIngestSite(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            res.statusCode = 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 /**
  * Dev-server endpoint for "Generate a media mix with Claude". Keeps the Anthropic
  * key server-side; mirrors /api/claude-ask.
@@ -1028,6 +1054,7 @@ export default defineConfig(({ mode }) => {
       draftVoicesApi(),
       draftObjectivesApi(),
       draftChannelsApi(),
+      ingestSiteApi(),
       setupApi(),
       askApi(),
       mediaMixApi(),

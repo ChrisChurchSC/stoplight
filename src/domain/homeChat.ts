@@ -37,6 +37,8 @@ export interface HomeChatMsg {
   channelDone?: boolean
   /** When set, this message is a step in the guided foundation flow; renders Draft/Skip buttons. */
   flowStep?: string
+  /** Set on the message that announces ingested site content, to render a "View Library" link. */
+  ingestDone?: boolean
 }
 
 /** A saved Home chat conversation — listed in the sidebar and reopenable. */

@@ -6,7 +6,9 @@ import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
+import { ingestSite } from '../adapters/ask/ingestSite'
 import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
 import { freshRecordId } from '../domain/records'
@@ -97,6 +99,7 @@ export function HomeChat() {
   const addMessage = useTrafficStore((s) => s.addMessage)
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addObjective = useTrafficStore((s) => s.addObjective)
+  const importAssets = useTrafficStore((s) => s.importAssets)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const openFlow = useTrafficStore((s) => s.openFlow)
@@ -125,6 +128,8 @@ export function HomeChat() {
   const setupRef = useRef<{ step: number; brand: string; audience?: string } | null>(null)
   // The last thing the chat DID (e.g. 'proof'), so a follow-up like "more" continues that action.
   const lastActionRef = useRef<string | null>(null)
+  // When we've asked for the brand's website (to ingest content), the next message is read as the URL.
+  const awaitingSiteRef = useRef(false)
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -420,6 +425,38 @@ export function HomeChat() {
     lastActionRef.current = 'channel'
   }
 
+  // Ingest the brand's real published content (its website pages) into the Library. Needs the brand's
+  // website; if it's not on file, ask for it (the next message is read as the URL). Uses a plain-fetch
+  // server endpoint (works in production), then importAssets files the pages as Library content.
+  const ingestBrandContent = async (urlOverride?: string) => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('content'); return }
+    const profile = (store.clientProfiles[brand] ?? {}) as { website?: string }
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const website = (urlOverride || profile.website || rec.website || '').trim()
+    if (!website) {
+      awaitingSiteRef.current = true
+      say(`What's **${brand}**'s website? Paste the URL and I'll pull your existing content into the Library.`)
+      return
+    }
+    awaitingSiteRef.current = false
+    if (urlOverride && !profile.website) setClientProfile(brand, { website })
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Reading ${website.replace(/^https?:\/\//, '')}` }] }])
+    const items = await ingestSite(website)
+    if (!items.length) {
+      setMessages((m) => m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I couldn't read content from ${website}. Double-check the URL, or add content manually in the Library.` } : x)))
+      return
+    }
+    const result = await importAssets(brand, CONTENT_LIBRARY_CAMPAIGN, items, 'site')
+    const parts = [`I pulled **${result.imported}** piece${result.imported === 1 ? '' : 's'} of content from ${brand}'s site into your Library`]
+    if (result.updated) parts.push(`refreshed ${result.updated}`)
+    if (result.skipped) parts.push(`skipped ${result.skipped} already there`)
+    setMessages((m) => m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `${parts.join(', ')}. Open the Library to review them.`, ingestDone: true } : x)))
+    lastActionRef.current = 'ingest'
+  }
+
   // ── The guided "build your foundation" flow: walk the sections in order, drafting or skipping each.
   const runFlowAction = (step: FlowStep): Promise<void> => {
     switch (step) {
@@ -457,6 +494,16 @@ export function HomeChat() {
     // Guided setup is a deterministic script that creates records as we go — handle it before the
     // read-only ask/report paths so a task request never dead-ends.
     if (setupRef.current) return handleSetupAnswer(text)
+
+    // If we asked for the brand's website (to ingest content), the next message is the URL.
+    if (awaitingSiteRef.current) {
+      awaitingSiteRef.current = false
+      sayUser(text); setQ(''); void ingestBrandContent(text); return
+    }
+    // "Ingest / import / pull in my content" -> pull the brand's site content into the Library.
+    if (/\b(ingest|import|pull in|bring in|scrape|crawl)\b/i.test(text) && /\b(content|site|website|pages?|library|blog|posts?)\b/i.test(text)) {
+      sayUser(text); setQ(''); void ingestBrandContent(); return
+    }
 
     // "Build my foundation" launches the guided, section-by-section flow.
     if (/\bbuild\b.*\b(foundation|everything|it all|the rest|out my brand)\b/i.test(text)) {
@@ -591,6 +638,7 @@ export function HomeChat() {
       objectiveDone: m.objectiveDone,
       channelDone: m.channelDone,
       flowStep: m.flowStep,
+      ingestDone: m.ingestDone,
     }))
     saveHomeChat({
       id: chatIdRef.current,
@@ -725,6 +773,11 @@ export function HomeChat() {
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('channelrecords') }}>View channels</button>
                     </div>
                   )}
+                  {m.ingestDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('content') }}>View Library</button>
+                    </div>
+                  )}
                   {m.flowStep && (
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, true)}>{FLOW_PROMPT[m.flowStep as FlowStep].label}</button>
@@ -771,6 +824,10 @@ export function HomeChat() {
               <button className="hchat-action" disabled={busy} onClick={() => void draftBrandObjectives()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></svg>
                 Draft objectives
+              </button>
+              <button className="hchat-action" disabled={busy} onClick={() => void ingestBrandContent()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13l4-3h5" /><path d="M17 14v6M14 17h6" /></svg>
+                Ingest content
               </button>
               <button className="hchat-action" disabled={busy} onClick={() => { closeHomeChat(); openFlow('') }}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>

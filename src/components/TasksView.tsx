@@ -126,8 +126,9 @@ export function TasksView() {
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
   }, [allTasks, today])
   const doneTasks = useMemo(() => allTasks.filter((t) => t.done), [allTasks])
-  // The task whose detail drawer is open (read live from `tasks` so edits reflect immediately).
-  const openTask = tasks.find((t) => t.id === openTaskId) ?? null
+  // The task whose detail drawer is open — from allTasks so derived asset-tasks open their own detail
+  // too (read live so edits to a manual task reflect immediately).
+  const openTask = allTasks.find((t) => t.id === openTaskId) ?? null
 
   // Jump to Companies and pop the linked company's record drawer.
   const openCompany = (id: string) => {
@@ -161,8 +162,8 @@ export function TasksView() {
         </button>
         <button
           className="task-input task-name-input task-name-open"
-          onClick={() => openFlow(t.campaign ?? '', 'grid')}
-          title={`Open ${t.campaign ?? 'flow'}`}
+          onClick={() => setOpenTaskId(t.id)}
+          title="Open task details"
           style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text)', padding: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
           {t.text}
@@ -348,6 +349,37 @@ export function TasksView() {
     {openTask && (
       <>
         <div onClick={() => setOpenTaskId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,24,40,.28)' }} />
+        {openTask.derived ? (
+          <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+              <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => toggleAssetDone(openTask.rowId!)} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
+                {openTask.done && (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 6" /></svg>)}
+              </button>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.done ? 'Completed asset' : 'Asset task'}</span>
+              <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+            </header>
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.text || 'Untitled asset'}</div>
+              <div style={fieldRow}>
+                <span style={fieldLabel}>Status</span>
+                <button onClick={() => toggleAssetDone(openTask.rowId!)} style={{ ...fieldControl, cursor: 'pointer', textAlign: 'left', color: openTask.done ? 'var(--accent-2, #0e6d84)' : 'var(--text)' }}>{openTask.done ? '✓ Done' : 'Open'}</button>
+              </div>
+              <div style={fieldRow}>
+                <span style={fieldLabel}>Due date</span>
+                <span style={{ ...fieldControl, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDue(openTask.due) : 'No date'}</span>
+              </div>
+              <div style={fieldRow}>
+                <span style={fieldLabel}>Flow</span>
+                <span style={fieldControl}>{(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Flow'}</span>
+              </div>
+              <div style={fieldRow}>
+                <span style={fieldLabel} />
+                <button onClick={() => { openFlow(openTask.campaign ?? '', 'grid'); setOpenTaskId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-2, #0e6d84)', fontFamily: 'inherit', fontSize: 12, padding: 0, textAlign: 'left' }}>Open in flow ↗</button>
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>This task is a built asset from a flow. Edit its content in the flow.</div>
+            </div>
+          </aside>
+        ) : (
         <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <button className={`task-check${openTask.done ? ' on' : ''}`} onClick={() => patch(openTask.id, { done: !openTask.done })} aria-label={openTask.done ? 'Mark not done' : 'Mark done'} style={{ flex: '0 0 auto' }}>
@@ -404,6 +436,7 @@ export function TasksView() {
             </div>
           </div>
         </aside>
+        )}
       </>
     )}
     </>
