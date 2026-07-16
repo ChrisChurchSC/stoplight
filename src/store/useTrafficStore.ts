@@ -107,6 +107,7 @@ import { type Company, freshCompanyId, seedCompanies } from '../domain/companies
 import { type ChannelRecord, freshChannelRecordId, seedChannelRecords } from '../domain/channelRecords'
 import { type OnboardingState, type OnboardingStepId, DEFAULT_ONBOARDING } from '../domain/onboarding'
 import type { SavedFlowChat } from '../domain/flowAgent'
+import type { SavedHomeChat } from '../domain/homeChat'
 import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
@@ -621,6 +622,24 @@ function loadFlowChats(): SavedFlowChat[] {
 function saveFlowChats(list: SavedFlowChat[]): void {
   try {
     persistState(FLOW_CHATS_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
+// Home chat history — past conversations from the Home ask box, one global list.
+const HOME_CHATS_KEY = 'stoplight.homeChats.v1'
+function loadHomeChats(): SavedHomeChat[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HOME_CHATS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveHomeChats(list: SavedHomeChat[]): void {
+  try {
+    persistState(HOME_CHATS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -1540,8 +1559,22 @@ interface TrafficState {
    *  `homeChatSeed` is the first question to run when it opens. */
   homeChatOpen: boolean
   homeChatSeed: string | null
+  /** The saved conversation currently open (null = a fresh, unsaved chat). */
+  activeHomeChatId: string | null
+  /** Bumped on every open/new so the chat remounts with the right thread. */
+  homeChatSession: number
   openHomeChat: (q: string) => void
   closeHomeChat: () => void
+  /** Start a fresh, empty Home chat. */
+  newHomeChat: () => void
+  /** Reopen a saved Home chat by id. */
+  openSavedHomeChat: (id: string) => void
+  /** Past Home chat conversations, newest activity first. */
+  homeChats: SavedHomeChat[]
+  /** Upsert a saved Home chat by id. */
+  saveHomeChat: (chat: SavedHomeChat) => void
+  /** Delete a saved Home chat by id. */
+  deleteHomeChat: (id: string) => void
   /** Sharing & access: the current session role and the owner's share links. */
   role: Role
   sharedSession: SharedSession | null
@@ -2142,6 +2175,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   askOpen: false,
   homeChatOpen: false,
   homeChatSeed: null,
+  activeHomeChatId: null,
+  homeChatSession: 0,
+  homeChats: loadHomeChats(),
   role: initialShare?.role ?? 'owner',
   sharedSession: initialShare,
   shares: loadShares(),
@@ -2910,8 +2946,30 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeDiagnosis: () => set({ diagnosisOpen: false }),
   openAsk: (seed) => set({ askOpen: true, askSeed: seed }),
   closeAsk: () => set({ askOpen: false, askSeed: undefined }),
-  openHomeChat: (q) => set({ homeChatOpen: true, homeChatSeed: q, page: 'portfolio' }),
+  // A seeded question always starts a NEW conversation (clear the active saved id) and bumps the
+  // session so the chat remounts fresh rather than continuing whatever thread was last open.
+  openHomeChat: (q) =>
+    set((s) => ({ homeChatOpen: true, homeChatSeed: q, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1, page: 'portfolio' })),
   closeHomeChat: () => set({ homeChatOpen: false, homeChatSeed: null }),
+  newHomeChat: () =>
+    set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1, page: 'portfolio' })),
+  openSavedHomeChat: (id) =>
+    set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: id, homeChatSession: s.homeChatSession + 1, page: 'portfolio' })),
+  saveHomeChat: (chat) =>
+    set((s) => {
+      const rest = s.homeChats.filter((c) => c.id !== chat.id)
+      const homeChats = [chat, ...rest].sort((a, b) => b.updatedAt - a.updatedAt)
+      saveHomeChats(homeChats)
+      return { homeChats }
+    }),
+  deleteHomeChat: (id) =>
+    set((s) => {
+      const homeChats = s.homeChats.filter((c) => c.id !== id)
+      saveHomeChats(homeChats)
+      // Closing the one you're viewing drops you back to a fresh chat.
+      const clearing = s.activeHomeChatId === id
+      return clearing ? { homeChats, activeHomeChatId: null } : { homeChats }
+    }),
   openShareDialog: () => set({ shareDialogOpen: true }),
   closeShareDialog: () => set({ shareDialogOpen: false }),
   createShare: (client, role) => {
@@ -4172,6 +4230,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.reports.v1': 'reports',
       'stoplight.mediaMixes.v1': 'mediaMixes',
       'stoplight.flowChats.v1': 'flowChats',
+      'stoplight.homeChats.v1': 'homeChats',
     }
     const state = await hydrateState()
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
@@ -4221,7 +4280,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         'stoplight.clients.v1', 'stoplight.clientProfiles.v1', 'stoplight.clientAudiences.v1',
         'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1',
         'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.canvases.v1',
-        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1',
+        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
       ]
       for (const key of STATE_MIGRATIONS) {

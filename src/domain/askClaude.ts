@@ -18,9 +18,27 @@ import type { TrafficRow } from './types'
 
 export type AskIntent = 'connection' | 'what-worked' | 'help'
 
+/** The brand's foundation, so the chat can answer brand-specific questions and help with strategy,
+ *  not just report campaign performance. Fields may be empty early on. */
+export interface AskBrand {
+  name: string
+  oneLiner: string
+  positioning: string
+  industry: string
+  audiences: string[]
+  proofPoints: string[]
+  messages: string[]
+  voices: string[]
+}
+
+export const EMPTY_ASK_BRAND: AskBrand = {
+  name: '', oneLiner: '', positioning: '', industry: '', audiences: [], proofPoints: [], messages: [], voices: [],
+}
+
 export interface AskContext {
   question: string
   scope: string
+  brand: AskBrand
   connection: {
     total: number
     connected: number
@@ -53,6 +71,7 @@ interface BuildOpts {
   batchReview: BatchReview | null
   icp: Icp | null
   campaigns: Campaign[]
+  brand?: AskBrand
 }
 
 /** Gather the real, deterministic findings a question might need. Both the live
@@ -87,6 +106,7 @@ export function buildAskContext(question: string, rows: TrafficRow[], opts: Buil
   return {
     question,
     scope: opts.scope,
+    brand: opts.brand ?? EMPTY_ASK_BRAND,
     connection: {
       total: assetNames.size,
       connected: health.connected,
@@ -180,8 +200,15 @@ export function heuristicAnswer(ctx: AskContext): AskAnswer {
     }
   }
 
+  const b = ctx.brand
+  if (!b.name || b.audiences.length === 0) {
+    return {
+      intent: 'help',
+      answer: `Let's get your brand set up so I can help in context. Say **"get started"** and I'll walk you through your brand, one-liner, and first audience, then you can ask me to draft proof points or a flow.`,
+    }
+  }
   return {
     intent: 'help',
-    answer: `I can read this campaign two ways. Ask "is this coherent?" to run the connection check: what contradicts, what's unproven, what's off-brand. Or ask "what's working?" to see which proof points, channels, and stages are driving revenue.`,
+    answer: `I know **${b.name}**${b.oneLiner ? ` (${b.oneLiner})` : ''} and its ${b.audiences.length} audience${b.audiences.length === 1 ? '' : 's'}${b.audiences.length ? ` (${b.audiences.slice(0, 3).join(', ')})` : ''}. Ask me to **draft proof points** or **draft a flow**, to check whether your campaign is coherent, or what's driving results once things are live.`,
   }
 }

@@ -2924,8 +2924,24 @@ button {
 .hsb-chat {
   display: flex;
   align-items: center;
-  gap: 9px;
   width: 100%;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.hsb-chat:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.hsb-chat.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.hsb-chat-open {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
   border: 0;
   background: none;
   cursor: pointer;
@@ -2933,13 +2949,43 @@ button {
   border-radius: 8px;
   font-family: inherit;
   font-size: 13px;
-  color: var(--text-muted);
+  color: inherit;
   text-align: left;
 }
-.hsb-chat:hover {
-  background: var(--surface-2);
-  color: var(--text);
+.hsb-chat-del {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity .12s, color .12s;
 }
+.hsb-chat:hover .hsb-chat-del { opacity: 1; }
+.hsb-chat-del:hover { color: #d1495b; }
+.hsb-chat-empty {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+.hsb-sec-row { display: flex; align-items: center; }
+.hsb-sec-row .hsb-sec { flex: 1; min-width: 0; }
+.hsb-sec-add {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--text-faint);
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+}
+.hsb-sec-add svg { width: 15px; height: 15px; }
+.hsb-sec-add:hover { color: var(--text); background: var(--surface-2); }
 .hsb-chat-ic {
   width: 15px;
   height: 15px;
@@ -24430,6 +24476,23 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 7px;
 }
 .hchat-back:hover { background: var(--surface-2); color: var(--text); }
+.hchat-new {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transition: border-color .12s, color .12s;
+}
+.hchat-new:hover { border-color: var(--accent); color: var(--accent); }
 .hchat-thread {
   flex: 1 1 auto;
   min-height: 0;
@@ -24518,6 +24581,39 @@ table.aud-sheet td.stick .aud-cell {
 .hchat-setup-btn:hover { background: var(--accent); color: #fff; }
 .hchat-setup-btn.ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
 .hchat-setup-btn.ghost:hover { border-color: var(--border-strong, #cdd5d9); color: var(--text); background: transparent; }
+.hchat-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 2px;
+}
+.hchat-actions::-webkit-scrollbar { display: none; }
+.hchat-action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 999px;
+  transition: border-color .12s, color .12s, opacity .12s;
+}
+.hchat-action:hover { border-color: var(--accent); color: var(--accent); }
+.hchat-action:disabled { opacity: .5; cursor: default; }
+.hchat-action.ghost { color: var(--text-muted); }
+.hchat-action.ghost:hover { color: var(--text); border-color: var(--border-strong, #cdd5d9); }
+
 .hchat-composer { flex: 0 0 auto; padding: 8px 0 20px; }
 .hchat-box {
   border: 1px solid var(--border-strong);

@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
+import { draftProof } from '../adapters/ask/draftProof'
+import { draftAudiences } from '../adapters/ask/draftAudiences'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
+import { freshRecordId } from '../domain/records'
 import { newAudience } from '../domain/audiences'
+import { buildAskBrand } from '../lib/askBrand'
 import { GUIDED_SETUP_INTRO, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest } from '../domain/guidedSetup'
+import type { HomeChatMsg as Msg, HomeChatStepKind as StepKind, SavedHomeChat } from '../domain/homeChat'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -14,32 +19,12 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * question posts as a bubble, a "Thinking" block shows what data was read (grounded
  * in the same context the answer uses), the answer streams in, and a sticky composer
  * at the bottom keeps the conversation going. Same grounded askClaude engine as the
- * palette; this is just the multi-turn, full-page surface for it.
+ * palette; this is just the multi-turn, full-page surface for it. Each conversation is
+ * persisted (see saveHomeChat) so it can be reopened from the sidebar history.
  */
 
-type StepKind = 'assets' | 'records' | 'segments'
-interface Step {
-  kind: StepKind
-  label: string
-}
-interface Msg {
-  id: string
-  role: 'user' | 'assistant'
-  text?: string
-  steps?: Step[]
-  source?: string
-  busy?: boolean
-  /** Set on the message that announces a just-generated report, to render a "View report" link. */
-  reportId?: string
-  reportBrand?: string
-  /** Set on the completion message of the guided setup, to render next-step buttons. */
-  setupDone?: boolean
-  /** Set on a dead-end message to offer starting the guided setup. */
-  offerSetup?: boolean
-}
-
 let uid = 0
-const nid = () => `hc${++uid}`
+const nid = () => `hc_${Math.random().toString(36).slice(2)}_${++uid}`
 
 const STEP_ICON: Record<StepKind, ReactNode> = {
   assets: (
@@ -78,7 +63,10 @@ export function HomeChat() {
   const people = useTrafficStore((s) => s.people)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const homeChatSeed = useTrafficStore((s) => s.homeChatSeed)
+  const activeHomeChatId = useTrafficStore((s) => s.activeHomeChatId)
   const closeHomeChat = useTrafficStore((s) => s.closeHomeChat)
+  const newHomeChat = useTrafficStore((s) => s.newHomeChat)
+  const saveHomeChat = useTrafficStore((s) => s.saveHomeChat)
   const addReport = useTrafficStore((s) => s.addReport)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
@@ -87,6 +75,8 @@ export function HomeChat() {
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
+  const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const openFlow = useTrafficStore((s) => s.openFlow)
   const { brands } = useHomeCanvases()
 
@@ -103,10 +93,16 @@ export function HomeChat() {
   const seededRef = useRef<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const busyRef = useRef(false)
+  // The saved-conversation id + created time for THIS thread, so persisting as it grows upserts one
+  // record. Set once (on first save) for a new chat, or from the saved chat when reopened.
+  const chatIdRef = useRef<string | null>(null)
+  const createdAtRef = useRef<number>(0)
   // When we've asked "which brand?" for a report, the next message is read as the brand answer.
   const awaitingBrandRef = useRef(false)
   // Non-null while the guided setup is running: which step we're on + the brand named so far.
   const setupRef = useRef<{ step: number; brand: string; audience?: string } | null>(null)
+  // The last thing the chat DID (e.g. 'proof'), so a follow-up like "more" continues that action.
+  const lastActionRef = useRef<string | null>(null)
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -177,12 +173,26 @@ export function HomeChat() {
     setMessages((m) => [...m, { id: nid(), role: 'assistant', text, ...extra }])
   const sayUser = (text: string) => setMessages((m) => [...m, { id: nid(), role: 'user', text }])
 
-  // Start the guided setup: intro + first question. Clears any pending report handshake.
-  const startSetup = () => {
+  // Start the guided setup: intro + first question. Clears any pending report handshake. If the
+  // current brand is ALREADY set up (has a one-liner and an audience), don't restart from scratch —
+  // offer to extend it instead, so "get started" on an existing brand doesn't loop to "what's your
+  // brand called?".
+  const startSetup = (forceNew = false) => {
     awaitingBrandRef.current = false
+    setQ('')
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    const profile = (brand && brand !== 'all' ? store.clientProfiles[brand] : undefined) as { oneLiner?: string } | undefined
+    const hasAudiences = brand && brand !== 'all' && (store.clientAudiences[brand]?.length ?? 0) > 0
+    if (!forceNew && brand && brand !== 'all' && (profile?.oneLiner || hasAudiences)) {
+      say(
+        `**${brand}** is already set up. Want me to add more audiences, draft proof points, or draft a flow? (Say "new brand" to set up a different one.)`,
+        { setupDone: true },
+      )
+      return
+    }
     setupRef.current = { step: 0, brand: '' }
     say(`${GUIDED_SETUP_INTRO}\n\n${GUIDED_SETUP_STEPS[0].prompt('')}`)
-    setQ('')
   }
 
   // Apply one setup answer to the store (creating real records), then ask the next question or finish.
@@ -221,6 +231,83 @@ export function HomeChat() {
     }
   }
 
+  // Draft proof points for the active brand, grounded in the FULL brand context (its description on
+  // the brand record + profile + audiences), add them to the brand's library, and report them in the
+  // chat. Passes the existing proof points so repeat calls ("more") produce new, distinct ones.
+  // Falls back to a small heuristic set when the AI isn't available.
+  const draftProofPoints = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('proofpoints'); return }
+    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
+    // The rich brand context (positioning, differentiator, objective, …) lives on the brand record.
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const audiences = (store.clientAudiences[brand] ?? []).map((a) => a.name)
+    setMessagingBrand(brand)
+    const existing = (useTrafficStore.getState().library.rtbs ?? []).map((r) => r.label).filter(Boolean)
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting proof points for ${brand}` }] }])
+    const proof = await draftProof({
+      brand,
+      oneLiner: profile.oneLiner,
+      industry: profile.industry || rec.industry,
+      positioning: rec.positioning,
+      descriptor: rec.descriptor,
+      keyMessage: rec.keyMessage,
+      differentiator: rec.differentiator,
+      businessObjective: rec.businessObjective,
+      audiences,
+      existing,
+    })
+    proof.forEach((p) => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: p.label, detail: p.detail, approved: false }))
+    const list = proof.map((p) => `- **${p.label}**: ${p.detail}`).join('\n')
+    const more = existing.length > 0
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === id
+          ? { ...x, busy: false, steps: undefined, text: `I drafted ${proof.length} ${more ? 'more ' : ''}proof point${proof.length === 1 ? '' : 's'} for **${brand}** and saved them:\n\n${list}\n\nAsk for more, or open Proof points to edit them.`, proofDone: true }
+          : x,
+      ),
+    )
+    lastActionRef.current = 'proof'
+  }
+
+  // Draft target audiences for the active brand from its description, add them as real audience
+  // records, and report them in the chat. Passes existing audience names so "more" gives new ones.
+  const addAudiences = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('segments'); return }
+    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const current = store.clientAudiences[brand] ?? []
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Building audiences for ${brand}` }] }])
+    const drafted = await draftAudiences({
+      brand,
+      oneLiner: profile.oneLiner,
+      positioning: rec.positioning,
+      descriptor: rec.descriptor,
+      differentiator: rec.differentiator,
+      businessObjective: rec.businessObjective,
+      industry: profile.industry || rec.industry,
+      existing: current.map((a) => a.name),
+    })
+    const additions = drafted.map((d) =>
+      newAudience({ name: d.name, definition: d.definition, role: d.role, pains: d.pains, messageAngle: d.messageAngle, outcome: d.outcome }),
+    )
+    setClientAudiences(brand, [...(useTrafficStore.getState().clientAudiences[brand] ?? []), ...additions])
+    const list = drafted.map((d) => `- **${d.name}**: ${d.definition}`).join('\n')
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === id
+          ? { ...x, busy: false, steps: undefined, text: `I added ${drafted.length} audience${drafted.length === 1 ? '' : 's'} to **${brand}**:\n\n${list}\n\nAsk for more, draft proof points, or open Audiences to refine them.`, audienceDone: true }
+          : x,
+      ),
+    )
+    lastActionRef.current = 'audience'
+  }
+
   const run = async (question: string) => {
     const text = question.trim()
     if (!text || busyRef.current) return
@@ -228,6 +315,30 @@ export function HomeChat() {
     // Guided setup is a deterministic script that creates records as we go — handle it before the
     // read-only ask/report paths so a task request never dead-ends.
     if (setupRef.current) return handleSetupAnswer(text)
+
+    // Take real action for "do" requests instead of falling through to the read-only ask engine.
+    const doVerb = /\b(draft|add|create|generate|write|give|need|make|build|develop|define|more|another|additional)\b/i.test(text)
+    const wantsProof = /\bproof\s?points?\b|\brtbs?\b|\breasons?\s+to\s+believe\b/i.test(text) && doVerb
+    const wantsAudience = /\baudiences?\b|\bpersonas?\b|\bsegments?\b/i.test(text) && doVerb
+    const bareMore = text.length <= 40 && /\b(more|another|additional|others?|keep going|again|continue)\b/i.test(text)
+    if (wantsAudience || (bareMore && lastActionRef.current === 'audience')) {
+      sayUser(text)
+      setQ('')
+      void addAudiences()
+      return
+    }
+    if (wantsProof || (bareMore && lastActionRef.current === 'proof')) {
+      sayUser(text)
+      setQ('')
+      void draftProofPoints()
+      return
+    }
+
+    if (/\b(new|different|another|a)\s+brand\b/i.test(text)) {
+      sayUser(text)
+      startSetup(true)
+      return
+    }
     if (isSetupRequest(text)) {
       sayUser(text)
       startSetup()
@@ -268,7 +379,7 @@ export function HomeChat() {
       return
     }
 
-    const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList })
+    const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList, brand: buildAskBrand(clientFilter) })
     const res = await askClaude(ctx, useTrafficStore.getState().aiModel)
     setMessages((m) =>
       m.map((x) => (x.id === asstId ? { ...x, busy: false, text: res.answer, source: res.live ? 'Claude' : 'offline estimate' } : x)),
@@ -277,9 +388,20 @@ export function HomeChat() {
     setBusy(false)
   }
 
-  // Run the seed question once, then clear it so a remount doesn't re-fire it. The "Get started"
-  // button seeds a sentinel that launches the guided setup instead of asking a question.
+  // Initialize the thread once per conversation (the component is keyed by homeChatSession, so it
+  // remounts on open/new/reopen). Reopening a saved chat hydrates its messages; a seeded question
+  // runs it (or launches the guided setup); otherwise it's a blank new chat.
   useEffect(() => {
+    if (activeHomeChatId) {
+      const saved = useTrafficStore.getState().homeChats.find((c) => c.id === activeHomeChatId)
+      if (saved) {
+        chatIdRef.current = saved.id
+        createdAtRef.current = saved.createdAt
+        seededRef.current = 'loaded'
+        setMessages(saved.messages)
+      }
+      return
+    }
     if (homeChatSeed && seededRef.current !== homeChatSeed) {
       seededRef.current = homeChatSeed
       if (homeChatSeed === GUIDED_SETUP_SEED) startSetup()
@@ -287,7 +409,36 @@ export function HomeChat() {
       useTrafficStore.setState({ homeChatSeed: null })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeChatSeed])
+  }, [])
+
+  // Persist the conversation as it grows (once it has a user message and the turn has settled), so
+  // it shows in the sidebar history and survives a reload. Upserts one record by chatIdRef.
+  useEffect(() => {
+    const firstUser = messages.find((m) => m.role === 'user')
+    if (!firstUser || messages.some((m) => m.busy)) return
+    if (!chatIdRef.current) chatIdRef.current = `chat_${nid()}`
+    if (!createdAtRef.current) createdAtRef.current = Date.now()
+    const persisted: Msg[] = messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      text: m.text,
+      source: m.source,
+      reportId: m.reportId,
+      reportBrand: m.reportBrand,
+      setupDone: m.setupDone,
+      offerSetup: m.offerSetup,
+      proofDone: m.proofDone,
+      audienceDone: m.audienceDone,
+    }))
+    saveHomeChat({
+      id: chatIdRef.current,
+      title: (firstUser.text || 'Chat').slice(0, 60),
+      messages: persisted,
+      createdAt: createdAtRef.current,
+      updatedAt: Date.now(),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -298,6 +449,10 @@ export function HomeChat() {
       <header className="hchat-top">
         <button className="hchat-back" onClick={closeHomeChat}>
           ← Home
+        </button>
+        <button className="hchat-new" onClick={newHomeChat} title="Start a new chat">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+          New chat
         </button>
       </header>
 
@@ -367,9 +522,20 @@ export function HomeChat() {
                   )}
                   {m.setupDone && (
                     <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={addAudiences}>Add audiences</button>
+                      <button className="hchat-setup-btn" onClick={draftProofPoints}>Draft proof points</button>
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); openFlow('') }}>Draft a flow</button>
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('proofpoints') }}>Add proof points</button>
                       <button className="hchat-setup-btn ghost" onClick={closeHomeChat}>Go home</button>
+                    </div>
+                  )}
+                  {m.proofDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('proofpoints') }}>View proof points</button>
+                    </div>
+                  )}
+                  {m.audienceDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('segments') }}>View audiences</button>
                     </div>
                   )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
@@ -382,6 +548,30 @@ export function HomeChat() {
       </div>
 
       <div className="hchat-composer">
+        <div className="hchat-actions">
+          {clientFilter && clientFilter !== 'all' ? (
+            <>
+              <button className="hchat-action" disabled={busy} onClick={() => void addAudiences()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></svg>
+                Add audiences
+              </button>
+              <button className="hchat-action" disabled={busy} onClick={() => void draftProofPoints()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 6" /></svg>
+                Draft proof points
+              </button>
+              <button className="hchat-action" disabled={busy} onClick={() => { closeHomeChat(); openFlow('') }}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
+                Draft a flow
+              </button>
+              <button className="hchat-action ghost" disabled={busy} onClick={() => startSetup(true)}>New brand</button>
+            </>
+          ) : (
+            <button className="hchat-action" disabled={busy} onClick={() => startSetup()}>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              Get started
+            </button>
+          )}
+        </div>
         <div className="hchat-box">
           <textarea
             className="hchat-input"

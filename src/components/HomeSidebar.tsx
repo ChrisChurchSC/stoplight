@@ -199,7 +199,12 @@ export function HomeSidebar() {
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const taskBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
-  const reports = useTrafficStore((s) => s.reports)
+  const homeChats = useTrafficStore((s) => s.homeChats)
+  const activeHomeChatId = useTrafficStore((s) => s.activeHomeChatId)
+  const homeChatOpen = useTrafficStore((s) => s.homeChatOpen)
+  const newHomeChat = useTrafficStore((s) => s.newHomeChat)
+  const openSavedHomeChat = useTrafficStore((s) => s.openSavedHomeChat)
+  const deleteHomeChat = useTrafficStore((s) => s.deleteHomeChat)
   const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
   const sidebarCollapsed = useTrafficStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useTrafficStore((s) => s.toggleSidebar)
@@ -255,7 +260,8 @@ export function HomeSidebar() {
     },
   ]
 
-  const recentChats = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [reports])
+  // Home chat history (already newest-activity-first from the store), capped for the sidebar.
+  const recentChats = useMemo(() => homeChats.slice(0, 12), [homeChats])
 
   // Keep the Tasks badge in sync: TasksView writes localStorage + fires 'stoplight:tasks'; also
   // refresh when the tab regains focus (another tab may have edited) and when the page changes.
@@ -321,36 +327,48 @@ export function HomeSidebar() {
           )
         })}
 
-        {recentChats.length > 0 && (
-          <div className="hsb-chats">
+        <div className="hsb-chats">
+          <div className="hsb-sec-row">
             <button className="hsb-sec" onClick={() => setChatsOpen((o) => !o)}>
               <span className={`hsb-sec-chev${chatsOpen ? ' open' : ''}`}>
                 <Ico name="caret" />
               </span>
               Chats
             </button>
-            {chatsOpen && (
-              <div className="hsb-chat-list">
-                {recentChats.map((r) => (
-                  <button
-                    key={r.id}
-                    className="hsb-chat"
-                    title={r.title}
-                    onClick={() => {
-                      setClientFilter(r.client)
-                      setPage('reports')
-                    }}
-                  >
-                    <span className="hsb-chat-ic">
-                      <Ico name="chat" />
-                    </span>
-                    <span className="hsb-chat-title">{r.title}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <button className="hsb-sec-add" title="New chat" aria-label="New chat" onClick={newHomeChat}>
+              <Ico name="plus" />
+            </button>
           </div>
-        )}
+          {chatsOpen && (
+            <div className="hsb-chat-list">
+              {recentChats.length === 0 ? (
+                <div className="hsb-chat-empty">No chats yet.</div>
+              ) : (
+                recentChats.map((c) => {
+                  const active = homeChatOpen && activeHomeChatId === c.id
+                  return (
+                    <div key={c.id} className={`hsb-chat${active ? ' active' : ''}`} title={c.title}>
+                      <button className="hsb-chat-open" onClick={() => openSavedHomeChat(c.id)}>
+                        <span className="hsb-chat-ic">
+                          <Ico name="chat" />
+                        </span>
+                        <span className="hsb-chat-title">{c.title || 'Untitled chat'}</span>
+                      </button>
+                      <button
+                        className="hsb-chat-del"
+                        title="Delete chat"
+                        aria-label="Delete chat"
+                        onClick={(e) => { e.stopPropagation(); deleteHomeChat(c.id) }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
       </nav>
 
       <div className="sidebar-foot">

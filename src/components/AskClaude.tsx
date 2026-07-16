@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { buildAskContext, type AskAnswer, type AskIntent } from '../domain/askClaude'
+import { buildAskBrand } from '../lib/askBrand'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -83,7 +84,7 @@ export function AskClaude() {
     setBusy(true)
     setAnswer(null)
     const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
-    const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList })
+    const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList, brand: buildAskBrand(clientFilter) })
     const res = await askClaude(ctx, useTrafficStore.getState().aiModel)
     setAnswer(res)
     setBusy(false)

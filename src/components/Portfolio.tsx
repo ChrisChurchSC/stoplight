@@ -9,7 +9,9 @@ import { HomeAgenda } from './HomeAgenda'
  */
 export function Portfolio() {
   const homeChatOpen = useTrafficStore((s) => s.homeChatOpen)
-  if (homeChatOpen) return <HomeChat />
+  // Keyed by the session counter so opening a new/saved chat remounts HomeChat with a fresh thread.
+  const homeChatSession = useTrafficStore((s) => s.homeChatSession)
+  if (homeChatOpen) return <HomeChat key={homeChatSession} />
   return (
     <div className="pf pf-home">
       <HomeAgenda />
