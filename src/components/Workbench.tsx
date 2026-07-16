@@ -30,6 +30,7 @@ import { PeopleView } from './PeopleView'
 import { SegmentsView } from './SegmentsView'
 import { ProofPointsView } from './ProofPointsView'
 import { MessagesView } from './MessagesView'
+import { VoicesView } from './VoicesView'
 import { ObjectivesView } from './ObjectivesView'
 import { TasksView } from './TasksView'
 import { BrandsView } from './BrandsView'
@@ -273,6 +274,10 @@ export function Workbench() {
           ) : page === 'messages' ? (
             <div className="home-main-page">
               <MessagesView />
+            </div>
+          ) : page === 'voices' ? (
+            <div className="home-main-page">
+              <VoicesView />
             </div>
           ) : page === 'objectives' ? (
             <div className="home-main-page">

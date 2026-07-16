@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { getSession, onAuthChange, signInWithPassword, signUpWithPassword } from '../lib/session'
+import { Wordmark } from './Wordmark'
 
 /**
  * Gates the app behind Supabase auth — but only when a backend is configured.
@@ -45,8 +46,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="auth-gate">
-      <div className="auth-card">
-        <div className="auth-brand">Breadcrumbs</div>
+      <div className="auth-center">
+        <div className="auth-card">
         <div className="auth-title">{mode === 'in' ? 'Sign in' : 'Create your account'}</div>
         <input
           className="auth-input"
@@ -70,6 +71,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <button className="auth-switch" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
           {mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
         </button>
+        </div>
+      </div>
+      <div className="auth-footer">
+        <p className="auth-kicker">Marketing infrastructure<br />and automation platform</p>
+        <p className="auth-tagline">Leave a trail worth following. Breadcrumbs turns one brand strategy into personalized campaigns for every audience and channel.</p>
+        <Wordmark className="auth-bottomlogo" />
       </div>
     </div>
   )

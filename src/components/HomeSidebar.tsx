@@ -114,6 +114,12 @@ const ICONS: Record<string, ReactNode> = {
   caret: <path d="m6 9 6 6 6-6" />,
   updown: <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />,
   check: <path d="m5 12.5 4.5 4.5L19 6" />,
+  voices: (
+    <>
+      <path d="M4 5h16v11H8l-4 3z" />
+      <path d="M9 10v2M12 8.5v5M15 10v2" />
+    </>
+  ),
   plus: <path d="M12 5v14M5 12h14" />,
   user: (
     <>
@@ -183,7 +189,7 @@ function Ico({ name }: { name: string }) {
 // so the section config below can drive both the click and the active state from one place.
 type NavPage =
   | 'flows' | 'tasks' | 'reports'
-  | 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'proofpoints' | 'objectives' | 'channelrecords'
+  | 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'voices' | 'proofpoints' | 'objectives' | 'channelrecords'
 
 export function HomeSidebar() {
   const page = useTrafficStore((s) => s.page)
@@ -227,6 +233,7 @@ export function HomeSidebar() {
       items: [
         item('segments', 'Segments', 'segments', page === 'segments', () => setPage('segments')),
         item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
+        item('voices', 'Voices', 'voices', page === 'voices', () => setPage('voices')),
         item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),
       ],
     },

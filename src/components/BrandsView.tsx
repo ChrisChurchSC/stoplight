@@ -18,11 +18,24 @@ export function BrandsView() {
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const deleteBrandRecord = useTrafficStore((s) => s.deleteBrandRecord)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
 
   // Scoped to one brand (the common case): a single-brand strategy table.
   const one = clientFilter !== 'all' ? brandRecords.find((b) => b.name === clientFilter) : undefined
   if (one) {
-    return <BrandTable brand={one} fields={BRAND_FIELDS} statuses={BRAND_STATUSES} onUpdate={updateBrandRecord} />
+    return (
+      <BrandTable
+        brand={one}
+        fields={BRAND_FIELDS}
+        statuses={BRAND_STATUSES}
+        onUpdate={updateBrandRecord}
+        onDelete={(id) => {
+          // Drop back to the portfolio view before removing, so we're not scoped to a deleted brand.
+          setClientFilter('all')
+          deleteBrandRecord(id)
+        }}
+      />
+    )
   }
 
   return (

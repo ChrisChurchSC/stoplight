@@ -19,17 +19,20 @@ export function BrandTable({
   fields,
   statuses,
   onUpdate,
+  onDelete,
 }: {
   brand: BrandRecord
   fields: RecordField[]
   statuses: string[]
   onUpdate: (id: string, patch: Partial<BrandRecord>) => void
+  onDelete?: (id: string) => void
 }) {
   const val = (k: string) => ((brand as unknown as Record<string, unknown>)[k] ?? '').toString()
   const set = (k: string, v: string) => onUpdate(brand.id, { [k]: v } as Partial<BrandRecord>)
   const name = val('name')
   const pfp = val('pfp')
   const [pfpHover, setPfpHover] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const nameWrapRef = useRef<HTMLSpanElement>(null)
 
   // The header carries only the brand name (the page identity, like "Segments"); every attribute —
@@ -107,6 +110,44 @@ export function BrandTable({
                 </svg>
               </button>
             </span>
+            {/* Delete the brand — right-aligned, two-step confirm so it isn't a one-click mistake. */}
+            {onDelete && (
+              <span style={{ marginLeft: 'auto', flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {confirmDelete ? (
+                  <>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted, #5a6b72)' }}>Delete this brand?</span>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(brand.id)}
+                      style={{ border: 'none', borderRadius: 7, cursor: 'pointer', background: 'var(--danger, #d64545)', color: '#fff', fontWeight: 700, fontSize: 12.5, padding: '5px 11px' }}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      style={{ border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', background: 'var(--surface)', color: 'var(--text)', fontWeight: 600, fontSize: 12.5, padding: '5px 11px' }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    title="Delete brand"
+                    onClick={() => setConfirmDelete(true)}
+                    style={{ border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted, #5a6b72)', display: 'grid', placeItems: 'center', padding: 6, borderRadius: 8, flex: '0 0 auto' }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </button>
+                )}
+              </span>
+            )}
           </div>
         </header>
 

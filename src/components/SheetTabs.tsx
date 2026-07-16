@@ -7,6 +7,7 @@ type SheetPage =
   | 'people'
   | 'segments'
   | 'messages'
+  | 'voices'
   | 'proofpoints'
   | 'objectives'
   | 'channelrecords'
@@ -30,6 +31,7 @@ const GROUPS: { label: string; sheets: { page: SheetPage; label: string }[] }[] 
     label: 'Message',
     sheets: [
       { page: 'messages', label: 'Messages' },
+      { page: 'voices', label: 'Voices' },
       { page: 'proofpoints', label: 'Proof points' },
     ],
   },

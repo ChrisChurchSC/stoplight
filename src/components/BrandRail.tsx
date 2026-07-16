@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { can } from '../domain/access'
 import { recordTint } from '../domain/records'
-import { createInvite } from '../lib/session'
+import { createInvite, signOut } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -48,6 +48,9 @@ export function BrandRail() {
 
   // A short transition overlay when switching scope, so the change reads as "loading this brand".
   const [switching, setSwitching] = useState<string | null>(null)
+  // Instant hover tooltip for the "add a brand" (+) tile. Positioned fixed from the button's rect so
+  // it isn't clipped by the rail's overflow. null = not hovering.
+  const [addTip, setAddTip] = useState<{ top: number; left: number } | null>(null)
   // The account/settings dropdown anchored to the "C" avatar at the foot.
   const [acctOpen, setAcctOpen] = useState(false)
   // The invite popover anchored to the "add teammate" button — same anchored-card pattern as the C menu.
@@ -101,9 +104,23 @@ export function BrandRail() {
         )
       })}
 
-      <button title="Create brand" onClick={() => { addBrandRecord(); setClientFilter('New brand'); setPage('brands') }} style={{ ...tileBase, background: 'transparent', border: '1.5px dashed var(--border-strong, #cdd5d9)', color: 'var(--text-faint, #8a969b)', boxShadow: 'none' }}>
+      <button
+        aria-label="Add a brand"
+        onClick={() => { addBrandRecord(); setClientFilter('New brand'); setPage('brands'); setAddTip(null) }}
+        onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAddTip({ top: r.top + r.height / 2, left: r.right + 8 }) }}
+        onMouseLeave={() => setAddTip(null)}
+        style={{ ...tileBase, background: addTip ? 'var(--surface)' : 'transparent', border: '1.5px dashed var(--border-strong, #cdd5d9)', color: addTip ? 'var(--accent, #0e6d84)' : 'var(--text-faint, #8a969b)', boxShadow: 'none', transition: 'background .12s, color .12s, border-color .12s', borderColor: addTip ? 'var(--accent, #0e6d84)' : 'var(--border-strong, #cdd5d9)' }}
+      >
         <RailIco><path d="M12 5v14M5 12h14" /></RailIco>
       </button>
+      {addTip && (
+        <div
+          role="tooltip"
+          style={{ position: 'fixed', top: addTip.top, left: addTip.left, transform: 'translateY(-50%)', whiteSpace: 'nowrap', background: 'var(--text, #1a2023)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '5px 9px', borderRadius: 7, pointerEvents: 'none', zIndex: 80, boxShadow: '0 6px 18px rgba(16,24,40,.22)' }}
+        >
+          Add a brand
+        </div>
+      )}
 
       <div style={{ flex: 1 }} />
 
@@ -143,7 +160,7 @@ export function BrandRail() {
             </button>
           )}
           <div className="hsb-ws-sep" />
-          <button className="hsb-ws-mi" role="menuitem" onClick={() => setAcctOpen(false)}>
+          <button className="hsb-ws-mi" role="menuitem" onClick={() => { setAcctOpen(false); void signOut() }}>
             <span className="hsb-ws-mi-ic"><RailIco><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></RailIco></span>
             Sign out
           </button>

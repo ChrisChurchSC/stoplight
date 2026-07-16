@@ -111,6 +111,7 @@ import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
+import { type Voice, freshVoiceId } from '../domain/voice'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
   type LibraryFolder,
@@ -670,6 +671,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.segments.v1': 'segments',
   'stoplight.objectives.v1': 'objectives',
   'stoplight.messages.v1': 'message_records',
+  'stoplight.voices.v1': 'voice_records',
   'stoplight.brandRecords.v1': 'brands',
   'stoplight.libraryFolders.v1': 'library_folders',
 }
@@ -687,6 +689,7 @@ function saveRecordList<T extends { id: string }>(key: string, list: T[]): void 
   }
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
+const VOICES_KEY = 'stoplight.voices.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
 const LIBRARY_FOLDERS_KEY = 'stoplight.libraryFolders.v1'
 const TASKS_KEY = 'stoplight.tasks.v1'
@@ -1308,7 +1311,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks' | 'brands'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'objectives' | 'flows' | 'tasks' | 'brands'
   /** A record id to auto-open in its RecordsTable drawer once that sheet mounts (e.g. clicking a
    *  task's linked company jumps to Companies and pops that row's details). Consumed + cleared by
    *  the table that owns the id. */
@@ -1434,6 +1437,11 @@ interface TrafficState {
   addMessage: (partial?: Partial<Message>) => string
   updateMessage: (id: string, patch: Partial<Message>) => void
   deleteMessage: (id: string) => void
+  /** Records › Foundation › Voices — brand voice / tone-of-voice profiles copy is written in. */
+  voices: Voice[]
+  addVoice: (partial?: Partial<Voice>) => string
+  updateVoice: (id: string, patch: Partial<Voice>) => void
+  deleteVoice: (id: string) => void
   /** Records › Message › Objectives — what campaigns move + how it's measured. */
   objectives: Objective[]
   addObjective: (partial?: Partial<Objective>) => string
@@ -1742,7 +1750,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'objectives' | 'flows' | 'tasks' | 'brands') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'objectives' | 'flows' | 'tasks' | 'brands') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2139,6 +2147,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   onboarding: loadOnboarding(),
   people: isSupabaseConfigured ? [] : loadPeople(),
   messages: isSupabaseConfigured ? [] : loadRecordList<Message>(MESSAGES_KEY),
+  voices: isSupabaseConfigured ? [] : loadRecordList<Voice>(VOICES_KEY),
   objectives: isSupabaseConfigured ? [] : loadRecordList<Objective>(OBJECTIVES_KEY),
   libraryFolders: isSupabaseConfigured ? [] : loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY),
   brandRecords: isSupabaseConfigured ? [] : loadOrSeedBrandRecords(),
@@ -2530,6 +2539,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const messages = s.messages.filter((m) => m.id !== id)
       saveRecordList(MESSAGES_KEY, messages)
       return { messages }
+    }),
+
+  addVoice: (partial) => {
+    const id = freshVoiceId()
+    const row: Voice = { name: 'New voice', status: 'draft', ...(partial ?? {}), id }
+    set((s) => {
+      const voices = [row, ...s.voices]
+      saveRecordList(VOICES_KEY, voices)
+      return { voices }
+    })
+    return id
+  },
+  updateVoice: (id, patch) =>
+    set((s) => {
+      const voices = s.voices.map((v) => (v.id === id ? { ...v, ...patch } : v))
+      saveRecordList(VOICES_KEY, voices)
+      return { voices }
+    }),
+  deleteVoice: (id) =>
+    set((s) => {
+      const voices = s.voices.filter((v) => v.id !== id)
+      saveRecordList(VOICES_KEY, voices)
+      return { voices }
     }),
 
   addObjective: (partial) => {
@@ -4091,17 +4123,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   hydrateRecords: async () => {
     if (!isSupabaseConfigured) return
     const from = <T extends { id: string; name?: string }>(table: string) => new SupabaseRecordAdapter<T>(table).list()
-    const [companies, people, channelRecords, segments, objectives, messages, brandRecords, libraryFolders] = await Promise.all([
+    const [companies, people, channelRecords, segments, objectives, messages, voices, brandRecords, libraryFolders] = await Promise.all([
       from<Company>('companies'),
       from<Person>('people'),
       from<ChannelRecord>('channels'),
       from<Segment>('segments'),
       from<Objective>('objectives'),
       from<Message>('message_records'),
+      from<Voice>('voice_records'),
       from<BrandRecord>('brands'),
       from<LibraryFolder>('library_folders'),
     ])
-    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, brandRecords, libraryFolders }
+    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, voices, brandRecords, libraryFolders }
     // Non-record state (brand system, client list, campaign metadata, …) from the KV table, mapped
     // back onto its store slice by the localStorage key it was saved under.
     const STATE_SLICES: Record<string, string> = {
