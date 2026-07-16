@@ -27,6 +27,10 @@ export interface HomeChatMsg {
   proofDone?: boolean
   /** Set on the message that announces just-added audiences, to render a "View audiences" link. */
   audienceDone?: boolean
+  /** Set on the message that announces just-drafted messages, to render a "View messages" link. */
+  messageDone?: boolean
+  /** Set on the message that announces just-added voices, to render a "View voices" link. */
+  voiceDone?: boolean
 }
 
 /** A saved Home chat conversation — listed in the sidebar and reopenable. */

@@ -303,6 +303,60 @@ function draftAudiencesApi(): PluginOption {
   }
 }
 
+/** Dev-server endpoint for "Draft messages with Claude". Mirrors /api/claude-ask. */
+function draftMessagesApi(): PluginOption {
+  return {
+    name: 'draft-messages-api',
+    configureServer(server) {
+      server.middlewares.use('/api/draft-messages', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runDraftMessages } = await import('./server/draftMessageHandler')
+            const result = await runDraftMessages(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/** Dev-server endpoint for "Draft voices with Claude". Mirrors /api/claude-ask. */
+function draftVoicesApi(): PluginOption {
+  return {
+    name: 'draft-voices-api',
+    configureServer(server) {
+      server.middlewares.use('/api/draft-voices', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runDraftVoices } = await import('./server/draftVoiceHandler')
+            const result = await runDraftVoices(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 /**
  * Dev-server endpoint for "Generate a media mix with Claude". Keeps the Anthropic
  * key server-side; mirrors /api/claude-ask.
@@ -916,6 +970,8 @@ export default defineConfig(({ mode }) => {
       draftCellApi(),
       draftProofApi(),
       draftAudiencesApi(),
+      draftMessagesApi(),
+      draftVoicesApi(),
       setupApi(),
       askApi(),
       mediaMixApi(),

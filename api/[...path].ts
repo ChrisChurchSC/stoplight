@@ -32,6 +32,8 @@ const HANDLERS: Record<string, () => Promise<(body: unknown) => Promise<unknown>
   'draft-copy': () => import('../server/copyDraftHandler.js').then((m) => m.runCopyDraft),
   'draft-proof': () => import('../server/draftProofHandler.js').then((m) => m.runDraftProof),
   'draft-audiences': () => import('../server/draftAudienceHandler.js').then((m) => m.runDraftAudiences),
+  'draft-messages': () => import('../server/draftMessageHandler.js').then((m) => m.runDraftMessages),
+  'draft-voices': () => import('../server/draftVoiceHandler.js').then((m) => m.runDraftVoices),
   'extract-copy': () => import('../server/extractCopyHandler.js').then((m) => m.runExtractCopy),
   'icp-review': () => import('../server/icpReviewHandler.js').then((m) => m.runIcpReview),
   'media-mix': () => import('../server/mediaMixHandler.js').then((m) => m.runMediaMix),
