@@ -35,6 +35,8 @@ export interface HomeChatMsg {
   objectiveDone?: boolean
   /** Set on the message that announces just-set channels, to render a "View channels" link. */
   channelDone?: boolean
+  /** When set, this message is a step in the guided foundation flow; renders Draft/Skip buttons. */
+  flowStep?: string
 }
 
 /** A saved Home chat conversation — listed in the sidebar and reopenable. */

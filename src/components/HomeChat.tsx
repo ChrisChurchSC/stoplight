@@ -56,6 +56,19 @@ const STEP_ICON: Record<StepKind, ReactNode> = {
   ),
 }
 
+// The guided "build your foundation" flow, in dependency order (brand is done in setup first). Each
+// step offers to draft that piece or skip, then advances to the next.
+const FLOW_STEPS = ['audiences', 'channels', 'voices', 'proof', 'messages', 'objectives'] as const
+type FlowStep = (typeof FLOW_STEPS)[number]
+const FLOW_PROMPT: Record<FlowStep, { text: string; label: string }> = {
+  audiences: { text: `First, your **audiences**, the people you're marketing to. Everything else gets sharper once these exist. Want me to draft a few?`, label: 'Draft audiences' },
+  channels: { text: `Next, **channels**, where you reach each audience. Want me to pick the best-fit ones and set them?`, label: 'Set channels' },
+  voices: { text: `Now your **brand voice**, how you sound. Want me to define it?`, label: 'Add voices' },
+  proof: { text: `**Proof points**, the evidence your messages lean on. Want me to draft some?`, label: 'Draft proof points' },
+  messages: { text: `**Messages**, what you say to each audience, in your voice, backed by proof. Want me to draft them?`, label: 'Draft messages' },
+  objectives: { text: `Finally, **objectives**, what to measure and how often to report. Want me to draft them?`, label: 'Draft objectives' },
+}
+
 export function HomeChat() {
   const rows = useTrafficStore((s) => s.rows)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -407,6 +420,36 @@ export function HomeChat() {
     lastActionRef.current = 'channel'
   }
 
+  // ── The guided "build your foundation" flow: walk the sections in order, drafting or skipping each.
+  const runFlowAction = (step: FlowStep): Promise<void> => {
+    switch (step) {
+      case 'audiences': return addAudiences()
+      case 'channels': return setBrandChannels()
+      case 'voices': return addBrandVoices()
+      case 'proof': return draftProofPoints()
+      case 'messages': return draftBrandMessages()
+      case 'objectives': return draftBrandObjectives()
+    }
+  }
+  const pushFlowStep = (step: FlowStep) =>
+    setMessages((m) => [...m, { id: nid(), role: 'assistant', text: FLOW_PROMPT[step].text, flowStep: step }])
+  const advanceFlow = (current: FlowStep) => {
+    const next = FLOW_STEPS[FLOW_STEPS.indexOf(current) + 1]
+    if (next) pushFlowStep(next)
+    else say(`That's your foundation built, audiences, channels, voice, proof, messages, and objectives. From here you can put it to work in a flow.`, { setupDone: true })
+  }
+  const onFlowStep = async (msgId: string, step: FlowStep, doIt: boolean) => {
+    // Hide this step's buttons so it can't be re-triggered, then draft (or skip) and advance.
+    setMessages((m) => m.map((x) => (x.id === msgId ? { ...x, flowStep: undefined } : x)))
+    if (doIt) await runFlowAction(step)
+    advanceFlow(step)
+  }
+  const startFoundationFlow = () => {
+    setQ('')
+    say(`Let's build out your foundation in the order that works best. I'll offer each piece, you draft it or skip. You can refine anything later.`)
+    pushFlowStep('audiences')
+  }
+
   const run = async (question: string) => {
     const text = question.trim()
     if (!text || busyRef.current) return
@@ -414,6 +457,11 @@ export function HomeChat() {
     // Guided setup is a deterministic script that creates records as we go — handle it before the
     // read-only ask/report paths so a task request never dead-ends.
     if (setupRef.current) return handleSetupAnswer(text)
+
+    // "Build my foundation" launches the guided, section-by-section flow.
+    if (/\bbuild\b.*\b(foundation|everything|it all|the rest|out my brand)\b/i.test(text)) {
+      sayUser(text); startFoundationFlow(); return
+    }
 
     // Take real action for "do" requests instead of falling through to the read-only ask engine.
     const doVerb = /\b(draft|add|create|generate|write|give|need|make|build|develop|define|more|another|additional)\b/i.test(text)
@@ -542,6 +590,7 @@ export function HomeChat() {
       voiceDone: m.voiceDone,
       objectiveDone: m.objectiveDone,
       channelDone: m.channelDone,
+      flowStep: m.flowStep,
     }))
     saveHomeChat({
       id: chatIdRef.current,
@@ -635,6 +684,7 @@ export function HomeChat() {
                   )}
                   {m.setupDone && (
                     <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={startFoundationFlow}>Build my foundation</button>
                       <button className="hchat-setup-btn" onClick={addAudiences}>Add audiences</button>
                       <button className="hchat-setup-btn" onClick={draftBrandMessages}>Draft messages</button>
                       <button className="hchat-setup-btn" onClick={addBrandVoices}>Add voices</button>
@@ -675,6 +725,12 @@ export function HomeChat() {
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('channelrecords') }}>View channels</button>
                     </div>
                   )}
+                  {m.flowStep && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, true)}>{FLOW_PROMPT[m.flowStep as FlowStep].label}</button>
+                      <button className="hchat-setup-btn ghost" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, false)}>Skip</button>
+                    </div>
+                  )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
                 </>
               )}
@@ -688,6 +744,10 @@ export function HomeChat() {
         <div className="hchat-actions">
           {clientFilter && clientFilter !== 'all' ? (
             <>
+              <button className="hchat-action" disabled={busy} onClick={() => startFoundationFlow()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /></svg>
+                Build foundation
+              </button>
               <button className="hchat-action" disabled={busy} onClick={() => void addAudiences()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></svg>
                 Add audiences
