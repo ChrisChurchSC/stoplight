@@ -24,7 +24,7 @@ const GROUPS: { label: string; sheets: { page: SheetPage; label: string }[] }[] 
     sheets: [
       { page: 'records', label: 'Companies' },
       { page: 'people', label: 'People' },
-      { page: 'segments', label: 'Segments' },
+      { page: 'segments', label: 'Audiences' },
     ],
   },
   {

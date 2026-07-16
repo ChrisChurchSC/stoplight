@@ -287,7 +287,7 @@ export function FoundationView() {
         <div className="fnd-panel-head">
           <h2 className="fnd-panel-title">Audiences</h2>
           <span className="fnd-count">
-            {audiences.length || derived.length} segment{(audiences.length || derived.length) === 1 ? '' : 's'}
+            {audiences.length || derived.length} audience{(audiences.length || derived.length) === 1 ? '' : 's'}
           </span>
         </div>
 

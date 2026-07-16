@@ -153,7 +153,7 @@ export function HomeChat() {
     return [
       { kind: 'assets', label: `Campaign assets read: ${scoped.length}` },
       { kind: 'records', label: `Records retrieved: ${recs}` },
-      { kind: 'segments', label: `Segments scanned: ${segs}` },
+      { kind: 'segments', label: `Audiences scanned: ${segs}` },
     ]
   }
 

@@ -231,7 +231,7 @@ export function HomeSidebar() {
     {
       label: 'Foundation',
       items: [
-        item('segments', 'Segments', 'segments', page === 'segments', () => setPage('segments')),
+        item('segments', 'Audiences', 'segments', page === 'segments', () => setPage('segments')),
         item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
         item('voices', 'Voices', 'voices', page === 'voices', () => setPage('voices')),
         item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),

@@ -14,9 +14,9 @@ const ICON = (
   </>
 )
 
-// Segments IS the brand's audiences, surfaced as records. One spec drives the columns,
+// This page IS the brand's audiences, surfaced as records. One spec drives the columns,
 // the drawer fields, the row mapping, and the write-back, so everything stays in sync and
-// editing a segment updates the underlying audience (the same data used to generate copy).
+// editing a row updates the underlying audience (the same data used to generate copy).
 const line = (arr?: string[]) => (arr ?? []).join('\n')
 const parseLines = (v: string) => v.split('\n').map((s) => s.trim()).filter(Boolean)
 const parseCsv = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean)
@@ -39,7 +39,7 @@ interface Spec {
 }
 
 const SPECS: Spec[] = [
-  { key: 'name', label: 'Segment', kind: 'name', col: 200, get: (a) => a.name, set: (a, v) => { a.name = v } },
+  { key: 'name', label: 'Audience', kind: 'name', col: 200, get: (a) => a.name, set: (a, v) => { a.name = v } },
   { key: 'who', label: 'Who it is', kind: 'text', col: 220, get: (a) => a.definition || a.role || '', set: (a, v) => { a.definition = v } },
   { key: 'role', label: 'Role / buyer', kind: 'text', get: (a) => a.role || '', set: (a, v) => { a.role = v } },
   { key: 'angle', label: 'Message angle', kind: 'multiline', col: 300, get: (a) => a.messageAngle || '', set: (a, v) => { a.messageAngle = v } },
@@ -112,17 +112,17 @@ export function SegmentsView() {
 
   return (
     <RecordsTable
-      title="Segments"
+      title="Audiences"
       icon={ICON}
       columns={SEGMENT_COLUMNS}
       fields={SEGMENT_FIELDS}
       statuses={[]}
       rows={rows}
-      noun={['segment', 'segments']}
+      noun={['audience', 'audiences']}
       onAdd={() => {
         // Read the live array (not the render closure) so a paste that creates several rows in one
         // pass appends each one instead of clobbering the last. Return the id so paste can fill it.
-        const a = newAudience({ name: 'New segment' })
+        const a = newAudience({ name: 'New audience' })
         const cur = useTrafficStore.getState().clientAudiences[brand] ?? []
         setClientAudiences(brand, [...cur, a])
         return a.id
@@ -143,7 +143,7 @@ export function SegmentsView() {
         return (
           <RelatedList
             title="Companies"
-            empty="No companies tagged to this segment yet — set a company's Audience segment to this one."
+            empty="No companies tagged to this audience yet. Set a company's Audience segment to match it."
             items={inSegment.map((c) => ({
               id: c.id,
               name: c.name,

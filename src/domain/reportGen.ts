@@ -84,7 +84,7 @@ export function buildBrandReport(input: ReportInput): { title: string; kind: Rep
       recs.push(`Segment <strong>${esc(a.name)}</strong> has no assets targeted to it — nothing in the library speaks to them directly.`)
   }
   if (rows.length && drafts > live) recs.push(`Most assets are still drafts (${drafts} of ${rows.length}); only ${live} are scheduled or live.`)
-  if (!audiences.length) recs.push(`No audience segments are defined for ${esc(brand)} yet — define them in Segments so messaging can be aimed.`)
+  if (!audiences.length) recs.push(`No audiences are defined for ${esc(brand)} yet. Define them in Audiences so messaging can be aimed.`)
   if (!rows.length) recs.push(`No campaign assets found for ${esc(brand)} — the library is empty, so this report has nothing to read yet.`)
   const topRecs = recs.slice(0, 6)
 

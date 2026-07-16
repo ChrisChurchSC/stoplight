@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { recordTint } from '../domain/records'
-import type { TrafficRow } from '../domain/types'
+import { buildMatrix } from '../domain/matrix'
+import type { Rtb } from '../domain/rtb'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useAssetTasks } from '../lib/assetTasks'
 
 /**
- * Home — a personal agenda modeled on a calendar/notes home. A greeting and a big Ask box up
- * top (with quick chips), then "Meetings" for the selected day (your Granola notes), then
- * "Tasks" that are due (overdue dates in red). Scoped to the brand in the rail. Tasks live in
- * localStorage (see TasksView); meetings come from ingested Granola notes in the canvases.
+ * Home — the personalization command center. A greeting and a big Ask box up top (with quick
+ * chips), then "Personalization coverage" (audiences × stages covered vs gaps, from buildMatrix),
+ * a "Foundation" health strip, and "Tasks" that need you. Scoped to the brand in the rail. This is
+ * the "am I covered / what do I do next" home for scaling personalization — no meetings feed.
  */
 
-const DAY = 86_400_000
 const NAME = 'Chris'
-const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const TASKS_KEY = 'stoplight.tasks.v1'
 
@@ -50,28 +49,10 @@ const startOfDay = (ms: number) => {
   d.setHours(0, 0, 0, 0)
   return d.getTime()
 }
-const clock = (ms: number) => {
-  const d = new Date(ms)
-  let h = d.getHours()
-  const ap = h >= 12 ? 'PM' : 'AM'
-  h = h % 12 || 12
-  return `${h}:${String(d.getMinutes()).padStart(2, '0')} ${ap}`
-}
 const fmtDate = (ms: number) => {
   const d = new Date(ms)
   return `${MON[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
-function dayLabel(ms: number, todayStart: number): string {
-  const days = Math.round((startOfDay(ms) - todayStart) / DAY)
-  if (days === 0) return `Today, ${MON[new Date(ms).getMonth()]} ${new Date(ms).getDate()}`
-  if (days === -1) return 'Yesterday'
-  if (days === 1) return 'Tomorrow'
-  const d = new Date(ms)
-  return `${WD[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}`
-}
-const isMeeting = (r: TrafficRow): boolean => /granola\./i.test(r.sourceUrl ?? '') || r.assetType === 'Meeting note'
-const meetingMs = (r: TrafficRow): number =>
-  (typeof r.postedAt === 'number' ? r.postedAt : 0) || (r.publishedAt ? parseDue(r.publishedAt) : 0) || r.createdAt || 0
 
 export function HomeAgenda() {
   const { canvases } = useHomeCanvases()
@@ -80,10 +61,15 @@ export function HomeAgenda() {
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const setBrandView = useTrafficStore((s) => s.setBrandView)
+  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const openFlow = useTrafficStore((s) => s.openFlow)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const brandSystems = useTrafficStore((s) => s.brandSystems)
+  const voices = useTrafficStore((s) => s.voices)
+  const messages = useTrafficStore((s) => s.messages)
   const [q, setQ] = useState('')
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks())
-  const [dayOffset, setDayOffset] = useState(0)
 
   useEffect(() => {
     const update = () => setTasks(loadTasks())
@@ -99,7 +85,50 @@ export function HomeAgenda() {
   const { assetTasks, toggleAssetDone } = useAssetTasks(brand ?? '')
   const now = Date.now()
   const todayStart = startOfDay(now)
-  const selDayStart = todayStart + dayOffset * DAY
+
+  // ── Personalization coverage (audiences × funnel stages), from the same builder the
+  // Personalize matrix uses — so the home summary and the matrix always agree.
+  const audiences = useMemo(() => (brand ? clientAudiences[brand] ?? [] : []), [brand, clientAudiences])
+  const brandRows = useMemo(
+    () => canvases.filter((c) => !brand || c.client === brand).flatMap((c) => c.rows),
+    [canvases, brand],
+  )
+  const rtbById = useMemo(() => {
+    const m = new Map<string, Rtb>()
+    audiences.forEach((a) => a.rtbs?.forEach((r) => m.set(r.id, r)))
+    ;(brand ? brandSystems[brand]?.rtbs ?? [] : []).forEach((r) => m.set(r.id, r))
+    return m
+  }, [audiences, brandSystems, brand])
+  const matrix = useMemo(() => buildMatrix(audiences, brandRows, rtbById), [audiences, brandRows, rtbById])
+  const { cells, covered, gaps, blocked } = matrix.totals
+  const denom = Math.max(1, cells)
+  const pct = (n: number) => `${(n / denom) * 100}%`
+  // The audiences with the most reachable-but-empty stages — the highest-leverage gaps to fill.
+  const topGaps = useMemo(
+    () => matrix.rows.filter((r) => r.gaps > 0).sort((a, b) => b.gaps - a.gaps).slice(0, 4),
+    [matrix],
+  )
+
+  // Open the brand's Personalize matrix (the full audience × stage × channel grid).
+  const openMatrix = () => {
+    if (!brand) return
+    setCampaignFilter('all')
+    setBrandView('personalize')
+    setPage('clients')
+  }
+
+  // ── Foundation health — the strategy the AI writes from, counted for this brand.
+  const foundation = useMemo(() => {
+    const proofCount = brand ? brandSystems[brand]?.rtbs?.length ?? 0 : 0
+    const voiceCount = voices.filter((v) => !v.brand || v.brand === brand).length
+    const messageCount = messages.filter((m) => !m.brand || m.brand === brand).length
+    return [
+      { key: 'audiences', label: 'Audiences', count: audiences.length, go: () => setPage('segments') },
+      { key: 'voices', label: 'Voices', count: voiceCount, go: () => setPage('voices') },
+      { key: 'messages', label: 'Messages', count: messageCount, go: () => setPage('messages') },
+      { key: 'proof', label: 'Proof points', count: proofCount, go: () => setPage('proofpoints') },
+    ]
+  }, [brand, audiences, brandSystems, voices, messages, setPage])
 
   const toggleTask = (id: string) =>
     setTasks((prev) => {
@@ -109,18 +138,6 @@ export function HomeAgenda() {
       window.dispatchEvent(new Event('stoplight:tasks'))
       return next
     })
-
-  // Meetings for the selected day (Granola notes across the brand's canvases), sorted by time.
-  const dayMeetings = useMemo(() => {
-    return canvases
-      .filter((c) => !brand || c.client === brand)
-      .flatMap((c) => c.rows)
-      .filter(isMeeting)
-      .map((r) => ({ row: r, ms: meetingMs(r) }))
-      .filter((x) => startOfDay(x.ms || now) === selDayStart)
-      .sort((a, b) => a.ms - b.ms)
-  }, [canvases, brand, selDayStart, now])
-  const pastCount = dayMeetings.filter((m) => m.ms < now).length
 
   // Tasks that are due: manual tasks + derived asset-tasks, soonest first (undated last), overdue
   // dates in red. Each carries a `derived` flag so the row knows how to check it / where to open.
@@ -135,7 +152,10 @@ export function HomeAgenda() {
   }, [tasks, assetTasks, brand])
   const shownTasks = openTasks.slice(0, 8)
 
-  const recentReport = useMemo(() => [...reports].filter((r) => !brand || r.client === brand).sort((a, b) => b.createdAt - a.createdAt)[0], [reports, brand])
+  const recentReport = useMemo(
+    () => [...reports].filter((r) => !brand || r.client === brand).sort((a, b) => b.createdAt - a.createdAt)[0],
+    [reports, brand],
+  )
 
   const ask = () => {
     const t = q.trim()
@@ -170,46 +190,87 @@ export function HomeAgenda() {
             </div>
           </div>
           <div className="ag2-chips">
-            <button className="ag2-chip" onClick={() => openHomeChat('Prep me for my next meeting')}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="3" width="8" height="4" rx="1" /><rect x="5" y="5" width="14" height="16" rx="2" /><path d="M9 12h6M9 16h4" /></svg>
-              Prep for next meeting
+            <button className="ag2-chip" onClick={() => openHomeChat('Draft a new flow for this brand')}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
+              Draft a flow
             </button>
-            <button className="ag2-chip" onClick={() => openHomeChat('Recap my last call')}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4" /></svg>
-              Recap last call
+            <button className="ag2-chip" onClick={() => openHomeChat('Help me personalize a campaign for a specific audience')}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></svg>
+              Personalize for an audience
+            </button>
+            <button className="ag2-chip" onClick={() => openHomeChat('What personalization gaps should I prioritize next?')}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h10M4 18h7" /></svg>
+              What should I do next?
             </button>
           </div>
         </div>
 
         <section className="ag2-sec">
           <div className="ag2-sec-head">
-            <span className="ag2-sec-title">Meetings</span>
-            <span className="ag2-daynav">
-              <span className="ag2-daynav-label">{dayLabel(selDayStart, todayStart)}</span>
-              <button className="ag2-daynav-btn" aria-label="Previous day" onClick={() => setDayOffset((o) => o - 1)}>‹</button>
-              <button className="ag2-daynav-btn" aria-label="Next day" onClick={() => setDayOffset((o) => o + 1)}>›</button>
-            </span>
+            <span className="ag2-sec-title">Personalization coverage</span>
+            {brand && audiences.length > 0 && (
+              <button className="ag2-viewall" onClick={openMatrix}>Open matrix <span className="ag2-viewall-plus">→</span></button>
+            )}
           </div>
-          {dayMeetings.length === 0 ? (
-            <div className="ag2-empty">No meetings this day. Connect Granola to see your calls here.</div>
+          {!brand || audiences.length === 0 ? (
+            <div className="ag2-empty">
+              Add audiences to see where you&rsquo;re personalized.{' '}
+              <button className="home-link" onClick={() => setPage('segments')}>Add audiences</button>
+            </div>
           ) : (
             <>
-              <div className="ag2-mtg-sub">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg>
-                {pastCount > 0 ? `${pastCount} past ${pastCount === 1 ? 'event' : 'events'}` : `${dayMeetings.length} ${dayMeetings.length === 1 ? 'event' : 'events'}`}
+              <div className="ag2-cov-summary">
+                <span className="ag2-cov-stat"><b>{audiences.length}</b> {audiences.length === 1 ? 'audience' : 'audiences'}</span>
+                <span className="ag2-cov-dot">·</span>
+                <span className="ag2-cov-stat"><b>{cells}</b> cells</span>
+                <span className="ag2-cov-dot">·</span>
+                <span className="ag2-cov-stat ok"><b>{covered}</b> covered</span>
+                <span className="ag2-cov-dot">·</span>
+                <span className="ag2-cov-stat warn"><b>{gaps}</b> gaps</span>
+                {blocked > 0 && (
+                  <>
+                    <span className="ag2-cov-dot">·</span>
+                    <span className="ag2-cov-stat block"><b>{blocked}</b> blocked</span>
+                  </>
+                )}
               </div>
-              {dayMeetings.map(({ row, ms }) => {
-                const past = ms < now
-                return (
-                  <div key={row.id} className="ag2-mtg-row" role="button" tabIndex={0} onClick={() => setPage('library')} onKeyDown={(e) => { if (e.key === 'Enter') setPage('library') }}>
-                    <span className="ag2-mtg-dot" style={{ background: past ? 'var(--text-faint)' : recordTint(row.assetName) }} />
-                    <span className={`ag2-mtg-t${past ? ' past' : ''}`}>{row.assetName}</span>
-                    <span className="ag2-mtg-time">{clock(ms)}</span>
-                  </div>
-                )
-              })}
+              <div className="ag2-cov-bar" role="img" aria-label={`${covered} covered, ${gaps} gaps, ${blocked} blocked of ${cells} cells`}>
+                {covered > 0 && <span className="ag2-cov-seg cov" style={{ width: pct(covered) }} />}
+                {gaps > 0 && <span className="ag2-cov-seg gap" style={{ width: pct(gaps) }} />}
+                {blocked > 0 && <span className="ag2-cov-seg block" style={{ width: pct(blocked) }} />}
+              </div>
+              {topGaps.length > 0 && (
+                <div className="ag2-cov-gaps">
+                  {topGaps.map((r) => (
+                    <button
+                      key={r.audience.id}
+                      className="ag2-cov-gap"
+                      onClick={openMatrix}
+                      title={`Open the matrix to fill ${r.audience.name}`}
+                    >
+                      <span className="ag2-cov-gap-dot" style={{ background: recordTint(r.audience.name) }} />
+                      <span className="ag2-cov-gap-name">{r.audience.name}</span>
+                      <span className="ag2-cov-gap-count">{r.gaps} {r.gaps === 1 ? 'gap' : 'gaps'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </>
           )}
+        </section>
+
+        <section className="ag2-sec">
+          <div className="ag2-sec-head">
+            <span className="ag2-sec-title">Foundation</span>
+          </div>
+          <div className="ag2-found">
+            {foundation.map((f) => (
+              <button key={f.key} className={`ag2-found-item${f.count === 0 ? ' empty' : ''}`} onClick={f.go}>
+                <span className="ag2-found-count">{f.count}</span>
+                <span className="ag2-found-label">{f.label}</span>
+              </button>
+            ))}
+          </div>
         </section>
 
         <section className="ag2-sec">
