@@ -7,12 +7,14 @@ import { heuristicAnswer, type AskAnswer, type AskContext } from '../../domain/a
  * findings, so it's never wrong, only more or less fluent. `live` reports which
  * path answered so the UI can be honest about it.
  */
-export async function askClaude(context: AskContext): Promise<AskAnswer & { live: boolean }> {
+export async function askClaude(context: AskContext, model?: string): Promise<AskAnswer & { live: boolean }> {
   try {
+    // 'auto' (or unset) keeps the server's tier default; any other id overrides the model per request.
+    const body = model && model !== 'auto' ? { context, model } : { context }
     const res = await fetch('/api/claude-ask', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) throw new Error(`claude-ask ${res.status}`)
     const data = (await res.json()) as AskAnswer

@@ -73,9 +73,9 @@ export function modelProvider(): 'openrouter' | 'anthropic' | null {
  * preferred when its key is set; otherwise Anthropic direct. Throws NoKeyError
  * when neither is configured.
  */
-export function makeModelClient(tier: ModelTier = 'extract'): ModelClient {
+export function makeModelClient(tier: ModelTier = 'extract', modelOverride?: string): ModelClient {
   const orKey = process.env.OPENROUTER_API_KEY
-  if (orKey) return openRouterClient(orKey, tier)
+  if (orKey) return openRouterClient(orKey, tier, modelOverride)
 
   const anthKey = process.env.ANTHROPIC_API_KEY
   if (anthKey) {
@@ -181,9 +181,10 @@ function toOpenAITools(tools: Anthropic.MessageCreateParamsNonStreaming['tools']
   return fns.length ? fns : undefined
 }
 
-function openRouterClient(orKey: string, tier: ModelTier): ModelClient {
+function openRouterClient(orKey: string, tier: ModelTier, modelOverride?: string): ModelClient {
   const create = async (params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> => {
-    const model = resolveOpenRouterModel(tier)
+    // An explicit per-request override (from the app's model selector) wins over the env/tier default.
+    const model = modelOverride || resolveOpenRouterModel(tier)
 
     // json_schema output has no OpenAI-portable equivalent, so hand the model the
     // schema in the prompt and ask for a bare JSON object (matches copyDraftHandler).

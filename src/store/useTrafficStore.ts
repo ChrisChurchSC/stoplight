@@ -112,6 +112,7 @@ import { type Person, freshPersonId, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Voice, freshVoiceId } from '../domain/voice'
+import { DEFAULT_AI_MODEL } from '../domain/aiModels'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
   type LibraryFolder,
@@ -1108,6 +1109,23 @@ function saveAggregateContributing(on: boolean): void {
   }
 }
 
+// The model the user picked for the internal AI (see domain/aiModels). 'auto' = server tier defaults.
+const AI_MODEL_KEY = 'stoplight.aiModel.v1'
+function loadAiModel(): string {
+  try {
+    return localStorage.getItem(AI_MODEL_KEY) || DEFAULT_AI_MODEL
+  } catch {
+    return DEFAULT_AI_MODEL
+  }
+}
+function saveAiModel(id: string): void {
+  try {
+    localStorage.setItem(AI_MODEL_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}
+
 // Campaigns created in the new-client wizard, persisted. Registered into
 // clientForCampaign on load so they resolve to their client before any rows exist.
 const CAMPAIGNS_KEY = 'stoplight.campaigns.v1'
@@ -1897,6 +1915,9 @@ interface TrafficState {
   /** Account-wide opt-out of the anonymized aggregate learning layer (default-on). */
   aggregateContributing: boolean
   setAggregateContributing: (on: boolean) => void
+  /** The model the user picked for the internal AI ('auto' = server tier defaults). See domain/aiModels. */
+  aiModel: string
+  setAiModel: (id: string) => void
   /** True when the ICP was refined from Attio closed-won data (feedback loop). */
   icpFromClosedWon: boolean
   /** Refresh the ICP from actual closed-won customers in Attio. */
@@ -2225,6 +2246,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   auditLog: loadAuditLog(),
   coherenceDecisions: loadCoherenceDecisions(),
   aggregateContributing: loadAggregateContributing(),
+  aiModel: loadAiModel(),
   icpFromClosedWon: false,
   trackingRan: false,
   trackingCleared: false,
@@ -5527,6 +5549,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setAggregateContributing: (on) => {
     saveAggregateContributing(on)
     set({ aggregateContributing: on })
+  },
+  setAiModel: (id) => {
+    saveAiModel(id)
+    set({ aiModel: id })
   },
 
   openBreaks: (breakId) => set({ breaksOpen: true, activeBreakId: breakId ?? null }),

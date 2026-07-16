@@ -37,8 +37,9 @@ export async function runAsk(body: unknown): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = makeModelClient('agent')
-  const { context } = (body ?? {}) as { context?: { question?: string } }
+  const { context, model } = (body ?? {}) as { context?: { question?: string }; model?: string }
+  // The app's model selector can override the tier default; 'auto'/empty keeps the env-based default.
+  const client = makeModelClient('agent', typeof model === 'string' && model && model !== 'auto' ? model : undefined)
 
   const message = await client.messages.create({
     model: 'claude-opus-4-8',

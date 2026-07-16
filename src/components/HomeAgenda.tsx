@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { recordTint } from '../domain/records'
 import { buildMatrix } from '../domain/matrix'
+import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
+import { AI_MODELS } from '../domain/aiModels'
 import type { Rtb } from '../domain/rtb'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -68,6 +70,8 @@ export function HomeAgenda() {
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const voices = useTrafficStore((s) => s.voices)
   const messages = useTrafficStore((s) => s.messages)
+  const aiModel = useTrafficStore((s) => s.aiModel)
+  const setAiModel = useTrafficStore((s) => s.setAiModel)
   const [q, setQ] = useState('')
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks())
 
@@ -117,6 +121,16 @@ export function HomeAgenda() {
     setPage('clients')
   }
 
+  // ── Flows in flight — the brand's campaigns still in motion (not completed), most-active first,
+  // each with its scheduling progress (assets scheduled/live of total).
+  const flowsInFlight = useMemo(() => {
+    const rank: Record<string, number> = { active: 0, 'in-review': 1, planning: 2 }
+    return canvases
+      .filter((c) => (!brand || c.client === brand) && c.name !== CONTENT_LIBRARY_CAMPAIGN && c.status !== 'completed')
+      .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || b.lastTouched - a.lastTouched)
+      .slice(0, 5)
+  }, [canvases, brand])
+
   // ── Foundation health — the strategy the AI writes from, counted for this brand.
   const foundation = useMemo(() => {
     const proofCount = brand ? brandSystems[brand]?.rtbs?.length ?? 0 : 0
@@ -139,16 +153,19 @@ export function HomeAgenda() {
       return next
     })
 
-  // Tasks that are due: manual tasks + derived asset-tasks, soonest first (undated last), overdue
-  // dates in red. Each carries a `derived` flag so the row knows how to check it / where to open.
+  // Tasks that are due: manual tasks + derived asset-tasks, ranked by priority — most overdue first,
+  // then soonest due, then undated last (overdue dates render in red). Each carries a `derived` flag
+  // so the row knows how to check it / where to open. A task's priority is its due time: an earlier
+  // due (or further past due) outranks a later one; undated tasks sink to the bottom.
   const openTasks = useMemo(() => {
+    const priority = (due: string) => (due ? parseDue(due) : Infinity)
     const manual = tasks
       .filter((t) => !t.done && (!brand || (t.brand ?? '') === brand || !t.brand))
       .map((t) => ({ id: t.id, text: t.text, due: t.due, derived: false, rowId: '', campaign: '' }))
     const assets = assetTasks
       .filter((a) => !a.done)
       .map((a) => ({ id: a.id, text: a.text, due: a.due, derived: true, rowId: a.rowId, campaign: a.campaign }))
-    return [...manual, ...assets].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+    return [...manual, ...assets].sort((a, b) => priority(a.due) - priority(b.due))
   }, [tasks, assetTasks, brand])
   const shownTasks = openTasks.slice(0, 8)
 
@@ -185,7 +202,17 @@ export function HomeAgenda() {
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask() } }}
             />
             <div className="ag2-ask-foot">
-              <span className="ag2-ask-model">Auto</span>
+              <select
+                className="ag2-ask-model"
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                title="Model for the internal AI"
+                aria-label="AI model"
+              >
+                {AI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
               <button className="ag2-ask-send" onClick={ask} disabled={!q.trim()} aria-label="Ask">↑</button>
             </div>
           </div>
@@ -204,6 +231,30 @@ export function HomeAgenda() {
             </button>
           </div>
         </div>
+
+        <section className="ag2-sec">
+          <div className="ag2-sec-head">
+            <span className="ag2-sec-title">Tasks <span className="ag2-sec-count">{openTasks.length}</span></span>
+            <button className="ag2-viewall" onClick={() => setPage('tasks')}>View all <span className="ag2-viewall-plus">+</span></button>
+          </div>
+          {shownTasks.length === 0 ? (
+            <div className="ag2-empty">No tasks due. Add tasks and they&rsquo;ll show up here.</div>
+          ) : (
+            shownTasks.map((t) => {
+              const due = t.due ? parseDue(t.due) : null
+              const overdue = due != null && startOfDay(due) <= todayStart
+              const open = () => (t.derived ? openFlow(t.campaign, 'grid') : setPage('tasks'))
+              const check = () => (t.derived ? toggleAssetDone(t.rowId) : toggleTask(t.id))
+              return (
+                <div key={t.id} className="ag2-task">
+                  <button className="ag2-check" aria-label="Mark done" onClick={check} />
+                  <span className="ag2-task-t" onClick={open} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') open() }}>{t.text || 'Untitled task'}</span>
+                  {due != null && <span className={`ag2-task-due${overdue ? ' over' : ''}`}>{fmtDate(due)}</span>}
+                </div>
+              )
+            })
+          )}
+        </section>
 
         <section className="ag2-sec">
           <div className="ag2-sec-head">
@@ -261,6 +312,43 @@ export function HomeAgenda() {
 
         <section className="ag2-sec">
           <div className="ag2-sec-head">
+            <span className="ag2-sec-title">Flows in flight <span className="ag2-sec-count">{flowsInFlight.length}</span></span>
+            <button className="ag2-viewall" onClick={() => setPage('flows')}>View all <span className="ag2-viewall-plus">+</span></button>
+          </div>
+          {flowsInFlight.length === 0 ? (
+            <div className="ag2-empty">
+              No flows in flight.{' '}
+              <button className="home-link" onClick={() => openHomeChat('Draft a new flow for this brand')}>Draft a flow</button>
+            </div>
+          ) : (
+            flowsInFlight.map((c) => {
+              const total = c.rows.length
+              const live = c.rows.filter((r) => r.status === 'scheduled' || r.status === 'posted').length
+              const statusLabel = c.status === 'in-review' ? 'In review' : c.status === 'active' ? 'Active' : 'Planning'
+              return (
+                <div
+                  key={c.name}
+                  className="ag2-flow"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openFlow(c.name, 'grid')}
+                  onKeyDown={(e) => { if (e.key === 'Enter') openFlow(c.name, 'grid') }}
+                >
+                  <span className={`ag2-flow-dot s-${c.status}`} />
+                  <span className="ag2-flow-name">{c.name}</span>
+                  {c.flagged && <span className="ag2-flow-flag" title="Needs attention">⚑</span>}
+                  <span className="ag2-flow-meta">
+                    <span className={`ag2-flow-status s-${c.status}`}>{statusLabel}</span>
+                    {total > 0 && <span className="ag2-flow-prog">{live}/{total} scheduled</span>}
+                  </span>
+                </div>
+              )
+            })
+          )}
+        </section>
+
+        <section className="ag2-sec">
+          <div className="ag2-sec-head">
             <span className="ag2-sec-title">Foundation</span>
           </div>
           <div className="ag2-found">
@@ -271,30 +359,6 @@ export function HomeAgenda() {
               </button>
             ))}
           </div>
-        </section>
-
-        <section className="ag2-sec">
-          <div className="ag2-sec-head">
-            <span className="ag2-sec-title">Tasks <span className="ag2-sec-count">{openTasks.length}</span></span>
-            <button className="ag2-viewall" onClick={() => setPage('tasks')}>View all <span className="ag2-viewall-plus">+</span></button>
-          </div>
-          {shownTasks.length === 0 ? (
-            <div className="ag2-empty">No tasks due. Add tasks and they&rsquo;ll show up here.</div>
-          ) : (
-            shownTasks.map((t) => {
-              const due = t.due ? parseDue(t.due) : null
-              const overdue = due != null && startOfDay(due) <= todayStart
-              const open = () => (t.derived ? openFlow(t.campaign, 'grid') : setPage('tasks'))
-              const check = () => (t.derived ? toggleAssetDone(t.rowId) : toggleTask(t.id))
-              return (
-                <div key={t.id} className="ag2-task">
-                  <button className="ag2-check" aria-label="Mark done" onClick={check} />
-                  <span className="ag2-task-t" onClick={open} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') open() }}>{t.text || 'Untitled task'}</span>
-                  {due != null && <span className={`ag2-task-due${overdue ? ' over' : ''}`}>{fmtDate(due)}</span>}
-                </div>
-              )
-            })
-          )}
         </section>
       </div>
     </div>

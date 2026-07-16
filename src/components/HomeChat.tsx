@@ -195,7 +195,7 @@ export function HomeChat() {
     }
 
     const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList })
-    const res = await askClaude(ctx)
+    const res = await askClaude(ctx, useTrafficStore.getState().aiModel)
     setMessages((m) =>
       m.map((x) => (x.id === asstId ? { ...x, busy: false, text: res.answer, source: res.live ? 'Claude' : 'offline estimate' } : x)),
     )

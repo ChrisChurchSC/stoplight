@@ -84,7 +84,7 @@ export function AskClaude() {
     setAnswer(null)
     const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
     const ctx = buildAskContext(text, scoped, { scope, breakStatus, comments, batchReview, icp, campaigns: campaignList })
-    const res = await askClaude(ctx)
+    const res = await askClaude(ctx, useTrafficStore.getState().aiModel)
     setAnswer(res)
     setBusy(false)
   }
