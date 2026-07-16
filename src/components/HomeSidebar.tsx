@@ -196,7 +196,6 @@ export function HomeSidebar() {
   const setPage = useTrafficStore((s) => s.setPage)
   const libraryMode = useTrafficStore((s) => s.libraryMode)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const taskBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   const homeChats = useTrafficStore((s) => s.homeChats)

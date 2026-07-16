@@ -8,7 +8,7 @@ import { freshRecordId } from '../domain/records'
 import { newAudience } from '../domain/audiences'
 import { buildAskBrand } from '../lib/askBrand'
 import { GUIDED_SETUP_INTRO, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest } from '../domain/guidedSetup'
-import type { HomeChatMsg as Msg, HomeChatStepKind as StepKind, SavedHomeChat } from '../domain/homeChat'
+import type { HomeChatMsg as Msg, HomeChatStep as Step, HomeChatStepKind as StepKind } from '../domain/homeChat'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -517,7 +517,7 @@ export function HomeChat() {
                   )}
                   {m.offerSetup && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={startSetup}>Get started</button>
+                      <button className="hchat-setup-btn" onClick={() => startSetup()}>Get started</button>
                     </div>
                   )}
                   {m.setupDone && (
