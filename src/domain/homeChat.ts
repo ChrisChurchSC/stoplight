@@ -31,6 +31,10 @@ export interface HomeChatMsg {
   messageDone?: boolean
   /** Set on the message that announces just-added voices, to render a "View voices" link. */
   voiceDone?: boolean
+  /** Set on the message that announces just-drafted objectives, to render a "View objectives" link. */
+  objectiveDone?: boolean
+  /** Set on the message that announces just-set channels, to render a "View channels" link. */
+  channelDone?: boolean
 }
 
 /** A saved Home chat conversation — listed in the sidebar and reopenable. */

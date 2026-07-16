@@ -4,6 +4,9 @@ import { draftProof } from '../adapters/ask/draftProof'
 import { draftAudiences } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
+import { draftObjectives } from '../adapters/ask/draftObjectives'
+import { draftChannels } from '../adapters/ask/draftChannels'
+import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
 import { freshRecordId } from '../domain/records'
@@ -80,6 +83,7 @@ export function HomeChat() {
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addMessage = useTrafficStore((s) => s.addMessage)
   const addVoice = useTrafficStore((s) => s.addVoice)
+  const addObjective = useTrafficStore((s) => s.addObjective)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const openFlow = useTrafficStore((s) => s.openFlow)
@@ -355,6 +359,54 @@ export function HomeChat() {
     lastActionRef.current = 'voice'
   }
 
+  // Draft marketing objectives (goal + metric + target framing) for the active brand.
+  const draftBrandObjectives = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('objectives'); return }
+    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const existing = store.objectives.filter((o) => !o.brand || o.brand === brand).map((o) => o.name)
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting objectives for ${brand}` }] }])
+    const { objectives: drafted, reportingCadence } = await draftObjectives({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing })
+    drafted.forEach((d) => addObjective({ brand, name: d.name, metric: d.metric, target: d.target, timeframe: d.timeframe, status: 'planned' }))
+    const list = drafted.map((d) => `- **${d.name}** (${d.metric}, ${d.target}, ${d.timeframe})`).join('\n')
+    setMessages((m) =>
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I drafted ${drafted.length} objective${drafted.length === 1 ? '' : 's'} for **${brand}** and what to measure:\n\n${list}\n\n**Reporting cadence:** ${reportingCadence}\n\nAsk for more, or open Objectives to refine them.`, objectiveDone: true } : x)),
+    )
+    lastActionRef.current = 'objective'
+  }
+
+  // Recommend the channels that fit the brand and assign them to its audiences (which fills in the
+  // personalization coverage). The AI only picks from the channels the app supports.
+  const setBrandChannels = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('channelrecords'); return }
+    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const audiences = store.clientAudiences[brand] ?? []
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Choosing channels for ${brand}` }] }])
+    const recs = await draftChannels({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences: audiences.map((a) => a.name), channelOptions: CHANNEL_LIST.map((c) => c.label) })
+    // Resolve recommended labels to channel ids and assign them to every audience (union with any set).
+    const ids = [...new Set(recs.map((r) => resolveChannelId(r.name)).filter((x): x is NonNullable<typeof x> => !!x))]
+    if (ids.length && audiences.length) {
+      const updated = audiences.map((a) => ({ ...a, channels: [...new Set([...(a.channels ?? []), ...ids])] }))
+      setClientAudiences(brand, updated)
+    }
+    const label = (rid: string) => CHANNEL_LIST.find((c) => c.id === rid)?.label ?? rid
+    const list = recs.map((r) => `- **${r.name}**: ${r.why}`).join('\n')
+    const applied = audiences.length
+      ? ` I set them on your ${audiences.length} audience${audiences.length === 1 ? '' : 's'} (${ids.map(label).join(', ')}), so your personalization coverage fills in.`
+      : ' Add audiences and I can assign these to them.'
+    setMessages((m) =>
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `Here are the channels I'd focus on for **${brand}**:\n\n${list}\n${applied}`, channelDone: true } : x)),
+    )
+    lastActionRef.current = 'channel'
+  }
+
   const run = async (question: string) => {
     const text = question.trim()
     if (!text || busyRef.current) return
@@ -369,6 +421,8 @@ export function HomeChat() {
     const wantsAudience = /\baudiences?\b|\bpersonas?\b|\bsegments?\b/i.test(text) && doVerb
     const wantsMessage = /\bmessages?\b|\bangles?\b/i.test(text) && doVerb
     const wantsVoice = /\bvoices?\b|\btone[ -]?of[ -]?voice\b/i.test(text) && doVerb
+    const wantsObjective = /\bobjectives?\b|\bgoals?\b|\bkpis?\b/i.test(text) && doVerb
+    const wantsChannel = /\bchannels?\b/i.test(text) && doVerb
     const bareMore = text.length <= 40 && /\b(more|another|additional|others?|keep going|again|continue)\b/i.test(text)
     if (wantsAudience || (bareMore && lastActionRef.current === 'audience')) {
       sayUser(text); setQ(''); void addAudiences(); return
@@ -378,6 +432,12 @@ export function HomeChat() {
     }
     if (wantsVoice || (bareMore && lastActionRef.current === 'voice')) {
       sayUser(text); setQ(''); void addBrandVoices(); return
+    }
+    if (wantsObjective || (bareMore && lastActionRef.current === 'objective')) {
+      sayUser(text); setQ(''); void draftBrandObjectives(); return
+    }
+    if (wantsChannel || (bareMore && lastActionRef.current === 'channel')) {
+      sayUser(text); setQ(''); void setBrandChannels(); return
     }
     if (wantsProof || (bareMore && lastActionRef.current === 'proof')) {
       sayUser(text); setQ(''); void draftProofPoints(); return
@@ -480,6 +540,8 @@ export function HomeChat() {
       audienceDone: m.audienceDone,
       messageDone: m.messageDone,
       voiceDone: m.voiceDone,
+      objectiveDone: m.objectiveDone,
+      channelDone: m.channelDone,
     }))
     saveHomeChat({
       id: chatIdRef.current,
@@ -577,6 +639,8 @@ export function HomeChat() {
                       <button className="hchat-setup-btn" onClick={draftBrandMessages}>Draft messages</button>
                       <button className="hchat-setup-btn" onClick={addBrandVoices}>Add voices</button>
                       <button className="hchat-setup-btn" onClick={draftProofPoints}>Draft proof points</button>
+                      <button className="hchat-setup-btn" onClick={setBrandChannels}>Set channels</button>
+                      <button className="hchat-setup-btn" onClick={draftBrandObjectives}>Draft objectives</button>
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); openFlow('') }}>Draft a flow</button>
                       <button className="hchat-setup-btn ghost" onClick={closeHomeChat}>Go home</button>
                     </div>
@@ -599,6 +663,16 @@ export function HomeChat() {
                   {m.voiceDone && (
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('voices') }}>View voices</button>
+                    </div>
+                  )}
+                  {m.objectiveDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('objectives') }}>View objectives</button>
+                    </div>
+                  )}
+                  {m.channelDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('channelrecords') }}>View channels</button>
                     </div>
                   )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
@@ -629,6 +703,14 @@ export function HomeChat() {
               <button className="hchat-action" disabled={busy} onClick={() => void draftProofPoints()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 6" /></svg>
                 Draft proof points
+              </button>
+              <button className="hchat-action" disabled={busy} onClick={() => void setBrandChannels()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="2.3" /><circle cx="18" cy="6" r="2.3" /><circle cx="12" cy="18" r="2.3" /><path d="M6 8.3v2.2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8.3M12 12.5v3.2" /></svg>
+                Set channels
+              </button>
+              <button className="hchat-action" disabled={busy} onClick={() => void draftBrandObjectives()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></svg>
+                Draft objectives
               </button>
               <button className="hchat-action" disabled={busy} onClick={() => { closeHomeChat(); openFlow('') }}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
