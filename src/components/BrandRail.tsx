@@ -38,7 +38,19 @@ export function BrandRail() {
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   // Show real (named) brands, plus a just-created placeholder while it's the active one — so making
   // a brand adds its tile to the rail right away, before you name it (upload a pfp / rename later).
-  const brands = brandRecords.filter((b) => b.name.trim() && (b.name !== 'New brand' || clientFilter === b.name))
+  // De-dupe by name so two records with the same brand name never render as two tiles (the rail
+  // scopes by name, so both would resolve to the same brand and look unclickable); when names
+  // collide, keep the one with a picture, else the first seen.
+  const brands = (() => {
+    const byName = new Map<string, (typeof brandRecords)[number]>()
+    for (const b of brandRecords) {
+      if (!b.name.trim()) continue
+      if (b.name === 'New brand' && clientFilter !== b.name) continue
+      const prev = byName.get(b.name)
+      if (!prev || (b.pfp && !prev.pfp)) byName.set(b.name, b)
+    }
+    return [...byName.values()]
+  })()
   const is = (v: string) => clientFilter === v
 
   // No portfolio "all" view — the rail is brand-to-brand only, so land on a real brand.
@@ -106,7 +118,14 @@ export function BrandRail() {
 
       <button
         aria-label="Add a brand"
-        onClick={() => { addBrandRecord(); setClientFilter('New brand'); setPage('brands'); setAddTip(null) }}
+        onClick={() => {
+          // Reuse an existing unnamed placeholder instead of piling up more "New brand" records.
+          const hasPlaceholder = useTrafficStore.getState().brandRecords.some((b) => b.name === 'New brand')
+          if (!hasPlaceholder) addBrandRecord()
+          setClientFilter('New brand')
+          setPage('brands')
+          setAddTip(null)
+        }}
         onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAddTip({ top: r.top + r.height / 2, left: r.right + 8 }) }}
         onMouseLeave={() => setAddTip(null)}
         style={{ ...tileBase, background: addTip ? 'var(--surface)' : 'transparent', border: '1.5px dashed var(--border-strong, #cdd5d9)', color: addTip ? 'var(--accent, #0e6d84)' : 'var(--text-faint, #8a969b)', boxShadow: 'none', transition: 'background .12s, color .12s, border-color .12s', borderColor: addTip ? 'var(--accent, #0e6d84)' : 'var(--border-strong, #cdd5d9)' }}

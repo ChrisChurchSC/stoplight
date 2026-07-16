@@ -24254,9 +24254,12 @@ table.aud-sheet td.stick .aud-cell {
 .ag2-ask-model:focus-visible { outline: none; border-color: var(--accent); }
 .ag2-ask-send { width: 34px; height: 34px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 16px; cursor: pointer; display: grid; place-items: center; }
 .ag2-ask-send:disabled { opacity: .4; cursor: default; }
-.ag2-chips { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
-.ag2-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 8px 15px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+.ag2-chips { display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 10px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
+.ag2-chips::-webkit-scrollbar { display: none; }
+.ag2-chip { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 9px 16px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
 .ag2-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ag2-chip-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ag2-chip-primary:hover { background: var(--accent); border-color: var(--accent); color: #fff; filter: brightness(1.05); }
 
 .ag2-sec { margin-top: 34px; }
 .ag2-sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -24303,7 +24306,10 @@ table.aud-sheet td.stick .aud-cell {
 .ag2-cov-gap:hover { border-color: var(--accent); box-shadow: 0 1px 4px rgba(16,24,40,.08); }
 .ag2-cov-gap-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .ag2-cov-gap-name { font-weight: 600; }
+.ag2-cov-gap-sep { color: var(--text-faint); }
+.ag2-cov-gap-chan { color: var(--text-muted); }
 .ag2-cov-gap-count { color: #d08a1e; font-weight: 600; font-size: 12px; }
+.ag2-cov-more { align-self: center; font-size: 12.5px; color: var(--text-muted); }
 
 /* ---- Home: flows in flight ---- */
 .ag2-flow { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
@@ -24496,6 +24502,22 @@ table.aud-sheet td.stick .aud-cell {
   cursor: pointer;
 }
 .hchat-report-open:hover { background: var(--accent); color: #fff; }
+.hchat-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.hchat-setup-btn {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.hchat-setup-btn:hover { background: var(--accent); color: #fff; }
+.hchat-setup-btn.ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
+.hchat-setup-btn.ghost:hover { border-color: var(--border-strong, #cdd5d9); color: var(--text); background: transparent; }
 .hchat-composer { flex: 0 0 auto; padding: 8px 0 20px; }
 .hchat-box {
   border: 1px solid var(--border-strong);

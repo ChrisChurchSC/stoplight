@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
+import { newAudience } from '../domain/audiences'
+import { GUIDED_SETUP_INTRO, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest } from '../domain/guidedSetup'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -30,6 +32,10 @@ interface Msg {
   /** Set on the message that announces a just-generated report, to render a "View report" link. */
   reportId?: string
   reportBrand?: string
+  /** Set on the completion message of the guided setup, to render next-step buttons. */
+  setupDone?: boolean
+  /** Set on a dead-end message to offer starting the guided setup. */
+  offerSetup?: boolean
 }
 
 let uid = 0
@@ -76,6 +82,12 @@ export function HomeChat() {
   const addReport = useTrafficStore((s) => s.addReport)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  // Setup actions — the guided flow creates real records as the user answers.
+  const addClient = useTrafficStore((s) => s.addClient)
+  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
+  const setClientProfile = useTrafficStore((s) => s.setClientProfile)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const openFlow = useTrafficStore((s) => s.openFlow)
   const { brands } = useHomeCanvases()
 
   const [messages, setMessages] = useState<Msg[]>([])
@@ -93,6 +105,8 @@ export function HomeChat() {
   const busyRef = useRef(false)
   // When we've asked "which brand?" for a report, the next message is read as the brand answer.
   const awaitingBrandRef = useRef(false)
+  // Non-null while the guided setup is running: which step we're on + the brand named so far.
+  const setupRef = useRef<{ step: number; brand: string; audience?: string } | null>(null)
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -157,9 +171,69 @@ export function HomeChat() {
     ]
   }
 
+  // Append a bare assistant / user message (used by the deterministic guided setup, which doesn't
+  // use the ask engine's busy/steps machinery).
+  const say = (text: string, extra?: Partial<Msg>) =>
+    setMessages((m) => [...m, { id: nid(), role: 'assistant', text, ...extra }])
+  const sayUser = (text: string) => setMessages((m) => [...m, { id: nid(), role: 'user', text }])
+
+  // Start the guided setup: intro + first question. Clears any pending report handshake.
+  const startSetup = () => {
+    awaitingBrandRef.current = false
+    setupRef.current = { step: 0, brand: '' }
+    say(`${GUIDED_SETUP_INTRO}\n\n${GUIDED_SETUP_STEPS[0].prompt('')}`)
+    setQ('')
+  }
+
+  // Apply one setup answer to the store (creating real records), then ask the next question or finish.
+  const handleSetupAnswer = (text: string) => {
+    const val = text.trim()
+    sayUser(val)
+    setQ('')
+    const st = setupRef.current!
+    const step = GUIDED_SETUP_STEPS[st.step]
+    if (!val) {
+      say(step.prompt(st.brand))
+      return
+    }
+    if (step.key === 'brand') {
+      addClient(val)
+      addBrandRecord({ name: val })
+      setClientFilter(val)
+      st.brand = val
+    } else if (step.key === 'oneliner') {
+      setClientProfile(st.brand, { oneLiner: val })
+    } else if (step.key === 'audience') {
+      const cur = useTrafficStore.getState().clientAudiences[st.brand] ?? []
+      setClientAudiences(st.brand, [...cur, newAudience({ name: val })])
+      st.audience = val
+    }
+    const next = st.step + 1
+    if (next < GUIDED_SETUP_STEPS.length) {
+      st.step = next
+      say(GUIDED_SETUP_STEPS[next].prompt(st.brand))
+    } else {
+      setupRef.current = null
+      say(
+        `You're set up. **${st.brand}** now has a one-liner and your first audience${st.audience ? `, ${st.audience}` : ''}. From here you can draft a flow, add proof points, or head home to see your coverage.`,
+        { setupDone: true },
+      )
+    }
+  }
+
   const run = async (question: string) => {
     const text = question.trim()
     if (!text || busyRef.current) return
+
+    // Guided setup is a deterministic script that creates records as we go — handle it before the
+    // read-only ask/report paths so a task request never dead-ends.
+    if (setupRef.current) return handleSetupAnswer(text)
+    if (isSetupRequest(text)) {
+      sayUser(text)
+      startSetup()
+      return
+    }
+
     busyRef.current = true
     setBusy(true)
     setQ('')
@@ -186,7 +260,7 @@ export function HomeChat() {
       } else {
         awaitingBrandRef.current = false
         setMessages((m) =>
-          m.map((x) => (x.id === asstId ? { ...x, busy: false, steps: undefined, text: `You don't have any brands set up yet, so there's nothing to report on.` } : x)),
+          m.map((x) => (x.id === asstId ? { ...x, busy: false, steps: undefined, text: `You don't have any brands set up yet. Want to set one up? I can walk you through it.`, offerSetup: true } : x)),
         )
       }
       busyRef.current = false
@@ -203,11 +277,13 @@ export function HomeChat() {
     setBusy(false)
   }
 
-  // Run the seed question once, then clear it so a remount doesn't re-fire it.
+  // Run the seed question once, then clear it so a remount doesn't re-fire it. The "Get started"
+  // button seeds a sentinel that launches the guided setup instead of asking a question.
   useEffect(() => {
     if (homeChatSeed && seededRef.current !== homeChatSeed) {
       seededRef.current = homeChatSeed
-      void run(homeChatSeed)
+      if (homeChatSeed === GUIDED_SETUP_SEED) startSetup()
+      else void run(homeChatSeed)
       useTrafficStore.setState({ homeChatSeed: null })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -283,6 +359,18 @@ export function HomeChat() {
                     >
                       View report →
                     </button>
+                  )}
+                  {m.offerSetup && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={startSetup}>Get started</button>
+                    </div>
+                  )}
+                  {m.setupDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); openFlow('') }}>Draft a flow</button>
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('proofpoints') }}>Add proof points</button>
+                      <button className="hchat-setup-btn ghost" onClick={closeHomeChat}>Go home</button>
+                    </div>
                   )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
                 </>

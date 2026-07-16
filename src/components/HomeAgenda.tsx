@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { recordTint } from '../domain/records'
-import { buildMatrix } from '../domain/matrix'
+import { CHANNELS } from '../domain/channels'
+import type { ChannelId } from '../domain/types'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { AI_MODELS } from '../domain/aiModels'
-import type { Rtb } from '../domain/rtb'
+import { GUIDED_SETUP_SEED } from '../domain/guidedSetup'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -63,8 +64,6 @@ export function HomeAgenda() {
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
-  const setBrandView = useTrafficStore((s) => s.setBrandView)
-  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const openFlow = useTrafficStore((s) => s.openFlow)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
@@ -90,35 +89,43 @@ export function HomeAgenda() {
   const now = Date.now()
   const todayStart = startOfDay(now)
 
-  // ── Personalization coverage (audiences × funnel stages), from the same builder the
-  // Personalize matrix uses — so the home summary and the matrix always agree.
+  // ── Personalization coverage. Personalization is the combination of the records: producing
+  // on-brand content for each audience across each channel it uses. Coverage is how many of those
+  // (audience × channel) combinations already have content, out of all that are possible, plus the
+  // empty ones to fill next.
   const audiences = useMemo(() => (brand ? clientAudiences[brand] ?? [] : []), [brand, clientAudiences])
   const brandRows = useMemo(
     () => canvases.filter((c) => !brand || c.client === brand).flatMap((c) => c.rows),
     [canvases, brand],
   )
-  const rtbById = useMemo(() => {
-    const m = new Map<string, Rtb>()
-    audiences.forEach((a) => a.rtbs?.forEach((r) => m.set(r.id, r)))
-    ;(brand ? brandSystems[brand]?.rtbs ?? [] : []).forEach((r) => m.set(r.id, r))
-    return m
-  }, [audiences, brandSystems, brand])
-  const matrix = useMemo(() => buildMatrix(audiences, brandRows, rtbById), [audiences, brandRows, rtbById])
-  const { cells, covered, gaps, blocked } = matrix.totals
-  const denom = Math.max(1, cells)
-  const pct = (n: number) => `${(n / denom) * 100}%`
-  // The audiences with the most reachable-but-empty stages — the highest-leverage gaps to fill.
-  const topGaps = useMemo(
-    () => matrix.rows.filter((r) => r.gaps > 0).sort((a, b) => b.gaps - a.gaps).slice(0, 4),
-    [matrix],
-  )
+  // The channels in play for this brand: those its audiences declare + those its content already uses.
+  const channels = useMemo(() => {
+    const set = new Set<ChannelId>()
+    audiences.forEach((a) => a.channels?.forEach((c) => set.add(c)))
+    brandRows.forEach((r) => { if (r.channel) set.add(r.channel) })
+    return [...set]
+  }, [audiences, brandRows])
+  // Every audience × channel cell, split into produced (has content) and empty (to fill).
+  const coverage = useMemo(() => {
+    const made = new Set<string>()
+    brandRows.forEach((r) => { if (r.audience && r.channel) made.add(`${r.audience.trim()}|${r.channel}`) })
+    const empty: { audience: string; channel: ChannelId }[] = []
+    let produced = 0
+    audiences.forEach((a) =>
+      channels.forEach((c) => {
+        if (made.has(`${a.name.trim()}|${c}`)) produced += 1
+        else empty.push({ audience: a.name, channel: c })
+      }),
+    )
+    const possible = audiences.length * channels.length
+    return { possible, produced, toFill: possible - produced, empty }
+  }, [audiences, channels, brandRows])
+  const pct = (n: number) => `${(n / Math.max(1, coverage.possible)) * 100}%`
 
-  // Open the brand's Personalize matrix (the full audience × stage × channel grid).
-  const openMatrix = () => {
-    if (!brand) return
-    setCampaignFilter('all')
-    setBrandView('personalize')
-    setPage('clients')
+  // Fill an empty combination by drafting content — opens the flow builder, scoped to the brand.
+  const draftContent = () => {
+    if (brand) setClientFilter(brand)
+    openFlow('')
   }
 
   // ── Flows in flight — the brand's campaigns still in motion (not completed), most-active first,
@@ -217,6 +224,10 @@ export function HomeAgenda() {
             </div>
           </div>
           <div className="ag2-chips">
+            <button className="ag2-chip ag2-chip-primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              Get started
+            </button>
             <button className="ag2-chip" onClick={() => openHomeChat('Draft a new flow for this brand')}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
               Draft a flow
@@ -259,51 +270,48 @@ export function HomeAgenda() {
         <section className="ag2-sec">
           <div className="ag2-sec-head">
             <span className="ag2-sec-title">Personalization coverage</span>
-            {brand && audiences.length > 0 && (
-              <button className="ag2-viewall" onClick={openMatrix}>Open matrix <span className="ag2-viewall-plus">→</span></button>
-            )}
           </div>
           {!brand || audiences.length === 0 ? (
             <div className="ag2-empty">
-              Add audiences to see where you&rsquo;re personalized.{' '}
+              Add audiences to see what you can personalize.{' '}
               <button className="home-link" onClick={() => setPage('segments')}>Add audiences</button>
+            </div>
+          ) : channels.length === 0 ? (
+            <div className="ag2-empty">
+              Add channels to your audiences to see personalization coverage.{' '}
+              <button className="home-link" onClick={() => setPage('segments')}>Add channels</button>
             </div>
           ) : (
             <>
               <div className="ag2-cov-summary">
                 <span className="ag2-cov-stat"><b>{audiences.length}</b> {audiences.length === 1 ? 'audience' : 'audiences'}</span>
+                <span className="ag2-cov-dot">×</span>
+                <span className="ag2-cov-stat"><b>{channels.length}</b> {channels.length === 1 ? 'channel' : 'channels'}</span>
                 <span className="ag2-cov-dot">·</span>
-                <span className="ag2-cov-stat"><b>{cells}</b> cells</span>
+                <span className="ag2-cov-stat ok"><b>{coverage.produced}</b> produced</span>
                 <span className="ag2-cov-dot">·</span>
-                <span className="ag2-cov-stat ok"><b>{covered}</b> covered</span>
-                <span className="ag2-cov-dot">·</span>
-                <span className="ag2-cov-stat warn"><b>{gaps}</b> gaps</span>
-                {blocked > 0 && (
-                  <>
-                    <span className="ag2-cov-dot">·</span>
-                    <span className="ag2-cov-stat block"><b>{blocked}</b> blocked</span>
-                  </>
-                )}
+                <span className="ag2-cov-stat warn"><b>{coverage.toFill}</b> to fill</span>
               </div>
-              <div className="ag2-cov-bar" role="img" aria-label={`${covered} covered, ${gaps} gaps, ${blocked} blocked of ${cells} cells`}>
-                {covered > 0 && <span className="ag2-cov-seg cov" style={{ width: pct(covered) }} />}
-                {gaps > 0 && <span className="ag2-cov-seg gap" style={{ width: pct(gaps) }} />}
-                {blocked > 0 && <span className="ag2-cov-seg block" style={{ width: pct(blocked) }} />}
+              <div className="ag2-cov-bar" role="img" aria-label={`${coverage.produced} of ${coverage.possible} combinations produced`}>
+                {coverage.produced > 0 && <span className="ag2-cov-seg cov" style={{ width: pct(coverage.produced) }} />}
+                {coverage.toFill > 0 && <span className="ag2-cov-seg gap" style={{ width: pct(coverage.toFill) }} />}
               </div>
-              {topGaps.length > 0 && (
+              {coverage.empty.length > 0 && (
                 <div className="ag2-cov-gaps">
-                  {topGaps.map((r) => (
+                  {coverage.empty.slice(0, 5).map((g) => (
                     <button
-                      key={r.audience.id}
+                      key={`${g.audience}|${g.channel}`}
                       className="ag2-cov-gap"
-                      onClick={openMatrix}
-                      title={`Open the matrix to fill ${r.audience.name}`}
+                      onClick={draftContent}
+                      title={`Draft content for ${g.audience} on ${CHANNELS[g.channel]?.label ?? g.channel}`}
                     >
-                      <span className="ag2-cov-gap-dot" style={{ background: recordTint(r.audience.name) }} />
-                      <span className="ag2-cov-gap-name">{r.audience.name}</span>
-                      <span className="ag2-cov-gap-count">{r.gaps} {r.gaps === 1 ? 'gap' : 'gaps'}</span>
+                      <span className="ag2-cov-gap-dot" style={{ background: recordTint(g.audience) }} />
+                      <span className="ag2-cov-gap-name">{g.audience}</span>
+                      <span className="ag2-cov-gap-sep">·</span>
+                      <span className="ag2-cov-gap-chan">{CHANNELS[g.channel]?.label ?? g.channel}</span>
                     </button>
                   ))}
+                  {coverage.empty.length > 5 && <span className="ag2-cov-more">+{coverage.empty.length - 5} more</span>}
                 </div>
               )}
             </>
