@@ -1,10 +1,49 @@
 import { useEffect, useState } from 'react'
-import { mapSiteStream, type MapProgress, type SiteMap } from '../adapters/setup/siteMap'
+import { mapSiteStream, type MapProgress, type SiteMap, type SiteMapMessage } from '../adapters/setup/siteMap'
 import type { ChannelId } from '../domain/types'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
 type Step = 'input' | 'mapping' | 'review'
+// The visible stepper labels, in order. stepIndex (below) maps each Step onto one of these.
+const SETUP_STEPS = ['Channels', 'Map', 'Review'] as const
+
+// Dev-only sample map so we can preview the Review step without running a real (Claude-powered,
+// browser-based) site map. Enabled with localStorage 'hf.previewReview' = '1' in dev.
+const PREVIEW_MAP: SiteMap = {
+  brand: {
+    name: 'Acme',
+    website: 'https://acme.com',
+    industry: 'B2B SaaS',
+    voice: 'Direct and confident, a little playful. Short sentences that lead with the outcome, then back it with a number.',
+  },
+  audiences: [
+    { name: 'Ops leaders at mid-market SaaS', description: 'VP/Director of Operations at 50–500 person software companies' },
+    { name: 'Finance & FP&A teams', description: 'Controllers and analysts closing the books each month' },
+    { name: 'RevOps', description: 'Revenue operations owning the pipeline data' },
+  ],
+  proofPoints: [
+    { label: '2,000+ teams', detail: 'Used by over 2,000 operations teams worldwide' },
+    { label: 'SOC 2 Type II', detail: 'Independently audited security and data controls' },
+    { label: '40% faster close', detail: 'Customers close the books 40% faster on average' },
+  ],
+  messages: [
+    { label: 'Homepage hero', headline: 'Close the books in days, not weeks', body: 'Automate the busywork of month-end so your team ships the close on time, every time.', type: 'page', audience: 'Finance & FP&A teams', channel: 'website' },
+    { label: 'Product page', headline: 'One workspace for the whole close', body: 'Reconciliations, approvals, and reporting in one place — no spreadsheets to chase.', type: 'page', audience: 'Ops leaders at mid-market SaaS', channel: 'website' },
+    { label: 'Pricing page', headline: 'Simple, usage-based pricing', body: 'Start free. Pay for what you close. No seats, no surprises.', type: 'page', audience: 'RevOps', channel: 'website' },
+    { label: 'LinkedIn ad', headline: 'Your month-end, automated', body: 'See why 2,000+ ops teams switched to Acme.', type: 'ad', audience: 'Ops leaders at mid-market SaaS', channel: 'linkedin' },
+    { label: 'LinkedIn post', headline: 'How the fastest teams close in 3 days', body: 'A quick teardown of the workflow that gets them there.', type: 'post', audience: 'Ops leaders at mid-market SaaS', channel: 'linkedin' },
+    { label: 'Instagram reel', headline: 'Close day, but make it calm', body: 'Behind the scenes of a stress-free month-end.', type: 'post', audience: 'Finance & FP&A teams', channel: 'instagram' },
+    { label: 'Instagram post', headline: 'The 40% faster close, explained', body: 'Three habits our fastest customers share.', type: 'post', audience: 'Finance & FP&A teams', channel: 'instagram' },
+    { label: 'The Close (newsletter)', headline: 'What changed in your month-end, weekly', body: 'The two-minute read on what shifted in your numbers this week.', type: 'email', audience: 'Finance & FP&A teams', channel: 'email' },
+    { label: 'Welcome email', headline: 'Welcome to Acme — start here', body: 'Connect your ledger and run your first close in minutes.', type: 'email', audience: 'RevOps', channel: 'email' },
+  ],
+  socials: {
+    linkedin: 'https://linkedin.com/company/acme',
+    instagram: 'https://instagram.com/acme',
+    youtube: 'https://youtube.com/@acme',
+  },
+}
 
 /** A short platform label from an account URL, for the connect list. */
 function platformLabel(u: string): string {
@@ -31,6 +70,8 @@ function looksLikeDomain(raw: string): boolean {
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(s)
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 /**
  * The setup flow's guts: the 3-step "map a client from their site" experience
  * (input -> mapping -> review). Rendered inside two shells — the modal
@@ -38,19 +79,23 @@ function looksLikeDomain(raw: string): boolean {
  * `onDone` leaves the flow (close the modal / exit onboarding); it's called after
  * a successful build or an "add by name".
  */
-export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDone: () => void }) {
+export function SetupFlow({ variant, onDone, onSkip }: { variant: 'modal' | 'page'; onDone: () => void; onSkip?: () => void }) {
   const setPage = useTrafficStore((s) => s.setPage)
   const provisionCurrentState = useTrafficStore((s) => s.provisionCurrentState)
   const addClient = useTrafficStore((s) => s.addClient)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
 
-  const [step, setStep] = useState<Step>('input')
-  // The input step asks one thing at a time: the site, then an optional note.
-  const [inputPhase, setInputPhase] = useState<'site' | 'context'>('site')
+  // Dev preview: jump straight to Review with the sample map (see PREVIEW_MAP).
+  const previewReview = import.meta.env.DEV && localStorage.getItem('hf.previewReview') === '1'
+  // Dev "fake onboarding": run the whole flow with sample data and NO real AI calls, so the
+  // onboarding pages can be designed without connecting Claude. Toggle: localStorage
+  // 'hf.fakeOnboarding' = '1' (on) / remove or '0' (off).
+  const fakeOnboarding = import.meta.env.DEV && localStorage.getItem('hf.fakeOnboarding') === '1'
+  const [step, setStep] = useState<Step>(previewReview ? 'review' : 'input')
+  // The website (the map's anchor). Set by adding a plain domain in the channel list.
   const [url, setUrl] = useState('')
-  const [notes, setNotes] = useState('')
   const [stages, setStages] = useState<MapProgress[]>([])
-  const [map, setMap] = useState<SiteMap | null>(null)
+  const [map, setMap] = useState<SiteMap | null>(previewReview ? PREVIEW_MAP : null)
   const [error, setError] = useState<string | null>(null)
   const [provisioning, setProvisioning] = useState(false)
   // Channel connect: account URL -> pending token (browser open), and the set
@@ -61,10 +106,11 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
   const [accountInput, setAccountInput] = useState('')
   // Whether an AI provider is configured. null = still checking. Auto-map needs
   // Claude; with no key we lead with a manual "name your brand" setup instead.
-  const [aiConnected, setAiConnected] = useState<boolean | null>(null)
+  const [aiConnected, setAiConnected] = useState<boolean | null>(previewReview || fakeOnboarding ? true : null)
   const [manualName, setManualName] = useState('')
 
   useEffect(() => {
+    if (previewReview || fakeOnboarding) return
     let cancelled = false
     // Dev-only override to preview the no-AI path where a key is present locally.
     if (import.meta.env.DEV && localStorage.getItem('hf.forceNoAI') === '1') {
@@ -86,9 +132,27 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
     setStep('mapping')
     setStages([])
     setError(null)
+    // Fake mode: play canned progress, then hand back the sample map — no AI, no network.
+    if (fakeOnboarding) {
+      const site = (url || 'your site').replace(/^https?:\/\/(www\.)?/, '')
+      const fakeStages = [
+        `Reading ${site}…`,
+        'Scanning pages and running ads…',
+        extraAccounts.length ? `Reading ${extraAccounts.length} channel${extraAccounts.length === 1 ? '' : 's'}…` : 'Looking for social profiles…',
+        'Extracting voice, claims, and proof…',
+        'Mapping audiences and messaging…',
+      ]
+      for (const detail of fakeStages) {
+        setStages((s) => [...s, { stage: 'fake', detail }])
+        await sleep(650)
+      }
+      setMap({ ...PREVIEW_MAP, brand: { ...PREVIEW_MAP.brand, website: normalizeUrl(url || 'https://acme.com') } })
+      setStep('review')
+      return
+    }
     try {
       const m = await mapSiteStream(
-        { url: normalizeUrl(url), notes: notes.trim() || undefined, accounts: extraAccounts },
+        { url: normalizeUrl(url), accounts: extraAccounts },
         (e) => setStages((s) => [...s, e]),
       )
       setMap(m)
@@ -99,6 +163,11 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
   }
 
   const provision = async () => {
+    // Fake mode: don't write a real client/records — just leave the flow.
+    if (fakeOnboarding) {
+      onDone()
+      return
+    }
     if (!map) return
     setProvisioning(true)
     await provisionCurrentState(map)
@@ -144,15 +213,14 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
     setExtraAccounts((a) => (a.includes(u) ? a : [...a, u]))
     setAccountInput('')
   }
-
-  // Escape hatch: no public site (or you want to start manual). Create the client
-  // by name and drop into an empty workspace to fill in. Onboarding stays one flow.
-  const addByName = () => {
-    const name = url.trim()
-    if (!name) return
-    addClient(name)
-    setClientFilter(name)
-    onDone()
+  // Add whatever channel the user typed to the list. A plain domain becomes the WEBSITE (the map's
+  // anchor); a known social/profile URL becomes an extra channel Claude reads alongside it.
+  const addChannel = () => {
+    const raw = accountInput.trim()
+    if (!raw || !looksLikeDomain(raw)) return
+    if (platformLabel(raw) === 'account' && !url) setUrl(raw)
+    else setExtraAccounts((a) => (a.includes(raw) ? a : [...a, raw]))
+    setAccountInput('')
   }
 
   // No-AI path: create the brand by name and drop into the workspace to fill in.
@@ -165,6 +233,11 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
   }
 
   const channels = map ? [...new Set(map.messages.map((m) => m.channel as ChannelId))] : []
+  // The ingested content, grouped by the channel it came from — shown on Review as "in your Library".
+  const contentByChannel = channels.map((ch) => ({
+    channel: ch,
+    items: (map?.messages ?? []).filter((m) => m.channel === ch) as SiteMapMessage[],
+  }))
   // Every account to connect: discovered on the site + ones you add by hand.
   const discoveredAccounts = map
     ? Object.entries(map.socials ?? {}).filter(([p]) => p !== 'facebook').map(([, u]) => u)
@@ -172,19 +245,17 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
   const allAccounts = [...new Set([...discoveredAccounts, ...extraAccounts])]
 
   const stepIndex = step === 'input' ? 0 : step === 'mapping' ? 1 : 2
-  const cls = (i: number) => `wiz-step${stepIndex === i ? ' active' : stepIndex > i ? ' done' : ''}`
+  // Skip sits with the primary CTA (not the header), so it reads as the quiet alternative to it.
+  const skipBtn = onSkip ? (
+    <button type="button" className="btn ghost sm setup-skip" onClick={onSkip}>
+      Skip for now
+    </button>
+  ) : null
 
   // First-run onboarding (page) is about the user's OWN brand; the modal is an
   // agency mapping a client. Same flow, different voice.
   const own = variant === 'page'
   const copy = {
-    siteTitle: own ? 'What’s your website?' : 'What’s your client’s website?',
-    siteSub: own
-      ? 'Claude reads your live site and running ads, then maps your whole messaging: voice, audiences, claims, and proof.'
-      : 'Claude reads their live site and running ads, then maps their whole messaging: voice, audiences, claims, and proof.',
-    byName: own
-      ? `No website? Add “${url.trim() || 'your brand'}” by name instead`
-      : `No public site? Add “${url.trim() || 'them'}” by name instead`,
     mapBtn: own ? '✦ Map my brand →' : '✦ Map their messaging →',
     channelsLives: own ? 'Channels your messaging lives on' : 'Channels their messaging lives on',
     channelsTitle: own ? 'Your channels' : 'Their channels',
@@ -224,7 +295,8 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
               onKeyDown={(e) => e.key === 'Enter' && manualName.trim() && createManually()}
             />
           </div>
-          <div className="setup-q-foot">
+          <div className="setup-q-foot setup-q-foot-center">
+            {skipBtn}
             <button className="btn primary setup-cta" disabled={!manualName.trim()} onClick={createManually}>
               {copy.manualCta}
             </button>
@@ -239,71 +311,80 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
 
   return (
     <div className={`setup-flow setup-flow-${variant}`}>
-      <div className={`wiz-steps setup-steps${variant === 'page' ? ' setup-steps-page' : ''}`}>
-        <span className={cls(0)}>1 · Site</span>
-        <span className="wiz-step-sep">›</span>
-        <span className={cls(1)}>2 · Map</span>
-        <span className="wiz-step-sep">›</span>
-        <span className={cls(2)}>3 · Review</span>
-      </div>
+      <ol className={`setup-stepper${variant === 'page' ? ' setup-stepper-page' : ''}`} aria-label={`Step ${stepIndex + 1} of ${SETUP_STEPS.length}`}>
+        {SETUP_STEPS.map((label, i) => {
+          const state = stepIndex > i ? 'done' : stepIndex === i ? 'active' : 'todo'
+          return (
+            <li key={label} className={`setup-stepper-step is-${state}`} aria-current={state === 'active' ? 'step' : undefined}>
+              {i > 0 && <span className={`setup-stepper-line${stepIndex >= i ? ' is-filled' : ''}`} aria-hidden="true" />}
+              <span className="setup-stepper-dot" aria-hidden="true" />
+              <span className="setup-stepper-label">{label}</span>
+            </li>
+          )
+        })}
+      </ol>
 
-      {step === 'input' && inputPhase === 'site' && (
+      {step === 'input' && (
         <div className="setup-step setup-q">
-          <h2 className="setup-q-title">{copy.siteTitle}</h2>
-          <p className="setup-q-sub">{copy.siteSub}</p>
-          <div className="setup-input-wrap setup-q-input">
-            <span className="setup-input-globe" aria-hidden="true">
-              ⦿
-            </span>
+          <h2 className="setup-q-title">{own ? 'Add your channels' : 'Add their channels'}</h2>
+          <p className="setup-q-sub">
+            Claude reads each one — {own ? 'your' : 'their'} site, socials, and ads — pulls the content into {own ? 'your' : 'their'} Library and maps the messaging.
+          </p>
+
+          <div className="setup-onb-add">
             <input
-              className="wiz-input"
-              value={url}
-              placeholder="acme.com"
+              className="wiz-input setup-onb-input"
+              placeholder="acme.com, instagram.com/you…"
+              value={accountInput}
               autoFocus
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && canMap && setInputPhase('context')}
+              onChange={(e) => setAccountInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addChannel()}
             />
+            <button className="setup-onb-addbtn" onClick={addChannel} disabled={!looksLikeDomain(accountInput)}>
+              Add
+            </button>
           </div>
           <div className="setup-hint-row">
-            {url.trim() && !canMap
-              ? 'That doesn’t look like a domain yet — try “acme.com”.'
-              : 'Just the domain is enough — we add https:// for you.'}
+            {accountInput.trim() && !looksLikeDomain(accountInput)
+              ? 'That doesn’t look like a link yet — try “acme.com” or “instagram.com/you”.'
+              : url
+                ? 'Your website anchors the map. Add socials and ad accounts to read those too.'
+                : 'Start with your website, then add any socials.'}
           </div>
 
-          <div className="setup-q-foot">
-            <button className="btn primary setup-cta" disabled={!canMap} onClick={() => setInputPhase('context')}>
-              Continue →
-            </button>
-          </div>
+          {(url || extraAccounts.length > 0) && (
+            <div className="setup-onb-chanlist">
+              {url && (
+                <div className="setup-onb-chan is-site">
+                  <span className="setup-onb-chan-plat">website</span>
+                  <span className="setup-onb-chan-url">{url.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                  <button className="setup-onb-chan-x" aria-label="Remove website" onClick={() => setUrl('')}>
+                    ✕
+                  </button>
+                </div>
+              )}
+              {extraAccounts.map((acct) => (
+                <div key={acct} className="setup-onb-chan">
+                  <span className="setup-onb-chan-plat">{platformLabel(acct)}</span>
+                  <span className="setup-onb-chan-url">{acct.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                  <button
+                    className="setup-onb-chan-x"
+                    aria-label={`Remove ${acct}`}
+                    onClick={() => setExtraAccounts((a) => a.filter((x) => x !== acct))}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-          <button className="wiz-link setup-q-alt" disabled={!url.trim()} onClick={addByName}>
-            {copy.byName}
-          </button>
-        </div>
-      )}
-
-      {step === 'input' && inputPhase === 'context' && (
-        <div className="setup-step setup-q">
-          <h2 className="setup-q-title">Anything Claude should know?</h2>
-          <p className="setup-q-sub">Optional. A nudge on what to focus on or ignore, or just map it.</p>
-          <textarea
-            className="wiz-input wiz-textarea setup-q-textarea"
-            value={notes}
-            placeholder="e.g. focus on their B2B line, ignore the legacy blog"
-            autoFocus
-            onChange={(e) => setNotes(e.target.value)}
-          />
-
-          <div className="setup-q-foot">
-            <button className="btn" onClick={() => setInputPhase('site')}>
-              ← Back
-            </button>
-            <span className="spacer" />
-            <button className="btn primary setup-cta" onClick={run}>
+          <div className="setup-q-foot setup-q-foot-center">
+            {skipBtn}
+            <button className="btn primary setup-cta" disabled={!canMap} onClick={run}>
               {copy.mapBtn}
             </button>
           </div>
-          <div className="setup-q-note">Nothing is committed until you review the map.</div>
         </div>
       )}
 
@@ -362,7 +443,7 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
               </div>
               <div className="setup-stat">
                 <span className="setup-stat-n">{map.messages.length}</span>
-                <span className="setup-stat-l">Live messages</span>
+                <span className="setup-stat-l">Content pieces</span>
               </div>
               <div className="setup-stat">
                 <span className="setup-stat-n">{map.proofPoints.length}</span>
@@ -401,6 +482,34 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
                   <div key={i} className="setup-rtb">
                     <span className="setup-rtb-label">{r.label}</span>
                     <span className="setup-rtb-detail">{r.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {map.messages.length > 0 && (
+            <>
+              <div className="wiz-label setup-section-plain">
+                Content we pulled in ({map.messages.length}) · added to your Library
+              </div>
+              <div className="setup-ingest">
+                {contentByChannel.map(({ channel, items }) => (
+                  <div key={channel} className="setup-ingest-group">
+                    <div className="setup-ingest-head">
+                      <ChannelIcon channel={channel} size={13} />
+                      <span className="setup-ingest-chan">{channel}</span>
+                      <span className="setup-ingest-count">{items.length}</span>
+                    </div>
+                    <div className="setup-ingest-items">
+                      {items.map((m, i) => (
+                        <div key={i} className="setup-ingest-item">
+                          <div className="setup-ingest-item-head">{m.headline}</div>
+                          {m.body && <div className="setup-ingest-item-body">{m.body}</div>}
+                          <span className="setup-ingest-item-kind">{m.label || m.type}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -460,16 +569,11 @@ export function SetupFlow({ variant, onDone }: { variant: 'modal' | 'page'; onDo
           </div>
 
           <div className="wiz-foot setup-foot-sticky">
-            <button
-              className="btn sm"
-              onClick={() => {
-                setStep('input')
-                setInputPhase('site')
-              }}
-            >
+            <button className="btn sm" onClick={() => setStep('input')}>
               ← Start over
             </button>
             <span className="spacer" />
+            {skipBtn}
             <button className="btn primary" disabled={provisioning} onClick={provision}>
               {provisioning ? 'Building…' : 'Build the map ↓'}
             </button>

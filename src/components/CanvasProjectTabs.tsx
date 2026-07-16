@@ -15,6 +15,7 @@ export function CanvasProjectTabs() {
   const closeProject = useTrafficStore((s) => s.closeProject)
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
 
   const assetCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -25,11 +26,15 @@ export function CanvasProjectTabs() {
     return m
   }, [rows])
 
-  // Every open canvas gets a tab — including a freshly-created one with no assets
-  // yet (a blank Drafts canvas), so it's never lost behind the home.
+  // Only the CURRENT brand's open flows get tabs: switching brands hides the other brand's tabs
+  // (they stay open in the store and reappear when you switch back), so you can't reach another
+  // brand's flows from here. On the "all brands" scope, show everything.
   const projects = useMemo(
-    () => openProjects.map((c) => ({ campaign: c, client: clientForCampaign(c), count: assetCounts.get(c) ?? 0 })),
-    [openProjects, assetCounts],
+    () =>
+      openProjects
+        .map((c) => ({ campaign: c, client: clientForCampaign(c), count: assetCounts.get(c) ?? 0 }))
+        .filter((p) => clientFilter === 'all' || p.client === clientFilter),
+    [openProjects, assetCounts, clientFilter],
   )
 
   // Opening a campaign's canvas adds it to the drawer (assets or not).

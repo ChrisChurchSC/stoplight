@@ -1,6 +1,6 @@
 import { chromium, type BrowserContext } from 'playwright'
-import { hasSession, loadSession } from './sessionStore'
-import { platformOf } from './connectChannel'
+import { hasSession, loadSession } from './sessionStore.js'
+import { platformOf } from './connectChannel.js'
 
 /**
  * Gather ONE channel's live content for a per-channel ingest: the rendered feed

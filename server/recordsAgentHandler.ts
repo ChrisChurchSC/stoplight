@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { makeModelClient } from './modelClient.js'
 
 /**
  * Server-side records-table agent. Runs ONLY on the dev server / a serverless function so the
@@ -68,9 +69,9 @@ export class NoKeyError extends Error {
 
 export async function runRecordsAgent(body: unknown): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('agent')
   const { context } = (body ?? {}) as { context?: unknown }
 
   const message = await client.messages.create({

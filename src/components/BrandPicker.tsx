@@ -17,7 +17,9 @@ export function BrandPicker({ verb }: { verb: string }) {
         <div style={{ fontSize: 13, color: 'var(--text-faint, #8a969b)' }}>No brands yet — add one under Foundation → Brands.</div>
       ) : (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {brands.map((b) => (
+          {brands.map((b) => {
+            const pfp = b.pfp
+            return (
             <button
               key={b.id}
               onClick={() => setClientFilter(b.name)}
@@ -27,12 +29,15 @@ export function BrandPicker({ verb }: { verb: string }) {
                 cursor: 'pointer', font: 'inherit', boxShadow: '0 1px 2px rgba(16,24,40,.05)',
               }}
             >
-              <span style={{ width: 26, height: 26, borderRadius: 7, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 13, background: recordTint(b.name) }}>
-                {b.name[0]?.toUpperCase() ?? '?'}
+              <span style={{ width: 26, height: 26, borderRadius: 7, overflow: 'hidden', display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 13, background: pfp ? 'var(--surface)' : recordTint(b.name) }}>
+                {pfp
+                  ? <img src={pfp} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : (b.name[0]?.toUpperCase() ?? '?')}
               </span>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text, #1a2023)' }}>{b.name}</span>
             </button>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

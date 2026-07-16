@@ -1,6 +1,7 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import type { BrandRecord } from '../domain/brandRecord'
 import { recordTint, type RecordField } from '../domain/records'
+import { imageToDataUrl } from '../lib/image'
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
 import { RecordsChat } from './RecordsChat'
 import { SheetTabs } from './SheetTabs'
@@ -17,18 +18,19 @@ export function BrandTable({
   brand,
   fields,
   statuses,
-  icon,
   onUpdate,
 }: {
   brand: BrandRecord
   fields: RecordField[]
   statuses: string[]
-  icon: ReactNode
   onUpdate: (id: string, patch: Partial<BrandRecord>) => void
 }) {
   const val = (k: string) => ((brand as unknown as Record<string, unknown>)[k] ?? '').toString()
   const set = (k: string, v: string) => onUpdate(brand.id, { [k]: v } as Partial<BrandRecord>)
   const name = val('name')
+  const pfp = val('pfp')
+  const [pfpHover, setPfpHover] = useState(false)
+  const nameWrapRef = useRef<HTMLSpanElement>(null)
 
   // The header carries only the brand name (the page identity, like "Segments"); every attribute —
   // including status — is a Field | Value row so the body matches the other record tables exactly.
@@ -50,12 +52,61 @@ export function BrandTable({
       <div className="rec">
         <header className="rec-head">
           <div className="rec-title">
-            <span className="rec-title-ic" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                {icon}
-              </svg>
+            <span
+              onMouseEnter={() => setPfpHover(true)}
+              onMouseLeave={() => setPfpHover(false)}
+              style={{ position: 'relative', flex: '0 0 auto', display: 'inline-flex' }}
+            >
+              <label
+                title={pfp ? 'Change profile picture' : 'Add a profile picture'}
+                style={{ position: 'relative', width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', display: 'grid', placeItems: 'center', cursor: 'pointer', background: pfp ? 'var(--surface)' : recordTint(name || '?'), color: '#fff', fontWeight: 700, fontSize: 20, border: '1px solid var(--border)' }}
+              >
+                {pfp
+                  ? <img src={pfp} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : (name.trim()[0] ?? '?').toUpperCase()}
+                {/* Camera overlay on hover — implies the avatar is clickable to change the picture. */}
+                <span
+                  aria-hidden="true"
+                  style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16,24,40,.5)', color: '#fff', opacity: pfpHover ? 1 : 0, transition: 'opacity .12s', pointerEvents: 'none' }}
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="3.5" />
+                  </svg>
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void imageToDataUrl(f).then((url) => set('pfp', url)).catch(() => {}); e.currentTarget.value = '' }}
+                />
+              </label>
+              {/* Little × to delete the picture — appears on hover only when one is set. */}
+              {pfp && pfpHover && (
+                <button
+                  type="button"
+                  title="Remove picture"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); set('pfp', '') }}
+                  style={{ position: 'absolute', top: -5, right: -5, width: 17, height: 17, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 10, lineHeight: 1, padding: 0, boxShadow: '0 1px 3px rgba(16,24,40,.25)', zIndex: 2 }}
+                >
+                  ✕
+                </button>
+              )}
             </span>
-            <BufferedInput className="brand-title-name" value={name} onCommit={(v) => set('name', v)} placeholder="Brand name" />
+            <span ref={nameWrapRef} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <BufferedInput className="brand-title-name" value={name} onCommit={(v) => set('name', v)} placeholder="Brand name" />
+              <button
+                type="button"
+                title="Edit name"
+                onClick={() => nameWrapRef.current?.querySelector<HTMLInputElement>('input.brand-title-name')?.focus()}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-faint, #8a969b)', display: 'grid', placeItems: 'center', padding: 2, flex: '0 0 auto' }}
+              >
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+            </span>
           </div>
         </header>
 

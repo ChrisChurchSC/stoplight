@@ -1,4 +1,4 @@
-import { jsonRoute } from '../server/apiRoute'
+import { jsonRoute } from '../server/apiRoute.js'
 
 /**
  * Single catch-all API router. Vercel's Hobby plan caps a deployment at 12 serverless functions, so
@@ -23,18 +23,18 @@ interface ApiRes {
 
 // endpoint name → loader for its POST handler (parsed body in, object out).
 const HANDLERS: Record<string, () => Promise<(body: unknown) => Promise<unknown>>> = {
-  'flow-agent': () => import('../server/flowAgentHandler').then((m) => m.runFlowAgent),
-  'records-agent': () => import('../server/recordsAgentHandler').then((m) => m.runRecordsAgent),
-  'claude-ask': () => import('../server/askHandler').then((m) => m.runAsk),
-  'claude-agent': () => import('../server/agentHandler').then((m) => m.runAgent),
-  'coherence-check': () => import('../server/coherenceHandler').then((m) => m.runCoherenceCheck),
-  'draft-cell': () => import('../server/draftCellHandler').then((m) => m.runDraftCell),
-  'draft-copy': () => import('../server/copyDraftHandler').then((m) => m.runCopyDraft),
-  'extract-copy': () => import('../server/extractCopyHandler').then((m) => m.runExtractCopy),
-  'icp-review': () => import('../server/icpReviewHandler').then((m) => m.runIcpReview),
-  'media-mix': () => import('../server/mediaMixHandler').then((m) => m.runMediaMix),
-  publish: () => import('../server/publishHandler').then((m) => m.runPublish as (body: unknown) => Promise<unknown>),
-  'publish-email': () => import('../server/resendHandler').then((m) => m.runPublishEmail as (body: unknown) => Promise<unknown>),
+  'flow-agent': () => import('../server/flowAgentHandler.js').then((m) => m.runFlowAgent),
+  'records-agent': () => import('../server/recordsAgentHandler.js').then((m) => m.runRecordsAgent),
+  'claude-ask': () => import('../server/askHandler.js').then((m) => m.runAsk),
+  'claude-agent': () => import('../server/agentHandler.js').then((m) => m.runAgent),
+  'coherence-check': () => import('../server/coherenceHandler.js').then((m) => m.runCoherenceCheck),
+  'draft-cell': () => import('../server/draftCellHandler.js').then((m) => m.runDraftCell),
+  'draft-copy': () => import('../server/copyDraftHandler.js').then((m) => m.runCopyDraft),
+  'extract-copy': () => import('../server/extractCopyHandler.js').then((m) => m.runExtractCopy),
+  'icp-review': () => import('../server/icpReviewHandler.js').then((m) => m.runIcpReview),
+  'media-mix': () => import('../server/mediaMixHandler.js').then((m) => m.runMediaMix),
+  publish: () => import('../server/publishHandler.js').then((m) => m.runPublish as (body: unknown) => Promise<unknown>),
+  'publish-email': () => import('../server/resendHandler.js').then((m) => m.runPublishEmail as (body: unknown) => Promise<unknown>),
 }
 
 export default async function router(req: ApiReq, res: ApiRes): Promise<void> {

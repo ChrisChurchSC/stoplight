@@ -1,4 +1,4 @@
-import { jsonRoute } from '../server/apiRoute'
-import { runCopyDraft } from '../server/copyDraftHandler'
+import { jsonRoute } from '../server/apiRoute.js'
+import { runCopyDraft } from '../server/copyDraftHandler.js'
 
 export default jsonRoute(runCopyDraft)

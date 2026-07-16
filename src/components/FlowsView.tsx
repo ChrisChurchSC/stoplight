@@ -389,6 +389,7 @@ export function FlowsView() {
   const deleteFlowChat = useTrafficStore((s) => s.deleteFlowChat)
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   // The brand's Segments records (the Segments page IS the brand's audiences).
@@ -1619,6 +1620,11 @@ export function FlowsView() {
       let source: CopySource | null = null
       if (writeCopy && allNewIds.length) source = await draftCopy(allNewIds)
       setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source })
+      // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
+      // and brand views show its assets right away — no need to match the rail by hand.
+      // (setClientFilter also clears any stale channel/proof/audience narrowing.)
+      setClientFilter(brand || 'all')
+      setCampaignFilter(campaignName)
       return campaignName
     } finally {
       setBuilding(false)

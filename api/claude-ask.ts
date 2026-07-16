@@ -1,4 +1,4 @@
-import { jsonRoute } from '../server/apiRoute'
-import { runAsk } from '../server/askHandler'
+import { jsonRoute } from '../server/apiRoute.js'
+import { runAsk } from '../server/askHandler.js'
 
 export default jsonRoute(runAsk)

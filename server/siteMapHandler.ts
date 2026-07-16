@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { readLiveAds } from './adScraper'
-import { crawlSite } from './siteCrawler'
-import { readYouTube } from './youtube'
-import { readInstagram } from './instagram'
-import { readLinkedIn } from './linkedin'
-import { gatherWithSession, platformOf } from './connectChannel'
-import { hasSession } from './sessionStore'
+import { makeModelClient } from './modelClient.js'
+import { readLiveAds } from './adScraper.js'
+import { crawlSite } from './siteCrawler.js'
+import { readYouTube } from './youtube.js'
+import { readInstagram } from './instagram.js'
+import { readLinkedIn } from './linkedin.js'
+import { gatherWithSession, platformOf } from './connectChannel.js'
+import { hasSession } from './sessionStore.js'
 
 /**
  * Current-state messaging map. Given a brand's public site (rendered) + their
@@ -122,9 +123,9 @@ export type ProgressFn = (e: { stage: string; detail: string }) => void
 
 export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('extract')
   const { url, notes, accounts } = (body ?? {}) as { url?: string; notes?: string; accounts?: string[] }
 
   // Show the work: emit a stage as the crawl and the ad scrape each resolve.

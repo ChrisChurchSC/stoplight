@@ -1,4 +1,4 @@
-import { jsonRoute } from '../server/apiRoute'
-import { runDraftCell } from '../server/draftCellHandler'
+import { jsonRoute } from '../server/apiRoute.js'
+import { runDraftCell } from '../server/draftCellHandler.js'
 
 export default jsonRoute(runDraftCell)

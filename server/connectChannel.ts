@@ -1,5 +1,5 @@
 import { chromium, type Browser, type BrowserContext } from 'playwright'
-import { hasSession, loadSession, saveSession } from './sessionStore'
+import { hasSession, loadSession, saveSession } from './sessionStore.js'
 
 /**
  * Connect a channel by logging in ONCE, then gather it authenticated. The agency

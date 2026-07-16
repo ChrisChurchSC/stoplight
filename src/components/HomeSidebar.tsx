@@ -216,6 +216,7 @@ export function HomeSidebar() {
     ({ key, label, ico, page: null, active, onClick, ...extra })
   // Build lives at the top as flat items (like Home) — not under a collapsible header.
   const topItems: NavItem[] = [
+    item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
     item('flows', 'Flows', 'flows', page === 'flows', () => setPage('flows')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
@@ -224,7 +225,6 @@ export function HomeSidebar() {
     {
       label: 'Foundation',
       items: [
-        item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
         item('segments', 'Segments', 'segments', page === 'segments', () => setPage('segments')),
         item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
         item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),

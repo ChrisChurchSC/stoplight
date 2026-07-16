@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { NoKeyError } from './siteMapHandler'
+import { makeModelClient } from './modelClient.js'
+import { NoKeyError } from './siteMapHandler.js'
 
 /**
  * Read the copy baked INTO a single creative on demand. Given an image URL, fetch
@@ -27,7 +28,7 @@ export interface ExtractCopyResult {
 
 export async function runExtractCopy(body: unknown): Promise<ExtractCopyResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
   const { mediaRef, mediaType } = (body ?? {}) as {
     mediaRef?: string
@@ -52,7 +53,7 @@ export async function runExtractCopy(body: unknown): Promise<ExtractCopyResult> 
   if (!media) return { text: '(Unsupported image format for transcription.)', via: 'stub' }
   const data = Buffer.from(await resp.arrayBuffer()).toString('base64')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('extract')
   const message = await client.messages.create({
     model: 'claude-opus-4-8',
     max_tokens: 1500,

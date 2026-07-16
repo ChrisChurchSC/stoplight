@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { runPublish } from './publishHandler'
-import { runPublishEmail } from './resendHandler'
+import { makeModelClient } from './modelClient.js'
+import { runPublish } from './publishHandler.js'
+import { runPublishEmail } from './resendHandler.js'
 
 /**
  * The Claude engine — the center of the architecture. Hyperfocus (the cockpit)
@@ -160,9 +161,9 @@ export interface AgentAction {
 
 export async function runAgent(body: unknown): Promise<{ summary: string; actions: AgentAction[] }> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('agent')
   const { instruction, context } = (body ?? {}) as { instruction?: string; context?: unknown }
 
   const messages: Anthropic.MessageParam[] = [

@@ -20,13 +20,10 @@ export function Onboarding() {
           <span className="onboarding-logo">✦</span>
           Breadcrumbs
         </div>
-        <button className="btn ghost sm" onClick={exit}>
-          Skip for now
-        </button>
       </header>
       <div className="onboarding-body">
         <div className="onboarding-panel">
-          <SetupFlow variant="page" onDone={exit} />
+          <SetupFlow variant="page" onDone={exit} onSkip={exit} />
         </div>
       </div>
     </div>

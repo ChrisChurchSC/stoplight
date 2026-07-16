@@ -14,6 +14,9 @@ export interface BrandRecord {
   status?: 'active' | 'prospect' | 'paused' | ''
   owner?: string
   notes?: string
+  /** Brand profile picture / avatar — a compact data URL (uploaded, resized) or image URL. Keyed to
+   *  the record id, so it can be set before the brand is named and survives a rename. */
+  pfp?: string
   // ---- Communications strategy (the brand's own strategy document) ----
   // Overview / header
   descriptor?: string

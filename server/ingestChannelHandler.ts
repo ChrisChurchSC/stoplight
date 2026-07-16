@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { NoKeyError } from './siteMapHandler'
-import { gatherChannelMedia, type GatheredImage } from './channelGather'
-import { crawlSite } from './siteCrawler'
-import { readYouTube } from './youtube'
-import { readInstagram } from './instagram'
-import { readLinkedIn } from './linkedin'
-import { platformOf } from './connectChannel'
+import { makeModelClient, type ModelClient } from './modelClient.js'
+import { NoKeyError } from './siteMapHandler.js'
+import { gatherChannelMedia, type GatheredImage } from './channelGather.js'
+import { crawlSite } from './siteCrawler.js'
+import { readYouTube } from './youtube.js'
+import { readInstagram } from './instagram.js'
+import { readLinkedIn } from './linkedin.js'
+import { platformOf } from './connectChannel.js'
 
 /**
  * Per-channel ingest. Given ONE channel (a social profile or an owned web
@@ -98,7 +99,7 @@ type Progress = (e: { stage: string; detail: string }) => void
 
 /** One structured (vision) call over a chunk of images + the gathered text. */
 async function mapChunk(
-  client: Anthropic,
+  client: ModelClient,
   channel: string,
   text: string,
   images: GatheredImage[],
@@ -142,8 +143,8 @@ async function mapChunk(
 
 export async function runIngestChannel(body: unknown, onProgress?: Progress): Promise<ChannelIngestResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
-  const client = new Anthropic({ apiKey })
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
+  const client = makeModelClient('extract')
 
   const { channel, profileUrl, website, audiences } = (body ?? {}) as {
     channel?: string

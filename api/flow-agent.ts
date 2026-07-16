@@ -1,4 +1,4 @@
-import { jsonRoute } from '../server/apiRoute'
-import { runFlowAgent } from '../server/flowAgentHandler'
+import { jsonRoute } from '../server/apiRoute.js'
+import { runFlowAgent } from '../server/flowAgentHandler.js'
 
 export default jsonRoute(runFlowAgent)

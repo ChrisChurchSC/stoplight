@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { useAssetTasks } from '../lib/assetTasks'
 
 /**
  * Tasks — a standalone, Attio-style task list for the workspace: a row per task with its due date,
@@ -25,6 +26,13 @@ interface Task {
   createdAt: number
   brand: string // which brand this task belongs to (scoped by the rail)
   notes: string // free-form details, shown in the task detail drawer
+  // ---- Derived asset-tasks (a flow's built asset, surfaced here as a to-do) ----
+  /** True when this task is derived from an asset rather than hand-created. Read-mostly:
+   *  its name/date come from the asset, it opens the flow, and "done" is tracked per-asset. */
+  derived?: boolean
+  /** For a derived task: the asset's row id (tracks done) and its campaign (opens the flow). */
+  rowId?: string
+  campaign?: string
 }
 
 const KEY = 'stoplight.tasks.v1'
@@ -78,8 +86,10 @@ export function TasksView() {
   const setPage = useTrafficStore((s) => s.setPage)
   const focusRecord = useTrafficStore((s) => s.focusRecord)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const openFlow = useTrafficStore((s) => s.openFlow)
   // The rail always lands on a real brand now, but guard against a transient 'all'.
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
+  const { assetTasks, toggleAssetDone } = useAssetTasks(brand)
   const [tasks, setTasks] = useState<Task[]>(() => load())
   const [editDue, setEditDue] = useState<string | null>(null)
   const [pickRec, setPickRec] = useState<string | null>(null)
@@ -94,23 +104,28 @@ export function TasksView() {
     // count) directly.
     window.dispatchEvent(new Event('stoplight:tasks'))
   }, [tasks])
-
   // Everything below is scoped to the brand selected in the rail. Any untagged task (e.g. created
   // before scoping) shows under every brand rather than silently disappearing.
   const brandTasks = useMemo(() => tasks.filter((t) => !t.brand || t.brand === brand), [tasks, brand])
-  const openCount = brandTasks.filter((t) => !t.done).length
+  // Derived asset-tasks (shared with Home via useAssetTasks) shaped as full tasks so they merge
+  // with manual ones. Read-mostly: the row's check toggles per-asset done and it opens the flow.
+  const allTasks = useMemo<Task[]>(
+    () => [...brandTasks, ...assetTasks.map((a): Task => ({ ...a, record: null, assignee: '', notes: '' }))],
+    [brandTasks, assetTasks],
+  )
+  const openCount = allTasks.filter((t) => !t.done).length
 
   // Group the open tasks into due-date buckets (done tasks fall to their own section at the end).
   const groups = useMemo(() => {
-    const open = brandTasks.filter((t) => !t.done)
+    const open = allTasks.filter((t) => !t.done)
     const map = new Map<Bucket, Task[]>()
     for (const b of BUCKETS) map.set(b, [])
     for (const t of open) map.get(bucketOf(t.due, today))!.push(t)
     for (const list of map.values())
       list.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt)
     return BUCKETS.map((b) => [b, map.get(b)!] as const).filter(([, list]) => list.length > 0)
-  }, [brandTasks, today])
-  const doneTasks = useMemo(() => brandTasks.filter((t) => t.done), [brandTasks])
+  }, [allTasks, today])
+  const doneTasks = useMemo(() => allTasks.filter((t) => t.done), [allTasks])
   // The task whose detail drawer is open (read live from `tasks` so edits reflect immediately).
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null
 
@@ -127,6 +142,47 @@ export function TasksView() {
     // Open the detail drawer for the fresh task so it can be named and filled in.
     setOpenTaskId(id)
   }
+
+  // A derived asset-task: read-mostly. Check toggles per-asset done; the name and the flow chip
+  // both open the asset's flow. No company / assignee / delete (those belong to manual tasks).
+  const assetRow = (t: Task) => (
+    <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`}>
+      <div className="task-cell task-cell-name">
+        <button
+          className={`task-check${t.done ? ' on' : ''}`}
+          onClick={() => toggleAssetDone(t.rowId!)}
+          aria-label={t.done ? 'Mark not done' : 'Mark done'}
+        >
+          {t.done && (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5 12.5 4.5 4.5L19 6" />
+            </svg>
+          )}
+        </button>
+        <button
+          className="task-input task-name-input task-name-open"
+          onClick={() => openFlow(t.campaign ?? '', 'grid')}
+          title={`Open ${t.campaign ?? 'flow'}`}
+          style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text)', padding: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {t.text}
+        </button>
+      </div>
+      <div className="task-cell">
+        <span className={`task-due-text${!t.done && t.due && t.due <= today ? ' soon' : ''}${t.due ? '' : ' empty'}`}>
+          {t.due ? `Due ${fmtDue(t.due)}` : 'No date'}
+        </span>
+      </div>
+      <div className="task-cell task-rec-cell">
+        <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign ?? '', 'flow')} title={`Open ${t.campaign ?? 'flow'}`}>
+          <span className="task-chip-name">{(t.campaign ?? '').replace(`${brand} — `, '') || 'Flow'}</span>
+        </button>
+      </div>
+      <div className="task-cell">
+        <span className="task-chip empty"><span className="task-chip-name muted">Asset</span></span>
+      </div>
+    </div>
+  )
 
   const row = (t: Task) => (
     <div key={t.id} className={`task-grid task-row${t.done ? ' done' : ''}`}>
@@ -265,8 +321,8 @@ export function TasksView() {
         <div className="task-cell">Assigned to</div>
       </div>
 
-      {brandTasks.length === 0 ? (
-        <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Add one with “＋ New task”.</div>
+      {allTasks.length === 0 ? (
+        <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Build a flow, or add one with “＋ New task”.</div>
       ) : (
         <>
           {groups.map(([bucket, list]) => (
@@ -274,7 +330,7 @@ export function TasksView() {
               <div className={`task-group-head${bucket === 'Overdue' ? ' overdue' : ''}`}>
                 {bucket} <span className="task-group-count">{list.length}</span>
               </div>
-              {list.map(row)}
+              {list.map((t) => (t.derived ? assetRow(t) : row(t)))}
             </div>
           ))}
           {doneTasks.length > 0 && (
@@ -282,7 +338,7 @@ export function TasksView() {
               <div className="task-group-head">
                 Done <span className="task-group-count">{doneTasks.length}</span>
               </div>
-              {doneTasks.map(row)}
+              {doneTasks.map((t) => (t.derived ? assetRow(t) : row(t)))}
             </div>
           )}
         </>

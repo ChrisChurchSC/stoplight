@@ -36,7 +36,9 @@ export function BrandRail() {
   const role = useTrafficStore((s) => s.role)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
-  const brands = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
+  // Show real (named) brands, plus a just-created placeholder while it's the active one — so making
+  // a brand adds its tile to the rail right away, before you name it (upload a pfp / rename later).
+  const brands = brandRecords.filter((b) => b.name.trim() && (b.name !== 'New brand' || clientFilter === b.name))
   const is = (v: string) => clientFilter === v
 
   // No portfolio "all" view — the rail is brand-to-brand only, so land on a real brand.
@@ -88,11 +90,16 @@ export function BrandRail() {
   return (
     <>
     <div style={{ width: 44, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '9px 0', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
-      {brands.map((b) => (
-        <button key={b.id} title={b.name} onClick={() => go(b.name, b.name)} style={{ ...tileBase, background: recordTint(b.name), color: '#fff', ...ring(is(b.name)) }}>
-          <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.01em' }}>{initials(b.name)}</span>
-        </button>
-      ))}
+      {brands.map((b) => {
+        const pfp = b.pfp
+        return (
+          <button key={b.id} title={b.name} onClick={() => go(b.name, b.name)} style={{ ...tileBase, overflow: 'hidden', background: pfp ? 'var(--surface)' : recordTint(b.name), color: '#fff', ...ring(is(b.name)) }}>
+            {pfp
+              ? <img src={pfp} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.01em' }}>{initials(b.name)}</span>}
+          </button>
+        )
+      })}
 
       <button title="Create brand" onClick={() => { addBrandRecord(); setClientFilter('New brand'); setPage('brands') }} style={{ ...tileBase, background: 'transparent', border: '1.5px dashed var(--border-strong, #cdd5d9)', color: 'var(--text-faint, #8a969b)', boxShadow: 'none' }}>
         <RailIco><path d="M12 5v14M5 12h14" /></RailIco>

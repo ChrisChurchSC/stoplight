@@ -4,6 +4,7 @@ import type { TrafficRow } from '../domain/types'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
+import { useAssetTasks } from '../lib/assetTasks'
 
 /**
  * Home — a personal agenda modeled on a calendar/notes home. A greeting and a big Ask box up
@@ -79,6 +80,7 @@ export function HomeAgenda() {
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const openFlow = useTrafficStore((s) => s.openFlow)
   const [q, setQ] = useState('')
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks())
   const [dayOffset, setDayOffset] = useState(0)
@@ -94,6 +96,7 @@ export function HomeAgenda() {
   }, [])
 
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : null
+  const { assetTasks, toggleAssetDone } = useAssetTasks(brand ?? '')
   const now = Date.now()
   const todayStart = startOfDay(now)
   const selDayStart = todayStart + dayOffset * DAY
@@ -119,12 +122,17 @@ export function HomeAgenda() {
   }, [canvases, brand, selDayStart, now])
   const pastCount = dayMeetings.filter((m) => m.ms < now).length
 
-  // Tasks that are due: open tasks, soonest first (undated last), overdue dates in red.
+  // Tasks that are due: manual tasks + derived asset-tasks, soonest first (undated last), overdue
+  // dates in red. Each carries a `derived` flag so the row knows how to check it / where to open.
   const openTasks = useMemo(() => {
-    return tasks
+    const manual = tasks
       .filter((t) => !t.done && (!brand || (t.brand ?? '') === brand || !t.brand))
-      .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
-  }, [tasks, brand])
+      .map((t) => ({ id: t.id, text: t.text, due: t.due, derived: false, rowId: '', campaign: '' }))
+    const assets = assetTasks
+      .filter((a) => !a.done)
+      .map((a) => ({ id: a.id, text: a.text, due: a.due, derived: true, rowId: a.rowId, campaign: a.campaign }))
+    return [...manual, ...assets].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+  }, [tasks, assetTasks, brand])
   const shownTasks = openTasks.slice(0, 8)
 
   const recentReport = useMemo(() => [...reports].filter((r) => !brand || r.client === brand).sort((a, b) => b.createdAt - a.createdAt)[0], [reports, brand])
@@ -215,10 +223,12 @@ export function HomeAgenda() {
             shownTasks.map((t) => {
               const due = t.due ? parseDue(t.due) : null
               const overdue = due != null && startOfDay(due) <= todayStart
+              const open = () => (t.derived ? openFlow(t.campaign, 'grid') : setPage('tasks'))
+              const check = () => (t.derived ? toggleAssetDone(t.rowId) : toggleTask(t.id))
               return (
                 <div key={t.id} className="ag2-task">
-                  <button className="ag2-check" aria-label="Mark done" onClick={() => toggleTask(t.id)} />
-                  <span className="ag2-task-t" onClick={() => setPage('tasks')} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setPage('tasks') }}>{t.text || 'Untitled task'}</span>
+                  <button className="ag2-check" aria-label="Mark done" onClick={check} />
+                  <span className="ag2-task-t" onClick={open} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') open() }}>{t.text || 'Untitled task'}</span>
                   {due != null && <span className={`ag2-task-due${overdue ? ' over' : ''}`}>{fmtDate(due)}</span>}
                 </div>
               )

@@ -22,7 +22,7 @@ export function BrandsView() {
   // Scoped to one brand (the common case): a single-brand strategy table.
   const one = clientFilter !== 'all' ? brandRecords.find((b) => b.name === clientFilter) : undefined
   if (one) {
-    return <BrandTable brand={one} fields={BRAND_FIELDS} statuses={BRAND_STATUSES} icon={ICON} onUpdate={updateBrandRecord} />
+    return <BrandTable brand={one} fields={BRAND_FIELDS} statuses={BRAND_STATUSES} onUpdate={updateBrandRecord} />
   }
 
   return (

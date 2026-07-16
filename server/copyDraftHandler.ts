@@ -1,10 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { makeModelClient } from './modelClient.js'
 
 /**
  * Server-side starter-copy drafting. Runs ONLY on the dev server / a serverless
- * function — never in the browser — so the Anthropic API key stays private.
- * Throws NO_KEY when ANTHROPIC_API_KEY is unset, so the client falls back to the
- * heuristic writer. Mirrors server/icpReviewHandler.ts.
+ * function — never in the browser — so the model key stays private. Routes through
+ * the shared model client (OpenRouter's 'copy' tier, or Anthropic direct); throws
+ * NO_KEY when neither key is set, so the client falls back to the heuristic writer.
  */
 
 // JSON Schema for the structured output — mirrors DraftResult in adapters/copy/draftWriter.ts.
@@ -82,62 +83,9 @@ export class NoKeyError extends Error {
   code = 'NO_KEY'
 }
 
-/** Default OpenRouter model — a cheap, modern Claude. Override with OPENROUTER_MODEL. */
-const OPENROUTER_MODEL = 'anthropic/claude-haiku-4.5'
-
-/** Strip a ```json … ``` fence if the model wrapped its JSON in one. */
-function stripFences(s: string): string {
-  const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  return (m ? m[1] : s).trim()
-}
-
-/**
- * Generate copy through OpenRouter's OpenAI-compatible endpoint (used when
- * OPENROUTER_API_KEY is set, since Anthropic's direct credits are exhausted).
- * The Anthropic-native json_schema output_config has no OpenAI equivalent, so we
- * ask for a JSON object and hand the model the schema in the system prompt.
- */
-async function callOpenRouter(system: string, userContent: string, maxTokens: number): Promise<unknown> {
-  const model = process.env.OPENROUTER_MODEL || OPENROUTER_MODEL
-  const body = JSON.stringify({
-    model,
-    max_tokens: maxTokens,
-    messages: [
-      { role: 'system', content: `${system}\n\nReturn ONLY a single JSON object that conforms to this JSON Schema. No prose, no markdown fences:\n${JSON.stringify(DRAFT_SCHEMA)}` },
-      { role: 'user', content: userContent },
-    ],
-    response_format: { type: 'json_object' },
-  })
-  // Free models are shared and often throttled (429); retry a couple of times
-  // respecting the provider's backoff before giving up (the client then falls to heuristic).
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:5173',
-        'X-Title': 'Hyperfocus',
-      },
-      body,
-    })
-    // One short retry for a momentary blip; don't hang the request if the free tier is
-    // persistently throttled — fail fast so the client falls to the heuristic writer.
-    if (res.status === 429 && attempt < 1) {
-      await new Promise((r) => setTimeout(r, 1200))
-      continue
-    }
-    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`)
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-    const content = data.choices?.[0]?.message?.content ?? '{}'
-    return JSON.parse(stripFences(content))
-  }
-}
-
 export async function runCopyDraft(body: unknown): Promise<unknown> {
-  const orKey = process.env.OPENROUTER_API_KEY
-  const anthKey = process.env.ANTHROPIC_API_KEY
-  if (!orKey && !anthKey) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
+  if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
+    throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
   const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, avoid, assets } = (body ?? {}) as {
     icp?: unknown
@@ -161,10 +109,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
   const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, ctaSeed, proof, and components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
 
-  // Anthropic's direct credits are exhausted; prefer OpenRouter when its key is set.
-  if (orKey) return callOpenRouter(SYSTEM, userContent, maxTokens)
-
-  const client = new Anthropic({ apiKey: anthKey as string })
+  const client = makeModelClient('copy')
   const message = await client.messages.create({
     model: 'claude-opus-4-8',
     max_tokens: maxTokens,

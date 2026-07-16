@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { NoKeyError } from './siteMapHandler'
+import { makeModelClient } from './modelClient.js'
+import { NoKeyError } from './siteMapHandler.js'
 
 /**
  * Ingest a brand's email copy from Resend. The brand's broadcasts are the email
@@ -133,7 +134,7 @@ type Progress = (e: { stage: string; detail: string }) => void
 
 export async function runResendIngest(body: unknown, onProgress?: Progress): Promise<ResendIngestResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
   const { apiKey: resendKey } = (body ?? {}) as { apiKey?: string }
   const key = (resendKey ?? '').trim()
@@ -153,7 +154,7 @@ export async function runResendIngest(body: unknown, onProgress?: Progress): Pro
     .join('\n\n---\n\n')
     .slice(0, 24000)
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('extract')
   const message = await client.messages.create({
     model: 'claude-opus-4-8',
     max_tokens: 8000,

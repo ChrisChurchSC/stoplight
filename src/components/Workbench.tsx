@@ -121,15 +121,8 @@ export function Workbench() {
       }
       await refresh()
       await hydrateRecords()
-      // First run: a signed-in user whose workspace has no brands yet gets routed straight into
-      // "Claude sets up your workspace", instead of landing on an empty home. Once (flag-gated).
-      if (!isSupabaseConfigured) return
-      const st = useTrafficStore.getState()
-      const empty = st.brandRecords.length === 0 && st.clientList.length === 0
-      if (empty && !localStorage.getItem('stoplight.welcomed.v1')) {
-        // Full-page takeover for new users (exitOnboarding sets the welcomed flag).
-        st.startOnboarding()
-      }
+      // New users land straight in the app now; the first-run onboarding takeover was removed.
+      // The SetupFlow is still available to open manually (Getting started / setup wizard).
     })()
   }, [refresh, hydrateRecords])
 

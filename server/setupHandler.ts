@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { readLiveAds } from './adScraper'
-import { crawlSite } from './siteCrawler'
-import { GTM_STRATEGIES, inferStrategy } from '../src/domain/strategies'
+import { makeModelClient } from './modelClient.js'
+import { readLiveAds } from './adScraper.js'
+import { crawlSite } from './siteCrawler.js'
+import { GTM_STRATEGIES, inferStrategy } from '../src/domain/strategies.js'
 
 /**
  * Server-side workspace setup generation. Reads the team's site (best-effort)
@@ -291,9 +292,9 @@ export async function runSetup(body: unknown): Promise<unknown> {
   ])
 
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (apiKey) {
+  if (apiKey || process.env.OPENROUTER_API_KEY) {
     try {
-      const client = new Anthropic({ apiKey })
+      const client = makeModelClient('extract')
       const content =
         `Company URL: ${String(url ?? '')}\n` +
         (notes ? `Notes from the team: ${notes}\n` : '') +
