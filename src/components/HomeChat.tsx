@@ -7,7 +7,9 @@ import { draftVoices } from '../adapters/ask/draftVoices'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
 import { ingestSite } from '../adapters/ask/ingestSite'
-import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
+import { CHANNELS, CHANNEL_LIST, resolveChannelId } from '../domain/channels'
+import { DELIVERABLE_PRESETS, presetByKey } from '../domain/flows'
+import type { Deliverable } from '../domain/strategyAssets'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
@@ -100,6 +102,8 @@ export function HomeChat() {
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addObjective = useTrafficStore((s) => s.addObjective)
   const importAssets = useTrafficStore((s) => s.importAssets)
+  const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const openFlow = useTrafficStore((s) => s.openFlow)
@@ -130,6 +134,8 @@ export function HomeChat() {
   const lastActionRef = useRef<string | null>(null)
   // When we've asked for the brand's website (to ingest content), the next message is read as the URL.
   const awaitingSiteRef = useRef(false)
+  // Non-null while the guided "build a flow" conversation is running.
+  const flowBuildRef = useRef<{ step: number; name: string; weeks: number } | null>(null)
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -473,7 +479,7 @@ export function HomeChat() {
   const advanceFlow = (current: FlowStep) => {
     const next = FLOW_STEPS[FLOW_STEPS.indexOf(current) + 1]
     if (next) pushFlowStep(next)
-    else say(`That's your foundation built, audiences, channels, voice, proof, messages, and objectives. From here you can put it to work in a flow.`, { setupDone: true })
+    else say(`That's your foundation built, audiences, channels, voice, proof, messages, and objectives. Now let's put it to work. Want to build your first flow?`, { flowOffer: true })
   }
   const onFlowStep = async (msgId: string, step: FlowStep, doIt: boolean) => {
     // Hide this step's buttons so it can't be re-triggered, then draft (or skip) and advance.
@@ -487,6 +493,56 @@ export function HomeChat() {
     pushFlowStep('audiences')
   }
 
+  // ── Guided "build a flow" conversation: ask the few things a flow needs, then build it with real
+  // assets (deterministic seeding), scoped to the brand's audiences and channels, and open it.
+  const startFlowBuild = () => {
+    setQ('')
+    const brand = useTrafficStore.getState().clientFilter
+    if (!brand || brand === 'all') { say(`Set up a brand first and I can build you a flow. Say "get started".`, { offerSetup: true }); return }
+    flowBuildRef.current = { step: 0, name: '', weeks: 4 }
+    say(`Let's build a flow for **${brand}**. What's this campaign about? Give it a theme or goal, like "Q1 inbound push" or "Launch the new pricing".`)
+  }
+  const handleFlowAnswer = async (text: string) => {
+    const val = text.trim()
+    sayUser(val); setQ('')
+    const st = flowBuildRef.current!
+    if (st.step === 0) {
+      st.name = val || 'New campaign'
+      st.step = 1
+      say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
+      return
+    }
+    // step 1: weeks, then build.
+    const n = parseInt(val.replace(/[^0-9]/g, ''), 10)
+    st.weeks = n > 0 && n <= 52 ? n : 4
+    flowBuildRef.current = null
+    await buildFlowFromChat(st.name, st.weeks)
+  }
+  const buildFlowFromChat = async (name: string, weeks: number) => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    const audiences = store.clientAudiences[brand] ?? []
+    const audienceNames = audiences.map((a) => a.name)
+    // Channels from the brand's audiences; fall back to a sensible content mix if none are set yet.
+    const channelIds = [...new Set(audiences.flatMap((a) => a.channels ?? []))]
+    let presets = channelIds
+      .map((cid) => DELIVERABLE_PRESETS.find((p) => p.channel === cid))
+      .filter((p): p is NonNullable<typeof p> => !!p)
+    if (!presets.length) presets = ['blog', 'newsletter', 'li-text'].map((k) => presetByKey(k)).filter((p): p is NonNullable<typeof p> => !!p)
+    const deliverables: Deliverable[] = presets.map((p) => ({ label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: p.perMonth, runtime: p.runtime, brand: p.brand }))
+    const campaignName = `${brand} — ${name}`
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
+    addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks })
+    await seedCampaignAssets(campaignName, deliverables, { flightWeeks: weeks, audiences: audienceNames })
+    const chLabels = [...new Set(deliverables.map((d) => CHANNELS[d.channel]?.label ?? d.channel))]
+    const audBit = audienceNames.length ? `, scoped to your ${audienceNames.length} audience${audienceNames.length === 1 ? '' : 's'}` : ''
+    setMessages((m) =>
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, assets across ${chLabels.join(', ')} over ${weeks} weeks${audBit}. Open it to review the plan and generate the copy.`, flowBuiltName: campaignName } : x)),
+    )
+    lastActionRef.current = 'flow'
+  }
+
   const run = async (question: string) => {
     const text = question.trim()
     if (!text || busyRef.current) return
@@ -494,6 +550,8 @@ export function HomeChat() {
     // Guided setup is a deterministic script that creates records as we go — handle it before the
     // read-only ask/report paths so a task request never dead-ends.
     if (setupRef.current) return handleSetupAnswer(text)
+    // Guided "build a flow" conversation takes the next answers.
+    if (flowBuildRef.current) return void handleFlowAnswer(text)
 
     // If we asked for the brand's website (to ingest content), the next message is the URL.
     if (awaitingSiteRef.current) {
@@ -508,6 +566,10 @@ export function HomeChat() {
     // "Build my foundation" launches the guided, section-by-section flow.
     if (/\bbuild\b.*\b(foundation|everything|it all|the rest|out my brand)\b/i.test(text)) {
       sayUser(text); startFoundationFlow(); return
+    }
+    // "Build/make/draft a flow (or campaign)" launches the guided flow-build conversation.
+    if (/\b(build|make|create|draft|start|new|set up)\b.*\b(flow|campaign)\b/i.test(text)) {
+      sayUser(text); startFlowBuild(); return
     }
 
     // Take real action for "do" requests instead of falling through to the read-only ask engine.
@@ -639,6 +701,8 @@ export function HomeChat() {
       channelDone: m.channelDone,
       flowStep: m.flowStep,
       ingestDone: m.ingestDone,
+      flowOffer: m.flowOffer,
+      flowBuiltName: m.flowBuiltName,
     }))
     saveHomeChat({
       id: chatIdRef.current,
@@ -739,7 +803,7 @@ export function HomeChat() {
                       <button className="hchat-setup-btn" onClick={draftProofPoints}>Draft proof points</button>
                       <button className="hchat-setup-btn" onClick={setBrandChannels}>Set channels</button>
                       <button className="hchat-setup-btn" onClick={draftBrandObjectives}>Draft objectives</button>
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); openFlow('') }}>Draft a flow</button>
+                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Draft a flow</button>
                       <button className="hchat-setup-btn ghost" onClick={closeHomeChat}>Go home</button>
                     </div>
                   )}
@@ -776,6 +840,17 @@ export function HomeChat() {
                   {m.ingestDone && (
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('content') }}>View Library</button>
+                    </div>
+                  )}
+                  {m.flowOffer && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Build a flow</button>
+                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Say "build a flow" whenever you're ready.`)}>Not now</button>
+                    </div>
+                  )}
+                  {m.flowBuiltName && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'grid') }}>Open flow</button>
                     </div>
                   )}
                   {m.flowStep && (
@@ -829,7 +904,7 @@ export function HomeChat() {
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13l4-3h5" /><path d="M17 14v6M14 17h6" /></svg>
                 Ingest content
               </button>
-              <button className="hchat-action" disabled={busy} onClick={() => { closeHomeChat(); openFlow('') }}>
+              <button className="hchat-action" disabled={busy} onClick={() => startFlowBuild()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
                 Draft a flow
               </button>
