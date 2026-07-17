@@ -39,6 +39,8 @@ export interface HomeChatMsg {
   flowStep?: string
   /** When set, renders the brand's objectives as goal buttons during the flow-build (plus Skip). */
   goalPick?: { id: string; label: string; metric?: string }[]
+  /** When set, renders the brand's audiences as multi-select toggles at the start of go-to-market. */
+  audiencePick?: { id: string; label: string }[]
   /** Set on the message that announces ingested site content, to render a "View Library" link. */
   ingestDone?: boolean
   /** When set, offer to build the go-to-market (renders "Build go-to-market" / "Not now"). */

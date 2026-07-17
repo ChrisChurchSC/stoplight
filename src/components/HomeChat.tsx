@@ -142,6 +142,11 @@ export function HomeChat() {
   const awaitingSiteRef = useRef(false)
   // Non-null while the guided "build a flow" conversation is running.
   const flowBuildRef = useRef<{ step: number; name: string; weeks: number; objectiveId?: string } | null>(null)
+  // The audiences you're pursuing in go-to-market: scopes channel assignment and the flow-build.
+  // null = pursue all. Set when you pick audiences at the start of the GTM flow.
+  const gtmPursuedRef = useRef<Set<string> | null>(null)
+  // In-progress toggle selection while the GTM audience-pick step is on screen.
+  const [gtmAudSel, setGtmAudSel] = useState<Set<string>>(new Set())
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -416,14 +421,18 @@ export function HomeChat() {
     if (!brand || brand === 'all') { closeHomeChat(); setPage('channelrecords'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
-    const audiences = store.clientAudiences[brand] ?? []
+    const allAud = store.clientAudiences[brand] ?? []
+    // Scope to the audiences you're pursuing (set at the start of go-to-market); default to all.
+    const pursued = gtmPursuedRef.current
+    const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Choosing channels for ${brand}` }] }])
     const recs = await draftChannels({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences: audiences.map((a) => a.name), channelOptions: CHANNEL_LIST.map((c) => c.label) })
-    // Resolve recommended labels to channel ids and assign them to every audience (union with any set).
+    // Resolve recommended labels to channel ids and assign them to the pursued audiences (union with any set).
     const ids = [...new Set(recs.map((r) => resolveChannelId(r.name)).filter((x): x is NonNullable<typeof x> => !!x))]
     if (ids.length && audiences.length) {
-      const updated = audiences.map((a) => ({ ...a, channels: [...new Set([...(a.channels ?? []), ...ids])] }))
+      const pursuedIds = new Set(audiences.map((a) => a.id))
+      const updated = allAud.map((a) => (pursuedIds.has(a.id) ? { ...a, channels: [...new Set([...(a.channels ?? []), ...ids])] } : a))
       setClientAudiences(brand, updated)
     }
     const label = (rid: string) => CHANNEL_LIST.find((c) => c.id === rid)?.label ?? rid
@@ -505,7 +514,36 @@ export function HomeChat() {
   }
   const startGtmFlow = () => {
     setQ('')
-    say(`Now your go-to-market: where you'll reach each audience and what you're aiming for. Same deal, draft each or skip.`)
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    const auds = store.clientAudiences[brand] ?? []
+    gtmPursuedRef.current = null
+    // Go-to-market starts with WHO: which audiences you're pursuing. Skip the question if there
+    // are none yet (nothing to choose) and go straight to channels.
+    if (auds.length < 2) {
+      say(`Now your go-to-market: where you'll reach each audience and what you're aiming for. Draft each or skip.`)
+      pushFlowStep(GTM_STEPS[0])
+      return
+    }
+    setGtmAudSel(new Set(auds.map((a) => a.id)))
+    say(`Go-to-market starts with who you're pursuing. Which of **${brand}**'s audiences is this push focused on? Toggle off any you're not chasing right now, then Continue.`, { audiencePick: auds.map((a) => ({ id: a.id, label: a.name })) })
+  }
+  const toggleGtmAud = (audId: string) => {
+    setGtmAudSel((prev) => {
+      const next = new Set(prev)
+      if (next.has(audId)) next.delete(audId); else next.add(audId)
+      return next
+    })
+  }
+  // Lock in the pursued audiences, then run the rest of go-to-market (channels, objectives) for them.
+  const confirmGtmAudiences = () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    const auds = store.clientAudiences[brand] ?? []
+    const chosen = gtmAudSel.size ? auds.filter((a) => gtmAudSel.has(a.id)) : auds
+    gtmPursuedRef.current = new Set(chosen.map((a) => a.id))
+    sayUser(chosen.length === auds.length ? 'Pursuing all audiences' : `Pursuing ${chosen.map((a) => a.name).join(', ')}`)
+    say(`Good, we'll focus on ${chosen.length} audience${chosen.length === 1 ? '' : 's'}. Now where you'll reach them, and what you're aiming for. Draft each or skip.`)
     pushFlowStep(GTM_STEPS[0])
   }
 
@@ -607,7 +645,10 @@ export function HomeChat() {
   const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string) => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    const audiences = store.clientAudiences[brand] ?? []
+    // Scope the flow to the audiences you're pursuing (chosen in go-to-market); default to all.
+    const allAud = store.clientAudiences[brand] ?? []
+    const pursued = gtmPursuedRef.current
+    const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
     const audienceNames = audiences.map((a) => a.name)
     // Channels from the brand's audiences; fall back to a sensible content mix if none are set yet.
     const channelIds = [...new Set(audiences.flatMap((a) => a.channels ?? []))]
@@ -823,6 +864,7 @@ export function HomeChat() {
       channelDone: m.channelDone,
       flowStep: m.flowStep,
       goalPick: m.goalPick,
+      audiencePick: m.audiencePick,
       ingestDone: m.ingestDone,
       gtmOffer: m.gtmOffer,
       flowOffer: m.flowOffer,
@@ -998,6 +1040,17 @@ export function HomeChat() {
                         <button key={g.id} className="hchat-setup-btn" title={g.metric || undefined} onClick={() => pickFlowGoal(g)}>{g.label}</button>
                       ))}
                       <button className="hchat-setup-btn ghost" onClick={() => pickFlowGoal(null)}>Skip</button>
+                    </div>
+                  )}
+                  {m.audiencePick && (
+                    <div className="hchat-setup-actions">
+                      {m.audiencePick.map((a) => {
+                        const on = gtmAudSel.has(a.id)
+                        return (
+                          <button key={a.id} className={`hchat-setup-btn${on ? '' : ' ghost'}`} onClick={() => toggleGtmAud(a.id)}>{on ? '✓ ' : ''}{a.label}</button>
+                        )
+                      })}
+                      <button className="hchat-setup-btn" onClick={() => confirmGtmAudiences()}>Continue</button>
                     </div>
                   )}
                   {m.measureOffer && (
