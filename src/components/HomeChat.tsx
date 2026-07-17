@@ -10,6 +10,7 @@ import { ingestSite } from '../adapters/ask/ingestSite'
 import { CHANNELS, CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { DELIVERABLE_PRESETS, presetByKey } from '../domain/flows'
 import type { Deliverable } from '../domain/strategyAssets'
+import type { FlowReference } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
@@ -105,6 +106,7 @@ export function HomeChat() {
   const addObjective = useTrafficStore((s) => s.addObjective)
   const importAssets = useTrafficStore((s) => s.importAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
@@ -544,9 +546,19 @@ export function HomeChat() {
     if (!presets.length) presets = ['blog', 'newsletter', 'li-text'].map((k) => presetByKey(k)).filter((p): p is NonNullable<typeof p> => !!p)
     const deliverables: Deliverable[] = presets.map((p) => ({ label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: p.perMonth, runtime: p.runtime, brand: p.brand }))
     const campaignName = `${brand} — ${name}`
+    // The brand's records to hang on the flow: audiences (segment tags) + proof points (proof tags),
+    // plus its primary objective as the campaign goal. Mirrors what the visual builder links.
+    const proof = store.brandSystems[brand]?.rtbs ?? []
+    const refs: FlowReference[] = [
+      ...audiences.map((a) => ({ type: 'segment' as const, id: a.id, label: a.name })),
+      ...proof.map((r) => ({ type: 'proof' as const, id: r.id, label: r.label })),
+    ]
+    const objective = store.objectives.find((o) => !o.brand || o.brand === brand)
+    const goalTarget = objective?.target ? Number(String(objective.target).replace(/[^0-9.]/g, '')) || undefined : undefined
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
-    addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks })
+    addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks, objective: objective?.name, goalKpi: objective?.metric?.trim() || undefined, goalTarget })
+    if (refs.length) setCampaignReferences(campaignName, refs)
     // Seed the assets, then write copy for the freshly-created rows (diff to find them, like the builder).
     const beforeIds = new Set(useTrafficStore.getState().rows.map((r) => r.id))
     await seedCampaignAssets(campaignName, deliverables, { flightWeeks: weeks, audiences: audienceNames })
@@ -562,9 +574,14 @@ export function HomeChat() {
       }
     }
     const chLabels = [...new Set(deliverables.map((d) => CHANNELS[d.channel]?.label ?? d.channel))]
-    const audBit = audienceNames.length ? `, scoped to your ${audienceNames.length} audience${audienceNames.length === 1 ? '' : 's'}` : ''
+    // Report what got linked to the flow: audiences, proof points, and the objective.
+    const linked: string[] = []
+    if (audienceNames.length) linked.push(`your ${audienceNames.length} audience${audienceNames.length === 1 ? '' : 's'}`)
+    if (proof.length) linked.push(`${proof.length} proof point${proof.length === 1 ? '' : 's'}`)
+    if (objective) linked.push(`the "${objective.name}" objective`)
+    const linkBit = linked.length ? `, with ${linked.join(', ')} attached` : ''
     setMessages((m) =>
-      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, ${newIds.length} asset${newIds.length === 1 ? '' : 's'} across ${chLabels.join(', ')} over ${weeks} weeks${audBit}${wroteCopy ? ', with copy written for each' : ''}. Open it to review.`, flowBuiltName: campaignName } : x)),
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, ${newIds.length} asset${newIds.length === 1 ? '' : 's'} across ${chLabels.join(', ')} over ${weeks} weeks${linkBit}${wroteCopy ? ', with copy written for each' : ''}. Open it to review.`, flowBuiltName: campaignName } : x)),
     )
     lastActionRef.current = 'flow'
   }
@@ -887,7 +904,7 @@ export function HomeChat() {
                   )}
                   {m.flowBuiltName && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'grid') }}>Open flow</button>
+                      <button className="hchat-setup-btn" onClick={() => { const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'flow') }}>Open flow</button>
                     </div>
                   )}
                   {m.flowStep && (
