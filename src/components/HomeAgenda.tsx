@@ -73,6 +73,8 @@ export function HomeAgenda() {
   const setAiModel = useTrafficStore((s) => s.setAiModel)
   const [q, setQ] = useState('')
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks())
+  // The task whose slide-out detail drawer is open (clicking a task opens it here, not the grid).
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
 
   useEffect(() => {
     const update = () => setTasks(loadTasks())
@@ -175,6 +177,8 @@ export function HomeAgenda() {
     return [...manual, ...assets].sort((a, b) => priority(a.due) - priority(b.due))
   }, [tasks, assetTasks, brand])
   const shownTasks = openTasks.slice(0, 8)
+  // The open task's detail (from the full list so it survives even if it falls past the shown 8).
+  const openTask = openTasks.find((t) => t.id === openTaskId) ?? null
 
   const recentReport = useMemo(
     () => [...reports].filter((r) => !brand || r.client === brand).sort((a, b) => b.createdAt - a.createdAt)[0],
@@ -189,6 +193,7 @@ export function HomeAgenda() {
   }
 
   return (
+    <>
     <div className="agenda2">
       <div className="agenda2-inner">
         <h1 className="ag2-greet">{greeting()}, {NAME}.</h1>
@@ -254,7 +259,7 @@ export function HomeAgenda() {
             shownTasks.map((t) => {
               const due = t.due ? parseDue(t.due) : null
               const overdue = due != null && startOfDay(due) <= todayStart
-              const open = () => (t.derived ? openFlow(t.campaign, 'grid') : setPage('tasks'))
+              const open = () => setOpenTaskId(t.id)
               const check = () => (t.derived ? toggleAssetDone(t.rowId) : toggleTask(t.id))
               return (
                 <div key={t.id} className="ag2-task">
@@ -370,5 +375,49 @@ export function HomeAgenda() {
         </section>
       </div>
     </div>
+    {openTask && (
+      <>
+        <div onClick={() => setOpenTaskId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,24,40,.28)' }} />
+        <aside style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw', zIndex: 201, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-8px 0 30px rgba(16,24,40,.14)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: '1px solid var(--border)' }}>
+            <button
+              className="ag2-check"
+              aria-label="Mark done"
+              onClick={() => { if (openTask.derived) toggleAssetDone(openTask.rowId); else toggleTask(openTask.id); setOpenTaskId(null) }}
+              style={{ flex: '0 0 auto' }}
+            />
+            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{openTask.derived ? 'Asset task' : 'Task'}</span>
+            <button onClick={() => setOpenTaskId(null)} aria-label="Close" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1 }}>×</button>
+          </div>
+          <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{openTask.text || 'Untitled task'}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-muted)' }}>Due</span>
+              <span style={{ fontSize: 14, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDate(parseDue(openTask.due)) : 'No date'}</span>
+            </div>
+            {openTask.derived && openTask.campaign && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-muted)' }}>Flow</span>
+                <button
+                  onClick={() => { const c = openTask.campaign; setOpenTaskId(null); openFlow(c, 'flow') }}
+                  style={{ alignSelf: 'flex-start', border: '1px solid var(--border)', background: 'var(--surface)', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+                >
+                  {(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Open flow'} →
+                </button>
+              </div>
+            )}
+            {!openTask.derived && (
+              <button
+                onClick={() => { setOpenTaskId(null); setPage('tasks') }}
+                style={{ alignSelf: 'flex-start', border: '1px solid var(--border)', background: 'var(--surface)', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+              >
+                Edit in Tasks →
+              </button>
+            )}
+          </div>
+        </aside>
+      </>
+    )}
+    </>
   )
 }
