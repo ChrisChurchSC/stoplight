@@ -12,6 +12,8 @@ export interface ShareGrant {
   id: string
   client: string
   role: Role
+  /** When set, this link grants a SINGLE flow (campaign name), not the whole brand. */
+  campaign?: string
   createdAt: string
 }
 
@@ -19,6 +21,8 @@ interface TokenPayload {
   c: string
   r: Role
   id: string
+  /** Campaign name for a single-flow share. */
+  cmp?: string
 }
 
 const b64urlEncode = (s: string): string =>
@@ -27,18 +31,19 @@ const b64urlEncode = (s: string): string =>
 const b64urlDecode = (s: string): string =>
   decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))))
 
-export function encodeShareToken(grant: { client: string; role: Role; id: string }): string {
+export function encodeShareToken(grant: { client: string; role: Role; id: string; campaign?: string }): string {
   const payload: TokenPayload = { c: grant.client, r: grant.role, id: grant.id }
+  if (grant.campaign) payload.cmp = grant.campaign
   return b64urlEncode(JSON.stringify(payload))
 }
 
-export function decodeShareToken(token: string): { client: string; role: Role; id: string } | null {
+export function decodeShareToken(token: string): { client: string; role: Role; id: string; campaign?: string } | null {
   try {
     const o = JSON.parse(b64urlDecode(token)) as Partial<TokenPayload>
     // A link can only ever grant a shareable role (editor / stakeholder). Reject
     // a forged token trying to mint owner, even though tokens are unsigned.
     if (!o.c || !o.r || !SHAREABLE_ROLES.includes(o.r)) return null
-    return { client: o.c, role: o.r, id: o.id ?? '' }
+    return { client: o.c, role: o.r, id: o.id ?? '', campaign: o.cmp || undefined }
   } catch {
     return null
   }

@@ -1075,13 +1075,15 @@ interface SharedSession {
   client: string
   role: Role
   grantId: string
+  /** When set, the session is locked to this single flow (campaign), not the whole brand. */
+  campaign?: string
 }
 function readShareFromUrl(): SharedSession | null {
   try {
     const token = new URLSearchParams(window.location.search).get('share')
     if (!token) return null
     const g = decodeShareToken(token)
-    return g ? { client: g.client, role: g.role, grantId: g.id } : null
+    return g ? { client: g.client, role: g.role, grantId: g.id, campaign: g.campaign } : null
   } catch {
     return null
   }
@@ -1581,9 +1583,11 @@ interface TrafficState {
   sharedSession: SharedSession | null
   shares: ShareGrant[]
   shareDialogOpen: boolean
-  openShareDialog: () => void
+  /** When set, the Share dialog mints a link for this single flow (campaign), not the whole brand. */
+  shareDialogCampaign: string | null
+  openShareDialog: (campaign?: string) => void
   closeShareDialog: () => void
-  createShare: (client: string, role: Role) => ShareGrant
+  createShare: (client: string, role: Role, campaign?: string) => ShareGrant
   revokeShare: (id: string) => void
   exitSharedSession: () => void
   /** Campaign version history: copy save-points per client. */
@@ -2161,7 +2165,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   query: '',
   // A share link locks the session to its client + role from the first render.
   clientFilter: initialShare?.client ?? 'all',
-  campaignFilter: 'all',
+  // A single-flow share also pins the campaign so the session is scoped to that one flow.
+  campaignFilter: initialShare?.campaign ?? 'all',
   view: 'flow',
   perfMode: false,
   brandView: 'campaigns',
@@ -2185,6 +2190,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   sharedSession: initialShare,
   shares: loadShares(),
   shareDialogOpen: false,
+  shareDialogCampaign: null,
   versions: loadVersions(),
   historyOpen: false,
   icpOpen: false,
@@ -2241,7 +2247,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   artboards: loadArtboards(),
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
-  flowOpen: null,
+  // A single-flow share opens straight into that flow (flowOpen drives FlowsView to open it).
+  flowOpen: initialShare?.campaign ?? null,
   flowOpenView: 'flow',
   flowCanvasOpen: false,
   sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
@@ -2973,20 +2980,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const clearing = s.activeHomeChatId === id
       return clearing ? { homeChats, activeHomeChatId: null } : { homeChats }
     }),
-  openShareDialog: () => set({ shareDialogOpen: true }),
+  openShareDialog: (campaign) => set({ shareDialogOpen: true, shareDialogCampaign: campaign || null }),
   closeShareDialog: () => set({ shareDialogOpen: false }),
-  createShare: (client, role) => {
+  createShare: (client, role, campaign) => {
     const grant: ShareGrant = {
       id: `shr_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`,
       client,
       role,
+      campaign: campaign || undefined,
       createdAt: new Date().toISOString(),
     }
     const shares = [grant, ...get().shares]
     saveShares(shares)
     set({ shares })
-    // Publish a brand-scoped, read-only snapshot so the link is viewable with no account.
-    void publishShareSnapshot(client, role, grant.id)
+    // Publish a read-only snapshot (whole brand, or scoped to one flow) so the link is viewable
+    // with no account.
+    void publishShareSnapshot(client, role, grant.id, grant.campaign)
     return grant
   },
   revokeShare: (id) => {

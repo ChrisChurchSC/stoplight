@@ -383,6 +383,8 @@ export function FlowsView() {
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
   const role = useTrafficStore((s) => s.role)
   const openShareDialog = useTrafficStore((s) => s.openShareDialog)
+  // A single-flow share locks the recipient to that one flow: no back-to-list, no flow switching.
+  const flowShareLock = useTrafficStore((s) => !!s.sharedSession?.campaign)
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
   const flowChats = useTrafficStore((s) => s.flowChats)
   const saveFlowChat = useTrafficStore((s) => s.saveFlowChat)
@@ -441,7 +443,8 @@ export function FlowsView() {
   const [flowView, setFlowView] = useState<'flow' | 'grid' | 'calendar'>('flow')
   // The Flows section opens on an all-flows landing page; picking a flow (or New flow)
   // drops into the canvas. The "Flows" breadcrumb returns here.
-  const [flowScreen, setFlowScreen] = useState<'home' | 'canvas'>('home')
+  // A single-flow share opens straight in the flow (no all-flows landing to flash or navigate to).
+  const [flowScreen, setFlowScreen] = useState<'home' | 'canvas'>(flowShareLock ? 'canvas' : 'home')
   // Collapse the sidebar (to a rail) whenever a flow canvas is open; restore on leave/unmount.
   useEffect(() => {
     setFlowCanvasOpen(flowScreen === 'canvas')
@@ -1994,15 +1997,23 @@ export function FlowsView() {
           <span className="flow-crumb-ic" aria-hidden="true">
             ⋔
           </span>
-          <button className="flow-crumb-home" onClick={() => setFlowScreen('home')} title="All flows">
-            Flows
-          </button>
+          {flowShareLock ? (
+            <span className="flow-crumb-home" style={{ cursor: 'default' }}>Flow</span>
+          ) : (
+            <button className="flow-crumb-home" onClick={() => setFlowScreen('home')} title="All flows">
+              Flows
+            </button>
+          )}
           <span className="flow-crumb-sep">/</span>
-          <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
-            {viewing ? viewShort : name.trim() || 'New campaign'}
-            <span className="flow-switcher-caret">▾</span>
-          </button>
-          {switcherOpen && (
+          {flowShareLock ? (
+            <span className="flow-switcher" style={{ cursor: 'default' }}>{viewing ? viewShort : name.trim() || 'Flow'}</span>
+          ) : (
+            <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
+              {viewing ? viewShort : name.trim() || 'New campaign'}
+              <span className="flow-switcher-caret">▾</span>
+            </button>
+          )}
+          {!flowShareLock && switcherOpen && (
             <>
               <div className="flow-switch-scrim" onClick={() => setSwitcherOpen(false)} />
               <div className="flow-switch-menu">
@@ -2022,7 +2033,11 @@ export function FlowsView() {
         </div>
         <div className="flow-top-right">
           {can(role, 'share') && (
-            <button className="flow-share-btn" onClick={openShareDialog} title="Share this workspace">
+            <button
+              className="flow-share-btn"
+              onClick={() => openShareDialog(viewName ?? undefined)}
+              title={viewName ? 'Share just this flow (view-only)' : 'Share this workspace'}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />
                 <circle cx="6" cy="12" r="3" />

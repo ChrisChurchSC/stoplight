@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTrafficStore } from '../store/useTrafficStore'
 import { CanvasProjectTabs } from './CanvasProjectTabs'
 import { HomeSidebar } from './HomeSidebar'
 import { BrandRail } from './BrandRail'
@@ -9,8 +10,19 @@ import { BrandRail } from './BrandRail'
  * Library / Connectors / Billing pages, so they all share one layout (matching the
  * canvas, which uses the same sidebar + tab bar). Children fill the main column and
  * own their own scroll/padding.
+ *
+ * A single-flow share renders chromeless (no rail, sidebar, or tab bar) so the recipient is
+ * confined to the one flow they were given — nothing to navigate away with.
  */
 export function HomeShell({ children }: { children: ReactNode }) {
+  const flowOnly = useTrafficStore((s) => !!s.sharedSession?.campaign)
+  if (flowOnly) {
+    return (
+      <div className="home-shell home-shell-flowonly">
+        <div className="home-main">{children}</div>
+      </div>
+    )
+  }
   return (
     <div className="home-shell">
       <BrandRail />

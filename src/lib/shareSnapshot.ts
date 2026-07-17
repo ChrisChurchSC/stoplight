@@ -50,28 +50,35 @@ const byBrandOrGlobal = (key: string, client: string): unknown[] | undefined => 
 }
 
 /**
- * The localStorage-shaped, brand-scoped snapshot for `client`. Only this brand's slices, plus the
- * genuinely global taxonomies (channels, segments) that carry no brand and are safe to share whole.
+ * The localStorage-shaped snapshot for `client`. Only this brand's slices, plus the genuinely global
+ * taxonomies (channels, segments). When `campaign` is given, the flow-specific slices (rows,
+ * campaigns, canvases, reports, RTBs) are narrowed to that ONE flow, so a single-flow link exposes
+ * only that flow (the brand's foundation records it references are still included so it renders).
  */
-export function buildShareSnapshot(client: string): Record<string, unknown> {
+export function buildShareSnapshot(client: string, campaign?: string): Record<string, unknown> {
   const snap: Record<string, unknown> = {}
   const set = (k: string, v: unknown) => {
     if (v !== undefined) snap[k] = v
   }
+  // A row/campaign belongs to this share if it's the shared flow (single-flow) or, for a brand
+  // share, any campaign attributed to the client.
+  const campInShare = (name: string): boolean =>
+    campaign ? name === campaign : clientForCampaign(name) === client
 
   // Sheet rows carry no client field — attribute via the campaign→client map (the app's own rule),
-  // which is both correct and leak-safe (a row is never misattributed to this client).
+  // which is both correct and leak-safe (a row is never misattributed to this client/flow).
   const sheet = read('stoplight.sheet.v1') as { rows?: unknown[] } | unknown[] | undefined
   const rows = Array.isArray(sheet) ? sheet : (sheet?.rows ?? [])
-  const scopedRows = (rows as Record<string, unknown>[]).filter(
-    (r) => clientForCampaign(String(r.campaign ?? '')) === client,
-  )
+  const scopedRows = (rows as Record<string, unknown>[]).filter((r) => campInShare(String(r.campaign ?? '')))
   set('stoplight.sheet.v1', { rows: scopedRows })
 
-  // Direct `client` field.
-  set('stoplight.campaigns.v1', byField('stoplight.campaigns.v1', 'client', client))
-  set('stoplight.canvases.v1', byField('stoplight.canvases.v1', 'client', client))
-  set('stoplight.reports.v1', byField('stoplight.reports.v1', 'client', client))
+  // Direct `client` field — for a single-flow share, narrow campaigns/canvases/reports to the flow.
+  const campaigns = byField('stoplight.campaigns.v1', 'client', client) as Record<string, unknown>[] | undefined
+  set('stoplight.campaigns.v1', campaign ? campaigns?.filter((c) => c.name === campaign) : campaigns)
+  const canvases = byField('stoplight.canvases.v1', 'client', client) as Record<string, unknown>[] | undefined
+  set('stoplight.canvases.v1', campaign ? canvases?.filter((c) => c.campaign === campaign) : canvases)
+  const reports = byField('stoplight.reports.v1', 'client', client) as Record<string, unknown>[] | undefined
+  set('stoplight.reports.v1', campaign ? reports?.filter((r) => r.campaign === campaign) : reports)
 
   // Object keyed by brand/client name.
   set('stoplight.clientAudiences.v1', pick('stoplight.clientAudiences.v1', client))
@@ -101,12 +108,12 @@ export function buildShareSnapshot(client: string): Record<string, unknown> {
   // The client list, narrowed to just this brand.
   set('stoplight.clients.v1', [client])
 
-  // Campaign-keyed RTBs — keep the client's campaigns (same campaign→client attribution).
+  // Campaign-keyed RTBs — keep this share's campaigns (the one flow, or all the client's).
   const rtbs = read('stoplight.campaignRtbs.v1')
   if (rtbs && typeof rtbs === 'object' && !Array.isArray(rtbs)) {
     const out: Record<string, unknown> = {}
     for (const [camp, v] of Object.entries(rtbs as Record<string, unknown>)) {
-      if (clientForCampaign(camp) === client) out[camp] = v
+      if (campInShare(camp)) out[camp] = v
     }
     set('stoplight.campaignRtbs.v1', out)
   }
@@ -119,12 +126,17 @@ export function buildShareSnapshot(client: string): Record<string, unknown> {
 }
 
 /** Publish (or refresh) the public snapshot for a share grant. Fire-and-forget; no-op on localStorage. */
-export async function publishShareSnapshot(client: string, role: Role, grantId: string): Promise<void> {
+export async function publishShareSnapshot(
+  client: string,
+  role: Role,
+  grantId: string,
+  campaign?: string,
+): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return
   try {
     const ws = await getActiveWorkspaceId()
     if (!ws) return
-    const data = buildShareSnapshot(client)
+    const data = buildShareSnapshot(client, campaign)
     await supabase
       .from('share_snapshots')
       .upsert({ id: grantId, workspace_id: ws, client, role, data, updated_at: new Date().toISOString() })

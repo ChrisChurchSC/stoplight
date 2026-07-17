@@ -188,7 +188,7 @@ export function Breadcrumb() {
           )}
         </div>
         {can(role, 'share') && (
-          <button className="btn sm" onClick={openShareDialog} title="Share this client's workspace">
+          <button className="btn sm" onClick={() => openShareDialog()} title="Share this client's workspace">
             ⤴ Share
           </button>
         )}
