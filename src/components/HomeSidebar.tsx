@@ -116,6 +116,12 @@ const ICONS: Record<string, ReactNode> = {
   caret: <path d="m6 9 6 6 6-6" />,
   updown: <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />,
   check: <path d="m5 12.5 4.5 4.5L19 6" />,
+  pattern: (
+    <>
+      <path d="M4 7h16M4 12h16M4 17h10" />
+      <circle cx="18.5" cy="17" r="2" />
+    </>
+  ),
   voices: (
     <>
       <path d="M4 5h16v11H8l-4 3z" />
@@ -214,6 +220,7 @@ export function HomeSidebar() {
   const addPerson = useTrafficStore((s) => s.addPerson)
   const addMessage = useTrafficStore((s) => s.addMessage)
   const addVoice = useTrafficStore((s) => s.addVoice)
+  const addPattern = useTrafficStore((s) => s.addPattern)
   const addObjective = useTrafficStore((s) => s.addObjective)
   const addChannelRecord = useTrafficStore((s) => s.addChannelRecord)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
@@ -252,6 +259,7 @@ export function HomeSidebar() {
         item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
         item('voices', 'Voices', 'voices', page === 'voices', () => setPage('voices')),
         item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),
+        item('patterns', 'Patterns', 'pattern', page === 'patterns', () => setPage('patterns')),
       ],
     },
     {
@@ -296,6 +304,7 @@ export function HomeSidebar() {
     { group: 'Foundation', label: 'Message', page: 'messages', run: () => addMessage({ brand: taskBrand }) },
     { group: 'Foundation', label: 'Voice', page: 'voices', run: () => addVoice({ brand: taskBrand }) },
     { group: 'Foundation', label: 'Proof point', page: 'proofpoints', run: () => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: 'New proof point', detail: '', approved: false }) },
+    { group: 'Foundation', label: 'Pattern', page: 'patterns', run: () => addPattern({ brand: taskBrand }) },
     { group: 'Go-to-market', label: 'Channel', page: 'channelrecords', run: () => addChannelRecord() },
     { group: 'Go-to-market', label: 'Objective', page: 'objectives', run: () => addObjective({ brand: taskBrand }) },
     { group: 'Go-to-market', label: 'Company', page: 'records', run: () => addCompany({ brand: taskBrand }) },
