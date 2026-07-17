@@ -14,6 +14,9 @@ export interface RecordField {
   kind: RecordFieldKind
   /** Optional section heading; consecutive fields sharing a group render under one header. */
   group?: string
+  /** A fixed pick-list — renders the cell as a dropdown (e.g. Funnel stage, Cadence). Distinct from
+   *  `ref` (options supplied per-field at render time from other records). */
+  options?: readonly string[]
 }
 
 /** A field that also appears as a table column (adds a pixel width). */

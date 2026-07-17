@@ -11,6 +11,7 @@ import { SheetTabs } from './SheetTabs'
 // dropdowns (pick a value); the rest are typed in or need to be sourced.
 function cellHint(col: RecordColumn): string {
   const l = col.label.toLowerCase()
+  if (col.options) return `Set a ${l} — pick one from the dropdown`
   switch (col.kind) {
     case 'status':
       return `Set a ${l} — pick one from the dropdown`
@@ -380,6 +381,21 @@ export function RecordsTable<T extends { id: string }>({
                               </option>
                             ))}
                             {v && !(fieldOptions?.[col.key] ?? []).includes(v) && <option value={v}>{v}</option>}
+                          </select>
+                        ) : col.options ? (
+                          <select
+                            className="rec-status rec-ref"
+                            style={{ color: v ? recordTint(v) : undefined }}
+                            value={v}
+                            onChange={(e) => set(r.id, col.key, e.target.value)}
+                          >
+                            <option value="">—</option>
+                            {col.options.map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                            {v && !col.options.includes(v) && <option value={v}>{v}</option>}
                           </select>
                         ) : (
                           <BufferedInput className="rec-cell" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} cellR={ri} cellC={ci} onKeyDown={(e) => onCellKey(e, ri, ci)} onPaste={(e) => onCellPaste(e, ri, ci)} />

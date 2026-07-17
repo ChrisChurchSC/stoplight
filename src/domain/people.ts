@@ -24,7 +24,7 @@ export interface Person {
 export const PEOPLE_COLUMNS: RecordColumn[] = [
   { key: 'name', label: 'Name', kind: 'name', width: 200, group: 'Identity' },
   { key: 'title', label: 'Title', kind: 'text', width: 180, group: 'Identity' },
-  { key: 'company', label: 'Company', kind: 'text', width: 160, group: 'Identity' },
+  { key: 'company', label: 'Company', kind: 'ref', width: 160, group: 'Identity' },
   { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Identity' },
   { key: 'email', label: 'Email', kind: 'text', width: 220, group: 'Contact' },
   { key: 'location', label: 'Location', kind: 'text', width: 150, group: 'Contact' },
@@ -34,7 +34,7 @@ export const PEOPLE_COLUMNS: RecordColumn[] = [
 export const PEOPLE_FIELDS: RecordField[] = [
   { key: 'name', label: 'Name', kind: 'name', group: 'Identity' },
   { key: 'title', label: 'Title', kind: 'text', group: 'Identity' },
-  { key: 'company', label: 'Company', kind: 'text', group: 'Identity' },
+  { key: 'company', label: 'Company', kind: 'ref', group: 'Identity' },
   { key: 'status', label: 'Status', kind: 'status', group: 'Identity' },
   { key: 'email', label: 'Email', kind: 'text', group: 'Contact' },
   { key: 'phone', label: 'Phone', kind: 'text', group: 'Contact' },

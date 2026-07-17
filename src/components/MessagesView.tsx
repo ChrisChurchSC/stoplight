@@ -20,8 +20,11 @@ export function MessagesView() {
   // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
   const { brands } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const scoped = messages.filter((m) => !m.brand || m.brand === brand)
+  // The Audience column picks from the brand's audiences.
+  const audienceNames = (clientAudiences[brand] ?? []).map((a) => a.name)
 
   return (
     <RecordsTable
@@ -35,6 +38,7 @@ export function MessagesView() {
       onAdd={() => addMessage({ brand })}
       onUpdate={updateMessage}
       onDelete={deleteMessage}
+      fieldOptions={{ audience: audienceNames }}
     />
   )
 }

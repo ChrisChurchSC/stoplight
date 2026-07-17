@@ -17,11 +17,14 @@ export interface Objective {
   notes?: string
 }
 
+/** Timeframe pick-list for an Objective. */
+export const OBJECTIVE_TIMEFRAME_OPTIONS = ['This month', 'This quarter', 'This half', 'This year', 'Ongoing'] as const
+
 export const OBJECTIVE_COLUMNS: RecordColumn[] = [
   { key: 'name', label: 'Objective', kind: 'name', width: 260, group: 'Goal' },
   { key: 'metric', label: 'Metric', kind: 'text', width: 180, group: 'Measure' },
   { key: 'target', label: 'Target', kind: 'text', width: 140, group: 'Measure' },
-  { key: 'timeframe', label: 'Timeframe', kind: 'text', width: 150, group: 'Measure' },
+  { key: 'timeframe', label: 'Timeframe', kind: 'text', width: 150, group: 'Measure', options: OBJECTIVE_TIMEFRAME_OPTIONS },
   { key: 'status', label: 'Status', kind: 'status', width: 130, group: 'State' },
 ]
 
@@ -29,7 +32,7 @@ export const OBJECTIVE_FIELDS: RecordField[] = [
   { key: 'name', label: 'Objective', kind: 'name', group: 'Goal' },
   { key: 'metric', label: 'Metric', kind: 'text', group: 'Measure' },
   { key: 'target', label: 'Target', kind: 'text', group: 'Measure' },
-  { key: 'timeframe', label: 'Timeframe', kind: 'text', group: 'Measure' },
+  { key: 'timeframe', label: 'Timeframe', kind: 'text', group: 'Measure', options: OBJECTIVE_TIMEFRAME_OPTIONS },
   { key: 'owner', label: 'Owner', kind: 'text', group: 'State' },
   { key: 'status', label: 'Status', kind: 'status', group: 'State' },
   { key: 'notes', label: 'Notes', kind: 'multiline', group: 'State' },

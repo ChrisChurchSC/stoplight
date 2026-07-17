@@ -22,10 +22,13 @@ export interface ChannelRecord {
   notes?: string
 }
 
+/** Platform pick-list — the distinct platforms across the channel taxonomy. */
+export const CHANNEL_PLATFORM_OPTIONS: readonly string[] = [...new Set(CHANNEL_LIST.map((c) => c.platform))].sort()
+
 export const CHANNEL_RECORD_COLUMNS: RecordColumn[] = [
   { key: 'name', label: 'Channel', kind: 'name', width: 200, group: 'Channel' },
   { key: 'type', label: 'Type', kind: 'status', width: 110, group: 'Channel' },
-  { key: 'platform', label: 'Platform', kind: 'text', width: 140, group: 'Channel' },
+  { key: 'platform', label: 'Platform', kind: 'text', width: 140, group: 'Channel', options: CHANNEL_PLATFORM_OPTIONS },
   { key: 'cpm', label: 'CPM $', kind: 'text', width: 100, group: 'Benchmarks' },
   { key: 'ctr', label: 'CTR %', kind: 'text', width: 100, group: 'Benchmarks' },
   { key: 'cvr', label: 'CVR %', kind: 'text', width: 100, group: 'Benchmarks' },
@@ -35,7 +38,7 @@ export const CHANNEL_RECORD_COLUMNS: RecordColumn[] = [
 export const CHANNEL_RECORD_FIELDS: RecordField[] = [
   { key: 'name', label: 'Channel', kind: 'name', group: 'Channel' },
   { key: 'type', label: 'Type', kind: 'status', group: 'Channel' },
-  { key: 'platform', label: 'Platform', kind: 'text', group: 'Channel' },
+  { key: 'platform', label: 'Platform', kind: 'text', group: 'Channel', options: CHANNEL_PLATFORM_OPTIONS },
   { key: 'cpm', label: 'CPM $', kind: 'text', group: 'Benchmarks' },
   { key: 'ctr', label: 'CTR %', kind: 'text', group: 'Benchmarks' },
   { key: 'cvr', label: 'CVR %', kind: 'text', group: 'Benchmarks' },

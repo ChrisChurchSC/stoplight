@@ -45,7 +45,7 @@ export function CompaniesView() {
       onAdd={() => addCompany({ brand })}
       onUpdate={updateCompany}
       onDelete={deleteCompany}
-      fieldOptions={{ audienceSegment: segmentNames }}
+      fieldOptions={{ audienceSegment: segmentNames, segment: segmentNames }}
       relatedSlot={(company) => {
         const norm = company.name.trim().toLowerCase()
         const atCompany = people.filter((p) => (p.company ?? '').trim().toLowerCase() === norm)

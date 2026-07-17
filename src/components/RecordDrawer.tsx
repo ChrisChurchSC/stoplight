@@ -102,6 +102,16 @@ export function RecordDrawer<T extends { id: string }>({
                         </a>
                       )}
                     </div>
+                  ) : f.options ? (
+                    <select className="rd-input rd-select" style={{ color: v ? recordTint(v) : undefined }} value={v} onChange={(e) => set(f.key, e.target.value)}>
+                      <option value="">—</option>
+                      {f.options.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                      {v && !f.options.includes(v) && <option value={v}>{v}</option>}
+                    </select>
                   ) : (
                     <BufferedInput className="rd-input" value={v} onCommit={(nv) => set(f.key, nv)} placeholder="Empty" />
                   )}

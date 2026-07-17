@@ -18,12 +18,15 @@ export interface Message {
   notes?: string
 }
 
+/** Funnel-stage pick-list for a Message (mirrors FUNNEL_STAGES). */
+export const MESSAGE_STAGE_OPTIONS = ['Awareness', 'Consideration', 'Conversion', 'Retention'] as const
+
 export const MESSAGE_COLUMNS: RecordColumn[] = [
   { key: 'name', label: 'Message', kind: 'name', width: 240, group: 'Message' },
   { key: 'angle', label: 'Angle', kind: 'text', width: 220, group: 'Message' },
-  { key: 'audience', label: 'Audience', kind: 'text', width: 160, group: 'Fit' },
+  { key: 'audience', label: 'Audience', kind: 'ref', width: 160, group: 'Fit' },
   { key: 'pillar', label: 'Pillar', kind: 'text', width: 150, group: 'Fit' },
-  { key: 'stage', label: 'Funnel stage', kind: 'text', width: 140, group: 'Fit' },
+  { key: 'stage', label: 'Funnel stage', kind: 'text', width: 140, group: 'Fit', options: MESSAGE_STAGE_OPTIONS },
   { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'State' },
 ]
 
@@ -31,9 +34,9 @@ export const MESSAGE_FIELDS: RecordField[] = [
   { key: 'name', label: 'Message', kind: 'name', group: 'Message' },
   { key: 'angle', label: 'Angle', kind: 'multiline', group: 'Message' },
   { key: 'proof', label: 'Proof behind it', kind: 'multiline', group: 'Message' },
-  { key: 'audience', label: 'Audience', kind: 'text', group: 'Fit' },
+  { key: 'audience', label: 'Audience', kind: 'ref', group: 'Fit' },
   { key: 'pillar', label: 'Pillar', kind: 'text', group: 'Fit' },
-  { key: 'stage', label: 'Funnel stage', kind: 'text', group: 'Fit' },
+  { key: 'stage', label: 'Funnel stage', kind: 'text', group: 'Fit', options: MESSAGE_STAGE_OPTIONS },
   { key: 'status', label: 'Status', kind: 'status', group: 'State' },
   { key: 'notes', label: 'Notes', kind: 'multiline', group: 'State' },
 ]

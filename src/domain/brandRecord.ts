@@ -54,12 +54,15 @@ export interface BrandRecord {
 // The full communications strategy as columns, grouped into the same section bands the drawer uses
 // (Overview / Strategic Foundation / Message Architecture / Execution / Measurement) — so the Brand
 // sheet reads like every other record table, with the sections as column-group bands.
+/** Review-cadence pick-list, shared by the brief's two cadence fields. */
+export const REVIEW_CADENCE_OPTIONS = ['Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Annually'] as const
+
 export const BRAND_COLUMNS: RecordColumn[] = [
   { key: 'name', label: 'Brand', kind: 'name', width: 200, group: 'Overview' },
   { key: 'descriptor', label: 'Descriptor', kind: 'text', width: 240, group: 'Overview' },
   { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Overview' },
   { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', width: 150, group: 'Overview' },
-  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', width: 150, group: 'Overview' },
+  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', width: 150, group: 'Overview', options: REVIEW_CADENCE_OPTIONS },
   { key: 'industry', label: 'Industry', kind: 'text', width: 170, group: 'Overview' },
   { key: 'website', label: 'Website', kind: 'url', width: 180, group: 'Overview' },
   { key: 'businessObjective', label: 'Business objective', kind: 'text', width: 300, group: 'Strategic Foundation' },
@@ -83,7 +86,7 @@ export const BRAND_COLUMNS: RecordColumn[] = [
   { key: 'keyMoments', label: 'Key moments', kind: 'text', width: 240, group: 'Execution' },
   { key: 'primaryKpis', label: 'Primary KPIs', kind: 'text', width: 220, group: 'Measurement' },
   { key: 'headlineTargets', label: 'Headline targets', kind: 'text', width: 220, group: 'Measurement' },
-  { key: 'reviewCadence', label: 'Review cadence', kind: 'text', width: 180, group: 'Measurement' },
+  { key: 'reviewCadence', label: 'Review cadence', kind: 'text', width: 180, group: 'Measurement', options: REVIEW_CADENCE_OPTIONS },
   { key: 'risks', label: 'Risks & watch-outs', kind: 'text', width: 240, group: 'Measurement' },
 ]
 
@@ -93,7 +96,7 @@ export const BRAND_FIELDS: RecordField[] = [
   { key: 'descriptor', label: 'Brand descriptor', kind: 'text', group: 'Overview' },
   { key: 'status', label: 'Status', kind: 'status', group: 'Overview' },
   { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', group: 'Overview' },
-  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', group: 'Overview' },
+  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', group: 'Overview', options: REVIEW_CADENCE_OPTIONS },
   { key: 'industry', label: 'Industry', kind: 'text', group: 'Overview' },
   { key: 'website', label: 'Website', kind: 'url', group: 'Overview' },
   { key: 'businessObjective', label: 'Business objective', kind: 'multiline', group: 'Strategic Foundation' },
@@ -117,7 +120,7 @@ export const BRAND_FIELDS: RecordField[] = [
   { key: 'keyMoments', label: 'Key moments / campaigns', kind: 'multiline', group: 'Execution' },
   { key: 'primaryKpis', label: 'Primary KPIs', kind: 'multiline', group: 'Measurement' },
   { key: 'headlineTargets', label: 'Headline targets', kind: 'multiline', group: 'Measurement' },
-  { key: 'reviewCadence', label: 'Review cadence', kind: 'multiline', group: 'Measurement' },
+  { key: 'reviewCadence', label: 'Review cadence', kind: 'text', group: 'Measurement', options: REVIEW_CADENCE_OPTIONS },
   { key: 'risks', label: 'Risks & watch-outs', kind: 'multiline', group: 'Measurement' },
 ]
 

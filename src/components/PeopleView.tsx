@@ -42,6 +42,7 @@ export function PeopleView() {
       onAdd={() => addPerson({ brand })}
       onUpdate={updatePerson}
       onDelete={deletePerson}
+      fieldOptions={{ company: companies.map((c) => c.name).filter(Boolean) }}
       relatedSlot={(person) => {
         const co = (person.company ?? '').trim()
         const norm = co.toLowerCase()
