@@ -106,6 +106,7 @@ export function HomeChat() {
   const importAssets = useTrafficStore((s) => s.importAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
+  const draftCopy = useTrafficStore((s) => s.draftCopy)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const openFlow = useTrafficStore((s) => s.openFlow)
@@ -546,11 +547,24 @@ export function HomeChat() {
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
     addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks })
+    // Seed the assets, then write copy for the freshly-created rows (diff to find them, like the builder).
+    const beforeIds = new Set(useTrafficStore.getState().rows.map((r) => r.id))
     await seedCampaignAssets(campaignName, deliverables, { flightWeeks: weeks, audiences: audienceNames })
+    const newIds = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !beforeIds.has(r.id)).map((r) => r.id)
+    let wroteCopy = false
+    if (newIds.length) {
+      setMessages((m) => m.map((x) => (x.id === id ? { ...x, steps: [{ kind: 'assets', label: `Writing copy for ${newIds.length} asset${newIds.length === 1 ? '' : 's'}` }] } : x)))
+      try {
+        await draftCopy(newIds)
+        wroteCopy = true
+      } catch {
+        /* leave assets as drafts if copy generation fails */
+      }
+    }
     const chLabels = [...new Set(deliverables.map((d) => CHANNELS[d.channel]?.label ?? d.channel))]
     const audBit = audienceNames.length ? `, scoped to your ${audienceNames.length} audience${audienceNames.length === 1 ? '' : 's'}` : ''
     setMessages((m) =>
-      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, assets across ${chLabels.join(', ')} over ${weeks} weeks${audBit}. Open it to review the plan and generate the copy.`, flowBuiltName: campaignName } : x)),
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, ${newIds.length} asset${newIds.length === 1 ? '' : 's'} across ${chLabels.join(', ')} over ${weeks} weeks${audBit}${wroteCopy ? ', with copy written for each' : ''}. Open it to review.`, flowBuiltName: campaignName } : x)),
     )
     lastActionRef.current = 'flow'
   }
