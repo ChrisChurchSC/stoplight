@@ -532,8 +532,7 @@ export function HomeChat() {
       const objs = flowObjectives()
       if (objs.length) {
         st.step = 1
-        const list = objs.map((o, i) => `${i + 1}. **${o.name}**${o.metric ? ` — ${o.metric}` : ''}`).join('\n')
-        say(`What's the goal? Pick the objective this flow should drive:\n\n${list}\n\nReply with a number or name, or say "skip".`)
+        say(`What's the goal? Pick the objective this flow should drive.`, { goalPick: objs.map((o) => ({ id: o.id, label: o.name, metric: o.metric })) })
         return
       }
       // No objectives yet, skip straight to timing (the flow builds without a linked goal).
@@ -561,6 +560,15 @@ export function HomeChat() {
     const objectiveId = st.objectiveId
     flowBuildRef.current = null
     await buildFlowFromChat(st.name, st.weeks, objectiveId)
+  }
+  // Goal chosen by clicking a button during the flow-build: record it and move on to timing.
+  const pickFlowGoal = (obj: { id: string; label: string } | null) => {
+    const st = flowBuildRef.current
+    if (!st || st.step !== 1) return
+    setQ('')
+    if (obj) { st.objectiveId = obj.id; sayUser(obj.label) } else { sayUser('Skip goal') }
+    st.step = 2
+    say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
   }
   const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string) => {
     const store = useTrafficStore.getState()
@@ -778,6 +786,7 @@ export function HomeChat() {
       objectiveDone: m.objectiveDone,
       channelDone: m.channelDone,
       flowStep: m.flowStep,
+      goalPick: m.goalPick,
       ingestDone: m.ingestDone,
       gtmOffer: m.gtmOffer,
       flowOffer: m.flowOffer,
@@ -942,6 +951,14 @@ export function HomeChat() {
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, true)}>{FLOW_PROMPT[m.flowStep as FlowStep].label}</button>
                       <button className="hchat-setup-btn ghost" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, false)}>Skip</button>
+                    </div>
+                  )}
+                  {m.goalPick && (
+                    <div className="hchat-setup-actions">
+                      {m.goalPick.map((g) => (
+                        <button key={g.id} className="hchat-setup-btn" title={g.metric || undefined} onClick={() => pickFlowGoal(g)}>{g.label}</button>
+                      ))}
+                      <button className="hchat-setup-btn ghost" onClick={() => pickFlowGoal(null)}>Skip</button>
                     </div>
                   )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
