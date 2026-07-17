@@ -2986,6 +2986,26 @@ button {
 }
 .hsb-sec-add svg { width: 15px; height: 15px; }
 .hsb-sec-add:hover { color: var(--text); background: var(--surface-2); }
+
+/* New-record picker: a nav button that opens a grouped menu of record types. */
+.hsb-newrec { position: relative; }
+.hsb-newrec-scrim { position: fixed; inset: 0; z-index: 40; }
+.hsb-newrec-menu {
+  position: absolute; top: calc(100% + 2px); left: 6px; z-index: 50;
+  min-width: 196px; max-height: 62vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(16, 24, 40, .18); padding: 6px;
+}
+.hsb-newrec-group + .hsb-newrec-group { margin-top: 2px; }
+.hsb-newrec-grouphead {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); padding: 6px 8px 2px;
+}
+.hsb-newrec-item {
+  display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  padding: 7px 8px; font-size: 13px; color: var(--text); border-radius: 6px;
+}
+.hsb-newrec-item:hover { background: var(--surface-2); }
 .hsb-chat-ic {
   width: 15px;
   height: 15px;

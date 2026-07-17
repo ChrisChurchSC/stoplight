@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { newAudience } from '../domain/audiences'
+import { freshRecordId } from '../domain/records'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -207,11 +209,22 @@ export function HomeSidebar() {
   const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
   const sidebarCollapsed = useTrafficStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useTrafficStore((s) => s.toggleSidebar)
+  // Add functions for the "New record" picker.
+  const addCompany = useTrafficStore((s) => s.addCompany)
+  const addPerson = useTrafficStore((s) => s.addPerson)
+  const addMessage = useTrafficStore((s) => s.addMessage)
+  const addVoice = useTrafficStore((s) => s.addVoice)
+  const addObjective = useTrafficStore((s) => s.addObjective)
+  const addChannelRecord = useTrafficStore((s) => s.addChannelRecord)
+  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
+  const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   // A flow canvas forces the rail; otherwise the user's manual toggle decides.
   const railed = flowCanvasOpen || sidebarCollapsed
 
   const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
   const [chatsOpen, setChatsOpen] = useState(true)
+  const [newRecOpen, setNewRecOpen] = useState(false)
   // Workflow sections (Build / Foundation / Go-to-market / Measure) — all open by default.
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Go-to-market', 'Measure']))
   const toggleSection = (label: string) =>
@@ -275,6 +288,26 @@ export function HomeSidebar() {
     }
   }, [page, taskBrand])
 
+  // "New record" picker: choose a record type, add a blank one (scoped to the brand in the rail),
+  // and jump to its page to fill it in. Grouped to mirror the nav sections.
+  type PageId = Parameters<typeof setPage>[0]
+  const newRecordTypes: { group: string; label: string; page: PageId; run: () => void }[] = [
+    { group: 'Foundation', label: 'Audience', page: 'segments', run: () => { const a = newAudience({ name: 'New audience' }); const cur = useTrafficStore.getState().clientAudiences[taskBrand] ?? []; setClientAudiences(taskBrand, [...cur, a]) } },
+    { group: 'Foundation', label: 'Message', page: 'messages', run: () => addMessage({ brand: taskBrand }) },
+    { group: 'Foundation', label: 'Voice', page: 'voices', run: () => addVoice({ brand: taskBrand }) },
+    { group: 'Foundation', label: 'Proof point', page: 'proofpoints', run: () => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: 'New proof point', detail: '', approved: false }) },
+    { group: 'Go-to-market', label: 'Channel', page: 'channelrecords', run: () => addChannelRecord() },
+    { group: 'Go-to-market', label: 'Objective', page: 'objectives', run: () => addObjective({ brand: taskBrand }) },
+    { group: 'Go-to-market', label: 'Company', page: 'records', run: () => addCompany({ brand: taskBrand }) },
+    { group: 'Go-to-market', label: 'Person', page: 'people', run: () => addPerson({ brand: taskBrand }) },
+    { group: 'Brand', label: 'Brand', page: 'brands', run: () => addBrandRecord() },
+  ]
+  const addNewRecord = (t: (typeof newRecordTypes)[number]) => {
+    setNewRecOpen(false)
+    t.run()
+    setPage(t.page)
+  }
+
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
       <nav className="sidebar-nav">
@@ -288,6 +321,29 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
+        <div className="hsb-newrec">
+          <button className="nav-item hsb-newrec-btn" onClick={() => setNewRecOpen((o) => !o)} title="Add a record" aria-haspopup="menu" aria-expanded={newRecOpen}>
+            <span className="nav-ico"><Ico name="plus" /></span>
+            <span className="nav-label">New record</span>
+          </button>
+          {newRecOpen && (
+            <>
+              <div className="hsb-newrec-scrim" onClick={() => setNewRecOpen(false)} />
+              <div className="hsb-newrec-menu" role="menu">
+                {['Foundation', 'Go-to-market', 'Brand'].map((g) => (
+                  <div key={g} className="hsb-newrec-group">
+                    <div className="hsb-newrec-grouphead">{g}</div>
+                    {newRecordTypes.filter((t) => t.group === g).map((t) => (
+                      <button key={t.label} className="hsb-newrec-item" role="menuitem" onClick={() => addNewRecord(t)}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         {topItems.map((it) => (
           <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
             <span className="nav-ico">
