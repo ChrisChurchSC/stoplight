@@ -7,6 +7,24 @@ import { RecordsChat } from './RecordsChat'
 import { BufferedInput } from './BufferedInput'
 import { SheetTabs } from './SheetTabs'
 
+// What a blank cell needs, shown in a tooltip beside the "needs info" flag. Status/ref cells are
+// dropdowns (pick a value); the rest are typed in or need to be sourced.
+function cellHint(col: RecordColumn): string {
+  const l = col.label.toLowerCase()
+  switch (col.kind) {
+    case 'status':
+      return `Set a ${l} — pick one from the dropdown`
+    case 'ref':
+      return `Link a ${l} from the dropdown`
+    case 'url':
+      return `Add the ${l}`
+    case 'colors':
+      return `Add ${l} in the record's details`
+    default:
+      return `Add the ${l}`
+  }
+}
+
 /**
  * A generic spreadsheet-style Records table. Every text cell edits inline; Status is a
  * select tinted off its value; a `url` field renders an open-in-new affordance. Click a
@@ -297,8 +315,11 @@ export function RecordsTable<T extends { id: string }>({
                   <tr>
                   {columns.map((col, ci) => {
                     const v = val(r, col.key)
+                    // Flag a blank, fillable cell so it's clear what still needs info (name is the
+                    // record itself; colors edits in the drawer).
+                    const needsInfo = !String(v ?? '').trim() && col.kind !== 'name' && col.kind !== 'colors'
                     return (
-                      <td key={col.key} className={`rec-td rec-td-${col.kind}`}>
+                      <td key={col.key} className={`rec-td rec-td-${col.kind}`} style={needsInfo ? { position: 'relative' } : undefined} title={needsInfo ? cellHint(col) : undefined}>
                         {col.kind === 'name' ? (
                           <div className="rec-name">
                             <button
@@ -362,6 +383,14 @@ export function RecordsTable<T extends { id: string }>({
                           </select>
                         ) : (
                           <BufferedInput className="rec-cell" placeholder="—" value={v} onCommit={(nv) => set(r.id, col.key, nv)} cellR={ri} cellC={ci} onKeyDown={(e) => onCellKey(e, ri, ci)} onPaste={(e) => onCellPaste(e, ri, ci)} />
+                        )}
+                        {needsInfo && (
+                          <span aria-label={cellHint(col)} title={cellHint(col)} style={{ position: 'absolute', top: 3, left: 3, lineHeight: 0, pointerEvents: 'none' }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#d9930b" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M5 21V4" />
+                              <path d="M5 4h12l-2.5 4L17 12H5" />
+                            </svg>
+                          </span>
                         )}
                       </td>
                     )
