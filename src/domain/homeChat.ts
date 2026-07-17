@@ -47,6 +47,12 @@ export interface HomeChatMsg {
   flowOffer?: boolean
   /** Set to the built campaign name, to render an "Open flow" link. */
   flowBuiltName?: string
+  /** When set, offer to set up measurement after a flow is built (renders "Set up measurement" / "Not now"). */
+  measureOffer?: boolean
+  /** When set, renders reporting-cadence buttons (Weekly / Monthly / Quarterly). */
+  cadencePick?: boolean
+  /** Set on the message that closes out measurement setup, to render a "View Insights" link. */
+  measureDone?: boolean
 }
 
 /** A saved Home chat conversation — listed in the sidebar and reopenable. */

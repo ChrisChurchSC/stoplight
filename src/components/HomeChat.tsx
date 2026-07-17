@@ -96,6 +96,7 @@ export function HomeChat() {
   const addReport = useTrafficStore((s) => s.addReport)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   // Setup actions — the guided flow creates real records as the user answers.
   const addClient = useTrafficStore((s) => s.addClient)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
@@ -570,6 +571,39 @@ export function HomeChat() {
     st.step = 2
     say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
   }
+
+  // ── Measure: after a flow is built, cover the two Measure sections (Reports + Insights). Recap what
+  // gets tracked (the brand's objectives; draft them if none), then ask the reporting cadence.
+  const startMeasure = async () => {
+    setQ('')
+    const brand = useTrafficStore.getState().clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('reports'); return }
+    // Objectives define what to measure. If none exist yet, draft them first (this also covers cadence).
+    if (!useTrafficStore.getState().objectives.filter((o) => !o.brand || o.brand === brand).length) {
+      await draftBrandObjectives()
+    }
+    const measured = useTrafficStore.getState().objectives.filter((o) => !o.brand || o.brand === brand)
+    const metrics = [...new Set(measured.map((o) => o.metric?.trim()).filter(Boolean))] as string[]
+    const measureBit = metrics.length ? `You'll track ${metrics.slice(0, 4).join(', ')}. ` : ''
+    say(`${measureBit}How often do you want to report on **${brand}**?`, { cadencePick: true })
+  }
+  // Reporting cadence chosen: generate a baseline report so Reports/Insights have a starting line.
+  const pickCadence = async (cadence: string) => {
+    setQ('')
+    sayUser(cadence)
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Setting up ${brand}'s measurement` }] }])
+    await new Promise((r) => setTimeout(r, 400))
+    const scopedRows = store.rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter: brand, campaignFilter: 'all' }))
+    const { title, kind, summary, html } = buildBrandReport({ brand, rows: scopedRows, audiences: store.clientAudiences[brand] ?? [] })
+    const reportId = addReport({ client: brand, title, kind, summary, html })
+    setMessages((m) =>
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `Set. You'll report **${cadence.toLowerCase()}**, and I saved a baseline report, **${title}**, to ${brand}'s Reports so you have a starting line. Watch Insights as the assets go live.`, reportId, reportBrand: brand, measureDone: true } : x)),
+    )
+    lastActionRef.current = 'measure'
+  }
   const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string) => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
@@ -623,6 +657,8 @@ export function HomeChat() {
       m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, ${newIds.length} asset${newIds.length === 1 ? '' : 's'} across ${chLabels.join(', ')} over ${weeks} weeks${linkBit}${wroteCopy ? ', with copy written for each' : ''}. Open it to review.`, flowBuiltName: campaignName } : x)),
     )
     lastActionRef.current = 'flow'
+    // Close the loop: set up how you'll measure this, what to track and how often to report.
+    say(`Last piece: how you'll measure **${name}**, what to track and how often to report. Want to set that up?`, { measureOffer: true })
   }
 
   const run = async (question: string) => {
@@ -791,6 +827,9 @@ export function HomeChat() {
       gtmOffer: m.gtmOffer,
       flowOffer: m.flowOffer,
       flowBuiltName: m.flowBuiltName,
+      measureOffer: m.measureOffer,
+      cadencePick: m.cadencePick,
+      measureDone: m.measureDone,
     }))
     saveHomeChat({
       id: chatIdRef.current,
@@ -959,6 +998,24 @@ export function HomeChat() {
                         <button key={g.id} className="hchat-setup-btn" title={g.metric || undefined} onClick={() => pickFlowGoal(g)}>{g.label}</button>
                       ))}
                       <button className="hchat-setup-btn ghost" onClick={() => pickFlowGoal(null)}>Skip</button>
+                    </div>
+                  )}
+                  {m.measureOffer && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => void startMeasure()}>Set up measurement</button>
+                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Open Reports or Insights whenever you want to measure.`)}>Not now</button>
+                    </div>
+                  )}
+                  {m.cadencePick && (
+                    <div className="hchat-setup-actions">
+                      {['Weekly', 'Monthly', 'Quarterly'].map((c) => (
+                        <button key={c} className="hchat-setup-btn" onClick={() => void pickCadence(c)}>{c}</button>
+                      ))}
+                    </div>
+                  )}
+                  {m.measureDone && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setLibraryMode('data') }}>View Insights</button>
                     </div>
                   )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
