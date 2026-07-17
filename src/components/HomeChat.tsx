@@ -60,17 +60,19 @@ const STEP_ICON: Record<StepKind, ReactNode> = {
   ),
 }
 
-// The guided "build your foundation" flow, in dependency order (brand is done in setup first). Each
-// step offers to draft that piece or skip, then advances to the next.
-const FLOW_STEPS = ['audiences', 'channels', 'voices', 'proof', 'messages', 'objectives'] as const
-type FlowStep = (typeof FLOW_STEPS)[number]
+// The guided build flows, in dependency order. Foundation and Go-to-market are separate sequences
+// (matching the sidebar sections); each step offers to draft that piece or skip, then advances.
+const FLOW_STEP_KEYS = ['audiences', 'voices', 'proof', 'messages', 'channels', 'objectives'] as const
+type FlowStep = (typeof FLOW_STEP_KEYS)[number]
+const FOUNDATION_STEPS: FlowStep[] = ['audiences', 'voices', 'proof', 'messages']
+const GTM_STEPS: FlowStep[] = ['channels', 'objectives']
 const FLOW_PROMPT: Record<FlowStep, { text: string; label: string }> = {
   audiences: { text: `First, your **audiences**, the people you're marketing to. Everything else gets sharper once these exist. Want me to draft a few?`, label: 'Draft audiences' },
-  channels: { text: `Next, **channels**, where you reach each audience. Want me to pick the best-fit ones and set them?`, label: 'Set channels' },
   voices: { text: `Now your **brand voice**, how you sound. Want me to define it?`, label: 'Add voices' },
   proof: { text: `**Proof points**, the evidence your messages lean on. Want me to draft some?`, label: 'Draft proof points' },
   messages: { text: `**Messages**, what you say to each audience, in your voice, backed by proof. Want me to draft them?`, label: 'Draft messages' },
-  objectives: { text: `Finally, **objectives**, what to measure and how often to report. Want me to draft them?`, label: 'Draft objectives' },
+  channels: { text: `Now go-to-market. First, **channels**, where you reach each audience. Want me to pick the best-fit ones and set them?`, label: 'Set channels' },
+  objectives: { text: `And **objectives**, what to measure and how often to report. Want me to draft them?`, label: 'Draft objectives' },
 }
 
 export function HomeChat() {
@@ -477,9 +479,14 @@ export function HomeChat() {
   const pushFlowStep = (step: FlowStep) =>
     setMessages((m) => [...m, { id: nid(), role: 'assistant', text: FLOW_PROMPT[step].text, flowStep: step }])
   const advanceFlow = (current: FlowStep) => {
-    const next = FLOW_STEPS[FLOW_STEPS.indexOf(current) + 1]
+    // Which sequence we're in is determined by the step (foundation and GTM steps don't overlap).
+    const inGtm = GTM_STEPS.includes(current)
+    const seq = inGtm ? GTM_STEPS : FOUNDATION_STEPS
+    const next = seq[seq.indexOf(current) + 1]
     if (next) pushFlowStep(next)
-    else say(`That's your foundation built, audiences, channels, voice, proof, messages, and objectives. Now let's put it to work. Want to build your first flow?`, { flowOffer: true })
+    else if (inGtm)
+      say(`Go-to-market is set, channels and objectives. Companies and People are your real target accounts and contacts, so add those in their tables when you have them. Now let's put it all to work. Want to build your first flow?`, { flowOffer: true })
+    else say(`That's your foundation built, audiences, voice, proof points, and messages. Next up: your go-to-market (channels and objectives). Want me to set that up?`, { gtmOffer: true })
   }
   const onFlowStep = async (msgId: string, step: FlowStep, doIt: boolean) => {
     // Hide this step's buttons so it can't be re-triggered, then draft (or skip) and advance.
@@ -490,7 +497,12 @@ export function HomeChat() {
   const startFoundationFlow = () => {
     setQ('')
     say(`Let's build out your foundation in the order that works best. I'll offer each piece, you draft it or skip. You can refine anything later.`)
-    pushFlowStep('audiences')
+    pushFlowStep(FOUNDATION_STEPS[0])
+  }
+  const startGtmFlow = () => {
+    setQ('')
+    say(`Now your go-to-market: where you'll reach each audience and what you're aiming for. Same deal, draft each or skip.`)
+    pushFlowStep(GTM_STEPS[0])
   }
 
   // ── Guided "build a flow" conversation: ask the few things a flow needs, then build it with real
@@ -566,6 +578,10 @@ export function HomeChat() {
     // "Build my foundation" launches the guided, section-by-section flow.
     if (/\bbuild\b.*\b(foundation|everything|it all|the rest|out my brand)\b/i.test(text)) {
       sayUser(text); startFoundationFlow(); return
+    }
+    // "Build my go-to-market" launches the GTM sequence (channels + objectives).
+    if (/\b(build|set ?up|do)\b.*\b(go[ -]?to[ -]?market|gtm)\b/i.test(text)) {
+      sayUser(text); startGtmFlow(); return
     }
     // "Build/make/draft a flow (or campaign)" launches the guided flow-build conversation.
     if (/\b(build|make|create|draft|start|new|set up)\b.*\b(flow|campaign)\b/i.test(text)) {
@@ -701,6 +717,7 @@ export function HomeChat() {
       channelDone: m.channelDone,
       flowStep: m.flowStep,
       ingestDone: m.ingestDone,
+      gtmOffer: m.gtmOffer,
       flowOffer: m.flowOffer,
       flowBuiltName: m.flowBuiltName,
     }))
@@ -840,6 +857,12 @@ export function HomeChat() {
                   {m.ingestDone && (
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('content') }}>View Library</button>
+                    </div>
+                  )}
+                  {m.gtmOffer && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => startGtmFlow()}>Build go-to-market</button>
+                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Say "build my go-to-market" whenever you're ready.`)}>Not now</button>
                     </div>
                   )}
                   {m.flowOffer && (

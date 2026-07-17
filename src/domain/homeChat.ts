@@ -39,6 +39,8 @@ export interface HomeChatMsg {
   flowStep?: string
   /** Set on the message that announces ingested site content, to render a "View Library" link. */
   ingestDone?: boolean
+  /** When set, offer to build the go-to-market (renders "Build go-to-market" / "Not now"). */
+  gtmOffer?: boolean
   /** When set, offer to build a flow (renders "Build a flow" / "Not now"). */
   flowOffer?: boolean
   /** Set to the built campaign name, to render an "Open flow" link. */
