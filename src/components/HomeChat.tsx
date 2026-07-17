@@ -141,7 +141,8 @@ export function HomeChat() {
   // When we've asked for the brand's website (to ingest content), the next message is read as the URL.
   const awaitingSiteRef = useRef(false)
   // Non-null while the guided "build a flow" conversation is running.
-  const flowBuildRef = useRef<{ step: number; name: string; weeks: number; objectiveId?: string } | null>(null)
+  // Flow-build steps: 0 theme, 1 audiences, 2 goal, 3 weeks. audienceIds = the flow's chosen targets.
+  const flowBuildRef = useRef<{ step: number; name: string; weeks: number; objectiveId?: string; audienceIds?: string[] } | null>(null)
   // The audiences you're pursuing in go-to-market: scopes channel assignment and the flow-build.
   // null = pursue all. Set when you pick audiences at the start of the GTM flow.
   const gtmPursuedRef = useRef<Set<string> | null>(null)
@@ -568,19 +569,16 @@ export function HomeChat() {
     const st = flowBuildRef.current!
     if (st.step === 0) {
       st.name = val || 'New campaign'
-      const objs = flowObjectives()
-      if (objs.length) {
-        st.step = 1
-        say(`What's the goal? Pick the objective this flow should drive.`, { goalPick: objs.map((o) => ({ id: o.id, label: o.name, metric: o.metric })) })
-        return
-      }
-      // No objectives yet, skip straight to timing (the flow builds without a linked goal).
-      st.step = 2
-      say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
+      presentFlowAudiences()
       return
     }
     if (st.step === 1) {
-      // Goal pick: a number, a name match, or "skip".
+      // Audiences are button-driven; a typed reply just means "go with what's selected".
+      confirmFlowAudiences()
+      return
+    }
+    if (st.step === 2) {
+      // Goal pick fallback: a number, a name match, or "skip".
       const objs = flowObjectives()
       if (!/^(skip|none|no)\b/i.test(val)) {
         const num = parseInt(val.replace(/[^0-9]/g, ''), 10)
@@ -589,25 +587,62 @@ export function HomeChat() {
         const picked = byNum || byName
         if (picked) st.objectiveId = picked.id
       }
-      st.step = 2
-      say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
+      askFlowWeeks()
       return
     }
-    // step 2: weeks, then build.
+    // step 3: weeks, then build.
     const n = parseInt(val.replace(/[^0-9]/g, ''), 10)
     st.weeks = n > 0 && n <= 52 ? n : 4
-    const objectiveId = st.objectiveId
+    const { name, weeks, objectiveId, audienceIds } = st
     flowBuildRef.current = null
-    await buildFlowFromChat(st.name, st.weeks, objectiveId)
+    await buildFlowFromChat(name, weeks, objectiveId, audienceIds)
+  }
+  // Suggest one audience and let them pick which this flow targets (keeps flows focused instead of
+  // spanning every audience at once). Skips the question when the brand has fewer than two.
+  const presentFlowAudiences = () => {
+    const st = flowBuildRef.current!
+    const auds = useTrafficStore.getState().clientAudiences[useTrafficStore.getState().clientFilter] ?? []
+    if (auds.length < 2) {
+      st.audienceIds = auds.map((a) => a.id)
+      presentFlowGoalOrWeeks()
+      return
+    }
+    st.step = 1
+    setGtmAudSel(new Set([auds[0].id])) // suggestion: start with the primary audience, focused
+    say(`Who should **${st.name}** target? I'd start with **${auds[0].name}** to keep it focused. Toggle on any others you want, then Continue.`, { audiencePick: auds.map((a) => ({ id: a.id, label: a.name })) })
+  }
+  const confirmFlowAudiences = () => {
+    const st = flowBuildRef.current
+    if (!st || st.step !== 1) return
+    setQ('')
+    const auds = useTrafficStore.getState().clientAudiences[useTrafficStore.getState().clientFilter] ?? []
+    const chosen = gtmAudSel.size ? auds.filter((a) => gtmAudSel.has(a.id)) : auds.slice(0, 1)
+    st.audienceIds = chosen.map((a) => a.id)
+    sayUser(`Targeting ${chosen.map((a) => a.name).join(', ')}`)
+    presentFlowGoalOrWeeks()
+  }
+  const presentFlowGoalOrWeeks = () => {
+    const st = flowBuildRef.current!
+    const objs = flowObjectives()
+    if (objs.length) {
+      st.step = 2
+      say(`What's the goal? Pick the objective this flow should drive.`, { goalPick: objs.map((o) => ({ id: o.id, label: o.name, metric: o.metric })) })
+    } else {
+      askFlowWeeks()
+    }
+  }
+  const askFlowWeeks = () => {
+    const st = flowBuildRef.current!
+    st.step = 3
+    say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
   }
   // Goal chosen by clicking a button during the flow-build: record it and move on to timing.
   const pickFlowGoal = (obj: { id: string; label: string } | null) => {
     const st = flowBuildRef.current
-    if (!st || st.step !== 1) return
+    if (!st || st.step !== 2) return
     setQ('')
     if (obj) { st.objectiveId = obj.id; sayUser(obj.label) } else { sayUser('Skip goal') }
-    st.step = 2
-    say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
+    askFlowWeeks()
   }
 
   // ── Measure: after a flow is built, cover the two Measure sections (Reports + Insights). Recap what
@@ -642,13 +677,19 @@ export function HomeChat() {
     )
     lastActionRef.current = 'measure'
   }
-  const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string) => {
+  const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string, audienceIds?: string[]) => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    // Scope the flow to the audiences you're pursuing (chosen in go-to-market); default to all.
+    // Scope the flow to the audiences picked for it (the flow-build's audience step wins); else the
+    // ones you're pursuing from go-to-market; else all.
     const allAud = store.clientAudiences[brand] ?? []
     const pursued = gtmPursuedRef.current
-    const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
+    const audiences =
+      audienceIds && audienceIds.length
+        ? allAud.filter((a) => audienceIds.includes(a.id))
+        : pursued && pursued.size
+          ? allAud.filter((a) => pursued.has(a.id))
+          : allAud
     const audienceNames = audiences.map((a) => a.name)
     // Channels from the brand's audiences; fall back to a sensible content mix if none are set yet.
     const channelIds = [...new Set(audiences.flatMap((a) => a.channels ?? []))]
@@ -1050,7 +1091,7 @@ export function HomeChat() {
                           <button key={a.id} className={`hchat-setup-btn${on ? '' : ' ghost'}`} onClick={() => toggleGtmAud(a.id)}>{on ? '✓ ' : ''}{a.label}</button>
                         )
                       })}
-                      <button className="hchat-setup-btn" onClick={() => confirmGtmAudiences()}>Continue</button>
+                      <button className="hchat-setup-btn" onClick={() => (flowBuildRef.current ? confirmFlowAudiences() : confirmGtmAudiences())}>Continue</button>
                     </div>
                   )}
                   {m.measureOffer && (
