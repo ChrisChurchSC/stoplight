@@ -27,8 +27,10 @@ const hasLocalData = (): boolean => {
 
 export function MigrateBanner() {
   const migrate = useTrafficStore((s) => s.migrateLocalToSupabase)
+  // A share viewer's localStorage is the seeded snapshot, not their own work — never prompt to import it.
+  const shared = useTrafficStore((s) => !!s.sharedSession)
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'err'>(() =>
-    isSupabaseConfigured && !localStorage.getItem(MIGRATED_KEY) && hasLocalData() ? 'idle' : 'done',
+    !shared && isSupabaseConfigured && !localStorage.getItem(MIGRATED_KEY) && hasLocalData() ? 'idle' : 'done',
   )
   const [err, setErr] = useState('')
 
