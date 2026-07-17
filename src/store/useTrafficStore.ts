@@ -2166,7 +2166,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   perfMode: false,
   brandView: 'campaigns',
   timeRange: 'all',
-  page: 'portfolio',
+  // A shared session opens on the brand's Flows (its actual work — flow / grid / calendar), not the
+  // workspace home, which a stakeholder can't use anyway (they're locked to one client).
+  page: initialShare ? 'flows' : 'portfolio',
   focusRecordId: null,
   libraryMode: 'catalog',
   brandTab: 'about',
