@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typeLabel, typesFor } from '../domain/channelAssetTypes'
 import { messagingFields, messagingMap } from '../domain/messaging'
@@ -48,6 +48,19 @@ export function CopyReview() {
   })
   const toggleSec = (k: 'details' | 'tracking' | 'budget') => setOpenSec((s) => ({ ...s, [k]: !s[k] }))
 
+  // Reset the collapsible sections when a different asset opens. A fresh asset (no copy yet) opens
+  // with Details expanded so the channel/type/date are right there to pick; an existing asset opens
+  // as a clean review (all collapsed).
+  useEffect(() => {
+    const r = rows.find((x) => x.id === reviewRowId)
+    if (!r) return
+    const flds = messagingFields(r.channel, r.assetType)
+    const mm = messagingMap(r)
+    const hasCopy = flds.some((fl) => (mm[fl.key] ?? '').trim()) || !!(r.body ?? '').trim()
+    setOpenSec({ details: !hasCopy, tracking: false, budget: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewRowId])
+
   const row = rows.find((r) => r.id === reviewRowId)
   if (!row) return null
 
@@ -62,6 +75,9 @@ export function CopyReview() {
 
   const fields = messagingFields(row.channel, row.assetType)
   const map = messagingMap(row)
+  // A fresh asset has no copy yet — keep the drawer focused on the essentials (pick channel/type,
+  // write copy) and hide the go-live checklist until there's something to check.
+  const fresh = !fields.some((fl) => (map[fl.key] ?? '').trim()) && !(row.body ?? '').trim()
   const pains = icp?.pains ?? []
   const isMedia = row.mediaType === 'image' || row.mediaType === 'video' || row.mediaType === 'link'
   const typeValid = isValidType(row.channel, row.assetType)
@@ -147,31 +163,41 @@ export function CopyReview() {
         </div>
 
         <div className="drawer-body">
-          {/* ---- Ready to post: the specs this asset needs to go live ---- */}
-          <div className="drawer-section">
-            Ready to post
-            <span className="spacer" />
-            <span className={`postspec-count${specsMet === specs.length ? ' ok' : ''}`}>
-              {specsMet}/{specs.length}
-            </span>
-          </div>
-          <div className="postspec">
-            {specs.map((s) => (
-              <div
-                key={s.key}
-                className={`postspec-item${s.ok ? ' ok' : ''}${s.fix ? ' fixable' : ''}`}
-                role={s.fix ? 'button' : undefined}
-                tabIndex={s.fix ? 0 : undefined}
-                onClick={
-                  s.fix ? () => setOpenSec((v) => ({ ...v, [s.fix as 'details' | 'tracking' | 'budget']: true })) : undefined
-                }
-              >
-                <span className="postspec-mark">{s.ok ? '✓' : '○'}</span>
-                <span className="postspec-label">{s.label}</span>
-                <span className="postspec-detail">{s.detail}</span>
+          {fresh && (
+            <div className="drawer-newhint">
+              New asset. Pick a <strong>channel</strong> and <strong>type</strong> below, then write the copy. The go-live checks and tracking fill in as you go.
+            </div>
+          )}
+
+          {/* ---- Ready to post: the specs this asset needs to go live (hidden until there's copy) ---- */}
+          {!fresh && (
+            <>
+              <div className="drawer-section">
+                Ready to post
+                <span className="spacer" />
+                <span className={`postspec-count${specsMet === specs.length ? ' ok' : ''}`}>
+                  {specsMet}/{specs.length}
+                </span>
               </div>
-            ))}
-          </div>
+              <div className="postspec">
+                {specs.map((s) => (
+                  <div
+                    key={s.key}
+                    className={`postspec-item${s.ok ? ' ok' : ''}${s.fix ? ' fixable' : ''}`}
+                    role={s.fix ? 'button' : undefined}
+                    tabIndex={s.fix ? 0 : undefined}
+                    onClick={
+                      s.fix ? () => setOpenSec((v) => ({ ...v, [s.fix as 'details' | 'tracking' | 'budget']: true })) : undefined
+                    }
+                  >
+                    <span className="postspec-mark">{s.ok ? '✓' : '○'}</span>
+                    <span className="postspec-label">{s.label}</span>
+                    <span className="postspec-detail">{s.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* ---- Preview ---- */}
           <div className="drawer-section">

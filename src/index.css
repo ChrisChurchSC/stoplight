@@ -10183,6 +10183,17 @@ button {
   flex-direction: column;
   gap: 16px;
 }
+/* First-step hint on a freshly added asset — tells you what to pick before the full review chrome. */
+.drawer-newhint {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.drawer-newhint strong { color: var(--text); font-weight: 600; }
 .copy-field {
   display: flex;
   flex-direction: column;
