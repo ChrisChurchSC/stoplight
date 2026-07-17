@@ -2994,8 +2994,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     saveShares(shares)
     set({ shares })
     // Publish a read-only snapshot (whole brand, or scoped to one flow) so the link is viewable
-    // with no account.
-    void publishShareSnapshot(client, role, grant.id, grant.campaign)
+    // with no account. Built from the live store state (rows/records live there, not localStorage).
+    void publishShareSnapshot(get(), client, role, grant.id, grant.campaign)
     return grant
   },
   revokeShare: (id) => {

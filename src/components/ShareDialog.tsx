@@ -54,7 +54,7 @@ export function ShareDialog() {
   }
   // Republish a link's snapshot so viewers see the current state (snapshots are point-in-time).
   const refresh = async (id: string, c: string, r: Role, cmp?: string) => {
-    await publishShareSnapshot(c, r, id, cmp)
+    await publishShareSnapshot(useTrafficStore.getState(), c, r, id, cmp)
     setRefreshed(id)
   }
 

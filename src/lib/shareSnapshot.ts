@@ -5,14 +5,44 @@ import { getActiveWorkspaceId } from './session'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 /**
- * Read-only share snapshots. A ?share= link carries a self-contained grant (client + role + id).
- * So a recipient can VIEW a brand with no account, the owner publishes a point-in-time snapshot of
- * ONLY that brand's data to a public table, keyed by the grant id (see supabase/migrations/
- * 0002_share_snapshots.sql). The snapshot is localStorage-shaped: on the recipient we seed those
- * keys before the store loads (main.tsx), and the ?share= token pins the shared client + role.
+ * Read-only share snapshots. A ?share= link carries a self-contained grant (client + role + id, and
+ * optionally one campaign). So a recipient can VIEW with no account, the owner publishes a
+ * point-in-time snapshot of ONLY that brand (or one flow) to a public table, keyed by the grant id
+ * (see supabase/migrations/0002_share_snapshots.sql). The snapshot is localStorage-shaped: on the
+ * recipient we seed those keys before the store loads (main.tsx), and the token pins client + role.
  *
- * Scoping is deliberately per-brand so a semi-public link never leaks the owner's other clients.
+ * The snapshot is built from the LIVE STORE STATE, not localStorage: with a Supabase backend the
+ * rows (assets) and record lists (companies, people, messages, voices, objectives, brands, segments,
+ * channels, library folders) are empty in localStorage and only live in the store after hydration.
+ * Reading localStorage would drop every asset. Scoping is per-brand (and per-flow) so a semi-public
+ * link never leaks the owner's other clients or flows.
  */
+
+/** The live store slices the snapshot needs. Kept loose to avoid importing the full store type. */
+export interface SnapshotState {
+  rows?: unknown[]
+  campaignList?: unknown[]
+  clientAudiences?: Record<string, unknown>
+  brandSystems?: Record<string, unknown>
+  clientProfiles?: Record<string, unknown>
+  brandMeta?: Record<string, unknown>
+  brandActuals?: Record<string, unknown>
+  brandGuides?: Record<string, unknown>
+  campaignFolders?: Record<string, unknown>
+  brandRecords?: unknown[]
+  companies?: unknown[]
+  people?: unknown[]
+  objectives?: unknown[]
+  messages?: unknown[]
+  voices?: unknown[]
+  canvases?: unknown[]
+  channelRecords?: unknown[]
+  mediaMixes?: unknown[]
+  reports?: unknown[]
+  segments?: unknown[]
+  targetLists?: unknown[]
+  libraryFolders?: unknown[]
+}
 
 const read = (key: string): unknown => {
   try {
@@ -23,39 +53,32 @@ const read = (key: string): unknown => {
   }
 }
 
+const asArr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? (v as Record<string, unknown>[]) : [])
+
 /** Object keyed by brand/client name → keep only this client's entry. */
-const pick = (key: string, client: string): Record<string, unknown> | undefined => {
-  const m = read(key)
-  if (!m || typeof m !== 'object' || Array.isArray(m)) return undefined
-  const v = (m as Record<string, unknown>)[client]
+const pick = (obj: Record<string, unknown> | undefined, client: string): Record<string, unknown> | undefined => {
+  if (!obj || typeof obj !== 'object') return undefined
+  const v = obj[client]
   return v === undefined ? undefined : { [client]: v }
 }
 
 /** Array of records → keep those whose `field` equals the client (strict). */
-const byField = (key: string, field: string, client: string): unknown[] | undefined => {
-  const a = read(key)
-  if (!Array.isArray(a)) return undefined
-  return a.filter((x) => x && typeof x === 'object' && (x as Record<string, unknown>)[field] === client)
-}
+const byField = (arr: unknown, field: string, client: string): unknown[] =>
+  asArr(arr).filter((x) => x[field] === client)
 
 /** Array of records → keep this client's, plus untagged rows (the app shows untagged for all brands). */
-const byBrandOrGlobal = (key: string, client: string): unknown[] | undefined => {
-  const a = read(key)
-  if (!Array.isArray(a)) return undefined
-  return a.filter((x) => {
-    if (!x || typeof x !== 'object') return false
-    const b = (x as Record<string, unknown>).brand
+const byBrandOrGlobal = (arr: unknown, client: string): unknown[] =>
+  asArr(arr).filter((x) => {
+    const b = x.brand
     return !b || b === client
   })
-}
 
 /**
- * The localStorage-shaped snapshot for `client`. Only this brand's slices, plus the genuinely global
- * taxonomies (channels, segments). When `campaign` is given, the flow-specific slices (rows,
- * campaigns, canvases, reports, RTBs) are narrowed to that ONE flow, so a single-flow link exposes
- * only that flow (the brand's foundation records it references are still included so it renders).
+ * The localStorage-shaped snapshot for `client`, built from the live store `state`. Only this brand's
+ * slices, plus the genuinely global taxonomies (channels, segments). When `campaign` is given, the
+ * flow-specific slices (rows, campaigns, canvases, reports, RTBs) are narrowed to that ONE flow.
  */
-export function buildShareSnapshot(client: string, campaign?: string): Record<string, unknown> {
+export function buildShareSnapshot(state: SnapshotState, client: string, campaign?: string): Record<string, unknown> {
   const snap: Record<string, unknown> = {}
   const set = (k: string, v: unknown) => {
     if (v !== undefined) snap[k] = v
@@ -65,50 +88,50 @@ export function buildShareSnapshot(client: string, campaign?: string): Record<st
   const campInShare = (name: string): boolean =>
     campaign ? name === campaign : clientForCampaign(name) === client
 
-  // Sheet rows carry no client field — attribute via the campaign→client map (the app's own rule),
-  // which is both correct and leak-safe (a row is never misattributed to this client/flow).
-  const sheet = read('stoplight.sheet.v1') as { rows?: unknown[] } | unknown[] | undefined
-  const rows = Array.isArray(sheet) ? sheet : (sheet?.rows ?? [])
-  const scopedRows = (rows as Record<string, unknown>[]).filter((r) => campInShare(String(r.campaign ?? '')))
+  // Rows (assets) — no client field; attribute via the campaign→client map (the app's own rule).
+  const scopedRows = asArr(state.rows).filter((r) => campInShare(String(r.campaign ?? '')))
   set('stoplight.sheet.v1', { rows: scopedRows })
 
   // Direct `client` field — for a single-flow share, narrow campaigns/canvases/reports to the flow.
-  const campaigns = byField('stoplight.campaigns.v1', 'client', client) as Record<string, unknown>[] | undefined
-  set('stoplight.campaigns.v1', campaign ? campaigns?.filter((c) => c.name === campaign) : campaigns)
-  const canvases = byField('stoplight.canvases.v1', 'client', client) as Record<string, unknown>[] | undefined
-  set('stoplight.canvases.v1', campaign ? canvases?.filter((c) => c.campaign === campaign) : canvases)
-  const reports = byField('stoplight.reports.v1', 'client', client) as Record<string, unknown>[] | undefined
-  set('stoplight.reports.v1', campaign ? reports?.filter((r) => r.campaign === campaign) : reports)
+  const campaigns = byField(state.campaignList, 'client', client)
+  set('stoplight.campaigns.v1', campaign ? campaigns.filter((c) => (c as Record<string, unknown>).name === campaign) : campaigns)
+  const canvases = byField(state.canvases, 'client', client)
+  set('stoplight.canvases.v1', campaign ? canvases.filter((c) => (c as Record<string, unknown>).campaign === campaign) : canvases)
+  const reports = byField(state.reports, 'client', client)
+  set('stoplight.reports.v1', campaign ? reports.filter((r) => (r as Record<string, unknown>).campaign === campaign) : reports)
 
   // Object keyed by brand/client name.
-  set('stoplight.clientAudiences.v1', pick('stoplight.clientAudiences.v1', client))
-  set('stoplight.brandSystems.v1', pick('stoplight.brandSystems.v1', client))
-  set('stoplight.clientProfiles.v1', pick('stoplight.clientProfiles.v1', client))
-  set('stoplight.campaignFolders.v1', pick('stoplight.campaignFolders.v1', client))
-  set('stoplight.brandGuides.v1', pick('stoplight.brandGuides.v1', client))
-  set('stoplight.brandMeta.v1', pick('stoplight.brandMeta.v1', client))
-  set('stoplight.brandActuals.v1', pick('stoplight.brandActuals.v1', client))
+  set('stoplight.clientAudiences.v1', pick(state.clientAudiences, client))
+  set('stoplight.brandSystems.v1', pick(state.brandSystems, client))
+  set('stoplight.clientProfiles.v1', pick(state.clientProfiles, client))
+  set('stoplight.campaignFolders.v1', pick(state.campaignFolders, client))
+  set('stoplight.brandGuides.v1', pick(state.brandGuides, client))
+  set('stoplight.brandMeta.v1', pick(state.brandMeta, client))
+  set('stoplight.brandActuals.v1', pick(state.brandActuals, client))
 
   // The brand record's own `name` is the brand.
-  set('stoplight.brandRecords.v1', byField('stoplight.brandRecords.v1', 'name', client))
+  set('stoplight.brandRecords.v1', byField(state.brandRecords, 'name', client))
 
   // Required `brand` field (strict).
-  set('stoplight.mediaMixes.v1', byField('stoplight.mediaMixes.v1', 'brand', client))
-  set('stoplight.targetLists.v1', byField('stoplight.targetLists.v1', 'brand', client))
-  set('stoplight.libraryFolders.v1', byField('stoplight.libraryFolders.v1', 'brand', client))
+  set('stoplight.mediaMixes.v1', byField(state.mediaMixes, 'brand', client))
+  set('stoplight.targetLists.v1', byField(state.targetLists, 'brand', client))
+  set('stoplight.libraryFolders.v1', byField(state.libraryFolders, 'brand', client))
 
   // Optional `brand` (untagged = shown for all brands, safe to include).
-  set('stoplight.companies.v1', byBrandOrGlobal('stoplight.companies.v1', client))
-  set('stoplight.people.v1', byBrandOrGlobal('stoplight.people.v1', client))
-  set('stoplight.objectives.v1', byBrandOrGlobal('stoplight.objectives.v1', client))
-  set('stoplight.messages.v1', byBrandOrGlobal('stoplight.messages.v1', client))
-  set('stoplight.voices.v1', byBrandOrGlobal('stoplight.voices.v1', client))
-  set('stoplight.tasks.v1', byBrandOrGlobal('stoplight.tasks.v1', client))
+  set('stoplight.companies.v1', byBrandOrGlobal(state.companies, client))
+  set('stoplight.people.v1', byBrandOrGlobal(state.people, client))
+  set('stoplight.objectives.v1', byBrandOrGlobal(state.objectives, client))
+  set('stoplight.messages.v1', byBrandOrGlobal(state.messages, client))
+  set('stoplight.voices.v1', byBrandOrGlobal(state.voices, client))
+
+  // Tasks are owned by TasksView (localStorage only) — scope by brand (untagged = global).
+  const tasks = asArr(read('stoplight.tasks.v1')).filter((t) => !t.brand || t.brand === client)
+  set('stoplight.tasks.v1', tasks)
 
   // The client list, narrowed to just this brand.
   set('stoplight.clients.v1', [client])
 
-  // Campaign-keyed RTBs — keep this share's campaigns (the one flow, or all the client's).
+  // Campaign-keyed RTBs (localStorage only) — keep this share's campaigns.
   const rtbs = read('stoplight.campaignRtbs.v1')
   if (rtbs && typeof rtbs === 'object' && !Array.isArray(rtbs)) {
     const out: Record<string, unknown> = {}
@@ -118,15 +141,16 @@ export function buildShareSnapshot(client: string, campaign?: string): Record<st
     set('stoplight.campaignRtbs.v1', out)
   }
 
-  // Global taxonomies (no brand) — safe to include whole so the view renders.
-  set('stoplight.channelRecords.v1', read('stoplight.channelRecords.v1'))
-  set('stoplight.segments.v1', read('stoplight.segments.v1'))
+  // Global taxonomies (no brand) — include whole so the view renders.
+  set('stoplight.channelRecords.v1', asArr(state.channelRecords))
+  set('stoplight.segments.v1', asArr(state.segments))
 
   return snap
 }
 
 /** Publish (or refresh) the public snapshot for a share grant. Fire-and-forget; no-op on localStorage. */
 export async function publishShareSnapshot(
+  state: SnapshotState,
   client: string,
   role: Role,
   grantId: string,
@@ -136,7 +160,7 @@ export async function publishShareSnapshot(
   try {
     const ws = await getActiveWorkspaceId()
     if (!ws) return
-    const data = buildShareSnapshot(client, campaign)
+    const data = buildShareSnapshot(state, client, campaign)
     await supabase
       .from('share_snapshots')
       .upsert({ id: grantId, workspace_id: ws, client, role, data, updated_at: new Date().toISOString() })
@@ -146,7 +170,7 @@ export async function publishShareSnapshot(
 }
 
 /**
- * For an anonymous viewer opening a ?share= link: fetch the brand snapshot by grant id and seed
+ * For an anonymous viewer opening a ?share= link: fetch the snapshot by grant id and seed
  * localStorage so the store renders it. Signed-in users skip this and use their own live data.
  * Called from main.tsx BEFORE the store module loads. Safe to overwrite localStorage: a later
  * sign-in re-hydrates from the workspace backend.
