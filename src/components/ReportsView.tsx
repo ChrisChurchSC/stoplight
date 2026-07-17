@@ -19,7 +19,6 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
   const reports = useTrafficStore((s) => s.reports)
   const deleteReport = useTrafficStore((s) => s.deleteReport)
   const addPinnedInsight = useTrafficStore((s) => s.addPinnedInsight)
-  const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const [openId, setOpenId] = useState<string | null>(null)
   // Transient feedback under the report toolbar after a pin attempt.
   const [pinMsg, setPinMsg] = useState<string | null>(null)
@@ -105,25 +104,9 @@ export function ReportsView({ scopeClient }: { scopeClient?: string }) {
         </span>
       </header>
 
-      <div className="report-new">
-        <div className="report-new-copy">
-          <span className="report-new-ico">✦</span>
-          <div>
-            <strong>Generate a report with Claude</strong>
-            <span>
-              Claude reads a brand's library and writes it up: coverage, segments, and recommendations. It asks which
-              brand in the conversation{brand ? '' : ' (or start it here)'}, then saves the report here, dated.
-            </span>
-          </div>
-        </div>
-        <button className="report-new-btn" onClick={() => openHomeChat(brand ? `Generate a report for ${brand}` : 'Generate a report')}>
-          ✦ Ask Claude
-        </button>
-      </div>
-
       {list.length === 0 ? (
         <div className="mtx-empty">
-          No reports yet. Use “Generate a report with Claude” above and it lands here as a saved report.
+          No reports yet. Ask Claude on the Home page to generate one and it lands here as a saved report.
         </div>
       ) : (
         <div className="report-list">
