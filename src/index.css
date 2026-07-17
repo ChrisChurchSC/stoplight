@@ -5321,10 +5321,25 @@ button {
   flex: none;
   font-size: 12px;
   color: var(--text-muted);
+}
+/* Toolbar above the flow Grid/Calendar: optional hint on the left, Add asset on the right. */
+.flow-real-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
+.cal-pop-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+}
+.cal-pop-foot .btn { width: 100%; justify-content: center; }
 .flow-real-view {
   flex: 1;
   min-height: 0;

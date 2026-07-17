@@ -383,8 +383,16 @@ export function FlowsView() {
   const clearFlowOpen = useTrafficStore((s) => s.clearFlowOpen)
   const role = useTrafficStore((s) => s.role)
   const openShareDialog = useTrafficStore((s) => s.openShareDialog)
+  const addBlankAsset = useTrafficStore((s) => s.addBlankAsset)
+  const openReview = useTrafficStore((s) => s.openReview)
   // A single-flow share locks the recipient to that one flow: no back-to-list, no flow switching.
   const flowShareLock = useTrafficStore((s) => !!s.sharedSession?.campaign)
+  // Add a blank draft asset to the open flow (from Grid/Calendar) and open it to fill in. Calendar
+  // passes the clicked day so the asset lands there.
+  const addFlowAsset = async (scheduledAt?: string) => {
+    const id = await addBlankAsset(flowCampaign, scheduledAt ? { scheduledAt } : undefined)
+    if (id) openReview(id)
+  }
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
   const flowChats = useTrafficStore((s) => s.flowChats)
   const saveFlowChat = useTrafficStore((s) => s.saveFlowChat)
@@ -3440,16 +3448,25 @@ export function FlowsView() {
 
       {(flowView === 'grid' || flowView === 'calendar') && (
         <div className="flow-real">
-          {!hasBuiltRows && (
-            <div className="flow-real-hint">
-              This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}, it shows built assets. Click "Build & write copy" to populate it.
-            </div>
-          )}
+          <div className="flow-real-bar">
+            {!hasBuiltRows ? (
+              <div className="flow-real-hint">
+                This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}, it shows built assets. Click "Build & write copy" to populate it, or add one yourself.
+              </div>
+            ) : (
+              <span />
+            )}
+            {!flowShareLock && (
+              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this flow">
+                ＋ Add asset
+              </button>
+            )}
+          </div>
           <div className="flow-real-view">
             {flowView === 'grid' ? (
               <SheetGrid scopeClient={brand || undefined} scopeCampaign={flowCampaign} />
             ) : (
-              <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} />
+              <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)} />
             )}
           </div>
         </div>

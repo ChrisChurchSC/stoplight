@@ -8,7 +8,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
 import { publishers as channelPublishers } from '../adapters/publishers/registry'
 import type { PublisherRegistry } from '../adapters/publishers/types'
-import type { Asset, ChannelId, RowStatus, TrafficRow } from '../domain/types'
+import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
@@ -1811,6 +1811,8 @@ interface TrafficState {
     deliverables: Deliverable[],
     opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string; audiences?: string[] },
   ) => Promise<void>
+  /** Add one blank draft asset to a campaign (from the flow Grid/Calendar), returns its row id. */
+  addBlankAsset: (campaign: string, opts?: { channel?: ChannelId; scheduledAt?: string }) => Promise<string>
   setFilter: (filter: ChannelId | 'all') => void
   setProofFilter: (proofFilter: string) => void
   setCtaFilter: (ctaFilter: string) => void
@@ -4229,6 +4231,30 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     rows.forEach((r) => { r.utm = buildUtm(r) })
     await sheet.append(rows)
     await get().refresh()
+  },
+
+  addBlankAsset: async (campaign, opts) => {
+    // A generic content draft the user fills in (channel is theirs to change via the grid dropdown).
+    const channel: ChannelId = opts?.channel ?? 'blog'
+    const media: MediaType = CHANNELS[channel]?.kind === 'paid' ? 'image' : 'text'
+    const row: TrafficRow = {
+      id: freshRowId(),
+      assetId: '',
+      assetName: 'New asset',
+      mediaType: media,
+      channel,
+      assetType: primaryTypeKey(channel),
+      messaging: {},
+      campaign,
+      audience: '',
+      status: 'draft',
+      scheduledAt: opts?.scheduledAt ?? new Date().toISOString(),
+      createdAt: Date.now(),
+    }
+    row.utm = buildUtm(row)
+    await sheet.append([row])
+    await get().refresh()
+    return row.id
   },
 
   hydrateRecords: async () => {

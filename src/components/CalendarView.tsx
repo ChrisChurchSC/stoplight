@@ -39,7 +39,7 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'quarter', label: 'Quarter' },
 ]
 
-export function CalendarView({ allClients = false, liveScope = false, scopeClient, scopeCampaign }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string; scopeCampaign?: string }) {
+export function CalendarView({ allClients = false, liveScope = false, scopeClient, scopeCampaign, onAddOnDay }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string; scopeCampaign?: string; onAddOnDay?: (iso: string) => void }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -202,6 +202,9 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
                     <div
                       key={key}
                       className={`cal-day cal-day--wk${inMonth ? '' : ' out'}${key === todayKey ? ' today' : ''}`}
+                      style={onAddOnDay ? { cursor: 'pointer' } : undefined}
+                      title={onAddOnDay ? 'Click to add an asset on this day' : undefined}
+                      onClick={onAddOnDay ? () => setDayKey(key) : undefined}
                     >
                       <div className="cal-daynum">{d.getDate()}</div>
                       {evs.length > 0 && (
@@ -359,7 +362,23 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
                 </span>
               </button>
             ))}
+            {evs.length === 0 && <div className="cal-col-empty">No posts yet</div>}
           </div>
+          {onAddOnDay && (
+            <div className="cal-pop-foot">
+              <button
+                className="btn primary sm"
+                onClick={() => {
+                  const at = new Date(date)
+                  at.setHours(10, 0, 0, 0)
+                  onAddOnDay(at.toISOString())
+                  setDayKey(null)
+                }}
+              >
+                ＋ Add asset on this day
+              </button>
+            </div>
+          )}
         </div>
       </>
     )
