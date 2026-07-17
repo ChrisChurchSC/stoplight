@@ -140,7 +140,7 @@ export function HomeChat() {
   // When we've asked for the brand's website (to ingest content), the next message is read as the URL.
   const awaitingSiteRef = useRef(false)
   // Non-null while the guided "build a flow" conversation is running.
-  const flowBuildRef = useRef<{ step: number; name: string; weeks: number } | null>(null)
+  const flowBuildRef = useRef<{ step: number; name: string; weeks: number; objectiveId?: string } | null>(null)
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -515,7 +515,13 @@ export function HomeChat() {
     const brand = useTrafficStore.getState().clientFilter
     if (!brand || brand === 'all') { say(`Set up a brand first and I can build you a flow. Say "get started".`, { offerSetup: true }); return }
     flowBuildRef.current = { step: 0, name: '', weeks: 4 }
-    say(`Let's build a flow for **${brand}**. What's this campaign about? Give it a theme or goal, like "Q1 inbound push" or "Launch the new pricing".`)
+    say(`Let's build a flow for **${brand}**. What's this campaign about? Give it a theme, like "Q1 inbound push" or "Launch the new pricing".`)
+  }
+  // The brand's objectives, so the flow-build can ask which goal to aim at (and attach it).
+  const flowObjectives = () => {
+    const s = useTrafficStore.getState()
+    const brand = s.clientFilter
+    return s.objectives.filter((o) => !o.brand || o.brand === brand)
   }
   const handleFlowAnswer = async (text: string) => {
     const val = text.trim()
@@ -523,17 +529,40 @@ export function HomeChat() {
     const st = flowBuildRef.current!
     if (st.step === 0) {
       st.name = val || 'New campaign'
-      st.step = 1
+      const objs = flowObjectives()
+      if (objs.length) {
+        st.step = 1
+        const list = objs.map((o, i) => `${i + 1}. **${o.name}**${o.metric ? ` — ${o.metric}` : ''}`).join('\n')
+        say(`What's the goal? Pick the objective this flow should drive:\n\n${list}\n\nReply with a number or name, or say "skip".`)
+        return
+      }
+      // No objectives yet, skip straight to timing (the flow builds without a linked goal).
+      st.step = 2
       say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
       return
     }
-    // step 1: weeks, then build.
+    if (st.step === 1) {
+      // Goal pick: a number, a name match, or "skip".
+      const objs = flowObjectives()
+      if (!/^(skip|none|no)\b/i.test(val)) {
+        const num = parseInt(val.replace(/[^0-9]/g, ''), 10)
+        const byNum = num >= 1 && num <= objs.length ? objs[num - 1] : undefined
+        const byName = objs.find((o) => o.name.toLowerCase() === val.toLowerCase()) || objs.find((o) => val.toLowerCase().includes(o.name.toLowerCase()))
+        const picked = byNum || byName
+        if (picked) st.objectiveId = picked.id
+      }
+      st.step = 2
+      say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
+      return
+    }
+    // step 2: weeks, then build.
     const n = parseInt(val.replace(/[^0-9]/g, ''), 10)
     st.weeks = n > 0 && n <= 52 ? n : 4
+    const objectiveId = st.objectiveId
     flowBuildRef.current = null
-    await buildFlowFromChat(st.name, st.weeks)
+    await buildFlowFromChat(st.name, st.weeks, objectiveId)
   }
-  const buildFlowFromChat = async (name: string, weeks: number) => {
+  const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string) => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
     const audiences = store.clientAudiences[brand] ?? []
@@ -553,7 +582,9 @@ export function HomeChat() {
       ...audiences.map((a) => ({ type: 'segment' as const, id: a.id, label: a.name })),
       ...proof.map((r) => ({ type: 'proof' as const, id: r.id, label: r.label })),
     ]
-    const objective = store.objectives.find((o) => !o.brand || o.brand === brand)
+    // The goal picked in the conversation wins; fall back to the brand's first objective.
+    const brandObjectives = store.objectives.filter((o) => !o.brand || o.brand === brand)
+    const objective = (objectiveId && brandObjectives.find((o) => o.id === objectiveId)) || brandObjectives[0]
     const goalTarget = objective?.target ? Number(String(objective.target).replace(/[^0-9.]/g, '')) || undefined : undefined
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
