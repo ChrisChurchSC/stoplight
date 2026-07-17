@@ -4224,6 +4224,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // conditions copy on this.
     const auds = opts?.audiences ?? []
     if (auds.length) rows.forEach((r, i) => { if (!r.audience) r.audience = auds[i % auds.length] })
+    // Every generated asset ships with UTMs built from its own channel + campaign + type, so the
+    // tracking link is ready the moment the asset exists (no hand-typing, consistent convention).
+    rows.forEach((r) => { r.utm = buildUtm(r) })
     await sheet.append(rows)
     await get().refresh()
   },
@@ -4376,13 +4379,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }),
 
   draftMatrixCell: async (row) => {
-    await sheet.append([row])
+    await sheet.append([{ ...row, utm: row.utm ?? buildUtm(row) }])
     await get().refresh()
   },
 
   draftMatrixCells: async (rows) => {
     if (!rows.length) return
-    await sheet.append(rows)
+    await sheet.append(rows.map((r) => ({ ...r, utm: r.utm ?? buildUtm(r) })))
     await get().refresh()
   },
 
@@ -4417,6 +4420,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const rows = proposeSchedule(ready, new Date(), {
       campaign: campaignFilter !== 'all' ? campaignFilter : '',
     })
+    rows.forEach((r) => { r.utm = r.utm ?? buildUtm(r) })
     await sheet.append(rows)
     const stagedIds = new Set(ready.map((a) => a.id))
     set((s) => ({ assets: s.assets.filter((a) => !stagedIds.has(a.id)) }))
