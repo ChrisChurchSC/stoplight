@@ -2,7 +2,20 @@ import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { getSession, onAuthChange, signInWithPassword, signUpWithPassword } from '../lib/session'
+import { decodeShareToken } from '../lib/shareLink'
 import { Wordmark } from './Wordmark'
+
+// A valid ?share= link is a self-contained grant (client + role live in the token), so a
+// recipient needs no account — the store reads it on load and pins the shared role. Without
+// this, an auth-configured deploy would wall share links behind sign-in and they'd open nothing.
+function hasValidShareLink(): boolean {
+  try {
+    const token = new URLSearchParams(window.location.search).get('share')
+    return !!(token && decodeShareToken(token))
+  } catch {
+    return false
+  }
+}
 
 /**
  * Gates the app behind Supabase auth — but only when a backend is configured.
@@ -30,6 +43,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   // No backend configured → run as before, no auth.
   if (!isSupabaseConfigured) return <>{children}</>
+  // A valid share link grants access without an account — don't wall it behind sign-in.
+  if (hasValidShareLink()) return <>{children}</>
   if (user === undefined) return <div className="auth-loading">Connecting…</div>
   if (user) return <>{children}</>
 
