@@ -225,5 +225,29 @@ drop policy if exists workspace_state_write on public.workspace_state;
 create policy workspace_state_write on public.workspace_state
   for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
 
+-- ── Share snapshots (public, read-only brand snapshots behind a ?share= link) ──
+-- The owner publishes a point-in-time, brand-scoped snapshot keyed by the grant id
+-- so a recipient can VIEW with no account. Reads go through a SECURITY DEFINER RPC
+-- (one row by id — the id is in the link), never a blanket anon select. See
+-- supabase/migrations/0002_share_snapshots.sql for the rationale.
+create table if not exists public.share_snapshots (
+  id           text primary key,
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  client       text not null,
+  role         text not null,
+  data         jsonb not null,
+  updated_at   timestamptz not null default now()
+);
+create index if not exists share_snapshots_workspace_idx on public.share_snapshots (workspace_id);
+alter table public.share_snapshots enable row level security;
+drop policy if exists share_snapshots_write on public.share_snapshots;
+create policy share_snapshots_write on public.share_snapshots
+  for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
+create or replace function public.get_share_snapshot(share_id text)
+returns jsonb language sql security definer set search_path = public as $$
+  select data from public.share_snapshots where id = share_id;
+$$;
+grant execute on function public.get_share_snapshot(text) to anon, authenticated;
+
 -- Still local (UI/ephemeral): saved views, pinned insights, open projects,
 -- active canvas, break status, onboarding — fine to leave per-browser for now.

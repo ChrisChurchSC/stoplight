@@ -163,6 +163,7 @@ import { ingestCommentsViaClaude } from '../adapters/comments/claudeCommentSourc
 import { messageStore } from '../adapters/messages/messageStore'
 import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
+import { publishShareSnapshot } from '../lib/shareSnapshot'
 import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
 
 // Wire the swappable seams here. The sheet is backed by Supabase when a project
@@ -2982,6 +2983,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const shares = [grant, ...get().shares]
     saveShares(shares)
     set({ shares })
+    // Publish a brand-scoped, read-only snapshot so the link is viewable with no account.
+    void publishShareSnapshot(client, role, grant.id)
     return grant
   },
   revokeShare: (id) => {

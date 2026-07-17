@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ROLE_META, SHAREABLE_ROLES, type Role } from '../domain/access'
 import { encodeShareToken, shareUrl } from '../lib/shareLink'
+import { publishShareSnapshot } from '../lib/shareSnapshot'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -19,6 +21,7 @@ export function ShareDialog() {
   const [role, setRole] = useState<Role>('stakeholder')
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [refreshed, setRefreshed] = useState<string | null>(null)
 
   if (!open) return null
   const clientShares = shares.filter((s) => s.client === client)
@@ -40,7 +43,13 @@ export function ShareDialog() {
   const dismiss = () => {
     setCreated(null)
     setCopied(false)
+    setRefreshed(null)
     close()
+  }
+  // Republish a link's snapshot so viewers see the brand's current state (snapshots are point-in-time).
+  const refresh = async (id: string, c: string, r: Role) => {
+    await publishShareSnapshot(c, r, id)
+    setRefreshed(id)
   }
 
   return (
@@ -55,7 +64,8 @@ export function ShareDialog() {
         </div>
         <p className="share-sub">
           Generate a link that opens this client's workspace at a fixed role. Anyone with the link
-          gets that access, no account needed.
+          gets that access, no account needed. Viewers see a snapshot as of when you shared, hit
+          Refresh on a link to bring it up to date.
         </p>
 
         <div className="share-roles">
@@ -100,6 +110,15 @@ export function ShareDialog() {
                 <span className={`share-badge r-${s.role}`}>{ROLE_META[s.role].label}</span>
                 <span className="share-item-id">{s.id.replace('shr_', '').slice(0, 14)}</span>
                 <span className="spacer" />
+                {isSupabaseConfigured && (
+                  <button
+                    className="share-revoke"
+                    title="Update the snapshot this link shows to the brand's current state"
+                    onClick={() => void refresh(s.id, s.client, s.role)}
+                  >
+                    {refreshed === s.id ? 'Updated' : 'Refresh'}
+                  </button>
+                )}
                 <button className="share-revoke" onClick={() => revokeShare(s.id)}>
                   Revoke
                 </button>

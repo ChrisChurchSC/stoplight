@@ -1,10 +1,19 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { App } from './App'
+import { maybeHydrateShare } from './lib/shareSnapshot'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// A ?share= link for an anonymous viewer seeds localStorage from the published brand snapshot
+// BEFORE the store module loads (the store reads localStorage at import). App is dynamically
+// imported for exactly that reason. No share link / signed-in user → this resolves immediately.
+async function boot() {
+  await maybeHydrateShare()
+  const { App } = await import('./App')
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+void boot()
