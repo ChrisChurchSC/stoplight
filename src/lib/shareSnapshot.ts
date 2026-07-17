@@ -188,9 +188,24 @@ export async function maybeHydrateShare(): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return
   try {
     const { data: sess } = await supabase.auth.getSession()
-    if (sess.session) return // signed in → use live data, not the snapshot
+    if (sess.session) {
+      // Signed in → use live data, not the snapshot. Clear any stale share-view flag.
+      try {
+        sessionStorage.removeItem('stoplight.shareView')
+      } catch {
+        /* ignore */
+      }
+      return
+    }
   } catch {
     /* treat as anonymous */
+  }
+  // Anonymous viewer → the store must read data from the seeded localStorage, not the backend it
+  // has no session for. This flag tells the store to run its data layer in localStorage mode.
+  try {
+    sessionStorage.setItem('stoplight.shareView', '1')
+  } catch {
+    /* ignore */
   }
   try {
     const { data, error } = await supabase.rpc('get_share_snapshot', { share_id: grant.id })

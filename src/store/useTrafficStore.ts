@@ -166,10 +166,24 @@ import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
 import { publishShareSnapshot } from '../lib/shareSnapshot'
 import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
 
+// An anonymous share viewer (main.tsx seeded localStorage from the published snapshot and set a
+// flag) has no backend session — its data IS the seeded snapshot. So for a share view we run the
+// DATA layer in localStorage mode even when Supabase is configured; auth stays bypassed via the
+// share token. A signed-in user opening a share link keeps their live backend (no flag set).
+const shareViewMode = ((): boolean => {
+  try {
+    const hasToken = !!new URLSearchParams(window.location.search).get('share')
+    return hasToken && sessionStorage.getItem('stoplight.shareView') === '1'
+  } catch {
+    return false
+  }
+})()
+const localDataMode = !isSupabaseConfigured || shareViewMode
+
 // Wire the swappable seams here. The sheet is backed by Supabase when a project
 // is configured (VITE_SUPABASE_*), and by localStorage otherwise — so the backend
 // is additive and the app runs unchanged until you provision one.
-const sheet: SheetAdapter = isSupabaseConfigured ? new SupabaseSheetAdapter() : new MockSheetAdapter()
+const sheet: SheetAdapter = localDataMode ? new MockSheetAdapter() : new SupabaseSheetAdapter()
 const publishers: PublisherRegistry = channelPublishers
 const icpSource: IcpSource = new MockIcpSource()
 // Real Claude batch review when a backend + key are present; heuristic otherwise.
@@ -2208,16 +2222,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // Record lists start empty when a backend is configured (hydrateRecords fills them from the
   // workspace on sign-in), so a real user never sees the local demo seeds flash. On localStorage
   // they load/seed as before.
-  companies: isSupabaseConfigured ? [] : loadCompanies(),
-  channelRecords: isSupabaseConfigured ? [] : loadChannelRecords(),
+  companies: localDataMode ? loadCompanies() : [],
+  channelRecords: localDataMode ? loadChannelRecords() : [],
   onboarding: loadOnboarding(),
-  people: isSupabaseConfigured ? [] : loadPeople(),
-  messages: isSupabaseConfigured ? [] : loadRecordList<Message>(MESSAGES_KEY),
-  voices: isSupabaseConfigured ? [] : loadRecordList<Voice>(VOICES_KEY),
-  objectives: isSupabaseConfigured ? [] : loadRecordList<Objective>(OBJECTIVES_KEY),
-  libraryFolders: isSupabaseConfigured ? [] : loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY),
-  brandRecords: isSupabaseConfigured ? [] : loadOrSeedBrandRecords(),
-  segments: isSupabaseConfigured ? [] : loadSegments(),
+  people: localDataMode ? loadPeople() : [],
+  messages: localDataMode ? loadRecordList<Message>(MESSAGES_KEY) : [],
+  voices: localDataMode ? loadRecordList<Voice>(VOICES_KEY) : [],
+  objectives: localDataMode ? loadRecordList<Objective>(OBJECTIVES_KEY) : [],
+  libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
+  brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
+  segments: localDataMode ? loadSegments() : [],
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
   actualsRefreshing: null,
@@ -4215,7 +4229,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
 
   hydrateRecords: async () => {
-    if (!isSupabaseConfigured) return
+    // A share viewer's records are the seeded snapshot (localStorage); don't overwrite with the
+    // backend (which it has no session for anyway).
+    if (!isSupabaseConfigured || shareViewMode) return
     const from = <T extends { id: string; name?: string }>(table: string) => new SupabaseRecordAdapter<T>(table).list()
     const [companies, people, channelRecords, segments, objectives, messages, voices, brandRecords, libraryFolders] = await Promise.all([
       from<Company>('companies'),
