@@ -36,6 +36,7 @@ export interface SnapshotState {
   messages?: unknown[]
   voices?: unknown[]
   patterns?: unknown[]
+  triggers?: unknown[]
   canvases?: unknown[]
   channelRecords?: unknown[]
   mediaMixes?: unknown[]
@@ -125,6 +126,7 @@ export function buildShareSnapshot(state: SnapshotState, client: string, campaig
   set('stoplight.messages.v1', byBrandOrGlobal(state.messages, client))
   set('stoplight.voices.v1', byBrandOrGlobal(state.voices, client))
   set('stoplight.patterns.v1', byBrandOrGlobal(state.patterns, client))
+  set('stoplight.triggers.v1', byBrandOrGlobal(state.triggers, client))
 
   // Tasks are owned by TasksView (localStorage only) — scope by brand (untagged = global).
   const tasks = asArr(read('stoplight.tasks.v1')).filter((t) => !t.brand || t.brand === client)

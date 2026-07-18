@@ -32,6 +32,7 @@ import { ProofPointsView } from './ProofPointsView'
 import { MessagesView } from './MessagesView'
 import { VoicesView } from './VoicesView'
 import { PatternsView } from './PatternsView'
+import { TriggersView } from './TriggersView'
 import { ObjectivesView } from './ObjectivesView'
 import { TasksView } from './TasksView'
 import { BrandsView } from './BrandsView'
@@ -287,6 +288,10 @@ export function Workbench() {
           ) : page === 'objectives' ? (
             <div className="home-main-page">
               <ObjectivesView />
+            </div>
+          ) : page === 'triggers' ? (
+            <div className="home-main-page">
+              <TriggersView />
             </div>
           ) : page === 'tasks' ? (
             <div className="home-main-scroll">

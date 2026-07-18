@@ -114,6 +114,7 @@ import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Voice, freshVoiceId } from '../domain/voice'
 import { type Pattern, freshPatternId } from '../domain/pattern'
+import { type Trigger, freshTriggerId } from '../domain/trigger'
 import { DEFAULT_AI_MODEL } from '../domain/aiModels'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
@@ -709,6 +710,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.messages.v1': 'message_records',
   'stoplight.voices.v1': 'voice_records',
   'stoplight.patterns.v1': 'patterns',
+  'stoplight.triggers.v1': 'triggers',
   'stoplight.brandRecords.v1': 'brands',
   'stoplight.libraryFolders.v1': 'library_folders',
 }
@@ -728,6 +730,7 @@ function saveRecordList<T extends { id: string }>(key: string, list: T[]): void 
 const MESSAGES_KEY = 'stoplight.messages.v1'
 const VOICES_KEY = 'stoplight.voices.v1'
 const PATTERNS_KEY = 'stoplight.patterns.v1'
+const TRIGGERS_KEY = 'stoplight.triggers.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
 const LIBRARY_FOLDERS_KEY = 'stoplight.libraryFolders.v1'
 const TASKS_KEY = 'stoplight.tasks.v1'
@@ -1368,7 +1371,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'flows' | 'tasks' | 'brands'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands'
   /** A record id to auto-open in its RecordsTable drawer once that sheet mounts (e.g. clicking a
    *  task's linked company jumps to Companies and pops that row's details). Consumed + cleared by
    *  the table that owns the id. */
@@ -1503,6 +1506,10 @@ interface TrafficState {
   addPattern: (partial?: Partial<Pattern>) => string
   updatePattern: (id: string, patch: Partial<Pattern>) => void
   deletePattern: (id: string) => void
+  triggers: Trigger[]
+  addTrigger: (partial?: Partial<Trigger>) => string
+  updateTrigger: (id: string, patch: Partial<Trigger>) => void
+  deleteTrigger: (id: string) => void
   /** Records › Message › Objectives — what campaigns move + how it's measured. */
   objectives: Objective[]
   addObjective: (partial?: Partial<Objective>) => string
@@ -1829,7 +1836,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'flows' | 'tasks' | 'brands') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2238,6 +2245,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   messages: localDataMode ? loadRecordList<Message>(MESSAGES_KEY) : [],
   voices: localDataMode ? loadRecordList<Voice>(VOICES_KEY) : [],
   patterns: localDataMode ? loadRecordList<Pattern>(PATTERNS_KEY) : [],
+  triggers: localDataMode ? loadRecordList<Trigger>(TRIGGERS_KEY) : [],
   objectives: localDataMode ? loadRecordList<Objective>(OBJECTIVES_KEY) : [],
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
@@ -2677,6 +2685,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const patterns = s.patterns.filter((p) => p.id !== id)
       saveRecordList(PATTERNS_KEY, patterns)
       return { patterns }
+    }),
+
+  addTrigger: (partial) => {
+    const id = freshTriggerId()
+    const row: Trigger = { name: 'New trigger', status: 'draft', ...(partial ?? {}), id }
+    set((s) => {
+      const triggers = [row, ...s.triggers]
+      saveRecordList(TRIGGERS_KEY, triggers)
+      return { triggers }
+    })
+    return id
+  },
+  updateTrigger: (id, patch) =>
+    set((s) => {
+      const triggers = s.triggers.map((t) => (t.id === id ? { ...t, ...patch } : t))
+      saveRecordList(TRIGGERS_KEY, triggers)
+      return { triggers }
+    }),
+  deleteTrigger: (id) =>
+    set((s) => {
+      const triggers = s.triggers.filter((t) => t.id !== id)
+      saveRecordList(TRIGGERS_KEY, triggers)
+      return { triggers }
     }),
 
   addObjective: (partial) => {
@@ -4293,7 +4324,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // backend (which it has no session for anyway).
     if (!isSupabaseConfigured || shareViewMode) return
     const from = <T extends { id: string; name?: string }>(table: string) => new SupabaseRecordAdapter<T>(table).list()
-    const [companies, people, channelRecords, segments, objectives, messages, voices, patterns, brandRecords, libraryFolders] = await Promise.all([
+    const [companies, people, channelRecords, segments, objectives, messages, voices, patterns, triggers, brandRecords, libraryFolders] = await Promise.all([
       from<Company>('companies'),
       from<Person>('people'),
       from<ChannelRecord>('channels'),
@@ -4302,10 +4333,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       from<Message>('message_records'),
       from<Voice>('voice_records'),
       from<Pattern>('patterns'),
+      from<Trigger>('triggers'),
       from<BrandRecord>('brands'),
       from<LibraryFolder>('library_folders'),
     ])
-    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, voices, patterns, brandRecords, libraryFolders }
+    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, voices, patterns, triggers, brandRecords, libraryFolders }
     // Non-record state (brand system, client list, campaign metadata, …) from the KV table, mapped
     // back onto its store slice by the localStorage key it was saved under.
     const STATE_SLICES: Record<string, string> = {

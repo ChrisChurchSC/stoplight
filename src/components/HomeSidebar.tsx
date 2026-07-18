@@ -120,6 +120,7 @@ const ICONS: Record<string, ReactNode> = {
       <circle cx="18.5" cy="17" r="2" />
     </>
   ),
+  trigger: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
   voices: (
     <>
       <path d="M4 5h16v11H8l-4 3z" />
@@ -261,6 +262,7 @@ export function HomeSidebar() {
       label: 'Go-to-market',
       items: [
         item('channelrecords', 'Channels', 'flows', page === 'channelrecords', () => setPage('channelrecords')),
+        item('triggers', 'Triggers', 'trigger', page === 'triggers', () => setPage('triggers')),
         item('objectives', 'Objectives', 'insights', page === 'objectives', () => setPage('objectives')),
       ],
     },
