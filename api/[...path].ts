@@ -58,6 +58,28 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
     return res.end(JSON.stringify({ connected: !!provider, provider }))
   }
 
+  // actuals is a GET ?brand=<name> → BrandActuals JSON (Summer), or 204 when there's no data.
+  if (path === 'actuals') {
+    if (req.method !== 'GET') {
+      res.statusCode = 405
+      return res.end()
+    }
+    const brand = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('brand') ?? ''
+    try {
+      const { runActuals } = await import('../server/actualsHandler.js')
+      const data = await runActuals(brand)
+      if (!data) {
+        res.statusCode = 204
+        return res.end()
+      }
+      res.setHeader('content-type', 'application/json')
+      return res.end(JSON.stringify(data))
+    } catch {
+      res.statusCode = 204
+      return res.end()
+    }
+  }
+
   const loader = HANDLERS[path]
   if (!loader) {
     res.statusCode = 404
