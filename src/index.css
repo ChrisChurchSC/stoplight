@@ -15371,6 +15371,29 @@ button.cv-board-tab {
 }
 
 /* Outcome map — attributes → outcomes by audience */
+/* Journeys-by-audience-over-time table (Insights). */
+.jl-empty { font-size: 13px; color: var(--text-muted); padding: 12px 2px; }
+.jl-scroll { overflow-x: auto; }
+.jl-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.jl-table th, .jl-table td {
+  border: 1px solid var(--border);
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.jl-table th {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--text-muted); background: var(--surface-2);
+}
+.jl-th-aud, .jl-aud { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.jl-aud { font-weight: 600; color: var(--text); }
+.jl-star { cursor: help; }
+.jl-cell { min-width: 120px; }
+.jl-camp { display: block; color: var(--text); font-weight: 500; }
+.jl-val { display: block; color: var(--text-muted); font-size: 11.5px; }
+.jl-none { color: var(--text-faint, #9aa0aa); }
+
 .omap {
   display: flex;
   flex-direction: column;

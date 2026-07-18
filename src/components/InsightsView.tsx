@@ -2,6 +2,7 @@ import { money } from '../domain/budget'
 import { CHANNELS } from '../domain/channels'
 import { computeInsights } from '../domain/insights'
 import { buildOutcomeMap, summarizeByAudience } from '../domain/outcomeMap'
+import { learnJourneysByAudience } from '../domain/journeyLearning'
 import { aggregatePatterns, type PatternDimension } from '../domain/outcomePatterns'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rowInScope } from '../lib/scope'
@@ -56,6 +57,14 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   // anonymized, and gated by the customer floor.
   const outcomeMap = buildOutcomeMap(view, { clientAudiences, campaigns: campaignList })
   const byAudience = summarizeByAudience(outcomeMap)
+  // Which journeys (campaigns) worked for which audiences over time — quarter buckets, ranked by
+  // measured outcome. Reads live metrics, so it fills in as analytics sync.
+  const journeyLearning = learnJourneysByAudience(view, {
+    client: allClients || clientFilter === 'all' ? '' : clientFilter,
+    bucket: 'quarter',
+    rankBy: 'outcome',
+  })
+  const shortCampaign = (name: string) => name.replace(/^.*? — /, '')
   const allOutcomeMap = buildOutcomeMap(rows, { clientAudiences, campaigns: campaignList })
   const aggregate = aggregatePatterns(allOutcomeMap, {
     floor: AGGREGATE_FLOOR,
@@ -164,6 +173,68 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* Journeys by audience over time — which campaign won each audience, by quarter */}
+          <section className="ins-card ins-wide">
+            <div className="ins-card-head">
+              <h3>Journeys by audience over time</h3>
+              <span className="ins-card-hint">
+                The campaign that drove the most measured outcome for each audience, by quarter. ⭐ marks a repeat winner.
+              </span>
+            </div>
+            {!journeyLearning.hasData ? (
+              <div className="jl-empty">
+                No measured performance yet. Once posted assets carry channel metrics, the winning journey per audience shows here quarter by quarter.
+              </div>
+            ) : (
+              <div className="jl-scroll">
+                <table className="jl-table">
+                  <thead>
+                    <tr>
+                      <th className="jl-th-aud">Audience</th>
+                      {journeyLearning.buckets.slice(-5).map((b) => (
+                        <th key={b}>{b}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {journeyLearning.audiences.slice(0, 6).map((a) => (
+                      <tr key={a.audience}>
+                        <td className="jl-aud">
+                          {a.audience}
+                          {a.winner && (
+                            <span
+                              className="jl-star"
+                              title={`Repeat winner: "${shortCampaign(a.winner.campaign)}" led ${a.winner.bucketsWon} quarters`}
+                            >
+                              {' '}⭐
+                            </span>
+                          )}
+                        </td>
+                        {journeyLearning.buckets.slice(-5).map((b) => {
+                          const top = a.perBucket[b]?.[0]
+                          return (
+                            <td key={b} className="jl-cell">
+                              {top ? (
+                                <>
+                                  <span className="jl-camp" title={`${shortCampaign(top.campaign)} · ${top.assets} asset${top.assets === 1 ? '' : 's'}`}>
+                                    {shortCampaign(top.campaign)}
+                                  </span>
+                                  <span className="jl-val">{Math.round(top.value).toLocaleString()}</span>
+                                </>
+                              ) : (
+                                <span className="jl-none">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           {/* Aggregate learning layer — anonymized, cross-customer, floor-gated */}
