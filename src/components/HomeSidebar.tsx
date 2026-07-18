@@ -219,7 +219,7 @@ export function HomeSidebar() {
   const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
   const [chatsOpen, setChatsOpen] = useState(true)
   // Workflow sections (Build / Foundation / Go-to-market / Measure) — all open by default.
-  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Go-to-market', 'Measure']))
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Prospects', 'Go-to-market', 'Measure']))
   const toggleSection = (label: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
@@ -241,7 +241,6 @@ export function HomeSidebar() {
     {
       label: 'Foundation',
       items: [
-        item('segments', 'Audiences', 'segments', page === 'segments', () => setPage('segments')),
         item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
         item('voices', 'Voices', 'voices', page === 'voices', () => setPage('voices')),
         item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),
@@ -249,12 +248,18 @@ export function HomeSidebar() {
       ],
     },
     {
+      label: 'Prospects',
+      items: [
+        item('segments', 'Audiences', 'segments', page === 'segments', () => setPage('segments')),
+        item('records', 'Companies', 'companies', page === 'records', () => setPage('records')),
+        item('people', 'People', 'people', page === 'people', () => setPage('people')),
+      ],
+    },
+    {
       label: 'Go-to-market',
       items: [
         item('channelrecords', 'Channels', 'flows', page === 'channelrecords', () => setPage('channelrecords')),
         item('objectives', 'Objectives', 'insights', page === 'objectives', () => setPage('objectives')),
-        item('records', 'Companies', 'companies', page === 'records', () => setPage('records')),
-        item('people', 'People', 'people', page === 'people', () => setPage('people')),
       ],
     },
     {
