@@ -81,7 +81,7 @@ export function CanvasProjectTabs() {
         className="cv-project-tab cv-project-tab-new"
         role="button"
         tabIndex={0}
-        title="New flow"
+        title="New campaign"
         onClick={() => openFlow('')}
       >
         ＋

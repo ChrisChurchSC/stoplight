@@ -175,8 +175,8 @@ export function TasksView() {
         </span>
       </div>
       <div className="task-cell task-rec-cell">
-        <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign ?? '', 'flow')} title={`Open ${t.campaign ?? 'flow'}`}>
-          <span className="task-chip-name">{(t.campaign ?? '').replace(`${brand} — `, '') || 'Flow'}</span>
+        <button className="task-chip task-chip-set" onClick={() => openFlow(t.campaign ?? '', 'flow')} title={`Open ${t.campaign ?? 'campaign'}`}>
+          <span className="task-chip-name">{(t.campaign ?? '').replace(`${brand} — `, '') || 'Campaign'}</span>
         </button>
       </div>
       <div className="task-cell">
@@ -323,7 +323,7 @@ export function TasksView() {
       </div>
 
       {allTasks.length === 0 ? (
-        <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Build a flow, or add one with “＋ New task”.</div>
+        <div className="mtx-empty">No tasks for {brand || 'this workspace'} yet. Build a campaign, or add one with “＋ New task”.</div>
       ) : (
         <>
           {groups.map(([bucket, list]) => (
@@ -369,8 +369,8 @@ export function TasksView() {
                 <span style={{ ...fieldControl, color: openTask.due ? 'var(--text)' : 'var(--text-faint, #8a969b)' }}>{openTask.due ? fmtDue(openTask.due) : 'No date'}</span>
               </div>
               <div style={fieldRow}>
-                <span style={fieldLabel}>Flow</span>
-                <span style={fieldControl}>{(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Flow'}</span>
+                <span style={fieldLabel}>Campaign</span>
+                <span style={fieldControl}>{(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Campaign'}</span>
               </div>
               <div style={fieldRow}>
                 <span style={fieldLabel} />

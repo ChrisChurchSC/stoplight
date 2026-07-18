@@ -2006,15 +2006,15 @@ export function FlowsView() {
             ⋔
           </span>
           {flowShareLock ? (
-            <span className="flow-crumb-home" style={{ cursor: 'default' }}>Flow</span>
+            <span className="flow-crumb-home" style={{ cursor: 'default' }}>Campaign</span>
           ) : (
-            <button className="flow-crumb-home" onClick={() => setFlowScreen('home')} title="All flows">
-              Flows
+            <button className="flow-crumb-home" onClick={() => setFlowScreen('home')} title="All campaigns">
+              Campaigns
             </button>
           )}
           <span className="flow-crumb-sep">/</span>
           {flowShareLock ? (
-            <span className="flow-switcher" style={{ cursor: 'default' }}>{viewing ? viewShort : name.trim() || 'Flow'}</span>
+            <span className="flow-switcher" style={{ cursor: 'default' }}>{viewing ? viewShort : name.trim() || 'Campaign'}</span>
           ) : (
             <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
               {viewing ? viewShort : name.trim() || 'New campaign'}
@@ -2092,7 +2092,7 @@ export function FlowsView() {
             )}
             <div className="flow-built-actions">
               <button className="flow-built-open" onClick={() => { openView(built.name); setFlowView('flow') }}>
-                Open flow
+                Open campaign
               </button>
               <button className="flow-built-new" onClick={startNew}>
                 Start another

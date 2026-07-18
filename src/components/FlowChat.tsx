@@ -20,12 +20,12 @@ interface Example { title: string; desc: string; prompt: string; mode?: ChatInte
 const BUILD_EXAMPLES: Example[] = [
   { title: 'Build a Giving Tuesday push', desc: 'A short fundraising burst tagged to your donors, copy written.', prompt: 'Build a 2-week Giving Tuesday push' },
   { title: 'Add a weekly newsletter + socials', desc: 'Add a newsletter and 4 Instagram posts a month.', prompt: 'Add a weekly newsletter and 4 Instagram posts a month' },
-  { title: 'Tag the right records', desc: 'Point this flow at the segments it targets.', prompt: 'Tag this flow to the impact investor segment' },
+  { title: 'Tag the right records', desc: 'Point this campaign at the segments it targets.', prompt: 'Tag this campaign to the impact investor segment' },
 ]
 const VIEW_EXAMPLES: Example[] = [
-  { title: 'Regenerate the copy', desc: 'Rewrite every asset so they read distinct and on-brand.', prompt: 'Regenerate the copy for this flow' },
-  { title: 'Add a deliverable', desc: 'Grow the flow with another channel.', prompt: 'Add a LinkedIn post to this flow' },
-  { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this flow?", mode: 'analyze' },
+  { title: 'Regenerate the copy', desc: 'Rewrite every asset so they read distinct and on-brand.', prompt: 'Regenerate the copy for this campaign' },
+  { title: 'Add a deliverable', desc: 'Grow the campaign with another channel.', prompt: 'Add a LinkedIn post to this campaign' },
+  { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this campaign?", mode: 'analyze' },
 ]
 
 /**
@@ -82,7 +82,7 @@ export function FlowChat({
   // Collapsed: a floating launcher over the canvas (no sidebar rail), click to open the card.
   if (collapsed) {
     return (
-      <button className="fchat-launch" title="Open flow assistant" aria-label="Open flow assistant" onClick={() => onCollapse(false)}>
+      <button className="fchat-launch" title="Open campaign assistant" aria-label="Open campaign assistant" onClick={() => onCollapse(false)}>
         <span className="fchat-spark" aria-hidden="true">✦</span>
       </button>
     )
@@ -112,7 +112,7 @@ export function FlowChat({
                 <div className="fchat-hist-scrim" onClick={() => setHistOpen(false)} />
                 <div className="fchat-hist-menu">
                   <div className="fchat-hist-head">Chat history</div>
-                  {history.length === 0 && <div className="fchat-hist-empty">No past chats for this flow yet.</div>}
+                  {history.length === 0 && <div className="fchat-hist-empty">No past chats for this campaign yet.</div>}
                   {history.map((h) => (
                     <div key={h.id} className="fchat-hist-row">
                       <button className="fchat-hist-open" onClick={() => { onOpenHistory(h.id); setHistOpen(false) }}>
@@ -133,7 +133,7 @@ export function FlowChat({
         {messages.length === 0 && (
           <div className="fchat-empty">
             <p className="fchat-empty-lead">I&rsquo;m your flow assistant.</p>
-            <p className="fchat-empty-sub">In <strong>Build</strong> I edit this flow (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
+            <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
             <div className="fchat-cards">
               {examples.map((ex) => (
                 <button key={ex.title} className="fchat-card" disabled={busy} onClick={() => onSend(ex.prompt, ex.mode ?? intent)}>
@@ -197,7 +197,7 @@ export function FlowChat({
             className="fchat-input"
             rows={2}
             value={q}
-            placeholder={intent === 'build' ? 'Describe an edit to make…' : 'Ask about this flow…'}
+            placeholder={intent === 'build' ? 'Describe an edit to make…' : 'Ask about this campaign…'}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }

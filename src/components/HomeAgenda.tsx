@@ -130,7 +130,7 @@ export function HomeAgenda() {
     openFlow('')
   }
 
-  // ── Flows in flight — the brand's campaigns still in motion (not completed), most-active first,
+  // ── Campaigns in flight — the brand's campaigns still in motion (not completed), most-active first,
   // each with its scheduling progress (assets scheduled/live of total).
   const flowsInFlight = useMemo(() => {
     const rank: Record<string, number> = { active: 0, 'in-review': 1, planning: 2 }
@@ -233,9 +233,9 @@ export function HomeAgenda() {
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               Get started
             </button>
-            <button className="ag2-chip" onClick={() => openHomeChat('Draft a new flow for this brand')}>
+            <button className="ag2-chip" onClick={() => openHomeChat('Draft a new campaign for this brand')}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
-              Draft a flow
+              Draft a campaign
             </button>
             <button className="ag2-chip" onClick={() => openHomeChat('Help me personalize a campaign for a specific audience')}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></svg>
@@ -325,13 +325,13 @@ export function HomeAgenda() {
 
         <section className="ag2-sec">
           <div className="ag2-sec-head">
-            <span className="ag2-sec-title">Flows in flight <span className="ag2-sec-count">{flowsInFlight.length}</span></span>
+            <span className="ag2-sec-title">Campaigns in flight <span className="ag2-sec-count">{flowsInFlight.length}</span></span>
             <button className="ag2-viewall" onClick={() => setPage('flows')}>View all <span className="ag2-viewall-plus">+</span></button>
           </div>
           {flowsInFlight.length === 0 ? (
             <div className="ag2-empty">
               No flows in flight.{' '}
-              <button className="home-link" onClick={() => openHomeChat('Draft a new flow for this brand')}>Draft a flow</button>
+              <button className="home-link" onClick={() => openHomeChat('Draft a new campaign for this brand')}>Draft a campaign</button>
             </div>
           ) : (
             flowsInFlight.map((c) => {
@@ -397,12 +397,12 @@ export function HomeAgenda() {
             </div>
             {openTask.derived && openTask.campaign && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-muted)' }}>Flow</span>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--text-muted)' }}>Campaign</span>
                 <button
                   onClick={() => { const c = openTask.campaign; setOpenTaskId(null); openFlow(c, 'flow') }}
                   style={{ alignSelf: 'flex-start', border: '1px solid var(--border)', background: 'var(--surface)', borderRadius: 8, padding: '7px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
                 >
-                  {(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Open flow'} →
+                  {(openTask.campaign ?? '').replace(`${brand} — `, '') || 'Open campaign'} →
                 </button>
               </div>
             )}

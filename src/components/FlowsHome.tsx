@@ -135,7 +135,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     <div className="flow-home">
       <header className="flow-home-head">
         <div>
-          <h1 className="flow-home-title">Flows</h1>
+          <h1 className="flow-home-title">Campaigns</h1>
           <p className="flow-home-sub">
             {cards.length} flow{cards.length === 1 ? '' : 's'} · {folders.length} folder{folders.length === 1 ? '' : 's'} for {brand || 'this brand'}
           </p>
@@ -163,7 +163,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             </button>
           )}
           <button className="flow-home-new" onClick={onNew}>
-            ＋ New flow
+            ＋ New campaign
           </button>
         </div>
       </header>
@@ -187,7 +187,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
                 </button>
               </div>
               {group.length === 0 ? (
-                <div className="flow-home-empty-folder">Empty. Drag a flow card here to file it.</div>
+                <div className="flow-home-empty-folder">Empty. Drag a campaign here to file it.</div>
               ) : (
                 <div className="flow-home-grid">{group.map(renderCard)}</div>
               )}
@@ -200,7 +200,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           return (
             <section className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
               <div className="flow-home-group-h">
-                {folders.length ? 'Unfiled' : 'All flows'}
+                {folders.length ? 'Unfiled' : 'All campaigns'}
                 <span className="flow-home-group-n">{unfiled.length}</span>
               </div>
               {unfiled.length === 0 ? (

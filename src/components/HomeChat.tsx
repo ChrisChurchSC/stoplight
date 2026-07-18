@@ -231,7 +231,7 @@ export function HomeChat() {
     const hasAudiences = brand && brand !== 'all' && (store.clientAudiences[brand]?.length ?? 0) > 0
     if (!forceNew && brand && brand !== 'all' && (profile?.oneLiner || hasAudiences)) {
       say(
-        `**${brand}** is already set up. Want me to add more audiences, draft proof points, or draft a flow? (Say "new brand" to set up a different one.)`,
+        `**${brand}** is already set up. Want me to add more audiences, draft proof points, or draft a campaign? (Say "new brand" to set up a different one.)`,
         { setupDone: true },
       )
       return
@@ -270,7 +270,7 @@ export function HomeChat() {
     } else {
       setupRef.current = null
       say(
-        `You're set up. **${st.brand}** now has a one-liner and your first audience${st.audience ? `, ${st.audience}` : ''}. From here you can draft a flow, add proof points, or head home to see your coverage.`,
+        `You're set up. **${st.brand}** now has a one-liner and your first audience${st.audience ? `, ${st.audience}` : ''}. From here you can draft a campaign, add proof points, or head home to see your coverage.`,
         { setupDone: true },
       )
     }
@@ -499,7 +499,7 @@ export function HomeChat() {
     const next = seq[seq.indexOf(current) + 1]
     if (next) pushFlowStep(next)
     else if (inGtm)
-      say(`Go-to-market is set, channels and objectives. Companies and People are your real target accounts and contacts, so add those in their tables when you have them. Now let's put it all to work. Want to build your first flow?`, { flowOffer: true })
+      say(`Go-to-market is set, channels and objectives. Companies and People are your real target accounts and contacts, so add those in their tables when you have them. Now let's put it all to work. Want to build your first campaign?`, { flowOffer: true })
     else say(`That's your foundation built, audiences, voice, proof points, and messages. Next up: your go-to-market (channels and objectives). Want me to set that up?`, { gtmOffer: true })
   }
   const onFlowStep = async (msgId: string, step: FlowStep, doIt: boolean) => {
@@ -553,9 +553,9 @@ export function HomeChat() {
   const startFlowBuild = () => {
     setQ('')
     const brand = useTrafficStore.getState().clientFilter
-    if (!brand || brand === 'all') { say(`Set up a brand first and I can build you a flow. Say "get started".`, { offerSetup: true }); return }
+    if (!brand || brand === 'all') { say(`Set up a brand first and I can build you a campaign. Say "get started".`, { offerSetup: true }); return }
     flowBuildRef.current = { step: 0, name: '', weeks: 4 }
-    say(`Let's build a flow for **${brand}**. What's this campaign about? Give it a theme, like "Q1 inbound push" or "Launch the new pricing".`)
+    say(`Let's build a campaign for **${brand}**. What's this campaign about? Give it a theme, like "Q1 inbound push" or "Launch the new pricing".`)
   }
   // The brand's objectives, so the flow-build can ask which goal to aim at (and attach it).
   const flowObjectives = () => {
@@ -626,7 +626,7 @@ export function HomeChat() {
     const objs = flowObjectives()
     if (objs.length) {
       st.step = 2
-      say(`What's the goal? Pick the objective this flow should drive.`, { goalPick: objs.map((o) => ({ id: o.id, label: o.name, metric: o.metric })) })
+      say(`What's the goal? Pick the objective this campaign should drive.`, { goalPick: objs.map((o) => ({ id: o.id, label: o.name, metric: o.metric })) })
     } else {
       askFlowWeeks()
     }
@@ -1013,7 +1013,7 @@ export function HomeChat() {
                       <button className="hchat-setup-btn" onClick={draftProofPoints}>Draft proof points</button>
                       <button className="hchat-setup-btn" onClick={setBrandChannels}>Set channels</button>
                       <button className="hchat-setup-btn" onClick={draftBrandObjectives}>Draft objectives</button>
-                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Draft a flow</button>
+                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Draft a campaign</button>
                       <button className="hchat-setup-btn ghost" onClick={closeHomeChat}>Go home</button>
                     </div>
                   )}
@@ -1060,13 +1060,13 @@ export function HomeChat() {
                   )}
                   {m.flowOffer && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Build a flow</button>
-                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Say "build a flow" whenever you're ready.`)}>Not now</button>
+                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Build a campaign</button>
+                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Say "build a campaign" whenever you're ready.`)}>Not now</button>
                     </div>
                   )}
                   {m.flowBuiltName && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'flow') }}>Open flow</button>
+                      <button className="hchat-setup-btn" onClick={() => { const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'flow') }}>Open campaign</button>
                     </div>
                   )}
                   {m.flowStep && (
@@ -1163,7 +1163,7 @@ export function HomeChat() {
               </button>
               <button className="hchat-action" disabled={busy} onClick={() => startFlowBuild()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
-                Draft a flow
+                Draft a campaign
               </button>
               <button className="hchat-action ghost" disabled={busy} onClick={() => startSetup(true)}>New brand</button>
             </>
