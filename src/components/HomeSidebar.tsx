@@ -219,7 +219,7 @@ export function HomeSidebar() {
   const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
   const [chatsOpen, setChatsOpen] = useState(true)
   // Workflow sections (Build / Foundation / Go-to-market / Measure) — all open by default.
-  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Prospects', 'Go-to-market', 'Measure']))
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Prospects', 'Go-to-market']))
   const toggleSection = (label: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
@@ -236,6 +236,8 @@ export function HomeSidebar() {
     item('flows', 'Campaigns', 'flows', page === 'flows', () => setPage('flows')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
+    item('insights', 'Insights', 'insights', page === 'content' && libraryMode !== 'catalog', () => setLibraryMode('data')),
+    item('reports', 'Reports', 'reports', page === 'reports', () => setPage('reports')),
   ]
   const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     {
@@ -260,13 +262,6 @@ export function HomeSidebar() {
       items: [
         item('channelrecords', 'Channels', 'flows', page === 'channelrecords', () => setPage('channelrecords')),
         item('objectives', 'Objectives', 'insights', page === 'objectives', () => setPage('objectives')),
-      ],
-    },
-    {
-      label: 'Measure',
-      items: [
-        item('insights', 'Insights', 'insights', page === 'content' && libraryMode !== 'catalog', () => setLibraryMode('data')),
-        item('reports', 'Reports', 'reports', page === 'reports', () => setPage('reports')),
       ],
     },
   ]
