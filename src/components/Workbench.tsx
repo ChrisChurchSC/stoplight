@@ -74,6 +74,9 @@ export function Workbench() {
   const view = useTrafficStore((s) => s.view)
   const page = useTrafficStore((s) => s.page)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
+  const brandRecords = useTrafficStore((s) => s.brandRecords)
+  const ingestBrandSite = useTrafficStore((s) => s.ingestBrandSite)
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const { brands } = useHomeCanvases()
@@ -128,6 +131,30 @@ export function Workbench() {
       // The SetupFlow is still available to open manually (Getting started / setup wizard).
     })()
   }, [refresh, hydrateRecords])
+
+  // Auto-ingest: the first time a brand with a website is active, pull its real published content
+  // into the Library in the background (once per brand). Gives the taxonomy + generation a real
+  // corpus to learn from without anyone having to ask. Manual re-sync lives on the Library page.
+  useEffect(() => {
+    const brand = clientFilter
+    if (!brand || brand === 'all') return
+    const website = (clientProfiles[brand]?.website || brandRecords.find((b) => b.name === brand)?.website || '').trim()
+    if (!website) return
+    let guard: Record<string, number> = {}
+    try {
+      guard = JSON.parse(localStorage.getItem('stoplight.siteIngested.v1') || '{}')
+    } catch {
+      /* ignore */
+    }
+    if (guard[brand]) return
+    guard[brand] = Date.now()
+    try {
+      localStorage.setItem('stoplight.siteIngested.v1', JSON.stringify(guard))
+    } catch {
+      /* ignore */
+    }
+    void ingestBrandSite(brand)
+  }, [clientFilter, clientProfiles, brandRecords, ingestBrandSite])
 
   // Cmd/Ctrl+K opens Ask Claude from anywhere.
   useEffect(() => {

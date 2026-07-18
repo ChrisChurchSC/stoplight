@@ -120,6 +120,7 @@ import { appendSnapshots } from '../adapters/metrics/metricSnapshots'
 import { buildOutcomeMap } from '../domain/outcomeMap'
 import { buildContributions } from '../domain/aggregateOutcome'
 import { contribute, contributorId } from '../adapters/aggregate/aggregateOutcomes'
+import { ingestSite } from '../adapters/ask/ingestSite'
 import { DEFAULT_AI_MODEL } from '../domain/aiModels'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
@@ -1920,6 +1921,9 @@ interface TrafficState {
     items: Record<string, unknown>[],
     source: AssetSource,
   ) => Promise<{ imported: number; updated: number; skipped: number }>
+  /** Pull a brand's real published content (its website pages) into the Library — headless, reusable
+   *  by the auto-ingest trigger and the chat. Resolves the site from the brand's profile/record. */
+  ingestBrandSite: (brand: string, urlOverride?: string) => Promise<{ imported: number; updated: number; skipped: number; ok: boolean; error?: string }>
   /** Set a single asset's review/publish status (draft → in_review → approved/rejected). */
   setRowStatus: (id: string, status: RowStatus, note?: string) => Promise<void>
   /** Soft-delete (archive) an asset — hidden but restorable. */
@@ -4756,6 +4760,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       await get().refresh()
     }
     return { imported: rows.length, updated: updates.length, skipped }
+  },
+
+  ingestBrandSite: async (brand, urlOverride) => {
+    const s = get()
+    const profile = (s.clientProfiles[brand] ?? {}) as { website?: string }
+    const rec = (s.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const website = (urlOverride || profile.website || rec.website || '').trim()
+    if (!website) return { imported: 0, updated: 0, skipped: 0, ok: false, error: 'no-website' }
+    try {
+      const items = await ingestSite(website)
+      if (!items.length) return { imported: 0, updated: 0, skipped: 0, ok: false, error: 'empty' }
+      const r = await get().importAssets(brand, CONTENT_LIBRARY_CAMPAIGN, items, 'site')
+      return { ...r, ok: true }
+    } catch (e) {
+      return { imported: 0, updated: 0, skipped: 0, ok: false, error: String((e as Error)?.message ?? e) }
+    }
   },
 
   setRowStatus: async (id, status, note) => {
