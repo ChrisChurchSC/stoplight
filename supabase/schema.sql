@@ -254,6 +254,38 @@ drop policy if exists metric_snapshots_insert on public.metric_snapshots;
 create policy metric_snapshots_insert on public.metric_snapshots
   for insert with check (public.is_editor(workspace_id));
 
+-- ── Aggregate outcomes (anonymized cross-customer learning pool) ──
+-- Workspaces contribute anonymized (dimension × archetype × attribute → outcome) rows keyed by an
+-- opaque contributor hash; reads are floor-gated + aggregated via aggregate_patterns() only (no
+-- direct select). See supabase/migrations/0006_aggregate_outcomes.sql.
+create table if not exists public.aggregate_outcomes (
+  contributor  text not null,
+  dimension    text not null,
+  archetype    text not null,
+  attribute    text not null,
+  variants     integer not null default 0,
+  outcome      double precision not null default 0,
+  updated_at   timestamptz not null default now(),
+  primary key (contributor, dimension, archetype, attribute)
+);
+alter table public.aggregate_outcomes enable row level security;
+drop policy if exists aggregate_outcomes_insert on public.aggregate_outcomes;
+create policy aggregate_outcomes_insert on public.aggregate_outcomes
+  for insert with check (auth.role() = 'authenticated');
+drop policy if exists aggregate_outcomes_update on public.aggregate_outcomes;
+create policy aggregate_outcomes_update on public.aggregate_outcomes
+  for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create or replace function public.aggregate_patterns(min_customers int default 10)
+returns table(dimension text, archetype text, attribute text, customers bigint, variants bigint, outcome double precision)
+language sql security definer set search_path = public as $$
+  select dimension, archetype, attribute, count(distinct contributor) as customers,
+         sum(variants) as variants, sum(outcome) as outcome
+  from public.aggregate_outcomes
+  group by dimension, archetype, attribute
+  having count(distinct contributor) >= greatest(min_customers, 1);
+$$;
+grant execute on function public.aggregate_patterns(int) to anon, authenticated;
+
 -- ── Share snapshots (public, read-only brand snapshots behind a ?share= link) ──
 -- The owner publishes a point-in-time, brand-scoped snapshot keyed by the grant id
 -- so a recipient can VIEW with no account. Reads go through a SECURITY DEFINER RPC

@@ -117,6 +117,9 @@ import { type Pattern, freshPatternId } from '../domain/pattern'
 import { type Trigger, freshTriggerId } from '../domain/trigger'
 import { snapshotsFromActuals, snapshotsFromAssets } from '../domain/metricSnapshot'
 import { appendSnapshots } from '../adapters/metrics/metricSnapshots'
+import { buildOutcomeMap } from '../domain/outcomeMap'
+import { buildContributions } from '../domain/aggregateOutcome'
+import { contribute, contributorId } from '../adapters/aggregate/aggregateOutcomes'
 import { DEFAULT_AI_MODEL } from '../domain/aiModels'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
@@ -2001,6 +2004,8 @@ interface TrafficState {
   /** Account-wide opt-out of the anonymized aggregate learning layer (default-on). */
   aggregateContributing: boolean
   setAggregateContributing: (on: boolean) => void
+  /** Publish this workspace's anonymized outcome patterns to the cross-customer pool (opt-in only). */
+  contributeAggregate: () => Promise<void>
   /** The model the user picked for the internal AI ('auto' = server tier defaults). See domain/aiModels. */
   aiModel: string
   setAiModel: (id: string) => void
@@ -2974,6 +2979,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const byId = new Map(get().rows.map((r) => [r.id, r]))
       const reconciled = updates.map((u) => byId.get(u.id)).filter((r): r is TrafficRow => !!r?.socialMetrics)
       void appendSnapshots(snapshotsFromAssets(brand, reconciled, new Date().toISOString()))
+      void get().contributeAggregate() // refresh the cross-customer pool (self-gates on opt-in)
     }
     return updates.length
   },
@@ -5758,6 +5764,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setAggregateContributing: (on) => {
     saveAggregateContributing(on)
     set({ aggregateContributing: on })
+    // Opting in publishes the current anonymized patterns; opting out stops (existing rows are the
+    // caller's to clear).
+    if (on) void get().contributeAggregate()
+  },
+  contributeAggregate: async () => {
+    if (!get().aggregateContributing) return
+    const cid = await contributorId()
+    if (!cid) return
+    const s = get()
+    const map = buildOutcomeMap(s.rows, { clientAudiences: s.clientAudiences, campaigns: s.campaignList })
+    await contribute(buildContributions(map, cid))
   },
   setAiModel: (id) => {
     saveAiModel(id)
