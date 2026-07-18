@@ -5,6 +5,7 @@ import { clientForCampaign } from './clients'
 import { funnelStageFor, type FunnelStage } from './funnel'
 import { messagingSummary } from './messaging'
 import { assetRtbIds, rtbById } from './rtb'
+import { archetypeFor, archetypeLabel } from './archetypes'
 import type { ChannelId, TrafficRow } from './types'
 
 /**
@@ -25,6 +26,8 @@ export const UNSEGMENTED = 'Unsegmented'
 /** Structured attributes of a shipped variant — "what it was". */
 export interface VariantAttributes {
   audienceType: string
+  /** Persona archetype (normalized from audienceType) — the cross-customer grouping key. */
+  archetype: string
   stage: FunnelStage
   channel: ChannelId
   assetType: string
@@ -161,6 +164,7 @@ export function buildOutcomeMap(rows: TrafficRow[], opts: OutcomeMapOpts): Outco
       assetName: r.assetName,
       attributes: {
         audienceType: audienceFor(r),
+        archetype: archetypeLabel(archetypeFor(audienceFor(r))),
         stage: funnelStageFor(r.channel, r.assetType),
         channel: r.channel,
         assetType: r.assetType ?? '—',

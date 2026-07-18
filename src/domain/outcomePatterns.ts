@@ -14,6 +14,8 @@ import type { OutcomeRow } from './outcomeMap'
  * this module is the aggregate derived from it. They never mix identifying data.
  */
 
+import { archetypeLabel, proofTypeFor } from './archetypes'
+
 export type PatternDimension = 'rtb' | 'channel' | 'stage' | 'strategy'
 
 export interface Pattern {
@@ -48,7 +50,8 @@ export interface AggregateResult {
 const dimensionOf = (row: OutcomeRow, dim: PatternDimension): string[] => {
   switch (dim) {
     case 'rtb':
-      return row.attributes.rtbs.map((r) => r.label)
+      // Normalize proof to its TYPE so it compares across customers (not exact wording).
+      return [...new Set(row.attributes.rtbs.map((r) => archetypeLabel(proofTypeFor(r.label))))]
     case 'channel':
       return [row.attributes.channel]
     case 'stage':
@@ -90,7 +93,8 @@ export function aggregatePatterns(
   }
   const groups = new Map<string, { dim: PatternDimension; audience: string; attr: string; acc: Acc }>()
   for (const row of rows) {
-    const audience = row.attributes.audienceType
+    // Group on the normalized persona archetype so patterns pool across customers, not on raw names.
+    const audience = row.attributes.archetype
     for (const dim of DIMENSIONS) {
       for (const attr of dimensionOf(row, dim)) {
         const key = `${dim}::${audience}::${attr}`
