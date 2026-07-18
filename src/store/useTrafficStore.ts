@@ -115,6 +115,8 @@ import { type Message, freshMessageId } from '../domain/message'
 import { type Voice, freshVoiceId } from '../domain/voice'
 import { type Pattern, freshPatternId } from '../domain/pattern'
 import { type Trigger, freshTriggerId } from '../domain/trigger'
+import { snapshotsFromActuals, snapshotsFromAssets } from '../domain/metricSnapshot'
+import { appendSnapshots } from '../adapters/metrics/metricSnapshots'
 import { DEFAULT_AI_MODEL } from '../domain/aiModels'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
@@ -531,6 +533,22 @@ function saveBrandActuals(map: Record<string, BrandActuals>): void {
     localStorage.setItem(BRAND_ACTUALS_KEY, JSON.stringify(map))
   } catch {
     /* ignore */
+  }
+}
+
+// Snapshot the metrics time-series at most once per brand per UTC day, so repeated pulls of the
+// same actuals don't flood metric_snapshots. Returns true (and marks today done) the first time.
+const SNAP_DAY_KEY = 'stoplight.metricsSnapDay.v1'
+function snapshotOncePerDay(brand: string): boolean {
+  const today = new Date().toISOString().slice(0, 10)
+  try {
+    const map = JSON.parse(localStorage.getItem(SNAP_DAY_KEY) || '{}') as Record<string, string>
+    if (map[brand] === today) return false
+    map[brand] = today
+    localStorage.setItem(SNAP_DAY_KEY, JSON.stringify(map))
+    return true
+  } catch {
+    return true
   }
 }
 
@@ -2514,6 +2532,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const brandActuals = { ...s.brandActuals, [n]: data }
       saveBrandActuals(brandActuals)
       setBrandCalibration(n, reachByChannelFromActuals(data))
+      // Append this pull to the metrics time-series (once per brand per day).
+      if (snapshotOncePerDay(n)) void appendSnapshots(snapshotsFromActuals(n, data, new Date().toISOString()))
       return { brandActuals }
     }),
 
@@ -2949,6 +2969,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       })
     }
     if (updates.length) await get().updateRows(updates)
+    // Append the freshly-measured assets to the metrics time-series (the per-persona signal).
+    if (updates.length) {
+      const byId = new Map(get().rows.map((r) => [r.id, r]))
+      const reconciled = updates.map((u) => byId.get(u.id)).filter((r): r is TrafficRow => !!r?.socialMetrics)
+      void appendSnapshots(snapshotsFromAssets(brand, reconciled, new Date().toISOString()))
+    }
     return updates.length
   },
 

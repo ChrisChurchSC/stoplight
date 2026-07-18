@@ -225,6 +225,35 @@ drop policy if exists workspace_state_write on public.workspace_state;
 create policy workspace_state_write on public.workspace_state
   for all using (public.is_editor(workspace_id)) with check (public.is_editor(workspace_id));
 
+-- ── Metric snapshots (append-only metrics time-series) ──
+-- Every metrics sync appends here (never overwrites), keeping history for trend + per-persona
+-- learning. Append-only by policy: members read, editors insert, no update/delete. See
+-- supabase/migrations/0005_metric_snapshots.sql.
+create table if not exists public.metric_snapshots (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  brand        text not null,
+  scope        text not null,
+  scope_id     text not null,
+  campaign     text,
+  audience     text,
+  metric       text not null,
+  value        double precision not null,
+  unit         text,
+  source       text,
+  captured_at  timestamptz not null default now()
+);
+create index if not exists metric_snapshots_ws_brand_idx on public.metric_snapshots (workspace_id, brand, captured_at desc);
+create index if not exists metric_snapshots_scope_idx on public.metric_snapshots (workspace_id, scope, scope_id);
+create index if not exists metric_snapshots_audience_idx on public.metric_snapshots (workspace_id, brand, audience);
+alter table public.metric_snapshots enable row level security;
+drop policy if exists metric_snapshots_select on public.metric_snapshots;
+create policy metric_snapshots_select on public.metric_snapshots
+  for select using (public.is_member(workspace_id));
+drop policy if exists metric_snapshots_insert on public.metric_snapshots;
+create policy metric_snapshots_insert on public.metric_snapshots
+  for insert with check (public.is_editor(workspace_id));
+
 -- ── Share snapshots (public, read-only brand snapshots behind a ?share= link) ──
 -- The owner publishes a point-in-time, brand-scoped snapshot keyed by the grant id
 -- so a recipient can VIEW with no account. Reads go through a SECURITY DEFINER RPC
