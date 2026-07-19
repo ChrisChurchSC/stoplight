@@ -24662,6 +24662,8 @@ table.aud-sheet td.stick .aud-cell {
 .hchat-action:disabled { opacity: .5; cursor: default; }
 .hchat-action.ghost { color: var(--text-muted); }
 .hchat-action.ghost:hover { color: var(--text); border-color: var(--border-strong, #cdd5d9); }
+.hchat-action.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hchat-action.primary:hover { color: #fff; filter: brightness(1.05); }
 
 .hchat-composer { flex: 0 0 auto; padding: 8px 0 20px; }
 .hchat-box {

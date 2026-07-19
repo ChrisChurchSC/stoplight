@@ -558,6 +558,50 @@ export function HomeChat() {
     say(`Let's build out your foundation in the order that works best. I'll offer each piece, you draft it or skip. You can refine anything later.`)
     pushFlowStep(FOUNDATION_STEPS[0])
   }
+
+  // One-click "Build brand": pull the brand's real content (its site via Search Console + published
+  // work), then draft the whole foundation FROM it. Voice and proof read the ingested Library, so the
+  // brand page reflects what the brand has actually put out, not a one-liner.
+  const buildBrandFromContent = async () => {
+    const brand = useTrafficStore.getState().clientFilter
+    if (!brand || brand === 'all') {
+      say(`Pick or set up a brand first, then I can build its brand page. Say "get started".`, { offerSetup: true })
+      return
+    }
+    say(`Building **${brand}**'s brand page from your real content. I'll pull your site and published work, then draft the foundation from what you've actually put out. Refine anything after.`)
+    // 1) Ingest everything the brand has (Search Console page list + real metrics + copy, plus any
+    //    connected published content). Best-effort: keep going with whatever lands.
+    const iid = nid()
+    setMessages((m) => [...m, { id: iid, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Pulling ${brand}'s content` }] }])
+    try {
+      await useTrafficStore.getState().ingestContent(brand)
+    } catch {
+      /* ingest is best-effort */
+    }
+    const libCount = brandLibrarySamples(brand).length
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === iid
+          ? {
+              ...x,
+              busy: false,
+              steps: undefined,
+              text: libCount
+                ? `Pulled **${brand}**'s content into the Library (${libCount} pieces to ground the drafts).`
+                : `No connected content yet, so I'll draft from **${brand}**'s description. Connect analytics or add a website, then re-run to ground this in real content.`,
+            }
+          : x,
+      ),
+    )
+    // 2) Draft the foundation in order. Voice + proof are derived from the ingested Library.
+    await addAudiences()
+    await addBrandVoices()
+    await draftProofPoints()
+    await draftBrandMessages()
+    say(
+      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: audiences, voice, proof points, and messages. Open each to refine, or build your go-to-market next.`,
+    )
+  }
   const startGtmFlow = () => {
     setQ('')
     const store = useTrafficStore.getState()
@@ -1170,6 +1214,10 @@ export function HomeChat() {
         <div className="hchat-actions">
           {clientFilter && clientFilter !== 'all' ? (
             <>
+              <button className="hchat-action primary" disabled={busy} onClick={() => void buildBrandFromContent()}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
+                Build brand from content
+              </button>
               <button className="hchat-action" disabled={busy} onClick={() => startFoundationFlow()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /></svg>
                 Build foundation
