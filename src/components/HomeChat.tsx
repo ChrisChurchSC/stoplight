@@ -961,9 +961,10 @@ export function HomeChat() {
     const connected = (s.brandActuals[brand]?.channels?.length ?? 0) > 0
     const voices = s.voices.filter((v) => !v.brand || v.brand === brand).length
     const audiences = (s.clientAudiences[brand] ?? []).length
-    const proof = (s.library.rtbs ?? []).length
     const messages = s.messages.filter((m) => !m.brand || m.brand === brand).length
-    const foundation = voices > 0 && audiences > 0 && proof > 0 && messages > 0
+    // "Foundation done" uses the reliably brand-scoped signals (voice + audiences + messages). Proof
+    // points live in a shared library that isn't cleanly brand-filtered, so it is not a gate here.
+    const foundation = voices > 0 && audiences > 0 && messages > 0
     const audienceChannels = (s.clientAudiences[brand] ?? []).some((a) => (a.channels?.length ?? 0) > 0)
     const objectives = s.objectives.filter((o) => !o.brand || o.brand === brand).length
     const gtm = audienceChannels && objectives > 0
