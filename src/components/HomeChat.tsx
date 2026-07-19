@@ -142,7 +142,7 @@ export function HomeChat() {
   // When we've asked "which brand?" for a report, the next message is read as the brand answer.
   const awaitingBrandRef = useRef(false)
   // Non-null while the guided setup is running: which step we're on + the brand named so far.
-  const setupRef = useRef<{ step: number; brand: string; audience?: string } | null>(null)
+  const setupRef = useRef<{ step: number; brand: string } | null>(null)
   // The last thing the chat DID (e.g. 'proof'), so a follow-up like "more" continues that action.
   const lastActionRef = useRef<string | null>(null)
   // When we've asked for the brand's website (to ingest content), the next message is read as the URL.
@@ -237,10 +237,8 @@ export function HomeChat() {
     const profile = (brand && brand !== 'all' ? store.clientProfiles[brand] : undefined) as { oneLiner?: string } | undefined
     const hasAudiences = brand && brand !== 'all' && (store.clientAudiences[brand]?.length ?? 0) > 0
     if (!forceNew && brand && brand !== 'all' && (profile?.oneLiner || hasAudiences)) {
-      say(
-        `**${brand}** is already set up. Want me to add more audiences, draft proof points, or draft a campaign? (Say "new brand" to set up a different one.)`,
-        { setupDone: true },
-      )
+      say(`**${brand}** is already started. Here's the next step toward a personalized campaign (say "new brand" to set up a different one):`)
+      surfaceNextStep()
       return
     }
     setupRef.current = { step: 0, brand: '' }
@@ -265,10 +263,8 @@ export function HomeChat() {
       st.brand = val
     } else if (step.key === 'oneliner') {
       setClientProfile(st.brand, { oneLiner: val })
-    } else if (step.key === 'audience') {
-      const cur = useTrafficStore.getState().clientAudiences[st.brand] ?? []
-      setClientAudiences(st.brand, [...cur, newAudience({ name: val })])
-      st.audience = val
+    } else if (step.key === 'website') {
+      if (val.toLowerCase() !== 'skip') setClientProfile(st.brand, { website: val })
     }
     const next = st.step + 1
     if (next < GUIDED_SETUP_STEPS.length) {
@@ -276,10 +272,11 @@ export function HomeChat() {
       say(GUIDED_SETUP_STEPS[next].prompt(st.brand))
     } else {
       setupRef.current = null
+      const hasSite = !!(useTrafficStore.getState().clientProfiles[st.brand] as { website?: string } | undefined)?.website
       say(
-        `You're set up. **${st.brand}** now has a one-liner and your first audience${st.audience ? `, ${st.audience}` : ''}. From here you can draft a campaign, add proof points, or head home to see your coverage.`,
-        { setupDone: true },
+        `**${st.brand}** is set up${hasSite ? ' with your website' : ''}. Now I'll walk you through the rest, in the right order, to a personalized campaign. Here's your next step:`,
       )
+      surfaceNextStep()
     }
   }
 
@@ -638,8 +635,9 @@ export function HomeChat() {
     await draftProofPoints()
     await draftBrandMessages()
     say(
-      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: strategy (positioning, objectives, audience), plus audiences, voice, proof points, and messages. Open Brand or each section to refine, or build your go-to-market next.`,
+      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: strategy (positioning, objectives, audience), plus audiences, voice, proof points, and messages. Open Brand or each section to refine.`,
     )
+    surfaceNextStep()
   }
   const startGtmFlow = () => {
     setQ('')
@@ -1064,6 +1062,12 @@ export function HomeChat() {
     } else if (step === 'build') void buildBrandFromContent()
     else if (step === 'gtm') startGtmFlow()
     else if (step === 'campaign') startFlowBuild()
+  }
+  // Post the single best next step as a chat message with its CTA, so each finished step hands off to
+  // the next one in order (connect -> build brand -> go-to-market -> campaign).
+  const surfaceNextStep = () => {
+    const ns = nextSetupStep()
+    say(ns.text, { guide: ns.guide })
   }
 
   // Initialize the thread once per conversation (the component is keyed by homeChatSession, so it
