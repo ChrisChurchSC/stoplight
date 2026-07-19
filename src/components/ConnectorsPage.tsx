@@ -117,6 +117,11 @@ export function ConnectorsPage() {
   // Real connection status for this workspace (Google + Resend), read from the floor-safe RPC.
   const [wsId, setWsId] = useState<string | null>(null)
   const [connected, setConnected] = useState<Set<string>>(new Set())
+  // Resend connect modal: paste a key, verify it against Resend, then store only if it works.
+  const [resendOpen, setResendOpen] = useState(false)
+  const [keyInput, setKeyInput] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
     void (async () => {
@@ -145,15 +150,36 @@ export function ConnectorsPage() {
       return
     }
     if (p === 'resend') {
-      const key = window.prompt('Paste your Resend API key (starts with re_):')?.trim()
-      if (!key) return
-      void fetch('/api/connect-resend', {
+      setKeyInput('')
+      setConnectError(null)
+      setResendOpen(true)
+    }
+  }
+
+  // Verify the pasted key server-side, then store it. The endpoint only returns ok:true once Resend
+  // has accepted the key, so a bad key surfaces an error here instead of a false "Connected".
+  const submitResend = async () => {
+    const key = keyInput.trim()
+    if (!key || !wsId) return
+    setVerifying(true)
+    setConnectError(null)
+    try {
+      const r = await fetch('/api/connect-resend', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ workspace: wsId, key }),
-      }).then((r) => {
-        if (r.ok) setConnected((s) => new Set(s).add('resend'))
       })
+      const body = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+      if (r.ok && body.ok) {
+        setConnected((s) => new Set(s).add('resend'))
+        setResendOpen(false)
+      } else {
+        setConnectError(body.error || 'Could not verify that key.')
+      }
+    } catch {
+      setConnectError('Network error. Try again.')
+    } finally {
+      setVerifying(false)
     }
   }
 
@@ -199,6 +225,35 @@ export function ConnectorsPage() {
           </ol>
         </div>
       </div>
+
+      {resendOpen && (
+        <div
+          onClick={() => { if (!verifying) setResendOpen(false) }}
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(16,24,40,.35)', display: 'grid', placeItems: 'center', padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 440, background: 'var(--surface, #fff)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 20px 60px rgba(16,24,40,.28)', padding: 22 }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px', color: 'var(--text, #1a2023)' }}>Connect Resend</h2>
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted, #5a6b72)', margin: '0 0 14px' }}>Paste a full-access API key. We check it with Resend before saving, so a bad key never shows as connected.</p>
+            <input
+              type="password"
+              autoFocus
+              value={keyInput}
+              onChange={(e) => { setKeyInput(e.target.value); if (connectError) setConnectError(null) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !verifying) void submitResend() }}
+              placeholder="re_..."
+              style={{ width: '100%', boxSizing: 'border-box', fontSize: 14, fontFamily: 'ui-monospace, SFMono-Regular, monospace', padding: '10px 12px', borderRadius: 10, border: `1px solid ${connectError ? 'var(--accent, #ff6347)' : 'var(--border)'}`, background: 'var(--hover, #f7f9fa)', color: 'var(--text, #1a2023)', outline: 'none' }}
+            />
+            {connectError && <div style={{ fontSize: 12.5, color: 'var(--accent, #ff6347)', margin: '8px 2px 0' }}>{connectError}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+              <button onClick={() => setResendOpen(false)} disabled={verifying} style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-muted, #5a6b72)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 14px', cursor: verifying ? 'default' : 'pointer' }}>Cancel</button>
+              <button onClick={() => void submitResend()} disabled={verifying || !keyInput.trim()} style={{ fontSize: 13.5, fontWeight: 700, color: '#fff', background: 'var(--accent, #ff6347)', border: 'none', borderRadius: 9, padding: '8px 16px', cursor: verifying || !keyInput.trim() ? 'default' : 'pointer', opacity: verifying || !keyInput.trim() ? 0.6 : 1 }}>{verifying ? 'Verifying…' : 'Verify & connect'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

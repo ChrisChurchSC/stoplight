@@ -33,6 +33,31 @@ interface BrandActuals {
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v) || 0)
 
+/**
+ * Check a Resend API key actually works BEFORE we store it, by hitting the same endpoint the metrics
+ * pull relies on (`GET /broadcasts`). A valid full-access key returns 200 (even with zero broadcasts);
+ * a bad key returns 401; a send-only key is restricted here, which we reject with a clear reason since
+ * it can't read metrics anyway. Returns { ok } plus a human error to show the user.
+ */
+export async function verifyResendKey(key: string): Promise<{ ok: boolean; error?: string }> {
+  const k = (key || '').trim()
+  if (!k) return { ok: false, error: 'Paste your Resend API key.' }
+  if (!k.startsWith('re_')) return { ok: false, error: 'That does not look like a Resend key (they start with "re_").' }
+  try {
+    const res = await fetch(`${BASE}/broadcasts`, { headers: { authorization: `Bearer ${k}` } })
+    if (res.ok) return { ok: true }
+    const body = (await res.json().catch(() => ({}))) as { name?: string; message?: string }
+    if (body.name === 'restricted_api_key')
+      return { ok: false, error: 'That key is send-only. Use a full-access Resend key so metrics can be read.' }
+    // Resend reports an invalid/missing key as a 400/401/403 with "API key is invalid".
+    if (res.status === 400 || res.status === 401 || res.status === 403 || /api key|invalid|unauthor/i.test(body.message || ''))
+      return { ok: false, error: 'Resend rejected that key. Double-check it and try again.' }
+    return { ok: false, error: body.message ? `Resend: ${body.message}` : `Resend returned an error (${res.status}). Try again in a moment.` }
+  } catch {
+    return { ok: false, error: 'Could not reach Resend to verify the key. Check your connection and retry.' }
+  }
+}
+
 /** Email actuals from Resend broadcasts. With a workspace id, uses that workspace's STORED Resend key
  *  (applies to all its brands); else the env key gated on RESEND_BRAND. Null when nothing sent. */
 export async function runResendActuals(brand: string, workspaceId?: string): Promise<BrandActuals | null> {

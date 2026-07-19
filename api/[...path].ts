@@ -129,16 +129,27 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
           })()
         : req.body ?? {}
     const b = raw as { workspace?: string; key?: string }
-    let ok = false
-    try {
-      const { saveConnection } = await import('../server/connections.js')
-      ok = !!(b.workspace && b.key) && (await saveConnection(b.workspace, 'resend', { api_key: b.key }, {}))
-    } catch {
-      ok = false
-    }
-    res.statusCode = ok ? 200 : 400
     res.setHeader('content-type', 'application/json')
-    return res.end(JSON.stringify({ ok }))
+    if (!b.workspace || !b.key) {
+      res.statusCode = 400
+      return res.end(JSON.stringify({ ok: false, error: 'Missing workspace or key.' }))
+    }
+    try {
+      // Verify the key against Resend BEFORE storing it, so a bad key never shows as "Connected".
+      const { verifyResendKey } = await import('../server/resendActuals.js')
+      const check = await verifyResendKey(b.key)
+      if (!check.ok) {
+        res.statusCode = 400
+        return res.end(JSON.stringify({ ok: false, error: check.error }))
+      }
+      const { saveConnection } = await import('../server/connections.js')
+      const saved = await saveConnection(b.workspace, 'resend', { api_key: b.key }, {})
+      res.statusCode = saved ? 200 : 500
+      return res.end(JSON.stringify(saved ? { ok: true } : { ok: false, error: 'Verified, but could not save the connection.' }))
+    } catch {
+      res.statusCode = 500
+      return res.end(JSON.stringify({ ok: false, error: 'Something went wrong verifying the key.' }))
+    }
   }
 
   const loader = HANDLERS[path]
