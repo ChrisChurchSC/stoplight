@@ -14,6 +14,25 @@ export interface BrandProfileDraft {
   audienceInsight: string
   competitiveContext: string
   differentiator: string
+  // Message Architecture
+  keyMessage: string
+  supportingMessages: string
+  proofPoints: string
+  toneOfVoice: string
+  languageDos: string
+  languageDonts: string
+  // Execution
+  primaryChannels: string
+  secondaryChannels: string
+  contentPillars: string
+  cadence: string
+  budgetSplit: string
+  keyMoments: string
+  // Measurement
+  primaryKpis: string
+  headlineTargets: string
+  reviewCadence: string
+  risks: string
 }
 
 export interface DraftBrandProfileInput {

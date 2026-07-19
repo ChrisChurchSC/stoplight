@@ -8,33 +8,44 @@ import { makeModelClient } from './modelClient.js'
  * so Build-brand fills it FIRST. 'copy' tier. Throws NO_KEY so the client falls back.
  */
 
+const FIELDS = [
+  // Overview + Strategic Foundation
+  'oneLiner',
+  'descriptor',
+  'industry',
+  'positioning',
+  'businessObjective',
+  'commsObjective',
+  'primaryAudience',
+  'audienceInsight',
+  'competitiveContext',
+  'differentiator',
+  // Message Architecture
+  'keyMessage',
+  'supportingMessages',
+  'proofPoints',
+  'toneOfVoice',
+  'languageDos',
+  'languageDonts',
+  // Execution
+  'primaryChannels',
+  'secondaryChannels',
+  'contentPillars',
+  'cadence',
+  'budgetSplit',
+  'keyMoments',
+  // Measurement
+  'primaryKpis',
+  'headlineTargets',
+  'reviewCadence',
+  'risks',
+] as const
+
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  properties: {
-    oneLiner: { type: 'string' },
-    descriptor: { type: 'string' },
-    industry: { type: 'string' },
-    positioning: { type: 'string' },
-    businessObjective: { type: 'string' },
-    commsObjective: { type: 'string' },
-    primaryAudience: { type: 'string' },
-    audienceInsight: { type: 'string' },
-    competitiveContext: { type: 'string' },
-    differentiator: { type: 'string' },
-  },
-  required: [
-    'oneLiner',
-    'descriptor',
-    'industry',
-    'positioning',
-    'businessObjective',
-    'commsObjective',
-    'primaryAudience',
-    'audienceInsight',
-    'competitiveContext',
-    'differentiator',
-  ],
+  properties: Object.fromEntries(FIELDS.map((f) => [f, { type: 'string' }])),
+  required: [...FIELDS],
 } as const
 
 const SYSTEM = `You fill in a brand's STRATEGY RECORD (its communications-strategy foundation) from what the brand has actually published. The brand NAME may be evocative or metaphorical; NEVER infer the product from the name.
@@ -52,6 +63,28 @@ Fields:
 - audienceInsight: the core tension or truth about that audience the brand speaks to.
 - competitiveContext: what it is an alternative to, or the landscape it stands against.
 - differentiator: the one thing that makes it distinct.
+
+Message Architecture:
+- keyMessage: the single most important thing the brand needs its audience to believe.
+- supportingMessages: 2 to 3 supporting messages, one line, semicolon separated.
+- proofPoints: the top reasons to believe, semicolon separated; cite the real reach figures given where relevant, never invented ones.
+- toneOfVoice: 3 to 5 tone adjectives that match how the brand actually writes.
+- languageDos: what to do in the copy, semicolon separated.
+- languageDonts: what to avoid, semicolon separated.
+
+Execution:
+- primaryChannels: the 2 to 3 main channels, comma separated, inferred from where the brand actually reaches its audience.
+- secondaryChannels: supporting channels, comma separated.
+- contentPillars: 3 to 4 recurring content themes the brand publishes around, comma separated.
+- cadence: a sensible publishing cadence for a brand of this kind.
+- budgetSplit: a directional split of effort across channels or content types (qualitative, no fabricated dollar figures).
+- keyMoments: the key campaigns or moments across the year to plan around.
+
+Measurement:
+- primaryKpis: the main KPIs to track, comma separated.
+- headlineTargets: directional headline targets; anchor to the real reach figures given when relevant, otherwise phrase as directional goals (never fabricate exact figures).
+- reviewCadence: how often to review performance.
+- risks: the key risks or watch-outs for this brand's marketing.
 
 No em dashes anywhere. Return ONLY the structured object.`
 
@@ -86,7 +119,7 @@ Fill in the brand's strategy record from the work above. When a field is blank, 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
     model: 'claude-opus-4-8',
-    max_tokens: 1400,
+    max_tokens: 2800,
     thinking: { type: 'adaptive' },
     system: SYSTEM,
     output_config: { format: { type: 'json_schema', schema: SCHEMA } },
