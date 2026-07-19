@@ -80,6 +80,36 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
     }
   }
 
+  // In-app connect flow (single-segment paths — Vercel only routes those to this catch-all):
+  // /api/google-connect?workspace=<id> begins OAuth; /api/google-callback stores the workspace's
+  // refresh token + discovered sources, then redirects back to the app.
+  if (path === 'google-connect') {
+    const workspace = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('workspace') ?? ''
+    const { googleAuthUrl, googleConfigured } = await import('../server/googleConnect.js')
+    if (!googleConfigured() || !workspace) {
+      res.statusCode = 400
+      return res.end('google connect not configured or missing workspace')
+    }
+    res.statusCode = 302
+    res.setHeader('location', googleAuthUrl(workspace))
+    return res.end()
+  }
+  if (path === 'google-callback') {
+    const qs = new URLSearchParams((req.url ?? '').split('?')[1] ?? '')
+    const code = qs.get('code') ?? ''
+    const state = qs.get('state') ?? ''
+    let ok = false
+    try {
+      const { googleCallback } = await import('../server/googleConnect.js')
+      ok = !!(code && state) && (await googleCallback(code, state))
+    } catch {
+      ok = false
+    }
+    res.statusCode = 302
+    res.setHeader('location', `https://stoplight-ochre.vercel.app/?connected=${ok ? 'google' : 'error'}`)
+    return res.end()
+  }
+
   const loader = HANDLERS[path]
   if (!loader) {
     res.statusCode = 404
