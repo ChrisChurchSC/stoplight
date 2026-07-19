@@ -32,7 +32,9 @@ const MESSAGE_SCHEMA = {
 
 const SYSTEM = `You draft MESSAGES (reusable angles) for a brand, the specific ways it makes its case to a given audience at a given stage.
 
-CRITICAL, derive everything ONLY from the description provided (one-liner, positioning, descriptor, differentiator, objective, industry). The brand NAME may be evocative or metaphorical; never infer the product from the name.
+Derive the messages from the description (one-liner, positioning, descriptor, differentiator, objective, industry) AND, when provided, the brand's REAL published copy below. The brand NAME may be evocative or metaphorical; never infer the product from the name.
+
+When real published copy is provided, draw the message angles and hooks from the themes the brand ACTUALLY talks about (its recurring ideas, framings, and language), not generic templates.
 
 Write the requested number of messages. Each has:
 - name: the message itself, a short punchy line (a headline you would actually run).
@@ -55,7 +57,7 @@ export async function runDraftMessages(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { brand, oneLiner, positioning, descriptor, differentiator, businessObjective, industry, audiences, existing, count } =
+  const { brand, oneLiner, positioning, descriptor, differentiator, businessObjective, industry, audiences, existing, count, samples } =
     (body ?? {}) as {
       brand?: string
       oneLiner?: string
@@ -67,10 +69,17 @@ export async function runDraftMessages(body: unknown): Promise<unknown> {
       audiences?: string[]
       existing?: string[]
       count?: number
+      samples?: { text?: string; channel?: string; reach?: number }[]
     }
 
   const n = typeof count === 'number' && count > 0 && count <= 8 ? count : 4
   const existingList = (existing ?? []).filter(Boolean)
+  const samps = (samples ?? []).filter((s) => s && s.text)
+  const samplesBlock = samps.length
+    ? `\nThe brand's REAL published copy (draw message angles from the themes and hooks it actually uses):\n${samps
+        .map((s, i) => `${i + 1}. ${s.text}`)
+        .join('\n')}`
+    : ''
 
   const userContent = `Brand name (do NOT infer the product from this): ${brand ?? ''}
 
@@ -83,9 +92,10 @@ Business objective: ${businessObjective || '(none)'}
 Industry: ${industry || '(none)'}
 
 Audiences to write for: ${(audiences ?? []).join(', ') || '(none given, use "All")'}
+${samplesBlock}
 ${existingList.length ? `\nEXISTING messages (do NOT repeat these):\n${existingList.map((e) => `- ${e}`).join('\n')}` : ''}
 
-Draft ${n} messages, grounded strictly in the description above (not the brand name).`
+Draft ${n} messages. When real copy is provided above, draw the angles from the themes the brand actually uses; otherwise ground them in the description (never the brand name).`
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({

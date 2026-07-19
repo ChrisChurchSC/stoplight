@@ -34,7 +34,9 @@ const AUDIENCE_SCHEMA = {
 
 const SYSTEM = `You define TARGET AUDIENCES (buyer personas) for a brand — the distinct groups it markets to.
 
-CRITICAL — derive the audiences ONLY from the description provided (one-liner, positioning, descriptor, differentiator, objective, industry). The brand NAME may be evocative or metaphorical; never infer the product from the name.
+Derive the audiences from the description (one-liner, positioning, descriptor, differentiator, objective, industry) AND, when provided, the brand's REAL published copy below. The brand NAME may be evocative or metaphorical; never infer the product from the name.
+
+When real published copy is provided, infer the audiences from who the content is actually written for, the people, roles, and needs it addresses, not just abstract personas.
 
 Write the requested number of audiences. Each has:
 - name: a short persona name (2 to 4 words), e.g. "RevOps leaders" or "Demand gen managers".
@@ -58,7 +60,7 @@ export async function runDraftAudiences(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { brand, oneLiner, positioning, descriptor, differentiator, businessObjective, industry, existing, count } =
+  const { brand, oneLiner, positioning, descriptor, differentiator, businessObjective, industry, existing, count, samples } =
     (body ?? {}) as {
       brand?: string
       oneLiner?: string
@@ -69,23 +71,31 @@ export async function runDraftAudiences(body: unknown): Promise<unknown> {
       industry?: string
       existing?: string[]
       count?: number
+      samples?: { text?: string; channel?: string; reach?: number }[]
     }
 
   const n = typeof count === 'number' && count > 0 && count <= 6 ? count : 3
   const existingList = (existing ?? []).filter(Boolean)
+  const samps = (samples ?? []).filter((s) => s && s.text)
+  const samplesBlock = samps.length
+    ? `\nThe brand's REAL published copy (infer audiences from who this is written for, the roles and needs it addresses):\n${samps
+        .map((s, i) => `${i + 1}. ${s.text}`)
+        .join('\n')}`
+    : ''
 
   const userContent = `Brand name (do NOT infer the product from this): ${brand ?? ''}
 
-Description of what the brand does — ground the audiences in this:
+Description of what the brand does, ground the audiences in this:
 One-liner: ${oneLiner || '(none)'}
 Positioning: ${positioning || '(none)'}
 Descriptor: ${descriptor || '(none)'}
 Differentiator: ${differentiator || '(none)'}
 Business objective: ${businessObjective || '(none)'}
 Industry: ${industry || '(none)'}
+${samplesBlock}
 ${existingList.length ? `\nEXISTING audiences (do NOT repeat these; write new, distinct personas):\n${existingList.map((e) => `- ${e}`).join('\n')}` : ''}
 
-Define ${n} distinct target audiences for this brand.`
+Define ${n} distinct target audiences. When real copy is provided above, infer them from who the content is written for; otherwise ground them in the description (never the brand name).`
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({

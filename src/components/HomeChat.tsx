@@ -370,6 +370,7 @@ export function HomeChat() {
       businessObjective: rec.businessObjective,
       industry: profile.industry || rec.industry,
       existing: current.map((a) => a.name),
+      samples: brandLibrarySamples(brand),
     })
     const additions = drafted.map((d) =>
       newAudience({ name: d.name, definition: d.definition, role: d.role, pains: d.pains, messageAngle: d.messageAngle, outcome: d.outcome }),
@@ -398,7 +399,7 @@ export function HomeChat() {
     const existing = store.messages.filter((m) => !m.brand || m.brand === brand).map((m) => m.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting messages for ${brand}` }] }])
-    const drafted = await draftMessages({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences, existing })
+    const drafted = await draftMessages({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences, existing, samples: brandLibrarySamples(brand) })
     drafted.forEach((d) =>
       addMessage({ brand, name: d.name, angle: d.angle, audience: d.audience, pillar: d.pillar, stage: (['awareness', 'consideration', 'conversion'].includes(d.stage) ? d.stage : '') as Message['stage'] }),
     )

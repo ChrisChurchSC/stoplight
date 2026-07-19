@@ -22,6 +22,9 @@ export interface DraftAudiencesInput {
   industry?: string
   existing?: string[]
   count?: number
+  /** The brand's real published copy + measured reach. When present, audiences are inferred from who
+   *  the content is actually written for (the people, roles, and needs it addresses). */
+  samples?: { text: string; channel?: string; reach?: number }[]
 }
 
 function heuristicAudiences(input: DraftAudiencesInput): DraftedAudience[] {

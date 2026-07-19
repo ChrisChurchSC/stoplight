@@ -21,6 +21,9 @@ export interface DraftMessagesInput {
   audiences?: string[]
   existing?: string[]
   count?: number
+  /** The brand's real published copy + measured reach. When present, message angles are drawn from the
+   *  themes and hooks the brand ACTUALLY uses, not just its description. */
+  samples?: { text: string; channel?: string; reach?: number }[]
 }
 
 function heuristicMessages(input: DraftMessagesInput): DraftedMessage[] {
