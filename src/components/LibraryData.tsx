@@ -93,20 +93,18 @@ export function LibraryData({
 
   return (
     <div className="ldata ldata-simple">
-      <header className="mtx-head">
-        <h2>Findings</h2>
-        <span className="mtx-sub">
-          {total} {total === 1 ? 'thing' : 'things'} the data can say about this brand right now. They update as the
-          library grows.
+      <div className="ldata-head">
+        <span className="ldata-head-label">
+          Findings <span className="ldata-head-count">{total}</span>
         </span>
         {synced && (
           <span className={`ldata-synced t-${synced.tone}`} title={synced.title}>
             <span className="ldata-synced-dot" aria-hidden="true" />
-            Data synced {synced.abs}
+            Synced {synced.abs}
             <span className="ldata-synced-rel"> · {synced.rel}</span>
           </span>
         )}
-      </header>
+      </div>
 
       <KpiBand items={items} />
       <FindingsCharts items={items} />

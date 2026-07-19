@@ -23399,6 +23399,16 @@ table.aud-sheet td.stick .aud-cell {
   min-width: 150px;
 }
 /* "Data synced" freshness chip on the Findings header — pushed to the far right. */
+/* Lighter "Findings" section header (the page header above already carries the title). */
+.ldata-head { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.ldata-head-label {
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-faint, #8a969b); display: inline-flex; align-items: center; gap: 7px;
+}
+.ldata-head-count {
+  font-size: 11px; font-weight: 700; letter-spacing: 0; color: var(--text-muted, #5a6b72);
+  background: var(--hover, #eef2f3); border-radius: 6px; padding: 1px 7px;
+}
 .ldata-synced {
   margin-left: auto;
   display: inline-flex;

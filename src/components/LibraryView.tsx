@@ -462,11 +462,13 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
   return (
     <div className="mtx">
       <header className="mtx-head">
-        <h2>{brand} · Library</h2>
+        <h2>{brand} · {mode === 'catalog' ? 'Library' : 'Insights'}</h2>
         <span className="mtx-sub">
-          {items.length > 0
-            ? `${num(published.length)} published ${published.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date${meetings.length ? ` · ${meetings.length} meeting ${meetings.length === 1 ? 'note' : 'notes'}` : ''}`
-            : 'Everything this brand has published, pulled from its connected channels'}
+          {mode !== 'catalog'
+            ? `${formatReach(totalReach)} reach across ${num(published.length)} published ${published.length === 1 ? 'asset' : 'assets'} · what the data says about ${brand} right now`
+            : items.length > 0
+              ? `${num(published.length)} published ${published.length === 1 ? 'asset' : 'assets'} · ${formatReach(totalReach)} reach to date${meetings.length ? ` · ${meetings.length} meeting ${meetings.length === 1 ? 'note' : 'notes'}` : ''}`
+              : 'Everything this brand has published, pulled from its connected channels'}
         </span>
         {mode === 'catalog' && !openFolder && (
           <button
