@@ -4,7 +4,7 @@ import { CHANNELS } from '../domain/channels'
 import type { ChannelId } from '../domain/types'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { AI_MODELS } from '../domain/aiModels'
-import { GUIDED_SETUP_SEED } from '../domain/guidedSetup'
+import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED } from '../domain/guidedSetup'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -232,6 +232,10 @@ export function HomeAgenda() {
             <button className="ag2-chip ag2-chip-primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
               Get started
+            </button>
+            <button className="ag2-chip" onClick={() => openHomeChat(BUILD_BRAND_SEED)}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
+              Build brand from content
             </button>
             <button className="ag2-chip" onClick={() => openHomeChat('Draft a new campaign for this brand')}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>

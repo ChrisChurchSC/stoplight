@@ -22,7 +22,7 @@ import { freshRecordId } from '../domain/records'
 import { newAudience } from '../domain/audiences'
 import type { Message } from '../domain/message'
 import { buildAskBrand } from '../lib/askBrand'
-import { GUIDED_SETUP_INTRO, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest } from '../domain/guidedSetup'
+import { BUILD_BRAND_SEED, GUIDED_SETUP_INTRO, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest } from '../domain/guidedSetup'
 import type { HomeChatMsg as Msg, HomeChatStep as Step, HomeChatStepKind as StepKind } from '../domain/homeChat'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
@@ -964,6 +964,7 @@ export function HomeChat() {
     if (homeChatSeed && seededRef.current !== homeChatSeed) {
       seededRef.current = homeChatSeed
       if (homeChatSeed === GUIDED_SETUP_SEED) startSetup()
+      else if (homeChatSeed === BUILD_BRAND_SEED) void buildBrandFromContent()
       else void run(homeChatSeed)
       useTrafficStore.setState({ homeChatSeed: null })
     }
