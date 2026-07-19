@@ -23,6 +23,8 @@ export interface HomeChatMsg {
   reportBrand?: string
   setupDone?: boolean
   offerSetup?: boolean
+  /** A single "do the next setup step" CTA the chat surfaces to steer the right order. */
+  guide?: { label: string; step: 'setup' | 'connect' | 'build' | 'gtm' | 'campaign' }
   /** Set on the message that announces just-drafted proof points, to render a "View proof points" link. */
   proofDone?: boolean
   /** Set on the message that announces just-added audiences, to render a "View audiences" link. */

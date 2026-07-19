@@ -948,6 +948,60 @@ export function HomeChat() {
     setBusy(false)
   }
 
+  // Steer setup in the dependency-correct order: connect (real data) -> build brand from content ->
+  // go-to-market -> campaign. Returns the next incomplete step for the active brand, so the chat can
+  // always point at the single best next thing rather than leaving every action equally available.
+  const nextSetupStep = (): { text: string; guide: NonNullable<Msg['guide']> } => {
+    const s = useTrafficStore.getState()
+    const brand = s.clientFilter
+    if (!brand || brand === 'all')
+      return { text: `Let's set up your first brand: name it and say what it does. Everything else builds from there.`, guide: { label: 'Get started', step: 'setup' } }
+    const rec = (s.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const website = (((s.clientProfiles[brand]?.website as string) || rec.website || '') as string).trim()
+    const connected = (s.brandActuals[brand]?.channels?.length ?? 0) > 0
+    const voices = s.voices.filter((v) => !v.brand || v.brand === brand).length
+    const audiences = (s.clientAudiences[brand] ?? []).length
+    const proof = (s.library.rtbs ?? []).length
+    const messages = s.messages.filter((m) => !m.brand || m.brand === brand).length
+    const foundation = voices > 0 && audiences > 0 && proof > 0 && messages > 0
+    const audienceChannels = (s.clientAudiences[brand] ?? []).some((a) => (a.channels?.length ?? 0) > 0)
+    const objectives = s.objectives.filter((o) => !o.brand || o.brand === brand).length
+    const gtm = audienceChannels && objectives > 0
+    const campaign = s.campaignList.some((c) => !c.archivedAt && c.client === brand && c.name !== CONTENT_LIBRARY_CAMPAIGN)
+
+    if (!connected)
+      return {
+        text: `Next for **${brand}**: connect your accounts (Google Analytics + Search Console, Resend) so everything after is built from real data, not guesses.${website ? '' : ` Add ${brand}'s website there too so I can pull your site.`} Open the account menu (bottom left), then Apps and integrations.`,
+        guide: { label: 'Open connectors', step: 'connect' },
+      }
+    if (!foundation)
+      return {
+        text: `Now build **${brand}**'s brand page from your real content: I'll pull your site and published work, then draft your audiences, voice, proof points, and messages from it.`,
+        guide: { label: 'Build brand from content', step: 'build' },
+      }
+    if (!gtm)
+      return {
+        text: `Foundation's set. Next, your go-to-market: which channels to use (weighted by your real traffic) and what to aim for.`,
+        guide: { label: 'Build go-to-market', step: 'gtm' },
+      }
+    if (!campaign)
+      return {
+        text: `You're set up. Draft your first campaign for **${brand}**, scoped to the audiences, channels, and objectives you just defined.`,
+        guide: { label: 'Draft a campaign', step: 'campaign' },
+      }
+    return { text: `**${brand}** is fully set up. Draft another campaign, or refine any part of the foundation.`, guide: { label: 'Draft a campaign', step: 'campaign' } }
+  }
+
+  const runGuideStep = (step: NonNullable<Msg['guide']>['step']) => {
+    if (step === 'setup') startSetup()
+    else if (step === 'connect') {
+      closeHomeChat()
+      setPage('connectors')
+    } else if (step === 'build') void buildBrandFromContent()
+    else if (step === 'gtm') startGtmFlow()
+    else if (step === 'campaign') startFlowBuild()
+  }
+
   // Initialize the thread once per conversation (the component is keyed by homeChatSession, so it
   // remounts on open/new/reopen). Reopening a saved chat hydrates its messages; a seeded question
   // runs it (or launches the guided setup); otherwise it's a blank new chat.
@@ -968,6 +1022,12 @@ export function HomeChat() {
       else if (homeChatSeed === BUILD_BRAND_SEED) void buildBrandFromContent()
       else void run(homeChatSeed)
       useTrafficStore.setState({ homeChatSeed: null })
+    } else if (!homeChatSeed && seededRef.current !== 'nudged') {
+      // Blank open (no seed, no saved chat): steer the user to the single best next setup step, so the
+      // chat always points at the right next thing in order instead of a wall of equal options.
+      seededRef.current = 'nudged'
+      const ns = nextSetupStep()
+      say(ns.text, { guide: ns.guide })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -988,6 +1048,7 @@ export function HomeChat() {
       reportBrand: m.reportBrand,
       setupDone: m.setupDone,
       offerSetup: m.offerSetup,
+      guide: m.guide,
       proofDone: m.proofDone,
       audienceDone: m.audienceDone,
       messageDone: m.messageDone,
@@ -1093,6 +1154,11 @@ export function HomeChat() {
                   {m.offerSetup && (
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => startSetup()}>Get started</button>
+                    </div>
+                  )}
+                  {m.guide && (
+                    <div className="hchat-setup-actions">
+                      <button className="hchat-setup-btn" onClick={() => runGuideStep(m.guide!.step)}>{m.guide.label}</button>
                     </div>
                   )}
                   {m.setupDone && (
