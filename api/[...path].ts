@@ -109,6 +109,34 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
     res.setHeader('location', `https://stoplight-ochre.vercel.app/?connected=${ok ? 'google' : 'error'}`)
     return res.end()
   }
+  // Resend connect: paste-key flow. POST { workspace, key } → stored against the workspace.
+  if (path === 'connect-resend') {
+    if (req.method !== 'POST') {
+      res.statusCode = 405
+      return res.end()
+    }
+    const raw =
+      typeof req.body === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(req.body as string)
+            } catch {
+              return {}
+            }
+          })()
+        : req.body ?? {}
+    const b = raw as { workspace?: string; key?: string }
+    let ok = false
+    try {
+      const { saveConnection } = await import('../server/connections.js')
+      ok = !!(b.workspace && b.key) && (await saveConnection(b.workspace, 'resend', { api_key: b.key }, {}))
+    } catch {
+      ok = false
+    }
+    res.statusCode = ok ? 200 : 400
+    res.setHeader('content-type', 'application/json')
+    return res.end(JSON.stringify({ ok }))
+  }
 
   const loader = HANDLERS[path]
   if (!loader) {

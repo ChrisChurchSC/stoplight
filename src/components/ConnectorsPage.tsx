@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getActiveWorkspaceId } from '../lib/session'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   siBuffer, siMeta, siX, siTiktok, siYoutube, siPinterest, siGoogleads, siGoogleanalytics,
   siGooglesearchconsole, siWebflow, siWordpress, siFramer, siShopify, siMailchimp, siHubspot,
@@ -151,6 +153,15 @@ const ICONS: Record<string, SI> = {
 // The picks worth suggesting first — the ones that close the create → publish → measure loop.
 const RECOMMENDED = new Set(['Buffer', 'Meta', 'LinkedIn', 'Meta Ads', 'Google Ads', 'Webflow', 'WordPress', 'Klaviyo', 'Mailchimp', 'Google Analytics', 'Search Console', 'Supermetrics', 'HubSpot', 'Attio', 'Slack', 'Figma', 'Google Drive', 'Zapier'])
 
+// Which page rows are backed by a REAL, wired connection. One Google OAuth covers GA4 + Search
+// Console + YouTube, so all three map to the 'google' provider; Resend is its own.
+const PROVIDER: Record<string, 'google' | 'resend'> = {
+  'Google Analytics': 'google',
+  'Search Console': 'google',
+  YouTube: 'google',
+  Resend: 'resend',
+}
+
 function LogoTile({ c }: { c: Connector }) {
   const ic = ICONS[c.name]
   const base: React.CSSProperties = { width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto' }
@@ -164,10 +175,11 @@ function LogoTile({ c }: { c: Connector }) {
   return <span style={{ ...base, background: c.color, color: c.light ? '#1a2023' : '#fff', fontWeight: 800, fontSize: 15 }}>{monogram(c.name)}</span>
 }
 
-function Row({ c, first, rec }: { c: Connector; first: boolean; rec?: boolean }) {
+function Row({ c, first, rec, connected, onConnect }: { c: Connector; first: boolean; rec?: boolean; connected: boolean; onConnect: () => void }) {
+  const wired = c.name in PROVIDER
   return (
     <button
-      onClick={() => { /* per-connector OAuth wiring is a follow-up */ }}
+      onClick={onConnect}
       style={{
         display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '13px 16px',
         background: 'transparent', border: 'none', borderTop: first ? 'none' : '1px dashed var(--border)',
@@ -182,9 +194,9 @@ function Row({ c, first, rec }: { c: Connector; first: boolean; rec?: boolean })
         </span>
         <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-muted, #5a6b72)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.desc}</span>
       </span>
-      {c.connected
+      {connected
         ? <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent, #0e6d84)', flex: '0 0 auto' }}>Connected</span>
-        : <span style={{ fontSize: 13, color: 'var(--text-muted, #5a6b72)', flex: '0 0 auto' }}>Connect</span>}
+        : <span style={{ fontSize: 13, fontWeight: wired ? 600 : 400, color: wired ? 'var(--accent, #0e6d84)' : 'var(--text-muted, #5a6b72)', flex: '0 0 auto' }}>Connect</span>}
       <span style={{ display: 'grid', placeItems: 'center', width: 16, color: 'var(--text-faint, #8a969b)', flex: '0 0 auto' }}><Chevron /></span>
     </button>
   )
@@ -201,6 +213,49 @@ export function ConnectorsPage() {
     window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500)
   }
 
+  // Real connection status for this workspace (Google + Resend), read from the floor-safe RPC.
+  const [wsId, setWsId] = useState<string | null>(null)
+  const [connected, setConnected] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const ws = await getActiveWorkspaceId()
+      if (!alive) return
+      setWsId(ws)
+      if (ws && isSupabaseConfigured && supabase) {
+        try {
+          const { data } = await supabase.rpc('connection_status', { ws })
+          if (alive && Array.isArray(data)) setConnected(new Set((data as { provider: string }[]).map((r) => r.provider)))
+        } catch {
+          /* migration not applied yet — everything reads disconnected */
+        }
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const startConnect = (name: string) => {
+    const p = PROVIDER[name]
+    if (!p || !wsId) return
+    if (p === 'google') {
+      window.location.href = `/api/google-connect?workspace=${encodeURIComponent(wsId)}`
+      return
+    }
+    if (p === 'resend') {
+      const key = window.prompt('Paste your Resend API key (starts with re_):')?.trim()
+      if (!key) return
+      void fetch('/api/connect-resend', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ workspace: wsId, key }),
+      }).then((r) => {
+        if (r.ok) setConnected((s) => new Set(s).add('resend'))
+      })
+    }
+  }
+
   const cardStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, background: 'var(--surface)', overflow: 'hidden', boxShadow: '0 1px 2px rgba(16,24,40,.04)' }
   const sectionLabel: React.CSSProperties = { fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-faint, #8a969b)', margin: '28px 2px 10px' }
 
@@ -214,7 +269,11 @@ export function ConnectorsPage() {
           <div key={g.label}>
             <div style={sectionLabel}>{g.label} <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, color: 'var(--text-faint,#8a969b)' }}>· {g.blurb}</span></div>
             <div style={cardStyle}>
-              {g.items.map((c, i) => <Row key={c.name} c={c} first={i === 0} rec={RECOMMENDED.has(c.name)} />)}
+              {g.items.map((c, i) => {
+                const prov = PROVIDER[c.name]
+                const isConn = !!c.connected || (prov ? connected.has(prov) : false)
+                return <Row key={c.name} c={c} first={i === 0} rec={RECOMMENDED.has(c.name)} connected={isConn} onConnect={() => startConnect(c.name)} />
+              })}
             </div>
           </div>
         ))}
