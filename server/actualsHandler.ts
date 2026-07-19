@@ -25,6 +25,7 @@
  */
 
 import { runGoogleActuals } from './ga4Actuals.js'
+import { runResendActuals } from './resendActuals.js'
 
 const BASE = process.env.SUPERMETRICS_BASE || 'https://api.supermetrics.com'
 const SINCE_DAYS = Number(process.env.SUPERMETRICS_SINCE_DAYS) || 90
@@ -113,10 +114,22 @@ async function runChannel(q: ChannelQuery, from: string): Promise<ChannelActual 
   }
 }
 
-/** Fetch a brand's real channel actuals. Google-direct first (free), then Supermetrics. Null if neither. */
+/** Fetch a brand's real channel actuals. Merges Google-direct (GA4/GSC/YouTube) + Resend (email);
+ *  falls back to Supermetrics only when neither returned anything. Null when nothing is configured. */
 export async function runActuals(brand: string): Promise<BrandActuals | null> {
-  const google = await runGoogleActuals(brand).catch(() => null)
-  if (google) return google
+  const [google, resend] = await Promise.all([
+    runGoogleActuals(brand).catch(() => null),
+    runResendActuals(brand).catch(() => null),
+  ])
+  const collected = [google, resend].filter((r): r is BrandActuals => !!r)
+  if (collected.length) {
+    return {
+      updatedAt: Date.now(),
+      source: collected.length === 1 ? collected[0].source : 'Multi',
+      sources: [...new Set(collected.flatMap((r) => r.sources ?? [r.source]))],
+      channels: collected.flatMap((r) => r.channels),
+    }
+  }
   if (!process.env.SUPERMETRICS_API_KEY) return null
   const queries = queriesFor(brand)
   if (!queries.length) return null
