@@ -1,18 +1,12 @@
 import { useEffect, useState } from 'react'
 import { getActiveWorkspaceId } from '../lib/session'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import {
-  siBuffer, siMeta, siX, siTiktok, siYoutube, siPinterest, siGoogleads, siGoogleanalytics,
-  siGooglesearchconsole, siWebflow, siWordpress, siFramer, siShopify, siMailchimp, siHubspot,
-  siFigma, siGoogledrive, siDropbox, siZapier, siMake,
-  siGhost, siSanity, siResend, siFormspree, siMixpanel,
-} from 'simple-icons'
+import { siGoogleanalytics, siGooglesearchconsole, siYoutube, siResend } from 'simple-icons'
 
 /**
- * Connectors — the integrations page. Grouped by the job each does in the create → publish →
- * measure loop (Publishing, Paid ads, CMS, Email, Analytics, CRM, Assets, Automation), plus the
- * API keys and the MCP connect card. Presentational for now: rows show status + a Connect affordance;
- * wiring real OAuth is per-connector work.
+ * Connectors: the integrations page. Shows only the connectors that are actually wired today:
+ * Google (one sign-in covers GA4 + Search Console + YouTube analytics) and Resend. Live status comes
+ * from the connection_status RPC; connecting runs the real OAuth / key flow in startConnect.
  */
 
 type Connector = { name: string; desc: string; color: string; light?: boolean; connected?: boolean }
@@ -20,108 +14,18 @@ type Group = { label: string; blurb: string; items: Connector[] }
 
 const GROUPS: Group[] = [
   {
-    label: 'Publishing',
-    blurb: 'Where generated posts ship',
-    items: [
-      { name: 'Buffer', desc: 'Schedule and publish generated posts', color: '#2C4BFF', connected: true },
-      { name: 'Meta', desc: 'Publish to Instagram & Facebook', color: '#0866FF' },
-      { name: 'LinkedIn', desc: 'Publish company posts & documents', color: '#0A66C2' },
-      { name: 'X', desc: 'Publish posts and threads', color: '#111111' },
-      { name: 'TikTok', desc: 'Publish videos and photo posts', color: '#FE2C55' },
-      { name: 'YouTube', desc: 'Publish videos & community posts', color: '#FF0000' },
-      { name: 'Pinterest', desc: 'Publish pins', color: '#E60023' },
-    ],
-  },
-  {
-    label: 'Paid ads',
-    blurb: 'Push creative, import live ads, pull spend',
-    items: [
-      { name: 'Meta Ads', desc: 'Ad creative, live ads & spend', color: '#0866FF' },
-      { name: 'Google Ads', desc: 'Search / PMax creative & performance', color: '#4285F4' },
-      { name: 'LinkedIn Ads', desc: 'B2B ad creative & metrics', color: '#0A66C2' },
-      { name: 'TikTok Ads', desc: 'Video ad creative & metrics', color: '#FE2C55' },
-    ],
-  },
-  {
-    label: 'CMS & web',
-    blurb: 'Where SEO / landing-page flows publish',
-    items: [
-      { name: 'Webflow', desc: 'Publish landing & SEO pages', color: '#4353FF' },
-      { name: 'WordPress', desc: 'Publish articles & pages', color: '#21759B' },
-      { name: 'Ghost', desc: 'Publish articles & newsletters', color: '#15171A' },
-      { name: 'Sanity', desc: 'Publish to your headless CMS', color: '#F03E2F' },
-      { name: 'Framer', desc: 'Publish landing pages', color: '#0055FF' },
-      { name: 'Shopify', desc: 'Publish product & collection pages', color: '#95BF47' },
-    ],
-  },
-  {
-    label: 'Email & lifecycle',
-    blurb: 'Where lifecycle flows send',
-    items: [
-      { name: 'Klaviyo', desc: 'Send lifecycle & campaign emails', color: '#232323' },
-      { name: 'Mailchimp', desc: 'Send campaigns & newsletters', color: '#FFE01B', light: true },
-      { name: 'Customer.io', desc: 'Trigger lifecycle journeys', color: '#7131FF' },
-      { name: 'Resend', desc: 'Send transactional & product email', color: '#000000' },
-      { name: 'Braze', desc: 'Cross-channel lifecycle messaging', color: '#801ED7' },
-    ],
-  },
-  {
     label: 'Analytics',
-    blurb: 'Closes the loop — feeds Insights & attribution',
+    blurb: 'One Google sign-in covers all three',
     items: [
       { name: 'Google Analytics', desc: 'Sessions & conversions into Insights', color: '#E8710A' },
-      { name: 'Mixpanel', desc: 'Product & conversion events', color: '#7856FF' },
       { name: 'Search Console', desc: 'SEO impressions & clicks', color: '#4285F4' },
-      { name: 'Meta Insights', desc: 'Organic social performance', color: '#0866FF' },
+      { name: 'YouTube', desc: 'Views, watch time & subscribers', color: '#FF0000' },
     ],
   },
   {
-    label: 'Data pipeline',
-    blurb: 'Aggregate marketing data across every source',
-    items: [
-      { name: 'Supermetrics', desc: 'Pull marketing data into sheets, BI & warehouses', color: '#E6398A' },
-      { name: 'Funnel', desc: 'Collect & normalize spend across channels', color: '#FF5A36' },
-      { name: 'Fivetran', desc: 'Sync sources to your warehouse', color: '#0073FF' },
-      { name: 'Segment', desc: 'Customer data platform & event pipeline', color: '#4FB58B' },
-      { name: 'Summer.io', desc: 'Aggregate & model marketing data', color: '#F5A623', light: true },
-    ],
-  },
-  {
-    label: 'CRM',
-    blurb: 'Accounts & contacts for ABM (Companies / People)',
-    items: [
-      { name: 'HubSpot', desc: 'Sync accounts, contacts & pipeline', color: '#FF7A59' },
-      { name: 'Salesforce', desc: 'Sync accounts & opportunities', color: '#00A1E0' },
-      { name: 'Attio', desc: 'Sync companies & people', color: '#111111', connected: true },
-      { name: 'Pipedrive', desc: 'Sync deals & contacts', color: '#017737' },
-    ],
-  },
-  {
-    label: 'Assets & design',
-    blurb: 'Pull brand assets, push creative',
-    items: [
-      { name: 'Figma', desc: 'Pull brand assets & designs', color: '#F24E1E' },
-      { name: 'Canva', desc: 'Pull & push creative', color: '#00C4CC' },
-      { name: 'Google Drive', desc: 'Pull brand files & assets', color: '#1FA463', connected: true },
-      { name: 'Dropbox', desc: 'Pull brand files & assets', color: '#0061FF' },
-    ],
-  },
-  {
-    label: 'Notifications & approvals',
-    blurb: 'Where the team gets pinged — ship alerts, approvals, digests',
-    items: [
-      { name: 'Slack', desc: 'Approvals, ship alerts & digests', color: '#4A154B' },
-      { name: 'Microsoft Teams', desc: 'Approvals & alerts in Teams', color: '#6264A7' },
-    ],
-  },
-  {
-    label: 'Automation',
-    blurb: 'Glue for the long tail',
-    items: [
-      { name: 'Formspree', desc: 'Capture form & landing-page leads', color: '#E5122E' },
-      { name: 'Zapier', desc: 'Connect to thousands of apps', color: '#FF4A00' },
-      { name: 'Make', desc: 'Build custom automations', color: '#6D00CC' },
-    ],
+    label: 'Email',
+    blurb: 'Send transactional & product email',
+    items: [{ name: 'Resend', desc: 'Send transactional & product email', color: '#000000' }],
   },
 ]
 
@@ -133,25 +37,13 @@ const Chevron = () => (
   </svg>
 )
 
-// LinkedIn was pulled from simple-icons on trademark request, so supply its mark.
-const LINKEDIN_PATH =
-  'M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z'
-
 type SI = { path: string; hex: string }
-const LI: SI = { path: LINKEDIN_PATH, hex: '0A66C2' }
-// Real brand marks from simple-icons; anything missing there falls back to a monogram tile.
+// Brand marks from simple-icons; anything missing falls back to a monogram tile.
 const ICONS: Record<string, SI> = {
-  Buffer: siBuffer, Meta: siMeta, LinkedIn: LI, X: siX, TikTok: siTiktok, YouTube: siYoutube, Pinterest: siPinterest,
-  'Meta Ads': siMeta, 'Google Ads': siGoogleads, 'LinkedIn Ads': LI, 'TikTok Ads': siTiktok,
-  Webflow: siWebflow, WordPress: siWordpress, Ghost: siGhost, Sanity: siSanity, Framer: siFramer, Shopify: siShopify,
-  Mailchimp: siMailchimp, Resend: siResend,
-  'Google Analytics': siGoogleanalytics, Mixpanel: siMixpanel, 'Search Console': siGooglesearchconsole, 'Meta Insights': siMeta,
-  HubSpot: siHubspot,
-  Figma: siFigma, 'Google Drive': siGoogledrive, Dropbox: siDropbox,
-  Formspree: siFormspree, Zapier: siZapier, Make: siMake,
+  'Google Analytics': siGoogleanalytics, 'Search Console': siGooglesearchconsole, YouTube: siYoutube, Resend: siResend,
 }
-// The picks worth suggesting first — the ones that close the create → publish → measure loop.
-const RECOMMENDED = new Set(['Buffer', 'Meta', 'LinkedIn', 'Meta Ads', 'Google Ads', 'Webflow', 'WordPress', 'Klaviyo', 'Mailchimp', 'Google Analytics', 'Search Console', 'Supermetrics', 'HubSpot', 'Attio', 'Slack', 'Figma', 'Google Drive', 'Zapier'])
+// No "Recommended" badges: these are the only connectors, so the label would be noise.
+const RECOMMENDED = new Set<string>()
 
 // Which page rows are backed by a REAL, wired connection. One Google OAuth covers GA4 + Search
 // Console + YouTube, so all three map to the 'google' provider; Resend is its own.
@@ -263,7 +155,7 @@ export function ConnectorsPage() {
     <div className="page">
       <div className="page-body" style={{ maxWidth: 860, margin: '0 auto', width: '100%', padding: '36px 24px 80px' }}>
         <h1 style={{ fontSize: 30, fontWeight: 700, margin: '0 0 4px', color: 'var(--text, #1a2023)' }}>Connectors</h1>
-        <p style={{ fontSize: 15, color: 'var(--text-muted, #5a6b72)', margin: 0 }}>Connect your marketing stack — publish content, sync records, and pull performance back in.</p>
+        <p style={{ fontSize: 15, color: 'var(--text-muted, #5a6b72)', margin: 0 }}>Connect your accounts so real performance flows into Insights and Reports.</p>
 
         {GROUPS.map((g) => (
           <div key={g.label}>
@@ -277,29 +169,6 @@ export function ConnectorsPage() {
             </div>
           </div>
         ))}
-
-        {/* API */}
-        <div style={sectionLabel}>API</div>
-        <div style={cardStyle}>
-          <button onClick={() => { /* keys UI */ }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '13px 16px', background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', background: 'var(--hover,#eef2f3)', color: 'var(--text-muted,#5a6b72)', fontWeight: 700, fontSize: 13 }}>{'</>'}</span>
-            <span style={{ flex: 1 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text,#1a2023)' }}>Personal API keys</span>
-              <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-muted,#5a6b72)' }}>Manage keys for programmatic access</span>
-            </span>
-            <span style={{ display: 'grid', placeItems: 'center', width: 16, color: 'var(--text-faint,#8a969b)' }}><Chevron /></span>
-          </button>
-          <button onClick={() => { /* keys UI */ }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '13px 16px', background: 'transparent', border: 'none', borderTop: '1px dashed var(--border)', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', background: 'var(--hover,#eef2f3)', color: 'var(--text-muted,#5a6b72)' }}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 14.5 14.5 9.5" /><path d="M11 6.5 12 5.5a3.5 3.5 0 0 1 5 5l-1 1" /><path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1" /></svg>
-            </span>
-            <span style={{ flex: 1 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text,#1a2023)' }}>Workspace API keys <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted,#5a6b72)', background: 'var(--hover,#eef2f3)', borderRadius: 6, padding: '1px 6px', marginLeft: 4 }}>Admins only</span></span>
-              <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-muted,#5a6b72)' }}>Admin-managed keys with workspace API access</span>
-            </span>
-            <span style={{ display: 'grid', placeItems: 'center', width: 16, color: 'var(--text-faint,#8a969b)' }}><Chevron /></span>
-          </button>
-        </div>
 
         {/* MCP */}
         <div style={sectionLabel}>MCP</div>
