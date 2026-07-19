@@ -4688,18 +4688,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // Already imported (same URL): refresh its metrics in place rather than duplicate.
       const existing = norm.sourceUrl ? byUrl.get(norm.sourceUrl) : undefined
       if (existing) {
+        // Re-import refreshes metrics AND backfills brand scoping onto rows imported before rows
+        // carried their own client (so an existing orphaned library row gets attributed on re-ingest).
+        const patch: Partial<TrafficRow> = existing.client === brand ? {} : { client: brand }
         if (norm.metrics) {
-          updates.push({
-            id: existing.id,
-            patch: {
-              socialMetrics: norm.metrics,
-              engagement: engagementFromMetrics(norm.metrics) ?? existing.engagement,
-              metricsUpdatedAt: norm.metricsUpdatedAt ?? Date.now(),
-            },
-          })
-        } else {
-          skipped++
+          patch.socialMetrics = norm.metrics
+          patch.engagement = engagementFromMetrics(norm.metrics) ?? existing.engagement
+          patch.metricsUpdatedAt = norm.metricsUpdatedAt ?? Date.now()
         }
+        if (Object.keys(patch).length) updates.push({ id: existing.id, patch })
+        else skipped++
         continue
       }
       const channel = norm.channel
@@ -4741,7 +4739,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         mediaType: norm.mediaRefs?.length ? 'image' : 'image',
         messaging,
         campaign: c,
-        audience: norm.audience ?? '',
+        client: brand,
+        audience: (norm.audience ?? '').trim() || (get().clientAudiences[brand]?.[0]?.name ?? ''),
         ...(norm.stage ? { funnelStage: norm.stage } : {}),
         status,
         scheduledAt: norm.publishedAt || new Date().toISOString(),

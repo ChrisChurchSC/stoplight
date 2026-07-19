@@ -139,12 +139,12 @@ export function buildOutcomeMap(rows: TrafficRow[], opts: OutcomeMapOpts): Outco
 
   const audienceFor = (r: TrafficRow): string => {
     if (r.audience?.trim()) return r.audience.trim()
-    const client = clientForCampaign(r.campaign)
+    const client = r.client?.trim() || clientForCampaign(r.campaign)
     return opts.clientAudiences[client]?.[0]?.name?.trim() || UNSEGMENTED
   }
 
   return rows.map((r) => {
-    const client = clientForCampaign(r.campaign)
+    const client = r.client?.trim() || clientForCampaign(r.campaign)
     const n = variantsPerAsset.get(r.assetName) ?? 1
     const attr = mockAttio.attributionForAsset(r.assetName)
     const live = r.status === 'posted'

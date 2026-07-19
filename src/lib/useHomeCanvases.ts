@@ -61,31 +61,42 @@ export function useHomeCanvases(): {
         ...campaignList.filter((c) => !c.archivedAt).map((c) => c.name),
       ]),
     ]
-    return names.map((name) => {
-      const cRows = live.filter((r) => (r.campaign ?? '').trim() === name)
-      const client = clientForCampaign(name)
-      const rtbPool = (brandSystems[client]?.rtbs ?? []).map((r) => ({ id: r.id, label: r.label }))
-      const assetNames = new Set(cRows.map((r) => r.assetName))
-      let revenue = 0
-      for (const n of assetNames) revenue += mockAttio.attributionForAsset(n).wonRevenue
-      const spend = cRows.reduce((a, r) => a + (r.spend?.toDate ?? 0), 0)
-      const breaks = allBreaks.filter(
-        (b) => b.campaign === name || assetNames.has(b.from.assetName) || (b.to ? assetNames.has(b.to.assetName) : false),
-      )
-      const attention = campaignAttention({ rows: cRows, breaks, roas: spend > 0 ? revenue / spend : null, spend })
-      return {
-        name,
-        client,
-        status: deriveCampaignStatus(meta.get(name), cRows),
-        rows: cRows,
-        lastTouched: cRows.reduce((m, r) => Math.max(m, r.postedAt ?? r.createdAt ?? 0), 0),
-        flagged: attention.count > 0,
-        attention,
-        spend,
-        revenue,
-        goal: resolveCampaignGoal(meta.get(name), cRows, rtbPool),
-        folder: meta.get(name)?.folder,
-      }
+    return names.flatMap((name) => {
+      const cRowsAll = live.filter((r) => (r.campaign ?? '').trim() === name)
+      // The library bucket ("Published content") holds EVERY brand's ingested content in one shared
+      // campaign, so split it into one canvas per brand (its rows carry their own `client`). Every
+      // other campaign is a single canvas keyed by the campaign's client.
+      const groups =
+        name === CONTENT_LIBRARY_CAMPAIGN && cRowsAll.some((r) => r.client)
+          ? [...new Set(cRowsAll.map((r) => (r.client || clientForCampaign(name)).trim()).filter(Boolean))].map((cl) => ({
+              client: cl,
+              rows: cRowsAll.filter((r) => (r.client || clientForCampaign(name)).trim() === cl),
+            }))
+          : [{ client: clientForCampaign(name), rows: cRowsAll }]
+      return groups.map(({ client, rows: cRows }) => {
+        const rtbPool = (brandSystems[client]?.rtbs ?? []).map((r) => ({ id: r.id, label: r.label }))
+        const assetNames = new Set(cRows.map((r) => r.assetName))
+        let revenue = 0
+        for (const n of assetNames) revenue += mockAttio.attributionForAsset(n).wonRevenue
+        const spend = cRows.reduce((a, r) => a + (r.spend?.toDate ?? 0), 0)
+        const breaks = allBreaks.filter(
+          (b) => b.campaign === name || assetNames.has(b.from.assetName) || (b.to ? assetNames.has(b.to.assetName) : false),
+        )
+        const attention = campaignAttention({ rows: cRows, breaks, roas: spend > 0 ? revenue / spend : null, spend })
+        return {
+          name,
+          client,
+          status: deriveCampaignStatus(meta.get(name), cRows),
+          rows: cRows,
+          lastTouched: cRows.reduce((m, r) => Math.max(m, r.postedAt ?? r.createdAt ?? 0), 0),
+          flagged: attention.count > 0,
+          attention,
+          spend,
+          revenue,
+          goal: resolveCampaignGoal(meta.get(name), cRows, rtbPool),
+          folder: meta.get(name)?.folder,
+        }
+      })
     })
   }, [rows, campaignList, breakStatus, brandSystems])
 

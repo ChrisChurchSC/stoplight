@@ -124,6 +124,9 @@ export interface TrafficRow {
    * → contact → pipeline. Maps to a HubSpot/Salesforce campaign object.
    */
   campaign?: string
+  /** The brand/client this row belongs to. Normally derived from the campaign, but ingested library
+   *  content lives in one shared bucket campaign, so it carries its brand explicitly for scoping. */
+  client?: string
   /**
    * Audience / segment for targeting. For paid channels this is the CRM-synced
    * segment (Meta Custom Audience, LinkedIn Matched Audience, etc.).
