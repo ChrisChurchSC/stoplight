@@ -17,6 +17,9 @@ export interface DraftChannelsInput {
   audiences?: string[]
   /** The exact channel labels the app supports; the AI must pick from these. */
   channelOptions: string[]
+  /** Live traffic mix from connected analytics (GA4 / Search Console): how audiences reach this brand
+   *  today. When present, the recommender weights toward proven sources and flags underused ones. */
+  performance?: { label: string; reach: number; reachUnit: string; engagement?: number }[]
 }
 
 function heuristicChannels(input: DraftChannelsInput): RecommendedChannel[] {

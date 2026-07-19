@@ -30,12 +30,17 @@ const CHANNEL_SCHEMA = {
 
 const SYSTEM = `You recommend the marketing CHANNELS a brand should focus on.
 
-CRITICAL, derive your picks ONLY from the description provided (one-liner, positioning, business objective, industry) and its audiences. The brand NAME may be evocative; never infer the product from it.
+Derive your picks from (a) the brand description (one-liner, positioning, business objective, industry) and its audiences, and (b) when provided, the brand's CURRENT TRAFFIC MIX from connected analytics, which shows how its audiences actually reach it today. The brand NAME may be evocative; never infer the product from it.
 
-You are given the exact list of channels the platform supports. PICK ONLY from that list, using the channel's label verbatim in "name". Choose the 4 to 6 channels that best fit this brand and how its audiences discover and buy. For each, give a one-line "why" tied to the brand and audience.
+You are given the exact list of channels the platform supports. PICK ONLY from that list, using the channel's label verbatim in "name". Choose the 4 to 6 channels that best fit this brand and how its audiences discover and buy. For each, give a one-line "why".
+
+When a current traffic mix is provided, treat it as evidence, not decoration:
+- Lean into channels that map to the brand's strongest, most-engaged sources (strong Organic Search -> SEO / blog / website; strong Organic Social -> the social channels; strong Referral -> partnerships; strong Paid -> the matching paid channel).
+- Call out a high-potential but underused source as an opportunity to scale.
+- In each "why", when the data supports the pick, reference the real signal in plain words (e.g. "Organic Search is your second-largest and most-engaged source"). Use ONLY the numbers you were given; never invent metrics or benchmarks.
 
 Rules:
-- Do NOT invent channels that are not in the provided list. Do NOT invent metrics or benchmark numbers.
+- Do NOT invent channels that are not in the provided list. Do NOT invent metrics or benchmark numbers beyond what you were given.
 - Prefer a focused mix over listing everything; quality of fit over quantity.
 - No em dashes anywhere. Return ONLY the structured object.`
 
@@ -47,7 +52,7 @@ export async function runDraftChannels(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { brand, oneLiner, positioning, businessObjective, industry, audiences, channelOptions } =
+  const { brand, oneLiner, positioning, businessObjective, industry, audiences, channelOptions, performance } =
     (body ?? {}) as {
       brand?: string
       oneLiner?: string
@@ -56,9 +61,16 @@ export async function runDraftChannels(body: unknown): Promise<unknown> {
       industry?: string
       audiences?: string[]
       channelOptions?: string[]
+      performance?: { label?: string; reach?: number; reachUnit?: string; engagement?: number }[]
     }
 
   const options = (channelOptions ?? []).filter(Boolean)
+  const perf = (performance ?? []).filter((p) => p && p.label)
+  const perfBlock = perf.length
+    ? `Current traffic mix (connected analytics, last 90 days) — how audiences reach this brand today:\n${perf
+        .map((p) => `- ${p.label}: ${p.reach ?? 0} ${p.reachUnit ?? ''}${p.engagement != null ? ` (${p.engagement} engaged)` : ''}`)
+        .join('\n')}`
+    : 'Current traffic mix: (no connected analytics yet — recommend from the description alone)'
 
   const userContent = `Brand name (do NOT infer the product from this): ${brand ?? ''}
 
@@ -69,10 +81,12 @@ Business objective: ${businessObjective || '(none)'}
 Industry: ${industry || '(none)'}
 Audiences: ${(audiences ?? []).join(', ') || '(none given)'}
 
+${perfBlock}
+
 Channels you may pick from (use the label verbatim in "name"):
 ${options.map((o) => `- ${o}`).join('\n')}
 
-Recommend the 4 to 6 best-fit channels for this brand.`
+Recommend the 4 to 6 best-fit channels for this brand. When the traffic mix above has data, weight your picks toward what is proven and flag any underused high-potential source.`
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({

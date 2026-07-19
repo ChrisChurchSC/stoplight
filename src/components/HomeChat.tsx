@@ -428,7 +428,9 @@ export function HomeChat() {
     const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Choosing channels for ${brand}` }] }])
-    const recs = await draftChannels({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences: audiences.map((a) => a.name), channelOptions: CHANNEL_LIST.map((c) => c.label) })
+    // Feed the brand's live traffic mix (connected analytics) so channel picks weight toward what works.
+    const perf = (store.brandActuals[brand]?.channels ?? []).map((c) => ({ label: c.label, reach: c.reach, reachUnit: c.reachUnit, engagement: c.engagement }))
+    const recs = await draftChannels({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences: audiences.map((a) => a.name), channelOptions: CHANNEL_LIST.map((c) => c.label), performance: perf.length ? perf : undefined })
     // Resolve recommended labels to channel ids and assign them to the pursued audiences (union with any set).
     const ids = [...new Set(recs.map((r) => resolveChannelId(r.name)).filter((x): x is NonNullable<typeof x> => !!x))]
     if (ids.length && audiences.length) {
