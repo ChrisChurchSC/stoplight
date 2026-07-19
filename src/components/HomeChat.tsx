@@ -6,6 +6,7 @@ import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
+import { readAggregatePatterns } from '../adapters/aggregate/aggregateOutcomes'
 import { ingestSite } from '../adapters/ask/ingestSite'
 import { CHANNELS, CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { DELIVERABLE_PRESETS, presetByKey } from '../domain/flows'
@@ -432,7 +433,15 @@ export function HomeChat() {
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Choosing channels for ${brand}` }] }])
     // Feed the brand's live traffic mix (connected analytics) so channel picks weight toward what works.
     const perf = (store.brandActuals[brand]?.channels ?? []).map((c) => ({ label: c.label, reach: c.reach, reachUnit: c.reachUnit, engagement: c.engagement }))
-    const recs = await draftChannels({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences: audiences.map((a) => a.name), channelOptions: CHANNEL_LIST.map((c) => c.label), performance: perf.length ? perf : undefined })
+    // Cross-customer learning: channels proven for similar personas, floor-gated + anonymized. Empty
+    // until the pool clears the floor, so this is a no-op until enough customers have contributed.
+    const pooled = await readAggregatePatterns().catch(() => [])
+    const patterns = pooled
+      .filter((p) => p.dimension === 'channel')
+      .map((p) => ({ attribute: p.attribute, archetype: p.archetype, customers: p.customers, outcomePerVariant: p.variants ? p.outcome / p.variants : p.outcome }))
+      .sort((a, b) => b.outcomePerVariant - a.outcomePerVariant)
+      .slice(0, 8)
+    const recs = await draftChannels({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences: audiences.map((a) => a.name), channelOptions: CHANNEL_LIST.map((c) => c.label), performance: perf.length ? perf : undefined, patterns: patterns.length ? patterns : undefined })
     // Resolve recommended labels to channel ids and assign them to the pursued audiences (union with any set).
     const ids = [...new Set(recs.map((r) => resolveChannelId(r.name)).filter((x): x is NonNullable<typeof x> => !!x))]
     if (ids.length && audiences.length) {

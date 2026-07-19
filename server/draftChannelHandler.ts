@@ -39,6 +39,8 @@ When a current traffic mix is provided, treat it as evidence, not decoration:
 - Call out a high-potential but underused source as an opportunity to scale.
 - In each "why", when the data supports the pick, reference the real signal in plain words (e.g. "Organic Search is your second-largest and most-engaged source"). Use ONLY the numbers you were given; never invent metrics or benchmarks.
 
+When CROSS-CUSTOMER LEARNING is provided (anonymized channels that drove outcomes for similar personas across many customers), give extra weight to channels proven to work for the matching persona, and say so plainly in the "why" (e.g. "proven channel for this persona across similar accounts"). It is aggregate evidence, not this brand's own numbers; never cite a specific customer or figure you were not given.
+
 Rules:
 - Do NOT invent channels that are not in the provided list. Do NOT invent metrics or benchmark numbers beyond what you were given.
 - Prefer a focused mix over listing everything; quality of fit over quantity.
@@ -52,7 +54,7 @@ export async function runDraftChannels(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { brand, oneLiner, positioning, businessObjective, industry, audiences, channelOptions, performance } =
+  const { brand, oneLiner, positioning, businessObjective, industry, audiences, channelOptions, performance, patterns } =
     (body ?? {}) as {
       brand?: string
       oneLiner?: string
@@ -62,6 +64,7 @@ export async function runDraftChannels(body: unknown): Promise<unknown> {
       audiences?: string[]
       channelOptions?: string[]
       performance?: { label?: string; reach?: number; reachUnit?: string; engagement?: number }[]
+      patterns?: { attribute?: string; archetype?: string; customers?: number; outcomePerVariant?: number }[]
     }
 
   const options = (channelOptions ?? []).filter(Boolean)
@@ -71,6 +74,12 @@ export async function runDraftChannels(body: unknown): Promise<unknown> {
         .map((p) => `- ${p.label}: ${p.reach ?? 0} ${p.reachUnit ?? ''}${p.engagement != null ? ` (${p.engagement} engaged)` : ''}`)
         .join('\n')}`
     : 'Current traffic mix: (no connected analytics yet — recommend from the description alone)'
+  const pats = (patterns ?? []).filter((p) => p && p.attribute)
+  const patternsBlock = pats.length
+    ? `\nCross-customer learning (anonymized, each backed by multiple customers) — channels that drove the best outcomes for similar personas:\n${pats
+        .map((p) => `- ${p.attribute} (persona: ${p.archetype ?? 'general'}) — across ${p.customers ?? 0} customers`)
+        .join('\n')}`
+    : ''
 
   const userContent = `Brand name (do NOT infer the product from this): ${brand ?? ''}
 
@@ -82,11 +91,12 @@ Industry: ${industry || '(none)'}
 Audiences: ${(audiences ?? []).join(', ') || '(none given)'}
 
 ${perfBlock}
+${patternsBlock}
 
 Channels you may pick from (use the label verbatim in "name"):
 ${options.map((o) => `- ${o}`).join('\n')}
 
-Recommend the 4 to 6 best-fit channels for this brand. When the traffic mix above has data, weight your picks toward what is proven and flag any underused high-potential source.`
+Recommend the 4 to 6 best-fit channels for this brand. When the traffic mix above has data, weight your picks toward what is proven and flag any underused high-potential source. When cross-customer learning is present, favor channels proven for the matching persona.`
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({

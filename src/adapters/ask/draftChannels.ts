@@ -20,6 +20,9 @@ export interface DraftChannelsInput {
   /** Live traffic mix from connected analytics (GA4 / Search Console): how audiences reach this brand
    *  today. When present, the recommender weights toward proven sources and flags underused ones. */
   performance?: { label: string; reach: number; reachUnit: string; engagement?: number }[]
+  /** Anonymized cross-customer learning (floor-gated): channels proven to drive outcomes for a given
+   *  persona archetype, each backed by N distinct customers. Empty until the pool clears the floor. */
+  patterns?: { attribute: string; archetype: string; customers: number; outcomePerVariant: number }[]
 }
 
 function heuristicChannels(input: DraftChannelsInput): RecommendedChannel[] {
