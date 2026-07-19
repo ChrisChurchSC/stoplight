@@ -218,9 +218,10 @@ export function HomeSidebar() {
   const railed = flowCanvasOpen || sidebarCollapsed
 
   const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
-  const [chatsOpen, setChatsOpen] = useState(true)
-  // Workflow sections (Build / Foundation / Go-to-market / Measure) — all open by default.
-  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['Foundation', 'Prospects', 'Go-to-market']))
+  const [chatsOpen, setChatsOpen] = useState(false)
+  // Workflow sections (Foundation / Prospects / Go-to-market) — collapsed by default so the nav starts
+  // compact; the user expands what they need.
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set<string>())
   const toggleSection = (label: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
