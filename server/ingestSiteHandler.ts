@@ -59,15 +59,25 @@ async function fetchPage(url: string): Promise<Page | null> {
   }
 }
 
-async function sitemapUrls(origin: string): Promise<string[]> {
+async function fetchSitemap(url: string): Promise<string[]> {
   try {
-    const res = await fetch(new URL('/sitemap.xml', origin).href, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(6000) })
+    const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(6000) })
     if (!res.ok) return []
     const xml = await res.text()
     return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1].trim())
   } catch {
     return []
   }
+}
+
+async function sitemapUrls(origin: string): Promise<string[]> {
+  const top = await fetchSitemap(new URL('/sitemap.xml', origin).href)
+  // A sitemap INDEX points at more sitemaps (.xml locs); follow one level and collect their pages so a
+  // site that splits its sitemap (pages, posts, products, ...) is fully discovered, not just its index.
+  const subs = top.filter((l) => /\.xml($|\?)/i.test(l)).slice(0, 25)
+  if (!subs.length) return top
+  const nested = await Promise.all(subs.map(fetchSitemap))
+  return [...new Set([...top.filter((l) => !/\.xml($|\?)/i.test(l)), ...nested.flat()])]
 }
 
 const SKIP = /\.(jpg|jpeg|png|gif|webp|svg|pdf|xml|css|js|ico|zip|mp4|woff2?)($|\?)/i
@@ -79,7 +89,7 @@ const isoDaysAgo = (n: number): string => new Date(Date.now() - n * 86400000).to
 async function gscPageMetrics(
   site: string,
   token: string,
-  limit = 200,
+  limit = 1000,
 ): Promise<{ url: string; impressions: number; clicks: number }[]> {
   try {
     const res = await fetch(
@@ -143,8 +153,11 @@ export async function runIngestSite(body: unknown): Promise<unknown> {
 
   const home = await fetchPage(norm)
 
-  const rawCandidates = gscUrls.length ? gscUrls : await sitemapUrls(origin)
-  const candidates = [...new Set(rawCandidates)]
+  // Discover EVERY page: Search Console's ranking pages (with metrics) UNION the full sitemap (all
+  // declared pages, including ones that get no search traffic). Same-origin, page-like, deduped.
+  const sitemap = await sitemapUrls(origin)
+  const gscSet = new Set(gscUrls)
+  const discovered = [...new Set([...gscUrls, ...sitemap])]
     .filter((l) => {
       try {
         return new URL(l).origin === origin
@@ -153,12 +166,19 @@ export async function runIngestSite(body: unknown): Promise<unknown> {
       }
     })
     .filter((l) => l !== norm && l !== `${norm}/` && !SKIP.test(l))
-    .slice(0, gscUrls.length ? 25 : 6) // GSC's real list is worth crawling deeper than a blind sitemap
+  // Ranking pages first (they carry metrics), then the rest, up to a generous cap so even a large site
+  // is covered without an unbounded serverless run.
+  const ordered = [...discovered.filter((u) => gscSet.has(u)), ...discovered.filter((u) => !gscSet.has(u))]
+  const MAX_PAGES = 300
+  const toFetch = ordered.slice(0, MAX_PAGES)
 
-  // Fetch copy for each candidate in parallel so a full-site pull stays fast.
-  const fetched = (await Promise.all(candidates.map((l) => fetchPage(l)))).filter(
-    (p): p is Page => !!p && (!!p.title || !!p.description || !!p.text),
-  )
+  // Fetch copy with bounded concurrency: comprehensive, but never hundreds of requests at once.
+  const CONCURRENCY = 12
+  const fetched: Page[] = []
+  for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+    const batch = await Promise.all(toFetch.slice(i, i + CONCURRENCY).map((l) => fetchPage(l)))
+    for (const p of batch) if (p && (p.title || p.description || p.text)) fetched.push(p)
+  }
   const pages: Page[] = [...(home ? [home] : []), ...fetched]
 
   // Shape each page for normalizeImportItem, attaching its real GSC metrics (matched with a trailing
