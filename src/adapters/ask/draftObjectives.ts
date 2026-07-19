@@ -18,6 +18,9 @@ export interface DraftObjectivesInput {
   industry?: string
   existing?: string[]
   count?: number
+  /** Live traffic mix from connected analytics: real per-channel baselines. When present, targets can
+   *  be anchored to actual current numbers (from -> to) instead of being purely directional. */
+  performance?: { label: string; reach: number; reachUnit: string; engagement?: number }[]
 }
 
 function heuristicObjectives(input: DraftObjectivesInput): DraftedObjective[] {

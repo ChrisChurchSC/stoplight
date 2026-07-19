@@ -405,7 +405,9 @@ export function HomeChat() {
     const existing = store.objectives.filter((o) => !o.brand || o.brand === brand).map((o) => o.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting objectives for ${brand}` }] }])
-    const { objectives: drafted, reportingCadence } = await draftObjectives({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing })
+    // Anchor targets to the brand's real baselines when analytics are connected.
+    const perf = (store.brandActuals[brand]?.channels ?? []).map((c) => ({ label: c.label, reach: c.reach, reachUnit: c.reachUnit, engagement: c.engagement }))
+    const { objectives: drafted, reportingCadence } = await draftObjectives({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, performance: perf.length ? perf : undefined })
     drafted.forEach((d) => addObjective({ brand, name: d.name, metric: d.metric, target: d.target, timeframe: d.timeframe, status: 'planned' }))
     const list = drafted.map((d) => `- **${d.name}** (${d.metric}, ${d.target}, ${d.timeframe})`).join('\n')
     setMessages((m) =>
