@@ -5393,6 +5393,27 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
+/* Umbrella: a full-width group whose audience-specific children nest beneath it. */
+.flow-home-umbrella {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.flow-home-umb-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.flow-home-umb-toggle {
+  flex: 0 0 auto; border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+  font-size: 11px; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+}
+.flow-home-umb-toggle:hover { background: var(--hover, #eef2f3); color: var(--text); }
+.flow-home-umb-open {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; border: none; background: transparent;
+  cursor: pointer; font: inherit; text-align: left; padding: 2px;
+}
+.flow-home-umb-name { font-weight: 700; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-home-umb-meta { font-size: 12px; color: var(--text-muted); flex: 0 0 auto; }
+.flow-home-umb-open .flow-home-chans { margin-left: auto; }
+.flow-home-grid.nested { padding: 0 10px 10px 32px; }
 .flow-home-card {
   position: relative;
   border: 1px solid var(--border);

@@ -808,8 +808,8 @@ export function HomeChat() {
   const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string, audienceIds?: string[]) => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    // Scope the flow to the audiences picked for it (the flow-build's audience step wins); else the
-    // ones you're pursuing from go-to-market; else all.
+    // Scope to the audiences picked for it (the flow-build's audience step wins); else the ones you're
+    // pursuing from go-to-market; else all.
     const allAud = store.clientAudiences[brand] ?? []
     const pursued = gtmPursuedRef.current
     const audiences =
@@ -818,54 +818,79 @@ export function HomeChat() {
         : pursued && pursued.size
           ? allAud.filter((a) => pursued.has(a.id))
           : allAud
-    const audienceNames = audiences.map((a) => a.name)
-    // Channels from the brand's audiences; fall back to a sensible content mix if none are set yet.
-    const channelIds = [...new Set(audiences.flatMap((a) => a.channels ?? []))]
-    let presets = channelIds
-      .map((cid) => DELIVERABLE_PRESETS.find((p) => p.channel === cid))
-      .filter((p): p is NonNullable<typeof p> => !!p)
-    if (!presets.length) presets = ['blog', 'newsletter', 'li-text'].map((k) => presetByKey(k)).filter((p): p is NonNullable<typeof p> => !!p)
-    const deliverables: Deliverable[] = presets.map((p) => ({ label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: p.perMonth, runtime: p.runtime, brand: p.brand }))
-    const campaignName = `${brand} — ${name}`
-    // The brand's records to hang on the flow: audiences (segment tags) + proof points (proof tags),
-    // plus its primary objective as the campaign goal. Mirrors what the visual builder links.
-    const proof = store.brandSystems[brand]?.rtbs ?? []
-    const refs: FlowReference[] = [
-      ...audiences.map((a) => ({ type: 'segment' as const, id: a.id, label: a.name })),
-      ...proof.map((r) => ({ type: 'proof' as const, id: r.id, label: r.label })),
-    ]
-    // The goal picked in the conversation wins; fall back to the brand's first objective.
+    // One goal for the whole campaign (the conversation's pick wins; else the brand's first objective).
     const brandObjectives = store.objectives.filter((o) => !o.brand || o.brand === brand)
     const objective = (objectiveId && brandObjectives.find((o) => o.id === objectiveId)) || brandObjectives[0]
+    const goalKpi = objective?.metric?.trim() || undefined
     const goalTarget = objective?.target ? Number(String(objective.target).replace(/[^0-9.]/g, '')) || undefined : undefined
+    const proof = store.brandSystems[brand]?.rtbs ?? []
+
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
-    addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks, objective: objective?.name, goalKpi: objective?.metric?.trim() || undefined, goalTarget })
-    if (refs.length) setCampaignReferences(campaignName, refs)
-    // Seed the assets, then write copy for the freshly-created rows (diff to find them, like the builder).
-    const beforeIds = new Set(useTrafficStore.getState().rows.map((r) => r.id))
-    await seedCampaignAssets(campaignName, deliverables, { flightWeeks: weeks, audiences: audienceNames })
-    const newIds = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !beforeIds.has(r.id)).map((r) => r.id)
-    let wroteCopy = false
-    if (newIds.length) {
-      setMessages((m) => m.map((x) => (x.id === id ? { ...x, steps: [{ kind: 'assets', label: `Writing copy for ${newIds.length} asset${newIds.length === 1 ? '' : 's'}` }] } : x)))
-      try {
-        await draftCopy(newIds)
-        wroteCopy = true
-      } catch {
-        /* leave assets as drafts if copy generation fails */
+
+    // Build ONE single-audience campaign. Its channels + deliverables come from that audience alone, so
+    // it stays coherent, and it carries the one shared goal. Returns the new asset count + channels.
+    const buildOne = async (
+      campaignName: string,
+      aud: (typeof allAud)[number] | undefined,
+      subject: string,
+      parent?: string,
+    ): Promise<{ count: number; channels: string[] }> => {
+      const channelIds = [...new Set(aud?.channels ?? [])]
+      let presets = channelIds
+        .map((cid) => DELIVERABLE_PRESETS.find((p) => p.channel === cid))
+        .filter((p): p is NonNullable<typeof p> => !!p)
+      if (!presets.length) presets = ['blog', 'newsletter', 'li-text'].map((k) => presetByKey(k)).filter((p): p is NonNullable<typeof p> => !!p)
+      const deliverables: Deliverable[] = presets.map((p) => ({ label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: p.perMonth, runtime: p.runtime, brand: p.brand }))
+      const refs: FlowReference[] = [
+        ...(aud ? [{ type: 'segment' as const, id: aud.id, label: aud.name }] : []),
+        ...proof.map((r) => ({ type: 'proof' as const, id: r.id, label: r.label })),
+      ]
+      addCampaign({ name: campaignName, client: brand, parent, strategy: 'content-seo', subject, durationWeeks: weeks, objective: objective?.name, goalKpi, goalTarget })
+      if (refs.length) setCampaignReferences(campaignName, refs)
+      const beforeIds = new Set(useTrafficStore.getState().rows.map((r) => r.id))
+      await seedCampaignAssets(campaignName, deliverables, { flightWeeks: weeks, audiences: aud ? [aud.name] : [] })
+      const newIds = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !beforeIds.has(r.id)).map((r) => r.id)
+      if (newIds.length) {
+        try {
+          await draftCopy(newIds)
+        } catch {
+          /* leave assets as drafts if copy generation fails */
+        }
       }
+      return { count: newIds.length, channels: [...new Set(deliverables.map((d) => CHANNELS[d.channel]?.label ?? d.channel))] }
     }
-    const chLabels = [...new Set(deliverables.map((d) => CHANNELS[d.channel]?.label ?? d.channel))]
-    // Report what got linked to the flow: audiences, proof points, and the objective.
-    const linked: string[] = []
-    if (audienceNames.length) linked.push(`your ${audienceNames.length} audience${audienceNames.length === 1 ? '' : 's'}`)
-    if (proof.length) linked.push(`${proof.length} proof point${proof.length === 1 ? '' : 's'}`)
-    if (objective) linked.push(`the "${objective.name}" objective`)
-    const linkBit = linked.length ? `, with ${linked.join(', ')} attached` : ''
-    setMessages((m) =>
-      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}, ${newIds.length} asset${newIds.length === 1 ? '' : 's'} across ${chLabels.join(', ')} over ${weeks} weeks${linkBit}${wroteCopy ? ', with copy written for each' : ''}. Open it to review.`, flowBuiltName: campaignName } : x)),
-    )
+
+    const umbrellaName = `${brand} — ${name}`
+    if (audiences.length >= 2) {
+      // A campaign per audience keeps each one focused, grouped under an umbrella (a container with no
+      // assets of its own). Each child is single-audience + the shared goal.
+      addCampaign({ name: umbrellaName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks, objective: objective?.name, goalKpi, goalTarget })
+      let total = 0
+      for (const aud of audiences) {
+        setMessages((m) => m.map((x) => (x.id === id ? { ...x, steps: [{ kind: 'assets', label: `Building ${name} · ${aud.name}` }] } : x)))
+        const r = await buildOne(`${umbrellaName} · ${aud.name}`, aud, `${name} · ${aud.name}`, umbrellaName)
+        total += r.count
+      }
+      const goalBit = objective ? ` toward the "${objective.name}" goal` : ''
+      setMessages((m) =>
+        m.map((x) =>
+          x.id === id
+            ? { ...x, busy: false, steps: undefined, text: `I built **${name}** as ${audiences.length} audience-specific campaigns under one umbrella (${total} assets total), each focused on a single audience${goalBit}. Open Campaigns to review the umbrella and its children.`, flowBuiltName: umbrellaName }
+            : x,
+        ),
+      )
+    } else {
+      const aud = audiences[0]
+      const r = await buildOne(umbrellaName, aud, name, undefined)
+      setMessages((m) =>
+        m.map((x) =>
+          x.id === id
+            ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}${aud ? ` (audience: ${aud.name})` : ''}, ${r.count} asset${r.count === 1 ? '' : 's'} across ${r.channels.join(', ')} over ${weeks} weeks${objective ? `, toward the "${objective.name}" goal` : ''}. Open it to review.`, flowBuiltName: umbrellaName }
+            : x,
+        ),
+      )
+    }
     lastActionRef.current = 'flow'
     // Close the loop: set up how you'll measure this, what to track and how often to report.
     say(`Last piece: how you'll measure **${name}**, what to track and how often to report. Want to set that up?`, { measureOffer: true })

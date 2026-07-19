@@ -20,6 +20,8 @@ interface FlowCard {
   types: number
   channels: ChannelId[]
   folder?: string
+  /** Umbrella parent campaign name, when this is an audience-specific child. */
+  parent?: string
 }
 
 const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1, planning: 2, completed: 3 }
@@ -38,6 +40,15 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   // Drag a flow card onto a folder section to file it there (replaces the folder dropdown).
   const [dragName, setDragName] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
+  // Umbrellas that are collapsed (children hidden). Default expanded.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggleUmbrella = (name: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
   const sectionDrop = (folder: string | undefined) => {
     const key = folder ?? '__unfiled__'
     return {
@@ -79,11 +90,22 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       types: new Set(cRows.map((r) => `${r.channel}/${r.assetType}`)).size,
       channels: [...new Set(cRows.map((r) => r.channel))] as ChannelId[],
       folder: meta.get(name)?.folder,
+      parent: meta.get(name)?.parent,
     }
   })
   const sortCards = (arr: FlowCard[]) =>
     [...arr].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.assetCount - a.assetCount)
-  const unfiled = sortCards(cards.filter((c) => !c.folder || !folders.includes(c.folder)))
+  // Umbrella grouping: children (audience-specific campaigns) nest under their parent; a child whose
+  // parent no longer exists falls back to top level. Folder grouping operates on top-level cards only.
+  const childrenByParent = new Map<string, FlowCard[]>()
+  for (const c of cards)
+    if (c.parent && meta.has(c.parent)) {
+      const arr = childrenByParent.get(c.parent) ?? []
+      arr.push(c)
+      childrenByParent.set(c.parent, arr)
+    }
+  const topCards = cards.filter((c) => !(c.parent && meta.has(c.parent)))
+  const unfiled = sortCards(topCards.filter((c) => !c.folder || !folders.includes(c.folder)))
 
   const addFolder = () => {
     if (newFolder.trim()) createCampaignFolder(brand, newFolder.trim())
@@ -131,6 +153,43 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     </div>
   )
 
+  // A top-level entry: an umbrella (its audience-specific children nested + collapsible) or a
+  // standalone campaign.
+  const renderTop = (c: FlowCard) => {
+    const kids = childrenByParent.get(c.name)
+    if (!kids?.length) return renderCard(c)
+    const isCollapsed = collapsed.has(c.name)
+    const totalAssets = kids.reduce((n, k) => n + k.assetCount, 0)
+    const chans = [...new Set(kids.flatMap((k) => k.channels))]
+    return (
+      <div key={c.name} className="flow-home-umbrella">
+        <div className="flow-home-umb-head">
+          <button className="flow-home-umb-toggle" onClick={() => toggleUmbrella(c.name)} aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
+            {isCollapsed ? '▸' : '▾'}
+          </button>
+          <button className="flow-home-umb-open" onClick={() => onOpen(c.name)}>
+            <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
+            <span className="flow-home-umb-name">{c.name.replace(`${brand} — `, '')}</span>
+            <span className="flow-home-umb-meta">
+              {kids.length} campaign{kids.length === 1 ? '' : 's'} · {totalAssets} asset{totalAssets === 1 ? '' : 's'}
+            </span>
+            <span className="flow-home-chans">
+              {chans.slice(0, 8).map((ch) => (
+                <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
+                  <ChannelIcon channel={ch} size={15} />
+                </span>
+              ))}
+            </span>
+          </button>
+          <button className="flow-home-del" title="Delete umbrella" aria-label="Delete umbrella" onClick={() => setConfirmDelete(c.name)}>
+            ✕
+          </button>
+        </div>
+        {!isCollapsed && <div className="flow-home-grid nested">{sortCards(kids).map(renderCard)}</div>}
+      </div>
+    )
+  }
+
   return (
     <div className="flow-home">
       <header className="flow-home-head">
@@ -170,7 +229,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
 
       <div className="flow-home-groups">
         {folders.map((folder) => {
-          const group = sortCards(cards.filter((c) => c.folder === folder))
+          const group = sortCards(topCards.filter((c) => c.folder === folder))
           const drop = sectionDrop(folder)
           return (
             <section key={folder} className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
@@ -189,7 +248,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               {group.length === 0 ? (
                 <div className="flow-home-empty-folder">Empty. Drag a campaign here to file it.</div>
               ) : (
-                <div className="flow-home-grid">{group.map(renderCard)}</div>
+                <div className="flow-home-grid">{group.map(renderTop)}</div>
               )}
             </section>
           )
@@ -206,7 +265,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               {unfiled.length === 0 ? (
                 <div className="flow-home-empty-folder">No flows here yet.</div>
               ) : (
-                <div className="flow-home-grid">{unfiled.map(renderCard)}</div>
+                <div className="flow-home-grid">{unfiled.map(renderTop)}</div>
               )}
             </section>
           )
