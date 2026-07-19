@@ -6,6 +6,8 @@
  * client imports them into the Library via importAssets(brand, CONTENT_LIBRARY_CAMPAIGN, items, 'site').
  */
 
+import { resolveGoogle } from './googleResolve.js'
+
 const UA = 'Mozilla/5.0 (compatible; BreadcrumbsBot/1.0; +https://breadcrumbs.app)'
 
 interface Page {
@@ -70,9 +72,43 @@ async function sitemapUrls(origin: string): Promise<string[]> {
 
 const SKIP = /\.(jpg|jpeg|png|gif|webp|svg|pdf|xml|css|js|ico|zip|mp4|woff2?)($|\?)/i
 
+const isoDaysAgo = (n: number): string => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
+
+/** Every ranking page of a Search Console property with its real search metrics, most impressions
+ *  first. This is the authoritative page list (better than a sitemap) AND carries measured reach. */
+async function gscPageMetrics(
+  site: string,
+  token: string,
+  limit = 200,
+): Promise<{ url: string; impressions: number; clicks: number }[]> {
+  try {
+    const res = await fetch(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ startDate: isoDaysAgo(90), endDate: isoDaysAgo(0), dimensions: ['page'], rowLimit: limit }),
+      },
+    )
+    if (!res.ok) return []
+    const j = (await res.json()) as { rows?: { keys?: string[]; clicks?: number; impressions?: number }[] }
+    return (j.rows ?? [])
+      .map((r) => ({ url: r.keys?.[0] ?? '', impressions: Number(r.impressions) || 0, clicks: Number(r.clicks) || 0 }))
+      .filter((r) => r.url)
+      .sort((a, b) => b.impressions - a.impressions)
+  } catch {
+    return []
+  }
+}
+
 export async function runIngestSite(body: unknown): Promise<unknown> {
-  const { url } = (body ?? {}) as { url?: string }
-  const raw = (url ?? '').trim()
+  const { url, brand, workspace, website } = (body ?? {}) as {
+    url?: string
+    brand?: string
+    workspace?: string
+    website?: string
+  }
+  const raw = (url ?? website ?? '').trim()
   if (!raw) return { items: [] }
   const norm = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
   let origin = ''
@@ -82,13 +118,33 @@ export async function runIngestSite(body: unknown): Promise<unknown> {
     return { items: [] }
   }
 
-  const pages: Page[] = []
-  const home = await fetchPage(norm)
-  if (home) pages.push(home)
+  // Preferred page list: Search Console's ranking pages (authoritative + real per-page metrics),
+  // available when the workspace has a Google connection. Falls back to the sitemap when it doesn't.
+  let gscMetrics: Map<string, { impressions: number; clicks: number }> | null = null
+  let gscUrls: string[] = []
+  if (brand && workspace) {
+    try {
+      const g = await resolveGoogle(workspace, brand, norm)
+      if (g?.token && g.gsc) {
+        const pages = await gscPageMetrics(g.gsc, g.token)
+        gscMetrics = new Map(pages.map((p) => [p.url, { impressions: p.impressions, clicks: p.clicks }]))
+        gscUrls = pages.map((p) => p.url).filter((u) => {
+          try {
+            return new URL(u).origin === origin && !SKIP.test(u)
+          } catch {
+            return false
+          }
+        })
+      }
+    } catch {
+      /* no GSC connection, fall back to the sitemap below */
+    }
+  }
 
-  // A few more pages from the sitemap (same origin, page-like), capped so it stays fast.
-  const locs = await sitemapUrls(origin)
-  const candidates = [...new Set(locs)]
+  const home = await fetchPage(norm)
+
+  const rawCandidates = gscUrls.length ? gscUrls : await sitemapUrls(origin)
+  const candidates = [...new Set(rawCandidates)]
     .filter((l) => {
       try {
         return new URL(l).origin === origin
@@ -97,24 +153,30 @@ export async function runIngestSite(body: unknown): Promise<unknown> {
       }
     })
     .filter((l) => l !== norm && l !== `${norm}/` && !SKIP.test(l))
-    .slice(0, 6)
+    .slice(0, gscUrls.length ? 25 : 6) // GSC's real list is worth crawling deeper than a blind sitemap
 
-  for (const l of candidates) {
-    if (pages.length >= 7) break
-    const p = await fetchPage(l)
-    if (p && (p.title || p.description || p.text)) pages.push(p)
-  }
+  // Fetch copy for each candidate in parallel so a full-site pull stays fast.
+  const fetched = (await Promise.all(candidates.map((l) => fetchPage(l)))).filter(
+    (p): p is Page => !!p && (!!p.title || !!p.description || !!p.text),
+  )
+  const pages: Page[] = [...(home ? [home] : []), ...fetched]
 
-  // Shape each page as an item normalizeImportItem understands (title, primaryText, description, url).
+  // Shape each page for normalizeImportItem, attaching its real GSC metrics (matched with a trailing
+  // slash fallback) so the ingested page carries measured reach.
+  const metricFor = (u: string) => gscMetrics?.get(u) ?? gscMetrics?.get(u.endsWith('/') ? u.slice(0, -1) : `${u}/`)
   const items = pages
     .filter((p) => p.title || p.description || p.text)
-    .map((p) => ({
-      title: p.title || new URL(p.url).pathname.replace(/\//g, ' ').trim() || 'Page',
-      primaryText: p.description || p.text,
-      description: p.description || undefined,
-      url: p.url,
-      channel: 'website',
-    }))
+    .map((p) => {
+      const m = metricFor(p.url)
+      return {
+        title: p.title || new URL(p.url).pathname.replace(/\//g, ' ').trim() || 'Page',
+        primaryText: p.description || p.text,
+        description: p.description || undefined,
+        url: p.url,
+        channel: 'website',
+        ...(m && (m.impressions || m.clicks) ? { metrics: { impressions: m.impressions, clicks: m.clicks } } : {}),
+      }
+    })
 
   return { items }
 }

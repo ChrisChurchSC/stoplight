@@ -3027,6 +3027,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         add(await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, b.items, b.source), b.sourceLabel)
       }
 
+      // Site pages via Search Console: every ranking page of the brand's site plus its real search
+      // metrics (impressions / clicks), when the workspace has a Google connection. Falls back to the
+      // sitemap when GSC is not connected. This is why connecting GA4 + Search Console fills the Library.
+      try {
+        const website = (get().clientProfiles[n]?.website || get().brandRecords.find((b) => b.name === n)?.website || '').trim()
+        if (website) {
+          const ws = (await getActiveWorkspaceId()) || undefined
+          const siteItems = await ingestSite(website, { brand: n, workspace: ws })
+          if (siteItems.length) add(await get().importAssets(n, CONTENT_LIBRARY_CAMPAIGN, siteItems, 'site'), 'Search Console')
+        }
+      } catch {
+        /* no site / no GSC, leave it out of this pull */
+      }
+
       // Neon (NeonCRM) published assets — pulled server-side with the .env key.
       // Skips silently when Neon isn't configured (NO_KEY) or unreachable, so the
       // pull never fails on an unconnected source.
@@ -4772,7 +4786,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const website = (urlOverride || profile.website || rec.website || '').trim()
     if (!website) return { imported: 0, updated: 0, skipped: 0, ok: false, error: 'no-website' }
     try {
-      const items = await ingestSite(website)
+      const items = await ingestSite(website, { brand, workspace: (await getActiveWorkspaceId()) || undefined })
       if (!items.length) return { imported: 0, updated: 0, skipped: 0, ok: false, error: 'empty' }
       const r = await get().importAssets(brand, CONTENT_LIBRARY_CAMPAIGN, items, 'site')
       return { ...r, ok: true }

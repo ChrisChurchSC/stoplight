@@ -3,6 +3,7 @@ import { askClaude } from '../adapters/ask/claudeAsk'
 import { draftProof } from '../adapters/ask/draftProof'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
+import { getActiveWorkspaceId } from '../lib/session'
 import { draftAudiences } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
@@ -510,7 +511,7 @@ export function HomeChat() {
     if (urlOverride && !profile.website) setClientProfile(brand, { website })
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Reading ${website.replace(/^https?:\/\//, '')}` }] }])
-    const items = await ingestSite(website)
+    const items = await ingestSite(website, { brand, workspace: (await getActiveWorkspaceId()) || undefined })
     if (!items.length) {
       setMessages((m) => m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I couldn't read content from ${website}. Double-check the URL, or add content manually in the Library.` } : x)))
       return
