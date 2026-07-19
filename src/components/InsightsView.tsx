@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { money } from '../domain/budget'
 import { CHANNELS } from '../domain/channels'
 import { computeInsights } from '../domain/insights'
 import { buildOutcomeMap, summarizeByAudience } from '../domain/outcomeMap'
 import { learnJourneysByAudience } from '../domain/journeyLearning'
 import { aggregatePatterns, type PatternDimension } from '../domain/outcomePatterns'
+import { readAggregatePatterns, type PooledPattern } from '../adapters/aggregate/aggregateOutcomes'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rowInScope } from '../lib/scope'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -47,6 +49,7 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   const coherenceDecisions = useTrafficStore((s) => s.coherenceDecisions)
   const aggregateContributing = useTrafficStore((s) => s.aggregateContributing)
   const setAggregateContributing = useTrafficStore((s) => s.setAggregateContributing)
+  const brandActuals = useTrafficStore((s) => s.brandActuals)
 
   const view = allClients
     ? rows
@@ -71,6 +74,19 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
     contributing: aggregateContributing,
   })
 
+  // The REAL cross-customer pool (floor-gated RPC). Returns [] until migration 0006 is applied and
+  // enough distinct workspaces have contributed; until then the panel shows the local preview below.
+  const [pooled, setPooled] = useState<PooledPattern[]>([])
+  useEffect(() => {
+    let alive = true
+    readAggregatePatterns(AGGREGATE_FLOOR)
+      .then((p) => alive && setPooled(p))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const pains = icp?.pains ?? []
   const flaggedRowIds = new Set(
     (batchReview?.flags ?? [])
@@ -84,10 +100,57 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
     hasReview: !!batchReview,
   })
 
+  // Connected metrics — the live channel actuals (GA4 / Search Console) for the active brand, pulled
+  // from the analytics feed. Brand-level (not asset-derived), so it renders even with zero assets.
+  const activeBrand = !allClients && clientFilter !== 'all' ? clientFilter : null
+  const actuals = activeBrand ? brandActuals[activeBrand] : undefined
+  const fmtN = (n: number) => Math.round(n).toLocaleString()
+  const connected =
+    actuals && actuals.channels.length > 0 ? (
+      <section className="ins-card ins-wide">
+        <div className="ins-card-head">
+          <h3>Connected metrics</h3>
+          <span className="ins-card-hint">
+            Live from {(actuals.sources ?? [actuals.source]).filter(Boolean).join(', ')} · last 90 days
+          </span>
+        </div>
+        <div className="ins-rows">
+          {actuals.channels.map((c) => {
+            const meta = [
+              c.clicks != null ? `${fmtN(c.clicks)} clicks` : null,
+              c.engagement != null ? `${fmtN(c.engagement)} engaged` : null,
+              c.conversions ? `${fmtN(c.conversions)} conversions` : null,
+              c.revenue ? money(c.revenue) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+            return (
+              <div className="ins-row" key={c.channel}>
+                <div className="ins-row-label">
+                  <span className="ins-row-name">{c.label}</span>
+                  {meta && <span className="ins-row-meta">{meta}</span>}
+                </div>
+                <span className="ins-row-value">
+                  {fmtN(c.reach)} {c.reachUnit}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+    ) : null
+
   if (view.length === 0) {
     return (
       <div className="sheet-grid">
-        <div className="ins ins-empty">No assets in scope. Load sample or widen the breadcrumb.</div>
+        <div className="ins">
+          {connected}
+          <div className="ins-empty">
+            {connected
+              ? 'No content analytics yet. The connected metrics above are live; per-message and per-audience breakdowns fill in as you publish.'
+              : 'No assets in scope. Load sample or widen the breadcrumb.'}
+          </div>
+        </div>
       </div>
     )
   }
@@ -108,6 +171,7 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
   return (
     <div className="sheet-grid">
       <div className="ins">
+        {connected}
         {/* KPI strip */}
         <div className="ins-kpis">
           <div className="ins-kpi">
@@ -242,6 +306,7 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
             <div className="ins-card-head">
               <h3>Aggregate patterns (cross-customer)</h3>
               <span className="ins-card-hint">
+                {pooled.length > 0 ? 'Live cross-customer pool · ' : ''}
                 Anonymized learnings: which attributes drive outcomes by audience, across customers
               </span>
             </div>
@@ -250,6 +315,23 @@ export function InsightsView({ allClients = false }: { allClients?: boolean }) {
               <div className="ins-note">
                 This account is opted out of the aggregate layer. It neither contributes data nor
                 reads cross-customer patterns. Per-customer data above is unaffected.
+              </div>
+            ) : pooled.length > 0 ? (
+              <div className="ins-rows">
+                {pooled.slice(0, 8).map((p) => (
+                  <div className="ins-row" key={`pool:${p.dimension}:${p.archetype}:${p.attribute}`}>
+                    <div className="ins-row-label">
+                      <span className="ins-row-name">
+                        {p.attribute} → {p.archetype}
+                      </span>
+                      <span className="ins-row-meta">
+                        {DIMENSION_LABEL[p.dimension as PatternDimension] ?? p.dimension} · {p.customers} customers ·{' '}
+                        {p.variants} variants
+                      </span>
+                    </div>
+                    <span className="ins-row-value">{money(p.outcome)}/variant</span>
+                  </div>
+                ))}
               </div>
             ) : aggregate.unlocked.length > 0 ? (
               <div className="ins-rows">

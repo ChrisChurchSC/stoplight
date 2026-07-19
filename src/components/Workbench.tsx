@@ -77,6 +77,7 @@ export function Workbench() {
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const ingestBrandSite = useTrafficStore((s) => s.ingestBrandSite)
+  const refreshActuals = useTrafficStore((s) => s.refreshActuals)
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const { brands } = useHomeCanvases()
@@ -155,6 +156,13 @@ export function Workbench() {
     }
     void ingestBrandSite(brand)
   }, [clientFilter, clientProfiles, brandRecords, ingestBrandSite])
+
+  // Pull the brand's real channel actuals (GA4 / Search Console via /api/actuals) whenever a brand
+  // is active. This is what fills `brandActuals` (Insights + Brand goal) and appends the metrics
+  // time-series (metric_snapshots). Self-gates on an in-flight guard, so re-renders don't refetch.
+  useEffect(() => {
+    if (scopedBrand) void refreshActuals(scopedBrand)
+  }, [scopedBrand, refreshActuals])
 
   // Cmd/Ctrl+K opens Ask Claude from anywhere.
   useEffect(() => {

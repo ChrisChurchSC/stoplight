@@ -482,15 +482,49 @@ export function LibraryView({ scopeClient }: { scopeClient?: string }) {
 
       {mode !== 'catalog' ? (
         // Insights: the single derived read over the library — Findings, with the flow
-        // map embedded in the dashboard.
-        <LibraryData
-          items={items}
-          allRows={allRows}
-          proofPoints={brandSystems[brand]?.rtbs}
-          ctas={brandSystems[brand]?.ctas}
-          audiences={brandSystems[brand]?.audiences}
-          sources={connectedSources}
-        />
+        // map embedded in the dashboard. Above it, the live connected metrics for the brand
+        // (GA4 / Search Console via the analytics feed) — brand-level, so it shows even with
+        // no ingested content yet.
+        <>
+          {measured && measured.channels.length > 0 && (
+            <section className="ins-card ins-wide" style={{ marginBottom: 16 }}>
+              <div className="ins-card-head">
+                <h3>Connected metrics</h3>
+                <span className="ins-card-hint">Live from {connectedSources.join(', ')} · last 90 days</span>
+              </div>
+              <div className="ins-rows">
+                {measured.channels.map((c) => {
+                  const meta = [
+                    c.clicks != null ? `${num(c.clicks)} clicks` : null,
+                    c.engagement != null ? `${num(c.engagement)} engaged` : null,
+                    c.conversions ? `${num(c.conversions)} conversions` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                  return (
+                    <div className="ins-row" key={c.channel}>
+                      <div className="ins-row-label">
+                        <span className="ins-row-name">{c.label}</span>
+                        {meta && <span className="ins-row-meta">{meta}</span>}
+                      </div>
+                      <span className="ins-row-value">
+                        {num(c.reach)} {c.reachUnit}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+          <LibraryData
+            items={items}
+            allRows={allRows}
+            proofPoints={brandSystems[brand]?.rtbs}
+            ctas={brandSystems[brand]?.ctas}
+            audiences={brandSystems[brand]?.audiences}
+            sources={connectedSources}
+          />
+        </>
       ) : (
         <div className="lib-catalog-wrap">
           {folderRail}

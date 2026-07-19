@@ -1,7 +1,9 @@
 /**
- * /api/actuals?brand=<name> → BrandActuals JSON, pulled from the Supermetrics API (static API key,
- * no OAuth). This is the real seam behind VITE_ACTUALS_URL — the app calibrates reach + fills
- * Insights from what this returns. Server-side only (the key stays private).
+ * /api/actuals?brand=<name> → BrandActuals JSON. Two real sources, tried in order:
+ *   1. GA4-direct (free, service account) — see ga4Actuals.ts. Preferred when configured.
+ *   2. Supermetrics API (static API key, paid tier) — the multi-source fallback below.
+ * This is the real seam behind VITE_ACTUALS_URL — the app calibrates reach + fills Insights from
+ * what this returns. Server-side only (keys stay private). Returns null → 204 when neither is set.
  *
  * Config via env:
  *   - SUPERMETRICS_API_KEY  — the API key generated on the Supermetrics Hub.
@@ -21,6 +23,8 @@
  *   Each entry's `metrics` maps a BrandActuals field → the Supermetrics field name for that source.
  * Returns null (→ 204) when unconfigured / no data, so the client stays on the mock honestly.
  */
+
+import { runGoogleActuals } from './ga4Actuals.js'
 
 const BASE = process.env.SUPERMETRICS_BASE || 'https://api.supermetrics.com'
 const SINCE_DAYS = Number(process.env.SUPERMETRICS_SINCE_DAYS) || 90
@@ -109,8 +113,10 @@ async function runChannel(q: ChannelQuery, from: string): Promise<ChannelActual 
   }
 }
 
-/** Fetch a brand's real channel actuals from Supermetrics. Returns null when unconfigured / no data. */
+/** Fetch a brand's real channel actuals. Google-direct first (free), then Supermetrics. Null if neither. */
 export async function runActuals(brand: string): Promise<BrandActuals | null> {
+  const google = await runGoogleActuals(brand).catch(() => null)
+  if (google) return google
   if (!process.env.SUPERMETRICS_API_KEY) return null
   const queries = queriesFor(brand)
   if (!queries.length) return null
