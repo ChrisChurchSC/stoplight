@@ -21,6 +21,9 @@ export interface DraftProofInput {
   /** Labels of proof points that already exist, so the AI writes new, distinct ones. */
   existing?: string[]
   count?: number
+  /** The brand's real published copy + measured reach. When present, proof points are grounded in
+   *  the brand's actual work and may cite the real reach figures provided (never invented ones). */
+  samples?: { text: string; channel?: string; reach?: number }[]
 }
 
 function heuristicProof(input: DraftProofInput): DraftedProof[] {

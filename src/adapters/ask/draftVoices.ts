@@ -22,6 +22,9 @@ export interface DraftVoicesInput {
   industry?: string
   existing?: string[]
   count?: number
+  /** The brand's real published copy + measured reach. When present, the voice is derived from how
+   *  the brand ACTUALLY writes (analyzed from its real work), not just its description. */
+  samples?: { text: string; channel?: string; reach?: number }[]
 }
 
 function heuristicVoices(input: DraftVoicesInput): DraftedVoice[] {

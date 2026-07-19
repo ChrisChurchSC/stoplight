@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { draftProof } from '../adapters/ask/draftProof'
+import { clientForCampaign } from '../domain/clients'
+import type { TrafficRow } from '../domain/types'
 import { draftAudiences } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
@@ -281,6 +283,34 @@ export function HomeChat() {
   // the brand record + profile + audiences), add them to the brand's library, and report them in the
   // chat. Passes the existing proof points so repeat calls ("more") produce new, distinct ones.
   // Falls back to a small heuristic set when the AI isn't available.
+  // The brand's REAL published work (copy + measured reach), highest-reach first, so voice and proof
+  // points are derived from what the brand actually wrote and how it performed, not just a one-liner.
+  const brandLibrarySamples = (brand: string, limit = 12): { text: string; channel?: string; reach?: number }[] => {
+    const rows = useTrafficStore.getState().rows
+    const isLib = (r: TrafficRow) => r.status === 'posted' || !!r.postedAt || (!!r.sourceUrl && r.source !== 'generated')
+    const belongs = (r: TrafficRow) => (r.client || '').trim() === brand || clientForCampaign((r.campaign || '').trim()) === brand
+    const reachOf = (r: TrafficRow): number => {
+      const m = r.socialMetrics ?? {}
+      return Number(m.impressions || m.reach || m.views || m.opens || 0) || 0
+    }
+    return rows
+      .filter((r) => isLib(r) && belongs(r))
+      .map((r) => ({ r, reach: reachOf(r) }))
+      .sort((a, b) => b.reach - a.reach)
+      .slice(0, limit)
+      .map(({ r, reach }) => ({
+        text: [r.assetName, r.body, ...Object.values(r.messaging ?? {})]
+          .filter(Boolean)
+          .join(' | ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 400),
+        channel: r.channel,
+        reach: reach || undefined,
+      }))
+      .filter((x) => x.text.length > 12)
+  }
+
   const draftProofPoints = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
@@ -304,6 +334,7 @@ export function HomeChat() {
       businessObjective: rec.businessObjective,
       audiences,
       existing,
+      samples: brandLibrarySamples(brand),
     })
     proof.forEach((p) => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: p.label, detail: p.detail, approved: false }))
     const list = proof.map((p) => `- **${p.label}**: ${p.detail}`).join('\n')
@@ -387,7 +418,7 @@ export function HomeChat() {
     const existing = store.voices.filter((v) => !v.brand || v.brand === brand).map((v) => v.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Defining voice for ${brand}` }] }])
-    const drafted = await draftVoices({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing })
+    const drafted = await draftVoices({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, samples: brandLibrarySamples(brand) })
     drafted.forEach((d) => addVoice({ brand, name: d.name, summary: d.summary, tone: d.tone, dos: d.dos, donts: d.donts, sample: d.sample, useFor: d.useFor, status: 'active' }))
     const list = drafted.map((d) => `- **${d.name}** (${d.tone}): ${d.summary}`).join('\n')
     setMessages((m) =>

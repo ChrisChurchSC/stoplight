@@ -34,7 +34,9 @@ const VOICE_SCHEMA = {
 
 const SYSTEM = `You define brand VOICES (tone-of-voice profiles) for a brand, the distinct voices its copy can be written in.
 
-CRITICAL, derive everything ONLY from the description provided (one-liner, positioning, descriptor, differentiator, objective, industry). The brand NAME may be evocative or metaphorical; never infer the product from the name.
+Derive the voice from the description (one-liner, positioning, descriptor, differentiator, objective, industry) AND, when provided, the brand's REAL published copy below. The brand NAME may be evocative or metaphorical; never infer the product from the name.
+
+When real published copy is provided, base the tone, dos, and donts on how the brand ACTUALLY writes, its rhythm, vocabulary, formality, sentence length, and recurring moves, not on adjectives guessed from a one-liner. Write the "sample" line so it genuinely sounds like the brand's real copy.
 
 Write the requested number of voices. Each has:
 - name: a short voice name (e.g. "Confident expert" or "Warm and plain-spoken").
@@ -59,7 +61,7 @@ export async function runDraftVoices(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { brand, oneLiner, positioning, descriptor, differentiator, businessObjective, industry, existing, count } =
+  const { brand, oneLiner, positioning, descriptor, differentiator, businessObjective, industry, existing, count, samples } =
     (body ?? {}) as {
       brand?: string
       oneLiner?: string
@@ -70,10 +72,17 @@ export async function runDraftVoices(body: unknown): Promise<unknown> {
       industry?: string
       existing?: string[]
       count?: number
+      samples?: { text?: string; channel?: string; reach?: number }[]
     }
 
   const n = typeof count === 'number' && count > 0 && count <= 5 ? count : 2
   const existingList = (existing ?? []).filter(Boolean)
+  const samps = (samples ?? []).filter((s) => s && s.text)
+  const samplesBlock = samps.length
+    ? `\nThe brand's REAL published copy (analyze how it actually writes; base tone / dos / donts on this):\n${samps
+        .map((s, i) => `${i + 1}. ${s.text}`)
+        .join('\n')}`
+    : ''
 
   const userContent = `Brand name (do NOT infer the product from this): ${brand ?? ''}
 
@@ -84,9 +93,10 @@ Descriptor: ${descriptor || '(none)'}
 Differentiator: ${differentiator || '(none)'}
 Business objective: ${businessObjective || '(none)'}
 Industry: ${industry || '(none)'}
+${samplesBlock}
 ${existingList.length ? `\nEXISTING voices (do NOT repeat these):\n${existingList.map((e) => `- ${e}`).join('\n')}` : ''}
 
-Define ${n} brand ${n === 1 ? 'voice' : 'voices'}, grounded in the description above (not the brand name).`
+Define ${n} brand ${n === 1 ? 'voice' : 'voices'}. When real copy is provided above, derive the voice from how the brand actually writes; otherwise ground it in the description (never the brand name).`
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
