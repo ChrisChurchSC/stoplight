@@ -78,6 +78,7 @@ export function Workbench() {
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const ingestBrandSite = useTrafficStore((s) => s.ingestBrandSite)
   const refreshActuals = useTrafficStore((s) => s.refreshActuals)
+  const contributeAggregate = useTrafficStore((s) => s.contributeAggregate)
   const homeFilter = useTrafficStore((s) => s.homeFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const { brands } = useHomeCanvases()
@@ -163,6 +164,12 @@ export function Workbench() {
   useEffect(() => {
     if (scopedBrand) void refreshActuals(scopedBrand)
   }, [scopedBrand, refreshActuals])
+
+  // Publish this account's anonymized contributions to the cross-customer pool on load. Internally a
+  // no-op unless the account is contributing; keeps the floor-gated pattern pool current over time.
+  useEffect(() => {
+    void contributeAggregate()
+  }, [contributeAggregate])
 
   // Cmd/Ctrl+K opens Ask Claude from anywhere.
   useEffect(() => {
