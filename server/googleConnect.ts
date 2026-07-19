@@ -34,6 +34,14 @@ export function googleAuthUrl(workspaceId: string): string {
   )
 }
 
+const domainOf = (url: string): string => {
+  try {
+    return new URL(url.includes('://') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 /** What this Google account can read (for later per-brand mapping). Best-effort; each part degrades. */
 async function discover(accessToken: string): Promise<Record<string, unknown>> {
   const H = { authorization: `Bearer ${accessToken}` }
@@ -58,8 +66,28 @@ async function discover(accessToken: string): Promise<Record<string, unknown>> {
     const a = (await (
       await fetch('https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200', { headers: H })
     ).json()) as { accountSummaries?: { propertySummaries?: { property: string; displayName: string }[] }[] }
-    config.ga4_properties = (a.accountSummaries ?? []).flatMap((s) =>
+    const base = (a.accountSummaries ?? []).flatMap((s) =>
       (s.propertySummaries ?? []).map((p) => ({ id: p.property.replace('properties/', ''), name: p.displayName })),
+    )
+    // Enrich each property with the website(s) its web data streams measure, so a brand can be matched
+    // by DOMAIN (robust, like Search Console) instead of guessing on the display name. Best-effort and
+    // parallel; caps at 100 properties to bound connect-time latency; any per-property failure -> [].
+    config.ga4_properties = await Promise.all(
+      base.slice(0, 100).map(async (p) => {
+        try {
+          const st = (await (
+            await fetch(`https://analyticsadmin.googleapis.com/v1beta/properties/${p.id}/dataStreams`, { headers: H })
+          ).json()) as { dataStreams?: { webStreamData?: { defaultUri?: string } }[] }
+          const domains = (st.dataStreams ?? [])
+            .map((d) => d.webStreamData?.defaultUri)
+            .filter((u): u is string => !!u)
+            .map(domainOf)
+            .filter(Boolean)
+          return { ...p, domains }
+        } catch {
+          return { ...p, domains: [] as string[] }
+        }
+      }),
     )
   } catch {
     /* skip (Admin API may not be enabled) */

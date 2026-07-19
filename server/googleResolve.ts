@@ -44,7 +44,7 @@ const norm = (s: string): string => (s || '').toLowerCase().replace(/[^a-z0-9]/g
 interface GoogleConfig {
   gsc_sites?: { url: string; permission?: string }[]
   yt_channels?: { id: string; title: string }[]
-  ga4_properties?: { id: string; name: string }[]
+  ga4_properties?: { id: string; name: string; domains?: string[] }[]
 }
 
 /** Resolve a brand's Google override from the workspace's stored connection. Null if none stored. */
@@ -61,10 +61,16 @@ export async function resolveGoogle(workspaceId: string, brand: string, website?
     const x = norm(n)
     return !!x && !!bn && (x.includes(bn) || bn.includes(x))
   }
+  const domainMatches = (d: string): boolean => !!d && !!dom && (d === dom || d.includes(dom) || dom.includes(d))
+  // GA4: prefer a property whose web stream domain matches the brand's site (robust); fall back to a
+  // display-name match only when no domain lines up (older connections stored before domain enrichment).
+  const ga4 =
+    (dom ? (cfg.ga4_properties ?? []).find((p) => (p.domains ?? []).some(domainMatches))?.id : undefined) ??
+    (cfg.ga4_properties ?? []).find((p) => nameMatches(p.name))?.id
   return {
     token,
     gsc: dom ? (cfg.gsc_sites ?? []).map((s) => s.url).find((u) => u.toLowerCase().includes(dom)) : undefined,
-    ga4: (cfg.ga4_properties ?? []).find((p) => nameMatches(p.name))?.id,
+    ga4,
     yt: (cfg.yt_channels ?? []).find((c) => nameMatches(c.title))?.id,
   }
 }
