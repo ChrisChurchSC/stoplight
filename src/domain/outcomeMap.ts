@@ -131,6 +131,7 @@ export function buildOutcomeMap(rows: TrafficRow[], opts: OutcomeMapOpts): Outco
   for (const c of opts.campaigns) strategyByCampaign[c.name] = c.strategy
 
   const mtRevenue = multiTouchRevenueByAsset(rows)
+  const num = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0)
   // Count variants per asset so asset-level outcomes (revenue/leads) divide
   // evenly across the asset's shipped rows and the per-variant totals reconcile.
   const variantsPerAsset = new Map<string, number>()
@@ -148,15 +149,28 @@ export function buildOutcomeMap(rows: TrafficRow[], opts: OutcomeMapOpts): Outco
     const attr = mockAttio.attributionForAsset(r.assetName)
     const live = r.status === 'posted'
     const spend = r.spend?.toDate ?? 0
-
-    // Deterministic engagement mock: paid impressions scale with spend, organic
-    // off a stable per-variant seed. Only live (posted) rows have engagement.
-    const seed = hash(`${r.id}:${r.channel}`)
-    const impressions = live
-      ? Math.round(spend > 0 ? spend * (18 + seed * 12) : 800 + seed * 6000)
-      : 0
     const ctr = CTR[r.channel] ?? 0.01
-    const clicks = Math.round(impressions * ctr * (0.7 + seed * 0.6))
+
+    // Prefer REAL measured performance. Imported / reconciled live posts carry socialMetrics
+    // (impressions / reach / views) and engagement (likes / comments) pulled from the channel, so a
+    // connected brand's outcomes are its actual numbers. Fall back to the deterministic seed
+    // projection ONLY when a row has no measured data yet (a planned, not-yet-live card).
+    const seed = hash(`${r.id}:${r.channel}`)
+    const sm = r.socialMetrics ?? {}
+    const measuredImpr = num(sm.impressions) || num(sm.reach) || num(sm.views) || num(sm.plays)
+    const engTotal =
+      (r.engagement ? r.engagement.likes + r.engagement.comments : 0) +
+      num(sm.shares) + num(sm.saves) + num(sm.likes) + num(sm.comments)
+    const measured = measuredImpr > 0 || engTotal > 0
+    const impressions = measured
+      ? measuredImpr || Math.round(engTotal / ctr) // engagement-only source: back out a reach estimate
+      : live
+        ? Math.round(spend > 0 ? spend * (18 + seed * 12) : 800 + seed * 6000)
+        : 0
+    const measuredClicks = num(sm.clicks) || num(sm.linkClicks) || num(sm.taps)
+    const clicks = measured
+      ? measuredClicks || (engTotal > 0 ? engTotal : Math.round(impressions * ctr))
+      : Math.round(impressions * ctr * (0.7 + seed * 0.6))
 
     return {
       variantId: r.id,
@@ -178,10 +192,13 @@ export function buildOutcomeMap(rows: TrafficRow[], opts: OutcomeMapOpts): Outco
       outcomes: {
         impressions,
         clicks,
-        engagementRate: impressions > 0 ? clicks / impressions : 0,
-        leads: attr.leads / n,
-        opportunities: attr.openDeals / n,
-        revenue: (mtRevenue.get(r.assetName) ?? 0) / n,
+        engagementRate: num(sm.engagementRate) || (impressions > 0 ? clicks / impressions : 0),
+        // A real post has real reach but UNKNOWN revenue until a CRM is wired, so measured rows carry
+        // 0 for the mock CRM-derived fields; the aggregate then ranks them by real engagement instead
+        // of mockAttio's fabricated money. Non-measured (planned) rows keep the projection.
+        leads: measured ? 0 : attr.leads / n,
+        opportunities: measured ? 0 : attr.openDeals / n,
+        revenue: measured ? 0 : (mtRevenue.get(r.assetName) ?? 0) / n,
         spend,
       },
     }
