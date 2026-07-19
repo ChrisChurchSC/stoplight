@@ -86,9 +86,18 @@ function Row({ c, first, rec, connected, onConnect }: { c: Connector; first: boo
         </span>
         <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-muted, #5a6b72)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.desc}</span>
       </span>
-      {connected
-        ? <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent, #0e6d84)', flex: '0 0 auto' }}>Connected</span>
-        : <span style={{ fontSize: 13, fontWeight: wired ? 600 : 400, color: wired ? 'var(--accent, #0e6d84)' : 'var(--text-muted, #5a6b72)', flex: '0 0 auto' }}>Connect</span>}
+      {connected ? (
+        // Status, not a call to action: a calm green pill with a check.
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--green, #30a46c)', background: 'color-mix(in srgb, var(--green, #30a46c) 14%, transparent)', borderRadius: 999, padding: '3px 10px 3px 8px', flex: '0 0 auto' }}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+          Connected
+        </span>
+      ) : wired ? (
+        // Action: a filled accent pill that clearly invites a click.
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--accent, #ff6347)', background: 'var(--accent-soft, #ffe8e2)', borderRadius: 999, padding: '5px 14px', flex: '0 0 auto' }}>Connect</span>
+      ) : (
+        <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted, #5a6b72)', flex: '0 0 auto' }}>Connect</span>
+      )}
       <span style={{ display: 'grid', placeItems: 'center', width: 16, color: 'var(--text-faint, #8a969b)', flex: '0 0 auto' }}><Chevron /></span>
     </button>
   )
