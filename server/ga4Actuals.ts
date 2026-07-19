@@ -116,9 +116,9 @@ const isoDaysAgo = (days: number): string => {
   return d.toISOString().slice(0, 10)
 }
 
-/** GA4 website actuals by default channel grouping. Null when the brand isn't mapped / no data. */
-async function ga4Channels(brand: string, token: string): Promise<ChannelActual[]> {
-  const property = (mapFor('GA4_PROPERTIES', brand) || '').replace(/^properties\//, '')
+/** GA4 website actuals by default channel grouping, for a resolved property id. */
+async function ga4Channels(propertyRaw: string, token: string): Promise<ChannelActual[]> {
+  const property = (propertyRaw || '').replace(/^properties\//, '')
   if (!property) return []
   try {
     const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`, {
@@ -155,9 +155,8 @@ async function ga4Channels(brand: string, token: string): Promise<ChannelActual[
   }
 }
 
-/** Search Console organic-search totals (clicks + impressions). Empty when the brand isn't mapped. */
-async function gscChannel(brand: string, token: string): Promise<ChannelActual[]> {
-  const site = mapFor('GSC_SITES', brand)
+/** Search Console organic-search totals (clicks + impressions), for a resolved site. */
+async function gscChannel(site: string, token: string): Promise<ChannelActual[]> {
   if (!site) return []
   try {
     const res = await fetch(
@@ -180,9 +179,8 @@ async function gscChannel(brand: string, token: string): Promise<ChannelActual[]
   }
 }
 
-/** YouTube channel analytics (views, watch, subs, engagement). Empty when the brand isn't mapped. */
-async function ytChannel(brand: string, token: string): Promise<ChannelActual[]> {
-  const channelId = mapFor('YT_CHANNELS', brand)
+/** YouTube channel analytics (views, watch, subs, engagement), for a resolved channel id. */
+async function ytChannel(channelId: string, token: string): Promise<ChannelActual[]> {
   if (!channelId) return []
   try {
     const res = await fetch(
@@ -216,12 +214,29 @@ async function ytChannel(brand: string, token: string): Promise<ChannelActual[]>
   }
 }
 
-/** Real Google actuals (GA4 + Search Console + YouTube) for any mapped brand. Null when no data. */
-export async function runGoogleActuals(brand: string): Promise<BrandActuals | null> {
-  if (!mapFor('GA4_PROPERTIES', brand) && !mapFor('GSC_SITES', brand) && !mapFor('YT_CHANNELS', brand)) return null
-  const token = await accessToken()
+/** A resolved Google connection for one brand: an access token + the brand's specific sources.
+ *  Passed in from a stored per-workspace connection; when absent we fall back to the env maps. */
+export interface GoogleOverride {
+  token: string
+  ga4?: string
+  gsc?: string
+  yt?: string
+}
+
+/** Real Google actuals (GA4 + Search Console + YouTube) for a brand. With `override` it uses that
+ *  workspace's stored token + resolved sources; without, it uses the env token + brand maps. */
+export async function runGoogleActuals(brand: string, override?: GoogleOverride): Promise<BrandActuals | null> {
+  const token = override?.token ?? (await accessToken())
   if (!token) return null
-  const [ga4, gsc, yt] = await Promise.all([ga4Channels(brand, token), gscChannel(brand, token), ytChannel(brand, token)])
+  const ga4Id = override ? override.ga4 : mapFor('GA4_PROPERTIES', brand) ?? undefined
+  const gscSite = override ? override.gsc : mapFor('GSC_SITES', brand) ?? undefined
+  const ytId = override ? override.yt : mapFor('YT_CHANNELS', brand) ?? undefined
+  if (!ga4Id && !gscSite && !ytId) return null
+  const [ga4, gsc, yt] = await Promise.all([
+    ga4Id ? ga4Channels(ga4Id, token) : Promise.resolve([]),
+    gscSite ? gscChannel(gscSite, token) : Promise.resolve([]),
+    ytId ? ytChannel(ytId, token) : Promise.resolve([]),
+  ])
   const channels = [...ga4, ...gsc, ...yt]
   if (!channels.length) return null
   const sources = [

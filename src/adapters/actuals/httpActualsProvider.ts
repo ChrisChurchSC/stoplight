@@ -10,8 +10,11 @@ import type { ActualsProvider } from './types'
 export function httpActualsProvider(baseUrl: string): ActualsProvider {
   return {
     source: 'Summer · Forward API',
-    async fetch(brand) {
-      const res = await fetch(`${baseUrl}?brand=${encodeURIComponent(brand)}`, {
+    async fetch(brand, opts) {
+      const q = new URLSearchParams({ brand })
+      if (opts?.workspaceId) q.set('workspace', opts.workspaceId)
+      if (opts?.website) q.set('website', opts.website)
+      const res = await fetch(`${baseUrl}?${q.toString()}`, {
         headers: { accept: 'application/json' },
       })
       if (!res.ok || res.status === 204) return null

@@ -26,6 +26,7 @@
 
 import { runGoogleActuals } from './ga4Actuals.js'
 import { runResendActuals } from './resendActuals.js'
+import { resolveGoogle } from './googleResolve.js'
 
 const BASE = process.env.SUPERMETRICS_BASE || 'https://api.supermetrics.com'
 const SINCE_DAYS = Number(process.env.SUPERMETRICS_SINCE_DAYS) || 90
@@ -114,12 +115,17 @@ async function runChannel(q: ChannelQuery, from: string): Promise<ChannelActual 
   }
 }
 
-/** Fetch a brand's real channel actuals. Merges Google-direct (GA4/GSC/YouTube) + Resend (email);
- *  falls back to Supermetrics only when neither returned anything. Null when nothing is configured. */
-export async function runActuals(brand: string): Promise<BrandActuals | null> {
+/** Fetch a brand's real channel actuals. When a workspace id is given, reads that workspace's STORED
+ *  Google/Resend connection (per-brand auto-matched); otherwise the single-tenant env maps. Merges
+ *  Google (GA4/GSC/YouTube) + Resend (email); Supermetrics is the last-resort fallback. */
+export async function runActuals(
+  brand: string,
+  ctx?: { workspaceId?: string; website?: string },
+): Promise<BrandActuals | null> {
+  const override = ctx?.workspaceId ? await resolveGoogle(ctx.workspaceId, brand, ctx.website).catch(() => null) : null
   const [google, resend] = await Promise.all([
-    runGoogleActuals(brand).catch(() => null),
-    runResendActuals(brand).catch(() => null),
+    runGoogleActuals(brand, override ?? undefined).catch(() => null),
+    runResendActuals(brand, ctx?.workspaceId).catch(() => null),
   ])
   const collected = [google, resend].filter((r): r is BrandActuals => !!r)
   if (collected.length) {

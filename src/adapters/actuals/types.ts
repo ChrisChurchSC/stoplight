@@ -10,5 +10,5 @@ export interface ActualsProvider {
   /** Human label for the source, shown in the UI ("Summer · Forward API"). */
   readonly source: string
   /** Pull a brand's measured actuals. Returns null when the brand has no connected data. */
-  fetch(brand: string): Promise<BrandActuals | null>
+  fetch(brand: string, opts?: { workspaceId?: string; website?: string }): Promise<BrandActuals | null>
 }

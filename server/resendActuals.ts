@@ -10,6 +10,8 @@
  *
  * Config: RESEND_API_KEY, RESEND_BRAND (the brand, lowercased, this Resend account maps to).
  */
+import { getConnection } from './connections.js'
+
 const BASE = 'https://api.resend.com'
 
 interface ChannelActual {
@@ -31,11 +33,20 @@ interface BrandActuals {
 
 const n = (v: unknown): number => (typeof v === 'number' ? v : Number(v) || 0)
 
-/** Email actuals from Resend broadcasts. Null when unmapped / unconfigured / nothing sent. */
-export async function runResendActuals(brand: string): Promise<BrandActuals | null> {
-  const key = process.env.RESEND_API_KEY
-  const mapped = (process.env.RESEND_BRAND || '').trim().toLowerCase()
-  if (!key || !mapped || brand.trim().toLowerCase() !== mapped) return null
+/** Email actuals from Resend broadcasts. With a workspace id, uses that workspace's STORED Resend key
+ *  (applies to all its brands); else the env key gated on RESEND_BRAND. Null when nothing sent. */
+export async function runResendActuals(brand: string, workspaceId?: string): Promise<BrandActuals | null> {
+  let key = ''
+  if (workspaceId) {
+    const conn = await getConnection(workspaceId, 'resend')
+    const stored = (conn?.credentials as { api_key?: string } | undefined)?.api_key
+    if (stored) key = stored
+  }
+  if (!key) {
+    const mapped = (process.env.RESEND_BRAND || '').trim().toLowerCase()
+    if (!process.env.RESEND_API_KEY || !mapped || brand.trim().toLowerCase() !== mapped) return null
+    key = process.env.RESEND_API_KEY
+  }
   try {
     const headers = { authorization: `Bearer ${key}` }
     const listRes = await fetch(`${BASE}/broadcasts`, { headers })

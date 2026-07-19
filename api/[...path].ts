@@ -64,10 +64,13 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
       res.statusCode = 405
       return res.end()
     }
-    const brand = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('brand') ?? ''
+    const qs = new URLSearchParams((req.url ?? '').split('?')[1] ?? '')
+    const brand = qs.get('brand') ?? ''
+    const workspaceId = qs.get('workspace') ?? undefined
+    const website = qs.get('website') ?? undefined
     try {
       const { runActuals } = await import('../server/actualsHandler.js')
-      const data = await runActuals(brand)
+      const data = await runActuals(brand, { workspaceId, website })
       if (!data) {
         res.statusCode = 204
         return res.end()

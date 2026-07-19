@@ -15,6 +15,7 @@ import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile,
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
+import { getActiveWorkspaceId } from '../lib/session'
 import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import { classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
@@ -2993,7 +2994,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (!n || get().actualsRefreshing) return
     set({ actualsRefreshing: n })
     try {
-      const data = await actualsProvider.fetch(n)
+      const s = get()
+      const website = (s.clientProfiles[n]?.website || s.brandRecords.find((b) => b.name === n)?.website || '').trim() || undefined
+      const workspaceId = (await getActiveWorkspaceId()) || undefined
+      const data = await actualsProvider.fetch(n, { workspaceId, website })
       if (data) get().setBrandActuals(n, data)
     } finally {
       set({ actualsRefreshing: null })
