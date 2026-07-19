@@ -23489,8 +23489,7 @@ table.aud-sheet td.stick .aud-cell {
 }
 .fvis-bar-fill {
   height: 100%;
-  background-color: var(--accent);
-  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0) 0 5px, rgba(255, 255, 255, 0.3) 5px 8px);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 80%, #fff), var(--accent));
   border-radius: 999px;
 }
 .fvis-bar-val {
@@ -23625,8 +23624,7 @@ table.aud-sheet td.stick .aud-cell {
 }
 .fchart-bar-fill {
   height: 100%;
-  background-color: var(--accent);
-  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0) 0 6px, rgba(255, 255, 255, 0.3) 6px 9px);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 80%, #fff), var(--accent));
   border-radius: 999px;
 }
 .fchart-bar-val {
@@ -23636,7 +23634,7 @@ table.aud-sheet td.stick .aud-cell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* Reach over time — bold rounded, textured vertical bars. */
+/* Reach over time — clean rounded vertical bars. */
 .fchart-vbars {
   display: flex;
   align-items: flex-end;
@@ -23662,13 +23660,12 @@ table.aud-sheet td.stick .aud-cell {
 }
 .fchart-vbar {
   width: 100%;
-  max-width: 56px;
-  border-radius: 12px 12px 0 0;
-  background-color: var(--accent);
-  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0) 0 6px, rgba(255, 255, 255, 0.32) 6px 9px);
+  max-width: 52px;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 74%, #fff), var(--accent));
 }
 .fchart-vbar.hot {
-  filter: brightness(0.94);
+  filter: brightness(1.04);
 }
 .fchart-vtip {
   position: absolute;
