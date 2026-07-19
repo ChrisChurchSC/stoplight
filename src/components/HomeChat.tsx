@@ -821,7 +821,10 @@ export function HomeChat() {
     const objective = (objectiveId && brandObjectives.find((o) => o.id === objectiveId)) || brandObjectives[0]
     const goalKpi = objective?.metric?.trim() || undefined
     const goalTarget = objective?.target ? Number(String(objective.target).replace(/[^0-9.]/g, '')) || undefined : undefined
-    const proof = store.brandSystems[brand]?.rtbs ?? []
+    // A campaign leans on a FEW key reasons-to-believe, not the brand's whole proof library. Prefer
+    // approved proof points, then cap to a focused set so each campaign stays sharp.
+    const allProof = store.brandSystems[brand]?.rtbs ?? []
+    const proof = (allProof.some((r) => r.approved) ? allProof.filter((r) => r.approved) : allProof).slice(0, 3)
 
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
