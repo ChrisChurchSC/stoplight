@@ -237,8 +237,7 @@ export function HomeSidebar() {
     item('flows', 'Campaigns', 'flows', page === 'flows', () => setPage('flows')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
-    item('insights', 'Insights', 'insights', page === 'content' && libraryMode !== 'catalog', () => setLibraryMode('data')),
-    item('reports', 'Reports', 'reports', page === 'reports', () => setPage('reports')),
+    item('insights', 'Insights', 'insights', page === 'reports' || (page === 'content' && libraryMode !== 'catalog'), () => setLibraryMode('data')),
   ]
   const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     {

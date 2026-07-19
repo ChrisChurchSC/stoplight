@@ -24665,6 +24665,16 @@ table.aud-sheet td.stick .aud-cell {
 .hchat-action.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .hchat-action.primary:hover { color: #fff; filter: brightness(1.05); }
 
+/* Insights sub-nav: unifies live Metrics and saved Reports under one page. */
+.insights-tabs { display: flex; gap: 2px; margin: 0 0 14px; border-bottom: 1px solid var(--border); }
+.insights-tab {
+  border: none; background: transparent; color: var(--text-muted); font: inherit; font-size: 13.5px;
+  font-weight: 600; cursor: pointer; padding: 8px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .12s, border-color .12s;
+}
+.insights-tab:hover { color: var(--text); }
+.insights-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
 .hchat-composer { flex: 0 0 auto; padding: 8px 0 20px; }
 .hchat-box {
   border: 1px solid var(--border-strong);

@@ -25,6 +25,7 @@ import { PrioritiesView } from './PrioritiesView'
 import { ChannelsView } from './ChannelsView'
 import { ChannelRecordsView } from './ChannelRecordsView'
 import { ReportsView } from './ReportsView'
+import { InsightsTabs } from './InsightsTabs'
 import { CompaniesView } from './CompaniesView'
 import { PeopleView } from './PeopleView'
 import { SegmentsView } from './SegmentsView'
@@ -285,6 +286,7 @@ export function Workbench() {
             </div>
           ) : page === 'content' ? (
             <div className="home-main-scroll">
+              <InsightsTabs />
               <LibraryView scopeClient={scopedBrand} />
             </div>
           ) : page === 'channels' ? (
@@ -293,6 +295,7 @@ export function Workbench() {
             </div>
           ) : page === 'reports' ? (
             <div className="home-main-scroll">
+              <InsightsTabs />
               <ReportsView scopeClient={scopedBrand} />
             </div>
           ) : page === 'records' ? (
