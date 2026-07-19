@@ -7,6 +7,8 @@ import { getActiveWorkspaceId } from '../lib/session'
 import { draftAudiences } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
+import { draftBrandProfile } from '../adapters/ask/draftBrandProfile'
+import type { BrandRecord } from '../domain/brandRecord'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
 import { readAggregatePatterns } from '../adapters/aggregate/aggregateOutcomes'
@@ -104,6 +106,7 @@ export function HomeChat() {
   // Setup actions — the guided flow creates real records as the user answers.
   const addClient = useTrafficStore((s) => s.addClient)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
+  const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addMessage = useTrafficStore((s) => s.addMessage)
@@ -560,6 +563,40 @@ export function HomeChat() {
     pushFlowStep(FOUNDATION_STEPS[0])
   }
 
+  // Fill the brand's STRATEGY RECORD (positioning, objectives, audience, differentiator, ...) from its
+  // real content. This is the upstream foundation the other generators read from, so it runs first.
+  const draftBrandStrategy = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') return
+    const rec = store.brandRecords.find((b) => b.name === brand)
+    if (!rec) return
+    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting ${brand}'s strategy from content` }] }])
+    const draft = await draftBrandProfile({ brand, oneLiner: profile.oneLiner, industry: profile.industry || rec.industry, positioning: rec.positioning, samples: brandLibrarySamples(brand) })
+    if (draft) {
+      const { oneLiner, ...recFields } = draft
+      updateBrandRecord(rec.id, recFields as Partial<BrandRecord>)
+      if (oneLiner) setClientProfile(brand, { oneLiner })
+    }
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              busy: false,
+              steps: undefined,
+              text: draft
+                ? `Filled in **${brand}**'s strategy foundation from your content: positioning, business and comms objectives, primary audience, and differentiator. Open Brand to refine.`
+                : `Couldn't draft the strategy yet. Add a website or one-liner and re-run so I have something to work from.`,
+            }
+          : x,
+      ),
+    )
+    lastActionRef.current = 'strategy'
+  }
+
   // One-click "Build brand": pull the brand's real content (its site via Search Console + published
   // work), then draft the whole foundation FROM it. Voice and proof read the ingested Library, so the
   // brand page reflects what the brand has actually put out, not a one-liner.
@@ -594,13 +631,14 @@ export function HomeChat() {
           : x,
       ),
     )
-    // 2) Draft the foundation in order. Voice + proof are derived from the ingested Library.
+    // 2) Fill the strategy record FIRST (the upstream fields the rest read), then the foundation.
+    await draftBrandStrategy()
     await addAudiences()
     await addBrandVoices()
     await draftProofPoints()
     await draftBrandMessages()
     say(
-      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: audiences, voice, proof points, and messages. Open each to refine, or build your go-to-market next.`,
+      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: strategy (positioning, objectives, audience), plus audiences, voice, proof points, and messages. Open Brand or each section to refine, or build your go-to-market next.`,
     )
   }
   const startGtmFlow = () => {
