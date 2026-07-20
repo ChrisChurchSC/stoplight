@@ -35,3 +35,17 @@ export function newFlight(patch: Partial<Flight> & { campaign: string }): Flight
     durationWeeks: patch.durationWeeks && patch.durationWeeks > 0 ? patch.durationWeeks : 4,
   }
 }
+
+/**
+ * The flight an asset belongs to: its explicit `flightId` when set, else the campaign's first flight.
+ * The fallback is what lets us skip stamping every asset during migration, while a campaign has one
+ * flight, all its (unstamped) assets resolve to it. flightId only matters once a campaign is split.
+ */
+export function flightForRow(row: { campaign?: string; flightId?: string }, flights: Flight[]): Flight | undefined {
+  if (row.flightId) {
+    const byId = flights.find((f) => f.id === row.flightId)
+    if (byId) return byId
+  }
+  const c = (row.campaign ?? '').trim()
+  return c ? flights.find((f) => f.campaign === c) : undefined
+}

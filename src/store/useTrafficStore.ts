@@ -3706,9 +3706,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }),
 
   ensureFlights: async () => {
-    // Give every campaign that has assets a default "Flight 1" spanning its current assets, and stamp
-    // each asset with its flightId. Guarded by a one-time flag; idempotent (skips campaigns that
-    // already have a flight). Non-destructive: asset dates are untouched.
+    // Give every campaign that has assets a default "Flight 1" spanning its current assets. Guarded by
+    // a one-time flag; idempotent (skips campaigns that already have a flight). We do NOT stamp each
+    // asset's flightId here — while a campaign has a single flight, its assets resolve to that flight
+    // by fallback (see flightForRow), which avoids hundreds of slow per-row writes. flightId is only
+    // set when a campaign is split into multiple flights.
     try {
       if (localStorage.getItem(FLIGHTS_MIGRATED_KEY)) return
     } catch {
@@ -3728,7 +3730,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const WK = 7 * 86_400_000
     const newFlights: Flight[] = []
-    const stamp: { id: string; flightId: string }[] = []
     for (const [campaign, crows] of byCampaign) {
       if (haveFor.has(campaign)) continue
       const times = crows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
@@ -3736,22 +3737,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const end = times.length ? Math.max(...times) : start
       const camp = get().campaignList.find((c) => c.name === campaign)
       const weeks = camp?.durationWeeks && camp.durationWeeks > 0 ? camp.durationWeeks : Math.max(1, Math.round((end - start) / WK) || 4)
-      const flight = newFlight({ campaign, name: 'Flight 1', startAt: new Date(start).toISOString(), durationWeeks: weeks })
-      newFlights.push(flight)
-      for (const r of crows) if (!r.flightId) stamp.push({ id: r.id, flightId: flight.id })
+      newFlights.push(newFlight({ campaign, name: 'Flight 1', startAt: new Date(start).toISOString(), durationWeeks: weeks }))
     }
     if (newFlights.length) {
       const flights = [...existing, ...newFlights]
       saveFlights(flights)
       set({ flights })
-      for (const u of stamp) await sheet.update(u.id, { flightId: u.flightId })
     }
     try {
       localStorage.setItem(FLIGHTS_MIGRATED_KEY, '1')
     } catch {
       /* ignore */
     }
-    if (stamp.length) await get().refresh()
   },
 
   addFlight: (campaign, patch) => {
