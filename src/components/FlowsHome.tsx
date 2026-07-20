@@ -49,6 +49,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const [newFolder, setNewFolder] = useState('')
   const [newUmbrellaOpen, setNewUmbrellaOpen] = useState(false)
   const [newUmbrella, setNewUmbrella] = useState('')
+  const [flightPickerOpen, setFlightPickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const addUmbrella = () => {
     const nm = newUmbrella.trim()
@@ -156,6 +157,8 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       childrenByParent.set(c.parent, arr)
     }
   const topCards = cards.filter((c) => !(c.parent && meta.has(c.parent)))
+  // Campaigns you can add a flight to (real campaigns that have assets, not umbrellas).
+  const flightable = cards.filter((c) => !c.isUmbrella && c.flights.length > 0)
   const unfiled = sortCards(topCards.filter((c) => !c.folder || !folders.includes(c.folder)))
 
   const addFolder = () => {
@@ -340,6 +343,36 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               ＋ New umbrella
             </button>
           )}
+          <div className="flow-home-flightpick">
+            <button className="flow-home-new" onClick={() => setFlightPickerOpen((o) => !o)}>
+              ＋ New flight
+            </button>
+            {flightPickerOpen && (
+              <>
+                <div className="flow-home-flightpick-scrim" onClick={() => setFlightPickerOpen(false)} />
+                <div className="flow-home-flightpick-menu" role="menu">
+                  <div className="flow-home-flightpick-head">Add a flight to…</div>
+                  {flightable.length === 0 ? (
+                    <div className="flow-home-flightpick-empty">No campaigns to re-run yet.</div>
+                  ) : (
+                    flightable.map((c) => (
+                      <button
+                        key={c.name}
+                        className="flow-home-flightpick-item"
+                        role="menuitem"
+                        onClick={() => {
+                          void addFlightRun(c.name)
+                          setFlightPickerOpen(false)
+                        }}
+                      >
+                        {c.name.replace(`${brand} — `, '')}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           <button
             className="flow-home-new"
             onClick={() => {

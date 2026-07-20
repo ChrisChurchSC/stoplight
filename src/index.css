@@ -5428,18 +5428,70 @@ button {
 }
 .flow-home-new {
   flex: none;
-  border: 0;
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  padding: 9px 15px;
+  padding: 8px 13px;
   border-radius: 9px;
   cursor: pointer;
 }
 .flow-home-new:hover {
-  filter: brightness(1.05);
+  border-color: var(--text-faint);
+}
+/* "New flight" campaign picker dropdown. */
+.flow-home-flightpick {
+  position: relative;
+}
+.flow-home-flightpick-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.flow-home-flightpick-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.18);
+  padding: 5px;
+}
+.flow-home-flightpick-head {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 9px 5px;
+}
+.flow-home-flightpick-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.flow-home-flightpick-item:hover {
+  background: var(--surface-2);
+}
+.flow-home-flightpick-empty {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  padding: 8px 9px;
 }
 .flow-home-groups {
   display: flex;
