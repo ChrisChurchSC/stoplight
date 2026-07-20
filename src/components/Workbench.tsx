@@ -38,6 +38,7 @@ import { ObjectivesView } from './ObjectivesView'
 import { TasksView } from './TasksView'
 import { BrandsView } from './BrandsView'
 import { FlowsView } from './FlowsView'
+import { CampaignCalendar } from './CampaignCalendar'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
@@ -351,6 +352,10 @@ export function Workbench() {
           ) : page === 'flows' ? (
             <div className="home-main-page">
               <FlowsView />
+            </div>
+          ) : page === 'calendar' ? (
+            <div className="home-main-scroll">
+              <CampaignCalendar />
             </div>
           ) : (
             <div className="home-main-page">

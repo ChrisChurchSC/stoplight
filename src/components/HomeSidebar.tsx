@@ -19,6 +19,13 @@ const ICONS: Record<string, ReactNode> = {
     </>
   ),
   brand: <path d="M12 2 22 12 12 22 2 12Z" />,
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="16" rx="2" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3.5v3M16 3.5v3" />
+    </>
+  ),
   library: (
     <>
       <rect x="4" y="4" width="7" height="7" rx="1.3" />
@@ -237,6 +244,7 @@ export function HomeSidebar() {
     // "Brand" opens this brand's own strategy record (single-brand only, never the every-brand list).
     item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
     item('flows', 'Campaigns', 'flows', page === 'flows', () => setPage('flows')),
+    item('calendar', 'Calendar', 'calendar', page === 'calendar', () => setPage('calendar')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
     item('insights', 'Insights', 'insights', page === 'reports' || (page === 'content' && libraryMode !== 'catalog'), () => setLibraryMode('data')),

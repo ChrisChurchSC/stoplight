@@ -5674,6 +5674,200 @@ button {
   color: var(--text-muted);
   margin-top: 4px;
 }
+/* ---- Campaign calendar (high-level timeline of all campaigns) ---- */
+.ccal {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+}
+.ccal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.ccal-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+.ccal-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 3px 0 0;
+}
+.ccal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
+}
+.ccal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.ccal-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+/* The label column width is shared by the month header and every row so bars align under months. */
+.ccal-label-col {
+  flex: 0 0 210px;
+  width: 210px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 12px;
+  min-width: 0;
+}
+.ccal-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ccal-monthrow {
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+.ccal-monthtrack {
+  height: 20px;
+}
+.ccal-month {
+  position: absolute;
+  bottom: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ccal-body {
+  display: flex;
+  flex-direction: column;
+}
+.ccal-row {
+  display: flex;
+  align-items: center;
+  height: 40px;
+}
+.ccal-row-name {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.ccal-row-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.ccal-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  pointer-events: none;
+}
+.ccal-today,
+.ccal-today-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+.ccal-today-head {
+  bottom: -2px;
+}
+.ccal-bar {
+  position: absolute;
+  top: 8px;
+  height: 24px;
+  min-width: 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
+  transition: filter 0.12s, transform 0.12s;
+  z-index: 1;
+}
+.ccal-bar:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.ccal-bar-label {
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ccal-unsched {
+  margin-top: 26px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.ccal-unsched-h {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.ccal-unsched-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ccal-unsched-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px 5px 10px;
+  cursor: pointer;
+}
+.ccal-unsched-item:hover {
+  border-color: var(--accent);
+}
+
 /* Which single audience the campaign is personalized to — a small pill inline in the card title. */
 .flow-home-persona {
   display: inline-flex;
