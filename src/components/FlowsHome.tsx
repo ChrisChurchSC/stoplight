@@ -22,6 +22,8 @@ interface FlowCard {
   folder?: string
   /** Umbrella parent campaign name, when this is an audience-specific child. */
   parent?: string
+  /** The single audience this campaign is personalized to (its segment reference label). */
+  personalizedTo?: string
 }
 
 const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1, planning: 2, completed: 3 }
@@ -91,6 +93,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       channels: [...new Set(cRows.map((r) => r.channel))] as ChannelId[],
       folder: meta.get(name)?.folder,
       parent: meta.get(name)?.parent,
+      personalizedTo: meta.get(name)?.references?.find((r) => r.type === 'segment')?.label,
     }
   })
   const sortCards = (arr: FlowCard[]) =>
@@ -141,6 +144,15 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         <div className="flow-home-card-meta">
           {c.types} deliverable{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
         </div>
+        {c.personalizedTo && (
+          <div className="flow-home-persona" title={`Personalized to ${c.personalizedTo}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.2" />
+              <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+            </svg>
+            <span>Personalized to {c.personalizedTo}</span>
+          </div>
+        )}
         <div className="flow-home-chans">
           {c.channels.slice(0, 8).map((ch) => (
             <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
