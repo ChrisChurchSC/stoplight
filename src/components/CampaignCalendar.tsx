@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { flightForRow } from '../domain/flight'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CampaignStatus } from '../domain/lifecycle'
 import type { ChannelId } from '../domain/types'
@@ -7,12 +8,10 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
 /**
- * A high-level campaign calendar: every one of the brand's campaigns as a horizontal bar on a shared
- * month timeline, so you can see at a glance what is running, when, and for how long. Each campaign's
- * flight window is derived from its scheduled assets (earliest to latest scheduledAt), extended to its
- * planned duration when longer. Bars are colored by lifecycle status; a "today" line marks now.
- * Clicking a bar opens that campaign (openFlow → the Flows canvas). Campaigns with nothing scheduled
- * yet are listed underneath so they aren't lost.
+ * The campaign calendar as a Gantt of FLIGHTS: Umbrella → Campaign (a row) → Flight (a bar) → Asset
+ * (a marker). A campaign row shows one bar per flight (a flight is one scheduled run of the campaign);
+ * dragging a bar moves/resizes that flight (and reschedules its assets). Expanding a row lists the
+ * campaign's assets, each draggable to its own launch date. Bars are colored by lifecycle status.
  */
 
 const DAY = 86_400_000
@@ -42,45 +41,53 @@ const nextMonth = (ms: number) => {
 export function CampaignCalendar() {
   const { canvases } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const campaignList = useTrafficStore((s) => s.campaignList)
+  const flights = useTrafficStore((s) => s.flights)
   const openFlow = useTrafficStore((s) => s.openFlow)
-  const moveCampaignSchedule = useTrafficStore((s) => s.moveCampaignSchedule)
-  const rescaleCampaignSchedule = useTrafficStore((s) => s.rescaleCampaignSchedule)
+  const ensureFlights = useTrafficStore((s) => s.ensureFlights)
+  const moveFlightSchedule = useTrafficStore((s) => s.moveFlightSchedule)
+  const rescaleFlightSchedule = useTrafficStore((s) => s.rescaleFlightSchedule)
   const moveAssetSchedule = useTrafficStore((s) => s.moveAssetSchedule)
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   // How many months the timeline spans (the view zoom).
   const [viewMonths, setViewMonths] = useState(12)
 
-  const durByName = useMemo(
-    () => new Map(campaignList.map((c) => [c.name, c.durationWeeks] as const)),
-    [campaignList],
-  )
+  // Every campaign gets a flight; make sure new ones do too (idempotent + cheap).
+  const canvasCount = canvases.length
+  useEffect(() => {
+    if (canvasCount) void ensureFlights()
+  }, [canvasCount, ensureFlights])
 
-  // The brand's campaigns with a derived flight window from their scheduled assets.
+  // Each brand campaign with its flight bars (one per flight, window derived from that flight's assets,
+  // extended to the flight's planned duration) and its full asset list for the expand.
   const items = useMemo(() => {
     const forBrand = canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN)
     return forBrand.map((c) => {
-      const times = c.rows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
-      const start = times.length ? Math.min(...times) : NaN
-      let end = times.length ? Math.max(...times) : NaN
-      const dur = durByName.get(c.name)
-      if (!Number.isNaN(start) && dur && dur > 0 && end - start < dur * 7 * DAY) end = start + dur * 7 * DAY
-      // Each scheduled asset, for the expandable per-asset rows. Kept in the campaign's natural asset
-      // order (NOT sorted by date) so dragging one to a new launch date never reshuffles the list.
+      const campFlights = flights.filter((f) => f.campaign === c.name)
+      const bars = campFlights
+        .map((f) => {
+          const fRows = c.rows.filter((r) => flightForRow(r, flights)?.id === f.id)
+          const times = fRows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
+          const start = times.length ? Math.min(...times) : Date.parse(f.startAt)
+          let end = times.length ? Math.max(...times) : start
+          const durMs = (f.durationWeeks || 4) * 7 * DAY
+          if (end - start < durMs) end = start + durMs
+          return { id: f.id, name: f.name, start, end, assetCount: fRows.length }
+        })
+        .filter((b) => !Number.isNaN(b.start))
+      // Fallback for the brief window before ensureFlights runs (or a campaign with no flight yet):
+      // a single synthetic, non-draggable bar derived from all assets.
+      if (!bars.length) {
+        const times = c.rows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
+        if (times.length) bars.push({ id: '', name: 'Flight 1', start: Math.min(...times), end: Math.max(...times), assetCount: c.rows.length })
+      }
+      // Assets in the campaign's natural order (NOT date-sorted) so a drag never reshuffles the list.
       const assets = c.rows
         .map((r) => ({ id: r.id, name: r.assetName || r.assetType || 'Asset', channel: r.channel, at: Date.parse(r.scheduledAt) }))
         .filter((a) => !Number.isNaN(a.at))
-      return {
-        name: c.name,
-        status: c.status as CampaignStatus,
-        start,
-        end,
-        assetCount: c.rows.length,
-        scheduled: times.length,
-        assets,
-      }
+      const start = bars.length ? Math.min(...bars.map((b) => b.start)) : NaN
+      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets }
     })
-  }, [canvases, brand, durByName])
+  }, [canvases, brand, flights])
 
   const scheduled = useMemo(
     () => items.filter((i) => !Number.isNaN(i.start)).sort((a, b) => a.start - b.start || a.name.localeCompare(b.name)),
@@ -88,24 +95,17 @@ export function CampaignCalendar() {
   )
   const unscheduled = items.filter((i) => Number.isNaN(i.start))
 
-  // Timeline range: snapped to whole months, spanning the earliest start to the latest end, with a
-  // floor of ~4 months around today so a single short campaign still reads on a real calendar.
+  // Timeline range: whole months from the earliest start, spanning exactly the selected view (zoom).
   const now = Date.now()
   const { rangeStart, span, months } = useMemo(() => {
     const starts = scheduled.map((i) => i.start)
     const lo = firstOfMonth(starts.length ? Math.min(...starts, now) : now)
-    // The window spans exactly the selected number of months from the start (the view zoom); campaigns
-    // running past the window clamp at the right edge, pick a longer view to see them in full.
     const loD = new Date(lo)
     const hi = new Date(loD.getFullYear(), loD.getMonth() + viewMonths, 1).getTime()
     const ms: { label: string; start: number; days: number }[] = []
     for (let m = lo; m < hi; ) {
       const nxt = nextMonth(m)
-      ms.push({
-        label: new Date(m).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-        start: m,
-        days: (nxt - m) / DAY,
-      })
+      ms.push({ label: new Date(m).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), start: m, days: (nxt - m) / DAY })
       m = nxt
     }
     return { rangeStart: lo, span: hi - lo, months: ms }
@@ -113,10 +113,8 @@ export function CampaignCalendar() {
 
   const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - rangeStart) / span) * 100))
   const todayPct = pct(now)
+  const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
-  // Drag to reschedule: grab a bar to MOVE the whole flight, or its edges to RESIZE (duration).
-  // Movement snaps to whole WEEKS so reschedules land on clean dates, and a live tooltip shows the
-  // resulting flight window. Committed once on drop.
   const LABEL_COL = 220
   const WEEK = 7 * DAY
   // Campaigns expanded to show their individual assets as sub-rows.
@@ -128,64 +126,62 @@ export function CampaignCalendar() {
       return next
     })
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  // Drag a FLIGHT bar to move/resize it (snapped to whole weeks) — reschedules that flight's assets.
   const [drag, setDrag] = useState<
-    { name: string; mode: 'move' | 'resize-l' | 'resize-r'; offsetPx: number; newStart: number; newEnd: number; x: number; y: number } | null
+    { flightId: string; mode: 'move' | 'resize-l' | 'resize-r'; offsetPx: number; newStart: number; newEnd: number; x: number; y: number } | null
   >(null)
   const dragMovedRef = useRef(false)
 
-  const beginDrag = (e: ReactMouseEvent, c: { name: string; start: number; end: number }, mode: 'move' | 'resize-l' | 'resize-r') => {
+  const beginDrag = (e: ReactMouseEvent, bar: { id: string; start: number; end: number }, mode: 'move' | 'resize-l' | 'resize-r') => {
     e.preventDefault()
     e.stopPropagation()
+    if (!bar.id) return // synthetic fallback bar — not yet a real flight
     dragMovedRef.current = false
     const startX = e.clientX
     const trackW = bodyRef.current ? bodyRef.current.clientWidth - LABEL_COL : 0
     const totalDays = span / DAY
-    // Convert the cursor delta into a whole number of weeks, then back into a snapped window.
     const compute = (clientX: number) => {
       const rawDays = trackW > 0 ? ((clientX - startX) / trackW) * totalDays : 0
-      const weeks = Math.round(rawDays / 7)
-      const days = weeks * 7
+      const days = Math.round(rawDays / 7) * 7
       const offsetPx = trackW > 0 ? (days / totalDays) * trackW : 0
       let newStart: number, newEnd: number
       if (mode === 'move') {
-        newStart = c.start + days * DAY
-        newEnd = c.end + days * DAY
+        newStart = bar.start + days * DAY
+        newEnd = bar.end + days * DAY
       } else if (mode === 'resize-r') {
-        newStart = c.start
-        newEnd = Math.max(c.start + WEEK, c.end + days * DAY)
+        newStart = bar.start
+        newEnd = Math.max(bar.start + WEEK, bar.end + days * DAY)
       } else {
-        newStart = Math.min(c.end - WEEK, c.start + days * DAY)
-        newEnd = c.end
+        newStart = Math.min(bar.end - WEEK, bar.start + days * DAY)
+        newEnd = bar.end
       }
       return { days, offsetPx, newStart, newEnd }
     }
     const onMove = (ev: MouseEvent) => {
       if (Math.abs(ev.clientX - startX) > 3) dragMovedRef.current = true
       const r = compute(ev.clientX)
-      setDrag({ name: c.name, mode, offsetPx: r.offsetPx, newStart: r.newStart, newEnd: r.newEnd, x: ev.clientX, y: ev.clientY })
+      setDrag({ flightId: bar.id, mode, offsetPx: r.offsetPx, newStart: r.newStart, newEnd: r.newEnd, x: ev.clientX, y: ev.clientY })
     }
     const onUp = (ev: MouseEvent) => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       const r = compute(ev.clientX)
       if (r.days !== 0) {
-        if (mode === 'move') void moveCampaignSchedule(c.name, r.days)
-        else void rescaleCampaignSchedule(c.name, r.newStart, r.newEnd)
+        if (mode === 'move') void moveFlightSchedule(bar.id, r.days)
+        else void rescaleFlightSchedule(bar.id, r.newStart, r.newEnd)
       }
       setDrag(null)
-      // Keep the "moved" flag through this tick so the bar's click doesn't also open the campaign.
       window.setTimeout(() => {
         dragMovedRef.current = false
       }, 0)
     }
-    setDrag({ name: c.name, mode, offsetPx: 0, newStart: c.start, newEnd: c.end, x: e.clientX, y: e.clientY })
+    setDrag({ flightId: bar.id, mode, offsetPx: 0, newStart: bar.start, newEnd: bar.end, x: e.clientX, y: e.clientY })
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
   }
 
-  const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-
-  // Drag a single asset's marker to change its launch date (snapped to whole DAYS for precision).
+  // Drag a single asset's marker to change its launch date (snapped to whole days).
   const [assetDrag, setAssetDrag] = useState<{ id: string; offsetPx: number; newAt: number; x: number; y: number } | null>(null)
   const assetMovedRef = useRef(false)
 
@@ -253,7 +249,6 @@ export function CampaignCalendar() {
       </header>
 
       <div className="ccal-chart">
-        {/* Timeline header: the task column heading + the month scale. */}
         <div className="ccal-chart-head">
           <div className="ccal-label-col ccal-label-head">Campaign</div>
           <div className="ccal-track ccal-scale">
@@ -267,124 +262,119 @@ export function CampaignCalendar() {
 
         <div className="ccal-body" ref={bodyRef}>
           {scheduled.map((c) => {
-            const left = pct(c.start)
-            const width = Math.max(1.5, pct(c.end) - left)
-            const d = drag?.name === c.name ? drag : null
-            // Live preview of the drag: shift/grow the bar by the week-snapped pixel offset before it commits.
-            const barStyle: CSSProperties = { background: STATUS_COLOR[c.status] }
-            barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.offsetPx}px)` : `${left}%`
-            barStyle.width =
-              d && d.mode === 'resize-r'
-                ? `calc(${width}% + ${d.offsetPx}px)`
-                : d && d.mode === 'resize-l'
-                  ? `calc(${width}% - ${d.offsetPx}px)`
-                  : `${width}%`
-            const countShift = d && d.mode !== 'resize-l' ? d.offsetPx : 0
             const short = c.name.replace(`${brand} — `, '')
-            // Under an umbrella the children share a prefix ("Series · Audience"); show the
-            // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
             const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
             const isExp = expanded.has(c.name)
+            const multi = c.bars.length > 1
             return (
               <Fragment key={c.name}>
-              <div className="ccal-row">
-                <div className="ccal-label-col">
-                  {c.assets.length > 0 ? (
-                    <button
-                      className={`ccal-caret${isExp ? ' open' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleExpanded(c.name)
-                      }}
-                      aria-label={isExp ? 'Hide assets' : 'Show assets'}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 6l6 6-6 6" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <span className="ccal-caret-spacer" aria-hidden="true" />
-                  )}
-                  <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
-                  <span className="ccal-row-name" title={short}>
-                    {display}
-                  </span>
-                  <span className="ccal-row-count">{c.assetCount}</span>
-                </div>
-                <div className="ccal-track">
-                  {/* Continuous month gridlines + today marker, full lane height (Gantt grid). */}
-                  {months.map((m) => (
-                    <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
-                  ))}
-                  {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
-                  <button
-                    className={`ccal-bar${d ? ' dragging' : ''}`}
-                    style={barStyle}
-                    onMouseDown={(e) => beginDrag(e, c, 'move')}
-                    onClick={() => {
-                      if (!dragMovedRef.current) openFlow(c.name)
-                    }}
-                    title={`${short} · ${STATUS_LABEL[c.status]} · ${c.assetCount} asset${c.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`}
-                  >
-                    <span
-                      className="ccal-bar-handle ccal-bar-handle-l"
-                      onMouseDown={(e) => beginDrag(e, c, 'resize-l')}
-                      aria-hidden="true"
-                    />
-                    <span className="ccal-bar-label">{display}</span>
-                    <span
-                      className="ccal-bar-handle ccal-bar-handle-r"
-                      onMouseDown={(e) => beginDrag(e, c, 'resize-r')}
-                      aria-hidden="true"
-                    />
-                  </button>
-                  {/* Asset count trailing the bar, so it reads on the timeline itself. */}
-                  <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
-                    {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Expanded: each asset as its own sub-row, marked at its scheduled date. */}
-              {isExp &&
-                c.assets.map((a) => (
-                  <div className="ccal-row ccal-asset-row" key={a.id}>
-                    <div className="ccal-label-col ccal-asset-label">
-                      <span className="ccal-asset-ico">
-                        <ChannelIcon channel={a.channel as ChannelId} size={12} />
-                      </span>
-                      <span className="ccal-row-name" title={a.name}>
-                        {a.name}
-                      </span>
-                    </div>
-                    <div className="ccal-track">
-                      {months.map((m) => (
-                        <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
-                      ))}
-                      {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
-                      {(() => {
-                        const ad = assetDrag?.id === a.id ? assetDrag : null
-                        const off = ad ? ad.offsetPx : 0
-                        return (
-                          <>
-                            <button
-                              className={`ccal-asset-marker${ad ? ' dragging' : ''}`}
-                              style={{ left: `calc(${pct(a.at)}% + ${off}px)`, background: STATUS_COLOR[c.status] }}
-                              onMouseDown={(e) => beginAssetDrag(e, a)}
-                              onClick={() => {
-                                if (!assetMovedRef.current) openFlow(c.name)
-                              }}
-                              title={`${a.name} · ${fmtDate(a.at)} · drag to change the launch date`}
-                            />
-                            <span className="ccal-asset-date" style={{ left: `calc(${pct(a.at)}% + ${off + 12}px)` }} aria-hidden="true">
-                              {fmtDate(ad ? ad.newAt : a.at)}
-                            </span>
-                          </>
-                        )
-                      })()}
-                    </div>
+                <div className="ccal-row">
+                  <div className="ccal-label-col">
+                    {c.assets.length > 0 ? (
+                      <button
+                        className={`ccal-caret${isExp ? ' open' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleExpanded(c.name)
+                        }}
+                        aria-label={isExp ? 'Hide assets' : 'Show assets'}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 6l6 6-6 6" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <span className="ccal-caret-spacer" aria-hidden="true" />
+                    )}
+                    <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
+                    <span className="ccal-row-name" title={short}>
+                      {display}
+                    </span>
+                    <span className="ccal-row-count">{c.assetCount}</span>
                   </div>
-                ))}
+                  <div className="ccal-track">
+                    {months.map((m) => (
+                      <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
+                    ))}
+                    {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
+                    {c.bars.map((bar) => {
+                      const left = pct(bar.start)
+                      const width = Math.max(1.5, pct(bar.end) - left)
+                      const d = drag?.flightId === bar.id && bar.id ? drag : null
+                      const barStyle: CSSProperties = { background: STATUS_COLOR[c.status] }
+                      barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.offsetPx}px)` : `${left}%`
+                      barStyle.width =
+                        d && d.mode === 'resize-r'
+                          ? `calc(${width}% + ${d.offsetPx}px)`
+                          : d && d.mode === 'resize-l'
+                            ? `calc(${width}% - ${d.offsetPx}px)`
+                            : `${width}%`
+                      const countShift = d && d.mode !== 'resize-l' ? d.offsetPx : 0
+                      const barLabel = multi ? bar.name : display
+                      return (
+                        <Fragment key={bar.id || 'synthetic'}>
+                          <button
+                            className={`ccal-bar${d ? ' dragging' : ''}`}
+                            style={barStyle}
+                            onMouseDown={(e) => beginDrag(e, bar, 'move')}
+                            onClick={() => {
+                              if (!dragMovedRef.current) openFlow(c.name)
+                            }}
+                            title={`${short} · ${bar.name} · ${STATUS_LABEL[c.status]} · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`}
+                          >
+                            <span className="ccal-bar-handle ccal-bar-handle-l" onMouseDown={(e) => beginDrag(e, bar, 'resize-l')} aria-hidden="true" />
+                            <span className="ccal-bar-label">{barLabel}</span>
+                            <span className="ccal-bar-handle ccal-bar-handle-r" onMouseDown={(e) => beginDrag(e, bar, 'resize-r')} aria-hidden="true" />
+                          </button>
+                          <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
+                            {bar.assetCount} asset{bar.assetCount === 1 ? '' : 's'}
+                          </span>
+                        </Fragment>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Expanded: each asset as its own sub-row, marked at its scheduled date. */}
+                {isExp &&
+                  c.assets.map((a) => (
+                    <div className="ccal-row ccal-asset-row" key={a.id}>
+                      <div className="ccal-label-col ccal-asset-label">
+                        <span className="ccal-asset-ico">
+                          <ChannelIcon channel={a.channel as ChannelId} size={12} />
+                        </span>
+                        <span className="ccal-row-name" title={a.name}>
+                          {a.name}
+                        </span>
+                      </div>
+                      <div className="ccal-track">
+                        {months.map((m) => (
+                          <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
+                        ))}
+                        {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
+                        {(() => {
+                          const ad = assetDrag?.id === a.id ? assetDrag : null
+                          const off = ad ? ad.offsetPx : 0
+                          return (
+                            <>
+                              <button
+                                className={`ccal-asset-marker${ad ? ' dragging' : ''}`}
+                                style={{ left: `calc(${pct(a.at)}% + ${off}px)`, background: STATUS_COLOR[c.status] }}
+                                onMouseDown={(e) => beginAssetDrag(e, a)}
+                                onClick={() => {
+                                  if (!assetMovedRef.current) openFlow(c.name)
+                                }}
+                                title={`${a.name} · ${fmtDate(a.at)} · drag to change the launch date`}
+                              />
+                              <span className="ccal-asset-date" style={{ left: `calc(${pct(a.at)}% + ${off + 12}px)` }} aria-hidden="true">
+                                {fmtDate(ad ? ad.newAt : a.at)}
+                              </span>
+                            </>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  ))}
               </Fragment>
             )
           })}
@@ -406,8 +396,7 @@ export function CampaignCalendar() {
         </div>
       )}
 
-      {/* Live tooltip following the cursor while dragging — the flight window (campaign) or launch
-          date (asset) it will land on. Fixed-positioned so it escapes the chart's clipping. */}
+      {/* Live tooltip following the cursor while dragging — the flight window or asset launch date. */}
       {(drag || assetDrag) && (
         <div className="ccal-drag-tip" style={{ left: (drag ?? assetDrag)!.x + 14, top: (drag ?? assetDrag)!.y - 34 }}>
           {drag ? `${fmtDate(drag.newStart)} - ${fmtDate(drag.newEnd)}` : fmtDate(assetDrag!.newAt)}

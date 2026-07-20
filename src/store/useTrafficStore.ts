@@ -12,7 +12,7 @@ import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../doma
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
-import { newFlight, type Flight } from '../domain/flight'
+import { newFlight, flightForRow, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
@@ -1231,7 +1231,6 @@ function saveCampaigns(list: Campaign[]): void {
 // its campaigns under. Membership lives on each Campaign.folder; this holds the list
 // (so an empty folder still exists) and its order. Keyed by brand (client) name.
 const FLIGHTS_KEY = 'stoplight.flights.v1'
-const FLIGHTS_MIGRATED_KEY = 'stoplight.flightsMigrated.v1'
 function loadFlights(): Flight[] {
   try {
     const v = JSON.parse(localStorage.getItem(FLIGHTS_KEY) || '[]')
@@ -1787,6 +1786,10 @@ interface TrafficState {
   patchFlight: (id: string, patch: Partial<Flight>) => void
   /** Remove a flight; its assets keep their dates but lose the flight tag. */
   deleteFlight: (id: string) => void
+  /** Drag-move a flight on the calendar: shift its window + every asset that resolves to it by N days. */
+  moveFlightSchedule: (flightId: string, deltaDays: number) => Promise<void>
+  /** Drag-resize a flight: set its window to [startMs, endMs] and rescale its assets into it. */
+  rescaleFlightSchedule: (flightId: string, newStartMs: number, newEndMs: number) => Promise<void>
   /** Which folder the campaigns gallery is scoped to — nested under Campaigns in the
    *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
   campaignFolderView: string | null
@@ -3706,16 +3709,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }),
 
   ensureFlights: async () => {
-    // Give every campaign that has assets a default "Flight 1" spanning its current assets. Guarded by
-    // a one-time flag; idempotent (skips campaigns that already have a flight). We do NOT stamp each
-    // asset's flightId here — while a campaign has a single flight, its assets resolve to that flight
-    // by fallback (see flightForRow), which avoids hundreds of slow per-row writes. flightId is only
-    // set when a campaign is split into multiple flights.
-    try {
-      if (localStorage.getItem(FLIGHTS_MIGRATED_KEY)) return
-    } catch {
-      /* ignore */
-    }
+    // Give every campaign that has assets a default "Flight 1" spanning its current assets. Idempotent
+    // and cheap (a scan + at most a few creates, no network, no per-asset writes), so it's safe to call
+    // on load and whenever campaigns change — that's how NEW campaigns pick up a flight too. Assets are
+    // NOT stamped: while a campaign has one flight, its assets resolve to it by fallback (flightForRow).
     const rows = get().rows
     if (!rows.length) return // rows not loaded yet; a later call runs it once they are
     const existing = get().flights
@@ -3744,11 +3741,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveFlights(flights)
       set({ flights })
     }
-    try {
-      localStorage.setItem(FLIGHTS_MIGRATED_KEY, '1')
-    } catch {
-      /* ignore */
-    }
   },
 
   addFlight: (campaign, patch) => {
@@ -3772,6 +3764,57 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveFlights(flights)
       return { flights }
     }),
+
+  moveFlightSchedule: async (flightId, deltaDays) => {
+    if (!deltaDays) return
+    const f = get().flights.find((x) => x.id === flightId)
+    if (!f) return
+    const ms = deltaDays * 86_400_000
+    const shift = (iso?: string) => {
+      if (!iso) return undefined
+      const t = Date.parse(iso)
+      return Number.isNaN(t) ? undefined : new Date(t + ms).toISOString()
+    }
+    const flights = get().flights
+    const rows = get().rows.filter((r) => !r.archivedAt && r.scheduledAt && flightForRow(r, flights)?.id === flightId)
+    for (const r of rows) {
+      const next = shift(r.scheduledAt)
+      if (next) await sheet.update(r.id, { scheduledAt: next, ...(r.endsAt ? { endsAt: shift(r.endsAt) } : {}) })
+    }
+    get().patchFlight(flightId, { startAt: shift(f.startAt) ?? f.startAt })
+    await get().refresh()
+  },
+
+  rescaleFlightSchedule: async (flightId, newStartMs, newEndMs) => {
+    const f = get().flights.find((x) => x.id === flightId)
+    if (!f) return
+    const flights = get().flights
+    const rows = get().rows.filter((r) => !r.archivedAt && r.scheduledAt && flightForRow(r, flights)?.id === flightId)
+    const parsed = rows.map((r) => ({ r, t: Date.parse(r.scheduledAt) })).filter((x) => !Number.isNaN(x.t))
+    const newSpan = Math.max(86_400_000, newEndMs - newStartMs)
+    if (parsed.length) {
+      const oldStart = Math.min(...parsed.map((x) => x.t))
+      const oldEnd = Math.max(...parsed.map((x) => x.t))
+      const oldSpan = oldEnd - oldStart
+      for (const { r, t } of parsed) {
+        const frac = oldSpan > 0 ? (t - oldStart) / oldSpan : 0
+        const patch: Partial<TrafficRow> = { scheduledAt: new Date(newStartMs + frac * newSpan).toISOString() }
+        if (r.endsAt) {
+          const et = Date.parse(r.endsAt)
+          if (!Number.isNaN(et)) {
+            const efrac = oldSpan > 0 ? (et - oldStart) / oldSpan : frac
+            patch.endsAt = new Date(newStartMs + efrac * newSpan).toISOString()
+          }
+        }
+        await sheet.update(r.id, patch)
+      }
+    }
+    get().patchFlight(flightId, {
+      startAt: new Date(newStartMs).toISOString(),
+      durationWeeks: Math.max(1, Math.round(newSpan / (7 * 86_400_000))),
+    })
+    await get().refresh()
+  },
 
   setCampaignGoal: (name, goal) =>
     set((s) => {
