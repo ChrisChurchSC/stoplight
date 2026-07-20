@@ -108,10 +108,14 @@ export function CampaignCalendar() {
   const todayPct = pct(now)
 
   // Drag to reschedule: grab a bar to MOVE the whole flight, or its edges to RESIZE (duration).
-  // Pixel movement is converted to whole days against the track width, then committed once on drop.
+  // Movement snaps to whole WEEKS so reschedules land on clean dates, and a live tooltip shows the
+  // resulting flight window. Committed once on drop.
   const LABEL_COL = 220
+  const WEEK = 7 * DAY
   const bodyRef = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<{ name: string; mode: 'move' | 'resize-l' | 'resize-r'; deltaPx: number } | null>(null)
+  const [drag, setDrag] = useState<
+    { name: string; mode: 'move' | 'resize-l' | 'resize-r'; offsetPx: number; newStart: number; newEnd: number; x: number; y: number } | null
+  >(null)
   const dragMovedRef = useRef(false)
 
   const beginDrag = (e: ReactMouseEvent, c: { name: string; start: number; end: number }, mode: 'move' | 'resize-l' | 'resize-r') => {
@@ -120,19 +124,38 @@ export function CampaignCalendar() {
     dragMovedRef.current = false
     const startX = e.clientX
     const trackW = bodyRef.current ? bodyRef.current.clientWidth - LABEL_COL : 0
+    const totalDays = span / DAY
+    // Convert the cursor delta into a whole number of weeks, then back into a snapped window.
+    const compute = (clientX: number) => {
+      const rawDays = trackW > 0 ? ((clientX - startX) / trackW) * totalDays : 0
+      const weeks = Math.round(rawDays / 7)
+      const days = weeks * 7
+      const offsetPx = trackW > 0 ? (days / totalDays) * trackW : 0
+      let newStart: number, newEnd: number
+      if (mode === 'move') {
+        newStart = c.start + days * DAY
+        newEnd = c.end + days * DAY
+      } else if (mode === 'resize-r') {
+        newStart = c.start
+        newEnd = Math.max(c.start + WEEK, c.end + days * DAY)
+      } else {
+        newStart = Math.min(c.end - WEEK, c.start + days * DAY)
+        newEnd = c.end
+      }
+      return { days, offsetPx, newStart, newEnd }
+    }
     const onMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX
-      if (Math.abs(dx) > 3) dragMovedRef.current = true
-      setDrag({ name: c.name, mode, deltaPx: dx })
+      if (Math.abs(ev.clientX - startX) > 3) dragMovedRef.current = true
+      const r = compute(ev.clientX)
+      setDrag({ name: c.name, mode, offsetPx: r.offsetPx, newStart: r.newStart, newEnd: r.newEnd, x: ev.clientX, y: ev.clientY })
     }
     const onUp = (ev: MouseEvent) => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
-      const deltaDays = trackW > 0 ? Math.round(((ev.clientX - startX) / trackW) * (span / DAY)) : 0
-      if (deltaDays !== 0) {
-        if (mode === 'move') void moveCampaignSchedule(c.name, deltaDays)
-        else if (mode === 'resize-r') void rescaleCampaignSchedule(c.name, c.start, Math.max(c.start + DAY, c.end + deltaDays * DAY))
-        else void rescaleCampaignSchedule(c.name, Math.min(c.end - DAY, c.start + deltaDays * DAY), c.end)
+      const r = compute(ev.clientX)
+      if (r.days !== 0) {
+        if (mode === 'move') void moveCampaignSchedule(c.name, r.days)
+        else void rescaleCampaignSchedule(c.name, r.newStart, r.newEnd)
       }
       setDrag(null)
       // Keep the "moved" flag through this tick so the bar's click doesn't also open the campaign.
@@ -140,10 +163,12 @@ export function CampaignCalendar() {
         dragMovedRef.current = false
       }, 0)
     }
-    setDrag({ name: c.name, mode, deltaPx: 0 })
+    setDrag({ name: c.name, mode, offsetPx: 0, newStart: c.start, newEnd: c.end, x: e.clientX, y: e.clientY })
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
   }
+
+  const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
   if (!items.length) {
     return (
@@ -194,16 +219,16 @@ export function CampaignCalendar() {
             const left = pct(c.start)
             const width = Math.max(1.5, pct(c.end) - left)
             const d = drag?.name === c.name ? drag : null
-            // Live preview of the drag: shift/grow the bar by the pixel delta before it commits.
+            // Live preview of the drag: shift/grow the bar by the week-snapped pixel offset before it commits.
             const barStyle: CSSProperties = { background: STATUS_COLOR[c.status] }
-            barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.deltaPx}px)` : `${left}%`
+            barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.offsetPx}px)` : `${left}%`
             barStyle.width =
               d && d.mode === 'resize-r'
-                ? `calc(${width}% + ${d.deltaPx}px)`
+                ? `calc(${width}% + ${d.offsetPx}px)`
                 : d && d.mode === 'resize-l'
-                  ? `calc(${width}% - ${d.deltaPx}px)`
+                  ? `calc(${width}% - ${d.offsetPx}px)`
                   : `${width}%`
-            const countShift = d && d.mode !== 'resize-l' ? d.deltaPx : 0
+            const countShift = d && d.mode !== 'resize-l' ? d.offsetPx : 0
             const short = c.name.replace(`${brand} — `, '')
             // Under an umbrella the children share a prefix ("Series · Audience"); show the
             // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
@@ -267,6 +292,14 @@ export function CampaignCalendar() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Live tooltip following the cursor while dragging — the flight window it will land on.
+          Fixed-positioned so it escapes the chart's clipping. */}
+      {drag && (
+        <div className="ccal-drag-tip" style={{ left: drag.x + 14, top: drag.y - 34 }}>
+          {fmtDate(drag.newStart)} - {fmtDate(drag.newEnd)}
         </div>
       )}
     </div>
