@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 type SheetPage =
-  | 'brands'
   | 'records'
   | 'people'
   | 'segments'
@@ -14,11 +13,8 @@ type SheetPage =
 
 // The record sheets, organized into the three things a campaign is made of: who you reach, what you
 // say, and where it goes out. Each group is a dropdown of nested sheets (like Google Sheets tabs).
+// (Brand is deliberately absent: a workspace is scoped to one brand, so there is no cross-brand sheet.)
 const GROUPS: { label: string; sheets: { page: SheetPage; label: string }[] }[] = [
-  {
-    label: 'Brand',
-    sheets: [{ page: 'brands', label: 'Brands' }],
-  },
   {
     label: 'Audience',
     sheets: [
@@ -54,21 +50,13 @@ const GROUPS: { label: string; sheets: { page: SheetPage; label: string }[] }[] 
 export function SheetTabs() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
-  const brandRecords = useTrafficStore((s) => s.brandRecords)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const [open, setOpen] = useState(false)
-  // The section (Brand / Audience / Message / Activation) that holds the sheet you're on. Its
+  // The section (Audience / Message / Activation) that holds the sheet you're on. Its
   // sheets are the peer tabs shown to the right.
   const group = GROUPS.find((g) => g.sheets.some((sh) => sh.page === page)) ?? GROUPS[0]
-  const isBrand = group.label === 'Brand'
 
-  const realBrands = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
-  // Peer tabs for the active section. Brand is special: its peers are the individual brands,
-  // switched via clientFilter — not a single static sheet.
-  const peers = isBrand
-    ? realBrands.map((b) => ({ key: b.id, label: b.name, on: clientFilter === b.name, go: () => setClientFilter(b.name) }))
-    : group.sheets.map((sh) => ({ key: sh.page, label: sh.label, on: sh.page === page, go: () => setPage(sh.page) }))
+  // Peer tabs for the active section.
+  const peers = group.sheets.map((sh) => ({ key: sh.page, label: sh.label, on: sh.page === page, go: () => setPage(sh.page) }))
 
   return (
     <div className="sheet-tabs" role="tablist" aria-label="Record sheets">
@@ -94,7 +82,6 @@ export function SheetTabs() {
                   className={`sheet-drop-item${g.label === group.label ? ' on' : ''}`}
                   role="menuitem"
                   onClick={() => {
-                    if (g.label === 'Brand') setClientFilter(realBrands[0]?.name ?? 'all')
                     setPage(g.sheets[0].page)
                     setOpen(false)
                   }}
@@ -113,10 +100,7 @@ export function SheetTabs() {
           className={`sheet-tab${p.on ? ' on' : ''}`}
           role="tab"
           aria-selected={p.on}
-          onClick={() => {
-            p.go()
-            if (isBrand) setPage('brands')
-          }}
+          onClick={() => p.go()}
         >
           {p.label}
         </button>

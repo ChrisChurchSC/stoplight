@@ -123,7 +123,7 @@ export function BrandRail() {
           const hasPlaceholder = useTrafficStore.getState().brandRecords.some((b) => b.name === 'New brand')
           if (!hasPlaceholder) addBrandRecord()
           setClientFilter('New brand')
-          setPage('brands')
+          setPage('brand')
           setAddTip(null)
         }}
         onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAddTip({ top: r.top + r.height / 2, left: r.right + 8 }) }}
