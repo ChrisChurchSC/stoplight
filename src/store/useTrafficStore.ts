@@ -1740,6 +1740,11 @@ interface TrafficState {
   /** Patch arbitrary campaign metadata (flight length, budget, …) on an existing campaign.
    *  A no-op if the campaign isn't found (only meaningful for built flows). */
   patchCampaign: (name: string, patch: Partial<Campaign>) => void
+  /** Shift every scheduled asset in a campaign by N days — drag-to-move a campaign on the calendar. */
+  moveCampaignSchedule: (campaign: string, deltaDays: number) => Promise<void>
+  /** Rescale a campaign's assets into a new [startMs, endMs] window and update its duration —
+   *  drag-to-resize a campaign on the calendar. */
+  rescaleCampaignSchedule: (campaign: string, newStartMs: number, newEndMs: number) => Promise<void>
   /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
   setCampaignGoal: (name: string, goal: string) => void
   /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
@@ -3851,6 +3856,48 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         copyReviewed: false,
       })
     }
+    await get().refresh()
+  },
+
+  moveCampaignSchedule: async (campaign, deltaDays) => {
+    if (!deltaDays) return
+    const ms = deltaDays * 86_400_000
+    const shift = (iso?: string) => {
+      if (!iso) return undefined
+      const t = Date.parse(iso)
+      return Number.isNaN(t) ? undefined : new Date(t + ms).toISOString()
+    }
+    const rows = get().rows.filter((r) => r.campaign === campaign && !r.archivedAt && r.scheduledAt)
+    for (const r of rows) {
+      const next = shift(r.scheduledAt)
+      if (next) await sheet.update(r.id, { scheduledAt: next, ...(r.endsAt ? { endsAt: shift(r.endsAt) } : {}) })
+    }
+    await get().refresh()
+  },
+
+  rescaleCampaignSchedule: async (campaign, newStartMs, newEndMs) => {
+    const rows = get().rows.filter((r) => r.campaign === campaign && !r.archivedAt && r.scheduledAt)
+    const parsed = rows.map((r) => ({ r, t: Date.parse(r.scheduledAt) })).filter((x) => !Number.isNaN(x.t))
+    if (!parsed.length) return
+    const oldStart = Math.min(...parsed.map((x) => x.t))
+    const oldEnd = Math.max(...parsed.map((x) => x.t))
+    const oldSpan = oldEnd - oldStart
+    const newSpan = Math.max(86_400_000, newEndMs - newStartMs)
+    // Map each asset's position within the old window onto the new window (proportional rescale),
+    // so a longer bar spreads the assets out and a shorter one packs them in.
+    for (const { r, t } of parsed) {
+      const frac = oldSpan > 0 ? (t - oldStart) / oldSpan : 0
+      const patch: Partial<TrafficRow> = { scheduledAt: new Date(newStartMs + frac * newSpan).toISOString() }
+      if (r.endsAt) {
+        const et = Date.parse(r.endsAt)
+        if (!Number.isNaN(et)) {
+          const efrac = oldSpan > 0 ? (et - oldStart) / oldSpan : frac
+          patch.endsAt = new Date(newStartMs + efrac * newSpan).toISOString()
+        }
+      }
+      await sheet.update(r.id, patch)
+    }
+    get().patchCampaign(campaign, { durationWeeks: Math.max(1, Math.round(newSpan / (7 * 86_400_000))) })
     await get().refresh()
   },
 

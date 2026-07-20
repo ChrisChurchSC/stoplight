@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CampaignStatus } from '../domain/lifecycle'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -42,6 +42,8 @@ export function CampaignCalendar() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const openFlow = useTrafficStore((s) => s.openFlow)
+  const moveCampaignSchedule = useTrafficStore((s) => s.moveCampaignSchedule)
+  const rescaleCampaignSchedule = useTrafficStore((s) => s.rescaleCampaignSchedule)
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
 
   const durByName = useMemo(
@@ -105,6 +107,44 @@ export function CampaignCalendar() {
   const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - rangeStart) / span) * 100))
   const todayPct = pct(now)
 
+  // Drag to reschedule: grab a bar to MOVE the whole flight, or its edges to RESIZE (duration).
+  // Pixel movement is converted to whole days against the track width, then committed once on drop.
+  const LABEL_COL = 220
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<{ name: string; mode: 'move' | 'resize-l' | 'resize-r'; deltaPx: number } | null>(null)
+  const dragMovedRef = useRef(false)
+
+  const beginDrag = (e: ReactMouseEvent, c: { name: string; start: number; end: number }, mode: 'move' | 'resize-l' | 'resize-r') => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragMovedRef.current = false
+    const startX = e.clientX
+    const trackW = bodyRef.current ? bodyRef.current.clientWidth - LABEL_COL : 0
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX
+      if (Math.abs(dx) > 3) dragMovedRef.current = true
+      setDrag({ name: c.name, mode, deltaPx: dx })
+    }
+    const onUp = (ev: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const deltaDays = trackW > 0 ? Math.round(((ev.clientX - startX) / trackW) * (span / DAY)) : 0
+      if (deltaDays !== 0) {
+        if (mode === 'move') void moveCampaignSchedule(c.name, deltaDays)
+        else if (mode === 'resize-r') void rescaleCampaignSchedule(c.name, c.start, Math.max(c.start + DAY, c.end + deltaDays * DAY))
+        else void rescaleCampaignSchedule(c.name, Math.min(c.end - DAY, c.start + deltaDays * DAY), c.end)
+      }
+      setDrag(null)
+      // Keep the "moved" flag through this tick so the bar's click doesn't also open the campaign.
+      window.setTimeout(() => {
+        dragMovedRef.current = false
+      }, 0)
+    }
+    setDrag({ name: c.name, mode, deltaPx: 0 })
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
   if (!items.length) {
     return (
       <div className="ccal">
@@ -149,10 +189,21 @@ export function CampaignCalendar() {
           </div>
         </div>
 
-        <div className="ccal-body">
+        <div className="ccal-body" ref={bodyRef}>
           {scheduled.map((c) => {
             const left = pct(c.start)
             const width = Math.max(1.5, pct(c.end) - left)
+            const d = drag?.name === c.name ? drag : null
+            // Live preview of the drag: shift/grow the bar by the pixel delta before it commits.
+            const barStyle: CSSProperties = { background: STATUS_COLOR[c.status] }
+            barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.deltaPx}px)` : `${left}%`
+            barStyle.width =
+              d && d.mode === 'resize-r'
+                ? `calc(${width}% + ${d.deltaPx}px)`
+                : d && d.mode === 'resize-l'
+                  ? `calc(${width}% - ${d.deltaPx}px)`
+                  : `${width}%`
+            const countShift = d && d.mode !== 'resize-l' ? d.deltaPx : 0
             const short = c.name.replace(`${brand} — `, '')
             // Under an umbrella the children share a prefix ("Series · Audience"); show the
             // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
@@ -173,15 +224,28 @@ export function CampaignCalendar() {
                   ))}
                   {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
                   <button
-                    className="ccal-bar"
-                    style={{ left: `${left}%`, width: `${width}%`, background: STATUS_COLOR[c.status] }}
-                    onClick={() => openFlow(c.name)}
-                    title={`${short} · ${STATUS_LABEL[c.status]} · ${c.assetCount} asset${c.assetCount === 1 ? '' : 's'}`}
+                    className={`ccal-bar${d ? ' dragging' : ''}`}
+                    style={barStyle}
+                    onMouseDown={(e) => beginDrag(e, c, 'move')}
+                    onClick={() => {
+                      if (!dragMovedRef.current) openFlow(c.name)
+                    }}
+                    title={`${short} · ${STATUS_LABEL[c.status]} · ${c.assetCount} asset${c.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`}
                   >
+                    <span
+                      className="ccal-bar-handle ccal-bar-handle-l"
+                      onMouseDown={(e) => beginDrag(e, c, 'resize-l')}
+                      aria-hidden="true"
+                    />
                     <span className="ccal-bar-label">{display}</span>
+                    <span
+                      className="ccal-bar-handle ccal-bar-handle-r"
+                      onMouseDown={(e) => beginDrag(e, c, 'resize-r')}
+                      aria-hidden="true"
+                    />
                   </button>
                   {/* Asset count trailing the bar, so it reads on the timeline itself. */}
-                  <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + 6px)` }} aria-hidden="true">
+                  <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
                     {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
                   </span>
                 </div>
