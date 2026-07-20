@@ -3872,8 +3872,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (!f) return
     // Archive ONLY assets explicitly stamped to this flight (re-run clones). The primary flight's
     // assets are unstamped and resolve by fallback, so they are never touched here.
-    const rows = get().rows.filter((r) => r.flightId === flightId && !r.archivedAt)
-    for (const r of rows) await sheet.update(r.id, { archivedAt: Date.now() })
+    // HARDENING: verify the archive writes actually landed before deleting the flight. If a write
+    // silently fails, deleting the flight would orphan its clones back into the primary flight (they
+    // resolve there by fallback), silently inflating the campaign. So archive, re-read, retry once,
+    // and only delete the flight when none of its assets remain unarchived — else keep it and warn.
+    const remaining = () => get().rows.filter((r) => r.flightId === flightId && !r.archivedAt)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const rows = remaining()
+      if (!rows.length) break
+      for (const r of rows) await sheet.update(r.id, { archivedAt: Date.now() })
+      await get().refresh()
+    }
+    const stuck = remaining()
+    if (stuck.length) {
+      get().showToast(
+        `Couldn't archive ${stuck.length} asset${stuck.length === 1 ? '' : 's'} on that flight, so it was kept (nothing left orphaned). Try removing it again.`,
+      )
+      return
+    }
     get().deleteFlight(flightId)
     await get().refresh()
   },
