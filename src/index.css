@@ -2828,19 +2828,19 @@ button {
 }
 /* Chats section (recent saved reports) */
 .hsb-chats {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 .hsb-sec {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
   border: 0;
   background: none;
   cursor: pointer;
-  padding: 8px 10px 5px;
+  padding: 6px 9px 3px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -2850,8 +2850,8 @@ button {
   color: var(--text-muted);
 }
 .hsb-sec-chev {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   display: inline-flex;
   transform: rotate(-90deg);
   transition: transform 0.15s ease;
@@ -2861,8 +2861,8 @@ button {
   transform: rotate(0deg);
 }
 .hsb-sec-chev svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 .hsb-chat-list {
   display: flex;
