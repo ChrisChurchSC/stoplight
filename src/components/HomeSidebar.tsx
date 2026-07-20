@@ -244,7 +244,7 @@ export function HomeSidebar() {
     // "Brand" opens this brand's own strategy record (single-brand only, never the every-brand list).
     item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
     item('flows', 'Campaigns', 'flows', page === 'flows', () => setPage('flows')),
-    item('calendar', 'Calendar', 'calendar', page === 'calendar', () => setPage('calendar')),
+    item('calendar', 'Timeline', 'calendar', page === 'calendar', () => setPage('calendar')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
     item('insights', 'Insights', 'insights', page === 'reports' || (page === 'content' && libraryMode !== 'catalog'), () => setLibraryMode('data')),

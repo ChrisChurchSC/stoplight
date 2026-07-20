@@ -58,6 +58,7 @@ export function ProofPointsView() {
   return (
     <RecordsTable
       title="Proof points"
+      term="proofPoint"
       icon={ICON}
       columns={COLUMNS}
       fields={FIELDS}

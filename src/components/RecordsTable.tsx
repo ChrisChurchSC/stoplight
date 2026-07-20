@@ -4,6 +4,7 @@ import { loadRecordGrouping, saveRecordGrouping } from '../domain/recordGrouping
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
 import { RecordsChat } from './RecordsChat'
+import { InfoTip } from './InfoTip'
 import { BufferedInput } from './BufferedInput'
 import { SheetTabs } from './SheetTabs'
 
@@ -34,6 +35,7 @@ function cellHint(col: RecordColumn): string {
  */
 export function RecordsTable<T extends { id: string }>({
   title,
+  term,
   icon,
   columns,
   fields,
@@ -48,6 +50,8 @@ export function RecordsTable<T extends { id: string }>({
   fieldOptions,
 }: {
   title: string
+  /** Optional glossary key: shows an InfoTip beside the title defining this record type. */
+  term?: string
   icon: ReactNode
   columns: RecordColumn[]
   fields: RecordField[]
@@ -241,6 +245,7 @@ export function RecordsTable<T extends { id: string }>({
             </svg>
           </span>
           {title}
+          {term && <InfoTip term={term} />}
         </div>
         <button className="rec-new" onClick={onAdd}>
           + New {noun[0]}

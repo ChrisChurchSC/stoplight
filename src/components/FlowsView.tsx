@@ -12,6 +12,7 @@ import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
 import { ChannelIcon } from './ChannelIcon'
+import { InfoTip } from './InfoTip'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -1202,9 +1203,10 @@ export function FlowsView() {
   // record"), shared by the build brief, the built-flow brief, and a deliverable's override.
   const renderRecordTags = (ops: TagOps) => (
     <>
-      <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-        Record Tags{ops.refs.length ? ` · ${ops.refs.length}` : ''}
-      </label>
+      <div className="flow-inspect-label" style={{ marginTop: 16 }}>
+        Linked records{ops.refs.length ? ` · ${ops.refs.length}` : ''}
+        <InfoTip term="linkedRecords" />
+      </div>
       {ops.refs.map((ref) => {
         const key = refKey(ref)
         const open = openTagKey === key

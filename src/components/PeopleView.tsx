@@ -33,6 +33,7 @@ export function PeopleView() {
   return (
     <RecordsTable<Person>
       title="People"
+      term="person"
       icon={ICON}
       columns={PEOPLE_COLUMNS}
       fields={PEOPLE_FIELDS}

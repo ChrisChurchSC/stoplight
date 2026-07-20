@@ -27,6 +27,7 @@ export function PatternsView() {
   return (
     <RecordsTable
       title="Patterns"
+      term="pattern"
       icon={ICON}
       columns={PATTERN_COLUMNS}
       fields={PATTERN_FIELDS}

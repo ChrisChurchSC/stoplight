@@ -113,6 +113,7 @@ export function SegmentsView() {
   return (
     <RecordsTable
       title="Audiences"
+      term="audience"
       icon={ICON}
       columns={SEGMENT_COLUMNS}
       fields={SEGMENT_FIELDS}

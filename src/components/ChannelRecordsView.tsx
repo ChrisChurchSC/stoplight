@@ -22,6 +22,7 @@ export function ChannelRecordsView() {
   return (
     <RecordsTable
       title="Channels"
+      term="channel"
       icon={ICON}
       columns={CHANNEL_RECORD_COLUMNS}
       fields={CHANNEL_RECORD_FIELDS}

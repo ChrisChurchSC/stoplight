@@ -224,7 +224,7 @@ export function CampaignCalendar() {
     return (
       <div className="ccal">
         <header className="ccal-head">
-          <h1 className="ccal-title">Calendar</h1>
+          <h1 className="ccal-title">Timeline</h1>
           <p className="ccal-sub">No campaigns yet for {brand || 'this brand'}. Build one and it shows up here on the timeline.</p>
         </header>
       </div>
@@ -235,7 +235,7 @@ export function CampaignCalendar() {
     <div className="ccal">
       <header className="ccal-head">
         <div>
-          <h1 className="ccal-title">Calendar</h1>
+          <h1 className="ccal-title">Timeline</h1>
           <p className="ccal-sub">
             {scheduled.length} scheduled campaign{scheduled.length === 1 ? '' : 's'} for {brand || 'this brand'}
             {unscheduled.length ? ` · ${unscheduled.length} not scheduled yet` : ''}

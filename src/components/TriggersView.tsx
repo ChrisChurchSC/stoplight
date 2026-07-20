@@ -24,6 +24,7 @@ export function TriggersView() {
   return (
     <RecordsTable
       title="Triggers"
+      term="trigger"
       icon={ICON}
       columns={TRIGGER_COLUMNS}
       fields={TRIGGER_FIELDS}

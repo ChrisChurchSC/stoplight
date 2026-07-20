@@ -27,6 +27,7 @@ export function VoicesView() {
   return (
     <RecordsTable
       title="Voices"
+      term="voice"
       icon={ICON}
       columns={VOICE_COLUMNS}
       fields={VOICE_FIELDS}

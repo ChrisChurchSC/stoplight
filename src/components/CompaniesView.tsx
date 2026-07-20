@@ -36,6 +36,7 @@ export function CompaniesView() {
   return (
     <RecordsTable<Company>
       title="Companies"
+      term="company"
       icon={ICON}
       columns={COMPANY_COLUMNS}
       fields={COMPANY_FIELDS}

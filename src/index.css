@@ -25913,3 +25913,81 @@ table.aud-sheet td.stick .aud-cell {
   color: #1a1d23;
   filter: drop-shadow(0 6px 16px rgba(120, 40, 0, 0.16));
 }
+
+/* ---- InfoTip: the single in-product definition primitive (see domain/glossary.ts) ---- */
+.infotip {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.infotip-btn {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: italic 700 10px/1 Georgia, "Times New Roman", serif;
+  cursor: help;
+  display: inline-grid;
+  place-items: center;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.infotip-btn:hover,
+.infotip-btn:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.infotip-pop {
+  position: fixed;
+  z-index: 1200;
+  width: min(300px, calc(100vw - 16px));
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.16);
+  padding: 11px 13px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  animation: infotip-in 0.12s ease-out;
+}
+.infotip-term {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.infotip-short {
+  color: var(--text-muted);
+}
+.infotip-more {
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.infotip-see {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+@keyframes infotip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .infotip-pop {
+    animation: none;
+  }
+}

@@ -27,6 +27,7 @@ export function ObjectivesView() {
   return (
     <RecordsTable
       title="Objectives"
+      term="objective"
       icon={ICON}
       columns={OBJECTIVE_COLUMNS}
       fields={OBJECTIVE_FIELDS}

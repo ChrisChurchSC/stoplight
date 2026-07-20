@@ -29,6 +29,7 @@ export function MessagesView() {
   return (
     <RecordsTable
       title="Messages"
+      term="message"
       icon={ICON}
       columns={MESSAGE_COLUMNS}
       fields={MESSAGE_FIELDS}
