@@ -1146,7 +1146,14 @@ export function FlowsView() {
   // writes to the segment refs, so this drives it with no extra wiring. In build mode an untouched
   // brief (null) reads as "not chosen yet" rather than the all-segments default.
   const chosenSegmentRefs = (viewName !== null ? flowRefs : briefRefs ?? []).filter((r) => r.type === 'segment')
-  const personalizedAudienceId = chosenSegmentRefs.length === 1 ? chosenSegmentRefs[0].id : ''
+  // Resolve the picked segment to a brand audience by id OR name — a ref created by the fan-out (or an
+  // older store) can carry a different id than the current clientAudiences record, so match on the
+  // label too, else the selector reads "Choose an audience" for a campaign that clearly has one.
+  const currentAudience =
+    chosenSegmentRefs.length === 1
+      ? brandSegments.find((a) => a.id === chosenSegmentRefs[0].id || a.name === chosenSegmentRefs[0].label)
+      : undefined
+  const personalizedAudienceId = currentAudience?.id ?? ''
   const setPersonalizedAudience = (segId: string) => {
     const seg = brandSegments.find((a) => a.id === segId)
     const base = viewName !== null ? flowRefs : briefRefs ?? []
