@@ -2830,6 +2830,16 @@ button {
 .hsb-chats {
   margin-top: 8px;
 }
+/* Chats promoted above the record sections: a light divider keeps it visually
+   grouped with the primary nav rather than reading as another record section. */
+.hsb-chats-promoted {
+  margin-top: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.hsb-chats-promoted .hsb-sec .nav-count {
+  margin-left: 6px;
+}
 .hsb-sec {
   display: flex;
   align-items: center;

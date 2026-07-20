@@ -319,45 +319,14 @@ export function HomeSidebar() {
             {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
           </button>
         ))}
-        {NAV_SECTIONS.map((sec) => {
-          const open = openSections.has(sec.label)
-          return (
-            <div className="hsb-chats" key={sec.label}>
-              <div className="hsb-sec-row">
-                <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
-                  <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
-                    <Ico name="caret" />
-                  </span>
-                  {sec.label}
-                </button>
-                <InfoTip term={SECTION_TERM[sec.label]} />
-              </div>
-              {open && (
-                <div className="hsb-chat-list">
-                  {sec.items.map((it) => (
-                    <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
-                      <span className="nav-ico">
-                        <Ico name={it.ico} />
-                      </span>
-                      <span className="nav-label">{it.label}</span>
-                      {it.badge ? (
-                        <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-
-        <div className="hsb-chats">
+        <div className="hsb-chats hsb-chats-promoted">
           <div className="hsb-sec-row">
             <button className="hsb-sec" onClick={() => setChatsOpen((o) => !o)}>
               <span className={`hsb-sec-chev${chatsOpen ? ' open' : ''}`}>
                 <Ico name="caret" />
               </span>
               Chats
+              {homeChats.length > 0 ? <span className="nav-count">{homeChats.length}</span> : null}
             </button>
             <button className="hsb-sec-add" title="New chat" aria-label="New chat" onClick={newHomeChat}>
               <Ico name="plus" />
@@ -393,6 +362,37 @@ export function HomeSidebar() {
             </div>
           )}
         </div>
+        {NAV_SECTIONS.map((sec) => {
+          const open = openSections.has(sec.label)
+          return (
+            <div className="hsb-chats" key={sec.label}>
+              <div className="hsb-sec-row">
+                <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
+                  <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
+                    <Ico name="caret" />
+                  </span>
+                  {sec.label}
+                </button>
+                <InfoTip term={SECTION_TERM[sec.label]} />
+              </div>
+              {open && (
+                <div className="hsb-chat-list">
+                  {sec.items.map((it) => (
+                    <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+                      <span className="nav-ico">
+                        <Ico name={it.ico} />
+                      </span>
+                      <span className="nav-label">{it.label}</span>
+                      {it.badge ? (
+                        <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </nav>
 
       <div className="sidebar-foot">
