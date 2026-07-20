@@ -6161,6 +6161,43 @@ button {
   align-items: center;
   justify-content: center;
 }
+/* "Add a campaign" tile inside an umbrella's nested grid. */
+.flow-home-add-under {
+  border: 1.5px dashed var(--border-strong, #cdd5d9);
+  background: transparent;
+  border-radius: 12px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 88px;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.12s, color 0.12s;
+}
+.flow-home-add-under:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* "+ Flight" (re-run) on a campaign card. */
+.flow-home-flight-add {
+  margin: 0 12px 12px;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 4px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.flow-home-flight-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 /* A re-run campaign's expandable flight list on its card. */
 .flow-home-flights {
   border-top: 1px solid var(--border);

@@ -27,6 +27,8 @@ interface FlowCard {
   personalizedTo?: string
   /** This campaign's flights (one scheduled run each), for the overview + expandable list. */
   flights: { id: string; name: string; assetCount: number; start: number; end: number }[]
+  /** A manually-created umbrella container (renders as an umbrella even with no children yet). */
+  isUmbrella?: boolean
 }
 
 const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1, planning: 2, completed: 3 }
@@ -40,9 +42,25 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const setCampaignFolder = useTrafficStore((s) => s.setCampaignFolder)
   const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
+  const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
+  const addFlightRun = useTrafficStore((s) => s.addFlightRun)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolder, setNewFolder] = useState('')
+  const [newUmbrellaOpen, setNewUmbrellaOpen] = useState(false)
+  const [newUmbrella, setNewUmbrella] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const addUmbrella = () => {
+    const nm = newUmbrella.trim()
+    if (nm && brand) addCampaign({ name: `${brand} — ${nm}`, client: brand, strategy: 'content-seo', isUmbrella: true })
+    setNewUmbrella('')
+    setNewUmbrellaOpen(false)
+  }
+  // Open the campaign builder to create a campaign nested under an umbrella.
+  const addCampaignUnder = (umbrella: string) => {
+    setNewCampaignParent(umbrella)
+    onNew()
+  }
   // Drag a flow card onto a folder section to file it there (replaces the folder dropdown).
   const [dragName, setDragName] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
@@ -123,6 +141,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       parent: meta.get(name)?.parent,
       personalizedTo: meta.get(name)?.references?.find((r) => r.type === 'segment')?.label,
       flights: campFlights,
+      isUmbrella: meta.get(name)?.isUmbrella,
     }
   })
   const sortCards = (arr: FlowCard[]) =>
@@ -192,6 +211,12 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           {c.channels.length > 8 && <span className="flow-home-chan more">+{c.channels.length - 8}</span>}
         </div>
       </button>
+      {/* Re-run: add another flight of this campaign (clones its assets into a new window). */}
+      {c.flights.length > 0 && (
+        <button className="flow-home-flight-add" onClick={() => void addFlightRun(c.name)} title="Add another flight of this campaign (clones its assets into a new window)">
+          ＋ Flight
+        </button>
+      )}
       {/* A re-run campaign (>1 flight) can expand to its flights: name, asset count, month window. */}
       {c.flights.length > 1 && (
         <div className="flow-home-flights">
@@ -221,8 +246,9 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   // A top-level entry: an umbrella (its audience-specific children nested + collapsible) or a
   // standalone campaign.
   const renderTop = (c: FlowCard) => {
-    const kids = childrenByParent.get(c.name)
-    if (!kids?.length) return renderCard(c)
+    const kids = childrenByParent.get(c.name) ?? []
+    // An umbrella if it has children OR was explicitly created as one (renders even when empty).
+    if (!kids.length && !c.isUmbrella) return renderCard(c)
     const isCollapsed = collapsed.has(c.name)
     const totalAssets = kids.reduce((n, k) => n + k.assetCount, 0)
     const chans = [...new Set(kids.flatMap((k) => k.channels))]
@@ -250,7 +276,14 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             ✕
           </button>
         </div>
-        {!isCollapsed && <div className="flow-home-grid nested">{sortCards(kids).map(renderCard)}</div>}
+        {!isCollapsed && (
+          <div className="flow-home-grid nested">
+            {sortCards(kids).map(renderCard)}
+            <button className="flow-home-add-under" onClick={() => addCampaignUnder(c.name)}>
+              ＋ Add a campaign
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -286,7 +319,34 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               ＋ New folder
             </button>
           )}
-          <button className="flow-home-new" onClick={onNew}>
+          {newUmbrellaOpen ? (
+            <input
+              className="flow-home-folder-input"
+              autoFocus
+              placeholder="Umbrella name"
+              value={newUmbrella}
+              onChange={(e) => setNewUmbrella(e.target.value)}
+              onBlur={addUmbrella}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addUmbrella()
+                if (e.key === 'Escape') {
+                  setNewUmbrella('')
+                  setNewUmbrellaOpen(false)
+                }
+              }}
+            />
+          ) : (
+            <button className="flow-home-folder-new" onClick={() => setNewUmbrellaOpen(true)}>
+              ＋ New umbrella
+            </button>
+          )}
+          <button
+            className="flow-home-new"
+            onClick={() => {
+              setNewCampaignParent(null)
+              onNew()
+            }}
+          >
             ＋ New campaign
           </button>
         </div>

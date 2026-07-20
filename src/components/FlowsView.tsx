@@ -413,6 +413,8 @@ export function FlowsView() {
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
+  const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   // The brand's Segments records (the Segments page IS the brand's audiences).
@@ -1648,7 +1650,8 @@ export function FlowsView() {
     setBuilding(true)
     const campaignName = `${brand ? `${brand} — ` : ''}${cfg.name.trim() || 'New campaign'}`
     try {
-      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       const allNewIds: string[] = []
       for (const n of cfg.nodes) {

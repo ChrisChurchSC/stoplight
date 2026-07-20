@@ -209,6 +209,9 @@ export interface Campaign {
   /** Umbrella parent: when set, this campaign is a child (one audience + one goal) grouped under the
    *  named parent campaign. A campaign with children serves as the umbrella; children carry the work. */
   parent?: string
+  /** Explicitly an umbrella container (a manually-created grouping). Renders as an umbrella even with
+   *  no children yet; carries no assets of its own. */
+  isUmbrella?: boolean
   /** Subject — what the campaign is ABOUT (its theme/focus), e.g. "Spring Launch
    *  — the new protein line." Distinct from strategy (what you want it to do). */
   subject?: string

@@ -1720,6 +1720,10 @@ interface TrafficState {
   flowOpenView: 'flow' | 'grid' | 'calendar'
   openFlow: (campaign: string, flowView?: 'flow' | 'grid' | 'calendar') => void
   clearFlowOpen: () => void
+  /** Umbrella to nest the next-created campaign under (set by "Add a campaign" inside an umbrella).
+   *  FlowsView reads it when it builds the campaign, then clears it. null = a top-level campaign. */
+  newCampaignParent: string | null
+  setNewCampaignParent: (parent: string | null) => void
   /** True while a flow canvas (build or view) is open — collapses the sidebar to a rail. */
   flowCanvasOpen: boolean
   setFlowCanvasOpen: (open: boolean) => void
@@ -3524,6 +3528,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView })
   },
   clearFlowOpen: () => set({ flowOpen: null, flowOpenView: 'flow' }),
+  newCampaignParent: null,
+  setNewCampaignParent: (newCampaignParent) => set({ newCampaignParent }),
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
   setRecordsChatCollapsed: (v) => {
     try { localStorage.setItem('stoplight.recordsChatCollapsed', v ? '1' : '0') } catch { /* ignore */ }
