@@ -362,11 +362,11 @@ export function FlowsView() {
   const showToast = useTrafficStore((s) => s.showToast)
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
-  const companies = useTrafficStore((s) => s.companies)
-  const people = useTrafficStore((s) => s.people)
+  const allCompanies = useTrafficStore((s) => s.companies)
+  const allPeople = useTrafficStore((s) => s.people)
   const channelRecords = useTrafficStore((s) => s.channelRecords)
-  const objectives = useTrafficStore((s) => s.objectives)
-  const messages = useTrafficStore((s) => s.messages)
+  const allObjectives = useTrafficStore((s) => s.objectives)
+  const allMessages = useTrafficStore((s) => s.messages)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const brandMeta = useTrafficStore((s) => s.brandMeta)
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
@@ -405,6 +405,15 @@ export function FlowsView() {
   // The brand's Segments records (the Segments page IS the brand's audiences).
   const brandSegments = clientAudiences[brand] ?? []
   const audienceNames = useMemo(() => brandSegments.map((a) => a.name), [brandSegments])
+
+  // A campaign belongs to ONE brand, so every record it can reference (messages, objectives,
+  // companies, people) is scoped to the brand you're working on — never another brand's records.
+  // Untagged records (no brand) stay shared across brands, matching each Records page's own scoping.
+  // Channels have no brand tag (a shared taxonomy) so they are not scoped here.
+  const messages = useMemo(() => allMessages.filter((m) => !m.brand || m.brand === brand), [allMessages, brand])
+  const objectives = useMemo(() => allObjectives.filter((o) => !o.brand || o.brand === brand), [allObjectives, brand])
+  const companies = useMemo(() => allCompanies.filter((c) => !c.brand || c.brand === brand), [allCompanies, brand])
+  const people = useMemo(() => allPeople.filter((p) => !p.brand || p.brand === brand), [allPeople, brand])
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
