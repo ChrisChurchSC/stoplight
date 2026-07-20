@@ -861,6 +861,20 @@ function saveClientAudiences(map: Record<string, AudienceType[]>): void {
   }
 }
 
+/**
+ * Merge a brand's system-library audiences with its clientAudiences store, deduped by name.
+ * clientAudiences wins on a collision (it is the actively-maintained source the audience selector and
+ * canvas lanes write to, and where the data-driven flow puts new personas); brandSystems-only
+ * (inherited) personas are kept. This is why generation always sees the full persona — role, angle,
+ * pains — regardless of which store holds it, so a "Personalized to" pick actually personalizes.
+ */
+function mergeAudiences(systemAuds: AudienceType[], clientAuds: AudienceType[]): AudienceType[] {
+  const byName = new Map<string, AudienceType>()
+  for (const a of systemAuds) byName.set(a.name, a)
+  for (const a of clientAuds) byName.set(a.name, a)
+  return [...byName.values()]
+}
+
 
 // Messaging systems — ONE per brand. Each brand owns a self-contained library
 // (audiences, proof, subjects, hooks, CTAs + the universal GTM strategies). Keyed
@@ -5479,7 +5493,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // (derived), audience (assigned/derived), CTA seed, and proof. Resolving through
         // the brand scope is the ONLY read path — no other brand's assets can reach here.
         const sys = resolveBrandScope(client, get().brandSystems, get().brandMeta).library
-        const libAudiences = sys.audiences
+        // Audiences can live in the brand's system library OR only in clientAudiences — the store the
+        // audience selector and canvas lanes write to, and where the data-driven flow puts them. Merge
+        // both (clientAudiences wins on a name collision, being the actively-maintained source) so a
+        // "Personalized to" pick always resolves to the full persona (angle + pains), even for brands
+        // whose brandSystems audiences are empty. Without this, personalization silently falls back.
+        const libAudiences = mergeAudiences(sys.audiences, get().clientAudiences[client] ?? [])
         const libCtas = sys.ctas
         const proofPool: Rtb[] = sys.rtbs
         // Record Tags checked on the campaign brief PIN the messaging inputs so every card
@@ -5674,7 +5693,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // The brand's effective messaging system supplies audience / proof / CTA — the same
     // scoped read path draftCopy uses, so preview copy matches what a build would write.
     const sys = resolveBrandScope(client, get().brandSystems, get().brandMeta).library
-    const libAudiences = sys.audiences
+    // Merge clientAudiences (see draftCopy) so preview personas carry angle + pains too.
+    const libAudiences = mergeAudiences(sys.audiences, get().clientAudiences[client] ?? [])
     // Pin proof to the checked proof tags so preview cards lean on the same reasons-to-believe
     // a build would write; empty = the brand's whole proof library (unchanged behavior).
     const pinnedProof = proofRefLabels?.length ? sys.rtbs.filter((p) => proofRefLabels.includes(p.label)) : []
