@@ -179,6 +179,10 @@ export function CampaignCalendar() {
                 >
                   <span className="ccal-bar-label">{display}</span>
                 </button>
+                {/* Asset count trailing the bar, so it reads on the timeline itself. */}
+                <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + 6px)` }} aria-hidden="true">
+                  {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
+                </span>
               </div>
             </div>
           )
