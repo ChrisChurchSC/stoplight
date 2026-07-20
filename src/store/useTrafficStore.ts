@@ -1745,6 +1745,8 @@ interface TrafficState {
   /** Rescale a campaign's assets into a new [startMs, endMs] window and update its duration —
    *  drag-to-resize a campaign on the calendar. */
   rescaleCampaignSchedule: (campaign: string, newStartMs: number, newEndMs: number) => Promise<void>
+  /** Shift a single asset's launch date (scheduledAt) by N days — drag an asset on the calendar. */
+  moveAssetSchedule: (rowId: string, deltaDays: number) => Promise<void>
   /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
   setCampaignGoal: (name: string, goal: string) => void
   /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
@@ -3898,6 +3900,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       await sheet.update(r.id, patch)
     }
     get().patchCampaign(campaign, { durationWeeks: Math.max(1, Math.round(newSpan / (7 * 86_400_000))) })
+    await get().refresh()
+  },
+
+  moveAssetSchedule: async (rowId, deltaDays) => {
+    if (!deltaDays) return
+    const r = get().rows.find((x) => x.id === rowId)
+    if (!r?.scheduledAt) return
+    const t = Date.parse(r.scheduledAt)
+    if (Number.isNaN(t)) return
+    const ms = deltaDays * 86_400_000
+    const patch: Partial<TrafficRow> = { scheduledAt: new Date(t + ms).toISOString() }
+    if (r.endsAt) {
+      const et = Date.parse(r.endsAt)
+      if (!Number.isNaN(et)) patch.endsAt = new Date(et + ms).toISOString()
+    }
+    await sheet.update(rowId, patch)
     await get().refresh()
   },
 

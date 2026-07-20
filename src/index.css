@@ -5716,6 +5716,34 @@ button {
   height: 9px;
   border-radius: 3px;
 }
+/* Timeline range (zoom) selector: 3 / 6 / 9 / 12 month segmented control. */
+.ccal-range {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.ccal-range-btn {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.ccal-range-btn:hover {
+  color: var(--text);
+}
+.ccal-range-btn.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
 /* The label column width is shared by the month header and every row so bars align under months. */
 /* The Gantt frame: a bordered chart with a header scale and banded lanes. */
 .ccal-chart {
@@ -5858,13 +5886,20 @@ button {
   border: 2px solid var(--surface);
   border-radius: 50%;
   padding: 0;
-  cursor: pointer;
+  cursor: grab;
   z-index: 1;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.2);
   transition: transform 0.1s ease;
 }
 .ccal-asset-marker:hover {
   transform: scale(1.3);
+}
+.ccal-asset-marker.dragging {
+  cursor: grabbing;
+  transform: scale(1.35);
+  transition: none;
+  z-index: 5;
+  box-shadow: 0 3px 8px rgba(16, 24, 40, 0.3);
 }
 .ccal-asset-date {
   position: absolute;
