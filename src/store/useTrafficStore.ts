@@ -12,6 +12,7 @@ import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../doma
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
+import { newFlight, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
 import { actualsProvider } from '../adapters/actuals'
@@ -1229,6 +1230,24 @@ function saveCampaigns(list: Campaign[]): void {
 // Campaign folders per brand — the ordered folder names a brand's gallery can file
 // its campaigns under. Membership lives on each Campaign.folder; this holds the list
 // (so an empty folder still exists) and its order. Keyed by brand (client) name.
+const FLIGHTS_KEY = 'stoplight.flights.v1'
+const FLIGHTS_MIGRATED_KEY = 'stoplight.flightsMigrated.v1'
+function loadFlights(): Flight[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FLIGHTS_KEY) || '[]')
+    return Array.isArray(v) ? (v as Flight[]) : []
+  } catch {
+    return []
+  }
+}
+function saveFlights(list: Flight[]): void {
+  try {
+    persistState(FLIGHTS_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
 const CAMPAIGN_FOLDERS_KEY = 'stoplight.campaignFolders.v1'
 function loadCampaignFolders(): Record<string, string[]> {
   try {
@@ -1758,6 +1777,16 @@ interface TrafficState {
   setCampaignClient: (name: string, client: string) => void
   /** Campaign folders per brand: the ordered folder names each brand's gallery files under. */
   campaignFolders: Record<string, string[]>
+  /** Campaign Flights — each a scheduled run of a campaign (Umbrella → Campaign → Flight → Asset). */
+  flights: Flight[]
+  /** One-time, non-destructive migration: give every campaign a default flight and stamp its assets. */
+  ensureFlights: () => Promise<void>
+  /** Add a flight to a campaign; returns the new flight's id. */
+  addFlight: (campaign: string, patch?: Partial<Flight>) => string
+  /** Edit a flight (name / startAt / durationWeeks). */
+  patchFlight: (id: string, patch: Partial<Flight>) => void
+  /** Remove a flight; its assets keep their dates but lose the flight tag. */
+  deleteFlight: (id: string) => void
   /** Which folder the campaigns gallery is scoped to — nested under Campaigns in the
    *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
   campaignFolderView: string | null
@@ -2337,6 +2366,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   flowChats: loadFlowChats(),
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
+  flights: loadFlights(),
   campaignFolderView: null,
   wizardOpen: false,
   wizardClient: null,
@@ -3673,6 +3703,77 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const campaignList = s.campaignList.map((c) => (c.client === brand && c.folder === folder ? { ...c, folder: undefined } : c))
       saveCampaigns(campaignList)
       return { campaignFolders, campaignList }
+    }),
+
+  ensureFlights: async () => {
+    // Give every campaign that has assets a default "Flight 1" spanning its current assets, and stamp
+    // each asset with its flightId. Guarded by a one-time flag; idempotent (skips campaigns that
+    // already have a flight). Non-destructive: asset dates are untouched.
+    try {
+      if (localStorage.getItem(FLIGHTS_MIGRATED_KEY)) return
+    } catch {
+      /* ignore */
+    }
+    const rows = get().rows
+    if (!rows.length) return // rows not loaded yet; a later call runs it once they are
+    const existing = get().flights
+    const haveFor = new Set(existing.map((f) => f.campaign))
+    const byCampaign = new Map<string, TrafficRow[]>()
+    for (const r of rows) {
+      const c = (r.campaign ?? '').trim()
+      if (!c || r.archivedAt) continue
+      const arr = byCampaign.get(c)
+      if (arr) arr.push(r)
+      else byCampaign.set(c, [r])
+    }
+    const WK = 7 * 86_400_000
+    const newFlights: Flight[] = []
+    const stamp: { id: string; flightId: string }[] = []
+    for (const [campaign, crows] of byCampaign) {
+      if (haveFor.has(campaign)) continue
+      const times = crows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
+      const start = times.length ? Math.min(...times) : Date.now()
+      const end = times.length ? Math.max(...times) : start
+      const camp = get().campaignList.find((c) => c.name === campaign)
+      const weeks = camp?.durationWeeks && camp.durationWeeks > 0 ? camp.durationWeeks : Math.max(1, Math.round((end - start) / WK) || 4)
+      const flight = newFlight({ campaign, name: 'Flight 1', startAt: new Date(start).toISOString(), durationWeeks: weeks })
+      newFlights.push(flight)
+      for (const r of crows) if (!r.flightId) stamp.push({ id: r.id, flightId: flight.id })
+    }
+    if (newFlights.length) {
+      const flights = [...existing, ...newFlights]
+      saveFlights(flights)
+      set({ flights })
+      for (const u of stamp) await sheet.update(u.id, { flightId: u.flightId })
+    }
+    try {
+      localStorage.setItem(FLIGHTS_MIGRATED_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+    if (stamp.length) await get().refresh()
+  },
+
+  addFlight: (campaign, patch) => {
+    const flight = newFlight({ campaign, ...patch })
+    const flights = [...get().flights, flight]
+    saveFlights(flights)
+    set({ flights })
+    return flight.id
+  },
+
+  patchFlight: (id, patch) =>
+    set((s) => {
+      const flights = s.flights.map((f) => (f.id === id ? { ...f, ...patch, id: f.id } : f))
+      saveFlights(flights)
+      return { flights }
+    }),
+
+  deleteFlight: (id) =>
+    set((s) => {
+      const flights = s.flights.filter((f) => f.id !== id)
+      saveFlights(flights)
+      return { flights }
     }),
 
   setCampaignGoal: (name, goal) =>

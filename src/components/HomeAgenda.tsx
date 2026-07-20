@@ -66,9 +66,6 @@ export function HomeAgenda() {
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const brandSystems = useTrafficStore((s) => s.brandSystems)
-  const voices = useTrafficStore((s) => s.voices)
-  const messages = useTrafficStore((s) => s.messages)
   const aiModel = useTrafficStore((s) => s.aiModel)
   const setAiModel = useTrafficStore((s) => s.setAiModel)
   const [q, setQ] = useState('')
@@ -139,19 +136,6 @@ export function HomeAgenda() {
       .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || b.lastTouched - a.lastTouched)
       .slice(0, 5)
   }, [canvases, brand])
-
-  // ── Foundation health — the strategy the AI writes from, counted for this brand.
-  const foundation = useMemo(() => {
-    const proofCount = brand ? brandSystems[brand]?.rtbs?.length ?? 0 : 0
-    const voiceCount = voices.filter((v) => !v.brand || v.brand === brand).length
-    const messageCount = messages.filter((m) => !m.brand || m.brand === brand).length
-    return [
-      { key: 'audiences', label: 'Audiences', count: audiences.length, go: () => setPage('segments') },
-      { key: 'voices', label: 'Voices', count: voiceCount, go: () => setPage('voices') },
-      { key: 'messages', label: 'Messages', count: messageCount, go: () => setPage('messages') },
-      { key: 'proof', label: 'Proof points', count: proofCount, go: () => setPage('proofpoints') },
-    ]
-  }, [brand, audiences, brandSystems, voices, messages, setPage])
 
   const toggleTask = (id: string) =>
     setTasks((prev) => {
@@ -364,19 +348,6 @@ export function HomeAgenda() {
           )}
         </section>
 
-        <section className="ag2-sec">
-          <div className="ag2-sec-head">
-            <span className="ag2-sec-title">Foundation</span>
-          </div>
-          <div className="ag2-found">
-            {foundation.map((f) => (
-              <button key={f.key} className={`ag2-found-item${f.count === 0 ? ' empty' : ''}`} onClick={f.go}>
-                <span className="ag2-found-count">{f.count}</span>
-                <span className="ag2-found-label">{f.label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
       </div>
     </div>
     {openTask && (

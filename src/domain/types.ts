@@ -127,6 +127,9 @@ export interface TrafficRow {
   /** The brand/client this row belongs to. Normally derived from the campaign, but ingested library
    *  content lives in one shared bucket campaign, so it carries its brand explicitly for scoping. */
   client?: string
+  /** The campaign FLIGHT (one scheduled run of the campaign) this asset belongs to. See domain/flight.ts.
+   *  Stamped by the flights migration; new assets are assigned to the campaign's current flight. */
+  flightId?: string
   /**
    * Audience / segment for targeting. For paid channels this is the CRM-synced
    * segment (Meta Custom Audience, LinkedIn Matched Audience, etc.).

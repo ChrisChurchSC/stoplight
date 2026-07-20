@@ -185,6 +185,14 @@ export function Workbench() {
     return () => window.removeEventListener('keydown', onKey)
   }, [openAsk])
 
+  // One-time flights migration: once assets have loaded, give every campaign a default flight and
+  // stamp its assets. Self-guarded, so this is a no-op after the first run.
+  const rowsLoaded = useTrafficStore((s) => s.rows.length > 0)
+  const ensureFlights = useTrafficStore((s) => s.ensureFlights)
+  useEffect(() => {
+    if (rowsLoaded) void ensureFlights()
+  }, [rowsLoaded, ensureFlights])
+
   async function onDrop(e: DragEvent) {
     e.preventDefault()
     setOver(false)
