@@ -5931,6 +5931,57 @@ button {
   border-radius: 999px;
   padding: 1px 7px;
 }
+/* Re-run: add another flight of a campaign. Shown on row hover to keep the label tidy. */
+.ccal-rerun {
+  flex: 0 0 auto;
+  margin-left: 5px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.ccal-row:hover .ccal-rerun {
+  opacity: 1;
+}
+.ccal-rerun:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* Remove a re-run flight (and its cloned assets); on the bar's right end, on row hover. */
+.ccal-bar-remove {
+  position: absolute;
+  top: 12px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.ccal-row:hover .ccal-bar-remove {
+  opacity: 1;
+}
+.ccal-bar-remove:hover {
+  border-color: var(--red, #dc2626);
+  color: var(--red, #dc2626);
+}
 .ccal-gridline {
   position: absolute;
   top: 0;
@@ -6109,6 +6160,67 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+/* A re-run campaign's expandable flight list on its card. */
+.flow-home-flights {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+.flow-home-flights-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-muted);
+  padding: 0;
+}
+.flow-home-flights-toggle:hover {
+  color: var(--text);
+}
+.flow-home-flights-chev {
+  display: inline-block;
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+.flow-home-flights-chev.open {
+  transform: rotate(90deg);
+}
+.flow-home-flight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+}
+.flow-home-flight {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+  text-align: left;
+}
+.flow-home-flight:hover {
+  border-color: var(--accent);
+}
+.flow-home-flight-name {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+}
+.flow-home-flight-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
 }
 .flow-home-chan.more {
   font-size: 10px;

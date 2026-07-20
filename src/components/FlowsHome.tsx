@@ -4,6 +4,7 @@ import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import type { ChannelId } from '../domain/types'
+import { flightForRow } from '../domain/flight'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -24,12 +25,15 @@ interface FlowCard {
   parent?: string
   /** The single audience this campaign is personalized to (its segment reference label). */
   personalizedTo?: string
+  /** This campaign's flights (one scheduled run each), for the overview + expandable list. */
+  flights: { id: string; name: string; assetCount: number; start: number; end: number }[]
 }
 
 const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1, planning: 2, completed: 3 }
 
 export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (name: string) => void; onNew: () => void }) {
   const rows = useTrafficStore((s) => s.rows)
+  const flights = useTrafficStore((s) => s.flights)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const campaignFolders = useTrafficStore((s) => s.campaignFolders)
   const createCampaignFolder = useTrafficStore((s) => s.createCampaignFolder)
@@ -42,6 +46,19 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   // Drag a flow card onto a folder section to file it there (replaces the folder dropdown).
   const [dragName, setDragName] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
+  // Campaign cards whose flight list is expanded (only cards with >1 flight offer this).
+  const [flightsOpen, setFlightsOpen] = useState<Set<string>>(new Set())
+  const toggleFlights = (name: string) =>
+    setFlightsOpen((prev) => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
+  // A flight's month window, e.g. "Sep" or "Sep - Oct".
+  const flightWindow = (start: number, end: number) => {
+    const mo = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short' })
+    return mo(start) === mo(end) ? mo(start) : `${mo(start)} - ${mo(end)}`
+  }
   // Umbrellas that are collapsed (children hidden). Default expanded.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const toggleUmbrella = (name: string) =>
@@ -85,6 +102,17 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   ].filter((n) => n !== CONTENT_LIBRARY_CAMPAIGN)
   const cards: FlowCard[] = names.map((name) => {
     const cRows = brandRows.filter((r) => (r.campaign ?? '').trim() === name)
+    // This campaign's flights, each with its resolved assets and derived window.
+    const campFlights = flights
+      .filter((f) => f.campaign === name)
+      .map((f) => {
+        const fRows = cRows.filter((r) => flightForRow(r, flights)?.id === f.id)
+        const times = fRows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
+        const start = times.length ? Math.min(...times) : Date.parse(f.startAt)
+        const end = times.length ? Math.max(...times) : start
+        return { id: f.id, name: f.name, assetCount: fRows.length, start, end }
+      })
+      .sort((a, b) => a.start - b.start)
     return {
       name,
       status: deriveCampaignStatus(meta.get(name), cRows),
@@ -94,6 +122,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       folder: meta.get(name)?.folder,
       parent: meta.get(name)?.parent,
       personalizedTo: meta.get(name)?.references?.find((r) => r.type === 'segment')?.label,
+      flights: campFlights,
     }
   })
   const sortCards = (arr: FlowCard[]) =>
@@ -152,6 +181,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         </div>
         <div className="flow-home-card-meta">
           {c.types} deliverable{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
+          {c.flights.length > 1 ? ` · ${c.flights.length} flights` : ''}
         </div>
         <div className="flow-home-chans">
           {c.channels.slice(0, 8).map((ch) => (
@@ -162,6 +192,29 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           {c.channels.length > 8 && <span className="flow-home-chan more">+{c.channels.length - 8}</span>}
         </div>
       </button>
+      {/* A re-run campaign (>1 flight) can expand to its flights: name, asset count, month window. */}
+      {c.flights.length > 1 && (
+        <div className="flow-home-flights">
+          <button className="flow-home-flights-toggle" onClick={() => toggleFlights(c.name)}>
+            <span className={`flow-home-flights-chev${flightsOpen.has(c.name) ? ' open' : ''}`} aria-hidden="true">
+              ▸
+            </span>
+            {c.flights.length} flights
+          </button>
+          {flightsOpen.has(c.name) && (
+            <div className="flow-home-flight-list">
+              {c.flights.map((f) => (
+                <button key={f.id} className="flow-home-flight" onClick={() => onOpen(c.name)}>
+                  <span className="flow-home-flight-name">{f.name}</span>
+                  <span className="flow-home-flight-meta">
+                    {f.assetCount} asset{f.assetCount === 1 ? '' : 's'} · {flightWindow(f.start, f.end)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 
