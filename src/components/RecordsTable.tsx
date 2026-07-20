@@ -8,6 +8,21 @@ import { InfoTip } from './InfoTip'
 import { BufferedInput } from './BufferedInput'
 import { SheetTabs } from './SheetTabs'
 
+// Human label for the page a "← Back" link returns to, keyed by the origin page id.
+const BACK_LABEL: Partial<Record<string, string>> = {
+  records: 'Companies',
+  people: 'People',
+  segments: 'Audiences',
+  tasks: 'Tasks',
+  proofpoints: 'Proof points',
+  messages: 'Messages',
+  voices: 'Voices',
+  patterns: 'Patterns',
+  objectives: 'Objectives',
+  triggers: 'Triggers',
+  channelrecords: 'Channels',
+}
+
 // What a blank cell needs, shown in a tooltip beside the "needs info" flag. Status/ref cells are
 // dropdowns (pick a value); the rest are typed in or need to be sourced.
 function cellHint(col: RecordColumn): string {
@@ -95,6 +110,9 @@ export function RecordsTable<T extends { id: string }>({
   // table that actually holds the id reacts, then it clears the signal.
   const focusRecordId = useTrafficStore((s) => s.focusRecordId)
   const focusRecord = useTrafficStore((s) => s.focusRecord)
+  // If we arrived here by jumping into a record from another page, offer a "← Back" out of it.
+  const recordBackTo = useTrafficStore((s) => s.recordBackTo)
+  const setPage = useTrafficStore((s) => s.setPage)
   // Brand in view (from the rail), so the assistant's edits and answers stay scoped to it.
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const chatBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
@@ -237,6 +255,11 @@ export function RecordsTable<T extends { id: string }>({
       onDelete={onDelete}
     />
     <div className="rec">
+      {recordBackTo && (
+        <button className="rec-back" onClick={() => setPage(recordBackTo)}>
+          <span aria-hidden="true">←</span> {BACK_LABEL[recordBackTo] ?? 'Back'}
+        </button>
+      )}
       <header className="rec-head">
         <div className="rec-title">
           <span className="rec-title-ic" aria-hidden="true">

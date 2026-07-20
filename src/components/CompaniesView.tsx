@@ -17,8 +17,7 @@ const ICON = (
 export function CompaniesView() {
   const companies = useTrafficStore((s) => s.companies)
   const people = useTrafficStore((s) => s.people)
-  const setPage = useTrafficStore((s) => s.setPage)
-  const focusRecord = useTrafficStore((s) => s.focusRecord)
+  const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const addCompany = useTrafficStore((s) => s.addCompany)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const deleteCompany = useTrafficStore((s) => s.deleteCompany)
@@ -59,8 +58,7 @@ export function CompaniesView() {
               name: p.name,
               sub: p.title,
               onOpen: () => {
-                focusRecord(p.id)
-                setPage('people')
+                jumpToRecord(p.id, 'people')
               },
             }))}
           />

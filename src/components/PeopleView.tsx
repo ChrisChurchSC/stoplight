@@ -18,8 +18,8 @@ const ICON = (
 export function PeopleView() {
   const people = useTrafficStore((s) => s.people)
   const companies = useTrafficStore((s) => s.companies)
-  const setPage = useTrafficStore((s) => s.setPage)
   const focusRecord = useTrafficStore((s) => s.focusRecord)
+  const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const addPerson = useTrafficStore((s) => s.addPerson)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const deletePerson = useTrafficStore((s) => s.deletePerson)
@@ -65,8 +65,7 @@ export function PeopleView() {
                           name: company.name,
                           sub: company.segment,
                           onOpen: () => {
-                            focusRecord(company.id)
-                            setPage('records')
+                            jumpToRecord(company.id, 'records')
                           },
                         },
                       ]

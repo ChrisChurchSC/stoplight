@@ -95,8 +95,7 @@ export function SegmentsView() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const companies = useTrafficStore((s) => s.companies)
-  const setPage = useTrafficStore((s) => s.setPage)
-  const focusRecord = useTrafficStore((s) => s.focusRecord)
+  const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const audiences = clientAudiences[brand] ?? []
 
@@ -155,8 +154,7 @@ export function SegmentsView() {
               name: c.name,
               sub: c.segment,
               onOpen: () => {
-                focusRecord(c.id)
-                setPage('records')
+                jumpToRecord(c.id, 'records')
               },
             }))}
           />

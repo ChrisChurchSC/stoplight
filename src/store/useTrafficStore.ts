@@ -1432,6 +1432,11 @@ interface TrafficState {
    *  the table that owns the id. */
   focusRecordId: string | null
   focusRecord: (id: string | null) => void
+  /** When you jump into a record that lives on another page (e.g. an Audience's linked Company, a
+   *  Task's company), the page you came from, so the destination record view can offer a "← Back"
+   *  out of it. Set by jumpToRecord; cleared by any ordinary nav (setPage). */
+  recordBackTo: TrafficState['page'] | null
+  jumpToRecord: (id: string, page: TrafficState['page']) => void
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -2310,6 +2315,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // workspace home, which a stakeholder can't use anyway (they're locked to one client).
   page: initialShare ? 'flows' : 'portfolio',
   focusRecordId: null,
+  recordBackTo: null,
   libraryMode: 'catalog',
   brandTab: 'about',
   brandGuides: loadBrandGuides(),
@@ -2499,10 +2505,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const role = get().role
     if (page === 'billing' && !can(role, 'billing')) return
     if (page === 'connectors' && role !== 'owner') return
-    set({ page })
+    // Ordinary nav clears any pending record back-link so a stale "← Back" never lingers.
+    set({ page, recordBackTo: null })
   },
   setLibraryMode: (libraryMode) => set({ libraryMode, page: 'content' }),
   focusRecord: (focusRecordId) => set({ focusRecordId }),
+  // Jump to a record that lives on another page and remember where we came from, so that page can
+  // offer a "← Back" out. Sets page directly (not via setPage) so the back-link survives the nav.
+  jumpToRecord: (id, page) => set((s) => ({ focusRecordId: id, page, recordBackTo: s.page === page ? null : s.page })),
   setBrandTab: (brandTab) => set({ brandTab, page: 'brand' }),
   setCampaignFolderView: (campaignFolderView) => set({ campaignFolderView }),
   setIcpOpen: (icpOpen) => set({ icpOpen }),

@@ -304,7 +304,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         )}
         {!isRenaming && isFolder && (
           <div className="flow-home-card-folder-hint" aria-hidden="true">
-            Open folder →
+            Open campaign →
           </div>
         )}
         {/* Re-run: add another flight of this campaign (clones its assets into a new window). */}

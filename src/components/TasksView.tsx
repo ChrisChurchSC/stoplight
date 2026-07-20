@@ -83,8 +83,7 @@ function Avatar({ name }: { name: string }) {
 
 export function TasksView() {
   const companies = useTrafficStore((s) => s.companies)
-  const setPage = useTrafficStore((s) => s.setPage)
-  const focusRecord = useTrafficStore((s) => s.focusRecord)
+  const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const openFlow = useTrafficStore((s) => s.openFlow)
   // The rail always lands on a real brand now, but guard against a transient 'all'.
@@ -132,8 +131,7 @@ export function TasksView() {
 
   // Jump to Companies and pop the linked company's record drawer.
   const openCompany = (id: string) => {
-    focusRecord(id)
-    setPage('records')
+    jumpToRecord(id, 'records')
   }
   const patch = (id: string, p: Partial<Task>) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...p } : t)))
   const remove = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id))

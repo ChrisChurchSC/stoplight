@@ -19,6 +19,10 @@ import { UNASSIGNED } from '../domain/clients'
 // "Connect Claude" step auto-completes when it actually is. Module-level so page switches (which
 // remount the widget) don't refetch.
 let aiStatusChecked = false
+// Re-surface the checklist once per page load for a user who's still mid-setup — so "Getting
+// started" isn't effectively hidden after a refresh. Module-level so page switches (which remount
+// the widget) don't re-trigger it within the same load.
+let autoExpanded = false
 
 function StepIcon({ id }: { id: OnboardingStepId }) {
   const common = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -141,6 +145,15 @@ export function GettingStarted() {
   const allDone = doneCount === total
   const currentId = steps.find((s) => !s.done)?.id ?? null
   const latestCampaign = brandCampaigns[0]?.name ?? ''
+
+  // First load of a session: if the user still has steps to do and had collapsed the checklist
+  // (but not dismissed it), pop it back open so it's visible. Runs once per page load; never for
+  // someone who's finished or dismissed it, so it doesn't nag.
+  useEffect(() => {
+    if (autoExpanded) return
+    autoExpanded = true
+    if (!onboarding.dismissed && !allDone && onboarding.collapsed) setCollapsed(false)
+  }, [onboarding.dismissed, onboarding.collapsed, allDone, setCollapsed])
 
   const go = (id: OnboardingStepId) => {
     switch (id) {

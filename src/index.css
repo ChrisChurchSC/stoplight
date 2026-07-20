@@ -3027,6 +3027,26 @@ button {
   gap: 16px;
   margin-bottom: 16px;
 }
+/* "← Back" out of a record you jumped into from another page (e.g. an Audience's linked company). */
+.rec-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 12px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rec-back:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
 .rec-title {
   display: flex;
   align-items: center;
