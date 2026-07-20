@@ -5598,11 +5598,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             index: i,
           }
         })
-        // Anchor the set to the campaign brief: its subject is the theme, its
-        // duration the timeframe (both authored on the campaign at build time).
+        // Anchor the set to the campaign brief's throughline so every asset connects back to it.
+        // The Subject (what the campaign is about) leads; the core message the assets carry and the
+        // goal fill it out, so the theme is meaningful even when the Subject alone is thin. Falls back
+        // to the campaign name so there is always an anchor. Duration is the timeframe.
         const campMeta = get().campaignList.find((c) => c.name === campaign)
+        const themeParts = [campMeta?.subject?.trim(), campMeta?.goalMessage?.trim()].filter(Boolean)
+        const theme = themeParts.length
+          ? themeParts.join('. ')
+          : campMeta?.objective?.trim()
+            ? `Campaign goal: ${campMeta.objective.trim()}`
+            : campaign.trim() || undefined
         // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
-        const baseReq = { icp, campaign, theme: campMeta?.subject, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: activeProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: activeProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
