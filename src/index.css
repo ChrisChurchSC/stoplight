@@ -5656,25 +5656,31 @@ button {
   border-radius: 10px;
 }
 .flow-home-card-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 14px;
   font-weight: 700;
   line-height: 1.3;
   color: var(--text);
   padding-right: 16px;
 }
+.flow-home-card-name .flow-home-dot {
+  margin-right: 0;
+}
 .flow-home-card-meta {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
 }
-/* Which single audience the campaign is personalized to — a small pill on the card. */
+/* Which single audience the campaign is personalized to — a small pill inline in the card title. */
 .flow-home-persona {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   max-width: 100%;
-  margin-top: 9px;
-  padding: 3px 9px 3px 7px;
+  padding: 2px 8px 2px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 11%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
