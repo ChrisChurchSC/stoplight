@@ -4336,6 +4336,51 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* "Personalized to" — the campaign's target audience, its own line on the brief. */
+.flow-audience {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 7px 0 2px;
+  cursor: default;
+}
+.flow-audience-lbl {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.flow-audience-sel {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 7px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.flow-audience-sel:hover {
+  border-color: var(--accent);
+}
+.flow-audience-add {
+  flex: 1 1 auto;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 7px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
 .flow-node-x {
   flex: 0 0 auto;
   border: 0;

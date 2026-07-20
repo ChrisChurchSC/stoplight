@@ -11,6 +11,7 @@ import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
+import { ChannelIcon } from './ChannelIcon'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -117,11 +118,14 @@ type RecordOptionGroup = { type: FlowRefType; label: string; items: { id: string
 // is CLICKABLE: clicking its chips (or its "Needs …" flag) opens an inline picker to add/remove the
 // records for that category right on the card. `overridden` tints a deliverable whose records
 // differ from the campaign's. `ops` writes to the right target (campaign brief or a deliverable).
-function CardTags({ tags, overridden, ops, recordGroups }: {
+function CardTags({ tags, overridden, ops, recordGroups, excludeGroupKeys }: {
   tags: FlowReference[]
   overridden: boolean
   ops: TagOps
   recordGroups: RecordOptionGroup[]
+  /** Category keys to omit (e.g. 'audience' on the campaign brief, where a dedicated
+   *  "Personalized to" selector owns the audience instead of a tag row). */
+  excludeGroupKeys?: string[]
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -135,6 +139,7 @@ function CardTags({ tags, overridden, ops, recordGroups }: {
     return () => document.removeEventListener('mousedown', onDown, true)
   }, [openKey])
   const groups = CARD_GROUPS
+    .filter((g) => !excludeGroupKeys?.includes(g.key))
     .map((g) => ({ ...g, items: tags.filter((t) => g.types.includes(t.type)) }))
     .filter((g) => g.items.length || g.required)
   if (!groups.length) return null
@@ -221,13 +226,20 @@ const startCount = (p: DeliverablePreset): number => (p.channel === 'lead-magnet
 const blueprintNoun = (channel: ChannelId): string =>
   PAGE_CHANNELS.has(channel) ? 'page' : channel === 'email' ? 'email' : channel === 'blog' ? 'article' : channel === 'linkedin-ads' ? 'ad' : 'asset'
 
-const PresetTile = ({ tone }: { tone: string }) => (
+// The tile mark matches the asset's channel (email envelope, LinkedIn/YouTube brand marks, a
+// page globe, etc.) so each deliverable reads at a glance, instead of one generic glyph for all.
+// Falls back to that generic glyph when no channel is known.
+const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${tone} 20%, transparent)`, color: tone }}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="4" width="16" height="7" rx="1.6" />
-      <path d="M4 16h11" />
-      <path d="M19 14v5M16.5 16.5h5" />
-    </svg>
+    {channel ? (
+      <ChannelIcon channel={channel} size={15} color={tone} />
+    ) : (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="4" width="16" height="7" rx="1.6" />
+        <path d="M4 16h11" />
+        <path d="M19 14v5M16.5 16.5h5" />
+      </svg>
+    )}
   </span>
 )
 
@@ -400,6 +412,7 @@ export function FlowsView() {
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const setPage = useTrafficStore((s) => s.setPage)
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   // The brand's Segments records (the Segments page IS the brand's audiences).
@@ -1126,6 +1139,25 @@ export function FlowsView() {
     if (viewName === null) return replaceBriefRef(key, type, id, label)
     setCampaignReferences(viewName, flowRefs.map((r) => (refKey(r) === key ? { type, id, label } : r)))
     setRefsDirty(true)
+  }
+  // The one audience this campaign is personalized to = its single segment reference (segments ARE
+  // the brand's audiences). Surfaced as a prominent brief field, not a tag chip: picking one replaces
+  // any other segment refs so a campaign personalizes to exactly one audience. Generation already
+  // writes to the segment refs, so this drives it with no extra wiring. In build mode an untouched
+  // brief (null) reads as "not chosen yet" rather than the all-segments default.
+  const chosenSegmentRefs = (viewName !== null ? flowRefs : briefRefs ?? []).filter((r) => r.type === 'segment')
+  const personalizedAudienceId = chosenSegmentRefs.length === 1 ? chosenSegmentRefs[0].id : ''
+  const setPersonalizedAudience = (segId: string) => {
+    const seg = brandSegments.find((a) => a.id === segId)
+    const base = viewName !== null ? flowRefs : briefRefs ?? []
+    const nonSeg = base.filter((r) => r.type !== 'segment')
+    const next = seg ? [...nonSeg, { type: 'segment' as FlowRefType, id: seg.id, label: seg.name }] : nonSeg
+    if (viewName !== null) {
+      setCampaignReferences(viewName, next)
+      setRefsDirty(true)
+    } else {
+      commitBriefRefs(next)
+    }
   }
   // Editing the CAMPAIGN's records (the brief).
   const campaignTagOps: TagOps = {
@@ -2282,7 +2314,7 @@ export function FlowsView() {
                       <div className="flow-addmenu-group">{group}</div>
                       {presets.map((p) => (
                         <button key={p.key} className="flow-addmenu-item" onClick={() => addFromMenu(p)}>
-                          <PresetTile tone={TONE_HEX[p.tone]} />
+                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
                           <span>{p.label}</span>
                         </button>
                       ))}
@@ -2322,7 +2354,34 @@ export function FlowsView() {
                   <div className="flow-node-desc">
                     {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week flight`}
                   </div>
-                  <CardTags tags={viewing ? flowRefs : briefRefsEffective} overridden={false} ops={campaignTagOps} recordGroups={recordGroups} />
+                  {/* Personalized to: the one audience this campaign is written for. Its own field, not
+                      a tag, so it reads as the campaign's target; drives which segment generation writes to. */}
+                  <label
+                    className="flow-audience"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span className="flow-audience-lbl">Personalized to</span>
+                    {brandSegments.length ? (
+                      <select
+                        className="flow-audience-sel"
+                        value={personalizedAudienceId}
+                        onChange={(e) => setPersonalizedAudience(e.target.value)}
+                      >
+                        <option value="">Choose an audience…</option>
+                        {brandSegments.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button className="flow-audience-add" onClick={() => setPage('segments')}>
+                        Add an audience first
+                      </button>
+                    )}
+                  </label>
+                  <CardTags tags={viewing ? flowRefs : briefRefsEffective} excludeGroupKeys={['audience']} overridden={false} ops={campaignTagOps} recordGroups={recordGroups} />
                 </div>
               </div>
               {!viewing && (
@@ -2425,7 +2484,7 @@ export function FlowsView() {
                                   onClick={(e) => clickSelect(e, r.id)}
                                 >
                                   <div className="flow-node-main">
-                                    <PresetTile tone={POST_TONE} />
+                                    <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
                                     <div className="flow-node-text">
                                       {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
@@ -2542,7 +2601,7 @@ export function FlowsView() {
                                   onClick={(e) => clickSelect(e, `${n.id}:${bi}`)}
                                 >
                                   <div className="flow-node-main">
-                                    <PresetTile tone={POST_TONE} />
+                                    <PresetTile tone={POST_TONE} channel={p.channel} />
                                     <div className="flow-node-text">
                                       <div className="flow-node-label">{PAGE_CHANNELS.has(p.channel) ? 'Page' : `${subcardWord(p)} ${bi + 1}`}</div>
                                       {PAGE_CHANNELS.has(p.channel) ? (
@@ -2621,7 +2680,7 @@ export function FlowsView() {
                       <div className="flow-pgroup-h">{group}</div>
                       {presets.map((p) => (
                         <button key={p.key} className="flow-pitem" disabled={addingDeliv} onClick={() => void addViewDeliverable(p)}>
-                          <PresetTile tone={TONE_HEX[p.tone]} />
+                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
                           <div className="flow-pitem-text">
                             <div className="flow-pitem-label">{p.label}</div>
                             <div className="flow-pitem-desc">{addingDeliv ? 'Adding…' : p.brand || p.runtime === 'one-off' ? 'one-off' : `${p.perMonth} / month`}</div>
@@ -2635,7 +2694,7 @@ export function FlowsView() {
             ) : selPost ? (
               <>
                 <div className="flow-panel-head">
-                  <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} />
+                  <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} channel={selPost.channel as ChannelId} />
                   <span className="flow-panel-title">{selPost.assetName}</span>
                   <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
                     ✕
@@ -2794,7 +2853,7 @@ export function FlowsView() {
             ) : selDeliv ? (
               <>
                 <div className="flow-panel-head">
-                  <PresetTile tone={selDeliv.tone} />
+                  <PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />
                   <span className="flow-panel-title">{selDeliv.label}</span>
                   <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
                     ✕
@@ -2978,7 +3037,7 @@ export function FlowsView() {
                   <div className="flow-deliv-list">
                     {viewDelivs.map((d) => (
                       <button key={d.key} className="flow-pitem" onClick={() => setSel(d.key)}>
-                        <PresetTile tone={d.tone} />
+                        <PresetTile tone={d.tone} channel={d.channel} />
                         <div className="flow-pitem-text">
                           <div className="flow-pitem-label">{d.label}</div>
                           <div className="flow-pitem-desc">{d.count} asset{d.count === 1 ? '' : 's'}</div>
@@ -3006,7 +3065,7 @@ export function FlowsView() {
                     <div className="flow-pgroup-h">{group}</div>
                     {presets.map((p) => (
                       <button key={p.key} className="flow-pitem" onClick={() => addPreset(p)}>
-                        <PresetTile tone={TONE_HEX[p.tone]} />
+                        <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
                         <div className="flow-pitem-text">
                           <div className="flow-pitem-label">{p.label}</div>
                           <div className="flow-pitem-desc">{p.brand || p.runtime === 'one-off' ? 'one-off' : `${p.perMonth} / month`}</div>
@@ -3150,7 +3209,7 @@ export function FlowsView() {
               return (
                 <>
                   <div className="flow-panel-head">
-                    <PresetTile tone={TONE_HEX[p.tone]} />
+                    <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
                     <span className="flow-panel-title">{isPage ? 'Page' : `Post ${bi + 1}`}</span>
                     <button className="flow-back flow-close" onClick={() => setSel(null)}>
                       ✕
@@ -3218,7 +3277,7 @@ export function FlowsView() {
               return (
                 <>
                   <div className="flow-panel-head">
-                    <PresetTile tone={TONE_HEX[p.tone]} />
+                    <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
                     <span className="flow-panel-title">{p.label}</span>
                     <button className="flow-back flow-close" onClick={() => setSel(null)}>
                       ✕
