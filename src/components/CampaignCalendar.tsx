@@ -81,11 +81,14 @@ export function CampaignCalendar() {
   const { rangeStart, span, months } = useMemo(() => {
     const starts = scheduled.map((i) => i.start)
     const ends = scheduled.map((i) => i.end)
-    let lo = firstOfMonth(starts.length ? Math.min(...starts, now) : now)
-    let hi = ends.length ? Math.max(...ends, now) : now + 60 * DAY
-    // Snap the high end up to the end of its month, and guarantee at least 4 months of width.
+    const lo = firstOfMonth(starts.length ? Math.min(...starts, now) : now)
+    let hi = ends.length ? Math.max(...ends, now) : now
     hi = nextMonth(hi)
-    while (hi - lo < 4 * 30 * DAY) hi = nextMonth(hi)
+    // Always show at least 12 months out from the current month; extend further when campaigns run
+    // beyond that so a long flight is never clipped.
+    const nd = new Date(now)
+    const twelveOut = new Date(nd.getFullYear(), nd.getMonth() + 12, 1).getTime()
+    if (hi < twelveOut) hi = twelveOut
     const ms: { label: string; start: number; days: number }[] = []
     for (let m = lo; m < hi; ) {
       const nxt = nextMonth(m)
@@ -151,12 +154,15 @@ export function CampaignCalendar() {
           const left = pct(c.start)
           const width = Math.max(1.5, pct(c.end) - left)
           const short = c.name.replace(`${brand} — `, '')
+          // Under an umbrella the children share a prefix ("Series · Audience"); show the
+          // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
+          const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
           return (
             <div className="ccal-row" key={c.name}>
               <div className="ccal-label-col">
-                <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
+                <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
                 <span className="ccal-row-name" title={short}>
-                  {short}
+                  {display}
                 </span>
                 <span className="ccal-row-count">{c.assetCount}</span>
               </div>
@@ -171,7 +177,7 @@ export function CampaignCalendar() {
                   onClick={() => openFlow(c.name)}
                   title={`${short} · ${STATUS_LABEL[c.status]} · ${c.assetCount} asset${c.assetCount === 1 ? '' : 's'}`}
                 >
-                  <span className="ccal-bar-label">{short}</span>
+                  <span className="ccal-bar-label">{display}</span>
                 </button>
               </div>
             </div>
@@ -185,7 +191,7 @@ export function CampaignCalendar() {
           <div className="ccal-unsched-list">
             {unscheduled.map((c) => (
               <button key={c.name} className="ccal-unsched-item" onClick={() => openFlow(c.name)}>
-                <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
+                <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
                 {c.name.replace(`${brand} — `, '')}
                 <span className="ccal-row-count">{c.assetCount}</span>
               </button>

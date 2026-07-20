@@ -5726,6 +5726,12 @@ button {
   padding-right: 12px;
   min-width: 0;
 }
+.ccal-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
 .ccal-track {
   position: relative;
   flex: 1 1 auto;
