@@ -189,6 +189,22 @@ export function messagingFields(channel: ChannelId, assetType?: string): Messagi
   return BASE[channel] ?? FALLBACK
 }
 
+/**
+ * Trim a component's copy to its field's hard limit, at a word boundary when one is
+ * reasonably close to the cap (else a clean hard cut), dropping any trailing
+ * punctuation. A safety net so a model overrun never yields an over-length field —
+ * headlines and SEO titles especially, where "really long" reads as broken. No-op when
+ * the field has no hard limit or the value already fits.
+ */
+export function clampToLimit(value: string, field?: MessagingField): string {
+  const max = field?.hardLimit
+  if (!max || value.length <= max) return value
+  const cut = value.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  const trimmed = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut
+  return trimmed.replace(/[\s,;:.!?-]+$/, '').trim()
+}
+
 export const messagingMap = (row: TrafficRow): Record<string, string> => row.messaging ?? {}
 
 /** All messaging text joined — for search and ICP evaluation. */

@@ -68,7 +68,7 @@ import {
 import { mapSite, type SiteMap } from '../adapters/setup/siteMap'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
-import { messagingFields, messagingAllText, messagingMap } from '../domain/messaging'
+import { messagingFields, messagingAllText, messagingMap, clampToLimit } from '../domain/messaging'
 import { composeMessaging } from '../domain/matrixDraft'
 import { ctaFor } from '../domain/matrix'
 import { funnelStageFor, FUNNEL_STAGES } from '../domain/funnel'
@@ -5632,9 +5632,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         for (const d of result.drafts) {
           const row = crows.find((r) => r.id === d.rowId)
           if (!row) continue
-          const map: Record<string, string> = { ...(row.messaging ?? {}) }
-          for (const c of d.components) if (!map[c.key]?.trim()) map[c.key] = c.value
           const fields = messagingFields(row.channel, row.assetType)
+          const fieldByKey = new Map(fields.map((f) => [f.key, f]))
+          const map: Record<string, string> = { ...(row.messaging ?? {}) }
+          // Clamp each component to its field's hard limit as a safety net — a model overrun
+          // (a pillar-guide SEO title especially) must never land as an over-length headline.
+          for (const c of d.components) if (!map[c.key]?.trim()) map[c.key] = clampToLimit(c.value, fieldByKey.get(c.key))
           const primaryKey = fields[0]?.key
           const ctaKey = fields.find((f) => /cta/i.test(f.key))?.key
           const ids = d.rtbIds.length ? d.rtbIds : result.rtbs[0] ? [result.rtbs[0].id] : []
@@ -5722,9 +5725,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const headKey = fields.find((f) => /headline|subject|title|subhead|^h\d/i.test(f.key))?.key
     const primKey = (fields.find((f) => /primary|body|caption|intro|post|message/i.test(f.key)) ?? fields[0])?.key
     const byRow = new Map(result.drafts.map((d) => [d.rowId, d]))
+    const fieldByKey = new Map(fields.map((f) => [f.key, f]))
     const posts = assets.map((a) => {
       const d = byRow.get(a.rowId)
-      const val = (k?: string) => (k ? d?.components.find((c) => c.key === k)?.value ?? '' : '')
+      // Clamp to each field's hard limit so the preview matches the (clamped) committed copy.
+      const val = (k?: string) =>
+        k ? clampToLimit(d?.components.find((c) => c.key === k)?.value ?? '', fieldByKey.get(k)) : ''
       // Every field, labeled and in schema order, so a page can show its copy as
       // organized components (headline / subhead / proof / body / cta) not a text wall.
       const components = fields.map((f) => ({ key: f.key, label: f.label, value: val(f.key) })).filter((c) => c.value.trim())

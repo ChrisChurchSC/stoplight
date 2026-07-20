@@ -69,7 +69,7 @@ Some assets carry an EMAIL BLUEPRINT in their context, which MUST shape the copy
 - context.levers: the ONLY persuasion levers allowed for this email (time-scarcity, quantity-scarcity, social-proof, exclusivity). Use only these, and only if the campaign genuinely supports them. If absent or "none", use no urgency/scarcity at all.
 Keep one dominant CTA per email.
 
-Write copy for EVERY component of EVERY asset, respecting each component's character limit. Headlines are tight; primary text can breathe; CTAs are short action labels, not sentences.
+Write copy for EVERY component of EVERY asset. Each component's hardLimit is an ABSOLUTE maximum: never exceed it — a value over the limit gets trimmed and reads as truncated, so write to fit. Aim at the recommended length when one is given, not the max. Headlines and titles are TIGHT: a headline or SEO title must be a short, punchy line, not a full sentence or a subtitle-laden description (a long-form or pillar guide still gets a short title, not a paragraph). Primary text can breathe; CTAs are short action labels, not sentences.
 
 UNIQUENESS is a hard requirement. Across the whole campaign: no two assets may share the same headline, no two may share the same primary text, and CTAs must not repeat. Vary the opening, structure, and angle, not just the noun that names the audience. If an AVOID list is provided, do not reuse any string in it.
 
