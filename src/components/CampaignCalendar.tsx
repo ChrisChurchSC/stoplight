@@ -65,11 +65,11 @@ export function CampaignCalendar() {
       let end = times.length ? Math.max(...times) : NaN
       const dur = durByName.get(c.name)
       if (!Number.isNaN(start) && dur && dur > 0 && end - start < dur * 7 * DAY) end = start + dur * 7 * DAY
-      // Each scheduled asset, for the expandable per-asset rows.
+      // Each scheduled asset, for the expandable per-asset rows. Kept in the campaign's natural asset
+      // order (NOT sorted by date) so dragging one to a new launch date never reshuffles the list.
       const assets = c.rows
         .map((r) => ({ id: r.id, name: r.assetName || r.assetType || 'Asset', channel: r.channel, at: Date.parse(r.scheduledAt) }))
         .filter((a) => !Number.isNaN(a.at))
-        .sort((a, b) => a.at - b.at)
       return {
         name: c.name,
         status: c.status as CampaignStatus,
