@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { draftProof } from '../adapters/ask/draftProof'
+import { draftCtas } from '../adapters/ask/draftCtas'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { getActiveWorkspaceId } from '../lib/session'
@@ -350,6 +351,48 @@ export function HomeChat() {
     lastActionRef.current = 'proof'
   }
 
+  // Draft reusable CTAs (calls to action) for the active brand, spread across the funnel, and save
+  // them to the brand's library so generation seeds asset CTAs from real brand-authored actions.
+  const draftBrandCtas = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') return
+    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
+    const audiences = (store.clientAudiences[brand] ?? []).map((a) => a.name)
+    setMessagingBrand(brand)
+    const existing = (useTrafficStore.getState().library.ctas ?? []).map((c) => c.label).filter(Boolean)
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting CTAs for ${brand}` }] }])
+    const ctas = await draftCtas({
+      brand,
+      oneLiner: profile.oneLiner,
+      industry: profile.industry || rec.industry,
+      positioning: rec.positioning,
+      descriptor: rec.descriptor,
+      keyMessage: rec.keyMessage,
+      differentiator: rec.differentiator,
+      businessObjective: rec.businessObjective,
+      commsObjective: rec.commsObjective,
+      audiences,
+      existing,
+      samples: brandLibrarySamples(brand),
+    })
+    ctas.forEach((c) =>
+      addLibraryItem('ctas', { id: freshRecordId('lcta'), label: c.label, stage: c.stage, outcome: c.outcome, approved: false }),
+    )
+    const list = ctas.map((c) => `- **${c.label}**${c.stage ? ` (${c.stage})` : ''}`).join('\n')
+    const more = existing.length > 0
+    setMessages((m) =>
+      m.map((x) =>
+        x.id === id
+          ? { ...x, busy: false, steps: undefined, text: `I drafted ${ctas.length} ${more ? 'more ' : ''}CTA${ctas.length === 1 ? '' : 's'} for **${brand}** and saved them to the library:\n\n${list}` }
+          : x,
+      ),
+    )
+    lastActionRef.current = 'cta'
+  }
+
   // Draft target audiences for the active brand from its description, add them as real audience
   // records, and report them in the chat. Passes existing audience names so "more" gives new ones.
   const addAudiences = async () => {
@@ -633,9 +676,10 @@ export function HomeChat() {
     await addAudiences()
     await addBrandVoices()
     await draftProofPoints()
+    await draftBrandCtas()
     await draftBrandMessages()
     say(
-      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: strategy (positioning, objectives, audience), plus audiences, voice, proof points, and messages. Open Brand or each section to refine.`,
+      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: strategy (positioning, objectives, audience), plus audiences, voice, proof points, CTAs, and messages. Open Brand or each section to refine.`,
     )
     surfaceNextStep()
   }
