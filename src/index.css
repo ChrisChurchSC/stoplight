@@ -25921,6 +25921,10 @@ table.aud-sheet td.stick .aud-cell {
   vertical-align: middle;
   margin-left: 6px;
 }
+/* In a sidebar section header the "i" sits at the row's right edge; give it breathing room. */
+.hsb-sec-row .infotip {
+  margin-right: 9px;
+}
 .infotip-btn {
   width: 15px;
   height: 15px;

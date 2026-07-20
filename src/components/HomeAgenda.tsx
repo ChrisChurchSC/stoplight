@@ -233,7 +233,7 @@ export function HomeAgenda() {
             </button>
             <button className="ag2-chip" onClick={() => openHomeChat(BUILD_BRAND_SEED)}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
-              Build brand from content
+              Draft brand from your content
             </button>
             <button className="ag2-chip" onClick={() => openHomeChat('Draft a new campaign for this brand')}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>

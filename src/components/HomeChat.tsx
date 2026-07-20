@@ -1086,7 +1086,7 @@ export function HomeChat() {
     if (!foundation)
       return {
         text: `Now build **${brand}**'s brand page from your real content: I'll pull your site and published work, then draft your audiences, voice, proof points, and messages from it.`,
-        guide: { label: 'Build brand from content', step: 'build' },
+        guide: { label: 'Draft brand from your content', step: 'build' },
       }
     if (!gtm)
       return {
@@ -1399,7 +1399,7 @@ export function HomeChat() {
             <>
               <button className="hchat-action primary" disabled={busy} onClick={() => void buildBrandFromContent()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
-                Build brand from content
+                Draft brand from your content
               </button>
               <button className="hchat-action" disabled={busy} onClick={() => startFoundationFlow()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /></svg>

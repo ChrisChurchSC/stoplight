@@ -7,6 +7,7 @@ import type { ChannelId } from '../domain/types'
 import { flightForRow } from '../domain/flight'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
+import { InfoTip } from './InfoTip'
 
 /**
  * The Flows landing page: every one of a brand's campaigns shown as a flow card, organized
@@ -486,7 +487,10 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     <div className="flow-home">
       <header className="flow-home-head">
         <div>
-          <h1 className="flow-home-title">Campaigns</h1>
+          <h1 className="flow-home-title">
+            Campaigns
+            <InfoTip term="campaign" />
+          </h1>
           <p className="flow-home-sub">
             {cards.length} flow{cards.length === 1 ? '' : 's'} · {folders.length} folder{folders.length === 1 ? '' : 's'} for {brand || 'this brand'}
           </p>

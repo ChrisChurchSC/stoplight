@@ -137,6 +137,11 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     more: 'This is the map, not a one-line positioning statement and not a differentiator.',
     seeAlso: ['differentiator'],
   },
+  recordsAssistant: {
+    term: 'Records assistant',
+    short:
+      "The chat for the record type you are viewing. In Build it adds, edits, and cleans up your records (you approve each change); in Analyze it answers questions without changing anything.",
+  },
   linkedRecords: {
     term: 'Linked records',
     short:

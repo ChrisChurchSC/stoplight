@@ -11,6 +11,7 @@ import {
   type RecordFieldSpec,
 } from '../domain/recordsAgent'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { InfoTip } from './InfoTip'
 
 /**
  * The Records-table AI assistant — the flow-canvas chat, brought to the Records pages. Build
@@ -215,6 +216,7 @@ export function RecordsChat({
       <header className="fchat-head">
         <span className="fchat-spark" aria-hidden="true">✦</span>
         <span className="fchat-title">{recordType} assistant</span>
+        <InfoTip term="recordsAssistant" />
         <span className="fchat-beta">Beta</span>
         <div className="fchat-head-actions">
           <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={() => setMessages([])}>+</button>

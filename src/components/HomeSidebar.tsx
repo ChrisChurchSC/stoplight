@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { InfoTip } from './InfoTip'
+
+// Which glossary term defines each collapsible nav section (build -> reach -> measure).
+const SECTION_TERM: Record<string, string> = { Foundation: 'foundation', Prospects: 'prospects', 'Go-to-market': 'gtm' }
 
 /**
  * The app's left sidebar for the files-browser shell — the same panel on the home
@@ -319,12 +323,15 @@ export function HomeSidebar() {
           const open = openSections.has(sec.label)
           return (
             <div className="hsb-chats" key={sec.label}>
-              <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
-                <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
-                  <Ico name="caret" />
-                </span>
-                {sec.label}
-              </button>
+              <div className="hsb-sec-row">
+                <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
+                  <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
+                    <Ico name="caret" />
+                  </span>
+                  {sec.label}
+                </button>
+                <InfoTip term={SECTION_TERM[sec.label]} />
+              </div>
               {open && (
                 <div className="hsb-chat-list">
                   {sec.items.map((it) => (
