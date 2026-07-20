@@ -25,6 +25,8 @@ export interface ChannelIngestResult {
   messages: IngestedMessage[]
   imagesSeen: number
   imagesTranscribed: number
+  /** The profile's avatar as a data URL, used to set the brand's picture. */
+  profileImage?: string
 }
 
 export interface IngestProgress {

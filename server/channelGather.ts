@@ -33,6 +33,8 @@ export interface ChannelGather {
   images: GatheredImage[]
   /** Images seen on the feed before fetching (so the UI can show "pulled N"). */
   seen: number
+  /** The profile avatar as a data URL, captured off the rendered header. */
+  avatar?: string
 }
 
 /** Where the real content lives for each platform, given a profile URL. */
@@ -85,6 +87,11 @@ export async function gatherChannelMedia(
     // step is the reliable path: real pixels, no fetch, no CORS. Deduped by src.
     const images: GatheredImage[] = []
     const captured = new Set<string>()
+    // The profile avatar, captured off the header. It's the first small, roughly
+    // square, near-the-top image whose src reads like an avatar. Kept separate from
+    // post images (which the loop below screenshots at content size).
+    let avatar: string | undefined
+    const avatarTried = new Set<string>()
     const grab = async () => {
       const imgs = page.locator('img')
       const n = await imgs.count().catch(() => 0)
@@ -92,7 +99,18 @@ export async function gatherChannelMedia(
         const el = imgs.nth(i)
         const src = (await el.getAttribute('src').catch(() => null)) || ''
         if (!/^https?:/i.test(src) || captured.has(src)) continue
-        if (/(avatar|profile_pic|favicon|sprite|emoji|\bicon\b|logo)/i.test(src)) continue
+        if (/(avatar|profile_pic|favicon|sprite|emoji|\bicon\b|logo)/i.test(src)) {
+          if (!avatar && /(avatar|profile_pic)/i.test(src) && !avatarTried.has(src)) {
+            avatarTried.add(src)
+            const box = await el.boundingBox().catch(() => null)
+            // Small, roughly square, and up near the header.
+            if (box && box.width >= 24 && box.width <= 200 && Math.abs(box.width - box.height) < 14 && box.y < 520) {
+              const buf = await el.screenshot({ timeout: 4000 }).catch(() => null)
+              if (buf && buf.length > 400) avatar = `data:image/png;base64,${buf.toString('base64')}`
+            }
+          }
+          continue
+        }
         const box = await el.boundingBox().catch(() => null)
         // Content-sized and currently on-screen only (skips chrome, and avoids the
         // big auto-scroll Playwright does to shoot an off-screen element).
@@ -116,7 +134,7 @@ export async function gatherChannelMedia(
       return null
     }
 
-    return { platform, text: text.slice(0, 7000), images, seen: captured.size }
+    return { platform, text: text.slice(0, 7000), images, seen: captured.size, avatar }
   } catch {
     return null
   } finally {

@@ -36,6 +36,27 @@ export interface ChannelIngestResult {
   messages: IngestedMessage[]
   imagesSeen: number
   imagesTranscribed: number
+  /** The profile's avatar as a data URL, for the brand's picture. Absent when none found. */
+  profileImage?: string
+}
+
+/**
+ * Fetch a remote avatar URL and inline it as a data URL. Done server-side (no CORS)
+ * so the stored brand picture never depends on a hotlink-protected or short-lived CDN
+ * link (Instagram's especially). Best-effort: returns undefined on any failure.
+ */
+async function avatarToDataUrl(url: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return undefined
+    const type = res.headers.get('content-type') || 'image/jpeg'
+    if (!/^image\//i.test(type)) return undefined
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (!buf.length || buf.length > 1_500_000) return undefined
+    return `data:${type};base64,${buf.toString('base64')}`
+  } catch {
+    return undefined
+  }
 }
 
 // Images per structured vision call. Keeps each request's token load sane while
@@ -163,6 +184,7 @@ export async function runIngestChannel(body: unknown, onProgress?: Progress): Pr
   let text = ''
   let images: GatheredImage[] = []
   let seen = 0
+  let profileImage: string | undefined
 
   const OWNED = ['website', 'blog', 'landing-page', 'lead-magnet', 'email']
   if (profileUrl) {
@@ -178,17 +200,26 @@ export async function runIngestChannel(body: unknown, onProgress?: Progress): Pr
     images = gathered.images
     seen = gathered.seen
 
+    // The profile avatar. Prefer the platform API's URL (stable, higher-res); the
+    // header screenshot from the gather is the fallback for platforms without an API.
+    let avatarUrl: string | undefined
+
     // Enrich text with the platform's own API where we have one (public data).
     if (platform === 'youtube') {
       const yt = await readYouTube(profileUrl)
       if (yt?.text) text = `${yt.text}\n\n${text}`.slice(0, 8000)
+      avatarUrl = yt?.avatar
     } else if (platform === 'instagram') {
       const ig = await readInstagram()
       if (ig?.text) text = `${ig.text}\n\n${text}`.slice(0, 8000)
+      avatarUrl = ig?.avatar
     } else if (platform === 'linkedin') {
       const li = await readLinkedIn()
       if (li?.text) text = `${li.text}\n\n${text}`.slice(0, 8000)
     }
+
+    profileImage = (avatarUrl ? await avatarToDataUrl(avatarUrl) : undefined) ?? gathered.avatar
+    if (profileImage) onProgress?.({ stage: 'avatar', detail: `Pulled the ${platform} profile picture` })
   } else if (OWNED.includes(ch) && website) {
     const crawl = await crawlSite(website)
     text = crawl.text
@@ -211,6 +242,7 @@ export async function runIngestChannel(body: unknown, onProgress?: Progress): Pr
     messages: [],
     imagesSeen: seen,
     imagesTranscribed: 0,
+    profileImage,
   }
   const seenProof = new Set<string>()
   for (let i = 0; i < chunks.length; i++) {

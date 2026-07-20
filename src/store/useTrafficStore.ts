@@ -4192,6 +4192,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       await sheet.append(ingestRows(campaign, channel, result.messages))
       mergeChannelProof(campaign, result.proofPoints)
       if (result.voice && !profile?.voice) get().setClientProfile(client, { voice: result.voice })
+      // Adopt the profile's avatar as the brand picture, but never clobber one the
+      // user set — only fill an empty pfp.
+      if (result.profileImage) {
+        const rec = get().brandRecords.find((b) => b.name === client)
+        if (rec && !rec.pfp) get().updateBrandRecord(rec.id, { pfp: result.profileImage })
+      }
       await get().refresh()
       set({ channelIngestResult: result, clientFilter: client })
     } catch (err) {
