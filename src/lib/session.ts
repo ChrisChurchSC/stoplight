@@ -29,6 +29,18 @@ export async function getSession(): Promise<Session | null> {
   return data.session
 }
 
+/**
+ * The signed-in user's first name for greetings: a metadata full name if set, else the email's
+ * local part, tidied ("chris.church@…" → "Chris"). Empty when signed out / no backend configured.
+ */
+export function firstNameOf(user: User | null): string {
+  const meta = (user?.user_metadata ?? {}) as { full_name?: string; name?: string }
+  const full = (meta.full_name || meta.name || '').trim()
+  if (full) return full.split(/\s+/)[0]
+  const local = (user?.email || '').split('@')[0].split(/[.+_-]/)[0]
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : ''
+}
+
 export function onAuthChange(cb: (user: User | null) => void): () => void {
   if (!supabase) return () => {}
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {

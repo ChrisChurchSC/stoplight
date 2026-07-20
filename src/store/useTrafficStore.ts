@@ -1782,7 +1782,10 @@ interface TrafficState {
   campaignFolders: Record<string, string[]>
   /** Campaign Flights — each a scheduled run of a campaign (Umbrella → Campaign → Flight → Asset). */
   flights: Flight[]
-  /** One-time, non-destructive migration: give every campaign a default flight and stamp its assets. */
+  /** True once flights have been hydrated from the backend (or immediately, with no backend). Gates
+   *  ensureFlights so it can't overwrite the workspace's real flights during the load race. */
+  flightsHydrated: boolean
+  /** Give every campaign that has assets a default flight (idempotent; gated on flightsHydrated). */
   ensureFlights: () => Promise<void>
   /** Add a flight to a campaign; returns the new flight's id. */
   addFlight: (campaign: string, patch?: Partial<Flight>) => string
@@ -1800,6 +1803,10 @@ interface TrafficState {
   /** Remove a re-run flight and archive ONLY the assets explicitly stamped to it (never the primary
    *  flight's unstamped assets). */
   removeFlightRun: (flightId: string) => Promise<void>
+  /** Delete a flight and archive every asset that resolves to it (stamped OR the primary flight's
+   *  fallback), with the same verify+retry hardening as removeFlightRun. This is the explicit,
+   *  user-initiated per-flight delete used by the folder view. */
+  removeFlight: (flightId: string) => Promise<void>
   /** Which folder the campaigns gallery is scoped to — nested under Campaigns in the
    *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
   campaignFolderView: string | null
@@ -1998,6 +2005,9 @@ interface TrafficState {
   restoreRow: (id: string) => Promise<void>
   /** Soft-delete a campaign + archive its assets. Recoverable. */
   deleteCampaign: (name: string) => Promise<void>
+  /** Rename a campaign (or umbrella) everywhere it's keyed by name: its record, every asset row's
+   *  `campaign`, its flights, any child campaigns' `parent`, and open-project state. */
+  renameCampaign: (oldName: string, newName: string) => Promise<void>
   /** Restore an archived campaign + its assets. */
   restoreCampaign: (name: string) => Promise<void>
   duplicateRow: (id: string) => Promise<void>
@@ -2143,6 +2153,10 @@ interface TrafficState {
   /** A transient bottom toast for lightweight recommendations (e.g. an unallocated budget). */
   toast: string | null
   showToast: (msg: string | null) => void
+  /** Optional action shown on the toast (e.g. "Undo" after a soft delete). Cleared with the toast. */
+  toastAction: { label: string; run: () => void } | null
+  /** Show a toast with an action button (used for undo after archive/delete). */
+  showToastAction: (msg: string, label: string, run: () => void) => void
   /** The inspectable baseline for a brand: which voice / proof set is in force and from
    *  where (self + ancestors + shares). Drives the canvas baseline chip + coherence report. */
   brandBaselineFor: (brand: string) => BrandBaseline
@@ -2359,6 +2373,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandMeta: loadBrandMeta(),
   brandNotice: null,
   toast: null,
+  toastAction: null,
   accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
   targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
   campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
@@ -2380,6 +2395,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
   flights: loadFlights(),
+  // Flights are hydrated from Supabase (workspace_state) by hydrateRecords. Until that lands on a
+  // backend-configured device, ensureFlights must NOT mint+persist fresh flights or it would clobber
+  // the real ones. With no backend (mock/share) there's nothing to wait for, so start ready.
+  flightsHydrated: localDataMode,
   campaignFolderView: null,
   wizardOpen: false,
   wizardClient: null,
@@ -3725,6 +3744,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // and cheap (a scan + at most a few creates, no network, no per-asset writes), so it's safe to call
     // on load and whenever campaigns change — that's how NEW campaigns pick up a flight too. Assets are
     // NOT stamped: while a campaign has one flight, its assets resolve to it by fallback (flightForRow).
+    // Don't run until flights have hydrated from the backend, or we'd mint fresh "Flight 1"s and
+    // persist them over the workspace's real flights (which arrive a beat later via hydrateRecords).
+    if (!get().flightsHydrated) return
     const rows = get().rows
     if (!rows.length) return // rows not loaded yet; a later call runs it once they are
     const existing = get().flights
@@ -3891,6 +3913,88 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return
     }
     get().deleteFlight(flightId)
+    await get().refresh()
+  },
+
+  removeFlight: async (flightId) => {
+    const f = get().flights.find((x) => x.id === flightId)
+    if (!f) return
+    const flight = { ...f } // snapshot for undo
+    const archived = new Set<string>()
+    // Archive every asset that resolves to this flight — stamped clones AND, for the primary flight,
+    // its unstamped fallback assets. Resolve via flightForRow while the flight still exists in state,
+    // then verify + retry (same hardening as removeFlightRun) so a failed write can't orphan assets.
+    const remaining = () => {
+      const flights = get().flights
+      return get().rows.filter((r) => !r.archivedAt && flightForRow(r, flights)?.id === flightId)
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const rows = remaining()
+      if (!rows.length) break
+      for (const r of rows) {
+        await sheet.update(r.id, { archivedAt: Date.now() })
+        archived.add(r.id)
+      }
+      await get().refresh()
+    }
+    const stuck = remaining()
+    if (stuck.length) {
+      get().showToast(
+        `Couldn't archive ${stuck.length} asset${stuck.length === 1 ? '' : 's'} on that flight, so it was kept. Try deleting it again.`,
+      )
+      return
+    }
+    get().deleteFlight(flightId)
+    await get().refresh()
+    // Soft delete → offer an undo: re-add the flight and un-archive exactly the assets we archived.
+    const ids = [...archived]
+    get().showToastAction(`Deleted ${flight.name}`, 'Undo', async () => {
+      set((s) => {
+        if (s.flights.some((x) => x.id === flight.id)) return {}
+        const flights = [...s.flights, flight]
+        saveFlights(flights)
+        return { flights }
+      })
+      if (ids.length) await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: undefined } })))
+      await get().refresh()
+    })
+  },
+
+  renameCampaign: async (oldName, newName) => {
+    const from = oldName.trim()
+    const to = newName.trim()
+    if (!from || !to || from === to) return
+    // Refuse to merge into an existing, different campaign (would silently fold two together).
+    if (get().campaignList.some((c) => c.name === to && c.name !== from)) {
+      get().showToast(`A campaign named "${to}" already exists.`)
+      return
+    }
+    // 1) Repoint every asset row (Supabase-backed) to the new campaign name.
+    const rowIds = get().rows.filter((r) => (r.campaign ?? '').trim() === from).map((r) => r.id)
+    if (rowIds.length) await get().updateRows(rowIds.map((id) => ({ id, patch: { campaign: to } })))
+    // 2) Rename the record, repoint any child campaigns' parent, all in one campaignList write.
+    set((s) => {
+      const client = clientForCampaign(from)
+      registerCampaign(to, client)
+      const campaignList = s.campaignList.map((c) => {
+        if (c.name === from) return { ...c, name: to }
+        if (c.parent === from) return { ...c, parent: to }
+        return c
+      })
+      saveCampaigns(campaignList)
+      // 3) Flights key their campaign by name too — repoint them (localStorage-backed).
+      const flights = s.flights.map((fl) => (fl.campaign === from ? { ...fl, campaign: to } : fl))
+      saveFlights(flights)
+      const openProjects = s.openProjects.map((p) => (p === from ? to : p))
+      saveOpenProjects(openProjects)
+      return {
+        campaignList,
+        flights,
+        openProjects,
+        newCampaignParent: s.newCampaignParent === from ? to : s.newCampaignParent,
+        campaignFilter: s.campaignFilter === from ? to : s.campaignFilter,
+      }
+    })
     await get().refresh()
   },
 
@@ -4707,6 +4811,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.brandGuides.v1': 'brandGuides',
       'stoplight.campaigns.v1': 'campaignList',
       'stoplight.campaignFolders.v1': 'campaignFolders',
+      'stoplight.flights.v1': 'flights',
       'stoplight.canvases.v1': 'canvases',
       'stoplight.reports.v1': 'reports',
       'stoplight.mediaMixes.v1': 'mediaMixes',
@@ -4715,6 +4820,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const state = await hydrateState()
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
+    // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights gate.
+    patch.flightsHydrated = true
     // UI preferences kept in localStorage (not a store slice) still sync via workspace_state:
     // write the workspace's copy back so components that read them synchronously (RecordsTable's
     // grouping) restore the workspace choice on a fresh device.
@@ -4760,7 +4867,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const STATE_MIGRATIONS = [
         'stoplight.clients.v1', 'stoplight.clientProfiles.v1', 'stoplight.clientAudiences.v1',
         'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1',
-        'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.canvases.v1',
+        'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.flights.v1', 'stoplight.canvases.v1',
         'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
       ]
@@ -5120,8 +5227,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   deleteCampaign: async (name) => {
     const c = name.trim()
     if (!c) return
-    // Archive the campaign + all its assets (soft, recoverable).
-    const ids = get().rows.filter((r) => (r.campaign ?? '').trim() === c).map((r) => r.id)
+    // Archive only the currently-live assets (soft, recoverable). Capturing the live set — not every
+    // row ever archived under this name — lets undo restore EXACTLY what this delete hid, instead of
+    // resurrecting old soft-deleted assets (which the blanket restoreCampaign would).
+    const ids = get().rows.filter((r) => (r.campaign ?? '').trim() === c && !r.archivedAt).map((r) => r.id)
     if (ids.length) await get().archiveRows(ids)
     set((s) => {
       const campaignList = s.campaignList.map((x) => (x.name === c ? { ...x, archivedAt: Date.now() } : x))
@@ -5133,6 +5242,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         openProjects: open,
         campaignFilter: s.campaignFilter === c ? 'all' : s.campaignFilter,
       }
+    })
+    // Undo: un-archive the campaign record + exactly the assets this delete hid.
+    const short = c.split(' — ').slice(1).join(' — ') || c
+    get().showToastAction(`Deleted "${short}"`, 'Undo', async () => {
+      set((s) => {
+        const campaignList = s.campaignList.map((x) => (x.name === c ? { ...x, archivedAt: undefined } : x))
+        saveCampaigns(campaignList)
+        return { campaignList }
+      })
+      if (ids.length) await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: undefined } })))
+      await get().refresh()
     })
   },
   restoreCampaign: async (name) => {
@@ -5530,7 +5650,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   // ---- Brand boundary actions ----
   setBrandNotice: (msg) => set({ brandNotice: msg }),
-  showToast: (msg) => set({ toast: msg }),
+  showToast: (msg) => set({ toast: msg, toastAction: null }),
+  showToastAction: (msg, label, run) => set({ toast: msg, toastAction: { label, run } }),
 
   brandBaselineFor: (brand) => {
     const s = get()

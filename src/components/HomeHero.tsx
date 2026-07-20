@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -7,10 +8,6 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * whatever you type (or the quick-action chip you pick). It is a front door onto
  * the same askClaude flow the rest of the app uses, not a second chat engine.
  */
-
-// Single-operator tool, so the name is a constant for now; swap for a profile field
-// when the app grows multi-user.
-const NAME = 'Chris'
 
 function greeting(): string {
   const h = new Date().getHours()
@@ -31,7 +28,19 @@ export function HomeHero() {
   const setPage = useTrafficStore((s) => s.setPage)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const [q, setQ] = useState('')
+  const [name, setName] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // Greet the signed-in user by name; keep it in sync if they sign in/out.
+  useEffect(() => {
+    let live = true
+    void getSession().then((s) => live && setName(firstNameOf(s?.user ?? null)))
+    const off = onAuthChange((u) => setName(firstNameOf(u)))
+    return () => {
+      live = false
+      off()
+    }
+  }, [])
 
   const recent = useMemo(() => [...reports].sort((a, b) => b.createdAt - a.createdAt)[0] ?? null, [reports])
 
@@ -45,7 +54,8 @@ export function HomeHero() {
   return (
     <section className="hh">
       <h1 className="hh-greeting">
-        {greeting()}, {NAME}.
+        {greeting()}
+        {name ? `, ${name}` : ''}.
       </h1>
 
       {recent && (

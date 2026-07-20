@@ -3,18 +3,21 @@ import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
  * A single transient toast at the bottom of the screen for lightweight recommendations
- * (e.g. a campaign budget that isn't allocated to any paid media). Auto-dismisses after a few
- * seconds; click to dismiss early. Driven by the store's `toast` string.
+ * (e.g. a campaign budget that isn't allocated to any paid media) and for undo after a soft
+ * delete. Auto-dismisses after a few seconds; click to dismiss early. Driven by the store's
+ * `toast` string plus an optional `toastAction` (e.g. "Undo").
  */
 export function Toast() {
   const toast = useTrafficStore((s) => s.toast)
+  const toastAction = useTrafficStore((s) => s.toastAction)
   const showToast = useTrafficStore((s) => s.showToast)
 
   useEffect(() => {
     if (!toast) return
-    const t = window.setTimeout(() => showToast(null), 6000)
+    // Give an actionable toast (undo) a bit longer to be noticed and clicked.
+    const t = window.setTimeout(() => showToast(null), toastAction ? 9000 : 6000)
     return () => window.clearTimeout(t)
-  }, [toast, showToast])
+  }, [toast, toastAction, showToast])
 
   if (!toast) return null
   return (
@@ -26,6 +29,18 @@ export function Toast() {
         </svg>
       </span>
       <span className="toast-msg">{toast}</span>
+      {toastAction && (
+        <button
+          className="toast-action"
+          onClick={(e) => {
+            e.stopPropagation()
+            toastAction.run()
+            showToast(null)
+          }}
+        >
+          {toastAction.label}
+        </button>
+      )}
       <button className="toast-x" aria-label="Dismiss" onClick={(e) => { e.stopPropagation(); showToast(null) }}>✕</button>
     </div>
   )

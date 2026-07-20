@@ -6,6 +6,7 @@ import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { AI_MODELS } from '../domain/aiModels'
 import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED } from '../domain/guidedSetup'
 import { persistState } from '../adapters/state/workspaceState'
+import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useAssetTasks } from '../lib/assetTasks'
@@ -17,7 +18,6 @@ import { useAssetTasks } from '../lib/assetTasks'
  * the "am I covered / what do I do next" home for scaling personalization — no meetings feed.
  */
 
-const NAME = 'Chris'
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const TASKS_KEY = 'stoplight.tasks.v1'
 
@@ -72,6 +72,17 @@ export function HomeAgenda() {
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks())
   // The task whose slide-out detail drawer is open (clicking a task opens it here, not the grid).
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  // Greet the signed-in user by name; keep it in sync if they sign in/out.
+  const [name, setName] = useState('')
+  useEffect(() => {
+    let live = true
+    void getSession().then((s) => live && setName(firstNameOf(s?.user ?? null)))
+    const off = onAuthChange((u) => setName(firstNameOf(u)))
+    return () => {
+      live = false
+      off()
+    }
+  }, [])
 
   useEffect(() => {
     const update = () => setTasks(loadTasks())
@@ -180,7 +191,10 @@ export function HomeAgenda() {
     <>
     <div className="agenda2">
       <div className="agenda2-inner">
-        <h1 className="ag2-greet">{greeting()}, {NAME}.</h1>
+        <h1 className="ag2-greet">
+          {greeting()}
+          {name ? `, ${name}` : ''}.
+        </h1>
 
         <div className="ag2-ask">
           {recentReport && (

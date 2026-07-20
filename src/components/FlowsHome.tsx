@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -25,8 +25,8 @@ interface FlowCard {
   parent?: string
   /** The single audience this campaign is personalized to (its segment reference label). */
   personalizedTo?: string
-  /** This campaign's flights (one scheduled run each), for the overview + expandable list. */
-  flights: { id: string; name: string; assetCount: number; start: number; end: number }[]
+  /** This campaign's flights (one scheduled run each), for the overview + folder drill-in. */
+  flights: { id: string; name: string; assetCount: number; types: number; channels: ChannelId[]; start: number; end: number }[]
   /** A manually-created umbrella container (renders as an umbrella even with no children yet). */
   isUmbrella?: boolean
 }
@@ -42,15 +42,76 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const setCampaignFolder = useTrafficStore((s) => s.setCampaignFolder)
   const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
+  const renameCampaign = useTrafficStore((s) => s.renameCampaign)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
   const addFlightRun = useTrafficStore((s) => s.addFlightRun)
+  const patchFlight = useTrafficStore((s) => s.patchFlight)
+  const removeFlight = useTrafficStore((s) => s.removeFlight)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolder, setNewFolder] = useState('')
   const [newUmbrellaOpen, setNewUmbrellaOpen] = useState(false)
   const [newUmbrella, setNewUmbrella] = useState('')
   const [flightPickerOpen, setFlightPickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  // Flight pending deletion (folder view): its id + display name + asset count for the confirm modal.
+  const [confirmDeleteFlight, setConfirmDeleteFlight] = useState<{ id: string; name: string; count: number } | null>(null)
+  // A multi-flight campaign drilled into like a folder: shows its flights as rows. null = grid view.
+  const [openFolder, setOpenFolder] = useState<string | null>(null)
+  // Inline rename in progress. kind distinguishes a campaign/umbrella (key = full campaign name) from
+  // a flight (key = flight id). value holds the editable text (short name for campaigns).
+  const [renaming, setRenaming] = useState<{ kind: 'campaign' | 'flight'; key: string } | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  // Escape cancels a rename; guards against the input's onBlur firing a stray commit right after.
+  const renameSkipRef = useRef(false)
+  const brandPrefix = `${brand} — `
+  const startRename = (kind: 'campaign' | 'flight', key: string, current: string) => {
+    renameSkipRef.current = false
+    setRenaming({ kind, key })
+    setRenameValue(current)
+  }
+  const commitRename = () => {
+    if (renameSkipRef.current) {
+      renameSkipRef.current = false
+      setRenaming(null)
+      setRenameValue('')
+      return
+    }
+    if (!renaming) return
+    const v = renameValue.trim()
+    if (v) {
+      if (renaming.kind === 'flight') {
+        patchFlight(renaming.key, { name: v })
+      } else {
+        const nextFull = renaming.key.startsWith(brandPrefix) ? brandPrefix + v : v
+        void renameCampaign(renaming.key, nextFull)
+      }
+    }
+    setRenaming(null)
+    setRenameValue('')
+  }
+  const cancelRename = () => {
+    renameSkipRef.current = true
+    setRenaming(null)
+    setRenameValue('')
+  }
+  // Shared inline rename input for cards/heads/flights.
+  const renameInput = (placeholder: string) => (
+    <input
+      className="flow-home-rename-input"
+      autoFocus
+      placeholder={placeholder}
+      value={renameValue}
+      onChange={(e) => setRenameValue(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onBlur={commitRename}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') commitRename()
+        if (e.key === 'Escape') cancelRename()
+      }}
+    />
+  )
   const addUmbrella = () => {
     const nm = newUmbrella.trim()
     if (nm && brand) addCampaign({ name: `${brand} — ${nm}`, client: brand, strategy: 'content-seo', isUmbrella: true })
@@ -65,14 +126,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   // Drag a flow card onto a folder section to file it there (replaces the folder dropdown).
   const [dragName, setDragName] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
-  // Campaign cards whose flight list is expanded (only cards with >1 flight offer this).
-  const [flightsOpen, setFlightsOpen] = useState<Set<string>>(new Set())
-  const toggleFlights = (name: string) =>
-    setFlightsOpen((prev) => {
-      const next = new Set(prev)
-      next.has(name) ? next.delete(name) : next.add(name)
-      return next
-    })
   // A flight's month window, e.g. "Sep" or "Sep - Oct".
   const flightWindow = (start: number, end: number) => {
     const mo = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short' })
@@ -129,7 +182,15 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         const times = fRows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
         const start = times.length ? Math.min(...times) : Date.parse(f.startAt)
         const end = times.length ? Math.max(...times) : start
-        return { id: f.id, name: f.name, assetCount: fRows.length, start, end }
+        return {
+          id: f.id,
+          name: f.name,
+          assetCount: fRows.length,
+          types: new Set(fRows.map((r) => `${r.channel}/${r.assetType}`)).size,
+          channels: [...new Set(fRows.map((r) => r.channel))] as ChannelId[],
+          start,
+          end,
+        }
       })
       .sort((a, b) => a.start - b.start)
     return {
@@ -167,84 +228,93 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     setNewFolderOpen(false)
   }
 
-  const renderCard = (c: FlowCard) => (
-    <div
-      key={c.name}
-      className={`flow-home-card${dragName === c.name ? ' dragging' : ''}`}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/plain', c.name)
-        e.dataTransfer.effectAllowed = 'move'
-        setDragName(c.name)
-      }}
-      onDragEnd={() => {
-        setDragName(null)
-        setDropKey(null)
-      }}
-    >
-      <div className="flow-home-card-actions">
-        <button className="flow-home-del" title="Delete flow" aria-label="Delete flow" onClick={() => setConfirmDelete(c.name)}>
-          ✕
-        </button>
-      </div>
-      <button className="flow-home-card-open" onClick={() => onOpen(c.name)}>
-        <div className="flow-home-card-name">
-          <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
-          <span className="flow-home-card-title-text">{c.name.replace(`${brand} — `, '')}</span>
-          {c.personalizedTo && (
-            <span className="flow-home-persona" title={`Personalized to ${c.personalizedTo}`}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="8" r="3.2" />
-                <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+  const renderCard = (c: FlowCard) => {
+    // A campaign with more than one flight behaves like a folder: clicking it drills into the
+    // flight list rather than opening the canvas directly.
+    const isFolder = c.flights.length > 1
+    const isRenaming = renaming?.kind === 'campaign' && renaming.key === c.name
+    const short = c.name.replace(brandPrefix, '')
+    return (
+      <div
+        key={c.name}
+        className={`flow-home-card${isFolder ? ' is-folder' : ''}${dragName === c.name ? ' dragging' : ''}`}
+        data-flights={isFolder ? Math.min(c.flights.length, 5) : undefined}
+        draggable={!isRenaming}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/plain', c.name)
+          e.dataTransfer.effectAllowed = 'move'
+          setDragName(c.name)
+        }}
+        onDragEnd={() => {
+          setDragName(null)
+          setDropKey(null)
+        }}
+      >
+        {!isRenaming && (
+          <div className="flow-home-card-actions">
+            <button className="flow-home-rename" title="Rename" aria-label="Rename" onClick={() => startRename('campaign', c.name, short)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
               </svg>
-              <span>{c.personalizedTo}</span>
-            </span>
-          )}
-        </div>
-        <div className="flow-home-card-meta">
-          {c.types} deliverable{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
-          {c.flights.length > 1 ? ` · ${c.flights.length} flights` : ''}
-        </div>
-        <div className="flow-home-chans">
-          {c.channels.slice(0, 8).map((ch) => (
-            <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
-              <ChannelIcon channel={ch} size={16} />
-            </span>
-          ))}
-          {c.channels.length > 8 && <span className="flow-home-chan more">+{c.channels.length - 8}</span>}
-        </div>
-      </button>
-      {/* Re-run: add another flight of this campaign (clones its assets into a new window). */}
-      {c.flights.length > 0 && (
-        <button className="flow-home-flight-add" onClick={() => void addFlightRun(c.name)} title="Add another flight of this campaign (clones its assets into a new window)">
-          ＋ Flight
+            </button>
+            <button className="flow-home-del" title="Delete flow" aria-label="Delete flow" onClick={() => setConfirmDelete(c.name)}>
+              ✕
+            </button>
+          </div>
+        )}
+        {isRenaming ? (
+          <div className="flow-home-card-open flow-home-card-renaming">{renameInput('Campaign name')}</div>
+        ) : (
+        <button className="flow-home-card-open" onClick={() => (isFolder ? setOpenFolder(c.name) : onOpen(c.name))}>
+          <div className="flow-home-card-name">
+            {isFolder && (
+              <span className="flow-home-card-folder-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+              </span>
+            )}
+            <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
+            <span className="flow-home-card-title-text">{c.name.replace(`${brand} — `, '')}</span>
+            {c.personalizedTo && (
+              <span className="flow-home-persona" title={`Personalized to ${c.personalizedTo}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="8" r="3.2" />
+                  <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+                </svg>
+                <span>{c.personalizedTo}</span>
+              </span>
+            )}
+          </div>
+          <div className="flow-home-card-meta">
+            {c.types} deliverable{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
+            {isFolder ? ` · ${c.flights.length} flights` : ''}
+          </div>
+          <div className="flow-home-chans">
+            {c.channels.slice(0, 8).map((ch) => (
+              <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
+                <ChannelIcon channel={ch} size={16} />
+              </span>
+            ))}
+            {c.channels.length > 8 && <span className="flow-home-chan more">+{c.channels.length - 8}</span>}
+          </div>
         </button>
-      )}
-      {/* A re-run campaign (>1 flight) can expand to its flights: name, asset count, month window. */}
-      {c.flights.length > 1 && (
-        <div className="flow-home-flights">
-          <button className="flow-home-flights-toggle" onClick={() => toggleFlights(c.name)}>
-            <span className={`flow-home-flights-chev${flightsOpen.has(c.name) ? ' open' : ''}`} aria-hidden="true">
-              ▸
-            </span>
-            {c.flights.length} flights
+        )}
+        {!isRenaming && isFolder && (
+          <div className="flow-home-card-folder-hint" aria-hidden="true">
+            Open folder →
+          </div>
+        )}
+        {/* Re-run: add another flight of this campaign (clones its assets into a new window). */}
+        {!isRenaming && c.flights.length > 0 && (
+          <button className="flow-home-flight-add" onClick={() => void addFlightRun(c.name)} title="Add another flight of this campaign (clones its assets into a new window)">
+            ＋ Flight
           </button>
-          {flightsOpen.has(c.name) && (
-            <div className="flow-home-flight-list">
-              {c.flights.map((f) => (
-                <button key={f.id} className="flow-home-flight" onClick={() => onOpen(c.name)}>
-                  <span className="flow-home-flight-name">{f.name}</span>
-                  <span className="flow-home-flight-meta">
-                    {f.assetCount} asset{f.assetCount === 1 ? '' : 's'} · {flightWindow(f.start, f.end)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
+        )}
+      </div>
+    )
+  }
 
   // A top-level entry: an umbrella (its audience-specific children nested + collapsible) or a
   // standalone campaign.
@@ -255,29 +325,45 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     const isCollapsed = collapsed.has(c.name)
     const totalAssets = kids.reduce((n, k) => n + k.assetCount, 0)
     const chans = [...new Set(kids.flatMap((k) => k.channels))]
+    const isRenaming = renaming?.kind === 'campaign' && renaming.key === c.name
+    const short = c.name.replace(brandPrefix, '')
     return (
       <div key={c.name} className="flow-home-umbrella">
         <div className="flow-home-umb-head">
           <button className="flow-home-umb-toggle" onClick={() => toggleUmbrella(c.name)} aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
             {isCollapsed ? '▸' : '▾'}
           </button>
-          <button className="flow-home-umb-open" onClick={() => onOpen(c.name)}>
-            <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
-            <span className="flow-home-umb-name">{c.name.replace(`${brand} — `, '')}</span>
-            <span className="flow-home-umb-meta">
-              {kids.length} campaign{kids.length === 1 ? '' : 's'} · {totalAssets} asset{totalAssets === 1 ? '' : 's'}
-            </span>
-            <span className="flow-home-chans">
-              {chans.slice(0, 8).map((ch) => (
-                <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
-                  <ChannelIcon channel={ch} size={15} />
-                </span>
-              ))}
-            </span>
-          </button>
-          <button className="flow-home-del" title="Delete umbrella" aria-label="Delete umbrella" onClick={() => setConfirmDelete(c.name)}>
-            ✕
-          </button>
+          {isRenaming ? (
+            <div className="flow-home-umb-open flow-home-umb-renaming">{renameInput('Umbrella name')}</div>
+          ) : (
+            <button className="flow-home-umb-open" onClick={() => onOpen(c.name)}>
+              <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
+              <span className="flow-home-umb-name">{short}</span>
+              <span className="flow-home-umb-meta">
+                {kids.length} campaign{kids.length === 1 ? '' : 's'} · {totalAssets} asset{totalAssets === 1 ? '' : 's'}
+              </span>
+              <span className="flow-home-chans">
+                {chans.slice(0, 8).map((ch) => (
+                  <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
+                    <ChannelIcon channel={ch} size={15} />
+                  </span>
+                ))}
+              </span>
+            </button>
+          )}
+          {!isRenaming && (
+            <>
+              <button className="flow-home-rename" title="Rename umbrella" aria-label="Rename umbrella" onClick={() => startRename('campaign', c.name, short)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                </svg>
+              </button>
+              <button className="flow-home-del" title="Delete umbrella" aria-label="Delete umbrella" onClick={() => setConfirmDelete(c.name)}>
+                ✕
+              </button>
+            </>
+          )}
         </div>
         {!isCollapsed && (
           <div className="flow-home-grid nested">
@@ -286,6 +372,111 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               ＋ Add a campaign
             </button>
           </div>
+        )}
+      </div>
+    )
+  }
+
+  // Drilled into a multi-flight campaign: show its flights as a folder of rows.
+  const folderCard = openFolder ? cards.find((c) => c.name === openFolder) : null
+  if (folderCard && folderCard.flights.length > 1) {
+    const title = folderCard.name.replace(`${brand} — `, '')
+    return (
+      <div className="flow-home">
+        <header className="flow-home-head">
+          <div>
+            <button className="flow-home-back" onClick={() => setOpenFolder(null)}>
+              <span aria-hidden="true">←</span> All campaigns
+            </button>
+            <h1 className="flow-home-title flow-home-folder-title">
+              <span className="flow-home-folder-title-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+              </span>
+              {title}
+            </h1>
+            <p className="flow-home-sub">
+              {folderCard.flights.length} flights · {folderCard.assetCount} asset{folderCard.assetCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="flow-home-actions">
+            <button className="flow-home-new" onClick={() => void addFlightRun(folderCard.name)}>
+              ＋ Flight
+            </button>
+            <button className="flow-home-new" onClick={() => onOpen(folderCard.name)}>
+              Open in canvas
+            </button>
+          </div>
+        </header>
+        <div className="flow-home-grid">
+          {folderCard.flights.map((f) => {
+            const isRenaming = renaming?.kind === 'flight' && renaming.key === f.id
+            return (
+            <div key={f.id} className="flow-home-card">
+              {!isRenaming && (
+                <div className="flow-home-card-actions">
+                  <button className="flow-home-rename" title="Rename flight" aria-label="Rename flight" onClick={() => startRename('flight', f.id, f.name)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                    </svg>
+                  </button>
+                  <button className="flow-home-del" title="Delete flight" aria-label="Delete flight" onClick={() => setConfirmDeleteFlight({ id: f.id, name: f.name, count: f.assetCount })}>
+                    ✕
+                  </button>
+                </div>
+              )}
+              {isRenaming ? (
+                <div className="flow-home-card-open flow-home-card-renaming">{renameInput('Flight name')}</div>
+              ) : (
+                <button className="flow-home-card-open" onClick={() => onOpen(folderCard.name)}>
+                  <div className="flow-home-card-name">
+                    <span className={`flow-home-dot s-${folderCard.status}`} aria-hidden="true" />
+                    <span className="flow-home-card-title-text">{f.name}</span>
+                  </div>
+                  <div className="flow-home-card-meta">
+                    {f.types} deliverable{f.types === 1 ? '' : 's'} · {f.assetCount} asset{f.assetCount === 1 ? '' : 's'} · {flightWindow(f.start, f.end)}
+                  </div>
+                  <div className="flow-home-chans">
+                    {f.channels.slice(0, 8).map((ch) => (
+                      <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
+                        <ChannelIcon channel={ch} size={16} />
+                      </span>
+                    ))}
+                    {f.channels.length > 8 && <span className="flow-home-chan more">+{f.channels.length - 8}</span>}
+                  </div>
+                </button>
+              )}
+            </div>
+            )
+          })}
+        </div>
+        {confirmDeleteFlight && (
+          <>
+            <div className="drawer-scrim" onClick={() => setConfirmDeleteFlight(null)} />
+            <div className="confirm-modal" role="dialog" aria-label="Delete flight">
+              <strong className="confirm-title">Delete {confirmDeleteFlight.name}?</strong>
+              <p className="confirm-text">
+                This archives the flight and its {confirmDeleteFlight.count} asset{confirmDeleteFlight.count === 1 ? '' : 's'}. It won't show here anymore.
+              </p>
+              <div className="confirm-foot">
+                <button className="btn sm" onClick={() => setConfirmDeleteFlight(null)}>
+                  Cancel
+                </button>
+                <span className="spacer" />
+                <button
+                  className="btn sm danger"
+                  onClick={() => {
+                    void removeFlight(confirmDeleteFlight.id)
+                    setConfirmDeleteFlight(null)
+                  }}
+                >
+                  Delete flight
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     )
