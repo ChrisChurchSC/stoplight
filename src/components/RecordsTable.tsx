@@ -290,7 +290,12 @@ export function RecordsTable<T extends { id: string }>({
             )}
             <tr>
               {columns.map((col) => (
-                <th key={col.key} style={{ width: col.width }} onClick={() => toggleSort(col.key)}>
+                <th
+                  key={col.key}
+                  className={col.kind === 'name' ? 'rec-th-name' : undefined}
+                  style={{ width: col.width }}
+                  onClick={() => toggleSort(col.key)}
+                >
                   <span className="rec-th-label">{col.label}</span>
                   {sortKey === col.key && <span className="rec-th-sort">{sortDir === 'asc' ? '↑' : '↓'}</span>}
                 </th>

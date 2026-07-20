@@ -3163,7 +3163,7 @@ button {
   white-space: nowrap;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
 }
 .rec-table th:hover .rec-th-label {
   color: var(--text);
@@ -3210,6 +3210,37 @@ button {
 .rec-table tbody tr:hover .rec-td,
 .rec-table tbody tr:hover {
   background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+
+/* Freeze the name column so a row's name stays put while you scroll the sheet
+   sideways. The frozen cells are opaque and cast a hairline divider so the columns
+   sliding underneath never bleed through. z-index sits above other body cells (incl.
+   relatively-positioned ones) but below the sticky header row (z 2). */
+.rec-table .rec-td-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-right: 0;
+  box-shadow: 1px 0 0 var(--border);
+}
+.rec-table tbody tr:hover .rec-td-name {
+  /* opaque equivalent of the translucent row hover, so nothing shows through */
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+}
+/* The name header is the frozen corner: sticky in both axes, above every other
+   header cell and the section-band row (z 3). */
+.rec-table th.rec-th-name {
+  left: 0;
+  z-index: 4;
+  border-right: 0;
+  box-shadow: 1px 0 0 var(--border);
+}
+/* The media-plan preview reuses this chrome but opts out of sticky headers; keep it flat. */
+.mplan-gen-tablewrap .rec-td-name,
+.mplan-gen-tablewrap .rec-th-name {
+  position: static;
+  box-shadow: none;
 }
 .rec-cell {
   width: 100%;
