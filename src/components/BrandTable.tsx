@@ -4,7 +4,6 @@ import { recordTint, type RecordField } from '../domain/records'
 import { imageToDataUrl } from '../lib/image'
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
 import { RecordsChat } from './RecordsChat'
-import { SheetTabs } from './SheetTabs'
 
 /**
  * The single-brand view — the Brand page is scoped by the rail to ONE brand, so it's not a list of
@@ -207,8 +206,6 @@ export function BrandTable({
             </tbody>
           </table>
         </div>
-
-        <SheetTabs />
       </div>
     </div>
   )

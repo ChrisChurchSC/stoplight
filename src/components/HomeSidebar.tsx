@@ -234,8 +234,8 @@ export function HomeSidebar() {
     ({ key, label, ico, page: null, active, onClick, ...extra })
   // Build lives at the top as flat items (like Home) — not under a collapsible header.
   const topItems: NavItem[] = [
-    // "Brand" opens this brand's own strategy page — not the cross-brand Brands spreadsheet ('brands').
-    item('brand', 'Brand', 'brand', page === 'brand' || page === 'brands', () => setPage('brand')),
+    // "Brand" opens this brand's own strategy record (single-brand only, never the every-brand list).
+    item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
     item('flows', 'Campaigns', 'flows', page === 'flows', () => setPage('flows')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),

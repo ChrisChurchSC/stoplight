@@ -36,6 +36,7 @@ import { PatternsView } from './PatternsView'
 import { TriggersView } from './TriggersView'
 import { ObjectivesView } from './ObjectivesView'
 import { TasksView } from './TasksView'
+import { BrandsView } from './BrandsView'
 import { FlowsView } from './FlowsView'
 import { BrandPage } from './BrandPage'
 import { BillingPage } from './BillingPage'
@@ -342,11 +343,10 @@ export function Workbench() {
               <TasksView />
             </div>
           ) : page === 'brands' ? (
-            // The cross-brand Brands spreadsheet is not user-facing — a workspace is scoped to one
-            // brand at a time. Any stray route here (e.g. a persisted page key) lands on this brand's
-            // strategy page instead of exposing every brand as editable rows.
-            <div className="home-main-scroll">
-              <BrandPage brand={scopedBrand} />
+            // This brand's strategy record. BrandsView is single-brand only now — never the
+            // cross-brand roster — so this can't expose the whole portfolio.
+            <div className="home-main-page">
+              <BrandsView />
             </div>
           ) : page === 'flows' ? (
             <div className="home-main-page">
