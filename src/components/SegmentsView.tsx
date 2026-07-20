@@ -1,5 +1,6 @@
 import { CHANNELS } from '../domain/channels'
 import { newAudience, type AudienceType } from '../domain/audiences'
+import { FUNNEL_STAGES } from '../domain/funnel'
 import type { RecordColumn, RecordField, RecordFieldKind } from '../domain/records'
 import type { ChannelId } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -34,26 +35,30 @@ interface Spec {
   kind: RecordFieldKind
   /** Column width when this field should also show as a table column. */
   col?: number
+  /** A fixed pick-list (renders the cell as a dropdown), e.g. Funnel stage. */
+  options?: readonly string[]
+  /** Set false to disable sorting on this column (meaningless for long free text). */
+  sortable?: boolean
   get: (a: AudienceType) => string
   set: (a: AudienceType, v: string) => void
 }
 
 const SPECS: Spec[] = [
   { key: 'name', label: 'Audience', kind: 'name', col: 200, get: (a) => a.name, set: (a, v) => { a.name = v } },
-  { key: 'who', label: 'Who it is', kind: 'text', col: 220, get: (a) => a.definition || a.role || '', set: (a, v) => { a.definition = v } },
+  { key: 'who', label: 'Who it is', kind: 'text', col: 220, sortable: false, get: (a) => a.definition || a.role || '', set: (a, v) => { a.definition = v } },
   { key: 'role', label: 'Role / buyer', kind: 'text', get: (a) => a.role || '', set: (a, v) => { a.role = v } },
-  { key: 'angle', label: 'Message angle', kind: 'multiline', col: 300, get: (a) => a.messageAngle || '', set: (a, v) => { a.messageAngle = v } },
+  { key: 'angle', label: 'Message angle', kind: 'multiline', col: 300, sortable: false, get: (a) => a.messageAngle || '', set: (a, v) => { a.messageAngle = v } },
   { key: 'antiMessage', label: 'Anti-message (what not to say)', kind: 'multiline', get: (a) => a.antiMessage || '', set: (a, v) => { a.antiMessage = v } },
   { key: 'outcome', label: 'Conversion outcome', kind: 'text', col: 160, get: (a) => a.outcome || '', set: (a, v) => { a.outcome = v } },
-  { key: 'funnel', label: 'Funnel stage', kind: 'text', col: 130, get: (a) => a.funnelStage || '', set: (a, v) => { a.funnelStage = v } },
+  { key: 'funnel', label: 'Funnel stage', kind: 'text', col: 130, options: FUNNEL_STAGES.map((s) => s.label), get: (a) => a.funnelStage || '', set: (a, v) => { a.funnelStage = v } },
   { key: 'tier', label: 'Value tier', kind: 'text', col: 140, get: (a) => a.tier || '', set: (a, v) => { a.tier = v } },
   { key: 'strategy', label: 'GTM strategy', kind: 'text', get: (a) => a.strategy || '', set: (a, v) => { a.strategy = v } },
-  { key: 'pains', label: 'Pains', kind: 'multiline', col: 240, get: (a) => line(a.pains), set: (a, v) => { a.pains = parseLines(v) } },
+  { key: 'pains', label: 'Pains', kind: 'multiline', col: 240, sortable: false, get: (a) => line(a.pains), set: (a, v) => { a.pains = parseLines(v) } },
   { key: 'goals', label: 'Goals', kind: 'multiline', get: (a) => a.goals || '', set: (a, v) => { a.goals = v } },
   { key: 'goalTags', label: 'Goal tags', kind: 'multiline', get: (a) => line(a.goalTags), set: (a, v) => { a.goalTags = parseLines(v) } },
   { key: 'objections', label: 'Objections', kind: 'multiline', get: (a) => a.objections || '', set: (a, v) => { a.objections = v } },
   { key: 'triggers', label: 'Buying triggers', kind: 'multiline', get: (a) => line(a.triggers), set: (a, v) => { a.triggers = parseLines(v) } },
-  { key: 'channels', label: 'Channels', kind: 'multiline', col: 180, get: (a) => (a.channels ?? []).map((id) => CHANNELS[id]?.label ?? id).join('\n'), set: (a, v) => { a.channels = parseLines(v).map((s) => chanId.get(s.toLowerCase())).filter((x): x is ChannelId => !!x) } },
+  { key: 'channels', label: 'Channels', kind: 'multiline', col: 180, sortable: false, get: (a) => (a.channels ?? []).map((id) => CHANNELS[id]?.label ?? id).join('\n'), set: (a, v) => { a.channels = parseLines(v).map((s) => chanId.get(s.toLowerCase())).filter((x): x is ChannelId => !!x) } },
   { key: 'leadProof', label: 'Lead proof points', kind: 'multiline', get: (a) => line(a.leadProof), set: (a, v) => { a.leadProof = parseLines(v) } },
   { key: 'examples', label: 'Example accounts', kind: 'multiline', get: (a) => line(a.examples), set: (a, v) => { a.examples = parseLines(v) } },
   { key: 'aliases', label: 'Aliases', kind: 'multiline', get: (a) => line(a.aliases), set: (a, v) => { a.aliases = parseLines(v) } },
@@ -79,8 +84,8 @@ const GROUP: Record<string, string> = {
   geos: 'Firmographics', functions: 'Firmographics', seniority: 'Firmographics', industry: 'Firmographics', companySize: 'Firmographics',
   ageRanges: 'Demographics', incomeRanges: 'Demographics', gender: 'Demographics',
 }
-const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: GROUP[s.key] }))
-const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: GROUP[s.key] }))
+const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: GROUP[s.key], options: s.options, sortable: s.sortable }))
+const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: GROUP[s.key], options: s.options }))
 
 type SegRow = { id: string } & Record<string, string>
 

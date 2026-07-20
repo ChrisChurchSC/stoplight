@@ -17,6 +17,9 @@ export interface RecordField {
   /** A fixed pick-list — renders the cell as a dropdown (e.g. Funnel stage, Cadence). Distinct from
    *  `ref` (options supplied per-field at render time from other records). */
   options?: readonly string[]
+  /** Set false to make this column not sortable — for long free-text where an alphabetical sort is
+   *  meaningless (message angle, pains, objections). Sortable by default. */
+  sortable?: boolean
 }
 
 /** A field that also appears as a table column (adds a pixel width). */

@@ -294,17 +294,20 @@ export function RecordsTable<T extends { id: string }>({
               </tr>
             )}
             <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={col.kind === 'name' ? 'rec-th-name' : undefined}
-                  style={{ width: col.width }}
-                  onClick={() => toggleSort(col.key)}
-                >
-                  <span className="rec-th-label">{col.label}</span>
-                  {sortKey === col.key && <span className="rec-th-sort">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                </th>
-              ))}
+              {columns.map((col) => {
+                const canSort = col.sortable !== false
+                return (
+                  <th
+                    key={col.key}
+                    className={[col.kind === 'name' ? 'rec-th-name' : '', canSort ? '' : 'rec-th-nosort'].filter(Boolean).join(' ') || undefined}
+                    style={{ width: col.width }}
+                    onClick={canSort ? () => toggleSort(col.key) : undefined}
+                  >
+                    <span className="rec-th-label">{col.label}</span>
+                    {canSort && sortKey === col.key && <span className="rec-th-sort">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                  </th>
+                )
+              })}
               {rowAction && <th className="rec-th-act" aria-hidden="true" />}
               <th className="rec-th-del" aria-hidden="true" />
             </tr>

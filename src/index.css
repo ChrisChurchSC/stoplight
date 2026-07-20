@@ -3168,6 +3168,13 @@ button {
 .rec-table th:hover .rec-th-label {
   color: var(--text);
 }
+/* Non-sortable column headers (long free-text): no pointer, no sort affordance on hover. */
+.rec-table th.rec-th-nosort {
+  cursor: default;
+}
+.rec-table th.rec-th-nosort:hover .rec-th-label {
+  color: var(--text-muted);
+}
 /* Section header row grouping columns (Brand-Foundation style). Sticks above the column headers. */
 .rec-group-row th {
   position: sticky;
