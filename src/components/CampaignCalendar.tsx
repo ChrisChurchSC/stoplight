@@ -47,6 +47,8 @@ export function CampaignCalendar() {
   const moveFlightSchedule = useTrafficStore((s) => s.moveFlightSchedule)
   const rescaleFlightSchedule = useTrafficStore((s) => s.rescaleFlightSchedule)
   const moveAssetSchedule = useTrafficStore((s) => s.moveAssetSchedule)
+  const addFlightRun = useTrafficStore((s) => s.addFlightRun)
+  const removeFlightRun = useTrafficStore((s) => s.removeFlightRun)
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   // How many months the timeline spans (the view zoom).
   const [viewMonths, setViewMonths] = useState(12)
@@ -291,15 +293,29 @@ export function CampaignCalendar() {
                       {display}
                     </span>
                     <span className="ccal-row-count">{c.assetCount}</span>
+                    {c.bars.some((b) => b.id) && (
+                      <button
+                        className="ccal-rerun"
+                        title="Re-run: add another flight of this campaign (clones its assets into a new window)"
+                        aria-label="Add a flight"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void addFlightRun(c.name)
+                        }}
+                      >
+                        ＋
+                      </button>
+                    )}
                   </div>
                   <div className="ccal-track">
                     {months.map((m) => (
                       <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
                     ))}
                     {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
-                    {c.bars.map((bar) => {
+                    {c.bars.map((bar, bi) => {
                       const left = pct(bar.start)
                       const width = Math.max(1.5, pct(bar.end) - left)
+                      const removable = bi > 0 && !!bar.id // re-run flights (not the primary)
                       const d = drag?.flightId === bar.id && bar.id ? drag : null
                       const barStyle: CSSProperties = { background: STATUS_COLOR[c.status] }
                       barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.offsetPx}px)` : `${left}%`
@@ -329,6 +345,20 @@ export function CampaignCalendar() {
                           <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
                             {bar.assetCount} asset{bar.assetCount === 1 ? '' : 's'}
                           </span>
+                          {removable && (
+                            <button
+                              className="ccal-bar-remove"
+                              style={{ left: `calc(${left + width}% + ${countShift}px - 16px)` }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void removeFlightRun(bar.id)
+                              }}
+                              title="Remove this flight and its assets"
+                              aria-label="Remove flight"
+                            >
+                              ×
+                            </button>
+                          )}
                         </Fragment>
                       )
                     })}

@@ -1790,6 +1790,12 @@ interface TrafficState {
   moveFlightSchedule: (flightId: string, deltaDays: number) => Promise<void>
   /** Drag-resize a flight: set its window to [startMs, endMs] and rescale its assets into it. */
   rescaleFlightSchedule: (flightId: string, newStartMs: number, newEndMs: number) => Promise<void>
+  /** Re-run a campaign: add a new flight after the latest one and clone its assets into that window
+   *  (fresh draft rows stamped with the new flightId). Returns the new flight's id. */
+  addFlightRun: (campaign: string) => Promise<string | null>
+  /** Remove a re-run flight and archive ONLY the assets explicitly stamped to it (never the primary
+   *  flight's unstamped assets). */
+  removeFlightRun: (flightId: string) => Promise<void>
   /** Which folder the campaigns gallery is scoped to — nested under Campaigns in the
    *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
   campaignFolderView: string | null
@@ -3813,6 +3819,56 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       startAt: new Date(newStartMs).toISOString(),
       durationWeeks: Math.max(1, Math.round(newSpan / (7 * 86_400_000))),
     })
+    await get().refresh()
+  },
+
+  addFlightRun: async (campaign) => {
+    const DAY_MS = 86_400_000
+    const all = get().flights
+    const campFlights = all.filter((f) => f.campaign === campaign)
+    if (!campFlights.length) return null
+    // Clone the latest flight (by start) and place the new one after it, with a one-week gap.
+    const source = [...campFlights].sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt))[0]
+    const rows = get().rows.filter((r) => !r.archivedAt && r.scheduledAt && flightForRow(r, all)?.id === source.id)
+    const times = rows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
+    const srcStart = times.length ? Math.min(...times) : Date.parse(source.startAt)
+    const srcEnd = times.length ? Math.max(...times) : srcStart
+    const dur = source.durationWeeks > 0 ? source.durationWeeks : 4
+    const newStart = Math.max(srcEnd, srcStart + dur * 7 * DAY_MS) + 7 * DAY_MS
+    const shift = newStart - srcStart
+    const flight = newFlight({ campaign, name: `Flight ${campFlights.length + 1}`, startAt: new Date(newStart).toISOString(), durationWeeks: dur })
+    const flights = [...all, flight]
+    saveFlights(flights)
+    set({ flights })
+    // Clone the source flight's assets into the new window, stamped with the new flightId, as drafts.
+    const clones: TrafficRow[] = rows.map((r) => ({
+      ...r,
+      id: freshRowId(),
+      assetId: '',
+      flightId: flight.id,
+      status: 'draft' as const,
+      scheduledAt: new Date(Date.parse(r.scheduledAt) + shift).toISOString(),
+      endsAt: r.endsAt ? new Date(Date.parse(r.endsAt) + shift).toISOString() : undefined,
+      approvedAt: undefined,
+      postedAt: undefined,
+      copyReviewed: false,
+      error: undefined,
+      spend: undefined,
+      createdAt: Date.now(),
+    }))
+    if (clones.length) await sheet.append(clones)
+    await get().refresh()
+    return flight.id
+  },
+
+  removeFlightRun: async (flightId) => {
+    const f = get().flights.find((x) => x.id === flightId)
+    if (!f) return
+    // Archive ONLY assets explicitly stamped to this flight (re-run clones). The primary flight's
+    // assets are unstamped and resolve by fallback, so they are never touched here.
+    const rows = get().rows.filter((r) => r.flightId === flightId && !r.archivedAt)
+    for (const r of rows) await sheet.update(r.id, { archivedAt: Date.now() })
+    get().deleteFlight(flightId)
     await get().refresh()
   },
 
