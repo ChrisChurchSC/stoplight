@@ -2776,13 +2776,13 @@ button {
 }
 /* Crisper, roomier nav items + line icons */
 .hsb .sidebar-nav {
-  gap: 2px;
+  gap: 1px;
 }
 .hsb .nav-item {
-  gap: 9px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 13px;
+  gap: 8px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 12px;
   color: var(--text);
 }
 .hsb .nav-item:hover {
@@ -2794,16 +2794,16 @@ button {
   font-weight: 600;
 }
 .hsb .nav-ico {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
 }
 .hsb .nav-ico svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 .hsb .nav-item.active .nav-ico {
   color: var(--text);
