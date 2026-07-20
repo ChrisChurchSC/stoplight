@@ -136,57 +136,59 @@ export function CampaignCalendar() {
         </div>
       </header>
 
-      {/* Month header, aligned to the track area (past the label column). */}
-      <div className="ccal-monthrow">
-        <div className="ccal-label-col" />
-        <div className="ccal-track ccal-monthtrack">
-          {months.map((m) => (
-            <div key={m.start} className="ccal-month" style={{ left: `${pct(m.start)}%`, width: `${(m.days / (span / DAY)) * 100}%` }}>
-              {m.label}
-            </div>
-          ))}
-          {todayPct > 0 && todayPct < 100 && <div className="ccal-today-head" style={{ left: `${todayPct}%` }} />}
+      <div className="ccal-chart">
+        {/* Timeline header: the task column heading + the month scale. */}
+        <div className="ccal-chart-head">
+          <div className="ccal-label-col ccal-label-head">Campaign</div>
+          <div className="ccal-track ccal-scale">
+            {months.map((m) => (
+              <div key={m.start} className="ccal-monthcell" style={{ left: `${pct(m.start)}%`, width: `${(m.days / (span / DAY)) * 100}%` }}>
+                <span className="ccal-monthcell-label">{m.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="ccal-body">
-        {scheduled.map((c) => {
-          const left = pct(c.start)
-          const width = Math.max(1.5, pct(c.end) - left)
-          const short = c.name.replace(`${brand} — `, '')
-          // Under an umbrella the children share a prefix ("Series · Audience"); show the
-          // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
-          const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
-          return (
-            <div className="ccal-row" key={c.name}>
-              <div className="ccal-label-col">
-                <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
-                <span className="ccal-row-name" title={short}>
-                  {display}
-                </span>
-                <span className="ccal-row-count">{c.assetCount}</span>
+        <div className="ccal-body">
+          {scheduled.map((c) => {
+            const left = pct(c.start)
+            const width = Math.max(1.5, pct(c.end) - left)
+            const short = c.name.replace(`${brand} — `, '')
+            // Under an umbrella the children share a prefix ("Series · Audience"); show the
+            // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
+            const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
+            return (
+              <div className="ccal-row" key={c.name}>
+                <div className="ccal-label-col">
+                  <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
+                  <span className="ccal-row-name" title={short}>
+                    {display}
+                  </span>
+                  <span className="ccal-row-count">{c.assetCount}</span>
+                </div>
+                <div className="ccal-track">
+                  {/* Continuous month gridlines + today marker, full lane height (Gantt grid). */}
+                  {months.map((m) => (
+                    <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
+                  ))}
+                  {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
+                  <button
+                    className="ccal-bar"
+                    style={{ left: `${left}%`, width: `${width}%`, background: STATUS_COLOR[c.status] }}
+                    onClick={() => openFlow(c.name)}
+                    title={`${short} · ${STATUS_LABEL[c.status]} · ${c.assetCount} asset${c.assetCount === 1 ? '' : 's'}`}
+                  >
+                    <span className="ccal-bar-label">{display}</span>
+                  </button>
+                  {/* Asset count trailing the bar, so it reads on the timeline itself. */}
+                  <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + 6px)` }} aria-hidden="true">
+                    {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
+                  </span>
+                </div>
               </div>
-              <div className="ccal-track">
-                {months.map((m) => (
-                  <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
-                ))}
-                {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
-                <button
-                  className="ccal-bar"
-                  style={{ left: `${left}%`, width: `${width}%`, background: STATUS_COLOR[c.status] }}
-                  onClick={() => openFlow(c.name)}
-                  title={`${short} · ${STATUS_LABEL[c.status]} · ${c.assetCount} asset${c.assetCount === 1 ? '' : 's'}`}
-                >
-                  <span className="ccal-bar-label">{display}</span>
-                </button>
-                {/* Asset count trailing the bar, so it reads on the timeline itself. */}
-                <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + 6px)` }} aria-hidden="true">
-                  {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
-                </span>
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
       {unscheduled.length > 0 && (

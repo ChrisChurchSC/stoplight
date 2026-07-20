@@ -5717,14 +5717,37 @@ button {
   border-radius: 3px;
 }
 /* The label column width is shared by the month header and every row so bars align under months. */
+/* The Gantt frame: a bordered chart with a header scale and banded lanes. */
+.ccal-chart {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.ccal-chart-head {
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
 .ccal-label-col {
-  flex: 0 0 210px;
-  width: 210px;
+  flex: 0 0 220px;
+  width: 220px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding-right: 12px;
+  padding: 0 12px 0 14px;
   min-width: 0;
+  border-right: 1px solid var(--border);
+}
+.ccal-label-head {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 .ccal-dot {
   flex: 0 0 auto;
@@ -5736,30 +5759,29 @@ button {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  align-self: stretch;
 }
-.ccal-monthrow {
-  display: flex;
-  align-items: flex-end;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
-  margin-bottom: 2px;
-}
-.ccal-monthtrack {
-  height: 20px;
-}
-.ccal-month {
+.ccal-monthcell {
   position: absolute;
+  top: 0;
   bottom: 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  padding-left: 6px;
+  display: flex;
+  align-items: center;
   border-left: 1px solid var(--border);
   box-sizing: border-box;
-  white-space: nowrap;
   overflow: hidden;
+}
+.ccal-monthcell:first-child {
+  border-left: 0;
+}
+.ccal-monthcell-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding-left: 8px;
+  white-space: nowrap;
 }
 .ccal-body {
   display: flex;
@@ -5768,7 +5790,14 @@ button {
 .ccal-row {
   display: flex;
   align-items: center;
-  height: 40px;
+  height: 42px;
+  border-bottom: 1px solid var(--border);
+}
+.ccal-row:last-child {
+  border-bottom: 0;
+}
+.ccal-row:nth-child(even) {
+  background: color-mix(in srgb, var(--surface-2) 45%, transparent);
 }
 .ccal-row-name {
   font-size: 13px;
@@ -5785,7 +5814,8 @@ button {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-faint);
-  background: var(--surface-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 1px 7px;
 }
@@ -5794,25 +5824,24 @@ button {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: color-mix(in srgb, var(--border) 60%, transparent);
+  background: var(--border);
   pointer-events: none;
 }
-.ccal-today,
-.ccal-today-head {
+.ccal-gridline:first-child {
+  display: none;
+}
+.ccal-today {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 85%, transparent);
   pointer-events: none;
-  z-index: 2;
-}
-.ccal-today-head {
-  bottom: -2px;
+  z-index: 3;
 }
 .ccal-bar {
   position: absolute;
-  top: 8px;
+  top: 9px;
   height: 24px;
   min-width: 8px;
   border: 0;
@@ -5841,7 +5870,7 @@ button {
 }
 .ccal-bar-count {
   position: absolute;
-  top: 8px;
+  top: 9px;
   height: 24px;
   display: flex;
   align-items: center;
