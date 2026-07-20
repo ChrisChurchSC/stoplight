@@ -1,8 +1,10 @@
-import { useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { Fragment, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import type { CampaignStatus } from '../domain/lifecycle'
+import type { ChannelId } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { ChannelIcon } from './ChannelIcon'
 
 /**
  * A high-level campaign calendar: every one of the brand's campaigns as a horizontal bar on a shared
@@ -60,6 +62,11 @@ export function CampaignCalendar() {
       let end = times.length ? Math.max(...times) : NaN
       const dur = durByName.get(c.name)
       if (!Number.isNaN(start) && dur && dur > 0 && end - start < dur * 7 * DAY) end = start + dur * 7 * DAY
+      // Each scheduled asset, for the expandable per-asset rows.
+      const assets = c.rows
+        .map((r) => ({ id: r.id, name: r.assetName || r.assetType || 'Asset', channel: r.channel, at: Date.parse(r.scheduledAt) }))
+        .filter((a) => !Number.isNaN(a.at))
+        .sort((a, b) => a.at - b.at)
       return {
         name: c.name,
         status: c.status as CampaignStatus,
@@ -67,6 +74,7 @@ export function CampaignCalendar() {
         end,
         assetCount: c.rows.length,
         scheduled: times.length,
+        assets,
       }
     })
   }, [canvases, brand, durByName])
@@ -112,6 +120,14 @@ export function CampaignCalendar() {
   // resulting flight window. Committed once on drop.
   const LABEL_COL = 220
   const WEEK = 7 * DAY
+  // Campaigns expanded to show their individual assets as sub-rows.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpanded = (name: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
   const bodyRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<
     { name: string; mode: 'move' | 'resize-l' | 'resize-r'; offsetPx: number; newStart: number; newEnd: number; x: number; y: number } | null
@@ -233,9 +249,27 @@ export function CampaignCalendar() {
             // Under an umbrella the children share a prefix ("Series · Audience"); show the
             // distinguishing tail so rows don't all read identically. Full name stays in the tooltip.
             const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
+            const isExp = expanded.has(c.name)
             return (
-              <div className="ccal-row" key={c.name}>
+              <Fragment key={c.name}>
+              <div className="ccal-row">
                 <div className="ccal-label-col">
+                  {c.assets.length > 0 ? (
+                    <button
+                      className={`ccal-caret${isExp ? ' open' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleExpanded(c.name)
+                      }}
+                      aria-label={isExp ? 'Hide assets' : 'Show assets'}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <span className="ccal-caret-spacer" aria-hidden="true" />
+                  )}
                   <span className="ccal-dot" style={{ background: STATUS_COLOR[c.status] }} aria-hidden="true" />
                   <span className="ccal-row-name" title={short}>
                     {display}
@@ -275,6 +309,37 @@ export function CampaignCalendar() {
                   </span>
                 </div>
               </div>
+
+              {/* Expanded: each asset as its own sub-row, marked at its scheduled date. */}
+              {isExp &&
+                c.assets.map((a) => (
+                  <div className="ccal-row ccal-asset-row" key={a.id}>
+                    <div className="ccal-label-col ccal-asset-label">
+                      <span className="ccal-asset-ico">
+                        <ChannelIcon channel={a.channel as ChannelId} size={12} />
+                      </span>
+                      <span className="ccal-row-name" title={a.name}>
+                        {a.name}
+                      </span>
+                    </div>
+                    <div className="ccal-track">
+                      {months.map((m) => (
+                        <div key={m.start} className="ccal-gridline" style={{ left: `${pct(m.start)}%` }} />
+                      ))}
+                      {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
+                      <button
+                        className="ccal-asset-marker"
+                        style={{ left: `${pct(a.at)}%`, background: STATUS_COLOR[c.status] }}
+                        onClick={() => openFlow(c.name)}
+                        title={`${a.name} · ${fmtDate(a.at)}`}
+                      />
+                      <span className="ccal-asset-date" style={{ left: `calc(${pct(a.at)}% + 12px)` }} aria-hidden="true">
+                        {fmtDate(a.at)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </Fragment>
             )
           })}
         </div>
