@@ -292,6 +292,11 @@ export function CampaignCalendar() {
             const multi = c.bars.length > 1
             const isPublished = c.published
             const openEnded = c.timing === 'always-on' && !isPublished
+            // Horizon-keeper (safe cut of 3.4): an always-on stream whose scheduled content ends
+            // within its refresh window is "running low" — a one-click manual Extend clones the
+            // latest content forward. No auto-materialization; the user is nudged, never surprised.
+            const lastEnd = c.bars.length ? Math.max(...c.bars.map((b) => b.end)) : 0
+            const runningLow = openEnded && lastEnd > 0 && lastEnd < now + (c.refreshWeeks || 8) * WEEK
             // Subheading before the first always-on stream, separating it from the dated campaigns.
             const showAlwaysOnHead = openEnded && (idx === 0 || orderedRows[idx - 1].timing !== 'always-on' || orderedRows[idx - 1].published)
             const showPublishedHead = isPublished && (idx === 0 || !orderedRows[idx - 1].published)
@@ -361,6 +366,26 @@ export function CampaignCalendar() {
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" />
+                        </svg>
+                      </button>
+                    )}
+                    {openEnded && (
+                      <button
+                        className={`ccal-rerun ccal-extend${runningLow ? ' low' : ''}`}
+                        title={
+                          runningLow
+                            ? "This stream's scheduled content runs out soon. Extend the horizon: clone the latest content forward to keep it going."
+                            : 'Extend the horizon: clone the latest content into a new future window to keep the stream going.'
+                        }
+                        aria-label="Extend horizon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void addFlightRun(c.name)
+                          showToast(`Extended ${display}'s horizon with a new run of content.`)
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 12h13M12 6l6 6-6 6M21 5v14" />
                         </svg>
                       </button>
                     )}
