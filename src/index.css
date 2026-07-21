@@ -26215,3 +26215,205 @@ table.aud-sheet td.stick .aud-cell {
     animation: none;
   }
 }
+
+/* ============================================================================
+   Public changelog page (/changelog) — standalone, unauthenticated "What's new".
+   Breadcrumbs brand: light surface with a warm orange wash, flat date-grouped
+   entries (date, tag chip, bullets). Self-contained; leans on the app tokens.
+   ============================================================================ */
+.chlog {
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(880px 440px at 50% -10%, var(--accent-soft), transparent 62%),
+    var(--bg);
+}
+
+/* ---- Nav ---- */
+.chlog-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 14px clamp(18px, 4vw, 40px);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(9px);
+  border-bottom: 1px solid var(--border);
+}
+.chlog-nav-side {
+  display: flex;
+  align-items: center;
+}
+.chlog-nav-right {
+  justify-content: flex-end;
+}
+.chlog-nav-active {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.chlog-brand {
+  display: inline-flex;
+  justify-self: center;
+  color: var(--text);
+  text-decoration: none;
+}
+.chlog-open {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 8px 16px;
+  text-decoration: none;
+  transition: filter 0.14s ease, transform 0.14s ease;
+}
+.chlog-open:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+/* ---- Body ---- */
+.chlog-main {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: clamp(44px, 8vw, 84px) clamp(20px, 5vw, 44px) 40px;
+}
+.chlog-head {
+  margin-bottom: clamp(32px, 6vw, 52px);
+}
+.chlog-eyebrow {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 46px);
+  font-weight: 800;
+  letter-spacing: -0.022em;
+  line-height: 1.04;
+  color: var(--text);
+}
+.chlog-sub {
+  margin: 14px 0 0;
+  font-size: clamp(15px, 2vw, 18px);
+  color: var(--text-muted);
+}
+
+.chlog-feed {
+  display: flex;
+  flex-direction: column;
+}
+.chlog-entry {
+  padding: clamp(26px, 4vw, 38px) 0;
+  border-top: 1px solid var(--border);
+}
+.chlog-entry:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.chlog-date {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.chlog-group {
+  margin-top: 22px;
+}
+.chlog-tag {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  line-height: 1.1;
+}
+.chlog-tag-new {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.chlog-tag-improved {
+  color: var(--accent-2);
+  background: var(--accent-2-soft);
+}
+.chlog-tag-fixed {
+  color: #17864a;
+  background: #e6f4ec;
+}
+.chlog-items {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.chlog-items li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 16px;
+  line-height: 1.58;
+  color: var(--text);
+  max-width: 72ch;
+}
+.chlog-items li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+/* ---- Footer ---- */
+.chlog-foot {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 28px clamp(20px, 5vw, 44px) 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.chlog-foot > svg {
+  color: var(--text-faint);
+}
+.chlog-foot-tag {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.chlog-foot-link {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--accent);
+  text-decoration: none;
+}
+.chlog-foot-link:hover {
+  text-decoration: underline;
+}
+@media (max-width: 560px) {
+  .chlog-nav {
+    grid-template-columns: auto 1fr;
+  }
+  .chlog-nav-side:first-child {
+    display: none;
+  }
+  .chlog-foot-link {
+    margin-left: 0;
+  }
+}
