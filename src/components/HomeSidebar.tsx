@@ -215,6 +215,9 @@ export function HomeSidebar() {
   const pageHistory = useTrafficStore((s) => s.pageHistory)
   const goBack = useTrafficStore((s) => s.goBack)
   const reopenOnboarding = useTrafficStore((s) => s.reopenOnboarding)
+  const userPrefs = useTrafficStore((s) => s.userPrefs)
+  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
+  const modeLabel = [userPrefs.marketerRole, userPrefs.skillLevel].filter(Boolean).map((x) => cap(x as string)).join(' · ')
   const libraryMode = useTrafficStore((s) => s.libraryMode)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -407,6 +410,14 @@ export function HomeSidebar() {
       </nav>
 
       <div className="sidebar-foot">
+        {modeLabel && (
+          <button className="nav-item hsb-modechip" title="Interface preferences (detail level + focus)" onClick={() => setPage('account')}>
+            <span className="nav-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" /></svg>
+            </span>
+            <span className="nav-label">{modeLabel}</span>
+          </button>
+        )}
         <button
           className="nav-item hsb-getstarted"
           title="Reopen the Getting started checklist"

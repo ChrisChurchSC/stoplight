@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { SKILL_LEVELS, MARKETER_ROLES } from '../domain/userPrefs'
 
 /**
  * Account settings — a full-screen settings surface (left grouped nav + content pane),
@@ -79,6 +80,56 @@ function Placeholder({ label }: { label: string }) {
   return <div className="acct-empty">{label} settings are coming soon.</div>
 }
 
+/** Skill level (how much shows) + marketer role (what leads). Both only set defaults; nothing is
+ *  removed, so a neutral choice is today's full UI. */
+function AppearanceSection() {
+  const userPrefs = useTrafficStore((s) => s.userPrefs)
+  const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
+  return (
+    <div className="acct-prefs">
+      <div className="acct-pref">
+        <div className="acct-pref-label">Detail level</div>
+        <div className="acct-pref-hint">How much of each screen shows. Nothing is ever removed; Simple tucks the advanced fields behind an expander you can open anytime.</div>
+        <div className="acct-seg">
+          {SKILL_LEVELS.map((s) => (
+            <button
+              key={s.value}
+              className={`acct-seg-btn${userPrefs.skillLevel === s.value ? ' on' : ''}`}
+              onClick={() => setUserPrefs({ skillLevel: s.value })}
+              title={s.hint}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="acct-pref">
+        <div className="acct-pref-label">Focus</div>
+        <div className="acct-pref-hint">Which objects, metrics, and words lead. Everything stays reachable; this only sets your default landing surface and emphasis.</div>
+        <div className="acct-seg acct-seg-wrap">
+          <button
+            className={`acct-seg-btn${!userPrefs.marketerRole ? ' on' : ''}`}
+            onClick={() => setUserPrefs({ marketerRole: null })}
+            title="No role emphasis — the full, neutral UI."
+          >
+            No focus
+          </button>
+          {MARKETER_ROLES.map((r) => (
+            <button
+              key={r.value}
+              className={`acct-seg-btn${userPrefs.marketerRole === r.value ? ' on' : ''}`}
+              onClick={() => setUserPrefs({ marketerRole: r.value })}
+              title={r.hint}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function AccountSettings() {
   const setPage = useTrafficStore((s) => s.setPage)
 
@@ -103,6 +154,8 @@ export function AccountSettings() {
     switch (section) {
       case 'profile':
         return <ProfileSection />
+      case 'appearance':
+        return <AppearanceSection />
       default:
         return <Placeholder label={current.label} />
     }

@@ -124,6 +124,7 @@ import { buildContributions } from '../domain/aggregateOutcome'
 import { contribute, contributorId } from '../adapters/aggregate/aggregateOutcomes'
 import { ingestSite } from '../adapters/ask/ingestSite'
 import { DEFAULT_AI_MODEL } from '../domain/aiModels'
+import { DEFAULT_USER_PREFS, type UserPrefs } from '../domain/userPrefs'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
   type LibraryFolder,
@@ -1206,6 +1207,18 @@ function saveAiModel(id: string): void {
   }
 }
 
+// Per-user interface preferences (skill level + marketer role). Persisted via persistState so they
+// mirror to the workspace_state blob. null axes = today's full UI (see domain/userPrefs).
+const USER_PREFS_KEY = 'stoplight.userPrefs.v1'
+function loadUserPrefs(): UserPrefs {
+  try {
+    const raw = JSON.parse(localStorage.getItem(USER_PREFS_KEY) ?? 'null')
+    return raw && typeof raw === 'object' ? { ...DEFAULT_USER_PREFS, ...raw } : { ...DEFAULT_USER_PREFS }
+  } catch {
+    return { ...DEFAULT_USER_PREFS }
+  }
+}
+
 // Campaigns created in the new-client wizard, persisted. Registered into
 // clientForCampaign on load so they resolve to their client before any rows exist.
 const CAMPAIGNS_KEY = 'stoplight.campaigns.v1'
@@ -2097,6 +2110,9 @@ interface TrafficState {
   /** The model the user picked for the internal AI ('auto' = server tier defaults). See domain/aiModels. */
   aiModel: string
   setAiModel: (id: string) => void
+  /** Per-user interface preferences: skill level (how much shows) + marketer role (what leads). */
+  userPrefs: UserPrefs
+  setUserPrefs: (patch: Partial<UserPrefs>) => void
   /** True when the ICP was refined from Attio closed-won data (feedback loop). */
   icpFromClosedWon: boolean
   /** Refresh the ICP from actual closed-won customers in Attio. */
@@ -2448,6 +2464,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   coherenceDecisions: loadCoherenceDecisions(),
   aggregateContributing: loadAggregateContributing(),
   aiModel: loadAiModel(),
+  userPrefs: loadUserPrefs(),
   icpFromClosedWon: false,
   trackingRan: false,
   trackingCleared: false,
@@ -6296,6 +6313,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     saveAiModel(id)
     set({ aiModel: id })
   },
+  setUserPrefs: (patch) =>
+    set((s) => {
+      const userPrefs = { ...s.userPrefs, ...patch }
+      persistState(USER_PREFS_KEY, userPrefs)
+      return { userPrefs }
+    }),
 
   openBreaks: (breakId) => set({ breaksOpen: true, activeBreakId: breakId ?? null }),
   closeBreaks: () => set({ breaksOpen: false, activeBreakId: null }),

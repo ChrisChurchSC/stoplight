@@ -19228,6 +19228,15 @@ button.cv-board-tab {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
+/* Appearance settings: skill-level + role preference controls. */
+.acct-prefs { display: flex; flex-direction: column; gap: 28px; max-width: 760px; }
+.acct-pref-label { font-size: 14px; font-weight: 650; color: var(--text); }
+.acct-pref-hint { font-size: 12.5px; color: var(--text-muted); margin: 4px 0 12px; line-height: 1.5; max-width: 60ch; }
+.acct-seg { display: inline-flex; gap: 6px; }
+.acct-seg-wrap { flex-wrap: wrap; }
+.acct-seg-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); border-radius: 9px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .12s, background .12s, color .12s; }
+.acct-seg-btn:hover { border-color: var(--border-strong); color: var(--text); }
+.acct-seg-btn.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); color: var(--accent); }
 .acct-empty {
   max-width: 760px;
   border: 1px dashed var(--border);
