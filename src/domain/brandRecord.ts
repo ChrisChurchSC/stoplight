@@ -71,11 +71,14 @@ export interface BrandRecord {
 export const REVIEW_CADENCE_OPTIONS = ['Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Annually'] as const
 
 /** The brand's differentiators as a list. The sheet stores them as a newline-separated string
- *  (`differentiator`); structured writers may also set the `differentiators` array. Prefer the
- *  string (the human-edited sheet value) when present so the two can't drift, else the array. */
+ *  (`differentiator`); structured writers may also set the `differentiators` array. The sheet
+ *  string is authoritative whenever it has been SET — including when the user explicitly cleared it
+ *  to '' — so clearing the cell truly clears the differentiators and a previously-written array can
+ *  never resurrect deleted values. Fall back to the array only when the string was never set. */
 export function brandDifferentiators(rec: Pick<BrandRecord, 'differentiator' | 'differentiators'>): string[] {
-  const s = (rec.differentiator ?? '').trim()
-  if (s) return s.split(/[\n;]+/).map((x) => x.trim()).filter(Boolean)
+  if (typeof rec.differentiator === 'string') {
+    return rec.differentiator.trim() ? rec.differentiator.split(/[\n;]+/).map((x) => x.trim()).filter(Boolean) : []
+  }
   return (rec.differentiators ?? []).map((x) => x.trim()).filter(Boolean)
 }
 
