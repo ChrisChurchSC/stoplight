@@ -40,6 +40,10 @@ export interface BrandRecord {
   keyMessage?: string
   supportingMessages?: string
   proofPoints?: string
+  /** @deprecated The brand's voice lives in ONE place: ClientProfile.voice + voiceGuide (the Brand
+   *  Voice tab), which is what copy generation reads. This sheet field was a dead duplicate; kept so
+   *  old blobs round-trip, not surfaced on the Brand sheet. The Voices record page is a library of
+   *  variant voices, distinct from the brand's core voice. */
   toneOfVoice?: string
   languageDos?: string
   languageDonts?: string
@@ -106,7 +110,6 @@ export const BRAND_COLUMNS: RecordColumn[] = [
   { key: 'keyMessage', label: 'Key message', kind: 'text', width: 280, group: 'Message Architecture' },
   { key: 'supportingMessages', label: 'Supporting messages', kind: 'text', width: 280, group: 'Message Architecture' },
   { key: 'proofPoints', label: 'Proof points', kind: 'text', width: 280, group: 'Message Architecture' },
-  { key: 'toneOfVoice', label: 'Tone of voice', kind: 'text', width: 220, group: 'Message Architecture' },
   { key: 'languageDos', label: "Language do's", kind: 'text', width: 200, group: 'Message Architecture' },
   { key: 'languageDonts', label: "Language don'ts", kind: 'text', width: 200, group: 'Message Architecture' },
   { key: 'contentPillars', label: 'Content pillars', kind: 'text', width: 220, group: 'Message Architecture' },
@@ -133,7 +136,6 @@ export const BRAND_FIELDS: RecordField[] = [
   { key: 'keyMessage', label: 'Key message', kind: 'multiline', group: 'Message Architecture' },
   { key: 'supportingMessages', label: 'Supporting messages', kind: 'multiline', group: 'Message Architecture' },
   { key: 'proofPoints', label: 'Proof points', kind: 'multiline', group: 'Message Architecture' },
-  { key: 'toneOfVoice', label: 'Tone of voice', kind: 'multiline', group: 'Message Architecture' },
   { key: 'languageDos', label: "Language do's", kind: 'multiline', group: 'Message Architecture' },
   { key: 'languageDonts', label: "Language don'ts", kind: 'multiline', group: 'Message Architecture' },
   { key: 'contentPillars', label: 'Content pillars', kind: 'multiline', group: 'Message Architecture' },

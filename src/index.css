@@ -6212,6 +6212,25 @@ button {
   font-size: 14px;
   color: var(--accent);
 }
+/* Published-content band: read-only history, muted so it never competes with planned campaigns. */
+.ccal-subhead-published .ccal-subhead-ic { color: var(--text-faint); }
+.ccal-bar-published {
+  background: var(--border-strong) !important;
+  color: var(--text) !important;
+  box-shadow: none;
+  cursor: default;
+  opacity: .82;
+}
+.ccal-bar-published:hover { filter: none; }
+/* Header controls: the Published toggle sits next to the range buttons. */
+.ccal-head-controls { display: flex; align-items: center; gap: 10px; }
+.ccal-pubtoggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+  border-radius: 8px; padding: 5px 11px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.ccal-pubtoggle:hover { border-color: var(--border-strong); color: var(--text); }
+.ccal-pubtoggle.on { border-color: var(--text-faint); background: var(--surface-2); color: var(--text); }
 .ccal-bar:hover {
   filter: brightness(1.06);
   transform: translateY(-1px);

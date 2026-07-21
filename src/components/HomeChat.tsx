@@ -678,7 +678,7 @@ export function HomeChat() {
       const EVERGREEN_KEYS: (keyof BrandRecord)[] = [
         'descriptor', 'industry', 'positioning', 'businessObjective', 'commsObjective',
         'primaryAudience', 'audienceInsight', 'competitiveContext', 'differentiator',
-        'keyMessage', 'supportingMessages', 'proofPoints', 'toneOfVoice', 'languageDos',
+        'keyMessage', 'supportingMessages', 'proofPoints', 'languageDos',
         'languageDonts', 'contentPillars', 'reviewCadence', 'risks',
       ]
       const recFields: Record<string, unknown> = {}

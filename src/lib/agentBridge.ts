@@ -324,13 +324,13 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     const br: Record<string, unknown> = {}
     const oneLiner = str(a.oneLiner).trim()
     const mission = str(a.mission).trim()
-    const voice = str(a.voice).trim()
     const industry = str(a.industry).trim()
     const website = str(a.website).trim()
     const diffs = list(a.differentiators)
     if (oneLiner) { br.descriptor = oneLiner; br.positioning = oneLiner; br.keyMessage = oneLiner }
     if (mission) br.businessObjective = mission
-    if (voice) br.toneOfVoice = voice
+    // Brand voice is set on ClientProfile.voice above (the canonical home); no longer mirrored to the
+    // dead brandRecord.toneOfVoice field (removed from the Brand sheet as part of voice consolidation).
     if (industry) br.industry = industry
     if (website) br.website = website
     if (diffs.length) { br.differentiators = diffs; br.differentiator = diffs.join('\n') }

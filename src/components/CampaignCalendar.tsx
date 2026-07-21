@@ -56,6 +56,9 @@ export function CampaignCalendar() {
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   // How many months the timeline spans (the view zoom).
   const [viewMonths, setViewMonths] = useState(12)
+  // Published content (the ingested library backfill) is past-dated, so it's off the forward-planning
+  // Gantt by default; a toggle brings it in as its own read-only "Published" band.
+  const [showPublished, setShowPublished] = useState(false)
 
   // Every campaign gets a flight; make sure new ones do too (idempotent + cheap).
   const canvasCount = canvases.length
@@ -66,7 +69,7 @@ export function CampaignCalendar() {
   // Each brand campaign with its flight bars (one per flight, window derived from that flight's assets,
   // extended to the flight's planned duration) and its full asset list for the expand.
   const items = useMemo(() => {
-    const forBrand = canvases.filter((c) => (brand ? c.client === brand : true) && c.name !== CONTENT_LIBRARY_CAMPAIGN)
+    const forBrand = canvases.filter((c) => (brand ? c.client === brand : true) && (showPublished || c.name !== CONTENT_LIBRARY_CAMPAIGN))
     return forBrand.map((c) => {
       const campFlights = flights.filter((f) => f.campaign === c.name)
       const bars = campFlights
@@ -91,9 +94,9 @@ export function CampaignCalendar() {
         .map((r) => ({ id: r.id, name: r.assetName || r.assetType || 'Asset', channel: r.channel, at: Date.parse(r.scheduledAt) }))
         .filter((a) => !Number.isNaN(a.at))
       const start = bars.length ? Math.min(...bars.map((b) => b.start)) : NaN
-      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets, timing: c.timing, refreshWeeks: c.refreshWeeks }
+      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets, timing: c.timing, refreshWeeks: c.refreshWeeks, published: c.name === CONTENT_LIBRARY_CAMPAIGN }
     })
-  }, [canvases, brand, flights])
+  }, [canvases, brand, flights, showPublished])
 
   const scheduled = useMemo(
     () => items.filter((i) => !Number.isNaN(i.start)).sort((a, b) => a.start - b.start || a.name.localeCompare(b.name)),
@@ -102,9 +105,10 @@ export function CampaignCalendar() {
   const unscheduled = items.filter((i) => Number.isNaN(i.start))
   // Discrete campaigns first (dated blocks), then perpetual always-on streams under their own
   // subheading — an evergreen stream has no end date, so it reads differently from a dated campaign.
-  const alwaysOnRows = scheduled.filter((i) => i.timing === 'always-on')
-  const discreteRows = scheduled.filter((i) => i.timing !== 'always-on')
-  const orderedRows = [...discreteRows, ...alwaysOnRows]
+  const publishedRows = scheduled.filter((i) => i.published)
+  const alwaysOnRows = scheduled.filter((i) => i.timing === 'always-on' && !i.published)
+  const discreteRows = scheduled.filter((i) => i.timing !== 'always-on' && !i.published)
+  const orderedRows = [...discreteRows, ...alwaysOnRows, ...publishedRows]
 
   // Timeline range: whole months from the earliest start, spanning exactly the selected view (zoom).
   const now = Date.now()
@@ -250,12 +254,21 @@ export function CampaignCalendar() {
             {unscheduled.length ? ` · ${unscheduled.length} not scheduled yet` : ''}
           </p>
         </div>
-        <div className="ccal-range" role="group" aria-label="Timeline range">
-          {[3, 6, 9, 12].map((n) => (
-            <button key={n} className={`ccal-range-btn${viewMonths === n ? ' on' : ''}`} onClick={() => setViewMonths(n)}>
-              {n} mo
-            </button>
-          ))}
+        <div className="ccal-head-controls">
+          <button
+            className={`ccal-pubtoggle${showPublished ? ' on' : ''}`}
+            onClick={() => setShowPublished((v) => !v)}
+            title="Show your already-published content as a read-only band on the timeline"
+          >
+            <span aria-hidden="true">✓</span> Published
+          </button>
+          <div className="ccal-range" role="group" aria-label="Timeline range">
+            {[3, 6, 9, 12].map((n) => (
+              <button key={n} className={`ccal-range-btn${viewMonths === n ? ' on' : ''}`} onClick={() => setViewMonths(n)}>
+                {n} mo
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -277,11 +290,18 @@ export function CampaignCalendar() {
             const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
             const isExp = expanded.has(c.name)
             const multi = c.bars.length > 1
-            const openEnded = c.timing === 'always-on'
+            const isPublished = c.published
+            const openEnded = c.timing === 'always-on' && !isPublished
             // Subheading before the first always-on stream, separating it from the dated campaigns.
-            const showAlwaysOnHead = openEnded && (idx === 0 || orderedRows[idx - 1].timing !== 'always-on')
+            const showAlwaysOnHead = openEnded && (idx === 0 || orderedRows[idx - 1].timing !== 'always-on' || orderedRows[idx - 1].published)
+            const showPublishedHead = isPublished && (idx === 0 || !orderedRows[idx - 1].published)
             return (
               <Fragment key={c.name}>
+                {showPublishedHead && (
+                  <div className="ccal-subhead ccal-subhead-published">
+                    <span className="ccal-subhead-ic" aria-hidden="true">✓</span> Published
+                  </div>
+                )}
                 {showAlwaysOnHead && (
                   <div className="ccal-subhead">
                     <span className="ccal-subhead-ic" aria-hidden="true">∞</span> Always-on
@@ -310,7 +330,7 @@ export function CampaignCalendar() {
                       {display}
                     </span>
                     <span className="ccal-row-count">{c.assetCount}</span>
-                    {!openEnded && c.bars.some((b) => b.id) && (
+                    {!openEnded && !isPublished && c.bars.some((b) => b.id) && (
                       <button
                         className="ccal-rerun"
                         title="Re-run: add another flight of this campaign (clones its assets into a new window)"
@@ -344,18 +364,20 @@ export function CampaignCalendar() {
                         </svg>
                       </button>
                     )}
-                    <button
-                      className={`ccal-rerun ccal-timing-toggle${openEnded ? ' on' : ''}`}
-                      title={openEnded ? 'Always-on stream (evergreen, no end date) — click to make it a dated campaign' : 'Make this an always-on stream (evergreen, no end date)'}
-                      aria-label={openEnded ? 'Make dated campaign' : 'Make always-on'}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        patchCampaign(c.name, openEnded ? { timing: 'one-off', durationWeeks: 4 } : { timing: 'always-on', durationWeeks: 0 })
-                        showToast(openEnded ? `${display} is now a dated campaign.` : `${display} is now an always-on stream.`)
-                      }}
-                    >
-                      ∞
-                    </button>
+                    {!isPublished && (
+                      <button
+                        className={`ccal-rerun ccal-timing-toggle${openEnded ? ' on' : ''}`}
+                        title={openEnded ? 'Always-on stream (evergreen, no end date) — click to make it a dated campaign' : 'Make this an always-on stream (evergreen, no end date)'}
+                        aria-label={openEnded ? 'Make dated campaign' : 'Make always-on'}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          patchCampaign(c.name, openEnded ? { timing: 'one-off', durationWeeks: 4 } : { timing: 'always-on', durationWeeks: 0 })
+                          showToast(openEnded ? `${display} is now a dated campaign.` : `${display} is now an always-on stream.`)
+                        }}
+                      >
+                        ∞
+                      </button>
+                    )}
                   </div>
                   <div className="ccal-track">
                     {months.map((m) => (
@@ -386,21 +408,23 @@ export function CampaignCalendar() {
                       return (
                         <Fragment key={bar.id || 'synthetic'}>
                           <button
-                            className={`ccal-bar${openEnded ? ' ccal-bar-alwayson' : ''}${d ? ' dragging' : ''}`}
+                            className={`ccal-bar${openEnded ? ' ccal-bar-alwayson' : ''}${isPublished ? ' ccal-bar-published' : ''}${d ? ' dragging' : ''}`}
                             style={barStyle}
-                            onMouseDown={(e) => beginDrag(e, bar, 'move')}
+                            onMouseDown={isPublished ? undefined : (e) => beginDrag(e, bar, 'move')}
                             onClick={() => {
                               if (!dragMovedRef.current) openFlow(c.name)
                             }}
                             title={
-                              openEnded
-                                ? `${short} · ${bar.name} · always-on · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move`
-                                : `${short} · ${bar.name} · ${STATUS_LABEL[c.status]} · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`
+                              isPublished
+                                ? `${short} · ${bar.assetCount} published item${bar.assetCount === 1 ? '' : 's'} (read-only history)`
+                                : openEnded
+                                  ? `${short} · ${bar.name} · always-on · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move`
+                                  : `${short} · ${bar.name} · ${STATUS_LABEL[c.status]} · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`
                             }
                           >
-                            {!openEnded && <span className="ccal-bar-handle ccal-bar-handle-l" onMouseDown={(e) => beginDrag(e, bar, 'resize-l')} aria-hidden="true" />}
+                            {!openEnded && !isPublished && <span className="ccal-bar-handle ccal-bar-handle-l" onMouseDown={(e) => beginDrag(e, bar, 'resize-l')} aria-hidden="true" />}
                             <span className="ccal-bar-label">{openEnded ? `∞ ${barLabel}` : barLabel}</span>
-                            {!openEnded && <span className="ccal-bar-handle ccal-bar-handle-r" onMouseDown={(e) => beginDrag(e, bar, 'resize-r')} aria-hidden="true" />}
+                            {!openEnded && !isPublished && <span className="ccal-bar-handle ccal-bar-handle-r" onMouseDown={(e) => beginDrag(e, bar, 'resize-r')} aria-hidden="true" />}
                           </button>
                           {!openEnded && (
                             <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
