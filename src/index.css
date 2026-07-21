@@ -10271,6 +10271,31 @@ button {
   color: var(--accent);
   margin: 8px 0 2px;
 }
+/* Recommend-step header (hint + Recommend/Re-recommend button) and the "Why:" rationale callout. */
+.wiz-rec-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+.wiz-rec-head .wiz-hint {
+  flex: 1;
+}
+.wiz-rec-why {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.wiz-rec-conf {
+  color: var(--text-muted);
+  font-weight: 600;
+}
 
 /* Segmented single-select (business model, gender) */
 .seg {

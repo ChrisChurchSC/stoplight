@@ -68,9 +68,9 @@ const SPECS: Spec[] = [
   { key: 'seniority', label: 'Seniority', kind: 'text', get: (a) => a.seniority || '', set: (a, v) => { a.seniority = v } },
   { key: 'industry', label: 'Industry', kind: 'text', get: (a) => a.industry || '', set: (a, v) => { a.industry = v } },
   { key: 'companySize', label: 'Company size', kind: 'text', get: (a) => a.companySize || '', set: (a, v) => { a.companySize = v } },
-  { key: 'ageRanges', label: 'Age ranges', kind: 'text', get: (a) => (a.ageRanges ?? []).join(', '), set: (a, v) => { a.ageRanges = parseCsv(v) } },
-  { key: 'incomeRanges', label: 'Income ranges', kind: 'text', get: (a) => (a.incomeRanges ?? []).join(', '), set: (a, v) => { a.incomeRanges = parseCsv(v) } },
-  { key: 'gender', label: 'Gender', kind: 'text', get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },
+  { key: 'ageRanges', label: 'Age ranges', kind: 'text', col: 130, sortable: false, get: (a) => (a.ageRanges ?? []).join(', '), set: (a, v) => { a.ageRanges = parseCsv(v) } },
+  { key: 'incomeRanges', label: 'Income ranges', kind: 'text', col: 140, sortable: false, get: (a) => (a.incomeRanges ?? []).join(', '), set: (a, v) => { a.incomeRanges = parseCsv(v) } },
+  { key: 'gender', label: 'Gender', kind: 'text', col: 110, get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },
 ]
 
 // Section groups so the table columns and the drawer fields organize under Brand-Foundation-style

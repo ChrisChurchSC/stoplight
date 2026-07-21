@@ -49,6 +49,8 @@ export function CampaignCalendar() {
   const moveAssetSchedule = useTrafficStore((s) => s.moveAssetSchedule)
   const addFlightRun = useTrafficStore((s) => s.addFlightRun)
   const removeFlightRun = useTrafficStore((s) => s.removeFlightRun)
+  const rotateAlwaysOn = useTrafficStore((s) => s.rotateAlwaysOn)
+  const showToastAction = useTrafficStore((s) => s.showToastAction)
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   // How many months the timeline spans (the view zoom).
   const [viewMonths, setViewMonths] = useState(12)
@@ -87,7 +89,7 @@ export function CampaignCalendar() {
         .map((r) => ({ id: r.id, name: r.assetName || r.assetType || 'Asset', channel: r.channel, at: Date.parse(r.scheduledAt) }))
         .filter((a) => !Number.isNaN(a.at))
       const start = bars.length ? Math.min(...bars.map((b) => b.start)) : NaN
-      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets, timing: c.timing }
+      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets, timing: c.timing, refreshWeeks: c.refreshWeeks }
     })
   }, [canvases, brand, flights])
 
@@ -318,6 +320,25 @@ export function CampaignCalendar() {
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                           <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </button>
+                    )}
+                    {openEnded && (
+                      <button
+                        className="ccal-rerun ccal-rotate"
+                        title={
+                          c.refreshWeeks
+                            ? `Rotate creative (every ${c.refreshWeeks} weeks) — pulls this stream's live content back to draft for a refresh`
+                            : "Rotate creative — pulls this stream's live content back to draft for a refresh"
+                        }
+                        aria-label="Rotate creative"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          showToastAction(`Rotate creative for ${display}? Its live content goes back to draft.`, 'Rotate', () => void rotateAlwaysOn(c.name))
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" />
                         </svg>
                       </button>
                     )}

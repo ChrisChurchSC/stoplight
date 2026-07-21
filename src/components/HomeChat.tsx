@@ -12,6 +12,8 @@ import { draftBrandProfile } from '../adapters/ask/draftBrandProfile'
 import { brandDifferentiatorText, type BrandRecord } from '../domain/brandRecord'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
+import { draftAngle } from '../adapters/ask/draftAngle'
+import { FUNNEL_STAGES } from '../domain/funnel'
 import { readAggregatePatterns } from '../adapters/aggregate/aggregateOutcomes'
 import { ingestSite } from '../adapters/ask/ingestSite'
 import { CHANNELS, CHANNEL_LIST, resolveChannelId } from '../domain/channels'
@@ -536,6 +538,57 @@ export function HomeChat() {
     lastActionRef.current = 'channel'
   }
 
+  // Recommend the interpretive fields (message angle, funnel stage, conversion outcome) for the
+  // brand's audiences, FILL-WHEN-EMPTY so it back-fills without clobbering anything the user wrote.
+  const recommendAngles = async () => {
+    const store = useTrafficStore.getState()
+    const brand = store.clientFilter
+    if (!brand || brand === 'all') { closeHomeChat(); setPage('segments'); return }
+    const allAud = store.clientAudiences[brand] ?? []
+    const pursued = gtmPursuedRef.current
+    const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
+    if (!audiences.length) { say('Add audiences first and I can recommend an angle, funnel stage, and outcome for each.'); return }
+    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as { businessObjective?: string; positioning?: string; industry?: string }
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Recommending angles for ${brand}'s audiences` }] }])
+    const drafted = await draftAngle({
+      brand,
+      businessObjective: rec.businessObjective,
+      positioning: rec.positioning,
+      industry: rec.industry,
+      audiences: audiences.map((a) => ({
+        name: a.name,
+        role: a.role,
+        definition: a.definition,
+        pains: a.pains,
+        goalTags: a.goalTags,
+        triggers: a.triggers,
+        demographics: [a.ageRanges?.join('/'), a.incomeRanges?.join('/'), a.gender, (a.geos ?? []).join('/')].filter(Boolean).join(', ') || undefined,
+      })),
+    })
+    const stageLabel = (key: string) => FUNNEL_STAGES.find((s) => s.stage === key)?.label ?? key
+    const byName = new Map(drafted.map((d) => [d.audience, d]))
+    const live = store.clientAudiences[brand] ?? []
+    setClientAudiences(
+      brand,
+      live.map((a) => {
+        const d = byName.get(a.name)
+        if (!d) return a
+        return {
+          ...a,
+          messageAngle: a.messageAngle.trim() ? a.messageAngle : d.messageAngle,
+          funnelStage: a.funnelStage?.trim() ? a.funnelStage : stageLabel(d.funnelStage),
+          outcome: a.outcome?.trim() ? a.outcome : d.outcome,
+        }
+      }),
+    )
+    const summary = drafted.map((d) => `- **${d.audience}** (${stageLabel(d.funnelStage)} · ${d.outcome}): ${d.rationale}`).join('\n')
+    setMessages((m) =>
+      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `Here's a recommended angle for each of **${brand}**'s audiences, filled where they were empty:\n\n${summary}` } : x)),
+    )
+    lastActionRef.current = 'angle'
+  }
+
   // Ingest the brand's real published content (its website pages) into the Library. Needs the brand's
   // website; if it's not on file, ask for it (the next message is read as the URL). Uses a plain-fetch
   // server endpoint (works in production), then importAssets files the pages as Library content.
@@ -1000,7 +1053,15 @@ export function HomeChat() {
     const wantsVoice = /\bvoices?\b|\btone[ -]?of[ -]?voice\b/i.test(text) && doVerb
     const wantsObjective = /\bobjectives?\b|\bgoals?\b|\bkpis?\b/i.test(text) && doVerb
     const wantsChannel = /\bchannels?\b/i.test(text) && doVerb
+    // More specific than wantsMessage (which also matches "angle"): recommend the audience angle +
+    // funnel + outcome. Checked first so it wins over the brand-message and audience routes.
+    const wantsAngleRec =
+      /\b(recommend|suggest|propose|fill\s*in)\b.*\b(angles?|funnel|positioning|outcomes?)\b/i.test(text) ||
+      (/\bangles?\b/i.test(text) && /\baudiences?\b/i.test(text) && doVerb)
     const bareMore = text.length <= 40 && /\b(more|another|additional|others?|keep going|again|continue)\b/i.test(text)
+    if (wantsAngleRec || (bareMore && lastActionRef.current === 'angle')) {
+      sayUser(text); setQ(''); void recommendAngles(); return
+    }
     if (wantsAudience || (bareMore && lastActionRef.current === 'audience')) {
       sayUser(text); setQ(''); void addAudiences(); return
     }
