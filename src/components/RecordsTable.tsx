@@ -61,6 +61,7 @@ export function RecordsTable<T extends { id: string }>({
   onUpdate,
   onDelete,
   rowAction,
+  headerAction,
   relatedSlot,
   fieldOptions,
 }: {
@@ -78,6 +79,8 @@ export function RecordsTable<T extends { id: string }>({
   onDelete: (id: string) => void
   /** Optional per-row action button (e.g. "Build flow" on a campaign row). */
   rowAction?: { label: string; run: (row: T) => void }
+  /** Optional secondary header button, shown left of "+ New" (e.g. a guided add flow). */
+  headerAction?: { label: string; run: () => void }
   /** Optional related-records section shown at the bottom of the drawer (e.g. people at a company). */
   relatedSlot?: (record: T) => ReactNode
   /** Options for `ref`-kind fields, keyed by field key (e.g. the brand's segment names). */
@@ -270,9 +273,16 @@ export function RecordsTable<T extends { id: string }>({
           {title}
           {term && <InfoTip term={term} />}
         </div>
-        <button className="rec-new" onClick={onAdd}>
-          + New {noun[0]}
-        </button>
+        <div className="rec-head-actions">
+          {headerAction && (
+            <button className="rec-new rec-new-ghost" onClick={headerAction.run}>
+              {headerAction.label}
+            </button>
+          )}
+          <button className="rec-new" onClick={onAdd}>
+            + New {noun[0]}
+          </button>
+        </div>
       </header>
 
       <div className="rec-sub">

@@ -3082,6 +3082,16 @@ button {
   background: var(--surface-2);
   border-color: var(--text-faint);
 }
+/* Header action group (a secondary "Guided" button left of "+ New"). */
+.rec-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.rec-new-ghost {
+  color: var(--text-muted);
+}
 .rec-sub {
   display: flex;
   align-items: center;

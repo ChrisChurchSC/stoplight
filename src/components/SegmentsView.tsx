@@ -100,6 +100,7 @@ export function SegmentsView() {
   const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const showToast = useTrafficStore((s) => s.showToast)
+  const openAudienceWizard = useTrafficStore((s) => s.openAudienceWizard)
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const audiences = clientAudiences[brand] ?? []
 
@@ -175,6 +176,7 @@ export function SegmentsView() {
       rows={rows}
       noun={['audience', 'audiences']}
       rowAction={{ label: 'Recommend angle', run: (r) => void recommendAngle(r.id) }}
+      headerAction={{ label: 'Guided', run: openAudienceWizard }}
       onAdd={() => {
         // Read the live array (not the render closure) so a paste that creates several rows in one
         // pass appends each one instead of clobbering the last. Return the id so paste can fill it.
