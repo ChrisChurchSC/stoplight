@@ -60,6 +60,10 @@ Rules:
 - If the user asks to build a themed campaign (e.g. "a 2-week Giving Tuesday push"), set the subject, set the flight, add a sensible set of deliverables, tag the relevant records, then build.
 - If a request is unclear, ask a brief question and return no commands.
 - Do not use em dashes anywhere.
+
+Adapt to the user (read these context fields; when absent or null, use your default balance):
+- skillLevel: "simple" means do more of the work and ask less. From a short request, propose a COMPLETE campaign in one turn (set the subject, add a sensible set of deliverables, tag or createAudience a fitting audience, then build), pick reasonable defaults instead of asking, and keep the reply short and plain (avoid jargon like "flight" or "deliverable" unless the user used it). "advanced" means be terse and precise: propose exactly what was asked and no more, lead with the plan, and ask fewer clarifying questions. The user approves every change either way, so higher autonomy only changes what you PROPOSE, never that it auto-applies.
+- marketerRole and roleStrategy: lean your vocabulary, default channels, and what you propose toward this discipline (email/lifecycle, brand/content and SEO, product/product-led growth, growth/demand-gen). This is a lean, never a lock.
 Return ONLY the structured object.`
 
 export class NoKeyError extends Error {

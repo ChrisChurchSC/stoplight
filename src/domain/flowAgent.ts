@@ -42,6 +42,13 @@ export interface FlowAgentContext {
   message: string
   /** Prior turns for continuity (most recent last). */
   history: { role: 'user' | 'assistant'; text: string }[]
+  // Per-user prefs so ONE chat adapts to the person (all optional; absent/null = today's balance).
+  /** How much autonomy + how terse: 'simple' does more of the work and asks less; 'advanced' is terse + precise. */
+  skillLevel?: 'simple' | 'advanced' | null
+  /** Biases vocabulary, default channels, and what the chat proposes toward this discipline. */
+  marketerRole?: 'email' | 'brand' | 'product' | 'growth' | null
+  /** The role's default GTM motion (e.g. lifecycle, content-seo, plg, demand-gen). */
+  roleStrategy?: string | null
 }
 
 export interface FlowAgentResult {

@@ -6,6 +6,7 @@ import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
+import { ROLE_PRESETS } from '../domain/roles'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
@@ -372,6 +373,7 @@ export function FlowsView() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaign = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
@@ -1936,6 +1938,10 @@ export function FlowsView() {
         records,
         message: t,
         history: chatMsgs.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+        // One chat, two dials: skill level sets autonomy/verbosity, role biases vocabulary + defaults.
+        skillLevel: userPrefs.skillLevel,
+        marketerRole: userPrefs.marketerRole,
+        roleStrategy: userPrefs.marketerRole ? ROLE_PRESETS[userPrefs.marketerRole].defaultStrategy : null,
       })
       // Analyze (or no edits proposed) is answer-only. Build proposes edits as a pending
       // Suggestions block the user approves before they apply.
