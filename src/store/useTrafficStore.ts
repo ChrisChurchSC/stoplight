@@ -3477,7 +3477,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => {
       registerCampaign(campaign.name, campaign.client)
       if (s.campaignList.some((c) => c.name === campaign.name && c.client === campaign.client)) return {}
-      const campaignList = [...s.campaignList, campaign]
+      // The quick-builders pass a generic 'content-seo' default. Prefer the brand's OWN chosen GTM
+      // strategy so a growth/email/product brand isn't forced into a content engine. A template or an
+      // explicit non-default strategy always wins.
+      const brandStrategy = s.clientProfiles[campaign.client]?.strategy
+      const strategy = campaign.strategy && campaign.strategy !== 'content-seo' ? campaign.strategy : brandStrategy || campaign.strategy || 'content-seo'
+      const campaignList = [...s.campaignList, { ...campaign, strategy }]
       saveCampaigns(campaignList)
       return { campaignList }
     }),
