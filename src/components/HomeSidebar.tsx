@@ -418,6 +418,20 @@ export function HomeSidebar() {
             <span className="nav-label">{modeLabel}</span>
           </button>
         )}
+        <a
+          className="nav-item hsb-whatsnew"
+          href="/changelog"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="See what's new in Breadcrumbs"
+        >
+          <span className="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l2.2 5.4L20 9.3l-4 3.9 1 5.6L12 16.9 7 18.8l1-5.6-4-3.9 5.8-.9z" />
+            </svg>
+          </span>
+          <span className="nav-label">What&rsquo;s new</span>
+        </a>
         <button
           className="nav-item hsb-getstarted"
           title="Reopen the Getting started checklist"
