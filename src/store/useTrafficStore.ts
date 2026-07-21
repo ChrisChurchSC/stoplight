@@ -2117,6 +2117,9 @@ interface TrafficState {
   /** Per-user interface preferences: skill level (how much shows) + marketer role (what leads). */
   userPrefs: UserPrefs
   setUserPrefs: (patch: Partial<UserPrefs>) => void
+  /** Once, after hydration: pick a starting detail level (Simple for a fresh workspace, Advanced when
+   * data exists) if the user has never chosen one. No-op once skillLevel is set. */
+  resolveSkillDefault: () => void
   /** True when the ICP was refined from Attio closed-won data (feedback loop). */
   icpFromClosedWon: boolean
   /** Refresh the ICP from actual closed-won customers in Attio. */
@@ -4887,6 +4890,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
     // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights gate.
     patch.flightsHydrated = true
+    // Interface preferences (skill level + role) live in localStorage, not a store slice, but do sync
+    // through workspace_state — restore the workspace's copy on a fresh device, merged with defaults
+    // so a newer field (e.g. focusDismissed) is never dropped by an older saved blob.
+    if (USER_PREFS_KEY in state && state[USER_PREFS_KEY] && typeof state[USER_PREFS_KEY] === 'object') {
+      const mergedPrefs = { ...DEFAULT_USER_PREFS, ...(state[USER_PREFS_KEY] as Partial<UserPrefs>) }
+      patch.userPrefs = mergedPrefs
+      try {
+        localStorage.setItem(USER_PREFS_KEY, JSON.stringify(mergedPrefs))
+      } catch {
+        /* storage unavailable — prefs fall back to whatever's local */
+      }
+    }
     // UI preferences kept in localStorage (not a store slice) still sync via workspace_state:
     // write the workspace's copy back so components that read them synchronously (RecordsTable's
     // grouping) restore the workspace choice on a fresh device.
@@ -6337,6 +6352,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return preset
         ? { userPrefs, page: preset.landingPage, toast: `Landing on ${preset.landingLabel}. Everything stays one click away.`, toastAction: null }
         : { userPrefs }
+    }),
+
+  resolveSkillDefault: () =>
+    set((s) => {
+      // Runs once after hydration. If the user has never chosen (or been resolved to) a detail level,
+      // start a fresh, empty workspace in Simple (the calm surface) and any workspace that already has
+      // data in Advanced (today's full UI), so existing users never regress. Then persist so it's stable.
+      if (s.userPrefs.skillLevel !== null) return {}
+      const hasData =
+        s.campaignList.length > 0 ||
+        s.canvases.length > 0 ||
+        Object.values(s.clientAudiences).some((a) => a.length > 0)
+      const userPrefs = { ...s.userPrefs, skillLevel: hasData ? ('advanced' as const) : ('simple' as const) }
+      persistState(USER_PREFS_KEY, userPrefs)
+      return { userPrefs }
     }),
 
   openBreaks: (breakId) => set({ breaksOpen: true, activeBreakId: breakId ?? null }),

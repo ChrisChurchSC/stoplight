@@ -197,6 +197,14 @@ export function Workbench() {
     if (rowsLoaded && flightsHydrated) void ensureFlights()
   }, [rowsLoaded, flightsHydrated, ensureFlights])
 
+  // Once hydration lands (so we can see whether the workspace actually has data), pick a starting
+  // detail level for a user who has never chosen one: Simple for a fresh workspace, Advanced when
+  // data already exists. Guarded + idempotent in the store; a no-op for anyone who already has a level.
+  const resolveSkillDefault = useTrafficStore((s) => s.resolveSkillDefault)
+  useEffect(() => {
+    if (flightsHydrated) resolveSkillDefault()
+  }, [flightsHydrated, resolveSkillDefault])
+
   async function onDrop(e: DragEvent) {
     e.preventDefault()
     setOver(false)

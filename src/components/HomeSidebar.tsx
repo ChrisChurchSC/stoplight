@@ -245,6 +245,13 @@ export function HomeSidebar() {
       next.has(label) ? next.delete(label) : next.add(label)
       return next
     })
+  // Simple detail level condenses the nav to the core destinations (Home, Campaigns, Timeline,
+  // Library) and hides the discipline sections. A session-level "Show everything" reveal keeps a
+  // Simple user from ever being trapped; the durable switch is Settings + the sidebar mode chip.
+  const skillLevel = useTrafficStore((s) => s.userPrefs.skillLevel)
+  const [revealNav, setRevealNav] = useState(false)
+  const simpleNav = skillLevel === 'simple' && !revealNav
+  const SIMPLE_TOP = new Set(['flows', 'calendar', 'library'])
   // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
   type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
   const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
@@ -324,7 +331,7 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
-        {topItems.map((it) => (
+        {(simpleNav ? topItems.filter((it) => SIMPLE_TOP.has(it.key)) : topItems).map((it) => (
           <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
             <span className="nav-ico">
               <Ico name={it.ico} />
@@ -376,7 +383,7 @@ export function HomeSidebar() {
             </div>
           )}
         </div>
-        {NAV_SECTIONS.map((sec) => {
+        {!simpleNav && NAV_SECTIONS.map((sec) => {
           const open = openSections.has(sec.label)
           return (
             <div className="hsb-chats" key={sec.label}>
@@ -407,6 +414,20 @@ export function HomeSidebar() {
             </div>
           )
         })}
+        {skillLevel === 'simple' && (
+          <button
+            className="nav-item hsb-shownav"
+            onClick={() => setRevealNav((v) => !v)}
+            title={revealNav ? 'Show only the essentials' : 'Show every section'}
+          >
+            <span className="nav-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d={revealNav ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
+              </svg>
+            </span>
+            <span className="nav-label">{revealNav ? 'Show less' : 'Show everything'}</span>
+          </button>
+        )}
       </nav>
 
       <div className="sidebar-foot">

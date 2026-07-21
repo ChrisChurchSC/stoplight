@@ -26418,3 +26418,7 @@ table.aud-sheet td.stick .aud-cell {
     margin-left: 0;
   }
 }
+
+/* Simple-mode "Show everything" nav reveal — a quiet utility action. */
+.hsb-shownav { color: var(--text-faint); }
+.hsb-shownav:hover { color: var(--accent); }
