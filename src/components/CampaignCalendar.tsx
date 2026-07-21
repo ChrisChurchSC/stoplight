@@ -501,13 +501,13 @@ export function CampaignCalendar() {
                           return (
                             <>
                               <button
-                                className={`ccal-asset-marker${ad ? ' dragging' : ''}`}
+                                className={`ccal-asset-marker${ad ? ' dragging' : ''}${isPublished ? ' published' : ''}`}
                                 style={{ left: `calc(${pct(a.at)}% + ${off}px)`, background: STATUS_COLOR[c.status] }}
-                                onMouseDown={(e) => beginAssetDrag(e, a)}
+                                onMouseDown={isPublished ? undefined : (e) => beginAssetDrag(e, a)}
                                 onClick={() => {
                                   if (!assetMovedRef.current) openFlow(c.name)
                                 }}
-                                title={`${a.name} · ${fmtDate(a.at)} · drag to change the launch date`}
+                                title={isPublished ? `${a.name} · ${fmtDate(a.at)} · published` : `${a.name} · ${fmtDate(a.at)} · drag to change the launch date`}
                               />
                               <span className="ccal-asset-date" style={{ left: `calc(${pct(a.at)}% + ${off + 12}px)` }} aria-hidden="true">
                                 {fmtDate(ad ? ad.newAt : a.at)}

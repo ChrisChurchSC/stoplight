@@ -15,12 +15,15 @@ export interface UserPrefs {
   marketerRole: MarketerRole | null
   /** Whether creating a campaign opens the template picker or a blank canvas. */
   defaultStart: 'templates' | 'blank'
+  /** Set once the first-run focus chooser is answered or skipped, so it never nags again. */
+  focusDismissed: boolean
 }
 
 export const DEFAULT_USER_PREFS: UserPrefs = {
   skillLevel: null,
   marketerRole: null,
   defaultStart: 'templates',
+  focusDismissed: false,
 }
 
 export const SKILL_LEVELS: { value: SkillLevel; label: string; hint: string }[] = [

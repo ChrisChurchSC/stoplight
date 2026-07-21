@@ -3483,10 +3483,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       registerCampaign(campaign.name, campaign.client)
       if (s.campaignList.some((c) => c.name === campaign.name && c.client === campaign.client)) return {}
       // The quick-builders pass a generic 'content-seo' default. Prefer the brand's OWN chosen GTM
-      // strategy so a growth/email/product brand isn't forced into a content engine. A template or an
-      // explicit non-default strategy always wins.
+      // strategy so a growth/email/product brand isn't forced into a content engine; failing that,
+      // lean on the user's role focus (email→lifecycle, growth→demand-gen, …). A template or an
+      // explicit non-default strategy always wins over both.
       const brandStrategy = s.clientProfiles[campaign.client]?.strategy
-      const strategy = campaign.strategy && campaign.strategy !== 'content-seo' ? campaign.strategy : brandStrategy || campaign.strategy || 'content-seo'
+      const roleStrategy = s.userPrefs.marketerRole ? ROLE_PRESETS[s.userPrefs.marketerRole].defaultStrategy : undefined
+      const strategy = campaign.strategy && campaign.strategy !== 'content-seo' ? campaign.strategy : brandStrategy || roleStrategy || campaign.strategy || 'content-seo'
       const campaignList = [...s.campaignList, { ...campaign, strategy }]
       saveCampaigns(campaignList)
       return { campaignList }
@@ -6329,9 +6331,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => {
       const userPrefs = { ...s.userPrefs, ...patch }
       persistState(USER_PREFS_KEY, userPrefs)
-      // On an explicit role pick, land on that role's home surface (bias only, everything reachable).
+      // On an explicit role pick, land on that role's home surface and confirm where you landed
+      // (bias only, everything stays reachable).
       const preset = patch.marketerRole ? ROLE_PRESETS[patch.marketerRole] : null
-      return preset ? { userPrefs, page: preset.landingPage } : { userPrefs }
+      return preset
+        ? { userPrefs, page: preset.landingPage, toast: `Landing on ${preset.landingLabel}. Everything stays one click away.`, toastAction: null }
+        : { userPrefs }
     }),
 
   openBreaks: (breakId) => set({ breaksOpen: true, activeBreakId: breakId ?? null }),

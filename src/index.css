@@ -6061,6 +6061,14 @@ button {
   z-index: 5;
   box-shadow: 0 3px 8px rgba(16, 24, 40, 0.3);
 }
+/* Published assets are historical: viewable and clickable, never draggable. */
+.ccal-asset-marker.published {
+  cursor: pointer;
+  opacity: 0.72;
+}
+.ccal-asset-marker.published:hover {
+  transform: scale(1.15);
+}
 .ccal-asset-date {
   position: absolute;
   top: 50%;

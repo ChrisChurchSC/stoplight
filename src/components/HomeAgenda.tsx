@@ -238,15 +238,15 @@ export function HomeAgenda() {
           </div>
           {empty ? (
             <>
-            {!userPrefs.marketerRole && (
+            {!userPrefs.marketerRole && !userPrefs.focusDismissed && (
               <div className="ag2-focus">
                 <span className="ag2-focus-q">What's your focus?</span>
                 {MARKETER_ROLES.map((r) => (
-                  <button key={r.value} className="ag2-focus-chip" title={r.hint} onClick={() => setUserPrefs({ marketerRole: r.value })}>
+                  <button key={r.value} className="ag2-focus-chip" title={r.hint} onClick={() => setUserPrefs({ marketerRole: r.value, focusDismissed: true })}>
                     {r.label}
                   </button>
                 ))}
-                <button className="ag2-focus-skip" onClick={() => setUserPrefs({ marketerRole: null, skillLevel: userPrefs.skillLevel ?? 'advanced' })}>
+                <button className="ag2-focus-skip" onClick={() => setUserPrefs({ focusDismissed: true, skillLevel: userPrefs.skillLevel ?? 'advanced' })}>
                   Skip
                 </button>
               </div>
