@@ -115,12 +115,16 @@ export function HomeAgenda() {
     () => audiences.length === 0 && canvases.filter((c) => !brand || c.client === brand).length === 0,
     [audiences, canvases, brand],
   )
-  // Passive role inference: for a workspace that has data but no chosen focus, suggest one from its
-  // strongest signal (the brand's GTM strategy). Silent at low confidence; a manual pick always wins.
+  // Passive role inference: for a workspace with data but no chosen focus, suggest one from its
+  // strongest signal (a GTM strategy). Only infer from an UNAMBIGUOUS signal so the nudge never
+  // suggests a role from an off-screen brand: the brand in view's own strategy, or — when no single
+  // brand is in the rail — the sole strategy if every brand agrees. Silent otherwise; a manual pick wins.
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const roleSuggestion = useMemo(() => {
-    const strat = (brand && clientProfiles[brand]?.strategy) || Object.values(clientProfiles).find((p) => p.strategy)?.strategy
-    return inferRole(strat)
+    const inView = brand ? clientProfiles[brand]?.strategy : null
+    if (inView) return inferRole(inView)
+    const strategies = [...new Set(Object.values(clientProfiles).map((p) => p.strategy).filter(Boolean))]
+    return strategies.length === 1 ? inferRole(strategies[0]) : null
   }, [brand, clientProfiles])
   const brandRows = useMemo(
     () => canvases.filter((c) => !brand || c.client === brand).flatMap((c) => c.rows),
