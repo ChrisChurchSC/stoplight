@@ -25,16 +25,21 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
-          'Breadcrumbs now fits how you work. Pick a detail level: Simple keeps the surface calm and the fields few, Advanced shows every column, metric, and control. Switch anytime in Settings.',
-          'Tell us your focus (email, brand, product, or growth) and Breadcrumbs opens on the surface your work lives on, with the right strategy leading.',
+          'Breadcrumbs now fits how you work. Pick a detail level: Simple keeps the surface calm and the fields few, Advanced shows every column, metric, and control. New workspaces start Simple; switch anytime in Settings.',
+          'Simple mode condenses the app to the essentials (Home, Campaigns, Timeline, Library), with a "Show everything" reveal so nothing is ever out of reach.',
+          'Tell us your focus (email, brand, product, or growth) and Breadcrumbs opens where your work lives, leads with the right strategy, and emphasizes the sections and checklist steps your role cares about.',
           'Quick-start campaign templates, ordered to your focus, so your first campaign is one click away.',
+          'A "What\'s new" page (this one), reachable from the sidebar and the sign-in screen.',
         ],
       },
       {
         tag: 'Improved',
         items: [
           "New campaigns follow your brand's own strategy, and your focus, instead of defaulting to a content playbook.",
-          'A short "what’s your focus?" prompt greets you on an empty home, and never nags once you’ve answered.',
+          'A short first-run prompt asks your focus and how much detail you want, and never nags once you\'ve answered.',
+          "The Getting-started checklist now leads with your role's happy path.",
+          'If your workspace has a strategy but no focus set, Breadcrumbs suggests one and tells you why.',
+          'Your detail level and focus now follow you across devices.',
         ],
       },
       {
