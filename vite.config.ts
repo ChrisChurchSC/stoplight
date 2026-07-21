@@ -411,6 +411,33 @@ function draftChannelsApi(): PluginOption {
   }
 }
 
+/** Dev-server endpoint for "Recommend audience angle with Claude". Mirrors /api/draft-channels. */
+function draftAngleApi(): PluginOption {
+  return {
+    name: 'draft-angle-api',
+    configureServer(server) {
+      server.middlewares.use('/api/draft-angle', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runDraftAngle } = await import('./server/draftAngleHandler')
+            const result = await runDraftAngle(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 /** Dev-server endpoint for "Ingest a brand's site content". Plain fetch, no key needed. */
 function ingestSiteApi(): PluginOption {
   return {
@@ -1054,6 +1081,7 @@ export default defineConfig(({ mode }) => {
       draftVoicesApi(),
       draftObjectivesApi(),
       draftChannelsApi(),
+      draftAngleApi(),
       ingestSiteApi(),
       setupApi(),
       askApi(),
