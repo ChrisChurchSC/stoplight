@@ -362,7 +362,11 @@ export function CampaignCalendar() {
                           ? `calc(${width}% + ${d.offsetPx}px)`
                           : d && d.mode === 'resize-l'
                             ? `calc(${width}% - ${d.offsetPx}px)`
-                            : `${width}%`
+                            : d && openEnded
+                              ? // Open-ended bar: shrink width as the left shifts so the right edge
+                                // stays pinned to the timeline edge during a move-drag (no "gains an end" flicker).
+                                `calc(${width}% - ${d.offsetPx}px)`
+                              : `${width}%`
                       const countShift = d && d.mode !== 'resize-l' ? d.offsetPx : 0
                       const barLabel = multi ? bar.name : display
                       return (

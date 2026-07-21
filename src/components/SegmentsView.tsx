@@ -1,4 +1,5 @@
 import { CHANNELS } from '../domain/channels'
+import { GENDERS } from '../domain/taxonomy'
 import { newAudience, type AudienceType } from '../domain/audiences'
 import { FUNNEL_STAGES } from '../domain/funnel'
 import { draftAngle } from '../adapters/ask/draftAngle'
@@ -70,7 +71,7 @@ const SPECS: Spec[] = [
   { key: 'companySize', label: 'Company size', kind: 'text', get: (a) => a.companySize || '', set: (a, v) => { a.companySize = v } },
   { key: 'ageRanges', label: 'Age ranges', kind: 'text', col: 130, sortable: false, get: (a) => (a.ageRanges ?? []).join(', '), set: (a, v) => { a.ageRanges = parseCsv(v) } },
   { key: 'incomeRanges', label: 'Income ranges', kind: 'text', col: 140, sortable: false, get: (a) => (a.incomeRanges ?? []).join(', '), set: (a, v) => { a.incomeRanges = parseCsv(v) } },
-  { key: 'gender', label: 'Gender', kind: 'text', col: 110, get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },
+  { key: 'gender', label: 'Gender', kind: 'text', col: 110, options: GENDERS, get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },
 ]
 
 // Section groups so the table columns and the drawer fields organize under Brand-Foundation-style

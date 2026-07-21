@@ -568,7 +568,9 @@ export function HomeChat() {
     })
     const stageLabel = (key: string) => FUNNEL_STAGES.find((s) => s.stage === key)?.label ?? key
     const byName = new Map(drafted.map((d) => [d.audience, d]))
-    const live = store.clientAudiences[brand] ?? []
+    // Re-read the LIVE array (not the pre-await snapshot) so edits/additions made to this brand's
+    // audiences during the AI call aren't clobbered by the stale list — mirrors SegmentsView.
+    const live = useTrafficStore.getState().clientAudiences[brand] ?? []
     setClientAudiences(
       brand,
       live.map((a) => {

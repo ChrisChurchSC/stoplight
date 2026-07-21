@@ -65,7 +65,7 @@ export function AudienceWizard() {
 
   // Recommend the interpretive fields from the observable facts collected so far + the objective.
   // Inside the wizard we overwrite the (still-blank) fields; they're shown editable before Save.
-  const runRecommend = async () => {
+  const runRecommend = async (force: boolean) => {
     setRec((r) => ({ ...r, busy: true }))
     const [d] = await draftAngle({
       brand: client,
@@ -89,14 +89,21 @@ export function AudienceWizard() {
       return
     }
     const stageLabel = FUNNEL_STAGES.find((s) => s.stage === d.funnelStage)?.label ?? ''
-    patch({ messageAngle: d.messageAngle, funnelStage: stageLabel, outcome: d.outcome })
+    // Apply against the LATEST draft: the auto-run keeps anything the user typed during the (slow)
+    // call (fill-when-empty); the manual "Re-recommend" forces an overwrite.
+    setDraft((cur) => ({
+      ...cur,
+      messageAngle: force || !cur.messageAngle.trim() ? d.messageAngle : cur.messageAngle,
+      funnelStage: force || !(cur.funnelStage ?? '').trim() ? stageLabel : cur.funnelStage,
+      outcome: force || !(cur.outcome ?? '').trim() ? d.outcome : cur.outcome,
+    }))
     setRec({ rationale: d.rationale, confidence: d.confidence, busy: false, done: true })
   }
 
   const goPositioning = () => {
     setStep(3)
     // Auto-recommend once on first entry when there's enough signal; the user can re-recommend or edit.
-    if (!rec.done && !rec.busy && draft.name.trim()) void runRecommend()
+    if (!rec.done && !rec.busy && draft.name.trim()) void runRecommend(false)
   }
 
   const reset = () => {
@@ -196,7 +203,7 @@ export function AudienceWizard() {
             />
             <div className="wiz-rec-head">
               <span className="wiz-hint">Recommended from this audience and your objective. Edit anything.</span>
-              <button className="btn ghost sm" disabled={rec.busy} onClick={() => void runRecommend()}>
+              <button className="btn ghost sm" disabled={rec.busy} onClick={() => void runRecommend(true)}>
                 {rec.busy ? 'Thinking…' : rec.done ? 'Re-recommend' : 'Recommend'}
               </button>
             </div>
