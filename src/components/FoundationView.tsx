@@ -1,4 +1,5 @@
 import type { AudienceType } from '../domain/audiences'
+import { OUTCOMES } from '../domain/outcomes'
 import { clientForCampaign } from '../domain/clients'
 import { rtbsForCampaign, type Rtb } from '../domain/rtb'
 import { brandPresence } from '../domain/presence'
@@ -23,20 +24,6 @@ import { ProofLibrary } from './ProofLibrary'
  * this view surfaces them as the standing layer instead of burying them in a
  * drawer. RTBs are elevated here from per-campaign fields into one brand library.
  */
-/** The conversion outcomes an audience can be pointed at. */
-const OUTCOMES = [
-  'Donate',
-  'Subscribe',
-  'Invest',
-  'Listen to the podcast',
-  'Attend a screening',
-  'Volunteer',
-  'Partner',
-  'Sign up',
-  'Share',
-  'Buy',
-]
-
 export function FoundationView() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const rows = useTrafficStore((s) => s.rows)
