@@ -2834,9 +2834,24 @@ button {
 /* Chats promoted above the record sections: a light divider keeps it visually
    grouped with the primary nav rather than reading as another record section. */
 /* Sidebar "Back" — page-history navigation, shown only when there's somewhere to go back to. */
-.hsb-back { color: var(--text-muted); }
-.hsb-back:hover { color: var(--text); }
-.hsb-back svg { width: 16px; height: 16px; }
+/* "Back" is a utility affordance, not a destination: a compact stroked (outlined) button, so it
+   never reads as one of the borderless nav rows. */
+.hsb-back {
+  align-self: flex-start;
+  width: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  gap: 5px;
+  padding: 5px 12px;
+  margin-bottom: 8px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.hsb-back:hover { color: var(--accent); border-color: var(--accent); background: transparent; }
+.hsb-back .nav-ico { width: auto; min-width: 0; }
+.hsb-back svg { width: 13px; height: 13px; }
 .hsb-chats-promoted {
   margin-top: 10px;
   padding-bottom: 6px;
