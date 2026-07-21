@@ -6164,6 +6164,28 @@ button {
   z-index: 1;
   cursor: grab;
 }
+/* Always-on streams: an evergreen bar that runs open-ended to the right edge — a distinct accent
+   hue with a soft fade at the leading edge so it reads as "continuing", and no fixed end. */
+.ccal-bar-alwayson {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 65%, transparent 100%) !important;
+  box-shadow: none;
+}
+/* "Always-on" group label, separating the evergreen streams from the dated campaigns above. */
+.ccal-subhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 0 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ccal-subhead-ic {
+  font-size: 14px;
+  color: var(--accent);
+}
 .ccal-bar:hover {
   filter: brightness(1.06);
   transform: translateY(-1px);

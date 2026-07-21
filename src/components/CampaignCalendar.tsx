@@ -87,7 +87,7 @@ export function CampaignCalendar() {
         .map((r) => ({ id: r.id, name: r.assetName || r.assetType || 'Asset', channel: r.channel, at: Date.parse(r.scheduledAt) }))
         .filter((a) => !Number.isNaN(a.at))
       const start = bars.length ? Math.min(...bars.map((b) => b.start)) : NaN
-      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets }
+      return { name: c.name, status: c.status as CampaignStatus, start, assetCount: c.rows.length, bars, assets, timing: c.timing }
     })
   }, [canvases, brand, flights])
 
@@ -96,6 +96,11 @@ export function CampaignCalendar() {
     [items],
   )
   const unscheduled = items.filter((i) => Number.isNaN(i.start))
+  // Discrete campaigns first (dated blocks), then perpetual always-on streams under their own
+  // subheading — an evergreen stream has no end date, so it reads differently from a dated campaign.
+  const alwaysOnRows = scheduled.filter((i) => i.timing === 'always-on')
+  const discreteRows = scheduled.filter((i) => i.timing !== 'always-on')
+  const orderedRows = [...discreteRows, ...alwaysOnRows]
 
   // Timeline range: whole months from the earliest start, spanning exactly the selected view (zoom).
   const now = Date.now()
@@ -263,13 +268,21 @@ export function CampaignCalendar() {
         </div>
 
         <div className="ccal-body" ref={bodyRef}>
-          {scheduled.map((c) => {
+          {orderedRows.map((c, idx) => {
             const short = c.name.replace(`${brand} — `, '')
             const display = short.includes(' · ') ? short.split(' · ').slice(1).join(' · ') : short
             const isExp = expanded.has(c.name)
             const multi = c.bars.length > 1
+            const openEnded = c.timing === 'always-on'
+            // Subheading before the first always-on stream, separating it from the dated campaigns.
+            const showAlwaysOnHead = openEnded && (idx === 0 || orderedRows[idx - 1].timing !== 'always-on')
             return (
               <Fragment key={c.name}>
+                {showAlwaysOnHead && (
+                  <div className="ccal-subhead">
+                    <span className="ccal-subhead-ic" aria-hidden="true">∞</span> Always-on
+                  </div>
+                )}
                 <div className="ccal-row">
                   <div className="ccal-label-col">
                     {c.assets.length > 0 ? (
@@ -293,7 +306,7 @@ export function CampaignCalendar() {
                       {display}
                     </span>
                     <span className="ccal-row-count">{c.assetCount}</span>
-                    {c.bars.some((b) => b.id) && (
+                    {!openEnded && c.bars.some((b) => b.id) && (
                       <button
                         className="ccal-rerun"
                         title="Re-run: add another flight of this campaign (clones its assets into a new window)"
@@ -316,8 +329,10 @@ export function CampaignCalendar() {
                     {todayPct > 0 && todayPct < 100 && <div className="ccal-today" style={{ left: `${todayPct}%` }} />}
                     {c.bars.map((bar, bi) => {
                       const left = pct(bar.start)
-                      const width = Math.max(1.5, pct(bar.end) - left)
-                      const removable = bi > 0 && !!bar.id // re-run flights (not the primary)
+                      // Always-on streams have no end date: run the bar to the right edge instead of
+                      // flooring it to a discrete (durationWeeks||4)-week block.
+                      const width = openEnded ? Math.max(1.5, 100 - left) : Math.max(1.5, pct(bar.end) - left)
+                      const removable = bi > 0 && !!bar.id && !openEnded // re-run flights (not the primary)
                       const d = drag?.flightId === bar.id && bar.id ? drag : null
                       const barStyle: CSSProperties = { background: STATUS_COLOR[c.status] }
                       barStyle.left = d && d.mode !== 'resize-r' ? `calc(${left}% + ${d.offsetPx}px)` : `${left}%`
@@ -332,21 +347,27 @@ export function CampaignCalendar() {
                       return (
                         <Fragment key={bar.id || 'synthetic'}>
                           <button
-                            className={`ccal-bar${d ? ' dragging' : ''}`}
+                            className={`ccal-bar${openEnded ? ' ccal-bar-alwayson' : ''}${d ? ' dragging' : ''}`}
                             style={barStyle}
                             onMouseDown={(e) => beginDrag(e, bar, 'move')}
                             onClick={() => {
                               if (!dragMovedRef.current) openFlow(c.name)
                             }}
-                            title={`${short} · ${bar.name} · ${STATUS_LABEL[c.status]} · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`}
+                            title={
+                              openEnded
+                                ? `${short} · ${bar.name} · always-on · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move`
+                                : `${short} · ${bar.name} · ${STATUS_LABEL[c.status]} · ${bar.assetCount} asset${bar.assetCount === 1 ? '' : 's'} · drag to move, edges to resize`
+                            }
                           >
-                            <span className="ccal-bar-handle ccal-bar-handle-l" onMouseDown={(e) => beginDrag(e, bar, 'resize-l')} aria-hidden="true" />
-                            <span className="ccal-bar-label">{barLabel}</span>
-                            <span className="ccal-bar-handle ccal-bar-handle-r" onMouseDown={(e) => beginDrag(e, bar, 'resize-r')} aria-hidden="true" />
+                            {!openEnded && <span className="ccal-bar-handle ccal-bar-handle-l" onMouseDown={(e) => beginDrag(e, bar, 'resize-l')} aria-hidden="true" />}
+                            <span className="ccal-bar-label">{openEnded ? `∞ ${barLabel}` : barLabel}</span>
+                            {!openEnded && <span className="ccal-bar-handle ccal-bar-handle-r" onMouseDown={(e) => beginDrag(e, bar, 'resize-r')} aria-hidden="true" />}
                           </button>
-                          <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
-                            {bar.assetCount} asset{bar.assetCount === 1 ? '' : 's'}
-                          </span>
+                          {!openEnded && (
+                            <span className="ccal-bar-count" style={{ left: `calc(${left + width}% + ${countShift + 6}px)` }} aria-hidden="true">
+                              {bar.assetCount} asset{bar.assetCount === 1 ? '' : 's'}
+                            </span>
+                          )}
                           {removable && (
                             <button
                               className="ccal-bar-remove"

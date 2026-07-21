@@ -31,6 +31,11 @@ export interface CanvasCard {
   goal: CampaignGoal
   /** The folder this campaign is filed under, within its brand (undefined = unfiled). */
   folder?: string
+  /** Cadence timing (one-off / seasonal / always-on / triggered). Consumers that don't care ignore
+   *  it; the Timeline uses `always-on` to render an open-ended, evergreen stream distinctly. */
+  timing?: import('../domain/timing').CampaignTiming
+  /** For an always-on stream: how often the creative rotates (weeks). */
+  refreshWeeks?: number
 }
 
 export interface BrandRow {
@@ -95,6 +100,8 @@ export function useHomeCanvases(): {
           revenue,
           goal: resolveCampaignGoal(meta.get(name), cRows, rtbPool),
           folder: meta.get(name)?.folder,
+          timing: meta.get(name)?.timing,
+          refreshWeeks: meta.get(name)?.refreshWeeks,
         }
       })
     })
