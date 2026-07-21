@@ -49,6 +49,10 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
   const query = useTrafficStore((s) => s.query)
   const clientFilterStore = useTrafficStore((s) => s.clientFilter)
   const campaignFilterStore = useTrafficStore((s) => s.campaignFilter)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  // Names of always-on campaigns, so their assets read as an evergreen baseline stream (distinct
+  // dot) intersecting the dated campaign events on the same grid.
+  const alwaysOnCampaigns = new Set(campaignList.filter((c) => c.timing === 'always-on').map((c) => c.name))
   // `scopeClient` (from the brand folder's combined Calendar) pins the view to one
   // brand across ALL its campaigns, overriding the global client/campaign filters.
   const clientFilter = scopeClient ?? clientFilterStore
@@ -132,9 +136,10 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
 
   const Event = ({ r }: { r: TrafficRow }) => {
     const reach = reachOf(r)
+    const alwaysOn = alwaysOnCampaigns.has(r.campaign ?? '')
     return (
       <button
-        className="cal-event"
+        className={`cal-event${alwaysOn ? ' cal-event-alwayson' : ''}`}
         onClick={() => openReview(r.id)}
         title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
           undefined,
@@ -236,7 +241,7 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
                     {placed.map((h) => (
                       <button
                         key={h.r.id}
-                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}`}
+                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}${alwaysOnCampaigns.has(h.r.campaign ?? '') ? ' cal-span-alwayson' : ''}`}
                         style={{ gridColumn: `${h.startCol + 1} / ${h.endCol + 2}`, gridRow: h.lane + 1 }}
                         onClick={() => openReview(h.r.id)}
                         title={`${CHANNELS[h.r.channel].label} · ${h.r.assetName} · runs to ${new Date(

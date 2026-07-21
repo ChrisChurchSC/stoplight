@@ -17683,6 +17683,18 @@ button.cv-board-tab {
   height: 6px;
   border-radius: 50%;
 }
+/* Always-on / evergreen assets: an accent left-edge + accent dot so the baseline stream reads
+   distinctly from dated-campaign events on the same month/week grid. */
+.cal-event-alwayson {
+  border-left: 2px solid var(--accent);
+  padding-left: 5px;
+}
+.cal-event-alwayson .cal-event-dot {
+  background: var(--accent) !important;
+}
+.cal-span-alwayson {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 78%, #000)) !important;
+}
 .cal-event-name {
   flex: 1;
   min-width: 0;
