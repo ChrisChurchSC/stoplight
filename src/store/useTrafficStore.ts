@@ -1399,6 +1399,7 @@ interface TrafficState {
   setOnboardingCollapsed: (collapsed: boolean) => void
   /** Hide the checklist entirely (until reset). */
   dismissOnboarding: () => void
+  reopenOnboarding: () => void
   /** Bring the checklist back (and expand it). */
   resetOnboarding: () => void
   /** Toggle a step's hand-checked state (an override on top of auto-detection). */
@@ -1437,6 +1438,10 @@ interface TrafficState {
    *  out of it. Set by jumpToRecord; cleared by any ordinary nav (setPage). */
   recordBackTo: TrafficState['page'] | null
   jumpToRecord: (id: string, page: TrafficState['page']) => void
+  /** Breadcrumb of visited pages so the shell can offer a plain "back" (navigation only, never an
+   *  undo stack). setPage pushes the page you're leaving; goBack pops. */
+  pageHistory: TrafficState['page'][]
+  goBack: () => void
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -2316,6 +2321,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   page: initialShare ? 'flows' : 'portfolio',
   focusRecordId: null,
   recordBackTo: null,
+  pageHistory: [],
   libraryMode: 'catalog',
   brandTab: 'about',
   brandGuides: loadBrandGuides(),
@@ -2464,6 +2470,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveOnboarding(onboarding)
       return { onboarding }
     }),
+  // Re-open a dismissed/collapsed checklist WITHOUT wiping completed steps (unlike resetOnboarding).
+  reopenOnboarding: () =>
+    set((s) => {
+      const onboarding = { ...s.onboarding, dismissed: false, collapsed: false }
+      saveOnboarding(onboarding)
+      return { onboarding }
+    }),
   resetOnboarding: () =>
     set(() => {
       const onboarding = { ...DEFAULT_ONBOARDING }
@@ -2505,9 +2518,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const role = get().role
     if (page === 'billing' && !can(role, 'billing')) return
     if (page === 'connectors' && role !== 'owner') return
-    // Ordinary nav clears any pending record back-link so a stale "← Back" never lingers.
-    set({ page, recordBackTo: null })
+    // Ordinary nav clears any pending record back-link so a stale "← Back" never lingers, and pushes
+    // the page you're leaving onto the history breadcrumb (dedup, capped) so goBack() can return.
+    set((s) => (s.page === page ? { page, recordBackTo: null } : { page, recordBackTo: null, pageHistory: [...s.pageHistory, s.page].slice(-30) }))
   },
+  goBack: () =>
+    set((s) => {
+      const hist = [...s.pageHistory]
+      const prev = hist.pop()
+      return prev ? { page: prev, pageHistory: hist, recordBackTo: null } : {}
+    }),
   setLibraryMode: (libraryMode) => set({ libraryMode, page: 'content' }),
   focusRecord: (focusRecordId) => set({ focusRecordId }),
   // Jump to a record that lives on another page and remember where we came from, so that page can

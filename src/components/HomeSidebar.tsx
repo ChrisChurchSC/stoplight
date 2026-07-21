@@ -212,6 +212,9 @@ type NavPage =
 export function HomeSidebar() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
+  const pageHistory = useTrafficStore((s) => s.pageHistory)
+  const goBack = useTrafficStore((s) => s.goBack)
+  const reopenOnboarding = useTrafficStore((s) => s.reopenOnboarding)
   const libraryMode = useTrafficStore((s) => s.libraryMode)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -300,6 +303,14 @@ export function HomeSidebar() {
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
       <nav className="sidebar-nav">
+        {pageHistory.length > 0 && (
+          <button className="nav-item hsb-back" onClick={goBack} title="Back to the previous page">
+            <span className="nav-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+            </span>
+            <span className="nav-label">Back</span>
+          </button>
+        )}
         <button
           className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
           onClick={() => setPage('portfolio')}
@@ -396,6 +407,21 @@ export function HomeSidebar() {
       </nav>
 
       <div className="sidebar-foot">
+        <button
+          className="nav-item hsb-getstarted"
+          title="Reopen the Getting started checklist"
+          onClick={() => {
+            setPage('portfolio')
+            reopenOnboarding()
+          }}
+        >
+          <span className="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" /><path d="M12 8v4l2.5 2.5" />
+            </svg>
+          </span>
+          <span className="nav-label">Getting started</span>
+        </button>
         {!flowCanvasOpen && (
           <button
             className="nav-item hsb-collapse"

@@ -26,7 +26,9 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     term: 'Campaign',
     short:
       "A durable marketing effort with a goal and a theme. It runs as one or more flights over time and produces the assets you see on the timeline.",
-    seeAlso: ['flight', 'umbrella', 'objective'],
+    more:
+      'The ladder: Umbrella (an optional theme) contains Campaigns, a Campaign runs as one or more Flights (each a dated run), and a Flight holds the Assets (single pieces of content) you see on the timeline. Folders are just for tidiness and sit outside this ladder.',
+    seeAlso: ['flight', 'umbrella', 'folder', 'objective'],
   },
   flight: {
     term: 'Flight',
