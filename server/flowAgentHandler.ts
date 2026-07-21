@@ -22,13 +22,14 @@ const COMMAND_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'build', 'regenerate'] },
+          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'build', 'regenerate'] },
           value: { type: 'string' },
           weeks: { type: 'number' },
           preset: { type: 'string' },
           perMonth: { type: 'number' },
           labels: { type: 'array', items: { type: 'string' } },
           name: { type: 'string' },
+          text: { type: 'string' },
         },
         required: ['op'],
       },
@@ -37,7 +38,7 @@ const COMMAND_SCHEMA = {
   required: ['reply', 'commands'],
 } as const
 
-const SYSTEM = `You are the AI builder inside Hyperfocus, a marketing flow tool. A "flow" is a campaign made of deliverables (posts, emails, ebooks, etc.), tagged to records (companies, people, segments, media mixes), with a budget and a flight length. You are given the current flow snapshot, the deliverable presets you may add, the records you may tag, and the user's message.
+const SYSTEM = `You are the AI builder inside Hyperfocus, a marketing flow tool. A "flow" is a campaign made of deliverables (posts, emails, ebooks, etc.), tagged to records (companies, people, segments/audiences, proof points, media mixes), with a budget and a flight length. You are given the current flow snapshot, the deliverable presets you may add, the records you may tag (records.segments are the audiences, records.proof the proof points), and the user's message.
 
 Do two things:
 1. Write a short, friendly "reply" in light Markdown. Lead with what you did (or a question if the request is ambiguous). Keep it tight. When you take actions, summarize them as a bullet list with check marks, e.g. "- ✓ Added Newsletter (4/month)".
@@ -50,6 +51,7 @@ Do two things:
    - removeDeliverable {preset}: remove a deliverable by preset key.
    - setRecordTags {labels}: replace the flow's record tags. Each label MUST exactly match a provided record label.
    - createAudience {name}: create a NEW placeholder audience and tag the flow to it. Use this ONLY when the campaign needs an audience that is NOT already in the provided records.segments list (for example a cold-start brand with no audiences yet). It makes a labeled placeholder the user fills in later, so pick a clear, specific name (e.g. "New homeowners", "Enterprise IT buyers") but NEVER invent persona details, ages, or demographics. Prefer tagging an existing audience via setRecordTags when a suitable one exists.
+   - createProof {text}: add a NEW proof point (a reason to believe, e.g. "40% faster onboarding", "SOC 2 certified") as an unvetted DRAFT and tag the flow to it. Use when the campaign needs proof that is not in the provided proof records. Keep the text short and concrete; do not fabricate specific numbers or claims you were not given, prefer a plausible placeholder the user will verify. Prefer tagging an existing proof point via setRecordTags when one fits.
    - build: build the campaign and write copy for every asset (build mode only; do this when the user asks to build/create/generate it, after adding deliverables).
    - regenerate: rewrite the flow's asset copy (view mode only; use when the user asks to redo/refresh the copy).
 

@@ -7,6 +7,7 @@ import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { newAudience } from '../domain/audiences'
 import { ROLE_PRESETS } from '../domain/roles'
+import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
@@ -373,6 +374,7 @@ export function FlowsView() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const addBrandProof = useTrafficStore((s) => s.addBrandProof)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaign = useTrafficStore((s) => s.patchCampaign)
@@ -1359,7 +1361,9 @@ export function FlowsView() {
     setConnectFrom(null)
     setAddingDeliv(true)
     try {
-      const auds = flowRefs.length ? flowRefs.map((r) => r.label) : viewAudiences.length ? viewAudiences : audSelection
+      // Segment refs only (proof/company/etc. refs must not leak into row.audience).
+      const segAuds = flowRefs.filter((r) => r.type === 'segment').map((r) => r.label)
+      const auds = segAuds.length ? segAuds : viewAudiences.length ? viewAudiences : audSelection
       const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: startCount(p), runtime: p.runtime, brand: p.brand }
       const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === viewName).map((r) => r.id))
       await seedCampaignAssets(viewName, [d], { flightWeeks: viewFlight ?? flightWeeks, audiences: auds })
@@ -1787,6 +1791,24 @@ export function FlowsView() {
     return { ref: { type: 'segment', id: aud.id, label: nm }, created: true }
   }
 
+  // Create-or-reuse a brand proof point (RTB) by label for the chat's `createProof` command. Reuses
+  // an existing same-label proof instead of duplicating; otherwise adds an UNVETTED DRAFT (approved:
+  // false) to the brand's library for the user to review. Dedups against the brand's live proof
+  // library so several creates in one batch do not duplicate.
+  const ensureProofRef = (rawText: string): { ref: FlowReference; created: boolean } | null => {
+    if (typeof rawText !== 'string') return null
+    const label = rawText.trim()
+    if (!label || !brand) return null
+    const key = label.toLowerCase()
+    const liveSystems = useTrafficStore.getState().brandSystems
+    const libRtbs = resolveBrandScope(brand, liveSystems, brandMeta).library.rtbs ?? []
+    const existing = libRtbs.find((r) => r.label.trim().toLowerCase() === key)
+    if (existing) return { ref: { type: 'proof', id: existing.id, label: existing.label }, created: false }
+    const rtb: Rtb = { id: `rtb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`, label, detail: label, approved: false, outcomes: [] }
+    addBrandProof(brand, rtb)
+    return { ref: { type: 'proof', id: rtb.id, label }, created: true }
+  }
+
   // Apply the AI's commands to the flow. Build-mode commands mutate the builder (and the
   // canvas) and can end in a `build`; view-mode commands edit the open flow in place.
   // Returns human-readable summaries of what was applied.
@@ -1815,6 +1837,15 @@ export function FlowsView() {
             setCampaignReferences(viewName, vRefs)
             setRefsDirty(true)
             applied.push(r.created ? `Created a placeholder audience "${r.ref.label}"` : `Tagged audience "${r.ref.label}"`)
+          }
+        } else if (c.op === 'createProof') {
+          const r = ensureProofRef(c.text)
+          if (r) {
+            if (!vRefs.some((x) => x.type === 'proof' && x.id === r.ref.id)) vRefs = [...vRefs, r.ref]
+            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
+            setCampaignReferences(viewName, vRefs)
+            setRefsDirty(true)
+            applied.push(r.created ? `Added a proof point "${r.ref.label}" (draft)` : `Tagged proof point "${r.ref.label}"`)
           }
         } else if (c.op === 'regenerate') {
           await regenerateFlow()
@@ -1868,8 +1899,20 @@ export function FlowsView() {
           }
           break
         }
+        case 'createProof': {
+          const r = ensureProofRef(c.text)
+          if (r) {
+            if (!wRefs.some((x) => x.type === 'proof' && x.id === r.ref.id)) { wRefs = [...wRefs, r.ref]; setBriefRefs(wRefs) }
+            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
+            applied.push(r.created ? `Added a proof point "${r.ref.label}" (draft)` : `Tagged proof point "${r.ref.label}"`)
+          }
+          break
+        }
         case 'build': {
-          const auds = wRefs.length ? wRefs.map((r) => r.label) : audienceNames
+          // Segment refs ONLY feed the audience rotation; proof/company/etc. refs must not leak
+          // into row.audience (that would create phantom audiences). Mirrors audSelection.
+          const segAuds = wRefs.filter((r) => r.type === 'segment').map((r) => r.label)
+          const auds = segAuds.length ? segAuds : audienceNames
           const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg })
           if (nm) applied.push(`Built ${wNodes.length} deliverable${wNodes.length === 1 ? '' : 's'} and wrote the copy`)
           break
@@ -1890,6 +1933,7 @@ export function FlowsView() {
       case 'removeDeliverable': { const p = presetByKey(c.preset); return `Remove ${p?.label ?? c.preset}` }
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
+      case 'createProof': return `Add a proof point "${c.text}" and tag it`
       case 'build': return 'Build the flow and write the copy'
       case 'regenerate': return 'Regenerate the copy'
     }
@@ -1907,6 +1951,7 @@ export function FlowsView() {
         people: people.map((p) => p.name),
         segments: brandSegments.map((a) => a.name),
         mediaMixes: brandMixesForRefs.map((m) => m.name),
+        proof: brandProof.map((r) => r.label),
       }
       const flow = viewName !== null
         ? {

@@ -17,6 +17,9 @@ export type FlowCommand =
   // Create a NEW placeholder audience (only when the needed one is not already in the records)
   // and tag the flow to it. Reuses an existing audience of the same name instead of duplicating.
   | { op: 'createAudience'; name: string }
+  // Add a NEW proof point (reason to believe) as an unvetted draft and tag the flow to it. Reuses
+  // an existing same-text proof instead of duplicating. `text` is the claim (kept short).
+  | { op: 'createProof'; text: string }
   | { op: 'build' }
   | { op: 'regenerate' }
 
@@ -38,7 +41,7 @@ export interface FlowAgentContext {
   /** Deliverable presets the agent may add, by key. */
   presets: { key: string; label: string; channel: string; group: string }[]
   /** Records available to tag, by label. */
-  records: { companies: string[]; people: string[]; segments: string[]; mediaMixes: string[] }
+  records: { companies: string[]; people: string[]; segments: string[]; mediaMixes: string[]; proof: string[] }
   message: string
   /** Prior turns for continuity (most recent last). */
   history: { role: 'user' | 'assistant'; text: string }[]

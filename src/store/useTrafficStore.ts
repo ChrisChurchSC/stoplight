@@ -1499,6 +1499,9 @@ interface TrafficState {
   /** Set the alias lists on a brand's canonical audiences (keyed by audience id), so
    *  freeform plan tags tie back to them for performance rollups. */
   setAudienceAliases: (brand: string, aliasesById: Record<string, string[]>) => void
+  /** Append a proof point (RTB) to a specific brand's library (brand-explicit, unlike the
+   *  active-library addLibraryItem). Used by the flow chat's createProof command. */
+  addBrandProof: (brand: string, rtb: Rtb) => void
   /** Bless a draft library asset into an approved master (governance). */
   approveLibraryItem: (kind: LibraryKind, id: string) => void
   /** Edit a library Subject master and PROPAGATE the new text to every campaign
@@ -3365,6 +3368,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const lib = libFor(s.brandSystems, b)
       const audiences = lib.audiences.map((a) => (aliasesById[a.id] ? { ...a, aliases: aliasesById[a.id] } : a))
       const nextLib = { ...lib, audiences }
+      const brandSystems = { ...s.brandSystems, [b]: nextLib }
+      saveBrandSystems(brandSystems)
+      return { brandSystems, ...(s.messagingBrand === b ? { library: nextLib } : {}) }
+    }),
+  addBrandProof: (brand, rtb) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const lib = libFor(s.brandSystems, b)
+      const nextLib = { ...lib, rtbs: [...lib.rtbs, rtb] }
       const brandSystems = { ...s.brandSystems, [b]: nextLib }
       saveBrandSystems(brandSystems)
       return { brandSystems, ...(s.messagingBrand === b ? { library: nextLib } : {}) }
