@@ -11,6 +11,7 @@ import {
   INCOME_RANGES,
   INDUSTRIES,
   JOB_FUNCTIONS,
+  MARITAL_STATUSES,
   PAIN_LIBRARY,
   REGIONS,
   SENIORITIES,
@@ -52,6 +53,8 @@ export function AudienceFields({ value, patch, section, businessModel, icpPains,
         <ChipMulti options={INCOME_RANGES} value={value.incomeRanges} onChange={(v) => patch({ incomeRanges: v })} />
         <label className="wiz-label">Gender</label>
         <Segmented options={GENDERS} value={value.gender} onChange={(v) => patch({ gender: v })} />
+        <label className="wiz-label">Marital status</label>
+        <Segmented options={MARITAL_STATUSES} value={value.maritalStatus} onChange={(v) => patch({ maritalStatus: v })} />
       </>
     )
     const firmographics = (

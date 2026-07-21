@@ -104,6 +104,12 @@ export function HomeAgenda() {
   // (audience × channel) combinations already have content, out of all that are possible, plus the
   // empty ones to fill next.
   const audiences = useMemo(() => (brand ? clientAudiences[brand] ?? [] : []), [brand, clientAudiences])
+  // A brand-new / empty workspace: promote the two setup actions as cards instead of the analytical
+  // quick-chips (which have nothing to analyze yet).
+  const empty = useMemo(
+    () => audiences.length === 0 && canvases.filter((c) => !brand || c.client === brand).length === 0,
+    [audiences, canvases, brand],
+  )
   const brandRows = useMemo(
     () => canvases.filter((c) => !brand || c.client === brand).flatMap((c) => c.rows),
     [canvases, brand],
@@ -226,6 +232,24 @@ export function HomeAgenda() {
               <button className="ag2-ask-send" onClick={ask} disabled={!q.trim()} aria-label="Ask">↑</button>
             </div>
           </div>
+          {empty ? (
+            <div className="ag2-startcards">
+              <button className="ag2-startcard primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
+                <span className="ag2-startcard-ic" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </span>
+                <span className="ag2-startcard-title">Get started</span>
+                <span className="ag2-startcard-sub">Set up your brand and first campaign, guided step by step.</span>
+              </button>
+              <button className="ag2-startcard" onClick={() => openHomeChat(BUILD_BRAND_SEED)}>
+                <span className="ag2-startcard-ic" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
+                </span>
+                <span className="ag2-startcard-title">Draft brand from your content</span>
+                <span className="ag2-startcard-sub">Point us at your site and we draft the brand for you to edit.</span>
+              </button>
+            </div>
+          ) : (
           <div className="ag2-chips">
             <button className="ag2-chip ag2-chip-primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
@@ -248,6 +272,7 @@ export function HomeAgenda() {
               What should I do next?
             </button>
           </div>
+          )}
         </div>
 
         <section className="ag2-sec">

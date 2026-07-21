@@ -27,6 +27,7 @@ export interface AudienceType {
   ageRanges: string[]
   incomeRanges: string[]
   gender: string
+  maritalStatus: string
   geos: string[]
   // ---- Firmographics (matter most for B2B) ----
   /** Job functions / titles this persona holds. */
@@ -90,6 +91,7 @@ export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
     ageRanges: [],
     incomeRanges: [],
     gender: '',
+    maritalStatus: '',
     geos: [],
     functions: [],
     seniority: '',

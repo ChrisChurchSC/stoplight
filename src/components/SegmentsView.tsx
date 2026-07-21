@@ -1,5 +1,5 @@
 import { CHANNELS } from '../domain/channels'
-import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS } from '../domain/taxonomy'
+import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS, MARITAL_STATUSES } from '../domain/taxonomy'
 import { newAudience, type AudienceType } from '../domain/audiences'
 import { FUNNEL_STAGES } from '../domain/funnel'
 import { draftAngle } from '../adapters/ask/draftAngle'
@@ -72,6 +72,7 @@ const SPECS: Spec[] = [
   { key: 'ageRanges', label: 'Age ranges', kind: 'text', col: 130, sortable: false, get: (a) => (a.ageRanges ?? []).join(', '), set: (a, v) => { a.ageRanges = parseCsv(v) } },
   { key: 'incomeRanges', label: 'Income ranges', kind: 'text', col: 140, sortable: false, get: (a) => (a.incomeRanges ?? []).join(', '), set: (a, v) => { a.incomeRanges = parseCsv(v) } },
   { key: 'gender', label: 'Gender', kind: 'text', col: 110, options: GENDERS, get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },
+  { key: 'maritalStatus', label: 'Marital status', kind: 'text', options: MARITAL_STATUSES, get: (a) => a.maritalStatus || '', set: (a, v) => { a.maritalStatus = v } },
 ]
 
 // Section groups so the table columns and the drawer fields organize under Brand-Foundation-style
@@ -84,7 +85,7 @@ const GROUP: Record<string, string> = {
   channels: 'Go-to-market', leadProof: 'Go-to-market',
   examples: 'References', aliases: 'References',
   geos: 'Firmographics', functions: 'Firmographics', seniority: 'Firmographics', industry: 'Firmographics', companySize: 'Firmographics',
-  ageRanges: 'Demographics', incomeRanges: 'Demographics', gender: 'Demographics',
+  ageRanges: 'Demographics', incomeRanges: 'Demographics', gender: 'Demographics', maritalStatus: 'Demographics',
 }
 const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: GROUP[s.key], options: s.options, sortable: s.sortable }))
 const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: GROUP[s.key], options: s.options }))

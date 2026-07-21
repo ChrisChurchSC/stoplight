@@ -99,6 +99,9 @@ export const INCOME_RANGES = [
 
 export const GENDERS = ['All', 'Female', 'Male', 'Non-binary']
 
+/** Marital / household status — a consumer (B2C) demographic. */
+export const MARITAL_STATUSES = ['Single', 'Married', 'Partnered', 'Divorced', 'Widowed', 'Any']
+
 /** How valuable / high-priority an audience is to the brand. */
 export const VALUE_TIERS = ['Primary', 'Secondary', 'Tertiary']
 

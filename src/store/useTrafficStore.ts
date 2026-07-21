@@ -3562,9 +3562,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // Open a campaign in the Flows view instead of the legacy canvas — the project tabs use
   // this so a tab opens the flow. An empty name opens a fresh flow builder.
   openFlow: (name, flowView = 'flow') => {
+    // Push the page you're leaving so the shell "Back" can return here (e.g. after the wizard or the
+    // go-to-market flow drops you straight into a campaign). openFlow sets page directly, so it must
+    // record history itself rather than going through setPage.
+    const pageHistory = get().page !== 'flows' ? [...get().pageHistory, get().page].slice(-30) : get().pageHistory
     const campaign = name.trim()
     if (!campaign) {
-      set({ page: 'flows', flowOpen: '', flowOpenView: flowView })
+      set({ page: 'flows', flowOpen: '', flowOpenView: flowView, pageHistory })
       return
     }
     const client = clientForCampaign(campaign)
@@ -3574,7 +3578,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().openProject(campaign)
     // campaignFilter tracks the active tab; it's inert on the Flows page (FlowsView scopes
     // by its own viewName), so setting it only drives the tab highlight.
-    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView })
+    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView, pageHistory })
   },
   clearFlowOpen: () => set({ flowOpen: null, flowOpenView: 'flow' }),
   newCampaignParent: null,
