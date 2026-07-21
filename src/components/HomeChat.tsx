@@ -9,7 +9,7 @@ import { draftAudiences } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
 import { draftBrandProfile } from '../adapters/ask/draftBrandProfile'
-import type { BrandRecord } from '../domain/brandRecord'
+import { brandDifferentiatorText, type BrandRecord } from '../domain/brandRecord'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
 import { readAggregatePatterns } from '../adapters/aggregate/aggregateOutcomes'
@@ -332,7 +332,7 @@ export function HomeChat() {
       positioning: rec.positioning,
       descriptor: rec.descriptor,
       keyMessage: rec.keyMessage,
-      differentiator: rec.differentiator,
+      differentiator: brandDifferentiatorText(rec),
       businessObjective: rec.businessObjective,
       audiences,
       existing,
@@ -371,7 +371,7 @@ export function HomeChat() {
       positioning: rec.positioning,
       descriptor: rec.descriptor,
       keyMessage: rec.keyMessage,
-      differentiator: rec.differentiator,
+      differentiator: brandDifferentiatorText(rec),
       businessObjective: rec.businessObjective,
       commsObjective: rec.commsObjective,
       audiences,
@@ -409,7 +409,7 @@ export function HomeChat() {
       oneLiner: profile.oneLiner,
       positioning: rec.positioning,
       descriptor: rec.descriptor,
-      differentiator: rec.differentiator,
+      differentiator: brandDifferentiatorText(rec),
       businessObjective: rec.businessObjective,
       industry: profile.industry || rec.industry,
       existing: current.map((a) => a.name),
@@ -442,7 +442,7 @@ export function HomeChat() {
     const existing = store.messages.filter((m) => !m.brand || m.brand === brand).map((m) => m.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting messages for ${brand}` }] }])
-    const drafted = await draftMessages({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences, existing, samples: brandLibrarySamples(brand) })
+    const drafted = await draftMessages({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences, existing, samples: brandLibrarySamples(brand) })
     drafted.forEach((d) =>
       addMessage({ brand, name: d.name, angle: d.angle, audience: d.audience, pillar: d.pillar, stage: (['awareness', 'consideration', 'conversion'].includes(d.stage) ? d.stage : '') as Message['stage'] }),
     )
@@ -463,7 +463,7 @@ export function HomeChat() {
     const existing = store.voices.filter((v) => !v.brand || v.brand === brand).map((v) => v.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Defining voice for ${brand}` }] }])
-    const drafted = await draftVoices({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, samples: brandLibrarySamples(brand) })
+    const drafted = await draftVoices({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, samples: brandLibrarySamples(brand) })
     drafted.forEach((d) => addVoice({ brand, name: d.name, summary: d.summary, tone: d.tone, dos: d.dos, donts: d.donts, sample: d.sample, useFor: d.useFor, status: 'active' }))
     const list = drafted.map((d) => `- **${d.name}** (${d.tone}): ${d.summary}`).join('\n')
     setMessages((m) =>
@@ -484,7 +484,7 @@ export function HomeChat() {
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting objectives for ${brand}` }] }])
     // Anchor targets to the brand's real baselines when analytics are connected.
     const perf = (store.brandActuals[brand]?.channels ?? []).map((c) => ({ label: c.label, reach: c.reach, reachUnit: c.reachUnit, engagement: c.engagement }))
-    const { objectives: drafted, reportingCadence } = await draftObjectives({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, differentiator: rec.differentiator, businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, performance: perf.length ? perf : undefined })
+    const { objectives: drafted, reportingCadence } = await draftObjectives({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, performance: perf.length ? perf : undefined })
     drafted.forEach((d) => addObjective({ brand, name: d.name, metric: d.metric, target: d.target, timeframe: d.timeframe, status: 'planned' }))
     const list = drafted.map((d) => `- **${d.name}** (${d.metric}, ${d.target}, ${d.timeframe})`).join('\n')
     setMessages((m) =>
@@ -616,9 +616,27 @@ export function HomeChat() {
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting ${brand}'s strategy from content` }] }])
     const draft = await draftBrandProfile({ brand, oneLiner: profile.oneLiner, industry: profile.industry || rec.industry, positioning: rec.positioning, samples: brandLibrarySamples(brand) })
     if (draft) {
-      const { oneLiner, ...recFields } = draft
+      // Only accept EVERGREEN brand fields. The drafter still emits campaign-level keys
+      // (primaryChannels / secondaryChannels / cadence / budgetSplit / keyMoments / primaryKpis /
+      // headlineTargets) but those now live on the Campaign, so we drop them here instead of writing
+      // them onto the brand. differentiator is normalized to one-per-line (multiple supported).
+      const EVERGREEN_KEYS: (keyof BrandRecord)[] = [
+        'descriptor', 'industry', 'positioning', 'businessObjective', 'commsObjective',
+        'primaryAudience', 'audienceInsight', 'competitiveContext', 'differentiator',
+        'keyMessage', 'supportingMessages', 'proofPoints', 'toneOfVoice', 'languageDos',
+        'languageDonts', 'contentPillars', 'reviewCadence', 'risks',
+      ]
+      const recFields: Record<string, unknown> = {}
+      const draftRec = draft as Record<string, unknown>
+      for (const k of EVERGREEN_KEYS) {
+        const v = draftRec[k]
+        if (typeof v === 'string' && v.trim()) recFields[k] = v
+      }
+      if (typeof recFields.differentiator === 'string') {
+        recFields.differentiator = recFields.differentiator.split(/[\n;]+/).map((s) => s.trim()).filter(Boolean).join('\n')
+      }
       updateBrandRecord(rec.id, recFields as Partial<BrandRecord>)
-      if (oneLiner) setClientProfile(brand, { oneLiner })
+      if (draft.oneLiner) setClientProfile(brand, { oneLiner: draft.oneLiner })
     }
     setMessages((m) =>
       m.map((x) =>

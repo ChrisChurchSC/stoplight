@@ -333,7 +333,7 @@ const handlers: Record<string, (a: Args) => Promise<unknown>> = {
     if (voice) br.toneOfVoice = voice
     if (industry) br.industry = industry
     if (website) br.website = website
-    if (diffs.length) br.differentiator = diffs.join('; ')
+    if (diffs.length) { br.differentiators = diffs; br.differentiator = diffs.join('\n') }
     if (Object.keys(br).length) {
       br.status = 'active'
       const stB = useTrafficStore.getState()
