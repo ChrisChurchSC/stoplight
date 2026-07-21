@@ -25775,6 +25775,19 @@ table.aud-sheet td.stick .aud-cell {
 
 /* collapsed pill */
 .gs-pill { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: inline-flex; align-items: center; gap: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: 0 4px 16px rgba(16,24,40,.12), 0 1px 2px rgba(16,24,40,.06); padding: 10px 16px 12px; cursor: pointer; font: inherit; }
+
+/* One-time guided coach-mark tour: a highlight ring on the anchor + a fixed tooltip. */
+.tour-ring { position: fixed; z-index: 1200; border: 2px solid var(--accent); border-radius: 12px; box-shadow: 0 0 0 4000px rgba(16,24,40,.34); pointer-events: none; transition: top .18s, left .18s, width .18s, height .18s; }
+.tour-pop { position: fixed; z-index: 1201; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 12px 40px rgba(16,24,40,.24); padding: 16px 18px; animation: tour-in .18s ease; }
+@keyframes tour-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.tour-step-n { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+.tour-title { font-size: 15px; font-weight: 700; color: var(--text); margin-top: 4px; }
+.tour-body { font-size: 13px; line-height: 1.5; color: var(--text-muted); margin-top: 6px; }
+.tour-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.tour-skip { border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 13px; cursor: pointer; padding: 6px 8px; }
+.tour-skip:hover { color: var(--text); }
+.tour-next { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; font-size: 13px; border-radius: 8px; padding: 7px 16px; cursor: pointer; }
+.tour-next:hover { filter: brightness(1.05); }
 .gs-pill:hover { border-color: var(--border-strong); }
 .gs-pill-label { font-size: 14px; font-weight: 700; color: var(--text); }
 .gs-pill-count { font-size: 13px; font-weight: 600; color: var(--text-faint); }
