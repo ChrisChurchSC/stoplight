@@ -14,6 +14,9 @@ export type FlowCommand =
   | { op: 'addDeliverable'; preset: string; perMonth?: number }
   | { op: 'removeDeliverable'; preset: string }
   | { op: 'setRecordTags'; labels: string[] }
+  // Create a NEW placeholder audience (only when the needed one is not already in the records)
+  // and tag the flow to it. Reuses an existing audience of the same name instead of duplicating.
+  | { op: 'createAudience'; name: string }
   | { op: 'build' }
   | { op: 'regenerate' }
 

@@ -5,6 +5,7 @@ import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
+import { newAudience } from '../domain/audiences'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
@@ -370,6 +371,7 @@ export function FlowsView() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaign = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
@@ -1749,7 +1751,7 @@ export function FlowsView() {
   // Resolve record-tag labels back to structured references via the record groups.
   const labelsToRefs = (labels: string[]): FlowReference[] => {
     const out: FlowReference[] = []
-    for (const l of labels) {
+    for (const l of (Array.isArray(labels) ? labels : [])) {
       for (const g of recordGroups) {
         const it = g.items.find((i) => i.label === l)
         if (it) { out.push({ type: g.type, id: it.id, label: it.label }); break }
@@ -1758,21 +1760,60 @@ export function FlowsView() {
     return out
   }
 
+  // Create-or-reuse a brand audience by name for the chat's `createAudience` command. Reuses an
+  // existing audience of the same name instead of duplicating, otherwise creates a LABELED
+  // PLACEHOLDER the user fills in later (newAudience gives empty persona fields — never a fabricated
+  // persona). Reads live store state so several creates in one command batch don't clobber, and
+  // returns the ref to tag plus whether it was freshly created (for the summary wording).
+  const ensureAudienceRef = (rawName: string): { ref: FlowReference; created: boolean } | null => {
+    // Guard first: a schema-valid command may omit `name`, and there may be no brand selected.
+    // Never trim undefined (crash), never persist to an empty-brand bucket (dangling ref).
+    if (typeof rawName !== 'string') return null
+    const nm = rawName.trim()
+    if (!nm || !brand) return null
+    // Dedup against the brand's FULL audience set (client audiences AND the inherited system-library
+    // ones), so we never recreate a real persona as an empty placeholder that would clobber it in
+    // generation. Reuse the existing one's identity when found; create only when genuinely missing.
+    // Read live client audiences so several creates in one batch don't clobber each other.
+    const key = nm.toLowerCase()
+    const clientAuds = useTrafficStore.getState().clientAudiences[brand] ?? []
+    const libAuds = resolveBrandScope(brand, brandSystems, brandMeta).library.audiences ?? []
+    const existing = [...clientAuds, ...libAuds].find((a) => a.name.trim().toLowerCase() === key)
+    if (existing) return { ref: { type: 'segment', id: existing.id, label: existing.name }, created: false }
+    const aud = newAudience({ name: nm })
+    setClientAudiences(brand, [...clientAuds, aud])
+    return { ref: { type: 'segment', id: aud.id, label: nm }, created: true }
+  }
+
   // Apply the AI's commands to the flow. Build-mode commands mutate the builder (and the
   // canvas) and can end in a `build`; view-mode commands edit the open flow in place.
   // Returns human-readable summaries of what was applied.
   const applyFlowCommands = async (cmds: FlowCommand[]): Promise<string[]> => {
     const applied: string[] = []
     if (viewName !== null) {
+      let vRefs = [...flowRefs]
+      const createdRefs: FlowReference[] = []
       for (const c of cmds) {
         if (c.op === 'addDeliverable') {
           const p = presetByKey(c.preset)
           if (p) { await addViewDeliverable(p); applied.push(`Added ${p.label}`) }
         } else if (c.op === 'setRecordTags') {
+          // Preserve audiences created earlier this batch: their labels are not in the record list,
+          // so a plain replace would silently drop them.
           const refs = labelsToRefs(c.labels)
-          setCampaignReferences(viewName, refs)
+          vRefs = [...refs, ...createdRefs.filter((cr) => !refs.some((r) => r.id === cr.id))]
+          setCampaignReferences(viewName, vRefs)
           setRefsDirty(true)
           applied.push(`Tagged ${refs.length} record${refs.length === 1 ? '' : 's'}`)
+        } else if (c.op === 'createAudience') {
+          const r = ensureAudienceRef(c.name)
+          if (r) {
+            if (!vRefs.some((x) => x.type === 'segment' && x.id === r.ref.id)) vRefs = [...vRefs, r.ref]
+            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
+            setCampaignReferences(viewName, vRefs)
+            setRefsDirty(true)
+            applied.push(r.created ? `Created a placeholder audience "${r.ref.label}"` : `Tagged audience "${r.ref.label}"`)
+          }
         } else if (c.op === 'regenerate') {
           await regenerateFlow()
           applied.push('Regenerated the copy')
@@ -1784,6 +1825,7 @@ export function FlowsView() {
     let wName = name, wSubject = subject, wBudget = budget, wFlight = flightWeeks
     let wNodes = [...nodesRef.current]
     let wRefs = [...briefRefsEffective]
+    const createdRefs: FlowReference[] = []
     for (const c of cmds) {
       switch (c.op) {
         case 'setName': setName(c.value); wName = c.value; applied.push(`Named it "${c.value}"`); break
@@ -1808,10 +1850,20 @@ export function FlowsView() {
           break
         }
         case 'setRecordTags': {
+          // Preserve audiences created earlier this batch (their labels are not in the record list).
           const refs = labelsToRefs(c.labels)
-          wRefs = refs
-          setBriefRefs(refs)
+          wRefs = [...refs, ...createdRefs.filter((cr) => !refs.some((r) => r.id === cr.id))]
+          setBriefRefs(wRefs)
           applied.push(`Tagged ${refs.length} record${refs.length === 1 ? '' : 's'}`)
+          break
+        }
+        case 'createAudience': {
+          const r = ensureAudienceRef(c.name)
+          if (r) {
+            if (!wRefs.some((x) => x.type === 'segment' && x.id === r.ref.id)) { wRefs = [...wRefs, r.ref]; setBriefRefs(wRefs) }
+            if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
+            applied.push(r.created ? `Created a placeholder audience "${r.ref.label}"` : `Tagged audience "${r.ref.label}"`)
+          }
           break
         }
         case 'build': {
@@ -1835,6 +1887,7 @@ export function FlowsView() {
       case 'addDeliverable': { const p = presetByKey(c.preset); return `Add ${p?.label ?? c.preset}${c.perMonth ? ` (${c.perMonth}/month)` : ''}` }
       case 'removeDeliverable': { const p = presetByKey(c.preset); return `Remove ${p?.label ?? c.preset}` }
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
+      case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
       case 'build': return 'Build the flow and write the copy'
       case 'regenerate': return 'Regenerate the copy'
     }

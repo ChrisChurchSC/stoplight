@@ -22,12 +22,13 @@ const COMMAND_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'build', 'regenerate'] },
+          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'build', 'regenerate'] },
           value: { type: 'string' },
           weeks: { type: 'number' },
           preset: { type: 'string' },
           perMonth: { type: 'number' },
           labels: { type: 'array', items: { type: 'string' } },
+          name: { type: 'string' },
         },
         required: ['op'],
       },
@@ -48,12 +49,13 @@ Do two things:
    - addDeliverable {preset, perMonth?}: add a deliverable. "preset" MUST be one of the provided preset keys. Include perMonth for recurring deliverables.
    - removeDeliverable {preset}: remove a deliverable by preset key.
    - setRecordTags {labels}: replace the flow's record tags. Each label MUST exactly match a provided record label.
+   - createAudience {name}: create a NEW placeholder audience and tag the flow to it. Use this ONLY when the campaign needs an audience that is NOT already in the provided records.segments list (for example a cold-start brand with no audiences yet). It makes a labeled placeholder the user fills in later, so pick a clear, specific name (e.g. "New homeowners", "Enterprise IT buyers") but NEVER invent persona details, ages, or demographics. Prefer tagging an existing audience via setRecordTags when a suitable one exists.
    - build: build the campaign and write copy for every asset (build mode only; do this when the user asks to build/create/generate it, after adding deliverables).
    - regenerate: rewrite the flow's asset copy (view mode only; use when the user asks to redo/refresh the copy).
 
 Rules:
 - The context has an "intent". When intent is "analyze", you are in READ-ONLY mode: answer the user's question about the flow with insight and suggestions, and return an EMPTY commands array (make no edits). When intent is "build", you may return edit commands.
-- Only use preset keys and record labels that appear in the provided lists. Never invent them.
+- Only use preset keys and existing record labels that appear in the provided lists. Never invent preset keys or setRecordTags labels. The ONE exception is createAudience, which is how you introduce an audience that does not exist yet, use it rather than tagging an unrelated record or leaving a campaign with no audience.
 - In "build" mode you are shaping a NEW flow; in "view" mode you are editing an existing one (do not setName/setFlight/build there; use regenerate to refresh copy).
 - If the user asks to build a themed campaign (e.g. "a 2-week Giving Tuesday push"), set the subject, set the flight, add a sensible set of deliverables, tag the relevant records, then build.
 - If a request is unclear, ask a brief question and return no commands.
