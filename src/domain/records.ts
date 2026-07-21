@@ -20,11 +20,21 @@ export interface RecordField {
   /** Set false to make this column not sortable — for long free-text where an alphabetical sort is
    *  meaningless (message angle, pains, objections). Sortable by default. */
   sortable?: boolean
+  /** Progressive disclosure: 'advanced' fields hide in Simple detail level (still reachable via the
+   *  drawer's "Advanced fields" expander / a "Show all" escape). Absent = 'core' = always visible. */
+  tier?: 'core' | 'advanced'
 }
 
 /** A field that also appears as a table column (adds a pixel width). */
 export interface RecordColumn extends RecordField {
   width: number
+}
+
+/** Filter record fields/columns by the user's detail level. In Simple, drop 'advanced'-tier ones;
+ *  Advanced (or unset) returns everything. The `name` column is always kept. Pure. */
+export function visibleForSkill<T extends RecordField>(specs: T[], skillLevel: 'simple' | 'advanced' | null): T[] {
+  if (skillLevel !== 'simple') return specs
+  return specs.filter((s) => s.tier !== 'advanced' || s.kind === 'name')
 }
 
 const TINTS = ['#6fb3ff', '#ff8a5c', '#9b7bff', '#33b579', '#eab308', '#e5628a', '#4bb3c4']

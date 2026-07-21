@@ -3113,6 +3113,12 @@ button {
   border: 1px solid var(--border);
   border-radius: 7px;
 }
+/* Progressive-disclosure escape: reveal advanced columns/fields hidden by Simple detail level. */
+.rec-sub-showall {
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--accent); font: inherit; font-size: inherit; font-weight: 600; cursor: pointer;
+}
+.rec-sub-showall:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 .rec-sub-group {
   display: inline-flex;
   align-items: center;

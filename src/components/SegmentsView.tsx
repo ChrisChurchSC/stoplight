@@ -87,8 +87,12 @@ const GROUP: Record<string, string> = {
   geos: 'Firmographics', functions: 'Firmographics', seniority: 'Firmographics', industry: 'Firmographics', companySize: 'Firmographics',
   ageRanges: 'Demographics', incomeRanges: 'Demographics', gender: 'Demographics', maritalStatus: 'Demographics',
 }
-const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: GROUP[s.key], options: s.options, sortable: s.sortable }))
-const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: GROUP[s.key], options: s.options }))
+// The deep persona groups are advanced-tier: they hide in Simple detail level (still reachable via
+// "Show all"), so a beginner sees just Identity / Messaging / Priority / Motivations / Go-to-market.
+const ADVANCED_GROUPS = new Set(['References', 'Firmographics', 'Demographics'])
+const tierOf = (key: string): 'advanced' | undefined => (ADVANCED_GROUPS.has(GROUP[key] ?? '') ? 'advanced' : undefined)
+const SEGMENT_COLUMNS: RecordColumn[] = SPECS.filter((s) => s.col).map((s) => ({ key: s.key, label: s.label, kind: s.kind, width: s.col!, group: GROUP[s.key], options: s.options, sortable: s.sortable, tier: tierOf(s.key) }))
+const SEGMENT_FIELDS: RecordField[] = SPECS.map((s) => ({ key: s.key, label: s.label, kind: s.kind, group: GROUP[s.key], options: s.options, tier: tierOf(s.key) }))
 
 type SegRow = { id: string } & Record<string, string>
 

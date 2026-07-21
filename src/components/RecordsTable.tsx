@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
-import { recordTint, type RecordColumn, type RecordField } from '../domain/records'
+import { recordTint, visibleForSkill, type RecordColumn, type RecordField } from '../domain/records'
 import { loadRecordGrouping, saveRecordGrouping } from '../domain/recordGrouping'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
@@ -52,8 +52,8 @@ export function RecordsTable<T extends { id: string }>({
   title,
   term,
   icon,
-  columns,
-  fields,
+  columns: allColumns,
+  fields: allFields,
   statuses,
   rows,
   noun,
@@ -86,6 +86,13 @@ export function RecordsTable<T extends { id: string }>({
   /** Options for `ref`-kind fields, keyed by field key (e.g. the brand's segment names). */
   fieldOptions?: Record<string, string[]>
 }) {
+  // Progressive disclosure: in Simple detail level, hide advanced-tier columns/fields (with a
+  // per-table "Show all" escape); Advanced (or unset) shows everything.
+  const skillLevel = useTrafficStore((s) => s.userPrefs.skillLevel)
+  const [showAllCols, setShowAllCols] = useState(false)
+  const columns = showAllCols ? allColumns : visibleForSkill(allColumns, skillLevel)
+  const fields = showAllCols ? allFields : visibleForSkill(allFields, skillLevel)
+  const hiddenCount = allColumns.length - columns.length
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? 'name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [openId, setOpenId] = useState<string | null>(null)
@@ -292,6 +299,11 @@ export function RecordsTable<T extends { id: string }>({
         <span className="rec-sub-sort">
           Sorted by {sortLabel} {sortDir === 'asc' ? '↑' : '↓'}
         </span>
+        {(hiddenCount > 0 || showAllCols) && (
+          <button className="rec-sub-showall" onClick={() => setShowAllCols((v) => !v)}>
+            {showAllCols ? 'Show fewer' : `Show all ${allColumns.length} fields`}
+          </button>
+        )}
         {groupCols.length > 0 && (
           <label className={`rec-sub-group${groupKey ? ' on' : ''}`}>
             <span className="rec-sub-group-ic" aria-hidden="true">⊟</span>
