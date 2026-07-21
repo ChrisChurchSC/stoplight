@@ -11,11 +11,14 @@ export interface RolePreset {
   landingLabel: string
   /** A GTM_STRATEGIES key: the motion this role's campaigns lean toward. */
   defaultStrategy: string
+  /** Sidebar sections (labels in NAV_SECTIONS) to pre-expand for this role, so the discipline it
+   * works in leads. Emphasis only, the user can collapse/expand freely. Growth = the full picture. */
+  sections: string[]
 }
 
 export const ROLE_PRESETS: Record<MarketerRole, RolePreset> = {
-  email: { landingPage: 'flows', landingLabel: 'Campaigns', defaultStrategy: 'lifecycle' },
-  brand: { landingPage: 'brand', landingLabel: 'Brand', defaultStrategy: 'content-seo' },
-  product: { landingPage: 'segments', landingLabel: 'Audiences', defaultStrategy: 'plg' },
-  growth: { landingPage: 'reports', landingLabel: 'Insights', defaultStrategy: 'demand-gen' },
+  email: { landingPage: 'flows', landingLabel: 'Campaigns', defaultStrategy: 'lifecycle', sections: ['Go-to-market'] },
+  brand: { landingPage: 'brand', landingLabel: 'Brand', defaultStrategy: 'content-seo', sections: ['Foundation'] },
+  product: { landingPage: 'segments', landingLabel: 'Audiences', defaultStrategy: 'plg', sections: ['Prospects'] },
+  growth: { landingPage: 'reports', landingLabel: 'Insights', defaultStrategy: 'demand-gen', sections: ['Foundation', 'Prospects', 'Go-to-market'] },
 }

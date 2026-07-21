@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
-import { ONBOARDING_STEPS, type OnboardingStepId } from '../domain/onboarding'
+import { stepsForRole, type OnboardingStepId } from '../domain/onboarding'
 import { resolveBrandScope } from '../domain/brand'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { UNASSIGNED } from '../domain/clients'
@@ -93,6 +93,7 @@ export function GettingStarted() {
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const brandMeta = useTrafficStore((s) => s.brandMeta)
   const campaignList = useTrafficStore((s) => s.campaignList)
+  const marketerRole = useTrafficStore((s) => s.userPrefs.marketerRole)
   const [menuOpen, setMenuOpen] = useState(false)
 
   // Auto-complete "Connect Claude" when the server actually has a model key configured.
@@ -139,7 +140,7 @@ export function GettingStarted() {
   }, [brand, clientProfiles, brandSystems, brandMeta, clientAudiences, campaignList])
 
   const isDone = (id: OnboardingStepId) => auto[id] || onboarding.done.includes(id)
-  const steps = ONBOARDING_STEPS.map((s) => ({ ...s, done: isDone(s.id) }))
+  const steps = stepsForRole(marketerRole).map((s) => ({ ...s, done: isDone(s.id) }))
   const doneCount = steps.filter((s) => s.done).length
   const total = steps.length
   const allDone = doneCount === total

@@ -31,6 +31,23 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'review', title: 'Review your calendar', hint: 'See the campaign as a schedule, then ship it.' },
 ]
 
+// Per-role happy path: brand stays the shared foundation, then the discipline each role works in
+// leads. All six steps are always present (completion detection is id-keyed) — only the order, and
+// therefore which step is highlighted as "next", changes. Growth / null use the default order.
+const ROLE_STEP_ORDER: Record<import('./userPrefs').MarketerRole, OnboardingStepId[]> = {
+  email: ['brand', 'connect', 'flow', 'segments', 'proof', 'review'],
+  brand: ['brand', 'proof', 'segments', 'connect', 'flow', 'review'],
+  product: ['brand', 'segments', 'flow', 'proof', 'connect', 'review'],
+  growth: ['brand', 'connect', 'segments', 'proof', 'flow', 'review'],
+}
+
+export function stepsForRole(role: import('./userPrefs').MarketerRole | null): OnboardingStep[] {
+  const order = role ? ROLE_STEP_ORDER[role] : null
+  if (!order) return ONBOARDING_STEPS
+  const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]))
+  return order.map((id) => byId.get(id)).filter((s): s is OnboardingStep => !!s)
+}
+
 /** Persisted UI state for the checklist. */
 export interface OnboardingState {
   /** Collapsed to the compact pill. */

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { ROLE_PRESETS } from '../domain/roles'
 import { InfoTip } from './InfoTip'
 
 // Which glossary term defines each collapsible nav section (build -> reach -> measure).
@@ -237,14 +238,22 @@ export function HomeSidebar() {
   const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
   const [chatsOpen, setChatsOpen] = useState(false)
   // Workflow sections (Foundation / Prospects / Go-to-market) — collapsed by default so the nav starts
-  // compact; the user expands what they need.
-  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set<string>())
+  // compact; the user expands what they need. A picked role pre-expands the section it works in
+  // (emphasis only): brand→Foundation, product→Prospects, email→Go-to-market, growth→all.
+  const marketerRole = useTrafficStore((s) => s.userPrefs.marketerRole)
+  const [openSections, setOpenSections] = useState<Set<string>>(
+    () => new Set<string>(marketerRole ? ROLE_PRESETS[marketerRole].sections : []),
+  )
   const toggleSection = (label: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
       next.has(label) ? next.delete(label) : next.add(label)
       return next
     })
+  // If the role changes later, add (never force-remove) its emphasized sections.
+  useEffect(() => {
+    if (marketerRole) setOpenSections((prev) => new Set([...prev, ...ROLE_PRESETS[marketerRole].sections]))
+  }, [marketerRole])
   // Simple detail level condenses the nav to the core destinations (Home, Campaigns, Timeline,
   // Library) and hides the discipline sections. A session-level "Show everything" reveal keeps a
   // Simple user from ever being trapped; the durable switch is Settings + the sidebar mode chip.

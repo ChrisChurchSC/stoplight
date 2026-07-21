@@ -6,6 +6,7 @@ import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { AI_MODELS } from '../domain/aiModels'
 import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED } from '../domain/guidedSetup'
 import { MARKETER_ROLES } from '../domain/userPrefs'
+import { inferRole } from '../domain/inferRole'
 import { persistState } from '../adapters/state/workspaceState'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -114,6 +115,13 @@ export function HomeAgenda() {
     () => audiences.length === 0 && canvases.filter((c) => !brand || c.client === brand).length === 0,
     [audiences, canvases, brand],
   )
+  // Passive role inference: for a workspace that has data but no chosen focus, suggest one from its
+  // strongest signal (the brand's GTM strategy). Silent at low confidence; a manual pick always wins.
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
+  const roleSuggestion = useMemo(() => {
+    const strat = (brand && clientProfiles[brand]?.strategy) || Object.values(clientProfiles).find((p) => p.strategy)?.strategy
+    return inferRole(strat)
+  }, [brand, clientProfiles])
   const brandRows = useMemo(
     () => canvases.filter((c) => !brand || c.client === brand).flatMap((c) => c.rows),
     [canvases, brand],
@@ -236,6 +244,26 @@ export function HomeAgenda() {
               <button className="ag2-ask-send" onClick={ask} disabled={!q.trim()} aria-label="Ask">↑</button>
             </div>
           </div>
+          {!empty && !userPrefs.marketerRole && !userPrefs.focusDismissed && roleSuggestion && (
+            <div className="ag2-infer">
+              <span className="ag2-infer-txt">
+                Looks like you focus on{' '}
+                <strong>{MARKETER_ROLES.find((r) => r.value === roleSuggestion.role)?.label ?? roleSuggestion.role}</strong>
+                {' '}({roleSuggestion.reason}). Tune Breadcrumbs to it?
+              </span>
+              <span className="ag2-infer-acts">
+                <button
+                  className="ag2-infer-yes"
+                  onClick={() => setUserPrefs({ marketerRole: roleSuggestion.role, focusDismissed: true })}
+                >
+                  Yes, focus
+                </button>
+                <button className="ag2-infer-no" onClick={() => setUserPrefs({ focusDismissed: true })}>
+                  No thanks
+                </button>
+              </span>
+            </div>
+          )}
           {empty ? (
             <>
             {!userPrefs.marketerRole && !userPrefs.focusDismissed && (
@@ -248,6 +276,25 @@ export function HomeAgenda() {
                 ))}
                 <button className="ag2-focus-skip" onClick={() => setUserPrefs({ focusDismissed: true, skillLevel: userPrefs.skillLevel ?? 'advanced' })}>
                   Skip
+                </button>
+              </div>
+            )}
+            {!userPrefs.focusDismissed && (
+              <div className="ag2-focus ag2-focus-detail">
+                <span className="ag2-focus-q">How much do you want to see?</span>
+                <button
+                  className={`ag2-focus-chip${userPrefs.skillLevel === 'simple' ? ' on' : ''}`}
+                  title="A calm surface with the essential fields. Everything stays one click away."
+                  onClick={() => setUserPrefs({ skillLevel: 'simple' })}
+                >
+                  Keep it simple
+                </button>
+                <button
+                  className={`ag2-focus-chip${userPrefs.skillLevel === 'advanced' ? ' on' : ''}`}
+                  title="Every column, metric, and control. The full experience."
+                  onClick={() => setUserPrefs({ skillLevel: 'advanced' })}
+                >
+                  Show me everything
                 </button>
               </div>
             )}
