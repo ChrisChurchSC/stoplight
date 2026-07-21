@@ -1211,6 +1211,9 @@ function saveAiModel(id: string): void {
 // Per-user interface preferences (skill level + marketer role). Persisted via persistState so they
 // mirror to the workspace_state blob. null axes = today's full UI (see domain/userPrefs).
 const USER_PREFS_KEY = 'stoplight.userPrefs.v1'
+// Set the moment the user changes a preference this session, so the device-sync restore during
+// hydration never clobbers an in-flight change with the stale server blob it read before the change.
+let userPrefsTouchedThisSession = false
 function loadUserPrefs(): UserPrefs {
   try {
     const raw = JSON.parse(localStorage.getItem(USER_PREFS_KEY) ?? 'null')
@@ -4893,7 +4896,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Interface preferences (skill level + role) live in localStorage, not a store slice, but do sync
     // through workspace_state — restore the workspace's copy on a fresh device, merged with defaults
     // so a newer field (e.g. focusDismissed) is never dropped by an older saved blob.
-    if (USER_PREFS_KEY in state && state[USER_PREFS_KEY] && typeof state[USER_PREFS_KEY] === 'object') {
+    if (!userPrefsTouchedThisSession && USER_PREFS_KEY in state && state[USER_PREFS_KEY] && typeof state[USER_PREFS_KEY] === 'object') {
       const mergedPrefs = { ...DEFAULT_USER_PREFS, ...(state[USER_PREFS_KEY] as Partial<UserPrefs>) }
       patch.userPrefs = mergedPrefs
       try {
@@ -6344,6 +6347,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   setUserPrefs: (patch) =>
     set((s) => {
+      userPrefsTouchedThisSession = true
       const userPrefs = { ...s.userPrefs, ...patch }
       persistState(USER_PREFS_KEY, userPrefs)
       // On an explicit role pick, land on that role's home surface and confirm where you landed
@@ -6360,10 +6364,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // start a fresh, empty workspace in Simple (the calm surface) and any workspace that already has
       // data in Advanced (today's full UI), so existing users never regress. Then persist so it's stable.
       if (s.userPrefs.skillLevel !== null) return {}
+      // "Has data" must cover EVERY way a workspace can hold real work, not just campaigns/canvases/
+      // audiences — a user who set up their brand and imported a CRM (records) but hasn't built a
+      // campaign yet is NOT empty, and must not be forced into Simple (which would hide those very
+      // sections). Any populated record list, brand profile, or canvas/campaign/audience counts.
+      const recordLists = [s.companies, s.people, s.brandRecords, s.messages, s.segments, s.objectives, s.channelRecords, s.voices, s.patterns, s.triggers]
       const hasData =
         s.campaignList.length > 0 ||
         s.canvases.length > 0 ||
-        Object.values(s.clientAudiences).some((a) => a.length > 0)
+        Object.keys(s.clientProfiles).length > 0 ||
+        Object.values(s.clientAudiences).some((a) => a.length > 0) ||
+        recordLists.some((r) => r.length > 0)
       const userPrefs = { ...s.userPrefs, skillLevel: hasData ? ('advanced' as const) : ('simple' as const) }
       persistState(USER_PREFS_KEY, userPrefs)
       return { userPrefs }

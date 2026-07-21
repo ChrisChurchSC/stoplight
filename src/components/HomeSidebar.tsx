@@ -251,7 +251,8 @@ export function HomeSidebar() {
   const skillLevel = useTrafficStore((s) => s.userPrefs.skillLevel)
   const [revealNav, setRevealNav] = useState(false)
   const simpleNav = skillLevel === 'simple' && !revealNav
-  const SIMPLE_TOP = new Set(['flows', 'calendar', 'library'])
+  // Tasks stays even in Simple: its badge is the only always-visible overdue-task cue.
+  const SIMPLE_TOP = new Set(['flows', 'calendar', 'tasks', 'library'])
   // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
   type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
   const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
@@ -293,6 +294,9 @@ export function HomeSidebar() {
       ],
     },
   ]
+  // The section that holds the page you're on — so Simple mode never hides where you currently are,
+  // and any mode auto-expands it so the active item is visible and highlighted.
+  const activeSection = NAV_SECTIONS.find((sec) => sec.items.some((it) => it.active))
 
   // Home chat history (already newest-activity-first from the store), capped for the sidebar.
   const recentChats = useMemo(() => homeChats.slice(0, 12), [homeChats])
@@ -331,7 +335,7 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">Home</span>
         </button>
-        {(simpleNav ? topItems.filter((it) => SIMPLE_TOP.has(it.key)) : topItems).map((it) => (
+        {(simpleNav ? topItems.filter((it) => SIMPLE_TOP.has(it.key) || it.active) : topItems).map((it) => (
           <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
             <span className="nav-ico">
               <Ico name={it.ico} />
@@ -383,8 +387,8 @@ export function HomeSidebar() {
             </div>
           )}
         </div>
-        {!simpleNav && NAV_SECTIONS.map((sec) => {
-          const open = openSections.has(sec.label)
+        {(simpleNav ? NAV_SECTIONS.filter((sec) => sec === activeSection) : NAV_SECTIONS).map((sec) => {
+          const open = openSections.has(sec.label) || sec === activeSection
           return (
             <div className="hsb-chats" key={sec.label}>
               <div className="hsb-sec-row">
