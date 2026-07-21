@@ -5,6 +5,7 @@ import type { ChannelId } from '../domain/types'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { AI_MODELS } from '../domain/aiModels'
 import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED } from '../domain/guidedSetup'
+import { MARKETER_ROLES } from '../domain/userPrefs'
 import { persistState } from '../adapters/state/workspaceState'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -63,6 +64,8 @@ export function HomeAgenda() {
   const reports = useTrafficStore((s) => s.reports)
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const openStarterTemplates = useTrafficStore((s) => s.openStarterTemplates)
+  const userPrefs = useTrafficStore((s) => s.userPrefs)
+  const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
@@ -234,6 +237,20 @@ export function HomeAgenda() {
             </div>
           </div>
           {empty ? (
+            <>
+            {!userPrefs.marketerRole && (
+              <div className="ag2-focus">
+                <span className="ag2-focus-q">What's your focus?</span>
+                {MARKETER_ROLES.map((r) => (
+                  <button key={r.value} className="ag2-focus-chip" title={r.hint} onClick={() => setUserPrefs({ marketerRole: r.value })}>
+                    {r.label}
+                  </button>
+                ))}
+                <button className="ag2-focus-skip" onClick={() => setUserPrefs({ marketerRole: null, skillLevel: userPrefs.skillLevel ?? 'advanced' })}>
+                  Skip
+                </button>
+              </div>
+            )}
             <div className="ag2-startcards">
               <button className="ag2-startcard primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
                 <span className="ag2-startcard-ic" aria-hidden="true">
@@ -250,6 +267,7 @@ export function HomeAgenda() {
                 <span className="ag2-startcard-sub">Point us at your site and we draft the brand for you to edit.</span>
               </button>
             </div>
+            </>
           ) : (
           <div className="ag2-chips">
             <button className="ag2-chip ag2-chip-primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>

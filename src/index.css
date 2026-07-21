@@ -25322,6 +25322,13 @@ table.aud-sheet td.stick .aud-cell {
 .ag2-ask-send { width: 34px; height: 34px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 16px; cursor: pointer; display: grid; place-items: center; }
 .ag2-ask-send:disabled { opacity: .4; cursor: default; }
 .ag2-chips { display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 10px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
+/* First-run focus chooser (P4): capture the marketer role on an empty workspace. */
+.ag2-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; justify-content: center; }
+.ag2-focus-q { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-right: 4px; }
+.ag2-focus-chip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.ag2-focus-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ag2-focus-skip { border: 0; background: none; color: var(--text-faint); font: inherit; font-size: 12.5px; cursor: pointer; padding: 6px 8px; }
+.ag2-focus-skip:hover { color: var(--text-muted); }
 /* Empty-workspace start cards: promote the two setup actions in place of the analytical chips. */
 .ag2-startcards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
 @media (max-width: 560px) { .ag2-startcards { grid-template-columns: 1fr; } }

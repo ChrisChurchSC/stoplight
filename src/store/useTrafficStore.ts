@@ -125,6 +125,7 @@ import { contribute, contributorId } from '../adapters/aggregate/aggregateOutcom
 import { ingestSite } from '../adapters/ask/ingestSite'
 import { DEFAULT_AI_MODEL } from '../domain/aiModels'
 import { DEFAULT_USER_PREFS, type UserPrefs } from '../domain/userPrefs'
+import { ROLE_PRESETS } from '../domain/roles'
 import { type Objective, freshObjectiveId } from '../domain/objective'
 import {
   type LibraryFolder,
@@ -6328,7 +6329,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => {
       const userPrefs = { ...s.userPrefs, ...patch }
       persistState(USER_PREFS_KEY, userPrefs)
-      return { userPrefs }
+      // On an explicit role pick, land on that role's home surface (bias only, everything reachable).
+      const preset = patch.marketerRole ? ROLE_PRESETS[patch.marketerRole] : null
+      return preset ? { userPrefs, page: preset.landingPage } : { userPrefs }
     }),
 
   openBreaks: (breakId) => set({ breaksOpen: true, activeBreakId: breakId ?? null }),
