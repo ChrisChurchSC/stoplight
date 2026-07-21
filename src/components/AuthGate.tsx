@@ -61,6 +61,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="auth-gate">
+      <a className="auth-changelog" href="/changelog">What&rsquo;s new</a>
       <div className="auth-center">
         <div className="auth-card">
         <div className="auth-title">{mode === 'in' ? 'Sign in' : 'Create your account'}</div>

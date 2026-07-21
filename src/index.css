@@ -15137,11 +15137,32 @@ button.cv-board-tab {
   font-size: 14px;
 }
 .auth-gate {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: #C29FED;
   overflow: hidden;
+}
+/* Public changelog link on the sign-in page — a glassy pill top-right on the purple field. */
+.auth-changelog {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 650;
+  color: #211d1a;
+  text-decoration: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.auth-changelog:hover {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(0, 0, 0, 0.5);
 }
 .auth-center {
   flex: 1 1 auto;
