@@ -1,6 +1,7 @@
 import { CHANNELS } from '../domain/channels'
 import { newAudience, type AudienceType } from '../domain/audiences'
 import { FUNNEL_STAGES } from '../domain/funnel'
+import { draftAngle } from '../adapters/ask/draftAngle'
 import type { RecordColumn, RecordField, RecordFieldKind } from '../domain/records'
 import type { ChannelId } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -96,8 +97,56 @@ export function SegmentsView() {
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const companies = useTrafficStore((s) => s.companies)
   const jumpToRecord = useTrafficStore((s) => s.jumpToRecord)
+  const brandRecords = useTrafficStore((s) => s.brandRecords)
+  const showToast = useTrafficStore((s) => s.showToast)
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   const audiences = clientAudiences[brand] ?? []
+
+  // Recommend the three INTERPRETIVE fields (message angle, funnel stage, conversion outcome) for one
+  // audience from its observable facts + the brand objective, so a user doesn't author them blank.
+  // Fill-when-empty: never clobbers a value the user already wrote. Maps the recommender's funnel KEY
+  // to the sheet's label (audience.funnelStage is display-only, stored as a label).
+  const recommendAngle = async (id: string) => {
+    const a = (useTrafficStore.getState().clientAudiences[brand] ?? []).find((x) => x.id === id)
+    if (!a) return
+    showToast(`Recommending an angle for ${a.name}…`)
+    const rec = brandRecords.find((b) => b.name === brand)
+    const demographics = [a.ageRanges?.join('/'), a.incomeRanges?.join('/'), a.gender, (a.geos ?? []).join('/')]
+      .filter(Boolean)
+      .join(', ')
+    const [drafted] = await draftAngle({
+      brand,
+      businessObjective: rec?.businessObjective,
+      positioning: rec?.positioning,
+      industry: rec?.industry,
+      audiences: [{
+        name: a.name,
+        role: a.role,
+        definition: a.definition,
+        pains: a.pains,
+        goalTags: a.goalTags,
+        triggers: a.triggers,
+        demographics: demographics || undefined,
+      }],
+    })
+    if (!drafted) { showToast('Could not recommend an angle right now.'); return }
+    const stageLabel = FUNNEL_STAGES.find((s) => s.stage === drafted.funnelStage)?.label ?? ''
+    const live = useTrafficStore.getState().clientAudiences[brand] ?? []
+    setClientAudiences(
+      brand,
+      live.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              messageAngle: x.messageAngle.trim() ? x.messageAngle : drafted.messageAngle,
+              funnelStage: x.funnelStage?.trim() ? x.funnelStage : stageLabel,
+              outcome: x.outcome?.trim() ? x.outcome : drafted.outcome,
+            }
+          : x,
+      ),
+    )
+    showToast(`Angle recommended for ${a.name}. ${drafted.rationale}`)
+  }
 
   const rows: SegRow[] = audiences.map((a) => {
     const r: SegRow = { id: a.id }
@@ -124,6 +173,7 @@ export function SegmentsView() {
       statuses={[]}
       rows={rows}
       noun={['audience', 'audiences']}
+      rowAction={{ label: 'Recommend angle', run: (r) => void recommendAngle(r.id) }}
       onAdd={() => {
         // Read the live array (not the render closure) so a paste that creates several rows in one
         // pass appends each one instead of clobbering the last. Return the id so paste can fill it.
