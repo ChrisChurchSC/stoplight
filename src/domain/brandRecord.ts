@@ -1,4 +1,5 @@
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
+import { INDUSTRIES } from './taxonomy'
 
 /**
  * A Brand record — the "Records › Brands" sheet: your own brands / clients, the entities you build
@@ -93,7 +94,7 @@ export const BRAND_COLUMNS: RecordColumn[] = [
   { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Overview' },
   { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', width: 150, group: 'Overview' },
   { key: 'reviewCycle', label: 'Review cadence', kind: 'text', width: 150, group: 'Overview', options: REVIEW_CADENCE_OPTIONS },
-  { key: 'industry', label: 'Industry', kind: 'text', width: 170, group: 'Overview' },
+  { key: 'industry', label: 'Industry', kind: 'text', width: 170, group: 'Overview', options: INDUSTRIES },
   { key: 'website', label: 'Website', kind: 'url', width: 180, group: 'Overview' },
   { key: 'businessObjective', label: 'Business objective', kind: 'text', width: 300, group: 'Strategic Foundation' },
   { key: 'commsObjective', label: 'Comms objective', kind: 'text', width: 280, group: 'Strategic Foundation' },
@@ -120,7 +121,7 @@ export const BRAND_FIELDS: RecordField[] = [
   { key: 'status', label: 'Status', kind: 'status', group: 'Overview' },
   { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', group: 'Overview' },
   { key: 'reviewCycle', label: 'Review cadence', kind: 'text', group: 'Overview', options: REVIEW_CADENCE_OPTIONS },
-  { key: 'industry', label: 'Industry', kind: 'text', group: 'Overview' },
+  { key: 'industry', label: 'Industry', kind: 'text', group: 'Overview', options: INDUSTRIES },
   { key: 'website', label: 'Website', kind: 'url', group: 'Overview' },
   { key: 'businessObjective', label: 'Business objective', kind: 'multiline', group: 'Strategic Foundation' },
   { key: 'commsObjective', label: 'Comms objective', kind: 'multiline', group: 'Strategic Foundation' },

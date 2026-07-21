@@ -188,6 +188,14 @@ export function BrandTable({
                               <option key={s} value={s}>{s}</option>
                             ))}
                           </select>
+                        ) : f.options ? (
+                          <select className="rec-status" value={v} onChange={(e) => set(f.key, e.target.value)}>
+                            <option value="">—</option>
+                            {v && !f.options.includes(v) && <option value={v}>{v}</option>}
+                            {f.options.map((o) => (
+                              <option key={o} value={o}>{o}</option>
+                            ))}
+                          </select>
                         ) : f.kind === 'url' ? (
                           <div className="rec-url">
                             <BufferedInput className="rec-cell rec-cell-url" value={v} onCommit={(nv) => set(f.key, nv)} placeholder="—" />

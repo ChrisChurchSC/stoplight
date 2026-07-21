@@ -1,5 +1,5 @@
 import { CHANNELS } from '../domain/channels'
-import { GENDERS } from '../domain/taxonomy'
+import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS } from '../domain/taxonomy'
 import { newAudience, type AudienceType } from '../domain/audiences'
 import { FUNNEL_STAGES } from '../domain/funnel'
 import { draftAngle } from '../adapters/ask/draftAngle'
@@ -53,7 +53,7 @@ const SPECS: Spec[] = [
   { key: 'antiMessage', label: 'Anti-message (what not to say)', kind: 'multiline', get: (a) => a.antiMessage || '', set: (a, v) => { a.antiMessage = v } },
   { key: 'outcome', label: 'Conversion outcome', kind: 'text', col: 160, get: (a) => a.outcome || '', set: (a, v) => { a.outcome = v } },
   { key: 'funnel', label: 'Funnel stage', kind: 'text', col: 130, options: FUNNEL_STAGES.map((s) => s.label), get: (a) => a.funnelStage || '', set: (a, v) => { a.funnelStage = v } },
-  { key: 'tier', label: 'Value tier', kind: 'text', col: 140, get: (a) => a.tier || '', set: (a, v) => { a.tier = v } },
+  { key: 'tier', label: 'Value tier', kind: 'text', col: 140, options: VALUE_TIERS, get: (a) => a.tier || '', set: (a, v) => { a.tier = v } },
   { key: 'strategy', label: 'GTM strategy', kind: 'text', get: (a) => a.strategy || '', set: (a, v) => { a.strategy = v } },
   { key: 'pains', label: 'Pains', kind: 'multiline', col: 240, sortable: false, get: (a) => line(a.pains), set: (a, v) => { a.pains = parseLines(v) } },
   { key: 'goals', label: 'Goals', kind: 'multiline', get: (a) => a.goals || '', set: (a, v) => { a.goals = v } },
@@ -66,9 +66,9 @@ const SPECS: Spec[] = [
   { key: 'aliases', label: 'Aliases', kind: 'multiline', get: (a) => line(a.aliases), set: (a, v) => { a.aliases = parseLines(v) } },
   { key: 'geos', label: 'Geographies', kind: 'multiline', get: (a) => line(a.geos), set: (a, v) => { a.geos = parseLines(v) } },
   { key: 'functions', label: 'Job functions', kind: 'multiline', get: (a) => line(a.functions), set: (a, v) => { a.functions = parseLines(v) } },
-  { key: 'seniority', label: 'Seniority', kind: 'text', get: (a) => a.seniority || '', set: (a, v) => { a.seniority = v } },
-  { key: 'industry', label: 'Industry', kind: 'text', get: (a) => a.industry || '', set: (a, v) => { a.industry = v } },
-  { key: 'companySize', label: 'Company size', kind: 'text', get: (a) => a.companySize || '', set: (a, v) => { a.companySize = v } },
+  { key: 'seniority', label: 'Seniority', kind: 'text', options: SENIORITIES, get: (a) => a.seniority || '', set: (a, v) => { a.seniority = v } },
+  { key: 'industry', label: 'Industry', kind: 'text', options: INDUSTRIES, get: (a) => a.industry || '', set: (a, v) => { a.industry = v } },
+  { key: 'companySize', label: 'Company size', kind: 'text', options: COMPANY_SIZES, get: (a) => a.companySize || '', set: (a, v) => { a.companySize = v } },
   { key: 'ageRanges', label: 'Age ranges', kind: 'text', col: 130, sortable: false, get: (a) => (a.ageRanges ?? []).join(', '), set: (a, v) => { a.ageRanges = parseCsv(v) } },
   { key: 'incomeRanges', label: 'Income ranges', kind: 'text', col: 140, sortable: false, get: (a) => (a.incomeRanges ?? []).join(', '), set: (a, v) => { a.incomeRanges = parseCsv(v) } },
   { key: 'gender', label: 'Gender', kind: 'text', col: 110, options: GENDERS, get: (a) => a.gender || '', set: (a, v) => { a.gender = v } },

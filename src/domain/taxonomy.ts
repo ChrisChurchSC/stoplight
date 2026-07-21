@@ -99,6 +99,9 @@ export const INCOME_RANGES = [
 
 export const GENDERS = ['All', 'Female', 'Male', 'Non-binary']
 
+/** How valuable / high-priority an audience is to the brand. */
+export const VALUE_TIERS = ['Primary', 'Secondary', 'Tertiary']
+
 export const SENIORITIES = [
   'Individual contributor',
   'Manager',
