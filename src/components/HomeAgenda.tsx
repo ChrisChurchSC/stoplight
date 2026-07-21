@@ -62,6 +62,7 @@ export function HomeAgenda() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const reports = useTrafficStore((s) => s.reports)
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
+  const openStarterTemplates = useTrafficStore((s) => s.openStarterTemplates)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
@@ -259,7 +260,7 @@ export function HomeAgenda() {
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
               Draft brand from your content
             </button>
-            <button className="ag2-chip" onClick={() => openHomeChat('Draft a new campaign for this brand')}>
+            <button className="ag2-chip" onClick={() => openStarterTemplates()}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
               Draft a campaign
             </button>

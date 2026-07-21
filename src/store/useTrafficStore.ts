@@ -1870,6 +1870,9 @@ interface TrafficState {
   audienceWizardOpen: boolean
   openAudienceWizard: () => void
   closeAudienceWizard: () => void
+  starterTemplatesOpen: boolean
+  openStarterTemplates: () => void
+  closeStarterTemplates: () => void
   /** "Claude sets up the workspace" flow (the manual route's connect + confirm). */
   setupOpen: boolean
   openSetup: () => void
@@ -2431,6 +2434,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   wizardOpen: false,
   wizardClient: null,
   audienceWizardOpen: false,
+  starterTemplatesOpen: false,
   setupOpen: false,
   onboardingActive: false,
   inviteOpen: false,
@@ -4319,6 +4323,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeWizard: () => set({ wizardOpen: false, wizardClient: null }),
   openAudienceWizard: () => set({ audienceWizardOpen: true }),
   closeAudienceWizard: () => set({ audienceWizardOpen: false }),
+  openStarterTemplates: () => set({ starterTemplatesOpen: true }),
+  closeStarterTemplates: () => set({ starterTemplatesOpen: false }),
 
   openSetup: () => set({ setupOpen: true }),
   closeSetup: () => set({ setupOpen: false }),

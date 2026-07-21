@@ -67,6 +67,7 @@ import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 import { GettingStarted } from './GettingStarted'
+import { StarterTemplates } from './StarterTemplates'
 import { Tour } from './Tour'
 import { Toast } from './Toast'
 
@@ -406,6 +407,7 @@ export function Workbench() {
       <SetupWizard />
       <Onboarding />
       <AudienceWizard />
+      <StarterTemplates />
       <GettingStarted />
       <Tour />
       <Toast />
