@@ -6108,6 +6108,18 @@ button {
   border-color: var(--accent);
   color: var(--accent);
 }
+/* Timing toggle (∞): flip a campaign between dated and always-on. Persistent + accent when the
+   campaign IS always-on, so the row's state is visible, not just on hover. */
+.ccal-timing-toggle {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.ccal-timing-toggle.on {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+}
 /* Remove a re-run flight (and its cloned assets); on the bar's right end, on row hover. */
 .ccal-bar-remove {
   position: absolute;

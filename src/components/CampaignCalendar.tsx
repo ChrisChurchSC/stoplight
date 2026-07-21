@@ -51,6 +51,8 @@ export function CampaignCalendar() {
   const removeFlightRun = useTrafficStore((s) => s.removeFlightRun)
   const rotateAlwaysOn = useTrafficStore((s) => s.rotateAlwaysOn)
   const showToastAction = useTrafficStore((s) => s.showToastAction)
+  const patchCampaign = useTrafficStore((s) => s.patchCampaign)
+  const showToast = useTrafficStore((s) => s.showToast)
   const brand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
   // How many months the timeline spans (the view zoom).
   const [viewMonths, setViewMonths] = useState(12)
@@ -342,6 +344,18 @@ export function CampaignCalendar() {
                         </svg>
                       </button>
                     )}
+                    <button
+                      className={`ccal-rerun ccal-timing-toggle${openEnded ? ' on' : ''}`}
+                      title={openEnded ? 'Always-on stream (evergreen, no end date) — click to make it a dated campaign' : 'Make this an always-on stream (evergreen, no end date)'}
+                      aria-label={openEnded ? 'Make dated campaign' : 'Make always-on'}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        patchCampaign(c.name, openEnded ? { timing: 'one-off', durationWeeks: 4 } : { timing: 'always-on', durationWeeks: 0 })
+                        showToast(openEnded ? `${display} is now a dated campaign.` : `${display} is now an always-on stream.`)
+                      }}
+                    >
+                      ∞
+                    </button>
                   </div>
                   <div className="ccal-track">
                     {months.map((m) => (
