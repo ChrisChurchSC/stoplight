@@ -19,12 +19,15 @@ export function BrandTable({
   statuses,
   onUpdate,
   onDelete,
+  deleteNote,
 }: {
   brand: BrandRecord
   fields: RecordField[]
   statuses: string[]
   onUpdate: (id: string, patch: Partial<BrandRecord>) => void
   onDelete?: (id: string) => void
+  /** Spells out what else the delete takes with it, e.g. "3 campaigns and 24 assets". */
+  deleteNote?: string
 }) {
   const val = (k: string) => ((brand as unknown as Record<string, unknown>)[k] ?? '').toString()
   const set = (k: string, v: string) => onUpdate(brand.id, { [k]: v } as Partial<BrandRecord>)
@@ -114,7 +117,9 @@ export function BrandTable({
               <span style={{ marginLeft: 'auto', flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 {confirmDelete ? (
                   <>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted, #5a6b72)' }}>Delete this brand?</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted, #5a6b72)' }}>
+                      Delete this brand{deleteNote ? `, and ${deleteNote}` : ''}?
+                    </span>
                     <button
                       type="button"
                       onClick={() => onDelete(brand.id)}

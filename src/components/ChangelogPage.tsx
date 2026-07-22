@@ -41,6 +41,9 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          "Deleting a brand now deletes the brand. It used to remove the name and its campaigns while leaving the canvases, timeline flights, library, folders, reports, chats and tasks behind, and because those sync to your workspace they came back on any other device or in a private window. One sweep now, so deleted means deleted everywhere.",
+          "The Back button is gone from the sidebar. It only ever restored the page, not the view you were actually looking at, and it pushed every other nav item down a row when it appeared. Use the “Campaigns / <name>” breadcrumb inside a campaign to step back out.",
+          'The Brand page no longer shows the first brand’s strategy when the brand you picked has none of its own.',
           "Home showed campaigns and tasks on a brand-new workspace. A workspace with no brands yet now always lands on the getting-started view.",
           'Choosing a motion in the chat now sticks, including on an existing campaign and when the motion you picked is Content and SEO.',
         ],

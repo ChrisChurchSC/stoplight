@@ -213,8 +213,6 @@ type NavPage =
 export function HomeSidebar() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
-  const pageHistory = useTrafficStore((s) => s.pageHistory)
-  const goBack = useTrafficStore((s) => s.goBack)
   const reopenOnboarding = useTrafficStore((s) => s.reopenOnboarding)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
@@ -326,14 +324,11 @@ export function HomeSidebar() {
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
       <nav className="sidebar-nav">
-        {pageHistory.length > 0 && (
-          <button className="nav-item hsb-back" onClick={goBack} title="Back to the previous page">
-            <span className="nav-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
-            </span>
-            <span className="nav-label">Back</span>
-          </button>
-        )}
+        {/* No global Back here. The rail is a list of destinations, and a history control that
+            appears and disappears shifted every item down a row. Back also only restored the PAGE,
+            never the sub-view you were actually looking at, so it rarely landed where you left.
+            Hierarchy has its own back where a parent really exists: the "Campaigns / <name>"
+            breadcrumb in a campaign, and the record back-link (recordBackTo). */}
         <button
           className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
           onClick={() => setPage('portfolio')}

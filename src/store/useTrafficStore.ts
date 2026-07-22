@@ -1455,10 +1455,6 @@ interface TrafficState {
    *  out of it. Set by jumpToRecord; cleared by any ordinary nav (setPage). */
   recordBackTo: TrafficState['page'] | null
   jumpToRecord: (id: string, page: TrafficState['page']) => void
-  /** Breadcrumb of visited pages so the shell can offer a plain "back" (navigation only, never an
-   *  undo stack). setPage pushes the page you're leaving; goBack pops. */
-  pageHistory: TrafficState['page'][]
-  goBack: () => void
   /** Which Library sub-view is open — nested under Library in the sidebar. */
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
@@ -2326,6 +2322,121 @@ async function flagRecheckMisfits(
   if (updates.length) await get().updateRows(updates)
 }
 
+/**
+ * Everything that makes a brand exist, swept in one pass.
+ *
+ * Deleting a brand used to clear six slices (client entry, profile, audiences, Drive link,
+ * campaigns, sheet rows) and leave the rest behind: canvases, flights, the messaging library,
+ * folders, reports, media mixes, chats, tasks, the brand record. Locally that READ as deleted,
+ * because most views scope through clientList, but the orphans were still mirrored to
+ * workspace_state, so a fresh device (or an incognito window) hydrated them straight back.
+ *
+ * Every write goes through the same save* helpers as a normal edit, so the purge propagates to
+ * the workspace exactly like any other change. Returns the state patch; the caller is
+ * responsible for removing the brand's sheet rows first (that side is async).
+ */
+function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
+  // Flights, chats and open tabs key off the campaign NAME, so we need name -> brand. campaignList
+  // is authoritative; the runtime registry is the fallback for a campaign that only exists there
+  // (registered by a builder before it was filed). Checking the list FIRST matters: campaign names
+  // are a global namespace, so a stale registry entry could otherwise attribute another brand's
+  // same-named campaign to this one and purge it.
+  const byName = new Map(s.campaignList.map((c) => [c.name, c.client]))
+  const ofBrand = (campaign?: string) => {
+    if (!campaign) return false
+    const filed = byName.get(campaign)
+    return filed !== undefined ? filed === name : clientForCampaign(campaign) === name
+  }
+  const dropKey = <T,>(map: Record<string, T>): Record<string, T> => {
+    const next = { ...map }
+    delete next[name]
+    return next
+  }
+  const dropCampaignKeys = <T,>(map: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(map).filter(([c]) => !ofBrand(c)))
+
+  const clientList = s.clientList.filter((c) => c !== name)
+  const campaignList = s.campaignList.filter((c) => c.client !== name)
+  const canvases = s.canvases.filter((c) => c.client !== name)
+  const artboards = s.artboards.filter((a) => a.client !== name)
+  const reports = s.reports.filter((r) => r.client !== name)
+  const pinnedInsights = s.pinnedInsights.filter((p) => p.client !== name)
+  const versions = s.versions.filter((v) => v.client !== name)
+  const mediaMixes = s.mediaMixes.filter((m) => m.brand !== name)
+  const flights = s.flights.filter((f) => !ofBrand(f.campaign))
+  const flowChats = s.flowChats.filter((c) => !ofBrand(c.flowKey))
+  const openProjects = s.openProjects.filter((c) => !ofBrand(c))
+  const brandRecords = s.brandRecords.filter((b) => b.name.trim() !== name)
+  const driveLinks = dropKey(s.driveLinks)
+  const clientProfiles = dropKey(s.clientProfiles)
+  const clientAudiences = dropKey(s.clientAudiences)
+  const brandSystems = dropKey(s.brandSystems)
+  const brandGuides = dropKey(s.brandGuides)
+  const brandActuals = dropKey(s.brandActuals)
+  const campaignFolders = dropKey(s.campaignFolders)
+  const campaignConditions = dropCampaignKeys(s.campaignConditions)
+  // activeCanvas is keyed "client|campaign".
+  const activeCanvas = Object.fromEntries(Object.entries(s.activeCanvas).filter(([k]) => k.split('|')[0] !== name))
+  // A surviving brand may still point AT the deleted one (parent / share / co-brand). Leaving those
+  // dangling would make resolveBrandScope reach for a library that no longer exists.
+  const brandMeta: BrandMetaMap = {}
+  for (const [b, meta] of Object.entries(dropKey(s.brandMeta))) {
+    const shares = meta.shares?.filter((x) => x !== name)
+    const coBrand = meta.coBrand?.filter((x) => x !== name)
+    brandMeta[b] = {
+      ...meta,
+      parent: meta.parent === name ? undefined : meta.parent,
+      shares: shares?.length ? shares : undefined,
+      coBrand: coBrand?.length ? coBrand : undefined,
+    }
+  }
+
+  saveClients(clientList)
+  saveCampaigns(campaignList)
+  saveCanvases(canvases)
+  saveArtboards(artboards)
+  saveReports(reports)
+  savePinned(pinnedInsights)
+  saveVersions(versions)
+  saveMediaMixes(mediaMixes)
+  saveFlights(flights)
+  saveFlowChats(flowChats)
+  saveOpenProjects(openProjects)
+  saveRecordList(BRAND_RECORDS_KEY, brandRecords)
+  saveDriveLinks(driveLinks)
+  saveClientProfiles(clientProfiles)
+  saveClientAudiences(clientAudiences)
+  saveBrandSystems(brandSystems)
+  saveBrandMeta(brandMeta)
+  saveBrandGuides(brandGuides)
+  saveBrandActuals(brandActuals)
+  saveCampaignFolders(campaignFolders)
+  saveConditions(campaignConditions)
+  saveActiveCanvas(activeCanvas)
+
+  // Tasks live in localStorage (TasksView owns them, not a store slice), and sync through the same
+  // workspace mirror, so they need the same sweep or a deleted brand's to-dos come back too.
+  try {
+    const raw = localStorage.getItem(TASKS_KEY)
+    const list: { brand?: string }[] = raw ? JSON.parse(raw) : []
+    if (Array.isArray(list)) {
+      const kept = list.filter((t) => (t.brand ?? '') !== name)
+      if (kept.length !== list.length) {
+        persistState(TASKS_KEY, kept)
+        window.dispatchEvent(new Event('stoplight:tasks'))
+      }
+    }
+  } catch {
+    /* malformed or unavailable storage — nothing to sweep */
+  }
+
+  return {
+    clientList, campaignList, canvases, artboards, reports, pinnedInsights, versions, mediaMixes,
+    flights, flowChats, openProjects, brandRecords, driveLinks, clientProfiles, clientAudiences,
+    brandSystems, brandMeta, brandGuides, brandActuals, campaignFolders, campaignConditions, activeCanvas,
+  }
+}
+
 export const useTrafficStore = create<TrafficState>((set, get) => ({
   assets: [],
   rows: [],
@@ -2350,7 +2461,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   page: initialShare ? 'flows' : 'portfolio',
   focusRecordId: null,
   recordBackTo: null,
-  pageHistory: [],
   libraryMode: 'catalog',
   brandTab: 'about',
   brandGuides: loadBrandGuides(),
@@ -2549,16 +2659,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const role = get().role
     if (page === 'billing' && !can(role, 'billing')) return
     if (page === 'connectors' && role !== 'owner') return
-    // Ordinary nav clears any pending record back-link so a stale "← Back" never lingers, and pushes
-    // the page you're leaving onto the history breadcrumb (dedup, capped) so goBack() can return.
-    set((s) => (s.page === page ? { page, recordBackTo: null } : { page, recordBackTo: null, pageHistory: [...s.pageHistory, s.page].slice(-30) }))
+    // Ordinary nav clears any pending record back-link so a stale "← Back" never lingers.
+    set({ page, recordBackTo: null })
   },
-  goBack: () =>
-    set((s) => {
-      const hist = [...s.pageHistory]
-      const prev = hist.pop()
-      return prev ? { page: prev, pageHistory: hist, recordBackTo: null } : {}
-    }),
   setLibraryMode: (libraryMode) => set({ libraryMode, page: 'content' }),
   focusRecord: (focusRecordId) => set({ focusRecordId }),
   // Jump to a record that lives on another page and remember where we came from, so that page can
@@ -3472,22 +3575,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       .rows.filter((r) => clientForCampaign(r.campaign) === name)
       .map((r) => r.id)
     for (const id of ids) await sheet.remove(id)
-    // Drop its persisted client entry, campaigns, and saved Drive link.
+    // Then sweep every other trace of the brand (see brandPurgePatch).
     set((s) => {
-      const clientList = s.clientList.filter((c) => c !== name)
-      const campaignList = s.campaignList.filter((c) => c.client !== name)
-      const driveLinks = { ...s.driveLinks }
-      delete driveLinks[name]
-      const clientProfiles = { ...s.clientProfiles }
-      delete clientProfiles[name]
-      const clientAudiences = { ...s.clientAudiences }
-      delete clientAudiences[name]
-      saveClients(clientList)
-      saveCampaigns(campaignList)
-      saveDriveLinks(driveLinks)
-      saveClientProfiles(clientProfiles)
-      saveClientAudiences(clientAudiences)
-      const next: Partial<TrafficState> = { clientList, campaignList, driveLinks, clientProfiles, clientAudiences }
+      const next = brandPurgePatch(s, name)
       // If we're scoped into the client being deleted, pop back to the overview.
       if (s.clientFilter === name) {
         next.clientFilter = 'all'
@@ -3610,13 +3700,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // Open a campaign in the Flows view instead of the legacy canvas — the project tabs use
   // this so a tab opens the flow. An empty name opens a fresh flow builder.
   openFlow: (name, flowView = 'flow') => {
-    // Push the page you're leaving so the shell "Back" can return here (e.g. after the wizard or the
-    // go-to-market flow drops you straight into a campaign). openFlow sets page directly, so it must
-    // record history itself rather than going through setPage.
-    const pageHistory = get().page !== 'flows' ? [...get().pageHistory, get().page].slice(-30) : get().pageHistory
     const campaign = name.trim()
     if (!campaign) {
-      set({ page: 'flows', flowOpen: '', flowOpenView: flowView, pageHistory })
+      set({ page: 'flows', flowOpen: '', flowOpenView: flowView })
       return
     }
     const client = clientForCampaign(campaign)
@@ -3626,7 +3712,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().openProject(campaign)
     // campaignFilter tracks the active tab; it's inert on the Flows page (FlowsView scopes
     // by its own viewName), so setting it only drives the tab highlight.
-    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView, pageHistory })
+    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView })
   },
   clearFlowOpen: () => set({ flowOpen: null, flowOpenView: 'flow' }),
   newCampaignParent: null,

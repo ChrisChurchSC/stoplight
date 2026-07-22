@@ -2834,9 +2834,6 @@ button {
 /* Chats promoted above the record sections: a light divider keeps it visually
    grouped with the primary nav rather than reading as another record section. */
 /* Sidebar "Back" — page-history navigation, shown only when there's somewhere to go back to. */
-.hsb-back { color: var(--text-muted); }
-.hsb-back:hover { color: var(--text); }
-.hsb-back svg { width: 16px; height: 16px; }
 .hsb-chats-promoted {
   margin-top: 10px;
   padding-bottom: 6px;
