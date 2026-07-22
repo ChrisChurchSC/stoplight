@@ -28,7 +28,7 @@ const RELEASES: Release[] = [
           'The campaign chat now starts with strategy. It asks one thing, what this campaign should do for the brand, then recommends a proven go-to-market motion and sets it on the campaign, so what gets built follows a real plan instead of a default playbook.',
           "The chat can create the pieces you're missing. When a campaign needs an audience or a proof point that isn't in your library yet, it adds a clearly labelled draft for you to fill in, rather than stalling or tagging something unrelated.",
           'Tappable follow-ups under every reply, and when the chat asks you a question, the answers come as chips you can tap.',
-          'A proper first run. Breadcrumbs asks two short questions about you, what you work on and how much detail you want, one at a time with nothing else on screen, then takes you straight into setting up your first brand. Draft it from your website, or be walked through it a question at a time. It only appears for a brand-new workspace.',
+          'A proper first run. Breadcrumbs asks two short questions about you, what you work on and how much detail you want, one at a time with nothing else on screen, then takes you straight into setting up your first brand. Draft it from your website, or be walked through it a question at a time. Setup happens on its own quiet surface, so you finish the whole thing in one place and arrive in your workspace once, when there is finally something in it. It only appears for a brand-new workspace.',
         ],
       },
       {

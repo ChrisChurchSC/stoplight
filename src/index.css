@@ -26447,7 +26447,13 @@ table.aud-sheet td.stick .aud-cell {
    the screen, which was the whole problem with asking these on Home. */
 .wel {
   position: fixed; inset: 0; z-index: 90;
-  background: var(--bg); display: grid; place-items: center; padding: 24px;
+  /* Deliberately NOT var(--bg). Sharing the app's ground made onboarding read as the app with
+     everything missing, rather than as its own place you pass through once. A warmer paper with a
+     faint accent bloom, and no chrome at all, so crossing into the workspace is a real arrival. */
+  background:
+    radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 60%),
+    #fbf9f8;
+  display: grid; place-items: center; padding: 24px;
   overflow-y: auto;
 }
 .wel-inner { width: min(560px, 100%); display: flex; flex-direction: column; gap: 26px; }
@@ -26496,3 +26502,33 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 9px; font-weight: 800; letter-spacing: 0.08em; padding: 1px 4px; border-radius: 3px;
   background: rgba(255, 255, 255, 0.18); color: #fff;
 }
+
+/* The brand-setup conversation, still on the onboarding surface. Same chat the app uses, framed as
+   part of the sequence, so there is ONE crossing into the workspace (when the brand exists) rather
+   than a jump into full app chrome mid-question. */
+.wel-setup { place-items: stretch; padding: 0; }
+.wel-setup-head {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 18px 24px 0; flex: 0 0 auto;
+}
+.wel-setup-step { font-size: 12px; font-weight: 600; color: var(--text-faint); }
+.wel-setup-body { min-height: 0; display: flex; flex-direction: column; padding: 0 24px 24px; }
+.wel-setup-body .hchat { flex: 1; min-height: 0; max-width: 820px; width: 100%; margin: 0 auto; background: transparent; }
+/* The chat's own "back to Home" and "new chat" controls belong to the app, not to a setup you are
+   part-way through: leaving is the sequence's job, not a header link's. */
+.wel-setup-body .hchat-top { display: none; }
+.wel-setup-head { position: relative; }
+.wel-setup-back {
+  position: absolute; left: 24px; top: 16px;
+  border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--text-faint);
+  cursor: pointer; padding: 6px 8px;
+}
+.wel-setup-back:hover { color: var(--text-muted); }
+/* Inline in the head, not pinned to the corner: it collided with the dev reset button, and it
+   reads better as the next thing in the sequence than as a floating action. */
+.wel-setup-go {
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  font: inherit; font-size: 12.5px; font-weight: 650; border-radius: 999px;
+  padding: 7px 14px; cursor: pointer;
+}
+.wel-setup-go:hover { filter: brightness(1.06); }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED } from '../domain/guidedSetup'
 import { MARKETER_ROLES, SKILL_LEVELS, type MarketerRole, type SkillLevel } from '../domain/userPrefs'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { HomeChat } from './HomeChat'
 import { Wordmark } from './Wordmark'
 
 /**
@@ -23,37 +24,100 @@ export function Welcome() {
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
+  const closeHomeChat = useTrafficStore((s) => s.closeHomeChat)
+  const openSavedHomeChat = useTrafficStore((s) => s.openSavedHomeChat)
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const clientList = useTrafficStore((s) => s.clientList)
   const flightsHydrated = useTrafficStore((s) => s.flightsHydrated)
   const sharedSession = useTrafficStore((s) => s.sharedSession)
 
+  const homeChatOpen = useTrafficStore((s) => s.homeChatOpen)
+
   const [step, setStep] = useState<0 | 1 | 2>(0)
   const [role, setRole] = useState<MarketerRole | null>(null)
   const [skill, setSkill] = useState<SkillLevel | null>(null)
+  // 'setup' keeps the brand-setup conversation ON this surface instead of handing off to the app
+  // mid-task. Onboarding ends by itself the moment a brand exists (see the stamp effect below),
+  // so the workspace appears once, when there is finally something in it.
+  const [phase, setPhase] = useState<'ask' | 'setup'>('ask')
 
   const fresh = Object.keys(clientProfiles).length === 0 && clientList.length === 0
   // Wait for hydration before judging emptiness, or an existing workspace flashes this on every load.
   const unresolved = userPrefs.onboardedAt == null
-  const show = flightsHydrated && unresolved && fresh && !sharedSession
+  // `fresh || phase === 'setup'`: once a setup conversation is running here it has to KEEP running
+  // here, even after it creates the brand. Gating on freshness alone tore this surface down the
+  // instant the brand existed, mid-conversation, which reset the chat and lost the transcript.
+  const show = flightsHydrated && unresolved && !sharedSession && (fresh || phase === 'setup')
 
   // A workspace that already has brands never needed this. Stamp it once so the question is settled
   // and deleting every brand later cannot resurrect a first-run screen.
   useEffect(() => {
+    // Never while a setup conversation is running on this surface: ending onboarding unmounts this
+    // component, which would tear down the chat mid-sentence and lose the transcript. Crossing into
+    // the workspace is a deliberate act there (see "Go to my workspace" below).
+    if (phase === 'setup') return
     if (flightsHydrated && unresolved && !fresh) setUserPrefs({ onboardedAt: Date.now() })
-  }, [flightsHydrated, unresolved, fresh, setUserPrefs])
+  }, [phase, flightsHydrated, unresolved, fresh, setUserPrefs])
+
+  // The setup conversation has its own way out ("← Home"). Backing out there returns to the step it
+  // was launched from, rather than stranding this surface around a closed chat.
+  useEffect(() => {
+    if (phase === 'setup' && !homeChatOpen) setPhase('ask')
+  }, [phase, homeChatOpen])
 
   if (!show) return null
 
-  // Record the answers and stand down. `seed` opens the chosen brand-setup route on the way out;
-  // without one we just land on Home, where the same two routes are the first thing on the page.
-  const complete = (seed?: string) => {
-    setUserPrefs({
-      ...(role ? { marketerRole: role } : {}),
-      ...(skill ? { skillLevel: skill } : {}),
-      onboardedAt: Date.now(),
-    })
-    if (seed) openHomeChat(seed)
+  const prefs = () => ({ ...(role ? { marketerRole: role } : {}), ...(skill ? { skillLevel: skill } : {}) })
+
+  // Start a brand-setup route WITHOUT resolving onboarding: the conversation runs inside this
+  // surface, and the stamp effect above ends onboarding when the brand actually exists. So the app
+  // appears exactly once, around a workspace that now has something in it.
+  const startSetup = (seed: string) => {
+    setUserPrefs(prefs())
+    openHomeChat(seed)
+    setPhase('setup')
+  }
+
+  // Leave without setting a brand up: resolve onboarding and land on Home, where the same two
+  // routes are the first thing on the page.
+  const leave = () => setUserPrefs({ ...prefs(), onboardedAt: Date.now() })
+
+  // Cross into the workspace, carrying the conversation with you. The chat is saved after every
+  // settled turn, so reopening the newest one means the app picks up exactly where this left off
+  // instead of greeting you with a fresh, empty chat that has forgotten your answers.
+  const enterWorkspace = () => {
+    const latest = useTrafficStore.getState().homeChats[0]
+    if (latest) openSavedHomeChat(latest.id)
+    // Only the stamp. startSetup already saved the role, and re-sending it makes setUserPrefs fire
+    // its role-landing again, which both threw you onto a working page you did not ask for and
+    // overrode the page the reopened chat had just set.
+    setUserPrefs({ onboardedAt: Date.now() })
+  }
+
+  if (phase === 'setup') {
+    return (
+      <div className="wel wel-setup" role="dialog" aria-label="Set up your brand">
+        <div className="wel-setup-head">
+          {/* The chat's own header is hidden here (its "back to Home" belongs to the app, not to a
+              setup you are part-way through), so the way out lives on this frame instead. */}
+          <button className="wel-setup-back" onClick={closeHomeChat}>
+            Back
+          </button>
+          <Wordmark />
+          <span className="wel-setup-step">Setting up your brand</span>
+          {/* Appears the moment the brand is real, so leaving is a choice rather than something that
+              happens to you halfway through a sentence. */}
+          {!fresh && (
+            <button className="wel-setup-go" onClick={enterWorkspace}>
+              Go to my workspace
+            </button>
+          )}
+        </div>
+        <div className="wel-setup-body">
+          <HomeChat key="onboarding-setup" />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -137,14 +201,14 @@ export function Welcome() {
               on. Pick how you want to start and we will do it together.
             </p>
             <div className="wel-opts">
-              <button className="wel-opt" onClick={() => complete(BUILD_BRAND_SEED)}>
+              <button className="wel-opt" onClick={() => startSetup(BUILD_BRAND_SEED)}>
                 <span className="wel-opt-label">Draft it from my website</span>
                 <span className="wel-opt-hint">
                   Point us at your site and we draft your voice, audiences and proof from your real
                   content, for you to edit.
                 </span>
               </button>
-              <button className="wel-opt" onClick={() => complete(GUIDED_SETUP_SEED)}>
+              <button className="wel-opt" onClick={() => startSetup(GUIDED_SETUP_SEED)}>
                 <span className="wel-opt-label">Walk me through it</span>
                 <span className="wel-opt-hint">
                   A guided setup, one short question at a time. Every answer creates something real.
@@ -155,7 +219,7 @@ export function Welcome() {
               <button className="wel-back" onClick={() => setStep(1)}>
                 Back
               </button>
-              <button className="wel-skip" onClick={() => complete()}>
+              <button className="wel-skip" onClick={leave}>
                 I&rsquo;ll do this later
               </button>
             </div>
