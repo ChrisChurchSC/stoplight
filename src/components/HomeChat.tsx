@@ -1228,11 +1228,10 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const gtm = audienceChannels && objectives > 0
     const campaign = s.campaignList.some((c) => !c.archivedAt && c.client === brand && c.name !== CONTENT_LIBRARY_CAMPAIGN)
 
-    if (!connected)
-      return {
-        text: `Next for **${brand}**: connect your accounts (Google Analytics + Search Console, Resend) so everything after is built from real data, not guesses.${website ? '' : ` Add ${brand}'s website there too so I can pull your site.`} Open the account menu (bottom left), then Apps and integrations.`,
-        guide: { label: 'Open connectors', step: 'connect' },
-      }
+    // Connecting analytics used to be FIRST, so the very next thing after someone told us their
+    // brand name was an OAuth consent screen, before they had a brand page for the data to inform.
+    // It is account plumbing, not a step in building a brand: it belongs after there is something to
+    // measure. Ordering is now build -> go-to-market -> connect -> campaign.
     if (!foundation)
       return {
         text: `Now build **${brand}**'s brand page from your real content: I'll pull your site and published work, then draft your audiences, voice, proof points, and messages from it.`,
@@ -1242,6 +1241,11 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       return {
         text: `Foundation's set. Next, your go-to-market: which channels to use (weighted by your real traffic) and what to aim for.`,
         guide: { label: 'Build go-to-market', step: 'gtm' },
+      }
+    if (!connected)
+      return {
+        text: `**${brand}**'s foundation is set. Connect your accounts now (Google Analytics, Search Console, Resend) and everything from here is measured against real numbers rather than estimates.${website ? '' : ` You can add ${brand}'s website there too.`}`,
+        guide: { label: 'Open connectors', step: 'connect' },
       }
     if (!campaign)
       return {
