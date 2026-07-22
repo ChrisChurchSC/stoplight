@@ -23,15 +23,11 @@ import { Wordmark } from './Wordmark'
 export function Welcome() {
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
-  const openHomeChat = useTrafficStore((s) => s.openHomeChat)
-  const closeHomeChat = useTrafficStore((s) => s.closeHomeChat)
   const openSavedHomeChat = useTrafficStore((s) => s.openSavedHomeChat)
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const clientList = useTrafficStore((s) => s.clientList)
   const flightsHydrated = useTrafficStore((s) => s.flightsHydrated)
   const sharedSession = useTrafficStore((s) => s.sharedSession)
-
-  const homeChatOpen = useTrafficStore((s) => s.homeChatOpen)
 
   const [step, setStep] = useState<0 | 1 | 2>(0)
   const [role, setRole] = useState<MarketerRole | null>(null)
@@ -40,6 +36,7 @@ export function Welcome() {
   // mid-task. Onboarding ends by itself the moment a brand exists (see the stamp effect below),
   // so the workspace appears once, when there is finally something in it.
   const [phase, setPhase] = useState<'ask' | 'setup'>('ask')
+  const [seed, setSeed] = useState<string>()
 
   const fresh = Object.keys(clientProfiles).length === 0 && clientList.length === 0
   // Wait for hydration before judging emptiness, or an existing workspace flashes this on every load.
@@ -59,12 +56,6 @@ export function Welcome() {
     if (flightsHydrated && unresolved && !fresh) setUserPrefs({ onboardedAt: Date.now() })
   }, [phase, flightsHydrated, unresolved, fresh, setUserPrefs])
 
-  // The setup conversation has its own way out ("← Home"). Backing out there returns to the step it
-  // was launched from, rather than stranding this surface around a closed chat.
-  useEffect(() => {
-    if (phase === 'setup' && !homeChatOpen) setPhase('ask')
-  }, [phase, homeChatOpen])
-
   if (!show) return null
 
   const prefs = () => ({ ...(role ? { marketerRole: role } : {}), ...(skill ? { skillLevel: skill } : {}) })
@@ -72,9 +63,12 @@ export function Welcome() {
   // Start a brand-setup route WITHOUT resolving onboarding: the conversation runs inside this
   // surface, and the stamp effect above ends onboarding when the brand actually exists. So the app
   // appears exactly once, around a workspace that now has something in it.
-  const startSetup = (seed: string) => {
+  const startSetup = (chosen: string) => {
     setUserPrefs(prefs())
-    openHomeChat(seed)
+    // Deliberately NOT openHomeChat: it sets page:'portfolio' in the same commit, which mounts a
+    // second HomeChat in Portfolio behind this overlay. Both instances then ran their mount effect
+    // and consumed the seed. The embedded instance below is the only one.
+    setSeed(chosen)
     setPhase('setup')
   }
 
@@ -100,7 +94,7 @@ export function Welcome() {
         <div className="wel-setup-head">
           {/* The chat's own header is hidden here (its "back to Home" belongs to the app, not to a
               setup you are part-way through), so the way out lives on this frame instead. */}
-          <button className="wel-setup-back" onClick={closeHomeChat}>
+          <button className="wel-setup-back" onClick={() => setPhase('ask')}>
             Back
           </button>
           <Wordmark />
@@ -114,7 +108,7 @@ export function Welcome() {
           )}
         </div>
         <div className="wel-setup-body">
-          <HomeChat key="onboarding-setup" />
+          <HomeChat key="onboarding-setup" embedded seed={seed} onExit={() => setPhase('ask')} />
         </div>
       </div>
     )

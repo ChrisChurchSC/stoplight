@@ -238,6 +238,42 @@ function askApi(): PluginOption {
 }
 
 /**
+ * Dev-server endpoint for the BRAND STRATEGY draft (pass 1 of the brand-page build, the one that
+ * fills 17 of the 26 brand fields). It existed only in the Vercel catch-all, so in local dev it
+ * 404ed and the chat reported "Couldn't draft the strategy yet. Add a website or one-liner" no
+ * matter what the user had supplied. Every local test of "is the brand page complete" was
+ * measuring a pipeline whose first and widest pass never ran.
+ */
+function draftBrandProfileApi(): PluginOption {
+  return {
+    name: 'draft-brand-profile-api',
+    configureServer(server) {
+      server.middlewares.use('/api/draft-brand-profile', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runDraftBrandProfile } = await import('./server/draftBrandProfileHandler')
+            const result = await runDraftBrandProfile(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for "Draft proof points with Claude". Keeps the key
  * server-side; mirrors /api/claude-ask. 501 when no key, so the client falls back.
  */
@@ -1076,6 +1112,7 @@ export default defineConfig(({ mode }) => {
       draftCopyApi(),
       draftCellApi(),
       draftProofApi(),
+    draftBrandProfileApi(),
       draftAudiencesApi(),
       draftMessagesApi(),
       draftVoicesApi(),

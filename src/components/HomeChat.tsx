@@ -85,7 +85,15 @@ const FLOW_PROMPT: Record<FlowStep, { text: string; label: string }> = {
   objectives: { text: `And **objectives**, what to measure and how often to report. Want me to draft them?`, label: 'Draft objectives' },
 }
 
-export function HomeChat() {
+/**
+ * When `embedded`, this chat is running inside another surface that owns the screen (today: the
+ * first-run onboarding sequence). Two things change: it takes its opening seed from the prop rather
+ * than the global `homeChatSeed`, and it never closes itself or navigates the app away. Both matter
+ * because the app-global path (`openHomeChat`) also sets `page:'portfolio'`, which mounts a SECOND
+ * HomeChat in Portfolio behind the overlay, and any of the ~19 "go look at X" exits would tear the
+ * onboarding surface down mid-setup.
+ */
+export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolean; seed?: string; onExit?: () => void } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
@@ -110,6 +118,7 @@ export function HomeChat() {
   const addClient = useTrafficStore((s) => s.addClient)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
+  const markBrandFields = useTrafficStore((s) => s.markBrandFields)
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addMessage = useTrafficStore((s) => s.addMessage)
@@ -259,6 +268,8 @@ export function HomeChat() {
       say(step.prompt(st.brand))
       return
     }
+    // Everything typed here is the USER's own words. Mark it so, or the brand drafter overwrites it
+    // (its schema returns a value for every field, so it has an opinion about all of them).
     if (step.key === 'brand') {
       addClient(val)
       addBrandRecord({ name: val })
@@ -266,8 +277,16 @@ export function HomeChat() {
       st.brand = val
     } else if (step.key === 'oneliner') {
       setClientProfile(st.brand, { oneLiner: val })
+      markBrandFields(st.brand, ['oneLiner'], 'user')
     } else if (step.key === 'website') {
-      if (val.toLowerCase() !== 'skip') setClientProfile(st.brand, { website: val })
+      if (val.toLowerCase() !== 'skip') {
+        setClientProfile(st.brand, { website: val })
+        // Onto the record too, not just the profile: the Brand sheet reads the record, and until
+        // both agree the sheet shows an empty website for a brand that has one.
+        const rec = useTrafficStore.getState().brandRecords.find((b) => b.name === st.brand)
+        if (rec) updateBrandRecord(rec.id, { website: val })
+        markBrandFields(st.brand, ['website'], 'user')
+      }
     }
     const next = st.step + 1
     if (next < GUIDED_SETUP_STEPS.length) {
@@ -318,7 +337,7 @@ export function HomeChat() {
   const draftProofPoints = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('proofpoints'); return }
+    if (!brand || brand === 'all') { exitToPage('proofpoints'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     // The rich brand context (positioning, differentiator, objective, …) lives on the brand record.
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
@@ -400,7 +419,7 @@ export function HomeChat() {
   const addAudiences = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('segments'); return }
+    if (!brand || brand === 'all') { exitToPage('segments'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const current = store.clientAudiences[brand] ?? []
@@ -437,7 +456,7 @@ export function HomeChat() {
   const draftBrandMessages = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('messages'); return }
+    if (!brand || brand === 'all') { exitToPage('messages'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const audiences = (store.clientAudiences[brand] ?? []).map((a) => a.name)
@@ -459,7 +478,7 @@ export function HomeChat() {
   const addBrandVoices = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('voices'); return }
+    if (!brand || brand === 'all') { exitToPage('voices'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const existing = store.voices.filter((v) => !v.brand || v.brand === brand).map((v) => v.name)
@@ -478,7 +497,7 @@ export function HomeChat() {
   const draftBrandObjectives = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('objectives'); return }
+    if (!brand || brand === 'all') { exitToPage('objectives'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const existing = store.objectives.filter((o) => !o.brand || o.brand === brand).map((o) => o.name)
@@ -500,7 +519,7 @@ export function HomeChat() {
   const setBrandChannels = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('channelrecords'); return }
+    if (!brand || brand === 'all') { exitToPage('channelrecords'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const allAud = store.clientAudiences[brand] ?? []
@@ -543,7 +562,7 @@ export function HomeChat() {
   const recommendAngles = async () => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('segments'); return }
+    if (!brand || brand === 'all') { exitToPage('segments'); return }
     const allAud = store.clientAudiences[brand] ?? []
     const pursued = gtmPursuedRef.current
     const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
@@ -597,7 +616,7 @@ export function HomeChat() {
   const ingestBrandContent = async (urlOverride?: string) => {
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('content'); return }
+    if (!brand || brand === 'all') { exitToPage('content'); return }
     const profile = (store.clientProfiles[brand] ?? {}) as { website?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const website = (urlOverride || profile.website || rec.website || '').trim()
@@ -681,17 +700,30 @@ export function HomeChat() {
         'keyMessage', 'supportingMessages', 'proofPoints', 'languageDos',
         'languageDonts', 'contentPillars', 'reviewCadence', 'risks',
       ]
+      // The drafter's schema marks all 26 fields required, so it ALWAYS returns a non-empty value
+      // for every one. Writing them all back unconditionally meant a user who typed their own
+      // one-liner or industry during setup had it replaced by the model's guess minutes later.
+      // Fields the user claimed are theirs; the draft fills the rest.
+      const owned = useTrafficStore.getState().userOwnedBrandFields(brand)
       const recFields: Record<string, unknown> = {}
       const draftRec = draft as Record<string, unknown>
       for (const k of EVERGREEN_KEYS) {
+        if (owned.has(k)) continue
         const v = draftRec[k]
         if (typeof v === 'string' && v.trim()) recFields[k] = v
       }
       if (typeof recFields.differentiator === 'string') {
         recFields.differentiator = recFields.differentiator.split(/[\n;]+/).map((s) => s.trim()).filter(Boolean).join('\n')
       }
-      updateBrandRecord(rec.id, recFields as Partial<BrandRecord>)
-      if (draft.oneLiner) setClientProfile(brand, { oneLiner: draft.oneLiner })
+      const written = Object.keys(recFields)
+      if (written.length) updateBrandRecord(rec.id, recFields as Partial<BrandRecord>)
+      if (draft.oneLiner && !owned.has('oneLiner')) {
+        setClientProfile(brand, { oneLiner: draft.oneLiner })
+        written.push('oneLiner')
+      }
+      // Record what the model wrote, so the review screen can label it as a draft rather than
+      // presenting the machine's guesses back to the user as if they were their own words.
+      if (written.length) useTrafficStore.getState().markBrandFields(brand, written, 'model')
     }
     setMessages((m) =>
       m.map((x) =>
@@ -893,7 +925,7 @@ export function HomeChat() {
   const startMeasure = async () => {
     setQ('')
     const brand = useTrafficStore.getState().clientFilter
-    if (!brand || brand === 'all') { closeHomeChat(); setPage('reports'); return }
+    if (!brand || brand === 'all') { exitToPage('reports'); return }
     // Objectives define what to measure. If none exist yet, draft them first (this also covers cadence).
     if (!useTrafficStore.getState().objectives.filter((o) => !o.brand || o.brand === brand).length) {
       await draftBrandObjectives()
@@ -1182,11 +1214,18 @@ export function HomeChat() {
     return { text: `**${brand}** is fully set up. Draft another campaign, or refine any part of the foundation.`, guide: { label: 'Draft a campaign', step: 'campaign' } }
   }
 
+  // Leaving the chat for another page. Inert while embedded: the host surface owns navigation, and
+  // closing here would end onboarding as a side effect of asking to look at something.
+  const exitToPage = (p: Parameters<typeof setPage>[0]) => {
+    if (embedded) return
+    closeHomeChat()
+    setPage(p)
+  }
+
   const runGuideStep = (step: NonNullable<Msg['guide']>['step']) => {
     if (step === 'setup') startSetup()
     else if (step === 'connect') {
-      closeHomeChat()
-      setPage('connectors')
+      exitToPage('connectors')
     } else if (step === 'build') void buildBrandFromContent()
     else if (step === 'gtm') startGtmFlow()
     else if (step === 'campaign') startFlowBuild()
@@ -1212,13 +1251,16 @@ export function HomeChat() {
       }
       return
     }
-    if (homeChatSeed && seededRef.current !== homeChatSeed) {
-      seededRef.current = homeChatSeed
-      if (homeChatSeed === GUIDED_SETUP_SEED) startSetup()
-      else if (homeChatSeed === BUILD_BRAND_SEED) void buildBrandFromContent()
-      else void run(homeChatSeed)
-      useTrafficStore.setState({ homeChatSeed: null })
-    } else if (!homeChatSeed && seededRef.current !== 'nudged') {
+    // Embedded takes its seed from the prop: the global one is consumed by whichever instance mounts
+    // first, and it is nulled on use, so a second instance would either double-run it or lose it.
+    const openWith = embedded ? seed : homeChatSeed
+    if (openWith && seededRef.current !== openWith) {
+      seededRef.current = openWith
+      if (openWith === GUIDED_SETUP_SEED) startSetup()
+      else if (openWith === BUILD_BRAND_SEED) void buildBrandFromContent()
+      else void run(openWith)
+      if (!embedded) useTrafficStore.setState({ homeChatSeed: null })
+    } else if (!openWith && seededRef.current !== 'nudged') {
       // Blank open (no seed, no saved chat): steer the user to the single best next setup step, so the
       // chat always points at the right next thing in order instead of a wall of equal options.
       seededRef.current = 'nudged'
@@ -1279,7 +1321,7 @@ export function HomeChat() {
   return (
     <div className="hchat">
       <header className="hchat-top">
-        <button className="hchat-back" onClick={closeHomeChat}>
+        <button className="hchat-back" onClick={() => (embedded ? onExit?.() : closeHomeChat())}>
           ← Home
         </button>
         <button className="hchat-new" onClick={newHomeChat} title="Start a new chat">
@@ -1340,8 +1382,7 @@ export function HomeChat() {
                       className="hchat-report-open"
                       onClick={() => {
                         setClientFilter(m.reportBrand!)
-                        closeHomeChat()
-                        setPage('reports')
+                        exitToPage('reports')
                       }}
                     >
                       View report →
@@ -1372,37 +1413,37 @@ export function HomeChat() {
                   )}
                   {m.proofDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('proofpoints') }}>View proof points</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('proofpoints') }}>View proof points</button>
                     </div>
                   )}
                   {m.audienceDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('segments') }}>View audiences</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('segments') }}>View audiences</button>
                     </div>
                   )}
                   {m.messageDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('messages') }}>View messages</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('messages') }}>View messages</button>
                     </div>
                   )}
                   {m.voiceDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('voices') }}>View voices</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('voices') }}>View voices</button>
                     </div>
                   )}
                   {m.objectiveDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('objectives') }}>View objectives</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('objectives') }}>View objectives</button>
                     </div>
                   )}
                   {m.channelDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('channelrecords') }}>View channels</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('channelrecords') }}>View channels</button>
                     </div>
                   )}
                   {m.ingestDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setPage('content') }}>View Library</button>
+                      <button className="hchat-setup-btn" onClick={() => { exitToPage('content') }}>View Library</button>
                     </div>
                   )}
                   {m.gtmOffer && (
@@ -1419,7 +1460,7 @@ export function HomeChat() {
                   )}
                   {m.flowBuiltName && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'flow') }}>Open campaign</button>
+                      <button className="hchat-setup-btn" onClick={() => { if (embedded) return; const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'flow') }}>Open campaign</button>
                     </div>
                   )}
                   {m.flowStep && (
@@ -1462,7 +1503,7 @@ export function HomeChat() {
                   )}
                   {m.measureDone && (
                     <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { closeHomeChat(); setLibraryMode('data') }}>View Insights</button>
+                      <button className="hchat-setup-btn" onClick={() => { if (embedded) return; closeHomeChat(); setLibraryMode('data') }}>View Insights</button>
                     </div>
                   )}
                   {m.source && <div className="hchat-source">{m.source}</div>}

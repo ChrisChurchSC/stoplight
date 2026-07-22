@@ -1173,6 +1173,37 @@ function saveBrandGuides(map: Record<string, BrandGuideEntry>): void {
   }
 }
 
+/**
+ * Who wrote each brand field: the person, or a drafting pass.
+ *
+ * Needed because the brand drafter fills every field it is asked for (its response schema marks all
+ * 26 required, so nothing ever comes back empty) and used to write all of them over the top of
+ * whatever was there. A user who typed their own one-liner during setup had it replaced by the
+ * model's version minutes later. Provenance is the only way to tell "you have not said" from "you
+ * said, and I overwrote you", and the review screen needs the same distinction to show what is a
+ * draft versus what is the user's own words.
+ *
+ * Keyed by brand, then by field name. Absent means unknown, which is treated as model-owned so a
+ * re-draft can still refresh fields written before this existed.
+ */
+const BRAND_FIELD_SOURCES_KEY = 'stoplight.brandFieldSources.v1'
+export type FieldSource = 'user' | 'model'
+function loadBrandFieldSources(): Record<string, Record<string, FieldSource>> {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRAND_FIELD_SOURCES_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+function saveBrandFieldSources(map: Record<string, Record<string, FieldSource>>): void {
+  try {
+    persistState(BRAND_FIELD_SOURCES_KEY, map)
+  } catch {
+    /* ignore */
+  }
+}
+
 // Account-wide switch for contributing to (and reading from) the anonymized
 // aggregate learning layer. Default-on; one opt-out for the whole account.
 const AGG_CONTRIB_KEY = 'stoplight.aggregateContributing.v1'
@@ -1654,6 +1685,12 @@ interface TrafficState {
   ingestContent: (brand: string) => Promise<void>
   /** Onboarding readiness: starter brand guides per client + the drawer state. */
   brandGuides: Record<string, BrandGuideEntry>
+  /** Who wrote each brand field, per brand: 'user' fields are never overwritten by a drafting pass. */
+  brandFieldSources: Record<string, Record<string, FieldSource>>
+  /** Record authorship for a set of brand fields. Call it right after writing them. */
+  markBrandFields: (brand: string, fields: string[], source: FieldSource) => void
+  /** The fields this brand's owner supplied themselves, as a set for cheap lookup. */
+  userOwnedBrandFields: (brand: string) => Set<string>
   readinessOpen: boolean
   openReadiness: () => void
   /** Onboarding-as-diagnosis: the before→after reveal on the brand's own data. */
@@ -2464,6 +2501,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   libraryMode: 'catalog',
   brandTab: 'about',
   brandGuides: loadBrandGuides(),
+  brandFieldSources: loadBrandFieldSources(),
   readinessOpen: false,
   diagnosisOpen: false,
   askOpen: false,
@@ -3090,10 +3128,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // client profile so Flows / Library / Insights can bind to it. (Placeholder rows don't sync.)
       if (!rec || !name || name === 'New brand') return { brandRecords }
       const clientList = s.clientList.includes(name) ? s.clientList : [...s.clientList, name]
-      const clientProfiles = {
-        ...s.clientProfiles,
-        [name]: { ...s.clientProfiles[name], industry: rec.industry || undefined, website: rec.website || undefined },
+      // Mirror ONLY the keys this patch actually carries. Mirroring them unconditionally read the
+      // merged record, which has no website when the URL was written to the profile instead (the
+      // guided setup does exactly that), so any unrelated patch nulled it. Drafting the strategy
+      // patches other fields entirely, and silently deleted the website the user had just typed.
+      // A truthiness guard is NOT the fix: clearing the cell in the Brand sheet must still clear
+      // the profile, and by then the merged record already holds ''.
+      const mirrored: Partial<ClientProfile> = {
+        ...('industry' in patch ? { industry: rec.industry || undefined } : {}),
+        ...('website' in patch ? { website: rec.website || undefined } : {}),
       }
+      const clientProfiles = Object.keys(mirrored).length
+        ? { ...s.clientProfiles, [name]: { ...s.clientProfiles[name], ...mirrored } }
+        : s.clientProfiles
       saveClients(clientList)
       saveClientProfiles(clientProfiles)
       return { brandRecords, clientList, clientProfiles }
@@ -3425,6 +3472,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (!v) return
     for (const r of v.rows) await sheet.update(r.id, { messaging: { ...r.messaging } })
     await get().refresh()
+  },
+  markBrandFields: (brand, fields, source) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b || !fields.length) return {}
+      const forBrand = { ...(s.brandFieldSources[b] ?? {}) }
+      // A field the user has claimed stays theirs. A later draft cannot quietly take it back by
+      // writing over it, which is the whole point of tracking this.
+      for (const f of fields) if (source === 'user' || forBrand[f] !== 'user') forBrand[f] = source
+      const brandFieldSources = { ...s.brandFieldSources, [b]: forBrand }
+      saveBrandFieldSources(brandFieldSources)
+      return { brandFieldSources }
+    }),
+  userOwnedBrandFields: (brand) => {
+    const map = get().brandFieldSources[brand.trim()] ?? {}
+    return new Set(Object.keys(map).filter((k) => map[k] === 'user'))
   },
   generateBrandGuide: (client) =>
     set((s) => {
@@ -4979,6 +5042,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.brandSystems.v1': 'brandSystems',
       'stoplight.brandMeta.v1': 'brandMeta',
       'stoplight.brandGuides.v1': 'brandGuides',
+      'stoplight.brandFieldSources.v1': 'brandFieldSources',
       'stoplight.campaigns.v1': 'campaignList',
       'stoplight.campaignFolders.v1': 'campaignFolders',
       'stoplight.flights.v1': 'flights',
@@ -5048,7 +5112,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // Keyed state + tasks + grouping → workspace_state.
       const STATE_MIGRATIONS = [
         'stoplight.clients.v1', 'stoplight.clientProfiles.v1', 'stoplight.clientAudiences.v1',
-        'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1',
+        'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1', 'stoplight.brandFieldSources.v1',
         'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.flights.v1', 'stoplight.canvases.v1',
         'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
