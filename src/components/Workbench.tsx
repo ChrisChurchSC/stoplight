@@ -68,6 +68,7 @@ import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 import { GettingStarted } from './GettingStarted'
 import { Welcome } from './Welcome'
+import { DevReset } from './DevReset'
 import { StarterTemplates } from './StarterTemplates'
 import { Tour } from './Tour'
 import { Toast } from './Toast'
@@ -421,6 +422,8 @@ export function Workbench() {
       <Tour />
       {/* Phase A of setup: asked before anything else, and the only thing on screen while it runs. */}
       <Welcome />
+      {/* Dev only, and it renders above Welcome so the first run can be replayed from anywhere. */}
+      <DevReset />
       <Toast />
     </div>
   )

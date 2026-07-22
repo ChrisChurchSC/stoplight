@@ -67,15 +67,20 @@ function LogoTile({ c }: { c: Connector }) {
   return <span style={{ ...base, background: c.color, color: c.light ? '#1a2023' : '#fff', fontWeight: 800, fontSize: 15 }}>{monogram(c.name)}</span>
 }
 
-function Row({ c, first, rec, connected, onConnect }: { c: Connector; first: boolean; rec?: boolean; connected: boolean; onConnect: () => void }) {
+function Row({ c, first, rec, connected, canConnect, onConnect }: { c: Connector; first: boolean; rec?: boolean; connected: boolean; canConnect: boolean; onConnect: () => void }) {
   const wired = c.name in PROVIDER
+  // A row that cannot connect says so by looking unavailable, rather than clicking to nothing.
+  const inert = wired && !canConnect && !connected
   return (
     <button
       onClick={onConnect}
+      disabled={inert}
+      title={inert ? 'Connecting needs a signed-in workspace. Use the deployed app.' : undefined}
       style={{
         display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '13px 16px',
         background: 'transparent', border: 'none', borderTop: first ? 'none' : '1px dashed var(--border)',
-        cursor: 'pointer', font: 'inherit', textAlign: 'left',
+        cursor: inert ? 'not-allowed' : 'pointer', font: 'inherit', textAlign: 'left',
+        opacity: inert ? 0.55 : 1,
       }}
     >
       <LogoTile c={c} />
@@ -192,6 +197,25 @@ export function ConnectorsPage() {
         <h1 style={{ fontSize: 30, fontWeight: 700, margin: '0 0 4px', color: 'var(--text, #1a2023)' }}>Connectors</h1>
         <p style={{ fontSize: 15, color: 'var(--text-muted, #5a6b72)', margin: 0 }}>Connect your accounts so real performance flows into Insights and Reports.</p>
 
+        {/* Connecting needs a signed-in workspace to store the credential against, and the connect
+            endpoints only exist in the deployed environment. Without one, every Connect button was
+            an inert no-op (startConnect returns early on a null workspace), which reads as broken
+            rather than unavailable. Say which it is. */}
+        {!wsId && (
+          <div
+            style={{
+              marginTop: 18, padding: '12px 14px', borderRadius: 12,
+              border: '1px solid var(--border)', background: 'var(--hover, #eef2f3)',
+              fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted, #5a6b72)',
+            }}
+          >
+            <strong style={{ color: 'var(--text, #1a2023)' }}>Connecting is unavailable here.</strong>{' '}
+            Connectors store credentials against your signed-in workspace, and this session does not have
+            one. Use the deployed app to connect an account. Everything else on this page is still
+            browsable.
+          </div>
+        )}
+
         {GROUPS.map((g) => (
           <div key={g.label}>
             <div style={sectionLabel}>{g.label} <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, color: 'var(--text-faint,#8a969b)' }}>· {g.blurb}</span></div>
@@ -199,7 +223,7 @@ export function ConnectorsPage() {
               {g.items.map((c, i) => {
                 const prov = PROVIDER[c.name]
                 const isConn = !!c.connected || (prov ? connected.has(prov) : false)
-                return <Row key={c.name} c={c} first={i === 0} rec={RECOMMENDED.has(c.name)} connected={isConn} onConnect={() => startConnect(c.name)} />
+                return <Row key={c.name} c={c} first={i === 0} rec={RECOMMENDED.has(c.name)} connected={isConn} canConnect={!!wsId} onConnect={() => startConnect(c.name)} />
               })}
             </div>
           </div>
