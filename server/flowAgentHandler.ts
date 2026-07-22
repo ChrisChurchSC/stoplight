@@ -82,6 +82,17 @@ export class NoKeyError extends Error {
   code = 'NO_KEY'
 }
 
+/**
+ * Strip em dashes from anything the user reads. The prompt already forbids them and the model still
+ * writes "Got it—let's build", so this is the deterministic backstop: a dash between words becomes a
+ * comma, a trailing/leading one just goes. House style is commas, colons, periods and parens.
+ */
+function noEmDashes<T>(v: T): T {
+  if (typeof v === 'string') return v.replace(/\s*—\s*/g, (_m, i, s: string) => (i === 0 || i + _m.length >= s.length ? ' ' : ', ')).replace(/\s+([,.!?])/g, '$1').trim() as unknown as T
+  if (Array.isArray(v)) return v.map(noEmDashes) as unknown as T
+  return v
+}
+
 export async function runFlowAgent(body: unknown): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
@@ -105,5 +116,10 @@ export async function runFlowAgent(body: unknown): Promise<unknown> {
 
   const block = message.content.find((b: Anthropic.ContentBlock) => b.type === 'text')
   const text = block && block.type === 'text' ? block.text : '{}'
-  return JSON.parse(text)
+  const out = JSON.parse(text) as { reply?: string; nextSteps?: string[] }
+  if (out && typeof out === 'object') {
+    if (out.reply) out.reply = noEmDashes(out.reply)
+    if (Array.isArray(out.nextSteps)) out.nextSteps = noEmDashes(out.nextSteps)
+  }
+  return out
 }
