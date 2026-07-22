@@ -275,29 +275,12 @@ export function HomeAgenda() {
               </span>
             </div>
           )}
-          {empty ? (
-            <>
-            {/* Focus and detail level are asked once in the first-run sequence (Welcome.tsx), not
-                here. They used to be two chip rows on this screen, competing with the tour, the
-                checklist and the start cards for a user who had not done anything yet. */}
-            <div className="ag2-startcards">
-              <button className="ag2-startcard primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
-                <span className="ag2-startcard-ic" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-                </span>
-                <span className="ag2-startcard-title">Get started</span>
-                <span className="ag2-startcard-sub">Set up your brand and first campaign, guided step by step.</span>
-              </button>
-              <button className="ag2-startcard" onClick={() => openHomeChat(BUILD_BRAND_SEED)}>
-                <span className="ag2-startcard-ic" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
-                </span>
-                <span className="ag2-startcard-title">Draft brand from your content</span>
-                <span className="ag2-startcard-sub">Point us at your site and we draft the brand for you to edit.</span>
-              </button>
-            </div>
-            </>
-          ) : (
+          {/* ONE row, whatever the workspace holds. These same actions used to render as two large
+              cards on an empty workspace and as pills once a brand existed, so the top of Home
+              visibly reshuffled the moment you created your first brand. Same handlers, same seeds,
+              two shapes: a user could not tell "I have data now" from "the app changed". The two
+              actions that need real data to mean anything are hidden until it exists, but nothing
+              changes shape. Focus and detail level are asked once in Welcome.tsx, not here. */}
           <div className="ag2-chips">
             <button className="ag2-chip ag2-chip-primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
@@ -311,16 +294,22 @@ export function HomeAgenda() {
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
               Draft a campaign
             </button>
-            <button className="ag2-chip" onClick={() => openHomeChat('Help me personalize a campaign for a specific audience')}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></svg>
-              Personalize for an audience
-            </button>
-            <button className="ag2-chip" onClick={() => openHomeChat('What personalization gaps should I prioritize next?')}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h10M4 18h7" /></svg>
-              What should I do next?
-            </button>
+            {/* Both of these ask about work that has to exist first, so they would send a brand-new
+                user to a chat with nothing to answer from. Hidden until there is something to
+                personalize or prioritise, without changing what the row looks like. */}
+            {!empty && (
+              <>
+                <button className="ag2-chip" onClick={() => openHomeChat('Help me personalize a campaign for a specific audience')}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></svg>
+                  Personalize for an audience
+                </button>
+                <button className="ag2-chip" onClick={() => openHomeChat('What personalization gaps should I prioritize next?')}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h10M4 18h7" /></svg>
+                  What should I do next?
+                </button>
+              </>
+            )}
           </div>
-          )}
         </div>
 
         <section className="ag2-sec">
