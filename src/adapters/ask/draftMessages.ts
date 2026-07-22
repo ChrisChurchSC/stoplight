@@ -1,3 +1,4 @@
+import type { DraftOrigin } from './draftAudiences'
 /**
  * Asks the server /api/draft-messages endpoint (Claude) to draft reusable messages (angles) for a
  * brand, with a heuristic fallback when the backend is absent, has no key (501), or errors.
@@ -36,7 +37,9 @@ function heuristicMessages(input: DraftMessagesInput): DraftedMessage[] {
   ]
 }
 
-export async function draftMessages(input: DraftMessagesInput): Promise<DraftedMessage[]> {
+export interface DraftedMessageResult { items: DraftedMessage[]; origin: DraftOrigin; status?: number }
+
+export async function draftMessages(input: DraftMessagesInput): Promise<DraftedMessageResult> {
   try {
     const res = await fetch('/api/draft-messages', {
       method: 'POST',
@@ -47,8 +50,8 @@ export async function draftMessages(input: DraftMessagesInput): Promise<DraftedM
     const data = (await res.json()) as { messages?: DraftedMessage[] }
     const msgs = (data.messages ?? []).filter((m) => m?.name)
     if (!msgs.length) throw new Error('empty')
-    return msgs
+    return { items: msgs, origin: 'model' }
   } catch {
-    return heuristicMessages(input)
+    return { items: heuristicMessages(input), origin: 'fallback' }
   }
 }

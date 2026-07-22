@@ -162,3 +162,32 @@ export function seedBrandRecords(
     status: 'active' as const,
   }))
 }
+
+/**
+ * The first-run review of the drafted brand page (BrandDraftReview.tsx).
+ *
+ * The drafter's response schema marks all 26 fields required, so from one sentence of input it is
+ * structurally obliged to answer questions it has no way to know. These two lists split what it
+ * writes into "check this first" and "the rest", ranked by how far a wrong value travels rather
+ * than by the order the sheet happens to show them in.
+ *
+ * Kept here beside BRAND_FIELDS so adding a field is one edit, not two files out of step.
+ */
+export const REVIEW_PRIORITY_KEYS: (keyof BrandRecord)[] = [
+  'positioning',        // widest read surface, including askBrand
+  'businessObjective',  // drives the angle drafter's stage and outcome
+  'primaryAudience',    // reaches the campaign chat's brandFacts, so it gets repeated back as fact
+  'differentiator',     // the field most often invented as a product capability
+  'descriptor',         // one phrase, cheapest possible correction
+  'keyMessage',         // propagates into saved library items, so a wrong one is sticky
+  'competitiveContext', // nothing reads it, and it is the most confidently fabricated. Here to be emptied.
+]
+
+/** Also written by the draft, shown collapsed. Same provenance rules, lower blast radius. */
+export const REVIEW_SECONDARY_KEYS: (keyof BrandRecord)[] = [
+  'commsObjective', 'audienceInsight', 'supportingMessages', 'proofPoints',
+  'languageDos', 'languageDonts', 'contentPillars', 'reviewCadence', 'risks',
+]
+
+/** Every record field the brand draft can write, and therefore every one the review can correct. */
+export const REVIEW_RECORD_KEYS: (keyof BrandRecord)[] = [...REVIEW_PRIORITY_KEYS, ...REVIEW_SECONDARY_KEYS]

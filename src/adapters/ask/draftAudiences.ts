@@ -36,7 +36,15 @@ function heuristicAudiences(input: DraftAudiencesInput): DraftedAudience[] {
   ]
 }
 
-export async function draftAudiences(input: DraftAudiencesInput): Promise<DraftedAudience[]> {
+/** What produced a foundation draft. A canned fallback is not a draft of the user's brand, and any
+ *  surface that shows it has to be able to say so: the five adapters below swallow every failure
+ *  (no route, no key, model error, empty response) into an identical heuristic, and until now the
+ *  caller could not tell the difference. */
+export type DraftOrigin = 'model' | 'fallback'
+
+export interface DraftedAudienceResult { items: DraftedAudience[]; origin: DraftOrigin; status?: number }
+
+export async function draftAudiences(input: DraftAudiencesInput): Promise<DraftedAudienceResult> {
   try {
     const res = await fetch('/api/draft-audiences', {
       method: 'POST',
@@ -47,8 +55,8 @@ export async function draftAudiences(input: DraftAudiencesInput): Promise<Drafte
     const data = (await res.json()) as { audiences?: DraftedAudience[] }
     const auds = (data.audiences ?? []).filter((a) => a?.name && a?.definition)
     if (!auds.length) throw new Error('empty')
-    return auds
+    return { items: auds, origin: 'model' }
   } catch {
-    return heuristicAudiences(input)
+    return { items: heuristicAudiences(input), origin: 'fallback' }
   }
 }

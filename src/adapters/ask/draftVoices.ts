@@ -1,3 +1,4 @@
+import type { DraftOrigin } from './draftAudiences'
 /**
  * Asks the server /api/draft-voices endpoint (Claude) to draft brand voice profiles, with a
  * heuristic fallback when the backend is absent, has no key (501), or errors.
@@ -42,7 +43,9 @@ function heuristicVoices(input: DraftVoicesInput): DraftedVoice[] {
   ]
 }
 
-export async function draftVoices(input: DraftVoicesInput): Promise<DraftedVoice[]> {
+export interface DraftedVoiceResult { items: DraftedVoice[]; origin: DraftOrigin; status?: number }
+
+export async function draftVoices(input: DraftVoicesInput): Promise<DraftedVoiceResult> {
   try {
     const res = await fetch('/api/draft-voices', {
       method: 'POST',
@@ -53,8 +56,8 @@ export async function draftVoices(input: DraftVoicesInput): Promise<DraftedVoice
     const data = (await res.json()) as { voices?: DraftedVoice[] }
     const voices = (data.voices ?? []).filter((v) => v?.name)
     if (!voices.length) throw new Error('empty')
-    return voices
+    return { items: voices, origin: 'model' }
   } catch {
-    return heuristicVoices(input)
+    return { items: heuristicVoices(input), origin: 'fallback' }
   }
 }

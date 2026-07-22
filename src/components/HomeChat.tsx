@@ -5,7 +5,7 @@ import { draftCtas } from '../adapters/ask/draftCtas'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { getActiveWorkspaceId } from '../lib/session'
-import { draftAudiences } from '../adapters/ask/draftAudiences'
+import { draftAudiences, type DraftOrigin } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
 import { draftBrandProfile } from '../adapters/ask/draftBrandProfile'
@@ -119,6 +119,11 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const markBrandFields = useTrafficStore((s) => s.markBrandFields)
+  // Which of the foundation passes were really written by the model, and which fell back to a
+  // canned generic set. Every adapter swallows its failures, so without this the review screen
+  // would present "Team leads / Operations owners / Executive sponsors" as a finding about the
+  // user's business. Reset at the start of each build.
+  const originsRef = useRef<Partial<Record<'strategy' | 'audiences' | 'voices' | 'proof' | 'ctas' | 'messages', DraftOrigin>>>({})
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addMessage = useTrafficStore((s) => s.addMessage)
@@ -346,7 +351,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const existing = (useTrafficStore.getState().library.rtbs ?? []).map((r) => r.label).filter(Boolean)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting proof points for ${brand}` }] }])
-    const proof = await draftProof({
+    const proofRes = await draftProof({
       brand,
       oneLiner: profile.oneLiner,
       industry: profile.industry || rec.industry,
@@ -359,6 +364,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       existing,
       samples: brandLibrarySamples(brand),
     })
+    const proof = proofRes.items
+    originsRef.current.proof = proofRes.origin
     proof.forEach((p) => addLibraryItem('rtbs', { id: freshRecordId('lrtb'), label: p.label, detail: p.detail, approved: false }))
     const list = proof.map((p) => `- **${p.label}**: ${p.detail}`).join('\n')
     const more = existing.length > 0
@@ -385,7 +392,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const existing = (useTrafficStore.getState().library.ctas ?? []).map((c) => c.label).filter(Boolean)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting CTAs for ${brand}` }] }])
-    const ctas = await draftCtas({
+    const ctasRes = await draftCtas({
       brand,
       oneLiner: profile.oneLiner,
       industry: profile.industry || rec.industry,
@@ -399,6 +406,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       existing,
       samples: brandLibrarySamples(brand),
     })
+    const ctas = ctasRes.items
+    originsRef.current.ctas = ctasRes.origin
     ctas.forEach((c) =>
       addLibraryItem('ctas', { id: freshRecordId('lcta'), label: c.label, stage: c.stage, outcome: c.outcome, approved: false }),
     )
@@ -425,7 +434,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const current = store.clientAudiences[brand] ?? []
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Building audiences for ${brand}` }] }])
-    const drafted = await draftAudiences({
+    const draftedRes = await draftAudiences({
       brand,
       oneLiner: profile.oneLiner,
       positioning: rec.positioning,
@@ -436,6 +445,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       existing: current.map((a) => a.name),
       samples: brandLibrarySamples(brand),
     })
+    const drafted = draftedRes.items
+    originsRef.current.audiences = draftedRes.origin
     const additions = drafted.map((d) =>
       newAudience({ name: d.name, definition: d.definition, role: d.role, pains: d.pains, messageAngle: d.messageAngle, outcome: d.outcome }),
     )
@@ -463,7 +474,9 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const existing = store.messages.filter((m) => !m.brand || m.brand === brand).map((m) => m.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting messages for ${brand}` }] }])
-    const drafted = await draftMessages({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences, existing, samples: brandLibrarySamples(brand) })
+    const draftedRes = await draftMessages({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, audiences, existing, samples: brandLibrarySamples(brand) })
+    const drafted = draftedRes.items
+    originsRef.current.messages = draftedRes.origin
     drafted.forEach((d) =>
       addMessage({ brand, name: d.name, angle: d.angle, audience: d.audience, pillar: d.pillar, stage: (['awareness', 'consideration', 'conversion'].includes(d.stage) ? d.stage : '') as Message['stage'] }),
     )
@@ -484,8 +497,13 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const existing = store.voices.filter((v) => !v.brand || v.brand === brand).map((v) => v.name)
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Defining voice for ${brand}` }] }])
-    const drafted = await draftVoices({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, samples: brandLibrarySamples(brand) })
-    drafted.forEach((d) => addVoice({ brand, name: d.name, summary: d.summary, tone: d.tone, dos: d.dos, donts: d.donts, sample: d.sample, useFor: d.useFor, status: 'active' }))
+    const draftedRes = await draftVoices({ brand, oneLiner: profile.oneLiner, positioning: rec.positioning, descriptor: rec.descriptor, differentiator: brandDifferentiatorText(rec), businessObjective: rec.businessObjective, industry: profile.industry || rec.industry, existing, samples: brandLibrarySamples(brand) })
+    const drafted = draftedRes.items
+    originsRef.current.voices = draftedRes.origin
+    drafted.forEach((d) => addVoice({ brand, name: d.name, summary: d.summary, tone: d.tone, dos: d.dos, donts: d.donts, sample: d.sample, useFor: d.useFor, status: 'draft' }))
+    // 'draft', not 'active': these are invented by a model from a one-line description and nobody
+    // has read them yet. Stamping them active made the machine's guess the live voice that copy
+    // generation reads, before the user had seen a single word of it.
     const list = drafted.map((d) => `- **${d.name}** (${d.tone}): ${d.summary}`).join('\n')
     setMessages((m) =>
       m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `I added ${drafted.length} ${drafted.length === 1 ? 'voice' : 'voices'} to **${brand}**:\n\n${list}\n\nAsk for more, or open Voices to refine them.`, voiceDone: true } : x)),

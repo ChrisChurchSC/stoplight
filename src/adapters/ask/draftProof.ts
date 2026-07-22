@@ -1,3 +1,4 @@
+import type { DraftOrigin } from './draftAudiences'
 /**
  * Asks the server /api/draft-proof endpoint (which calls Claude) to draft proof points for a brand,
  * and falls back to a small heuristic set when the backend is absent, has no key (501), or errors —
@@ -38,7 +39,9 @@ function heuristicProof(input: DraftProofInput): DraftedProof[] {
   ]
 }
 
-export async function draftProof(input: DraftProofInput): Promise<DraftedProof[]> {
+export interface DraftedProofResult { items: DraftedProof[]; origin: DraftOrigin; status?: number }
+
+export async function draftProof(input: DraftProofInput): Promise<DraftedProofResult> {
   try {
     const res = await fetch('/api/draft-proof', {
       method: 'POST',
@@ -49,8 +52,8 @@ export async function draftProof(input: DraftProofInput): Promise<DraftedProof[]
     const data = (await res.json()) as { proofPoints?: DraftedProof[] }
     const proof = (data.proofPoints ?? []).filter((p) => p?.label && p?.detail)
     if (!proof.length) throw new Error('empty')
-    return proof
+    return { items: proof, origin: 'model' }
   } catch {
-    return heuristicProof(input)
+    return { items: heuristicProof(input), origin: 'fallback' }
   }
 }

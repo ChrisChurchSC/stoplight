@@ -1691,6 +1691,8 @@ interface TrafficState {
   markBrandFields: (brand: string, fields: string[], source: FieldSource) => void
   /** The fields this brand's owner supplied themselves, as a set for cheap lookup. */
   userOwnedBrandFields: (brand: string) => Set<string>
+  /** Carry a brand's authorship map across a rename. Provenance is keyed by NAME, records by id. */
+  renameBrandFieldSources: (from: string, to: string) => void
   readinessOpen: boolean
   openReadiness: () => void
   /** Onboarding-as-diagnosis: the before→after reveal on the brand's own data. */
@@ -2409,6 +2411,10 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   const clientAudiences = dropKey(s.clientAudiences)
   const brandSystems = dropKey(s.brandSystems)
   const brandGuides = dropKey(s.brandGuides)
+  // Authorship goes with the brand. Leaving stale 'user' marks behind would make a later draft skip
+  // fields for a RECREATED brand of the same name, producing blanks the review would then label as
+  // the user's own words.
+  const brandFieldSources = dropKey(s.brandFieldSources)
   const brandActuals = dropKey(s.brandActuals)
   const campaignFolders = dropKey(s.campaignFolders)
   const campaignConditions = dropCampaignKeys(s.campaignConditions)
@@ -2446,6 +2452,7 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   saveBrandSystems(brandSystems)
   saveBrandMeta(brandMeta)
   saveBrandGuides(brandGuides)
+  saveBrandFieldSources(brandFieldSources)
   saveBrandActuals(brandActuals)
   saveCampaignFolders(campaignFolders)
   saveConditions(campaignConditions)
@@ -2470,7 +2477,7 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   return {
     clientList, campaignList, canvases, artboards, reports, pinnedInsights, versions, mediaMixes,
     flights, flowChats, openProjects, brandRecords, driveLinks, clientProfiles, clientAudiences,
-    brandSystems, brandMeta, brandGuides, brandActuals, campaignFolders, campaignConditions, activeCanvas,
+    brandSystems, brandMeta, brandGuides, brandActuals, campaignFolders, campaignConditions, activeCanvas, brandFieldSources,
   }
 }
 
@@ -3489,6 +3496,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     const map = get().brandFieldSources[brand.trim()] ?? {}
     return new Set(Object.keys(map).filter((k) => map[k] === 'user'))
   },
+  renameBrandFieldSources: (from, to) =>
+    set((s) => {
+      const a = from.trim()
+      const b = to.trim()
+      if (!a || !b || a === b || !s.brandFieldSources[a]) return {}
+      const brandFieldSources = { ...s.brandFieldSources, [b]: { ...(s.brandFieldSources[b] ?? {}), ...s.brandFieldSources[a] } }
+      delete brandFieldSources[a]
+      saveBrandFieldSources(brandFieldSources)
+      return { brandFieldSources }
+    }),
   generateBrandGuide: (client) =>
     set((s) => {
       const n = client.trim()

@@ -1,3 +1,4 @@
+import type { DraftOrigin } from './draftAudiences'
 /**
  * Asks the server /api/draft-ctas endpoint (which calls Claude) to draft reusable CTAs for a brand,
  * spread across the funnel, and falls back to a small heuristic set when the backend is absent, has no
@@ -38,7 +39,9 @@ function heuristicCtas(): DraftedCta[] {
   ]
 }
 
-export async function draftCtas(input: DraftCtaInput): Promise<DraftedCta[]> {
+export interface DraftedCtaResult { items: DraftedCta[]; origin: DraftOrigin; status?: number }
+
+export async function draftCtas(input: DraftCtaInput): Promise<DraftedCtaResult> {
   try {
     const res = await fetch('/api/draft-ctas', {
       method: 'POST',
@@ -49,8 +52,8 @@ export async function draftCtas(input: DraftCtaInput): Promise<DraftedCta[]> {
     const data = (await res.json()) as { ctas?: DraftedCta[] }
     const ctas = (data.ctas ?? []).filter((c) => c?.label)
     if (!ctas.length) throw new Error('empty')
-    return ctas
+    return { items: ctas, origin: 'model' }
   } catch {
-    return heuristicCtas()
+    return { items: heuristicCtas(), origin: 'fallback' }
   }
 }
