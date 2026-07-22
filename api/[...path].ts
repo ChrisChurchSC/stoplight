@@ -24,6 +24,7 @@ interface ApiRes {
 // endpoint name → loader for its POST handler (parsed body in, object out).
 const HANDLERS: Record<string, () => Promise<(body: unknown) => Promise<unknown>>> = {
   'flow-agent': () => import('../server/flowAgentHandler.js').then((m) => m.runFlowAgent),
+  'setup-agent': () => import('../server/setupAgentHandler.js').then((m) => m.runSetupAgent),
   'records-agent': () => import('../server/recordsAgentHandler.js').then((m) => m.runRecordsAgent),
   'claude-ask': () => import('../server/askHandler.js').then((m) => m.runAsk),
   'claude-agent': () => import('../server/agentHandler.js').then((m) => m.runAgent),

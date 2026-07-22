@@ -33,7 +33,9 @@ import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
-import type { MarketerRole, SkillLevel } from '../domain/userPrefs'
+import { MARKETER_ROLES, type MarketerRole, type SkillLevel } from '../domain/userPrefs'
+import { generateSetupTurn } from '../adapters/ask/generateSetupTurn'
+import type { SetupCommand } from '../domain/setupAgent'
 
 /**
  * The Home conversational chat: a full-page thread opened from the Home ask box. A
@@ -125,6 +127,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   // canned generic set. Every adapter swallows its failures, so without this the review screen
   // would present "Team leads / Operations owners / Executive sponsors" as a finding about the
   // user's business. Reset at the start of each build.
+  // Whether the site has already been read this run, so readSite cannot crawl twice.
+  const siteReadRef = useRef(false)
   const originsRef = useRef<Partial<Record<'strategy' | 'audiences' | 'voices' | 'proof' | 'ctas' | 'messages', DraftOrigin>>>({})
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
@@ -261,6 +265,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       return
     }
     setupRef.current = { step: 0, brand: '' }
+    siteReadRef.current = false
     askSetupStep(GUIDED_SETUP_STEPS[0], '')
   }
 
@@ -269,6 +274,84 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   // value it is handed.
   const askSetupStep = (step: SetupStep, brand: string) => {
     say(step.prompt(brand), step.kind === 'chips' ? { setupPick: step.options, setupSkippable: step.skippable } : undefined)
+  }
+
+  // One turn of the model-driven intake. Falls back to the scripted questions when there is no key,
+  // so a workspace without a model still gets set up: the difference is that the scripted path
+  // cannot read the answer it was just given, and this one can.
+  const runSetupTurn = async (text: string, display?: string) => {
+    const val = text.trim()
+    if (display || val) sayUser(display ?? val)
+    setQ('')
+    const st = useTrafficStore.getState()
+    const brand = st.clientFilter && st.clientFilter !== 'all' ? st.clientFilter : ''
+    const prof = (brand ? st.clientProfiles[brand] : undefined) as { oneLiner?: string; website?: string } | undefined
+    const id = nid()
+    setMessages((m) => [...m, { id, role: 'assistant', busy: true }])
+    const turn = await generateSetupTurn({
+      known: {
+        role: st.userPrefs.marketerRole,
+        detail: st.userPrefs.skillLevel,
+        brandName: brand || null,
+        oneLiner: prof?.oneLiner || null,
+        website: prof?.website || null,
+        siteRead: siteReadRef.current,
+      },
+      roleOptions: MARKETER_ROLES.map((r) => ({ value: r.value, label: r.label })),
+      message: val,
+      history: messages.filter((m) => m.text).slice(-8).map((m) => ({ role: m.role, text: m.text ?? '' })),
+    })
+    setMessages((m) => m.map((x) => (x.id === id ? { ...x, busy: false, text: turn.reply, nextSteps: turn.nextSteps } : x)))
+    await applySetupCommands(turn.commands)
+  }
+
+  // Every command is validated here, never trusted. The model chooses intent; what that is allowed
+  // to do to the workspace is ours.
+  const applySetupCommands = async (commands: SetupCommand[]) => {
+    for (const c of commands) {
+      const st = useTrafficStore.getState()
+      const brand = st.clientFilter && st.clientFilter !== 'all' ? st.clientFilter : ''
+      if (c.op === 'setRole') {
+        if (MARKETER_ROLES.some((r) => r.value === c.value)) setUserPrefs({ marketerRole: c.value as MarketerRole })
+      } else if (c.op === 'setDetail') {
+        if (c.value === 'simple' || c.value === 'advanced') setUserPrefs({ skillLevel: c.value as SkillLevel })
+      } else if (c.op === 'setBrandName') {
+        const name = c.value?.trim()
+        if (name && name !== brand) {
+          addClient(name)
+          addBrandRecord({ name })
+          setClientFilter(name)
+        }
+      } else if (c.op === 'setOneLiner') {
+        // The person's own words, so it is marked theirs and the brand drafter will not overwrite it.
+        if (brand && c.value?.trim()) {
+          setClientProfile(brand, { oneLiner: c.value.trim() })
+          markBrandFields(brand, ['oneLiner'], 'user')
+        }
+      } else if (c.op === 'setWebsite') {
+        if (brand && c.value?.trim()) {
+          const url = c.value.trim()
+          setClientProfile(brand, { website: url })
+          const rec = useTrafficStore.getState().brandRecords.find((b) => b.name === brand)
+          if (rec) updateBrandRecord(rec.id, { website: url })
+          markBrandFields(brand, ['website'], 'user')
+        }
+      } else if (c.op === 'readSite') {
+        if (brand && !siteReadRef.current) {
+          siteReadRef.current = true
+          try {
+            await useTrafficStore.getState().ingestBrandSite(brand)
+          } catch {
+            /* best effort: the draft still runs, just less grounded */
+          }
+        }
+      } else if (c.op === 'buildFoundation') {
+        if (brand) {
+          setupRef.current = null
+          await buildBrandFromContent()
+        }
+      }
+    }
   }
 
   // Apply one setup answer to the store (creating real records), then ask the next question or finish.
@@ -1089,7 +1172,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
 
     // Guided setup is a deterministic script that creates records as we go — handle it before the
     // read-only ask/report paths so a task request never dead-ends.
-    if (setupRef.current) return handleSetupAnswer(text)
+    if (setupRef.current) return void runSetupTurn(text)
     // Guided "build a flow" conversation takes the next answers.
     if (flowBuildRef.current) return void handleFlowAnswer(text)
 

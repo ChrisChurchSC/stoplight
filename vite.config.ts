@@ -238,6 +238,39 @@ function askApi(): PluginOption {
 }
 
 /**
+ * Dev-server endpoint for the first-run intake agent. Mirrors /api/flow-agent; 501 when no key, so
+ * the client falls back to the scripted questions and setup still works.
+ */
+function setupAgentApi(): PluginOption {
+  return {
+    name: 'setup-agent-api',
+    configureServer(server) {
+      server.middlewares.use('/api/setup-agent', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runSetupAgent } = await import('./server/setupAgentHandler')
+            const result = await runSetupAgent(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
+/**
  * Dev-server endpoint for the BRAND STRATEGY draft (pass 1 of the brand-page build, the one that
  * fills 17 of the 26 brand fields). It existed only in the Vercel catch-all, so in local dev it
  * 404ed and the chat reported "Couldn't draft the strategy yet. Add a website or one-liner" no
@@ -1113,6 +1146,7 @@ export default defineConfig(({ mode }) => {
       draftCellApi(),
       draftProofApi(),
     draftBrandProfileApi(),
+    setupAgentApi(),
       draftAudiencesApi(),
       draftMessagesApi(),
       draftVoicesApi(),
