@@ -71,6 +71,7 @@ export function HomeAgenda() {
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const aiModel = useTrafficStore((s) => s.aiModel)
   const setAiModel = useTrafficStore((s) => s.setAiModel)
   const [q, setQ] = useState('')
@@ -110,16 +111,22 @@ export function HomeAgenda() {
   // empty ones to fill next.
   const audiences = useMemo(() => (brand ? clientAudiences[brand] ?? [] : []), [brand, clientAudiences])
   // A brand-new / empty workspace: promote the two setup actions as cards instead of the analytical
-  // quick-chips (which have nothing to analyze yet).
-  const empty = useMemo(
-    () => audiences.length === 0 && canvases.filter((c) => !brand || c.client === brand).length === 0,
-    [audiences, canvases, brand],
-  )
+  // quick-chips (which have nothing to analyze yet). This reflects the scope you are ACTUALLY
+  // looking at. Previously, with no brand selected, `audiences` was always 0 and the canvas filter
+  // passed every brand's canvases, so the gate hinged on "does any canvas exist anywhere" — a cold
+  // user could be denied the getting-started state by someone else's canvas, and a workspace with
+  // audiences but no canvases wrongly read as empty.
+  const empty = useMemo(() => {
+    // No brands set up yet is a genuinely cold start, even if a stray/imported canvas exists.
+    if (Object.keys(clientProfiles).length === 0) return true
+    const scopedCanvases = canvases.filter((c) => !brand || c.client === brand)
+    const scopedAudiences = brand ? clientAudiences[brand] ?? [] : Object.values(clientAudiences).flat()
+    return scopedAudiences.length === 0 && scopedCanvases.length === 0
+  }, [clientProfiles, clientAudiences, canvases, brand])
   // Passive role inference: for a workspace with data but no chosen focus, suggest one from its
   // strongest signal (a GTM strategy). Only infer from an UNAMBIGUOUS signal so the nudge never
   // suggests a role from an off-screen brand: the brand in view's own strategy, or — when no single
   // brand is in the rail — the sole strategy if every brand agrees. Silent otherwise; a manual pick wins.
-  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const roleSuggestion = useMemo(() => {
     const inView = brand ? clientProfiles[brand]?.strategy : null
     if (inView) return inferRole(inView)

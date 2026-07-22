@@ -10,7 +10,7 @@ import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
-import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
+import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
@@ -375,6 +375,8 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
+  const clientProfiles = useTrafficStore((s) => s.clientProfiles)
+  const brandRecords = useTrafficStore((s) => s.brandRecords)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaign = useTrafficStore((s) => s.patchCampaign)
@@ -441,6 +443,12 @@ export function FlowsView() {
   const [subject, setSubject] = useState('')
   const [budget, setBudget] = useState('')
   const [flightWeeks, setFlightWeeks] = useState(12)
+  // The GTM motion the chat's setStrategy locks in for this build (a GTM_STRATEGIES key). Undefined
+  // = fall back to the brand/role resolution in addCampaign.
+  const [strategyKey, setStrategyKey] = useState<string>()
+  // A motion is chosen FOR a brand, so never let it carry across a brand switch and stamp another
+  // brand's campaign (startNew clears it for a new flow; this covers switching the rail).
+  useEffect(() => { setStrategyKey(undefined) }, [brand])
   // Records that seed the brief: an Objective sets the flow's measurable goal; a Message fills the
   // theme every asset is written to (its angle). Both are optional pulls from the Records pages.
   const [objectiveId, setObjectiveId] = useState('')
@@ -1478,6 +1486,7 @@ export function FlowsView() {
     setName('')
     setSubject('')
     setBudget('')
+    setStrategyKey(undefined)
     setObjectiveId('')
     setMessageId('')
     setBriefRefs(null)
@@ -1655,12 +1664,18 @@ export function FlowsView() {
     audiences: string[]
     nodes: FlowDeliverable[]
     objective?: { text: string; kpi?: string; target?: number }
+    /** The chosen GTM motion (a strategy key); falls back to addCampaign's brand/role resolution. */
+    strategy?: string
   }) => {
     if (!cfg.nodes.length || building) return
     setBuilding(true)
     const campaignName = `${brand ? `${brand} — ` : ''}${cfg.name.trim() || 'New campaign'}`
     try {
-      if (brand) addCampaign({ name: campaignName, client: brand, strategy: 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      if (brand) addCampaign({ name: campaignName, client: brand, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      // addCampaign treats 'content-seo' as a "no explicit choice" sentinel, so a deliberately
+      // confirmed Content + SEO motion would be silently replaced by the brand/role default. When
+      // the user actually chose a motion, stamp it directly so the campaign matches what we told them.
+      if (brand && cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
       if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       const allNewIds: string[] = []
@@ -1751,7 +1766,7 @@ export function FlowsView() {
       setNodes(effective)
       for (const n of extra) void genPreview(n)
     }
-    return buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes: effective, objective: objectiveCfg })
+    return buildFlow({ name, subject, budget, flightWeeks, refs: briefRefsEffective, audiences: audSelection, nodes: effective, objective: objectiveCfg, strategy: strategyKey })
   }
 
   // Resolve record-tag labels back to structured references via the record groups.
@@ -1809,6 +1824,14 @@ export function FlowsView() {
     return { ref: { type: 'proof', id: rtb.id, label }, created: true }
   }
 
+  // Resolve a chat-supplied motion (a key, a name, or an alias) to a real GTM strategy. Null when it
+  // cannot be resolved, so setStrategy no-ops instead of stamping a garbage strategy.
+  const strategyFor = (v: string): { key: string; name: string } | null => {
+    if (typeof v !== 'string' || !v.trim()) return null
+    const key = resolveStrategyKey(v.trim())
+    return key ? GTM_STRATEGIES.find((x) => x.key === key) ?? null : null
+  }
+
   // Apply the AI's commands to the flow. Build-mode commands mutate the builder (and the
   // canvas) and can end in a `build`; view-mode commands edit the open flow in place.
   // Returns human-readable summaries of what was applied.
@@ -1847,6 +1870,10 @@ export function FlowsView() {
             setRefsDirty(true)
             applied.push(r.created ? `Added a proof point "${r.ref.label}" (draft)` : `Tagged proof point "${r.ref.label}"`)
           }
+        } else if (c.op === 'setStrategy') {
+          // View mode: persist the motion straight onto the open campaign (build mode uses wStrategy).
+          const s = strategyFor(c.value)
+          if (s) { patchCampaign(viewName, { strategy: s.key }); applied.push(`Set the strategy to ${s.name}`) }
         } else if (c.op === 'regenerate') {
           await regenerateFlow()
           applied.push('Regenerated the copy')
@@ -1858,10 +1885,18 @@ export function FlowsView() {
     let wName = name, wSubject = subject, wBudget = budget, wFlight = flightWeeks
     let wNodes = [...nodesRef.current]
     let wRefs = [...briefRefsEffective]
+    let wStrategy = strategyKey
     const createdRefs: FlowReference[] = []
     for (const c of cmds) {
       switch (c.op) {
         case 'setName': setName(c.value); wName = c.value; applied.push(`Named it "${c.value}"`); break
+        case 'setStrategy': {
+          // Accept a key OR a motion name/alias; anything unresolvable no-ops rather than stamping
+          // a garbage strategy onto the campaign.
+          const s = strategyFor(c.value)
+          if (s) { setStrategyKey(s.key); wStrategy = s.key; applied.push(`Set the strategy to ${s.name}`) }
+          break
+        }
         case 'setSubject': setSubject(c.value); wSubject = c.value; applied.push('Set the theme'); break
         case 'setBudget': setBudget(String(c.value)); wBudget = String(c.value); applied.push(`Set budget $${Math.round(c.value).toLocaleString()}`); break
         case 'setFlight': setFlightWeeks(c.weeks); wFlight = c.weeks; applied.push(`Set flight to ${c.weeks} week${c.weeks === 1 ? '' : 's'}`); break
@@ -1913,7 +1948,7 @@ export function FlowsView() {
           // into row.audience (that would create phantom audiences). Mirrors audSelection.
           const segAuds = wRefs.filter((r) => r.type === 'segment').map((r) => r.label)
           const auds = segAuds.length ? segAuds : audienceNames
-          const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg })
+          const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg, strategy: wStrategy })
           if (nm) applied.push(`Built ${wNodes.length} deliverable${wNodes.length === 1 ? '' : 's'} and wrote the copy`)
           break
         }
@@ -1934,6 +1969,7 @@ export function FlowsView() {
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
       case 'createProof': return `Add a proof point "${c.text}" and tag it`
+      case 'setStrategy': return `Set the strategy to ${GTM_STRATEGIES.find((s) => s.key === c.value)?.name ?? c.value}`
       case 'build': return 'Build the flow and write the copy'
       case 'regenerate': return 'Regenerate the copy'
     }
@@ -1965,6 +2001,7 @@ export function FlowsView() {
               return { preset: p?.key ?? d.key, label: d.label, perMonth: d.count }
             }),
             recordTags: flowRefs.map((r) => r.label),
+            strategy: viewCampaign?.strategy ?? null,
           }
         : {
             mode: 'build' as const,
@@ -1974,7 +2011,22 @@ export function FlowsView() {
             flightWeeks,
             deliverables: nodesRef.current.map((n) => ({ preset: n.presetKey, label: presetByKey(n.presetKey)?.label ?? n.presetKey, perMonth: n.perMonth })),
             recordTags: briefRefsEffective.map((r) => r.label),
+            strategy: strategyKey ?? null,
           }
+      // Strategy-first discovery: the motions to choose from, and what the app already knows about
+      // this brand (split across the brand record + client profile), so the chat asks PURPOSE,
+      // recommends a motion, and never re-asks what it already knows.
+      const strategyMenu = GTM_STRATEGIES.map((s) => ({ key: s.key, name: s.name, bestFor: s.bestFor, coreMetrics: s.coreMetrics }))
+      const profile = brand ? clientProfiles[brand] : undefined
+      const brandRec = brand ? brandRecords.find((r) => r.name === brand) : undefined
+      const brandFacts = {
+        businessObjective: brandRec?.businessObjective || undefined,
+        positioning: brandRec?.positioning || undefined,
+        primaryAudience: brandRec?.primaryAudience || undefined,
+        strategy: profile?.strategy || undefined,
+        businessModel: profile?.businessModel || undefined,
+        oneLiner: profile?.oneLiner || undefined,
+      }
       const res = await generateFlowEdit({
         brand,
         intent,
@@ -1987,6 +2039,8 @@ export function FlowsView() {
         skillLevel: userPrefs.skillLevel,
         marketerRole: userPrefs.marketerRole,
         roleStrategy: userPrefs.marketerRole ? ROLE_PRESETS[userPrefs.marketerRole].defaultStrategy : null,
+        strategyMenu,
+        brandFacts,
       })
       // Analyze (or no edits proposed) is answer-only. Build proposes edits as a pending
       // Suggestions block the user approves before they apply.

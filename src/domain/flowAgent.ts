@@ -20,6 +20,9 @@ export type FlowCommand =
   // Add a NEW proof point (reason to believe) as an unvetted draft and tag the flow to it. Reuses
   // an existing same-text proof instead of duplicating. `text` is the claim (kept short).
   | { op: 'createProof'; text: string }
+  // Set the campaign's GTM strategy / motion (a strategyMenu key). This is the campaign's purpose
+  // made concrete: it drives the funnel, KPIs, and deliverable set. Confirm it with the user first.
+  | { op: 'setStrategy'; value: string }
   | { op: 'build' }
   | { op: 'regenerate' }
 
@@ -31,6 +34,9 @@ export interface FlowSnapshot {
   flightWeeks: number
   deliverables: { preset: string; label: string; perMonth: number }[]
   recordTags: string[]
+  /** The GTM motion already set on this flow, if any. When present the agent must NOT re-ask for a
+   *  strategy: it is already decided (keep it unless the user asks to change it). */
+  strategy?: string | null
 }
 
 export interface FlowAgentContext {
@@ -52,6 +58,20 @@ export interface FlowAgentContext {
   marketerRole?: 'email' | 'brand' | 'product' | 'growth' | null
   /** The role's default GTM motion (e.g. lifecycle, content-seo, plg, demand-gen). */
   roleStrategy?: string | null
+  // Strategy-first discovery: the motions to choose from, and what the app already knows about the
+  // brand, so the chat asks PURPOSE, recommends a motion, and never re-asks what it already knows.
+  /** The GTM strategy menu the chat may pick from (setStrategy.value must be one of these keys). */
+  strategyMenu?: { key: string; name: string; bestFor: string; coreMetrics: string }[]
+  /** What the app already knows about the brand (any field may be absent). */
+  brandFacts?: {
+    businessObjective?: string
+    positioning?: string
+    primaryAudience?: string
+    /** The brand's already-resolved motion key, if set — lean on it, do not re-derive. */
+    strategy?: string
+    businessModel?: string
+    oneLiner?: string
+  }
 }
 
 export interface FlowAgentResult {

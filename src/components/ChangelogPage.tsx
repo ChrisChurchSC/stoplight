@@ -19,6 +19,35 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.7',
+    dateLabel: 'July 21, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The campaign chat now starts with strategy. It asks one thing, what this campaign should do for the brand, then recommends a proven go-to-market motion and sets it on the campaign, so what gets built follows a real plan instead of a default playbook.',
+          "The chat can create the pieces you're missing. When a campaign needs an audience or a proof point that isn't in your library yet, it adds a clearly labelled draft for you to fill in, rather than stalling or tagging something unrelated.",
+          'Tappable follow-ups under every reply, and when the chat asks you a question, the answers come as chips you can tap.',
+        ],
+      },
+      {
+        tag: 'Improved',
+        items: [
+          'The chat adapts to you. On Simple it proposes a complete campaign in one turn; on Advanced it stays terse and precise. Both lean toward your focus area.',
+          'The chat now reads what your brand has already told us (objective, positioning, primary audience), so it stops asking for things the app already knows.',
+          'Once a motion is set, the chat moves on instead of asking about strategy again.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          "Home showed campaigns and tasks on a brand-new workspace. A workspace with no brands yet now always lands on the getting-started view.",
+          'Choosing a motion in the chat now sticks, including on an existing campaign and when the motion you picked is Content and SEO.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.6',
     dateLabel: 'July 21, 2026',
     groups: [
