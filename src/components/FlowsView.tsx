@@ -1992,7 +1992,8 @@ export function FlowsView() {
       // Suggestions block the user approves before they apply.
       const commands = intent === 'analyze' ? [] : res.commands
       const suggestions = commands.map(describeCommand)
-      setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: res.reply, live: res.live, commands: commands.length ? commands : undefined, suggestions: suggestions.length ? suggestions : undefined }])
+      const nextSteps = (res.nextSteps ?? []).map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean).slice(0, 3)
+      setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: res.reply, live: res.live, commands: commands.length ? commands : undefined, suggestions: suggestions.length ? suggestions : undefined, nextSteps: nextSteps.length ? nextSteps : undefined }])
     } catch {
       setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: 'Something went wrong. Try rephrasing.', live: false }])
     } finally {

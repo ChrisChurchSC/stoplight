@@ -57,6 +57,9 @@ export interface FlowAgentContext {
 export interface FlowAgentResult {
   reply: string
   commands: FlowCommand[]
+  /** Optional tappable follow-ups the user might do next (short prompts), shown as chips. When the
+   *  assistant asks an intake question, these can be the answer options. */
+  nextSteps?: string[]
 }
 
 /** One message in a flow chat. Assistant messages may carry pending suggestions (edit
@@ -70,6 +73,8 @@ export interface FlowChatMsg {
   commands?: FlowCommand[]
   /** Human-readable descriptions of `commands`, parallel array. */
   suggestions?: string[]
+  /** Tappable follow-up prompts shown as chips under the message. */
+  nextSteps?: string[]
   /** Resolution of the pending suggestions, once acted on. */
   resolved?: 'applied' | 'discarded'
 }

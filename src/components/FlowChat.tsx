@@ -172,6 +172,13 @@ export function FlowChat({
                   )}
                 </div>
               )}
+              {m.nextSteps && m.nextSteps.length > 0 && (
+                <div className="fchat-next">
+                  {m.nextSteps.map((s, i) => (
+                    <button key={i} className="fchat-next-chip" disabled={busy} onClick={() => onSend(s, 'build')}>{s}</button>
+                  ))}
+                </div>
+              )}
             </div>
           ),
         )}
