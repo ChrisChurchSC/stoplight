@@ -26458,3 +26458,40 @@ table.aud-sheet td.stick .aud-cell {
 .fchat-next-chip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12px; font-weight: 550; cursor: pointer; transition: border-color .12s, color .12s; }
 .fchat-next-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .fchat-next-chip:disabled { opacity: .5; cursor: default; }
+
+/* ---- Welcome: Phase A of setup, the "about you" sequence ------------------------------------ */
+/* Full-bleed and opaque on purpose. It is asked once, and while it is up nothing else competes for
+   the screen, which was the whole problem with asking these on Home. */
+.wel {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--bg); display: grid; place-items: center; padding: 24px;
+  overflow-y: auto;
+}
+.wel-inner { width: min(560px, 100%); display: flex; flex-direction: column; gap: 26px; }
+.wel-mark { display: flex; justify-content: center; opacity: 0.9; }
+.wel-step { display: flex; flex-direction: column; gap: 10px; }
+.wel-count {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.wel-q { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--text); text-wrap: balance; }
+.wel-sub { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-muted); max-width: 44ch; }
+.wel-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.wel-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 14px 16px; cursor: pointer; font: inherit;
+  transition: border-color .12s, background .12s;
+}
+.wel-opt:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.wel-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wel-opt-label { font-size: 14.5px; font-weight: 650; color: var(--text); }
+.wel-opt-hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.45; }
+.wel-foot { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.wel-skip, .wel-back {
+  border: 0; background: none; color: var(--text-faint); font: inherit; font-size: 12.5px;
+  cursor: pointer; padding: 8px 10px; align-self: flex-start; margin-top: 4px;
+}
+.wel-skip:hover, .wel-back:hover { color: var(--text-muted); }
+.wel-foot .wel-skip, .wel-foot .wel-back { margin-top: 0; }
+.wel-foot .wel-skip { margin-left: auto; }

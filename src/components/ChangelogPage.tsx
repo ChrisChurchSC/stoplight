@@ -28,6 +28,7 @@ const RELEASES: Release[] = [
           'The campaign chat now starts with strategy. It asks one thing, what this campaign should do for the brand, then recommends a proven go-to-market motion and sets it on the campaign, so what gets built follows a real plan instead of a default playbook.',
           "The chat can create the pieces you're missing. When a campaign needs an audience or a proof point that isn't in your library yet, it adds a clearly labelled draft for you to fill in, rather than stalling or tagging something unrelated.",
           'Tappable follow-ups under every reply, and when the chat asks you a question, the answers come as chips you can tap.',
+          'A proper first run. Breadcrumbs now asks two questions about you, what you work on and how much detail you want, one at a time with nothing else on screen, before you set anything up. It only appears for a brand-new workspace.',
         ],
       },
       {
@@ -44,6 +45,8 @@ const RELEASES: Release[] = [
           "Deleting a brand now deletes the brand. It used to remove the name and its campaigns while leaving the canvases, timeline flights, library, folders, reports, chats and tasks behind, and because those sync to your workspace they came back on any other device or in a private window. One sweep now, so deleted means deleted everywhere.",
           "The Back button is gone from the sidebar. It only ever restored the page, not the view you were actually looking at, and it pushed every other nav item down a row when it appeared. Use the “Campaigns / <name>” breadcrumb inside a campaign to step back out.",
           'The Brand page no longer shows the first brand’s strategy when the brand you picked has none of its own.',
+          "Home no longer greets a new workspace with six things at once. The focus and detail-level questions moved into the first run, and the walkthrough waits its turn instead of drawing over them.",
+          'Picking a focus on a brand-new workspace used to drop you straight onto that role’s working page, which is empty when you have not set anything up. You now land on Home, where the next step is.',
           "Home showed campaigns and tasks on a brand-new workspace. A workspace with no brands yet now always lands on the getting-started view.",
           'Choosing a motion in the chat now sticks, including on an existing campaign and when the motion you picked is Content and SEO.',
         ],

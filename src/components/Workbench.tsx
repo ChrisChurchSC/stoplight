@@ -67,6 +67,7 @@ import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 import { GettingStarted } from './GettingStarted'
+import { Welcome } from './Welcome'
 import { StarterTemplates } from './StarterTemplates'
 import { Tour } from './Tour'
 import { Toast } from './Toast'
@@ -418,6 +419,8 @@ export function Workbench() {
       <StarterTemplates />
       <GettingStarted />
       <Tour />
+      {/* Phase A of setup: asked before anything else, and the only thing on screen while it runs. */}
+      <Welcome />
       <Toast />
     </div>
   )

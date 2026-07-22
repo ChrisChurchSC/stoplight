@@ -35,9 +35,12 @@ export function Tour() {
   }
   const next = () => (i + 1 >= TOUR_STEPS.length ? finish() : setI(i + 1))
 
-  // Start once, on Home, after the anchors have had a moment to render.
+  // Start once, on Home, after the anchors have had a moment to render, and never before the
+  // first-run "about you" sequence is resolved: the tour used to draw straight over it, spotlight
+  // and all. One first-run surface at a time.
+  const onboardedAt = useTrafficStore((s) => s.userPrefs.onboardedAt)
   useEffect(() => {
-    if (isDone() || page !== 'portfolio' || active) return
+    if (onboardedAt == null || isDone() || page !== 'portfolio' || active) return
     const t = window.setTimeout(() => {
       if (!isDone() && document.querySelector(TOUR_STEPS[0].sel)) {
         setI(0)
@@ -45,7 +48,7 @@ export function Tour() {
       }
     }, 900)
     return () => window.clearTimeout(t)
-  }, [page, active])
+  }, [page, active, onboardedAt])
 
   // Skip steps whose anchor is missing; measure the current anchor and keep it measured on scroll/resize.
   useLayoutEffect(() => {

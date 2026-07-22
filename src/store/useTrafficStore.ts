@@ -6450,8 +6450,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const userPrefs = { ...s.userPrefs, ...patch }
       persistState(USER_PREFS_KEY, userPrefs)
       // On an explicit role pick, land on that role's home surface and confirm where you landed
-      // (bias only, everything stays reachable).
-      const preset = patch.marketerRole ? ROLE_PRESETS[patch.marketerRole] : null
+      // (bias only, everything stays reachable). NOT on a workspace with no brands yet: a role's
+      // landing page is a working surface, so a brand-new user would be dropped on an empty
+      // Insights or Library instead of the one screen that tells them what to do first.
+      const fresh = Object.keys(s.clientProfiles).length === 0 && s.clientList.length === 0
+      const preset = patch.marketerRole && !fresh ? ROLE_PRESETS[patch.marketerRole] : null
       return preset
         ? { userPrefs, page: preset.landingPage, toast: `Landing on ${preset.landingLabel}. Everything stays one click away.`, toastAction: null }
         : { userPrefs }

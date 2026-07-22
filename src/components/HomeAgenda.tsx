@@ -277,38 +277,9 @@ export function HomeAgenda() {
           )}
           {empty ? (
             <>
-            {!userPrefs.marketerRole && !userPrefs.focusDismissed && (
-              <div className="ag2-focus">
-                <span className="ag2-focus-q">What's your focus?</span>
-                {MARKETER_ROLES.map((r) => (
-                  <button key={r.value} className="ag2-focus-chip" title={r.hint} onClick={() => setUserPrefs({ marketerRole: r.value, focusDismissed: true })}>
-                    {r.label}
-                  </button>
-                ))}
-                <button className="ag2-focus-skip" onClick={() => setUserPrefs({ focusDismissed: true, skillLevel: userPrefs.skillLevel ?? 'advanced' })}>
-                  Skip
-                </button>
-              </div>
-            )}
-            {!userPrefs.focusDismissed && (
-              <div className="ag2-focus ag2-focus-detail">
-                <span className="ag2-focus-q">How much do you want to see?</span>
-                <button
-                  className={`ag2-focus-chip${userPrefs.skillLevel === 'simple' ? ' on' : ''}`}
-                  title="A calm surface with the essential fields. Everything stays one click away."
-                  onClick={() => setUserPrefs({ skillLevel: 'simple' })}
-                >
-                  Keep it simple
-                </button>
-                <button
-                  className={`ag2-focus-chip${userPrefs.skillLevel === 'advanced' ? ' on' : ''}`}
-                  title="Every column, metric, and control. The full experience."
-                  onClick={() => setUserPrefs({ skillLevel: 'advanced' })}
-                >
-                  Show me everything
-                </button>
-              </div>
-            )}
+            {/* Focus and detail level are asked once in the first-run sequence (Welcome.tsx), not
+                here. They used to be two chip rows on this screen, competing with the tour, the
+                checklist and the start cards for a user who had not done anything yet. */}
             <div className="ag2-startcards">
               <button className="ag2-startcard primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
                 <span className="ag2-startcard-ic" aria-hidden="true">
