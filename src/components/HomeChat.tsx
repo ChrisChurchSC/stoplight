@@ -27,12 +27,13 @@ import { freshRecordId } from '../domain/records'
 import { newAudience } from '../domain/audiences'
 import type { Message } from '../domain/message'
 import { buildAskBrand } from '../lib/askBrand'
-import { BUILD_BRAND_SEED, GUIDED_SETUP_INTRO, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest } from '../domain/guidedSetup'
+import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest, type SetupStep } from '../domain/guidedSetup'
 import type { HomeChatMsg as Msg, HomeChatStep as Step, HomeChatStepKind as StepKind } from '../domain/homeChat'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
+import type { MarketerRole, SkillLevel } from '../domain/userPrefs'
 
 /**
  * The Home conversational chat: a full-page thread opened from the Home ask box. A
@@ -119,6 +120,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const markBrandFields = useTrafficStore((s) => s.markBrandFields)
+  const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
   // Which of the foundation passes were really written by the model, and which fell back to a
   // canned generic set. Every adapter swallows its failures, so without this the review screen
   // would present "Team leads / Operations owners / Executive sponsors" as a finding about the
@@ -259,13 +261,22 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       return
     }
     setupRef.current = { step: 0, brand: '' }
-    say(`${GUIDED_SETUP_INTRO}\n\n${GUIDED_SETUP_STEPS[0].prompt('')}`)
+    askSetupStep(GUIDED_SETUP_STEPS[0], '')
+  }
+
+  // Ask one setup question. Chip steps carry their answers on the message so the user taps rather
+  // than guessing what to type; typing the same thing still works, since the applier only reads the
+  // value it is handed.
+  const askSetupStep = (step: SetupStep, brand: string) => {
+    say(step.prompt(brand), step.kind === 'chips' ? { setupPick: step.options, setupSkippable: step.skippable } : undefined)
   }
 
   // Apply one setup answer to the store (creating real records), then ask the next question or finish.
-  const handleSetupAnswer = (text: string) => {
+  const handleSetupAnswer = (text: string, display?: string) => {
     const val = text.trim()
-    sayUser(val)
+    // Chip answers carry a machine value ('growth') and a human label ('Growth / performance'). Echo
+    // the label, apply the value.
+    sayUser(display ?? val)
     setQ('')
     const st = setupRef.current!
     const step = GUIDED_SETUP_STEPS[st.step]
@@ -273,9 +284,17 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       say(step.prompt(st.brand))
       return
     }
+    const skipped = val.toLowerCase() === 'skip'
     // Everything typed here is the USER's own words. Mark it so, or the brand drafter overwrites it
     // (its schema returns a value for every field, so it has an opinion about all of them).
-    if (step.key === 'brand') {
+    if (step.key === 'role') {
+      // No role landing fires here: setUserPrefs skips it on a workspace with no brands, which is
+      // always the case at this point in the first run.
+      if (!skipped) setUserPrefs({ marketerRole: val as MarketerRole })
+    } else if (step.key === 'detail') {
+      // Skipping leaves it alone so resolveSkillDefault still picks from the shape of the workspace.
+      if (!skipped) setUserPrefs({ skillLevel: val as SkillLevel })
+    } else if (step.key === 'brand') {
       addClient(val)
       addBrandRecord({ name: val })
       setClientFilter(val)
@@ -284,7 +303,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       setClientProfile(st.brand, { oneLiner: val })
       markBrandFields(st.brand, ['oneLiner'], 'user')
     } else if (step.key === 'website') {
-      if (val.toLowerCase() !== 'skip') {
+      if (!skipped) {
         setClientProfile(st.brand, { website: val })
         // Onto the record too, not just the profile: the Brand sheet reads the record, and until
         // both agree the sheet shows an empty website for a brand that has one.
@@ -296,7 +315,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const next = st.step + 1
     if (next < GUIDED_SETUP_STEPS.length) {
       st.step = next
-      say(GUIDED_SETUP_STEPS[next].prompt(st.brand))
+      askSetupStep(GUIDED_SETUP_STEPS[next], st.brand)
     } else {
       setupRef.current = null
       const hasSite = !!(useTrafficStore.getState().clientProfiles[st.brand] as { website?: string } | undefined)?.website
@@ -1485,6 +1504,36 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, true)}>{FLOW_PROMPT[m.flowStep as FlowStep].label}</button>
                       <button className="hchat-setup-btn ghost" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, false)}>Skip</button>
+                    </div>
+                  )}
+                  {m.setupPick && (
+                    <div className="hchat-setup-actions">
+                      {m.setupPick.map((o) => (
+                        <button
+                          key={o.value}
+                          className="hchat-setup-btn"
+                          title={o.hint || undefined}
+                          onClick={() => {
+                            // Clear the chips off the answered message so a scrolled-back question
+                            // cannot be answered twice, which would advance the sequence out of step.
+                            setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, setupPick: undefined, setupSkippable: undefined } : x)))
+                            handleSetupAnswer(o.value, o.label)
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                      {m.setupSkippable && (
+                        <button
+                          className="hchat-setup-btn ghost"
+                          onClick={() => {
+                            setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, setupPick: undefined, setupSkippable: undefined } : x)))
+                            handleSetupAnswer('skip')
+                          }}
+                        >
+                          Skip
+                        </button>
+                      )}
                     </div>
                   )}
                   {m.goalPick && (

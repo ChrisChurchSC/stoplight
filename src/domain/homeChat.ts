@@ -41,6 +41,10 @@ export interface HomeChatMsg {
   flowStep?: string
   /** When set, renders the brand's objectives as goal buttons during the flow-build (plus Skip). */
   goalPick?: { id: string; label: string; metric?: string }[]
+  /** First-run setup step answered by tapping rather than typing (role, detail level). */
+  setupPick?: { value: string; label: string; hint?: string }[]
+  /** Whether that step can be passed over without answering. */
+  setupSkippable?: boolean
   /** When set, renders the brand's audiences as multi-select toggles at the start of go-to-market. */
   audiencePick?: { id: string; label: string }[]
   /** Set on the message that announces ingested site content, to render a "View Library" link. */
