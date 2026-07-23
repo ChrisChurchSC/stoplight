@@ -247,6 +247,11 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
   </span>
 )
 
+// Quick-start templates offered on the empty canvas: one high-signal deliverable per motion
+// (email, content, social, web, paid, lead magnet). Clicking one drops that node so the canvas
+// is never a blank page. Keys must exist in DELIVERABLE_PRESETS.
+const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 'ebook'] as const
+
 const CampaignTile = () => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${CAMPAIGN_TONE} 20%, transparent)`, color: CAMPAIGN_TONE }}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -504,6 +509,9 @@ export function FlowsView() {
   // card when clicked, so the canvas is clean by default.
   const [chatCollapsed, setChatCollapsed] = useState(true)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
+  // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
+  // opens Crumbot and hands it the brief (its discovery/build flow takes over from there).
+  const [starterText, setStarterText] = useState('')
   // The Outline: a navigable map of the campaign's contents (Figma's Layers panel, adapted). Docks
   // over the canvas's top-left, collapsed by default so the chat stays the star. Clicking a row
   // selects that node, which highlights it and opens its brief.
@@ -1358,6 +1366,15 @@ export function FlowsView() {
     setPickAt(null)
     setSel(node.id)
     void genPreview(node)
+  }
+  // Empty-canvas starter: hand the typed brief to Crumbot, which runs its discovery/build flow.
+  // Opening the assistant is the whole point, so the conversation continues in one place.
+  const submitStarter = () => {
+    const t = starterText.trim()
+    if (!t) return
+    setStarterText('')
+    setChatCollapsed(false)
+    void runFlowChat(t, 'build')
   }
   // View mode: add a deliverable straight into the opened flow's campaign (seed its rows
   // and write their copy), so an existing flow can grow without leaving Flows or rebuilding.
@@ -2554,6 +2571,50 @@ export function FlowsView() {
               </div>
             )
           })()}
+          {/* Empty-canvas starter: the front door before a campaign has any shape. Describe it to
+              Crumbot, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
+              centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
+          {!viewing && !building && nodes.length === 0 && chatMsgs.length === 0 && (
+            <div className="flow-starter">
+              <div className="flow-starter-eyebrow">New campaign</div>
+              <h2 className="flow-starter-title">What are you launching?</h2>
+              <p className="flow-starter-sub">Describe it and Crumbot drafts the plan, audiences, and copy. Nothing sends until you say so.</p>
+              <div className="flow-starter-prompt">
+                <textarea
+                  className="flow-starter-input"
+                  rows={2}
+                  placeholder="A spring launch for our new onboarding flow, aimed at RevOps leads…"
+                  value={starterText}
+                  onChange={(e) => setStarterText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submitStarter() }
+                  }}
+                />
+                <button className="flow-starter-go" onClick={submitStarter} disabled={!starterText.trim()}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5z" /></svg>
+                  Draft with Crumbot
+                  <span className="flow-starter-kbd">⌘↵</span>
+                </button>
+              </div>
+              <div className="flow-starter-or"><span>or start from a template</span></div>
+              <div className="flow-starter-chips">
+                {STARTER_KEYS.map((k) => {
+                  const p = presetByKey(k)
+                  if (!p) return null
+                  return (
+                    <button key={k} className="flow-starter-chip" onClick={() => addPreset(p)}>
+                      <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                      <span>{p.label}</span>
+                    </button>
+                  )
+                })}
+                <button className="flow-starter-chip flow-starter-chip-more" onClick={openAddDeliverable}>
+                  <span className="flow-starter-more-ic" aria-hidden="true">+</span>
+                  <span>Browse all</span>
+                </button>
+              </div>
+            </div>
+          )}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
             {/* Campaign brief node */}
             <div
