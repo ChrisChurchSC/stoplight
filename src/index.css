@@ -26397,6 +26397,14 @@ table.aud-sheet td.stick .aud-cell {
 @keyframes chat-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (prefers-reduced-motion: reduce) { .chat-drawer { animation: none; } }
 .chat-drawer .hchat { flex: 1; min-height: 0; }
+/* Crumbot reuses the polished .fchat-* chrome (header / empty state / composer) inside the
+   right-hand drawer. The shared .fchat container is a docked 360px left column with a right
+   border, so HomeChat keeps its own .hchat shell and we only borrow the children: drop the
+   .hchat side padding so the fchat-* children provide their own and fill the 440px drawer, then
+   restore the thread's horizontal padding (which relied on that shell padding). */
+.chat-drawer .hchat { padding: 0; max-width: none; }
+.chat-drawer .hchat-thread { padding-left: 16px; padding-right: 16px; }
+.chat-drawer .fchat-composer { padding-left: 16px; padding-right: 16px; }
 /* The collapsed assistant: a slim panel docked flush to the right edge (not a floating button),
    full height, so it reads as a right-side panel waiting to open. */
 .chat-rail {

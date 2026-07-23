@@ -26,7 +26,7 @@ export function ChatDock() {
       {open && (
         // A side drawer, not a takeover: it pops out from the right and leaves the page visible
         // beside it, so the chat stays a companion to whatever you are looking at.
-        <div className="chat-drawer" role="dialog" aria-label="Assistant">
+        <div className="chat-drawer" role="dialog" aria-label="Crumbot">
           {/* Keyed by session so opening a new or saved chat remounts a fresh thread. */}
           <HomeChat key={session} />
         </div>
@@ -34,11 +34,11 @@ export function ChatDock() {
       {!open && !flowCanvasOpen && (
         // A slim panel docked to the right edge (the assistant, collapsed), not a floating button.
         // Clicking it slides the full panel out.
-        <button className="chat-rail" onClick={() => newHomeChat()} title="Ask the assistant" aria-label="Open the assistant">
+        <button className="chat-rail" onClick={() => newHomeChat()} title="Ask Crumbot" aria-label="Open Crumbot">
           <svg className="chat-rail-ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4v3l4-3h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z" />
           </svg>
-          <span className="chat-rail-label">Ask</span>
+          <span className="chat-rail-label">Crumbot</span>
         </button>
       )}
     </>

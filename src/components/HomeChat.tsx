@@ -40,6 +40,21 @@ import { useTrafficStore } from '../store/useTrafficStore'
 let uid = 0
 const nid = () => `hc_${Math.random().toString(36).slice(2)}_${++uid}`
 
+// A small sparkle, matching the RecordsChat agent panel, for the empty-state suggestion cards.
+const SparkIco = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
+  </svg>
+)
+
+// The three starter prompts shown on a fresh Crumbot chat. Each runs through the existing `run`
+// engine, so they behave exactly like typing the prompt.
+const EMPTY_CARDS = [
+  { title: 'Draft a campaign', desc: 'Start a new campaign from a goal.', prompt: 'Draft a new campaign' },
+  { title: 'What needs attention', desc: "See what's flagged and due next.", prompt: 'What should I prioritize next?' },
+  { title: 'Personalize for an audience', desc: "Tailor copy to who you're targeting.", prompt: 'Help me personalize a campaign for a specific audience' },
+]
+
 const STEP_ICON: Record<StepKind, ReactNode> = {
   assets: (
     <>
@@ -669,19 +684,44 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
 
   return (
     <div className="hchat">
-      <header className="hchat-top">
-        {/* Closes the overlay back to whatever page you were on. Not "Home": the assistant is no
-            longer part of the Home page. */}
-        <button className="hchat-back" onClick={() => (embedded ? onExit?.() : closeHomeChat())}>
-          {embedded ? '← Back' : '✕ Close'}
-        </button>
-        <button className="hchat-new" onClick={newHomeChat} title="Start a new chat">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-          New chat
-        </button>
+      <header className="fchat-head">
+        <span className="fchat-spark" aria-hidden="true">✦</span>
+        <span className="fchat-title">Crumbot</span>
+        <span className="fchat-beta">Beta</span>
+        <div className="fchat-head-actions">
+          <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={newHomeChat}>+</button>
+          {/* Closes the overlay back to whatever page you were on (or exits the embedded host). */}
+          <button
+            className="fchat-hbtn"
+            title={embedded ? 'Back' : 'Close'}
+            aria-label={embedded ? 'Back' : 'Close'}
+            onClick={() => (embedded ? onExit?.() : closeHomeChat())}
+          >
+            ✕
+          </button>
+        </div>
       </header>
 
       <div className="hchat-thread">
+        {messages.length === 0 && (
+          <div className="fchat-empty">
+            <p className="fchat-empty-lead">I&rsquo;m Crumbot.</p>
+            <p className="fchat-empty-sub">
+              Ask me anything about your campaigns, brands, and what to do next. I can draft, answer, and point you to what needs attention.
+            </p>
+            <div className="fchat-cards">
+              {EMPTY_CARDS.map((c) => (
+                <button key={c.title} className="fchat-card" disabled={busy} onClick={() => void run(c.prompt)}>
+                  <span className="fchat-card-ic" aria-hidden="true"><SparkIco /></span>
+                  <span className="fchat-card-txt">
+                    <span className="fchat-card-title">{c.title}</span>
+                    <span className="fchat-card-desc">{c.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {messages.map((m) =>
           m.role === 'user' ? (
             <div key={m.id} className="hchat-user">
@@ -783,7 +823,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
         <div ref={endRef} />
       </div>
 
-      <div className="hchat-composer">
+      <div className="fchat-disclaim">Crumbot can make mistakes. Check important details.</div>
+      <div className="fchat-composer">
         <div className="hchat-actions">
           {clientFilter && clientFilter !== 'all' && (
             <>
@@ -818,9 +859,9 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
             </>
           )}
         </div>
-        <div className="hchat-box">
+        <div className="fchat-inputrow">
           <textarea
-            className="hchat-input"
+            className="fchat-input"
             placeholder="Ask anything…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -833,13 +874,9 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
             rows={2}
             autoFocus
           />
-          <div className="hchat-box-foot">
-            <span className="hchat-scope">{scope}</span>
-            <span className="hchat-model">Auto</span>
-            <button className="hchat-send" onClick={() => run(q)} disabled={!q.trim() || busy} aria-label="Send">
-              ↑
-            </button>
-          </div>
+          <button className="fchat-send" onClick={() => run(q)} disabled={!q.trim() || busy} aria-label="Send">
+            ↑
+          </button>
         </div>
       </div>
     </div>
