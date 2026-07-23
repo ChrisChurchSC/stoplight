@@ -26317,7 +26317,9 @@ table.aud-sheet td.stick .aud-cell {
 /* ---- Dev-only "start from scratch" ---------------------------------------------------------- */
 /* Sits in the empty right end of the dark project strip. Above the Welcome overlay (z 90) on
    purpose, so the first-run flow can be replayed without first clicking through it. */
-.devreset { position: fixed; top: 11px; right: 16px; z-index: 95; display: flex; align-items: center; gap: 6px; }
+/* Clear of the assistant's right-edge rail (46px), and below the open drawer (z 80) so it never
+   sits over the chat. Dev-only, so it just needs to stay out of the way. */
+.devreset { position: fixed; top: 11px; right: 62px; z-index: 70; display: flex; align-items: center; gap: 6px; }
 .devreset-q { font-size: 11.5px; color: #fff; background: rgba(28, 33, 43, 0.92); padding: 4px 8px; border-radius: 6px; }
 .devreset-btn {
   display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 11.5px; font-weight: 600;
