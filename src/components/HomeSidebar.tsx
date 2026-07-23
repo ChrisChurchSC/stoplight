@@ -213,7 +213,6 @@ type NavPage =
 export function HomeSidebar() {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
-  const reopenOnboarding = useTrafficStore((s) => s.reopenOnboarding)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
   const modeLabel = [userPrefs.marketerRole, userPrefs.skillLevel].filter(Boolean).map((x) => cap(x as string)).join(' · ')
@@ -461,21 +460,6 @@ export function HomeSidebar() {
           </span>
           <span className="nav-label">What&rsquo;s new</span>
         </a>
-        <button
-          className="nav-item hsb-getstarted"
-          title="Reopen the Getting started checklist"
-          onClick={() => {
-            setPage('portfolio')
-            reopenOnboarding()
-          }}
-        >
-          <span className="nav-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" /><path d="M12 8v4l2.5 2.5" />
-            </svg>
-          </span>
-          <span className="nav-label">Getting started</span>
-        </button>
         {!flowCanvasOpen && (
           <button
             className="nav-item hsb-collapse"

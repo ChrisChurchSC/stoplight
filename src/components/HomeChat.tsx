@@ -1,25 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { askClaude } from '../adapters/ask/claudeAsk'
 import { draftProof } from '../adapters/ask/draftProof'
-import { draftCtas } from '../adapters/ask/draftCtas'
 import { clientForCampaign } from '../domain/clients'
 import type { TrafficRow } from '../domain/types'
 import { getActiveWorkspaceId } from '../lib/session'
 import { draftAudiences, type DraftOrigin } from '../adapters/ask/draftAudiences'
 import { draftMessages } from '../adapters/ask/draftMessages'
 import { draftVoices } from '../adapters/ask/draftVoices'
-import { draftBrandProfile } from '../adapters/ask/draftBrandProfile'
-import { brandDifferentiatorText, type BrandRecord } from '../domain/brandRecord'
+import { brandDifferentiatorText } from '../domain/brandRecord'
 import { draftObjectives } from '../adapters/ask/draftObjectives'
 import { draftChannels } from '../adapters/ask/draftChannels'
 import { draftAngle } from '../adapters/ask/draftAngle'
 import { FUNNEL_STAGES } from '../domain/funnel'
 import { readAggregatePatterns } from '../adapters/aggregate/aggregateOutcomes'
 import { ingestSite } from '../adapters/ask/ingestSite'
-import { CHANNELS, CHANNEL_LIST, resolveChannelId } from '../domain/channels'
-import { DELIVERABLE_PRESETS, presetByKey } from '../domain/flows'
-import type { Deliverable } from '../domain/strategyAssets'
-import type { FlowReference } from '../domain/clients'
+import { CHANNEL_LIST, resolveChannelId } from '../domain/channels'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { buildAskContext } from '../domain/askClaude'
 import { buildBrandReport } from '../domain/reportGen'
@@ -27,13 +22,11 @@ import { freshRecordId } from '../domain/records'
 import { newAudience } from '../domain/audiences'
 import type { Message } from '../domain/message'
 import { buildAskBrand } from '../lib/askBrand'
-import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED, GUIDED_SETUP_STEPS, isSetupRequest, type SetupStep } from '../domain/guidedSetup'
 import type { HomeChatMsg as Msg, HomeChatStep as Step, HomeChatStepKind as StepKind } from '../domain/homeChat'
 import { Markdown } from '../lib/miniMarkdown'
 import { rowInScope } from '../lib/scope'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
-import type { MarketerRole, SkillLevel } from '../domain/userPrefs'
 
 /**
  * The Home conversational chat: a full-page thread opened from the Home ask box. A
@@ -71,21 +64,6 @@ const STEP_ICON: Record<StepKind, ReactNode> = {
   ),
 }
 
-// The guided build flows, in dependency order. Foundation and Go-to-market are separate sequences
-// (matching the sidebar sections); each step offers to draft that piece or skip, then advances.
-const FLOW_STEP_KEYS = ['audiences', 'voices', 'proof', 'messages', 'channels', 'objectives'] as const
-type FlowStep = (typeof FLOW_STEP_KEYS)[number]
-const FOUNDATION_STEPS: FlowStep[] = ['audiences', 'voices', 'proof', 'messages']
-const GTM_STEPS: FlowStep[] = ['channels', 'objectives']
-const FLOW_PROMPT: Record<FlowStep, { text: string; label: string }> = {
-  audiences: { text: `First, your **audiences**, the people you're marketing to. Everything else gets sharper once these exist. Want me to draft a few?`, label: 'Draft audiences' },
-  voices: { text: `Now your **brand voice**, how you sound. Want me to define it?`, label: 'Add voices' },
-  proof: { text: `**Proof points**, the evidence your messages lean on. Want me to draft some?`, label: 'Draft proof points' },
-  messages: { text: `**Messages**, what you say to each audience, in your voice, backed by proof. Want me to draft them?`, label: 'Draft messages' },
-  channels: { text: `Now go-to-market. First, **channels**, where you reach each audience. Want me to pick the best-fit ones and set them?`, label: 'Set channels' },
-  objectives: { text: `And **objectives**, what to measure and how often to report. Want me to draft them?`, label: 'Draft objectives' },
-}
-
 /**
  * When `embedded`, this chat is running inside another surface that owns the screen (today: the
  * first-run onboarding sequence). Two things change: it takes its opening seed from the prop rather
@@ -114,13 +92,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   const addReport = useTrafficStore((s) => s.addReport)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
-  const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
-  // Setup actions — the guided flow creates real records as the user answers.
-  const addClient = useTrafficStore((s) => s.addClient)
-  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
-  const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
-  const markBrandFields = useTrafficStore((s) => s.markBrandFields)
-  const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
   // Which of the foundation passes were really written by the model, and which fell back to a
   // canned generic set. Every adapter swallows its failures, so without this the review screen
   // would present "Team leads / Operations owners / Executive sponsors" as a finding about the
@@ -132,13 +103,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addObjective = useTrafficStore((s) => s.addObjective)
   const importAssets = useTrafficStore((s) => s.importAssets)
-  const addCampaign = useTrafficStore((s) => s.addCampaign)
-  const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
-  const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
-  const draftCopy = useTrafficStore((s) => s.draftCopy)
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
-  const openFlow = useTrafficStore((s) => s.openFlow)
   const { brands } = useHomeCanvases()
 
   const [messages, setMessages] = useState<Msg[]>([])
@@ -160,20 +126,10 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   const createdAtRef = useRef<number>(0)
   // When we've asked "which brand?" for a report, the next message is read as the brand answer.
   const awaitingBrandRef = useRef(false)
-  // Non-null while the guided setup is running: which step we're on + the brand named so far.
-  const setupRef = useRef<{ step: number; brand: string } | null>(null)
   // The last thing the chat DID (e.g. 'proof'), so a follow-up like "more" continues that action.
   const lastActionRef = useRef<string | null>(null)
   // When we've asked for the brand's website (to ingest content), the next message is read as the URL.
   const awaitingSiteRef = useRef(false)
-  // Non-null while the guided "build a flow" conversation is running.
-  // Flow-build steps: 0 theme, 1 audiences, 2 goal, 3 weeks. audienceIds = the flow's chosen targets.
-  const flowBuildRef = useRef<{ step: number; name: string; weeks: number; objectiveId?: string; audienceIds?: string[] } | null>(null)
-  // The audiences you're pursuing in go-to-market: scopes channel assignment and the flow-build.
-  // null = pursue all. Set when you pick audiences at the start of the GTM flow.
-  const gtmPursuedRef = useRef<Set<string> | null>(null)
-  // In-progress toggle selection while the GTM audience-pick step is on screen.
-  const [gtmAudSel, setGtmAudSel] = useState<Set<string>>(new Set())
 
   // Brands you can report on (canvas brands ∪ any brand with segments), minus the Drafts catch-all.
   const brandList = useMemo(
@@ -243,88 +199,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   const say = (text: string, extra?: Partial<Msg>) =>
     setMessages((m) => [...m, { id: nid(), role: 'assistant', text, ...extra }])
   const sayUser = (text: string) => setMessages((m) => [...m, { id: nid(), role: 'user', text }])
-
-  // Start the guided setup: intro + first question. Clears any pending report handshake. If the
-  // current brand is ALREADY set up (has a one-liner and an audience), don't restart from scratch —
-  // offer to extend it instead, so "get started" on an existing brand doesn't loop to "what's your
-  // brand called?".
-  const startSetup = (forceNew = false) => {
-    awaitingBrandRef.current = false
-    setQ('')
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    const profile = (brand && brand !== 'all' ? store.clientProfiles[brand] : undefined) as { oneLiner?: string } | undefined
-    const hasAudiences = brand && brand !== 'all' && (store.clientAudiences[brand]?.length ?? 0) > 0
-    if (!forceNew && brand && brand !== 'all' && (profile?.oneLiner || hasAudiences)) {
-      say(`**${brand}** is already started. Here's the next step toward a personalized campaign (say "new brand" to set up a different one):`)
-      surfaceNextStep()
-      return
-    }
-    setupRef.current = { step: 0, brand: '' }
-    askSetupStep(GUIDED_SETUP_STEPS[0], '')
-  }
-
-  // Ask one setup question. Chip steps carry their answers on the message so the user taps rather
-  // than guessing what to type; typing the same thing still works, since the applier only reads the
-  // value it is handed.
-  const askSetupStep = (step: SetupStep, brand: string) => {
-    say(step.prompt(brand), step.kind === 'chips' ? { setupPick: step.options, setupSkippable: step.skippable } : undefined)
-  }
-
-  // Apply one setup answer to the store (creating real records), then ask the next question or finish.
-  const handleSetupAnswer = (text: string, display?: string) => {
-    const val = text.trim()
-    // Chip answers carry a machine value ('growth') and a human label ('Growth / performance'). Echo
-    // the label, apply the value.
-    sayUser(display ?? val)
-    setQ('')
-    const st = setupRef.current!
-    const step = GUIDED_SETUP_STEPS[st.step]
-    if (!val) {
-      say(step.prompt(st.brand))
-      return
-    }
-    const skipped = val.toLowerCase() === 'skip'
-    // Everything typed here is the USER's own words. Mark it so, or the brand drafter overwrites it
-    // (its schema returns a value for every field, so it has an opinion about all of them).
-    if (step.key === 'role') {
-      // No role landing fires here: setUserPrefs skips it on a workspace with no brands, which is
-      // always the case at this point in the first run.
-      if (!skipped) setUserPrefs({ marketerRole: val as MarketerRole })
-    } else if (step.key === 'detail') {
-      // Skipping leaves it alone so resolveSkillDefault still picks from the shape of the workspace.
-      if (!skipped) setUserPrefs({ skillLevel: val as SkillLevel })
-    } else if (step.key === 'brand') {
-      addClient(val)
-      addBrandRecord({ name: val })
-      setClientFilter(val)
-      st.brand = val
-    } else if (step.key === 'oneliner') {
-      setClientProfile(st.brand, { oneLiner: val })
-      markBrandFields(st.brand, ['oneLiner'], 'user')
-    } else if (step.key === 'website') {
-      if (!skipped) {
-        setClientProfile(st.brand, { website: val })
-        // Onto the record too, not just the profile: the Brand sheet reads the record, and until
-        // both agree the sheet shows an empty website for a brand that has one.
-        const rec = useTrafficStore.getState().brandRecords.find((b) => b.name === st.brand)
-        if (rec) updateBrandRecord(rec.id, { website: val })
-        markBrandFields(st.brand, ['website'], 'user')
-      }
-    }
-    const next = st.step + 1
-    if (next < GUIDED_SETUP_STEPS.length) {
-      st.step = next
-      askSetupStep(GUIDED_SETUP_STEPS[next], st.brand)
-    } else {
-      setupRef.current = null
-      const hasSite = !!(useTrafficStore.getState().clientProfiles[st.brand] as { website?: string } | undefined)?.website
-      say(
-        `**${st.brand}** is set up${hasSite ? ' with your website' : ''}. Now I'll walk you through the rest, in the right order, to a personalized campaign. Here's your next step:`,
-      )
-      surfaceNextStep()
-    }
-  }
 
   // Draft proof points for the active brand, grounded in the FULL brand context (its description on
   // the brand record + profile + audiences), add them to the brand's library, and report them in the
@@ -396,50 +270,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       ),
     )
     lastActionRef.current = 'proof'
-  }
-
-  // Draft reusable CTAs (calls to action) for the active brand, spread across the funnel, and save
-  // them to the brand's library so generation seeds asset CTAs from real brand-authored actions.
-  const draftBrandCtas = async () => {
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    if (!brand || brand === 'all') return
-    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
-    const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
-    const audiences = (store.clientAudiences[brand] ?? []).map((a) => a.name)
-    setMessagingBrand(brand)
-    const existing = (useTrafficStore.getState().library.ctas ?? []).map((c) => c.label).filter(Boolean)
-    const id = nid()
-    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting CTAs for ${brand}` }] }])
-    const ctasRes = await draftCtas({
-      brand,
-      oneLiner: profile.oneLiner,
-      industry: profile.industry || rec.industry,
-      positioning: rec.positioning,
-      descriptor: rec.descriptor,
-      keyMessage: rec.keyMessage,
-      differentiator: brandDifferentiatorText(rec),
-      businessObjective: rec.businessObjective,
-      commsObjective: rec.commsObjective,
-      audiences,
-      existing,
-      samples: brandLibrarySamples(brand),
-    })
-    const ctas = ctasRes.items
-    originsRef.current.ctas = ctasRes.origin
-    ctas.forEach((c) =>
-      addLibraryItem('ctas', { id: freshRecordId('lcta'), label: c.label, stage: c.stage, outcome: c.outcome, approved: false }),
-    )
-    const list = ctas.map((c) => `- **${c.label}**${c.stage ? ` (${c.stage})` : ''}`).join('\n')
-    const more = existing.length > 0
-    setMessages((m) =>
-      m.map((x) =>
-        x.id === id
-          ? { ...x, busy: false, steps: undefined, text: `I drafted ${ctas.length} ${more ? 'more ' : ''}CTA${ctas.length === 1 ? '' : 's'} for **${brand}** and saved them to the library:\n\n${list}` }
-          : x,
-      ),
-    )
-    lastActionRef.current = 'cta'
   }
 
   // Draft target audiences for the active brand from its description, add them as real audience
@@ -560,9 +390,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
     const allAud = store.clientAudiences[brand] ?? []
-    // Scope to the audiences you're pursuing (set at the start of go-to-market); default to all.
-    const pursued = gtmPursuedRef.current
-    const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
+    const audiences = allAud
     const id = nid()
     setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'segments', label: `Choosing channels for ${brand}` }] }])
     // Feed the brand's live traffic mix (connected analytics) so channel picks weight toward what works.
@@ -600,9 +428,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const store = useTrafficStore.getState()
     const brand = store.clientFilter
     if (!brand || brand === 'all') { exitToPage('segments'); return }
-    const allAud = store.clientAudiences[brand] ?? []
-    const pursued = gtmPursuedRef.current
-    const audiences = pursued && pursued.size ? allAud.filter((a) => pursued.has(a.id)) : allAud
+    const audiences = store.clientAudiences[brand] ?? []
     if (!audiences.length) { say('Add audiences first and I can recommend an angle, funnel stage, and outcome for each.'); return }
     const rec = (store.brandRecords.find((b) => b.name === brand) ?? {}) as { businessObjective?: string; positioning?: string; industry?: string }
     const id = nid()
@@ -679,419 +505,9 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     lastActionRef.current = 'ingest'
   }
 
-  // ── The guided "build your foundation" flow: walk the sections in order, drafting or skipping each.
-  const runFlowAction = (step: FlowStep): Promise<void> => {
-    switch (step) {
-      case 'audiences': return addAudiences()
-      case 'channels': return setBrandChannels()
-      case 'voices': return addBrandVoices()
-      case 'proof': return draftProofPoints()
-      case 'messages': return draftBrandMessages()
-      case 'objectives': return draftBrandObjectives()
-    }
-  }
-  const pushFlowStep = (step: FlowStep) =>
-    setMessages((m) => [...m, { id: nid(), role: 'assistant', text: FLOW_PROMPT[step].text, flowStep: step }])
-  const advanceFlow = (current: FlowStep) => {
-    // Which sequence we're in is determined by the step (foundation and GTM steps don't overlap).
-    const inGtm = GTM_STEPS.includes(current)
-    const seq = inGtm ? GTM_STEPS : FOUNDATION_STEPS
-    const next = seq[seq.indexOf(current) + 1]
-    if (next) pushFlowStep(next)
-    else if (inGtm)
-      say(`Go-to-market is set, channels and objectives. Companies and People are your real target accounts and contacts, so add those in their tables when you have them. Now let's put it all to work. Want to build your first campaign?`, { flowOffer: true })
-    else say(`That's your foundation built, audiences, voice, proof points, and messages. Next up: your go-to-market (channels and objectives). Want me to set that up?`, { gtmOffer: true })
-  }
-  const onFlowStep = async (msgId: string, step: FlowStep, doIt: boolean) => {
-    // Hide this step's buttons so it can't be re-triggered, then draft (or skip) and advance.
-    setMessages((m) => m.map((x) => (x.id === msgId ? { ...x, flowStep: undefined } : x)))
-    if (doIt) await runFlowAction(step)
-    advanceFlow(step)
-  }
-  const startFoundationFlow = () => {
-    setQ('')
-    say(`Let's build out your foundation in the order that works best. I'll offer each piece, you draft it or skip. You can refine anything later.`)
-    pushFlowStep(FOUNDATION_STEPS[0])
-  }
-
-  // Fill the brand's STRATEGY RECORD (positioning, objectives, audience, differentiator, ...) from its
-  // real content. This is the upstream foundation the other generators read from, so it runs first.
-  const draftBrandStrategy = async () => {
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    if (!brand || brand === 'all') return
-    const rec = store.brandRecords.find((b) => b.name === brand)
-    if (!rec) return
-    const profile = (store.clientProfiles[brand] ?? {}) as { oneLiner?: string; industry?: string }
-    const id = nid()
-    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'records', label: `Drafting ${brand}'s strategy from content` }] }])
-    const draft = await draftBrandProfile({ brand, oneLiner: profile.oneLiner, industry: profile.industry || rec.industry, positioning: rec.positioning, samples: brandLibrarySamples(brand) })
-    if (draft) {
-      // Only accept EVERGREEN brand fields. The drafter still emits campaign-level keys
-      // (primaryChannels / secondaryChannels / cadence / budgetSplit / keyMoments / primaryKpis /
-      // headlineTargets) but those now live on the Campaign, so we drop them here instead of writing
-      // them onto the brand. differentiator is normalized to one-per-line (multiple supported).
-      const EVERGREEN_KEYS: (keyof BrandRecord)[] = [
-        'descriptor', 'industry', 'positioning', 'businessObjective', 'commsObjective',
-        'primaryAudience', 'audienceInsight', 'competitiveContext', 'differentiator',
-        'keyMessage', 'supportingMessages', 'proofPoints', 'languageDos',
-        'languageDonts', 'contentPillars', 'reviewCadence', 'risks',
-      ]
-      // The drafter's schema marks all 26 fields required, so it ALWAYS returns a non-empty value
-      // for every one. Writing them all back unconditionally meant a user who typed their own
-      // one-liner or industry during setup had it replaced by the model's guess minutes later.
-      // Fields the user claimed are theirs; the draft fills the rest.
-      const owned = useTrafficStore.getState().userOwnedBrandFields(brand)
-      const recFields: Record<string, unknown> = {}
-      const draftRec = draft as Record<string, unknown>
-      for (const k of EVERGREEN_KEYS) {
-        if (owned.has(k)) continue
-        const v = draftRec[k]
-        if (typeof v === 'string' && v.trim()) recFields[k] = v
-      }
-      if (typeof recFields.differentiator === 'string') {
-        recFields.differentiator = recFields.differentiator.split(/[\n;]+/).map((s) => s.trim()).filter(Boolean).join('\n')
-      }
-      const written = Object.keys(recFields)
-      if (written.length) updateBrandRecord(rec.id, recFields as Partial<BrandRecord>)
-      if (draft.oneLiner && !owned.has('oneLiner')) {
-        setClientProfile(brand, { oneLiner: draft.oneLiner })
-        written.push('oneLiner')
-      }
-      // Record what the model wrote, so the review screen can label it as a draft rather than
-      // presenting the machine's guesses back to the user as if they were their own words.
-      if (written.length) useTrafficStore.getState().markBrandFields(brand, written, 'model')
-    }
-    setMessages((m) =>
-      m.map((x) =>
-        x.id === id
-          ? {
-              ...x,
-              busy: false,
-              steps: undefined,
-              text: draft
-                ? `Filled in **${brand}**'s strategy foundation from your content: positioning, business and comms objectives, primary audience, and differentiator. Open Brand to refine.`
-                : `Couldn't draft the strategy yet. Add a website or one-liner and re-run so I have something to work from.`,
-            }
-          : x,
-      ),
-    )
-    lastActionRef.current = 'strategy'
-  }
-
-  // One-click "Build brand": pull the brand's real content (its site via Search Console + published
-  // work), then draft the whole foundation FROM it. Voice and proof read the ingested Library, so the
-  // brand page reflects what the brand has actually put out, not a one-liner.
-  const buildBrandFromContent = async () => {
-    const brand = useTrafficStore.getState().clientFilter
-    if (!brand || brand === 'all') {
-      say(`Pick or set up a brand first, then I can build its brand page. Say "get started".`, { offerSetup: true })
-      return
-    }
-    say(`Building **${brand}**'s brand page from your real content. I'll pull your site and published work, then draft the foundation from what you've actually put out. Refine anything after.`)
-    // 1) Ingest everything the brand has (Search Console page list + real metrics + copy, plus any
-    //    connected published content). Best-effort: keep going with whatever lands.
-    const iid = nid()
-    setMessages((m) => [...m, { id: iid, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Pulling ${brand}'s content` }] }])
-    try {
-      await useTrafficStore.getState().ingestContent(brand)
-    } catch {
-      /* ingest is best-effort */
-    }
-    const libCount = brandLibrarySamples(brand).length
-    setMessages((m) =>
-      m.map((x) =>
-        x.id === iid
-          ? {
-              ...x,
-              busy: false,
-              steps: undefined,
-              text: libCount
-                ? `Pulled **${brand}**'s content into the Library (${libCount} pieces to ground the drafts).`
-                : `No connected content yet, so I'll draft from **${brand}**'s description. Connect analytics or add a website, then re-run to ground this in real content.`,
-            }
-          : x,
-      ),
-    )
-    // 2) Fill the strategy record FIRST (the upstream fields the rest read), then the foundation.
-    await draftBrandStrategy()
-    await addAudiences()
-    await addBrandVoices()
-    await draftProofPoints()
-    await draftBrandCtas()
-    await draftBrandMessages()
-    say(
-      `That's **${brand}**'s brand page drafted${libCount ? ' from your real content' : ''}: strategy (positioning, objectives, audience), plus audiences, voice, proof points, CTAs, and messages. Open Brand or each section to refine.`,
-    )
-    surfaceNextStep()
-  }
-  const startGtmFlow = () => {
-    setQ('')
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    const auds = store.clientAudiences[brand] ?? []
-    gtmPursuedRef.current = null
-    // Go-to-market starts with WHO: which audiences you're pursuing. Skip the question if there
-    // are none yet (nothing to choose) and go straight to channels.
-    if (auds.length < 2) {
-      say(`Now your go-to-market: where you'll reach each audience and what you're aiming for. Draft each or skip.`)
-      pushFlowStep(GTM_STEPS[0])
-      return
-    }
-    setGtmAudSel(new Set(auds.map((a) => a.id)))
-    say(`Go-to-market starts with who you're pursuing. Which of **${brand}**'s audiences is this push focused on? Toggle off any you're not chasing right now, then Continue.`, { audiencePick: auds.map((a) => ({ id: a.id, label: a.name })) })
-  }
-  const toggleGtmAud = (audId: string) => {
-    setGtmAudSel((prev) => {
-      const next = new Set(prev)
-      if (next.has(audId)) next.delete(audId); else next.add(audId)
-      return next
-    })
-  }
-  // Lock in the pursued audiences, then run the rest of go-to-market (channels, objectives) for them.
-  const confirmGtmAudiences = () => {
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    const auds = store.clientAudiences[brand] ?? []
-    const chosen = gtmAudSel.size ? auds.filter((a) => gtmAudSel.has(a.id)) : auds
-    gtmPursuedRef.current = new Set(chosen.map((a) => a.id))
-    sayUser(chosen.length === auds.length ? 'Pursuing all audiences' : `Pursuing ${chosen.map((a) => a.name).join(', ')}`)
-    say(`Good, we'll focus on ${chosen.length} audience${chosen.length === 1 ? '' : 's'}. Now where you'll reach them, and what you're aiming for. Draft each or skip.`)
-    pushFlowStep(GTM_STEPS[0])
-  }
-
-  // ── Guided "build a flow" conversation: ask the few things a flow needs, then build it with real
-  // assets (deterministic seeding), scoped to the brand's audiences and channels, and open it.
-  const startFlowBuild = () => {
-    setQ('')
-    const brand = useTrafficStore.getState().clientFilter
-    if (!brand || brand === 'all') { say(`Set up a brand first and I can build you a campaign. Say "get started".`, { offerSetup: true }); return }
-    flowBuildRef.current = { step: 0, name: '', weeks: 4 }
-    say(`Let's build a campaign for **${brand}**. What's this campaign about? Give it a theme, like "Q1 inbound push" or "Launch the new pricing".`)
-  }
-  // The brand's objectives, so the flow-build can ask which goal to aim at (and attach it).
-  const flowObjectives = () => {
-    const s = useTrafficStore.getState()
-    const brand = s.clientFilter
-    return s.objectives.filter((o) => !o.brand || o.brand === brand)
-  }
-  const handleFlowAnswer = async (text: string) => {
-    const val = text.trim()
-    sayUser(val); setQ('')
-    const st = flowBuildRef.current!
-    if (st.step === 0) {
-      st.name = val || 'New campaign'
-      presentFlowAudiences()
-      return
-    }
-    if (st.step === 1) {
-      // Audiences are button-driven; a typed reply just means "go with what's selected".
-      confirmFlowAudiences()
-      return
-    }
-    if (st.step === 2) {
-      // Goal pick fallback: a number, a name match, or "skip".
-      const objs = flowObjectives()
-      if (!/^(skip|none|no)\b/i.test(val)) {
-        const num = parseInt(val.replace(/[^0-9]/g, ''), 10)
-        const byNum = num >= 1 && num <= objs.length ? objs[num - 1] : undefined
-        const byName = objs.find((o) => o.name.toLowerCase() === val.toLowerCase()) || objs.find((o) => val.toLowerCase().includes(o.name.toLowerCase()))
-        const picked = byNum || byName
-        if (picked) st.objectiveId = picked.id
-      }
-      askFlowWeeks()
-      return
-    }
-    // step 3: weeks, then build.
-    const n = parseInt(val.replace(/[^0-9]/g, ''), 10)
-    st.weeks = n > 0 && n <= 52 ? n : 4
-    const { name, weeks, objectiveId, audienceIds } = st
-    flowBuildRef.current = null
-    await buildFlowFromChat(name, weeks, objectiveId, audienceIds)
-  }
-  // Suggest one audience and let them pick which this flow targets (keeps flows focused instead of
-  // spanning every audience at once). Skips the question when the brand has fewer than two.
-  const presentFlowAudiences = () => {
-    const st = flowBuildRef.current!
-    const auds = useTrafficStore.getState().clientAudiences[useTrafficStore.getState().clientFilter] ?? []
-    if (auds.length < 2) {
-      st.audienceIds = auds.map((a) => a.id)
-      presentFlowGoalOrWeeks()
-      return
-    }
-    st.step = 1
-    setGtmAudSel(new Set([auds[0].id])) // suggestion: start with the primary audience, focused
-    say(`Who should **${st.name}** target? I'd start with **${auds[0].name}** to keep it focused. Toggle on any others you want, then Continue.`, { audiencePick: auds.map((a) => ({ id: a.id, label: a.name })) })
-  }
-  const confirmFlowAudiences = () => {
-    const st = flowBuildRef.current
-    if (!st || st.step !== 1) return
-    setQ('')
-    const auds = useTrafficStore.getState().clientAudiences[useTrafficStore.getState().clientFilter] ?? []
-    const chosen = gtmAudSel.size ? auds.filter((a) => gtmAudSel.has(a.id)) : auds.slice(0, 1)
-    st.audienceIds = chosen.map((a) => a.id)
-    sayUser(`Targeting ${chosen.map((a) => a.name).join(', ')}`)
-    presentFlowGoalOrWeeks()
-  }
-  const presentFlowGoalOrWeeks = () => {
-    const st = flowBuildRef.current!
-    const objs = flowObjectives()
-    if (objs.length) {
-      st.step = 2
-      say(`What's the goal? Pick the objective this campaign should drive.`, { goalPick: objs.map((o) => ({ id: o.id, label: o.name, metric: o.metric })) })
-    } else {
-      askFlowWeeks()
-    }
-  }
-  const askFlowWeeks = () => {
-    const st = flowBuildRef.current!
-    st.step = 3
-    say(`Over how many weeks should "${st.name}" run? (a number, e.g. 4)`)
-  }
-  // Goal chosen by clicking a button during the flow-build: record it and move on to timing.
-  const pickFlowGoal = (obj: { id: string; label: string } | null) => {
-    const st = flowBuildRef.current
-    if (!st || st.step !== 2) return
-    setQ('')
-    if (obj) { st.objectiveId = obj.id; sayUser(obj.label) } else { sayUser('Skip goal') }
-    askFlowWeeks()
-  }
-
-  // ── Measure: after a flow is built, cover the two Measure sections (Reports + Insights). Recap what
-  // gets tracked (the brand's objectives; draft them if none), then ask the reporting cadence.
-  const startMeasure = async () => {
-    setQ('')
-    const brand = useTrafficStore.getState().clientFilter
-    if (!brand || brand === 'all') { exitToPage('reports'); return }
-    // Objectives define what to measure. If none exist yet, draft them first (this also covers cadence).
-    if (!useTrafficStore.getState().objectives.filter((o) => !o.brand || o.brand === brand).length) {
-      await draftBrandObjectives()
-    }
-    const measured = useTrafficStore.getState().objectives.filter((o) => !o.brand || o.brand === brand)
-    const metrics = [...new Set(measured.map((o) => o.metric?.trim()).filter(Boolean))] as string[]
-    const measureBit = metrics.length ? `You'll track ${metrics.slice(0, 4).join(', ')}. ` : ''
-    say(`${measureBit}How often do you want to report on **${brand}**?`, { cadencePick: true })
-  }
-  // Reporting cadence chosen: generate a baseline report so Reports/Insights have a starting line.
-  const pickCadence = async (cadence: string) => {
-    setQ('')
-    sayUser(cadence)
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    const id = nid()
-    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Setting up ${brand}'s measurement` }] }])
-    await new Promise((r) => setTimeout(r, 400))
-    const scopedRows = store.rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter: brand, campaignFilter: 'all' }))
-    const { title, kind, summary, html } = buildBrandReport({ brand, rows: scopedRows, audiences: store.clientAudiences[brand] ?? [] })
-    const reportId = addReport({ client: brand, title, kind, summary, html })
-    setMessages((m) =>
-      m.map((x) => (x.id === id ? { ...x, busy: false, steps: undefined, text: `Set. You'll report **${cadence.toLowerCase()}**, and I saved a baseline report, **${title}**, to ${brand}'s Reports so you have a starting line. Watch Insights as the assets go live.`, reportId, reportBrand: brand, measureDone: true } : x)),
-    )
-    lastActionRef.current = 'measure'
-  }
-  const buildFlowFromChat = async (name: string, weeks: number, objectiveId?: string, audienceIds?: string[]) => {
-    const store = useTrafficStore.getState()
-    const brand = store.clientFilter
-    // Scope to the audiences picked for it (the flow-build's audience step wins); else the ones you're
-    // pursuing from go-to-market; else all.
-    const allAud = store.clientAudiences[brand] ?? []
-    const pursued = gtmPursuedRef.current
-    const audiences =
-      audienceIds && audienceIds.length
-        ? allAud.filter((a) => audienceIds.includes(a.id))
-        : pursued && pursued.size
-          ? allAud.filter((a) => pursued.has(a.id))
-          : allAud
-    // One goal for the whole campaign (the conversation's pick wins; else the brand's first objective).
-    const brandObjectives = store.objectives.filter((o) => !o.brand || o.brand === brand)
-    const objective = (objectiveId && brandObjectives.find((o) => o.id === objectiveId)) || brandObjectives[0]
-    const goalKpi = objective?.metric?.trim() || undefined
-    const goalTarget = objective?.target ? Number(String(objective.target).replace(/[^0-9.]/g, '')) || undefined : undefined
-    // A campaign leans on a FEW key reasons-to-believe, not the brand's whole proof library. Prefer
-    // approved proof points, then cap to a focused set so each campaign stays sharp.
-    const allProof = store.brandSystems[brand]?.rtbs ?? []
-    const proof = (allProof.some((r) => r.approved) ? allProof.filter((r) => r.approved) : allProof).slice(0, 3)
-
-    const id = nid()
-    setMessages((m) => [...m, { id, role: 'assistant', busy: true, steps: [{ kind: 'assets', label: `Building ${name}` }] }])
-
-    // Build ONE single-audience campaign. Its channels + deliverables come from that audience alone, so
-    // it stays coherent, and it carries the one shared goal. Returns the new asset count + channels.
-    const buildOne = async (
-      campaignName: string,
-      aud: (typeof allAud)[number] | undefined,
-      subject: string,
-      parent?: string,
-    ): Promise<{ count: number; channels: string[] }> => {
-      const channelIds = [...new Set(aud?.channels ?? [])]
-      let presets = channelIds
-        .map((cid) => DELIVERABLE_PRESETS.find((p) => p.channel === cid))
-        .filter((p): p is NonNullable<typeof p> => !!p)
-      if (!presets.length) presets = ['blog', 'newsletter', 'li-text'].map((k) => presetByKey(k)).filter((p): p is NonNullable<typeof p> => !!p)
-      const deliverables: Deliverable[] = presets.map((p) => ({ label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: p.perMonth, runtime: p.runtime, brand: p.brand }))
-      const refs: FlowReference[] = [
-        ...(aud ? [{ type: 'segment' as const, id: aud.id, label: aud.name }] : []),
-        ...proof.map((r) => ({ type: 'proof' as const, id: r.id, label: r.label })),
-      ]
-      addCampaign({ name: campaignName, client: brand, parent, strategy: 'content-seo', subject, durationWeeks: weeks, objective: objective?.name, goalKpi, goalTarget })
-      if (refs.length) setCampaignReferences(campaignName, refs)
-      const beforeIds = new Set(useTrafficStore.getState().rows.map((r) => r.id))
-      await seedCampaignAssets(campaignName, deliverables, { flightWeeks: weeks, audiences: aud ? [aud.name] : [] })
-      const newIds = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !beforeIds.has(r.id)).map((r) => r.id)
-      if (newIds.length) {
-        try {
-          await draftCopy(newIds)
-        } catch {
-          /* leave assets as drafts if copy generation fails */
-        }
-      }
-      return { count: newIds.length, channels: [...new Set(deliverables.map((d) => CHANNELS[d.channel]?.label ?? d.channel))] }
-    }
-
-    const umbrellaName = `${brand} — ${name}`
-    if (audiences.length >= 2) {
-      // A campaign per audience keeps each one focused, grouped under an umbrella (a container with no
-      // assets of its own). Each child is single-audience + the shared goal.
-      addCampaign({ name: umbrellaName, client: brand, strategy: 'content-seo', subject: name, durationWeeks: weeks, objective: objective?.name, goalKpi, goalTarget })
-      let total = 0
-      for (const aud of audiences) {
-        setMessages((m) => m.map((x) => (x.id === id ? { ...x, steps: [{ kind: 'assets', label: `Building ${name} · ${aud.name}` }] } : x)))
-        const r = await buildOne(`${umbrellaName} · ${aud.name}`, aud, `${name} · ${aud.name}`, umbrellaName)
-        total += r.count
-      }
-      const goalBit = objective ? ` toward the "${objective.name}" goal` : ''
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === id
-            ? { ...x, busy: false, steps: undefined, text: `I built **${name}** as ${audiences.length} audience-specific campaigns under one umbrella (${total} assets total), each focused on a single audience${goalBit}. Open Campaigns to review the umbrella and its children.`, flowBuiltName: umbrellaName }
-            : x,
-        ),
-      )
-    } else {
-      const aud = audiences[0]
-      const r = await buildOne(umbrellaName, aud, name, undefined)
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === id
-            ? { ...x, busy: false, steps: undefined, text: `I built **${name}** for ${brand}${aud ? ` (audience: ${aud.name})` : ''}, ${r.count} asset${r.count === 1 ? '' : 's'} across ${r.channels.join(', ')} over ${weeks} weeks${objective ? `, toward the "${objective.name}" goal` : ''}. Open it to review.`, flowBuiltName: umbrellaName }
-            : x,
-        ),
-      )
-    }
-    lastActionRef.current = 'flow'
-    // Close the loop: set up how you'll measure this, what to track and how often to report.
-    say(`Last piece: how you'll measure **${name}**, what to track and how often to report. Want to set that up?`, { measureOffer: true })
-  }
-
   const run = async (question: string) => {
     const text = question.trim()
     if (!text || busyRef.current) return
-
-    // Guided setup is a deterministic script that creates records as we go — handle it before the
-    // read-only ask/report paths so a task request never dead-ends.
-    if (setupRef.current) return handleSetupAnswer(text)
-    // Guided "build a flow" conversation takes the next answers.
-    if (flowBuildRef.current) return void handleFlowAnswer(text)
 
     // If we asked for the brand's website (to ingest content), the next message is the URL.
     if (awaitingSiteRef.current) {
@@ -1101,19 +517,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     // "Ingest / import / pull in my content" -> pull the brand's site content into the Library.
     if (/\b(ingest|import|pull in|bring in|scrape|crawl)\b/i.test(text) && /\b(content|site|website|pages?|library|blog|posts?)\b/i.test(text)) {
       sayUser(text); setQ(''); void ingestBrandContent(); return
-    }
-
-    // "Build my foundation" launches the guided, section-by-section flow.
-    if (/\bbuild\b.*\b(foundation|everything|it all|the rest|out my brand)\b/i.test(text)) {
-      sayUser(text); startFoundationFlow(); return
-    }
-    // "Build my go-to-market" launches the GTM sequence (channels + objectives).
-    if (/\b(build|set ?up|do)\b.*\b(go[ -]?to[ -]?market|gtm)\b/i.test(text)) {
-      sayUser(text); startGtmFlow(); return
-    }
-    // "Build/make/draft a flow (or campaign)" launches the guided flow-build conversation.
-    if (/\b(build|make|create|draft|start|new|set up)\b.*\b(flow|campaign)\b/i.test(text)) {
-      sayUser(text); startFlowBuild(); return
     }
 
     // Take real action for "do" requests instead of falling through to the read-only ask engine.
@@ -1152,17 +555,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       sayUser(text); setQ(''); void draftProofPoints(); return
     }
 
-    if (/\b(new|different|another|a)\s+brand\b/i.test(text)) {
-      sayUser(text)
-      startSetup(true)
-      return
-    }
-    if (isSetupRequest(text)) {
-      sayUser(text)
-      startSetup()
-      return
-    }
-
     busyRef.current = true
     setBusy(true)
     setQ('')
@@ -1189,7 +581,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       } else {
         awaitingBrandRef.current = false
         setMessages((m) =>
-          m.map((x) => (x.id === asstId ? { ...x, busy: false, steps: undefined, text: `You don't have any brands set up yet. Want to set one up? I can walk you through it.`, offerSetup: true } : x)),
+          m.map((x) => (x.id === asstId ? { ...x, busy: false, steps: undefined, text: `You don't have any brands set up yet. Add a brand from the Brands page, then ask me again.` } : x)),
         )
       }
       busyRef.current = false
@@ -1206,76 +598,12 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     setBusy(false)
   }
 
-  // Steer setup in the dependency-correct order: connect (real data) -> build brand from content ->
-  // go-to-market -> campaign. Returns the next incomplete step for the active brand, so the chat can
-  // always point at the single best next thing rather than leaving every action equally available.
-  const nextSetupStep = (): { text: string; guide: NonNullable<Msg['guide']> } => {
-    const s = useTrafficStore.getState()
-    const brand = s.clientFilter
-    if (!brand || brand === 'all')
-      return { text: `Let's set up your first brand: name it and say what it does. Everything else builds from there.`, guide: { label: 'Get started', step: 'setup' } }
-    const rec = (s.brandRecords.find((b) => b.name === brand) ?? {}) as Record<string, string>
-    const website = (((s.clientProfiles[brand]?.website as string) || rec.website || '') as string).trim()
-    const connected = (s.brandActuals[brand]?.channels?.length ?? 0) > 0
-    const voices = s.voices.filter((v) => !v.brand || v.brand === brand).length
-    const audiences = (s.clientAudiences[brand] ?? []).length
-    const messages = s.messages.filter((m) => !m.brand || m.brand === brand).length
-    // "Foundation done" uses the reliably brand-scoped signals (voice + audiences + messages). Proof
-    // points live in a shared library that isn't cleanly brand-filtered, so it is not a gate here.
-    const foundation = voices > 0 && audiences > 0 && messages > 0
-    const audienceChannels = (s.clientAudiences[brand] ?? []).some((a) => (a.channels?.length ?? 0) > 0)
-    const objectives = s.objectives.filter((o) => !o.brand || o.brand === brand).length
-    const gtm = audienceChannels && objectives > 0
-    const campaign = s.campaignList.some((c) => !c.archivedAt && c.client === brand && c.name !== CONTENT_LIBRARY_CAMPAIGN)
-
-    // Connecting analytics used to be FIRST, so the very next thing after someone told us their
-    // brand name was an OAuth consent screen, before they had a brand page for the data to inform.
-    // It is account plumbing, not a step in building a brand: it belongs after there is something to
-    // measure. Ordering is now build -> go-to-market -> connect -> campaign.
-    if (!foundation)
-      return {
-        text: `Now build **${brand}**'s brand page from your real content: I'll pull your site and published work, then draft your audiences, voice, proof points, and messages from it.`,
-        guide: { label: 'Draft brand from your content', step: 'build' },
-      }
-    if (!gtm)
-      return {
-        text: `Foundation's set. Next, your go-to-market: which channels to use (weighted by your real traffic) and what to aim for.`,
-        guide: { label: 'Build go-to-market', step: 'gtm' },
-      }
-    if (!connected)
-      return {
-        text: `**${brand}**'s foundation is set. Connect your accounts now (Google Analytics, Search Console, Resend) and everything from here is measured against real numbers rather than estimates.${website ? '' : ` You can add ${brand}'s website there too.`}`,
-        guide: { label: 'Open connectors', step: 'connect' },
-      }
-    if (!campaign)
-      return {
-        text: `You're set up. Draft your first campaign for **${brand}**, scoped to the audiences, channels, and objectives you just defined.`,
-        guide: { label: 'Draft a campaign', step: 'campaign' },
-      }
-    return { text: `**${brand}** is fully set up. Draft another campaign, or refine any part of the foundation.`, guide: { label: 'Draft a campaign', step: 'campaign' } }
-  }
-
   // Leaving the chat for another page. Inert while embedded: the host surface owns navigation, and
   // closing here would end onboarding as a side effect of asking to look at something.
   const exitToPage = (p: Parameters<typeof setPage>[0]) => {
     if (embedded) return
     closeHomeChat()
     setPage(p)
-  }
-
-  const runGuideStep = (step: NonNullable<Msg['guide']>['step']) => {
-    if (step === 'setup') startSetup()
-    else if (step === 'connect') {
-      exitToPage('connectors')
-    } else if (step === 'build') void buildBrandFromContent()
-    else if (step === 'gtm') startGtmFlow()
-    else if (step === 'campaign') startFlowBuild()
-  }
-  // Post the single best next step as a chat message with its CTA, so each finished step hands off to
-  // the next one in order (connect -> build brand -> go-to-market -> campaign).
-  const surfaceNextStep = () => {
-    const ns = nextSetupStep()
-    say(ns.text, { guide: ns.guide })
   }
 
   // Initialize the thread once per conversation (the component is keyed by homeChatSession, so it
@@ -1297,16 +625,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     const openWith = embedded ? seed : homeChatSeed
     if (openWith && seededRef.current !== openWith) {
       seededRef.current = openWith
-      if (openWith === GUIDED_SETUP_SEED) startSetup()
-      else if (openWith === BUILD_BRAND_SEED) void buildBrandFromContent()
-      else void run(openWith)
+      void run(openWith)
       if (!embedded) useTrafficStore.setState({ homeChatSeed: null })
-    } else if (!openWith && seededRef.current !== 'nudged') {
-      // Blank open (no seed, no saved chat): steer the user to the single best next setup step, so the
-      // chat always points at the right next thing in order instead of a wall of equal options.
-      seededRef.current = 'nudged'
-      const ns = nextSetupStep()
-      say(ns.text, { guide: ns.guide })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1325,25 +645,13 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       source: m.source,
       reportId: m.reportId,
       reportBrand: m.reportBrand,
-      setupDone: m.setupDone,
-      offerSetup: m.offerSetup,
-      guide: m.guide,
       proofDone: m.proofDone,
       audienceDone: m.audienceDone,
       messageDone: m.messageDone,
       voiceDone: m.voiceDone,
       objectiveDone: m.objectiveDone,
       channelDone: m.channelDone,
-      flowStep: m.flowStep,
-      goalPick: m.goalPick,
-      audiencePick: m.audiencePick,
       ingestDone: m.ingestDone,
-      gtmOffer: m.gtmOffer,
-      flowOffer: m.flowOffer,
-      flowBuiltName: m.flowBuiltName,
-      measureOffer: m.measureOffer,
-      cadencePick: m.cadencePick,
-      measureDone: m.measureDone,
     }))
     saveHomeChat({
       id: chatIdRef.current,
@@ -1429,29 +737,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
                       View report →
                     </button>
                   )}
-                  {m.offerSetup && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => startSetup()}>Get started</button>
-                    </div>
-                  )}
-                  {m.guide && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => runGuideStep(m.guide!.step)}>{m.guide.label}</button>
-                    </div>
-                  )}
-                  {m.setupDone && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={startFoundationFlow}>Build my foundation</button>
-                      <button className="hchat-setup-btn" onClick={addAudiences}>Add audiences</button>
-                      <button className="hchat-setup-btn" onClick={draftBrandMessages}>Draft messages</button>
-                      <button className="hchat-setup-btn" onClick={addBrandVoices}>Add voices</button>
-                      <button className="hchat-setup-btn" onClick={draftProofPoints}>Draft proof points</button>
-                      <button className="hchat-setup-btn" onClick={setBrandChannels}>Set channels</button>
-                      <button className="hchat-setup-btn" onClick={draftBrandObjectives}>Draft objectives</button>
-                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Draft a campaign</button>
-                      <button className="hchat-setup-btn ghost" onClick={closeHomeChat}>Go home</button>
-                    </div>
-                  )}
                   {m.proofDone && (
                     <div className="hchat-setup-actions">
                       <button className="hchat-setup-btn" onClick={() => { exitToPage('proofpoints') }}>View proof points</button>
@@ -1487,96 +772,6 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
                       <button className="hchat-setup-btn" onClick={() => { exitToPage('content') }}>View Library</button>
                     </div>
                   )}
-                  {m.gtmOffer && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => startGtmFlow()}>Build go-to-market</button>
-                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Say "build my go-to-market" whenever you're ready.`)}>Not now</button>
-                    </div>
-                  )}
-                  {m.flowOffer && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => startFlowBuild()}>Build a campaign</button>
-                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Say "build a campaign" whenever you're ready.`)}>Not now</button>
-                    </div>
-                  )}
-                  {m.flowBuiltName && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { if (embedded) return; const n = m.flowBuiltName!; closeHomeChat(); openFlow(n, 'flow') }}>Open campaign</button>
-                    </div>
-                  )}
-                  {m.flowStep && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, true)}>{FLOW_PROMPT[m.flowStep as FlowStep].label}</button>
-                      <button className="hchat-setup-btn ghost" onClick={() => void onFlowStep(m.id, m.flowStep as FlowStep, false)}>Skip</button>
-                    </div>
-                  )}
-                  {m.setupPick && (
-                    <div className="hchat-setup-actions">
-                      {m.setupPick.map((o) => (
-                        <button
-                          key={o.value}
-                          className="hchat-setup-btn"
-                          title={o.hint || undefined}
-                          onClick={() => {
-                            // Clear the chips off the answered message so a scrolled-back question
-                            // cannot be answered twice, which would advance the sequence out of step.
-                            setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, setupPick: undefined, setupSkippable: undefined } : x)))
-                            handleSetupAnswer(o.value, o.label)
-                          }}
-                        >
-                          {o.label}
-                        </button>
-                      ))}
-                      {m.setupSkippable && (
-                        <button
-                          className="hchat-setup-btn ghost"
-                          onClick={() => {
-                            setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, setupPick: undefined, setupSkippable: undefined } : x)))
-                            handleSetupAnswer('skip')
-                          }}
-                        >
-                          Skip
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {m.goalPick && (
-                    <div className="hchat-setup-actions">
-                      {m.goalPick.map((g) => (
-                        <button key={g.id} className="hchat-setup-btn" title={g.metric || undefined} onClick={() => pickFlowGoal(g)}>{g.label}</button>
-                      ))}
-                      <button className="hchat-setup-btn ghost" onClick={() => pickFlowGoal(null)}>Skip</button>
-                    </div>
-                  )}
-                  {m.audiencePick && (
-                    <div className="hchat-setup-actions">
-                      {m.audiencePick.map((a) => {
-                        const on = gtmAudSel.has(a.id)
-                        return (
-                          <button key={a.id} className={`hchat-setup-btn${on ? '' : ' ghost'}`} onClick={() => toggleGtmAud(a.id)}>{on ? '✓ ' : ''}{a.label}</button>
-                        )
-                      })}
-                      <button className="hchat-setup-btn" onClick={() => (flowBuildRef.current ? confirmFlowAudiences() : confirmGtmAudiences())}>Continue</button>
-                    </div>
-                  )}
-                  {m.measureOffer && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => void startMeasure()}>Set up measurement</button>
-                      <button className="hchat-setup-btn ghost" onClick={() => say(`No problem. Open Reports or Insights whenever you want to measure.`)}>Not now</button>
-                    </div>
-                  )}
-                  {m.cadencePick && (
-                    <div className="hchat-setup-actions">
-                      {['Weekly', 'Monthly', 'Quarterly'].map((c) => (
-                        <button key={c} className="hchat-setup-btn" onClick={() => void pickCadence(c)}>{c}</button>
-                      ))}
-                    </div>
-                  )}
-                  {m.measureDone && (
-                    <div className="hchat-setup-actions">
-                      <button className="hchat-setup-btn" onClick={() => { if (embedded) return; closeHomeChat(); setLibraryMode('data') }}>View Insights</button>
-                    </div>
-                  )}
                   {m.source && <div className="hchat-source">{m.source}</div>}
                 </>
               )}
@@ -1588,20 +783,8 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
 
       <div className="hchat-composer">
         <div className="hchat-actions">
-          {clientFilter && clientFilter !== 'all' ? (
+          {clientFilter && clientFilter !== 'all' && (
             <>
-              <button className="hchat-action primary" disabled={busy} onClick={() => void buildBrandFromContent()}>
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
-                Draft brand from your content
-              </button>
-              <button className="hchat-action" disabled={busy} onClick={() => startFoundationFlow()}>
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5Z" /><path d="m2 13 10 5 10-5" /></svg>
-                Build foundation
-              </button>
-              <button className="hchat-action" disabled={busy} onClick={() => startGtmFlow()}>
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1Z" /><path d="M17.5 9a3 3 0 0 1 0 6" /></svg>
-                Build go-to-market
-              </button>
               <button className="hchat-action" disabled={busy} onClick={() => void addAudiences()}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></svg>
                 Add audiences
@@ -1630,17 +813,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13l4-3h5" /><path d="M17 14v6M14 17h6" /></svg>
                 Ingest content
               </button>
-              <button className="hchat-action" disabled={busy} onClick={() => startFlowBuild()}>
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
-                Draft a campaign
-              </button>
-              <button className="hchat-action ghost" disabled={busy} onClick={() => startSetup(true)}>New brand</button>
             </>
-          ) : (
-            <button className="hchat-action" disabled={busy} onClick={() => startSetup()}>
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              Get started
-            </button>
           )}
         </div>
         <div className="hchat-box">

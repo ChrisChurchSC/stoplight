@@ -82,7 +82,7 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
   const messagingBrand = useTrafficStore((s) => s.messagingBrand)
   const setMessagingBrand = useTrafficStore((s) => s.setMessagingBrand)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const openOnboard = useTrafficStore((s) => s.openOnboard)
+  const openClientWizard = useTrafficStore((s) => s.openClientWizard)
   const { brands } = useHomeCanvases()
 
   // The Messaging page views one brand's system. Default to the brand you're in
@@ -184,7 +184,7 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 ▤ {b.name}
               </button>
             ))}
-            <button className="msys-new" onClick={openOnboard}>
+            <button className="msys-new" onClick={openClientWizard}>
               ＋ Add brand
             </button>
           </div>
@@ -194,7 +194,7 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
       {brands.length === 0 || !messagingBrand ? (
         <div className="home-empty">
           No brands yet.{' '}
-          <button className="home-link" onClick={openOnboard}>
+          <button className="home-link" onClick={openClientWizard}>
             Add a brand
           </button>{' '}
           to build its messaging system.

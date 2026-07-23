@@ -87,7 +87,7 @@ export function ClientsOverview() {
   const filter = useTrafficStore((s) => s.homeFilter)
   const setHomeFilter = useTrafficStore((s) => s.setHomeFilter)
   const openCampaign = useTrafficStore((s) => s.openCampaign)
-  const openOnboard = useTrafficStore((s) => s.openOnboard)
+  const openClientWizard = useTrafficStore((s) => s.openClientWizard)
   const loadSample = useTrafficStore((s) => s.loadSample)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   const campaignFolders = useTrafficStore((s) => s.campaignFolders)
@@ -297,8 +297,8 @@ export function ClientsOverview() {
             {canvases.length === 0 ? (
               <>
                 No canvases yet.{' '}
-                <button className="home-link" onClick={openOnboard}>
-                  Set up a brand
+                <button className="home-link" onClick={openClientWizard}>
+                  Add a brand
                 </button>{' '}
                 or{' '}
                 <button className="home-link" onClick={loadSample}>

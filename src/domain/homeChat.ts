@@ -21,10 +21,6 @@ export interface HomeChatMsg {
   busy?: boolean
   reportId?: string
   reportBrand?: string
-  setupDone?: boolean
-  offerSetup?: boolean
-  /** A single "do the next setup step" CTA the chat surfaces to steer the right order. */
-  guide?: { label: string; step: 'setup' | 'connect' | 'build' | 'gtm' | 'campaign' }
   /** Set on the message that announces just-drafted proof points, to render a "View proof points" link. */
   proofDone?: boolean
   /** Set on the message that announces just-added audiences, to render a "View audiences" link. */
@@ -37,30 +33,8 @@ export interface HomeChatMsg {
   objectiveDone?: boolean
   /** Set on the message that announces just-set channels, to render a "View channels" link. */
   channelDone?: boolean
-  /** When set, this message is a step in the guided foundation flow; renders Draft/Skip buttons. */
-  flowStep?: string
-  /** When set, renders the brand's objectives as goal buttons during the flow-build (plus Skip). */
-  goalPick?: { id: string; label: string; metric?: string }[]
-  /** First-run setup step answered by tapping rather than typing (role, detail level). */
-  setupPick?: { value: string; label: string; hint?: string }[]
-  /** Whether that step can be passed over without answering. */
-  setupSkippable?: boolean
-  /** When set, renders the brand's audiences as multi-select toggles at the start of go-to-market. */
-  audiencePick?: { id: string; label: string }[]
   /** Set on the message that announces ingested site content, to render a "View Library" link. */
   ingestDone?: boolean
-  /** When set, offer to build the go-to-market (renders "Build go-to-market" / "Not now"). */
-  gtmOffer?: boolean
-  /** When set, offer to build a flow (renders "Build a flow" / "Not now"). */
-  flowOffer?: boolean
-  /** Set to the built campaign name, to render an "Open flow" link. */
-  flowBuiltName?: string
-  /** When set, offer to set up measurement after a flow is built (renders "Set up measurement" / "Not now"). */
-  measureOffer?: boolean
-  /** When set, renders reporting-cadence buttons (Weekly / Monthly / Quarterly). */
-  cadencePick?: boolean
-  /** Set on the message that closes out measurement setup, to render a "View Insights" link. */
-  measureDone?: boolean
 }
 
 /** A saved Home chat conversation — listed in the sidebar and reopenable. */

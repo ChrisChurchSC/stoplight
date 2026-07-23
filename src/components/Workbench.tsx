@@ -51,10 +51,6 @@ import { CopyReview } from './CopyReview'
 import { CommentDrawer } from './CommentDrawer'
 import { DrivePicker } from './DrivePicker'
 import { NewClientWizard } from './NewClientWizard'
-import { OnboardingFork } from './OnboardingFork'
-import { ClaudeHandoff } from './ClaudeHandoff'
-import { SetupWizard } from './SetupWizard'
-import { Onboarding } from './Onboarding'
 import { AudienceWizard } from './AudienceWizard'
 import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
@@ -66,11 +62,8 @@ import { CommentInbox } from './CommentInbox'
 import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
-import { GettingStarted } from './GettingStarted'
-import { Welcome } from './Welcome'
 import { DevReset } from './DevReset'
 import { StarterTemplates } from './StarterTemplates'
-import { Tour } from './Tour'
 import { Toast } from './Toast'
 
 export function Workbench() {
@@ -412,17 +405,9 @@ export function Workbench() {
       <ClaudeEngine />
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
-      <OnboardingFork />
-      <ClaudeHandoff />
-      <SetupWizard />
-      <Onboarding />
       <AudienceWizard />
       <StarterTemplates />
-      <GettingStarted />
-      <Tour />
-      {/* Phase A of setup: asked before anything else, and the only thing on screen while it runs. */}
-      <Welcome />
-      {/* Dev only, and it renders above Welcome so the first run can be replayed from anywhere. */}
+      {/* Dev only: clears this browser's workspace so a fresh state can be tested. */}
       <DevReset />
       <Toast />
     </div>

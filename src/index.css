@@ -9522,57 +9522,6 @@ button {
 .setup-connect-block .setup-socials-note {
   margin: 0 0 10px;
 }
-/* Keep "Build the map" reachable while the review scrolls. Modal shell has a
-   16px-padded body, so the bar bleeds to the edges with negative margins. */
-.setup-flow-modal .setup-foot-sticky {
-  position: sticky;
-  bottom: 0;
-  margin: 18px -16px -16px;
-  padding: 12px 16px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-
-/* --- full-page onboarding (first-run takeover) --- */
-.onboarding-root {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-}
-.onboarding-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 22px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-.onboarding-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.onboarding-logo {
-  color: var(--accent);
-  font-size: 16px;
-}
-.onboarding-body {
-  flex: 1;
-  overflow: auto;
-  padding: 40px 16px 0;
-}
-.onboarding-panel {
-  max-width: 560px;
-  margin: 0 auto;
-  padding-bottom: 40px;
-}
 /* One-question-at-a-time screens (the input step, both shells). */
 .setup-q {
   text-align: center;
@@ -9663,15 +9612,6 @@ button {
   gap: 10px;
   margin-bottom: 22px;
   font-size: 13px;
-}
-/* Page shell owns the column padding, so the sticky bar needs no negative margin. */
-.setup-flow-page .setup-foot-sticky {
-  position: sticky;
-  bottom: 0;
-  margin: 18px 0 0;
-  padding: 14px 0;
-  background: var(--bg);
-  border-top: 1px solid var(--border);
 }
 
 /* new-client wizard */
@@ -18435,63 +18375,6 @@ button.cv-board-tab {
 .camp-act.primary { background: var(--green); color: #fff; border-color: var(--green); }
 .camp-act.primary:hover { opacity: 0.9; }
 
-/* ---------- forked onboarding (Do-it-yourself vs Set-up-with-Claude) ---------- */
-.onboard-fork, .assist {
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  z-index: 60; width: min(620px, calc(100vw - 40px));
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow); padding: 26px 26px 22px;
-}
-.onboard-x {
-  position: absolute; top: 14px; right: 14px; background: none; border: none;
-  color: var(--text-faint); font-size: 15px; line-height: 1;
-}
-.onboard-x:hover { color: var(--text); }
-.onboard-head { margin-bottom: 18px; }
-.onboard-title { font-size: 19px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
-.onboard-sub { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
-
-.fork-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 560px) { .fork-choices { grid-template-columns: 1fr; } }
-.fork-choice {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
-  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
-  padding: 16px; transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
-}
-.fork-choice:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
-.fork-choice.accent:hover { border-color: var(--accent); background: var(--accent-soft); }
-.fork-ico { font-size: 20px; }
-.fork-choice.accent .fork-ico { color: var(--accent); }
-.fork-name { font-size: 14.5px; font-weight: 700; }
-.fork-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.45; }
-.fork-go { margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
-.fork-foot { margin: 16px 0 0; font-size: 12px; color: var(--text-faint); text-align: center; }
-
-.assist-head { margin-bottom: 16px; }
-.assist-ico { display: inline-block; font-size: 22px; color: var(--accent); margin-bottom: 6px; }
-.assist-steps { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.assist-step { display: flex; align-items: flex-start; gap: 10px; }
-.assist-step-n {
-  flex: none; width: 22px; height: 22px; border-radius: 999px; background: var(--accent-soft);
-  color: var(--accent); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
-}
-.assist-step-body { display: flex; flex-direction: column; }
-.assist-step-label { font-size: 13px; font-weight: 600; }
-.assist-step-why { font-size: 12px; color: var(--text-muted); }
-.assist-note {
-  font-size: 12.5px; color: var(--text-muted); background: var(--surface-2);
-  border-radius: var(--radius-sm); padding: 11px 13px; line-height: 1.5; margin-bottom: 16px;
-}
-.assist-note strong { color: var(--text); }
-.assist-foot { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.assist-open {
-  display: inline-block; background: var(--accent); color: #fff; text-decoration: none;
-  border-radius: var(--radius-sm); padding: 9px 18px; font-size: 13.5px; font-weight: 600;
-}
-.assist-open:hover { opacity: 0.92; }
-.assist-escape { background: none; border: none; color: var(--text-muted); font-size: 12.5px; font-weight: 600; }
-.assist-escape:hover { color: var(--text); text-decoration: underline; }
-
 /* ---------- brand workspace: three layers (Foundation / Live / Campaigns) ---------- */
 /* Brand workspace: tabs fixed at top; the body scrolls (Foundation/Campaigns) or
    fills (Live owns its own internal scroll). .workspace clips at 100vh. */
@@ -25855,18 +25738,6 @@ table.aud-sheet td.stick .aud-cell {
 /* collapsed pill */
 .gs-pill { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: inline-flex; align-items: center; gap: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: 0 4px 16px rgba(16,24,40,.12), 0 1px 2px rgba(16,24,40,.06); padding: 10px 16px 12px; cursor: pointer; font: inherit; }
 
-/* One-time guided coach-mark tour: a highlight ring on the anchor + a fixed tooltip. */
-.tour-ring { position: fixed; z-index: 1200; border: 2px solid var(--accent); border-radius: 12px; box-shadow: 0 0 0 4000px rgba(16,24,40,.34); pointer-events: none; transition: top .18s, left .18s, width .18s, height .18s; }
-.tour-pop { position: fixed; z-index: 1201; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 12px 40px rgba(16,24,40,.24); padding: 16px 18px; animation: tour-in .18s ease; }
-@keyframes tour-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.tour-step-n { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
-.tour-title { font-size: 15px; font-weight: 700; color: var(--text); margin-top: 4px; }
-.tour-body { font-size: 13px; line-height: 1.5; color: var(--text-muted); margin-top: 6px; }
-.tour-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.tour-skip { border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 13px; cursor: pointer; padding: 6px 8px; }
-.tour-skip:hover { color: var(--text); }
-.tour-next { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; font-size: 13px; border-radius: 8px; padding: 7px 16px; cursor: pointer; }
-.tour-next:hover { filter: brightness(1.05); }
 .gs-pill:hover { border-color: var(--border-strong); }
 .gs-pill-label { font-size: 14px; font-weight: 700; color: var(--text); }
 .gs-pill-count { font-size: 13px; font-weight: 600; color: var(--text-faint); }
@@ -26442,48 +26313,6 @@ table.aud-sheet td.stick .aud-cell {
 .fchat-next-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .fchat-next-chip:disabled { opacity: .5; cursor: default; }
 
-/* ---- Welcome: Phase A of setup, the "about you" sequence ------------------------------------ */
-/* Full-bleed and opaque on purpose. It is asked once, and while it is up nothing else competes for
-   the screen, which was the whole problem with asking these on Home. */
-.wel {
-  position: fixed; inset: 0; z-index: 90;
-  /* Deliberately NOT var(--bg). Sharing the app's ground made onboarding read as the app with
-     everything missing, rather than as its own place you pass through once. A warmer paper with a
-     faint accent bloom, and no chrome at all, so crossing into the workspace is a real arrival. */
-  background:
-    radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 60%),
-    #fbf9f8;
-  display: grid; place-items: center; padding: 24px;
-  overflow-y: auto;
-}
-.wel-inner { width: min(560px, 100%); display: flex; flex-direction: column; gap: 26px; }
-.wel-mark { display: flex; justify-content: center; opacity: 0.9; }
-.wel-step { display: flex; flex-direction: column; gap: 10px; }
-.wel-count {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--text-faint);
-}
-.wel-q { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--text); text-wrap: balance; }
-.wel-sub { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-muted); max-width: 44ch; }
-.wel-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.wel-opt {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
-  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
-  padding: 14px 16px; cursor: pointer; font: inherit;
-  transition: border-color .12s, background .12s;
-}
-.wel-opt:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
-.wel-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.wel-opt-label { font-size: 14.5px; font-weight: 650; color: var(--text); }
-.wel-opt-hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.45; }
-.wel-foot { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
-.wel-skip, .wel-back {
-  border: 0; background: none; color: var(--text-faint); font: inherit; font-size: 12.5px;
-  cursor: pointer; padding: 8px 10px; align-self: flex-start; margin-top: 4px;
-}
-.wel-skip:hover, .wel-back:hover { color: var(--text-muted); }
-.wel-foot .wel-skip, .wel-foot .wel-back { margin-top: 0; }
-.wel-foot .wel-skip { margin-left: auto; }
 
 /* ---- Dev-only "start from scratch" ---------------------------------------------------------- */
 /* Sits in the empty right end of the dark project strip. Above the Welcome overlay (z 90) on
@@ -26503,32 +26332,3 @@ table.aud-sheet td.stick .aud-cell {
   background: rgba(255, 255, 255, 0.18); color: #fff;
 }
 
-/* The brand-setup conversation, still on the onboarding surface. Same chat the app uses, framed as
-   part of the sequence, so there is ONE crossing into the workspace (when the brand exists) rather
-   than a jump into full app chrome mid-question. */
-.wel-setup { place-items: stretch; padding: 0; }
-.wel-setup-head {
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  padding: 18px 24px 0; flex: 0 0 auto;
-}
-.wel-setup-step { font-size: 12px; font-weight: 600; color: var(--text-faint); }
-.wel-setup-body { min-height: 0; display: flex; flex-direction: column; padding: 0 24px 24px; }
-.wel-setup-body .hchat { flex: 1; min-height: 0; max-width: 820px; width: 100%; margin: 0 auto; background: transparent; }
-/* The chat's own "back to Home" and "new chat" controls belong to the app, not to a setup you are
-   part-way through: leaving is the sequence's job, not a header link's. */
-.wel-setup-body .hchat-top { display: none; }
-.wel-setup-head { position: relative; }
-.wel-setup-back {
-  position: absolute; left: 24px; top: 16px;
-  border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--text-faint);
-  cursor: pointer; padding: 6px 8px;
-}
-.wel-setup-back:hover { color: var(--text-muted); }
-/* Inline in the head, not pinned to the corner: it collided with the dev reset button, and it
-   reads better as the next thing in the sequence than as a floating action. */
-.wel-setup-go {
-  border: 1px solid var(--accent); background: var(--accent); color: #fff;
-  font: inherit; font-size: 12.5px; font-weight: 650; border-radius: 999px;
-  padding: 7px 14px; cursor: pointer;
-}
-.wel-setup-go:hover { filter: brightness(1.06); }

@@ -4,7 +4,6 @@ import { CHANNELS } from '../domain/channels'
 import type { ChannelId } from '../domain/types'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { AI_MODELS } from '../domain/aiModels'
-import { BUILD_BRAND_SEED, GUIDED_SETUP_SEED } from '../domain/guidedSetup'
 import { MARKETER_ROLES } from '../domain/userPrefs'
 import { inferRole } from '../domain/inferRole'
 import { persistState } from '../adapters/state/workspaceState'
@@ -65,6 +64,7 @@ export function HomeAgenda() {
   const reports = useTrafficStore((s) => s.reports)
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
   const openStarterTemplates = useTrafficStore((s) => s.openStarterTemplates)
+  const openClientWizard = useTrafficStore((s) => s.openClientWizard)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
@@ -275,21 +275,16 @@ export function HomeAgenda() {
               </span>
             </div>
           )}
-          {/* ONE row, whatever the workspace holds. These same actions used to render as two large
-              cards on an empty workspace and as pills once a brand existed, so the top of Home
-              visibly reshuffled the moment you created your first brand. Same handlers, same seeds,
-              two shapes: a user could not tell "I have data now" from "the app changed". The two
-              actions that need real data to mean anything are hidden until it exists, but nothing
-              changes shape. Focus and detail level are asked once in Welcome.tsx, not here. */}
+          {/* ONE row, whatever the workspace holds. A cold workspace leads with adding a brand by
+              hand (the manual wizard); the two data-dependent chips are hidden until there is
+              something to personalize or prioritise. Nothing changes shape as data arrives. */}
           <div className="ag2-chips">
-            <button className="ag2-chip ag2-chip-primary" onClick={() => openHomeChat(GUIDED_SETUP_SEED)}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              Get started
-            </button>
-            <button className="ag2-chip" onClick={() => openHomeChat(BUILD_BRAND_SEED)}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6" /></svg>
-              Draft brand from your content
-            </button>
+            {empty && (
+              <button className="ag2-chip ag2-chip-primary" onClick={() => openClientWizard()}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                Add a brand
+              </button>
+            )}
             <button className="ag2-chip" onClick={() => openStarterTemplates()}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
               Draft a campaign

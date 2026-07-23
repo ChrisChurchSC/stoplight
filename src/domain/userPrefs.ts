@@ -16,13 +16,8 @@ export interface UserPrefs {
   /** Whether creating a campaign opens the template picker or a blank canvas. */
   defaultStart: 'templates' | 'blank'
   /** Set once the PASSIVE role nudge (an existing workspace we can infer a focus for) is answered
-   *  or waved off, so it never nags again. Distinct from onboardedAt: this is the suggestion, not
-   *  the first-run sequence. */
+   *  or waved off, so it never nags again. */
   focusDismissed: boolean
-  /** When the first-run "about you" sequence was resolved, as a timestamp. Null = not yet resolved,
-   *  which is the only state that shows it. A workspace that already has brands is stamped without
-   *  ever being asked, since it plainly did not need onboarding. */
-  onboardedAt: number | null
 }
 
 export const DEFAULT_USER_PREFS: UserPrefs = {
@@ -30,7 +25,6 @@ export const DEFAULT_USER_PREFS: UserPrefs = {
   marketerRole: null,
   defaultStart: 'templates',
   focusDismissed: false,
-  onboardedAt: null,
 }
 
 export const SKILL_LEVELS: { value: SkillLevel; label: string; hint: string }[] = [

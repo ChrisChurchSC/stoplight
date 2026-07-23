@@ -1447,7 +1447,6 @@ interface TrafficState {
   setOnboardingCollapsed: (collapsed: boolean) => void
   /** Hide the checklist entirely (until reset). */
   dismissOnboarding: () => void
-  reopenOnboarding: () => void
   /** Bring the checklist back (and expand it). */
   resetOnboarding: () => void
   /** Toggle a step's hand-checked state (an override on top of auto-detection). */
@@ -1915,26 +1914,10 @@ interface TrafficState {
   starterTemplatesOpen: boolean
   openStarterTemplates: () => void
   closeStarterTemplates: () => void
-  /** "Claude sets up the workspace" flow (the manual route's connect + confirm). */
-  setupOpen: boolean
-  openSetup: () => void
-  closeSetup: () => void
-  /** Full-page first-run onboarding: a takeover that renders instead of the app for new users. */
-  onboardingActive: boolean
-  startOnboarding: () => void
-  exitOnboarding: () => void
   /** The "Invite teammate" modal (share the workspace by link). */
   inviteOpen: boolean
   openInvite: () => void
   closeInvite: () => void
-  /** Forked onboarding: pick Do-it-yourself (manual) vs Set-up-with-Claude (assisted). */
-  onboardOpen: boolean
-  openOnboard: () => void
-  closeOnboard: () => void
-  /** The assisted route's desktop handoff screen (opens Claude to connect tools). */
-  assistedOpen: boolean
-  openAssisted: () => void
-  closeAssisted: () => void
   /** Generate a proposed workspace setup from a URL (Claude, heuristic fallback). */
   generateSetup: (input: SetupInput) => Promise<WorkspaceSetup>
   /** Commit a confirmed setup: client + profile + ICP + proof + first campaign. */
@@ -2600,11 +2583,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   wizardClient: null,
   audienceWizardOpen: false,
   starterTemplatesOpen: false,
-  setupOpen: false,
-  onboardingActive: false,
   inviteOpen: false,
-  onboardOpen: false,
-  assistedOpen: false,
   reviewRowId: null,
   comments: {},
   commentRowId: null,
@@ -2653,13 +2632,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   dismissOnboarding: () =>
     set((s) => {
       const onboarding = { ...s.onboarding, dismissed: true }
-      saveOnboarding(onboarding)
-      return { onboarding }
-    }),
-  // Re-open a dismissed/collapsed checklist WITHOUT wiping completed steps (unlike resetOnboarding).
-  reopenOnboarding: () =>
-    set((s) => {
-      const onboarding = { ...s.onboarding, dismissed: false, collapsed: false }
       saveOnboarding(onboarding)
       return { onboarding }
     }),
@@ -4514,24 +4486,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openStarterTemplates: () => set({ starterTemplatesOpen: true }),
   closeStarterTemplates: () => set({ starterTemplatesOpen: false }),
 
-  openSetup: () => set({ setupOpen: true }),
-  closeSetup: () => set({ setupOpen: false }),
-  startOnboarding: () => set({ onboardingActive: true }),
-  exitOnboarding: () => {
-    set({ onboardingActive: false })
-    try {
-      localStorage.setItem('stoplight.welcomed.v1', '1')
-    } catch {
-      /* ignore */
-    }
-  },
   openInvite: () => set({ inviteOpen: true }),
   closeInvite: () => set({ inviteOpen: false }),
-  openOnboard: () => set({ onboardOpen: true }),
-  closeOnboard: () => set({ onboardOpen: false }),
-  // Fork → assisted: leave the fork, open the desktop handoff.
-  openAssisted: () => set({ onboardOpen: false, assistedOpen: true }),
-  closeAssisted: () => set({ assistedOpen: false }),
   generateSetup: (input) => setupGenerator.generate(input),
 
   provisionWorkspace: async (setup) => {
@@ -4568,7 +4524,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       get().campaignList.find((c) => c.name === campaign) ??
       get().campaignList.find((c) => c.client === client)
     if (existingCampaign) {
-      set({ setupOpen: false, clientFilter: client, campaignFilter: existingCampaign.name, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
+      set({ clientFilter: client, campaignFilter: existingCampaign.name, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
       return
     }
     get().setIcp(setup.icp)
@@ -4609,7 +4565,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       flightWeeks: weeks,
       endDate,
     })
-    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
+    set({ clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
   },
 
   provisionCurrentState: async (map) => {
@@ -4638,7 +4594,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     currentStateProof(campaign, map)
     await sheet.append(currentStateRows(campaign, map))
     await get().refresh()
-    set({ setupOpen: false, clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
+    set({ clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
   },
 
   refreshClient: async (client) => {
