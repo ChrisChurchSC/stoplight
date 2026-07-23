@@ -6794,6 +6794,9 @@ button {
   border-radius: 11px; box-shadow: var(--shadow); cursor: grab;
   display: flex; flex-direction: column;
 }
+/* The record-picker cards (audience / data source / channel asset) are wider so the linked
+   record name has room. */
+.flow-note-audience, .flow-note-data-source, .flow-note-channel-asset { width: 268px; }
 .flow-note.sel { border-color: var(--note-tone, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow); }
 .flow-note.multi { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
 .flow-note-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px; }
