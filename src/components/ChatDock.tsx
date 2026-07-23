@@ -32,11 +32,13 @@ export function ChatDock() {
         </div>
       )}
       {!open && !flowCanvasOpen && (
-        <button className="chat-fab" onClick={() => newHomeChat()} title="Ask the assistant" aria-label="Ask the assistant">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        // A slim panel docked to the right edge (the assistant, collapsed), not a floating button.
+        // Clicking it slides the full panel out.
+        <button className="chat-rail" onClick={() => newHomeChat()} title="Ask the assistant" aria-label="Open the assistant">
+          <svg className="chat-rail-ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4v3l4-3h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z" />
           </svg>
-          <span className="chat-fab-label">Ask</span>
+          <span className="chat-rail-label">Ask</span>
         </button>
       )}
     </>

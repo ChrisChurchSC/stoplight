@@ -26395,15 +26395,21 @@ table.aud-sheet td.stick .aud-cell {
 @keyframes chat-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (prefers-reduced-motion: reduce) { .chat-drawer { animation: none; } }
 .chat-drawer .hchat { flex: 1; min-height: 0; }
-/* Launcher: a compact pill, bottom-right, above page chrome but below the overlay. */
-.chat-fab {
-  position: fixed; right: 20px; bottom: 20px; z-index: 40;
-  display: inline-flex; align-items: center; gap: 8px;
-  border: 0; border-radius: 999px; background: var(--accent); color: #fff;
-  font: inherit; font-size: 13.5px; font-weight: 650; padding: 11px 17px 11px 15px;
-  cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.18);
-  transition: filter .12s, transform .12s;
+/* The collapsed assistant: a slim panel docked flush to the right edge (not a floating button),
+   full height, so it reads as a right-side panel waiting to open. */
+.chat-rail {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
+  width: 46px; border: 0; border-left: 1px solid var(--border);
+  background: var(--surface); color: var(--text-muted); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding-top: 16px; font: inherit;
+  transition: background .12s, color .12s;
 }
-.chat-fab:hover { filter: brightness(1.06); transform: translateY(-1px); }
-.chat-fab-label { line-height: 1; }
-@media (max-width: 560px) { .chat-fab-label { display: none; } .chat-fab { padding: 12px; } }
+.chat-rail:hover { background: var(--hover); color: var(--accent); }
+.chat-rail-ico { flex: 0 0 auto; }
+/* Vertical label under the icon, reading bottom-to-top like a docked panel tab. */
+.chat-rail-label {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
+}
+@media (max-width: 560px) { .chat-rail-label { display: none; } }
