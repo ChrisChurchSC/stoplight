@@ -255,7 +255,7 @@ const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 
 // Freeform canvas cards you drop from the toolbar (a lightweight node primitive shared across the
 // new types). They live in the builder's memory alongside the deliverable nodes, positioned via the
 // same `pos` map and connectable through the same edge system.
-type FlowNoteKind = 'brief' | 'audience' | 'data-source' | 'channel-asset' | 'note'
+type FlowNoteKind = 'audience' | 'data-source' | 'channel-asset' | 'note'
 interface FlowNote {
   id: string
   kind: FlowNoteKind
@@ -264,10 +264,6 @@ interface FlowNote {
   refId?: string
 }
 const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder: string; icon: React.ReactNode }> = {
-  brief: {
-    label: 'Brief', tone: '#ff6347', placeholder: 'What is this board about?',
-    icon: <path d="M5 21V4h11l-1.5 3.5L16 11H5" />,
-  },
   audience: {
     label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?',
     icon: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M17 8a3 3 0 0 1 0 6M20.5 20a5.5 5.5 0 0 0-4-5.3" /></>,
@@ -3927,9 +3923,9 @@ export function FlowsView() {
             <>
               <div className="flow-tb-add-scrim" onClick={() => setAddMenuOpen(false)} />
               <div className="flow-tb-add-menu" role="menu">
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('brief') }}>
-                  <span className="flow-tb-add-ic" style={{ color: NOTE_META.brief.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.brief.icon}</svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root</span></span>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
+                  <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root, select it</span></span>
                 </button>
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('audience') }}>
                   <span className="flow-tb-add-ic" style={{ color: NOTE_META.audience.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.audience.icon}</svg></span>
