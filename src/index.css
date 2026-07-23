@@ -26435,7 +26435,13 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 14px; padding: 16px 16px 14px;
   box-shadow: 0 14px 38px -18px color-mix(in srgb, var(--text) 28%, transparent), 0 2px 6px -2px color-mix(in srgb, var(--text) 12%, transparent);
   display: flex; flex-direction: column; gap: 0;
+  cursor: grab;
 }
+.flow-starter:active { cursor: grabbing; }
+/* Inputs/buttons inside the card keep their own cursors (drag only grabs the body). */
+.flow-starter textarea, .flow-starter button, .flow-starter .flow-starter-input { cursor: auto; }
+.flow-starter button, .flow-starter-chip, .flow-starter-go, .flow-starter-close { cursor: pointer; }
+.flow-starter-input { cursor: text; }
 .flow-starter-close {
   position: absolute; top: 10px; right: 10px; z-index: 1;
   width: 24px; height: 24px; border: 0; border-radius: 7px; cursor: pointer;

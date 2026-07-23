@@ -564,6 +564,8 @@ export function FlowsView() {
   // Dismissing the starter card reveals the bare canvas (build by hand via the toolbar or Crumbot).
   // Reset on startNew so a fresh campaign always offers it again.
   const [starterDismissed, setStarterDismissed] = useState(false)
+  // Where the starter card sits (canvas-local px). null = its default docked spot on the left.
+  const [starterPos, setStarterPos] = useState<{ x: number; y: number } | null>(null)
   // The Outline: a navigable map of the campaign's contents (Figma's Layers panel, adapted). Docks
   // over the canvas's top-left, collapsed by default so the chat stays the star. Clicking a row
   // selects that node, which highlights it and opens its brief.
@@ -1453,6 +1455,27 @@ export function FlowsView() {
     setChatCollapsed(false)
     void runFlowChat(t, 'build')
   }
+  // Drag the starter card around the canvas. Grabs from the card body only — its inputs, buttons,
+  // and chips keep working. Position is canvas-local px; the card is an overlay, so it doesn't
+  // pan/zoom with the stack (like the outline and toolbar).
+  const onStarterDragStart = (e: ReactMouseEvent) => {
+    if ((e.target as HTMLElement).closest('textarea, button, input, select')) return
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const cardRect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const cr = canvasRef.current?.getBoundingClientRect()
+    const baseX = cardRect.left - (cr?.left ?? 0)
+    const baseY = cardRect.top - (cr?.top ?? 0)
+    const onMove = (ev: MouseEvent) => setStarterPos({ x: baseX + (ev.clientX - startX), y: baseY + (ev.clientY - startY) })
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
   // Drop a freeform card from the toolbar. Cascades to the right of the campaign column so repeated
   // adds don't stack exactly on top of each other; the user drags it wherever from there.
   const addNote = (kind: FlowNoteKind) => {
@@ -1637,6 +1660,7 @@ export function FlowsView() {
     setCampaignFilter('all')
     setStarterText('')
     setStarterDismissed(false)
+    setStarterPos(null)
   }
   const openView = (n: string) => {
     setViewName(n)
@@ -2710,7 +2734,11 @@ export function FlowsView() {
               Crumbot, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
               centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
           {!viewing && !building && !starterDismissed && nodes.length === 0 && chatMsgs.length === 0 && (
-            <div className="flow-starter">
+            <div
+              className="flow-starter"
+              onMouseDown={onStarterDragStart}
+              style={starterPos ? { left: starterPos.x, top: starterPos.y, transform: 'none' } : undefined}
+            >
               <button className="flow-starter-close" title="Dismiss" aria-label="Dismiss" onClick={() => setStarterDismissed(true)}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
               </button>
