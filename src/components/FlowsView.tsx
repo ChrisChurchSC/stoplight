@@ -512,6 +512,9 @@ export function FlowsView() {
   // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
   // opens Crumbot and hands it the brief (its discovery/build flow takes over from there).
   const [starterText, setStarterText] = useState('')
+  // Dismissing the starter card reveals the bare canvas (build by hand via the toolbar or Crumbot).
+  // Reset on startNew so a fresh campaign always offers it again.
+  const [starterDismissed, setStarterDismissed] = useState(false)
   // The Outline: a navigable map of the campaign's contents (Figma's Layers panel, adapted). Docks
   // over the canvas's top-left, collapsed by default so the chat stays the star. Clicking a row
   // selects that node, which highlights it and opens its brief.
@@ -1515,6 +1518,8 @@ export function FlowsView() {
     setSel('campaign')
     setPickAt(null)
     setCampaignFilter('all')
+    setStarterText('')
+    setStarterDismissed(false)
   }
   const openView = (n: string) => {
     setViewName(n)
@@ -2574,8 +2579,11 @@ export function FlowsView() {
           {/* Empty-canvas starter: the front door before a campaign has any shape. Describe it to
               Crumbot, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
               centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
-          {!viewing && !building && nodes.length === 0 && chatMsgs.length === 0 && (
+          {!viewing && !building && !starterDismissed && nodes.length === 0 && chatMsgs.length === 0 && (
             <div className="flow-starter">
+              <button className="flow-starter-close" title="Dismiss" aria-label="Dismiss" onClick={() => setStarterDismissed(true)}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
               <div className="flow-starter-eyebrow">New campaign</div>
               <h2 className="flow-starter-title">What are you launching?</h2>
               <p className="flow-starter-sub">Describe it and Crumbot drafts the plan, audiences, and copy. Nothing sends until you say so.</p>
