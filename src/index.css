@@ -6795,8 +6795,9 @@ button {
   display: flex; flex-direction: column;
 }
 /* The record-picker cards (audience / data source / channel asset) are wider so the linked
-   record name has room. */
-.flow-note-audience, .flow-note-data-source, .flow-note-channel-asset { width: 268px; }
+   record name has room. Audience + data source get extra width for longer segment/source names. */
+.flow-note-channel-asset { width: 268px; }
+.flow-note-audience, .flow-note-data-source { width: 320px; }
 .flow-note.sel { border-color: var(--note-tone, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow); }
 .flow-note.multi { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
 .flow-note-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px; }
@@ -7101,6 +7102,20 @@ button {
 .flow-edge:hover {
   stroke: var(--accent);
   stroke-width: 1.5;
+}
+/* Wide invisible click target along each connector so the thin dotted line is easy to hit; hovering
+   the band turns the edge red to signal "click to delete". */
+.flow-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.flow-edge-g:hover .flow-edge {
+  stroke: var(--red);
+  stroke-width: 2;
 }
 /* A connector that touches a card carrying media budget/spend: gold, so paid paths read at a
    glance apart from organic ones. */

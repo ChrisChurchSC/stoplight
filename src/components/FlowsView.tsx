@@ -617,6 +617,17 @@ export function FlowsView() {
   const [zoom, setZoom] = useState(100)
   const [zoomOpen, setZoomOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const addWrapRef = useRef<HTMLDivElement>(null)
+  // Close the Add menu on any click outside it (a scrim gets trapped in the toolbar's stacking
+  // context, so canvas clicks miss it).
+  useEffect(() => {
+    if (!addMenuOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (!addWrapRef.current?.contains(e.target as Node)) setAddMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [addMenuOpen])
   const [tool, setTool] = useState<'select' | 'pan' | 'connect'>('select')
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
@@ -2637,13 +2648,15 @@ export function FlowsView() {
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
+              const d = elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)
               return (
-                <path
-                  key={`${cn.from}-${cn.to}-${i}`}
-                  className={`flow-edge${paid ? ' paid' : ''}`}
-                  d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)}
-                  onClick={() => setConnectors((c) => c.filter((_, j) => j !== i))}
-                />
+                <g key={`${cn.from}-${cn.to}-${i}`} className="flow-edge-g">
+                  <path className={`flow-edge${paid ? ' paid' : ''}`} d={d} />
+                  {/* Wide transparent hit path so the thin dotted edge is easy to click to delete. */}
+                  <path className="flow-edge-hit" d={d} onClick={() => setConnectors((c) => c.filter((_, j) => j !== i))}>
+                    <title>Click to delete this connection</title>
+                  </path>
+                </g>
               )
             })}
             {drawing &&
@@ -3992,7 +4005,7 @@ export function FlowsView() {
           </button>
         </div>
         <span className="flow-tb-divider" />
-        <div className="flow-tb-addwrap">
+        <div className="flow-tb-addwrap" ref={addWrapRef}>
           <button className="flow-tb-add" onClick={() => setAddMenuOpen((o) => !o)} disabled={addingDeliv}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="4" />
@@ -4003,7 +4016,6 @@ export function FlowsView() {
           </button>
           {addMenuOpen && (
             <>
-              <div className="flow-tb-add-scrim" onClick={() => setAddMenuOpen(false)} />
               <div className="flow-tb-add-menu" role="menu">
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
                   <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
