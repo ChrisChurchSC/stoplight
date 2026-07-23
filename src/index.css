@@ -4121,8 +4121,10 @@ button {
    (leftWidth - rightWidth)/2; equal widths (both open, or both railed) cancel to 0. LEFT is Crumbot
    and RIGHT is the inspector: when Crumbot rails (left=48) and the inspector is open (right=360) the
    canvas center shifts left by (48-360)/2 = -156px, and vice-versa. */
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 156px); }
+/* Collapsed Crumbot is now hidden entirely (0 wide), not a 48px rail. */
+.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
 .flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
+.flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
 .flow-canvas {
   flex: 1;
   min-width: 0;
@@ -4340,16 +4342,16 @@ button {
 .flow-audience {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin: 7px 0 2px;
+  gap: 8px;
+  margin: 10px 0 2px;
   cursor: default;
 }
 .flow-audience-lbl {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-faint);
   flex: 0 0 auto;
 }
 .flow-audience-sel {
@@ -4375,12 +4377,13 @@ button {
   font-size: 12px;
   font-weight: 600;
   color: var(--accent);
-  background: none;
-  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   border-radius: 7px;
-  padding: 4px 8px;
+  padding: 5px 9px;
   cursor: pointer;
 }
+.flow-audience-add:hover { border-color: var(--accent); }
 .flow-node-x {
   flex: 0 0 auto;
   border: 0;
@@ -6797,6 +6800,20 @@ button {
 /* The record-picker cards (audience / data source / channel asset) are wider so the linked
    record name has room. Audience + data source get extra width for longer segment/source names. */
 .flow-note-channel-asset { width: 268px; }
+/* Text note: styled like a physical sticky note — warm yellow paper, no accent top-border. */
+.flow-note-note {
+  background: #fdf4c4;
+  border-color: #efe09a;
+  border-top: 1px solid #efe09a;
+  box-shadow: 0 6px 16px -5px rgba(150, 120, 20, 0.34);
+}
+.flow-note-note .flow-note-kind,
+.flow-note-note .flow-note-ic { color: #9a7b16; }
+.flow-note-note .flow-note-text { color: #5f4d12; }
+.flow-note-note .flow-note-text::placeholder { color: #b39a4e; }
+.flow-note-note .flow-note-del { background: rgba(154, 123, 22, 0.13); color: #8a6d12; }
+.flow-note-note .flow-note-del:hover { background: rgba(154, 123, 22, 0.26); color: #6d5610; }
+.flow-note-note.sel { border-color: #d9a520; box-shadow: 0 0 0 2px color-mix(in srgb, #d9a520 45%, transparent), 0 6px 16px -5px rgba(150, 120, 20, 0.34); }
 .flow-note-audience, .flow-note-data-source { width: 320px; }
 .flow-note.sel { border-color: var(--note-tone, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow); }
 .flow-note.multi { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -25852,7 +25869,7 @@ table.aud-sheet td.stick .aud-cell {
 /* Tier backgrounds — a distinct brand hue per tier so the hierarchy reads at a glance:
    campaign (tomato) → deliverable (blue) → post/copy (purple). Percentages are tuned per hue
    so they land at a similar subtle intensity (light blue needs more, saturated purple less). */
-.flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
+.flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius: 14px; padding: 12px 13px 13px; }
 .flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--accent-3) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent-3) 40%, var(--border)); }
 .flow-node.flow-brief-node { background: color-mix(in srgb, var(--accent-2) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent-2) 18%, var(--border)); }
 /* Selected + click-held (drag) glow match the card's tier hue (campaign tomato is the default). A
@@ -26403,43 +26420,27 @@ table.aud-sheet td.stick .aud-cell {
 /* Flow Outline: the campaign's contents as a navigable map, docked over the canvas top-left.
    Adapted from Figma's Layers panel. Floats, so it never eats canvas width; collapsed to a pill by
    default so the chat keeps the stage. */
-.flow-outline {
-  /* Crumbot is now docked to the LEFT of the canvas (not floating over it), so the outline sits at
-     the canvas's own top-left edge. */
-  position: absolute; top: 12px; left: 12px; z-index: 6;
-  display: flex; flex-direction: column; gap: 6px; max-width: 240px;
+/* Outline — the board's contents (campaign + deliverables), shown inline in the inspector's
+   nothing-selected state. Click a row to open that node. */
+.flow-outline-head {
+  font-size: 11px; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-faint); margin: 18px 0 6px;
 }
-.flow-outline-toggle {
-  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
-  border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 12.5px; font-weight: 600;
-  cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.06);
-}
-.flow-outline-toggle:hover { border-color: var(--border-strong); }
-.flow-outline.open .flow-outline-toggle { border-color: var(--accent); color: var(--accent); }
-.flow-outline-count {
-  font-size: 11px; font-weight: 700; color: var(--text-muted);
-  background: var(--hover); border-radius: 20px; padding: 1px 7px; font-variant-numeric: tabular-nums;
-}
-.flow-outline-list {
-  display: flex; flex-direction: column; gap: 1px; max-height: 60vh; overflow-y: auto;
-  border: 1px solid var(--border); background: var(--surface); border-radius: 10px;
-  padding: 5px; box-shadow: 0 4px 16px rgba(0,0,0,.08);
-}
+.flow-outline-list { display: flex; flex-direction: column; gap: 1px; }
 .flow-outline-row {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-  border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--text);
-  border-radius: 7px; padding: 7px 9px; cursor: pointer;
+  border: 0; background: none; font: inherit; font-size: 13px; color: var(--text);
+  border-radius: 8px; padding: 8px 10px; cursor: pointer;
 }
-.flow-outline-row:hover { background: var(--hover); }
-.flow-outline-row.on { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
-.flow-outline-row.campaign { font-weight: 650; border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; margin-bottom: 3px; }
+.flow-outline-row:hover { background: var(--surface-2); }
+.flow-outline-row.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.flow-outline-row.campaign { font-weight: 650; }
 .flow-outline-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-outline-n {
   flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
-.flow-outline-empty { font-size: 12px; color: var(--text-faint); padding: 8px 9px; }
+.flow-outline-empty { font-size: 12.5px; color: var(--text-faint); padding: 6px 10px; }
 
 /* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
    canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */
@@ -26448,9 +26449,9 @@ table.aud-sheet td.stick .aud-cell {
      floating in the center. Compact so it doesn't crowd the canvas. */
   position: absolute; z-index: 5;
   left: 18px; top: 50%; transform: translateY(-50%);
-  width: min(316px, calc(100% - 36px));
+  width: min(324px, calc(100% - 36px));
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; padding: 16px 16px 14px;
+  border-radius: 16px; padding: 18px;
   box-shadow: 0 14px 38px -18px color-mix(in srgb, var(--text) 28%, transparent), 0 2px 6px -2px color-mix(in srgb, var(--text) 12%, transparent);
   display: flex; flex-direction: column; gap: 0;
   cursor: grab;
@@ -26471,28 +26472,29 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 10px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--accent); margin-bottom: 5px;
 }
-.flow-starter-title { font-size: 17px; font-weight: 680; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
-.flow-starter-sub { font-size: 12px; line-height: 1.45; color: var(--text-muted); margin: 5px 0 0; }
+.flow-starter-title { font-size: 18px; font-weight: 680; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.flow-starter-sub { font-size: 12.5px; line-height: 1.5; color: var(--text-muted); margin: 6px 0 0; }
 .flow-starter-prompt {
-  margin-top: 12px; border: 1px solid var(--border-strong); border-radius: 10px;
-  background: var(--bg); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+  margin-top: 14px; border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--bg); padding: 11px; display: flex; flex-direction: column; gap: 8px;
 }
 .flow-starter-prompt:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 .flow-starter-input {
   border: none; background: transparent; resize: none; width: 100%;
-  font: inherit; font-size: 12.5px; line-height: 1.45; color: var(--text); padding: 1px 3px;
+  font: inherit; font-size: 13px; line-height: 1.5; color: var(--text); padding: 1px 3px;
+  min-height: 74px;
 }
 .flow-starter-input:focus { outline: none; }
 .flow-starter-input::placeholder { color: var(--text-faint); }
 .flow-starter-go {
-  align-self: flex-end; display: inline-flex; align-items: center; gap: 6px;
-  border: none; border-radius: 8px; padding: 6px 11px; cursor: pointer;
-  background: var(--accent); color: #fff; font: inherit; font-size: 12px; font-weight: 620;
+  align-self: flex-end; display: inline-flex; align-items: center; gap: 5px;
+  border: none; border-radius: 8px; padding: 5px 9px; cursor: pointer;
+  background: var(--accent); color: #fff; font: inherit; font-size: 11.5px; font-weight: 620;
 }
 .flow-starter-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
 .flow-starter-go:disabled { opacity: 0.5; cursor: default; }
-.flow-starter-go svg { width: 13px; height: 13px; }
-.flow-starter-kbd { font-size: 10.5px; opacity: 0.75; margin-left: 1px; }
+.flow-starter-go svg { width: 12px; height: 12px; }
+.flow-starter-kbd { font-size: 10px; opacity: 0.7; margin-left: 1px; }
 .flow-starter-or {
   display: flex; align-items: center; gap: 10px; margin: 12px 0 10px;
   font-size: 11px; color: var(--text-faint);

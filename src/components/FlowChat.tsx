@@ -80,17 +80,8 @@ export function FlowChat({
   }
   const examples = flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
 
-  // Collapsed: a thin docked rail on the LEFT of the canvas (mirrors the inspector's right rail),
-  // click the spark to reopen the full column.
-  if (collapsed) {
-    return (
-      <aside className="fchat-rail">
-        <button className="fchat-rail-btn" title="Open Crumbot" aria-label="Open Crumbot" onClick={() => onCollapse(false)}>
-          <span className="fchat-spark" aria-hidden="true">✦</span>
-        </button>
-      </aside>
-    )
-  }
+  // Collapsed: Crumbot is fully hidden (no rail) — the "Crumbot" item in the left nav reopens it.
+  if (collapsed) return null
 
   return (
     <aside className="fchat">

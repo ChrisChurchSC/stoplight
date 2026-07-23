@@ -566,10 +566,6 @@ export function FlowsView() {
   const [starterDismissed, setStarterDismissed] = useState(false)
   // Where the starter card sits (canvas-local px). null = its default docked spot on the left.
   const [starterPos, setStarterPos] = useState<{ x: number; y: number } | null>(null)
-  // The Outline: a navigable map of the campaign's contents (Figma's Layers panel, adapted). Docks
-  // over the canvas's top-left, collapsed by default so the chat stays the star. Clicking a row
-  // selects that node, which highlights it and opens its brief.
-  const [outlineOpen, setOutlineOpen] = useState(false)
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
   const chatCollapsedRef = useRef(chatCollapsed)
   chatCollapsedRef.current = chatCollapsed
@@ -2389,6 +2385,20 @@ export function FlowsView() {
     )
   }
 
+  // The outline (campaign + its deliverables) — a map of the board's contents, shown in the
+  // inspector's nothing-selected state. Clicking a row selects that node.
+  const outlineItems = viewing
+    ? viewDelivs.map((d) => ({ id: d.key, label: d.label, count: d.count }))
+    : nodes.map((n) => {
+        const p = presetByKey(n.presetKey)
+        return { id: n.id, label: p?.label ?? 'Deliverable', count: p ? subcardCount(p, n.perMonth) : 0 }
+      })
+  const pickOutline = (id: string) => {
+    setSel(id === 'campaign' ? 'campaign' : id)
+    setSelected(id === 'campaign' ? new Set() : new Set([id]))
+    setBriefCollapsed(false)
+  }
+
   return (
     <div className={`flow${chatCollapsed ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}`}>
       <header className="flow-top">
@@ -2700,49 +2710,8 @@ export function FlowsView() {
               }}
             />
           )}
-          {/* Outline: a map of the campaign's contents, docked over the canvas top-left. Sits
-              OUTSIDE the transformed stack so it stays put while the canvas pans and zooms.
-              Collapsed by default (a compact pill) so the chat keeps the stage; clicking a row
-              selects that node, highlighting it and opening its brief. */}
-          {(() => {
-            const items = viewing
-              ? viewDelivs.map((d) => ({ id: d.key, label: d.label, count: d.count }))
-              : nodes.map((n) => {
-                  const p = presetByKey(n.presetKey)
-                  return { id: n.id, label: p?.label ?? 'Deliverable', count: p ? subcardCount(p, n.perMonth) : 0 }
-                })
-            const pick = (id: string) => {
-              setSel(id === 'campaign' ? 'campaign' : id)
-              setSelected(id === 'campaign' ? new Set() : new Set([id]))
-              setBriefCollapsed(false)
-            }
-            return (
-              <div className={`flow-outline${outlineOpen ? ' open' : ''}`}>
-                <button className="flow-outline-toggle" onClick={() => setOutlineOpen((o) => !o)} title="Outline: jump to any part of this campaign">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
-                  <span>Outline</span>
-                  {items.length > 0 && <span className="flow-outline-count">{items.length}</span>}
-                </button>
-                {outlineOpen && (
-                  <div className="flow-outline-list">
-                    <button className={`flow-outline-row campaign${sel === 'campaign' ? ' on' : ''}`} onClick={() => pick('campaign')}>
-                      <span className="flow-outline-label">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
-                    </button>
-                    {items.length === 0 ? (
-                      <div className="flow-outline-empty">No deliverables yet.</div>
-                    ) : (
-                      items.map((it) => (
-                        <button key={it.id} className={`flow-outline-row${sel === it.id ? ' on' : ''}`} onClick={() => pick(it.id)}>
-                          <span className="flow-outline-label">{it.label}</span>
-                          {it.count > 0 && <span className="flow-outline-n">{it.count}</span>}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          {/* The outline (a map of the campaign's contents) now lives in the inspector's
+              nothing-selected state instead of a floating canvas pill. */}
           {/* Empty-canvas starter: the front door before a campaign has any shape. Describe it to
               Crumbot, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
               centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
@@ -2761,7 +2730,7 @@ export function FlowsView() {
               <div className="flow-starter-prompt">
                 <textarea
                   className="flow-starter-input"
-                  rows={2}
+                  rows={4}
                   placeholder="A spring launch for our new onboarding flow, aimed at RevOps leads…"
                   value={starterText}
                   onChange={(e) => setStarterText(e.target.value)}
@@ -3937,6 +3906,23 @@ export function FlowsView() {
               </div>
               <div className="flow-overview">
                 <div className="flow-ov-note">Pick the campaign brief to set audiences and flight, or add deliverables. When it looks right, build it into a real draft campaign.</div>
+                {/* Outline: the board's contents (campaign + its deliverables). Click a row to open it. */}
+                <div className="flow-outline-list">
+                  <div className="flow-outline-head">Outline</div>
+                  <button className={`flow-outline-row campaign${sel === 'campaign' ? ' on' : ''}`} onClick={() => pickOutline('campaign')}>
+                    <span className="flow-outline-label">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
+                  </button>
+                  {outlineItems.length === 0 ? (
+                    <div className="flow-outline-empty">No deliverables yet.</div>
+                  ) : (
+                    outlineItems.map((it) => (
+                      <button key={it.id} className={`flow-outline-row${sel === it.id ? ' on' : ''}`} onClick={() => pickOutline(it.id)}>
+                        <span className="flow-outline-label">{it.label}</span>
+                        {it.count > 0 && <span className="flow-outline-n">{it.count}</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             </>
           )}
