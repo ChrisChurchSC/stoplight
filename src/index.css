@@ -6809,6 +6809,16 @@ button {
   display: inline-flex; align-items: center; justify-content: center; opacity: 0;
 }
 .flow-note:hover .flow-note-del { opacity: 1; }
+/* Delete ✕ on the campaign brief card (its root, so hidden by default, shown on hover). */
+.flow-tier-campaign { position: relative; }
+.flow-brief-del {
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  width: 22px; height: 22px; border: 0; border-radius: 6px; cursor: pointer;
+  background: none; color: var(--text-faint); font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; opacity: 0;
+}
+.flow-tier-campaign:hover .flow-brief-del { opacity: 1; }
+.flow-brief-del:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 .flow-note-del:hover { background: var(--surface-2); color: var(--text); }
 .flow-note-text {
   border: 0; background: none; resize: none; width: 100%;

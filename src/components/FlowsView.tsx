@@ -555,6 +555,9 @@ export function FlowsView() {
   const chatCollapsed = useTrafficStore((s) => s.flowChatCollapsed)
   const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
+  // The campaign brief is the board's root, rendered unconditionally. Deleting it hides the card
+  // (the campaign data stays); "Brief" in the Add menu brings it back. Reset on entering a campaign.
+  const [briefHidden, setBriefHidden] = useState(false)
   // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
   // opens Crumbot and hands it the brief (its discovery/build flow takes over from there).
   const [starterText, setStarterText] = useState('')
@@ -808,11 +811,12 @@ export function FlowsView() {
       // Delete / Backspace removes the selected card(s) — deliverable or freeform note. The campaign
       // brief is the board's root, so it's never deleted this way.
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const ids = (selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []).filter((id) => id !== 'campaign')
+        const ids = selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []
         if (ids.length) {
           e.preventDefault()
           ids.forEach((id) => {
-            if (notesRef.current.some((nt) => nt.id === id)) deleteNote(id)
+            if (id === 'campaign') setBriefHidden(true)
+            else if (notesRef.current.some((nt) => nt.id === id)) deleteNote(id)
             else if (nodesRef.current.some((n) => n.id === id)) removeNode(id)
           })
           setSel(null)
@@ -1618,6 +1622,7 @@ export function FlowsView() {
     setBuilt(null)
     setNodes([])
     setNotes([])
+    setBriefHidden(false)
     setPreview({})
     setName('')
     setSubject('')
@@ -1638,6 +1643,7 @@ export function FlowsView() {
     setBuilt(null)
     setPickAt(null)
     setSel('campaign')
+    setBriefHidden(false)
     // Opening a flow also opens a tab for it (and lights that tab as active), so the
     // top strip tracks the flow you're in, matching how a tab click opens a flow.
     openProject(n)
@@ -2748,7 +2754,8 @@ export function FlowsView() {
             </div>
           )}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
-            {/* Campaign brief node */}
+            {/* Campaign brief node — the board's root. Hideable via delete; "Brief" restores it. */}
+            {!briefHidden && (
             <div
               className={`flow-node flow-tier-campaign${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
               data-node-id="campaign"
@@ -2759,6 +2766,17 @@ export function FlowsView() {
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
                 Campaign
               </span>
+              {!viewing && (
+                <button
+                  className="flow-brief-del"
+                  title="Delete the brief card"
+                  aria-label="Delete the brief card"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setBriefHidden(true); if (sel === 'campaign') setSel(null) }}
+                >
+                  ✕
+                </button>
+              )}
               <div className="flow-node-main">
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
@@ -2846,6 +2864,7 @@ export function FlowsView() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Freeform toolbar cards (brief / audience / data source / channel asset / note):
                 absolutely positioned in the stack, dragged, selected, and connected like any node. */}
@@ -3958,9 +3977,9 @@ export function FlowsView() {
             <>
               <div className="flow-tb-add-scrim" onClick={() => setAddMenuOpen(false)} />
               <div className="flow-tb-add-menu" role="menu">
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
                   <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root, select it</span></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root</span></span>
                 </button>
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('audience') }}>
                   <span className="flow-tb-add-ic" style={{ color: NOTE_META.audience.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.audience.icon}</svg></span>
