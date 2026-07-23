@@ -805,6 +805,21 @@ export function FlowsView() {
       }
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      // Delete / Backspace removes the selected card(s) — deliverable or freeform note. The campaign
+      // brief is the board's root, so it's never deleted this way.
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const ids = (selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []).filter((id) => id !== 'campaign')
+        if (ids.length) {
+          e.preventDefault()
+          ids.forEach((id) => {
+            if (notesRef.current.some((nt) => nt.id === id)) deleteNote(id)
+            else if (nodesRef.current.some((n) => n.id === id)) removeNode(id)
+          })
+          setSel(null)
+          setSelected(new Set())
+        }
+        return
+      }
       // Cmd/Ctrl+Z undoes the last canvas action (move, Tidy, add, Generate); +Shift redoes.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -879,6 +894,14 @@ export function FlowsView() {
   writeCopyRef.current = writeCopy
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
+  // Fresh refs for the Delete/Backspace shortcut, whose keydown listener is bound less often than
+  // these change.
+  const notesRef = useRef(notes)
+  notesRef.current = notes
+  const selRef = useRef(sel)
+  selRef.current = sel
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
   const lastSubjectRef = useRef(subject)
 
   // Generate live draft copy for a deliverable node (all its post slots in one call).
@@ -1546,6 +1569,18 @@ export function FlowsView() {
   }, [addSearch])
   const removeNode = (id: string) => {
     setNodes((n) => n.filter((x) => x.id !== id))
+    setConnectors((c) => c.filter((e) => e.from !== id && e.to !== id))
+    setPos((p) => {
+      const next = { ...p }
+      delete next[id]
+      return next
+    })
+    setSelected((s) => {
+      if (!s.has(id)) return s
+      const next = new Set(s)
+      next.delete(id)
+      return next
+    })
     if (sel === id) setSel(null)
   }
   const setCadence = (id: string, perMonth: number) => setNodes((n) => n.map((x) => (x.id === id ? { ...x, perMonth: Math.max(1, perMonth) } : x)))
