@@ -26331,64 +26331,68 @@ table.aud-sheet td.stick .aud-cell {
 /* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
    canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */
 .flow-starter {
+  /* Docked to the canvas's left edge — where Crumbot opens on a new campaign — rather than
+     floating in the center. Compact so it doesn't crowd the canvas. */
   position: absolute; z-index: 5;
-  left: 50%; top: 46%; transform: translate(-50%, -50%);
-  width: min(440px, calc(100% - 48px));
+  left: 18px; top: 50%; transform: translateY(-50%);
+  width: min(316px, calc(100% - 36px));
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 18px; padding: 26px 26px 22px;
-  box-shadow: 0 18px 48px -20px color-mix(in srgb, var(--text) 30%, transparent), 0 2px 8px -2px color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 14px; padding: 16px 16px 14px;
+  box-shadow: 0 14px 38px -18px color-mix(in srgb, var(--text) 28%, transparent), 0 2px 6px -2px color-mix(in srgb, var(--text) 12%, transparent);
   display: flex; flex-direction: column; gap: 0;
 }
 .flow-starter-close {
-  position: absolute; top: 14px; right: 14px; z-index: 1;
-  width: 28px; height: 28px; border: 0; border-radius: 8px; cursor: pointer;
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  width: 24px; height: 24px; border: 0; border-radius: 7px; cursor: pointer;
   background: none; color: var(--text-faint);
   display: inline-flex; align-items: center; justify-content: center;
 }
 .flow-starter-close:hover { background: var(--hover); color: var(--text); }
 .flow-starter-eyebrow {
-  font-size: 11px; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase;
-  color: var(--accent); margin-bottom: 8px;
+  font-size: 10px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 5px;
 }
-.flow-starter-title { font-size: 22px; font-weight: 680; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
-.flow-starter-sub { font-size: 13.5px; line-height: 1.5; color: var(--text-muted); margin: 7px 0 0; }
+.flow-starter-title { font-size: 17px; font-weight: 680; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.flow-starter-sub { font-size: 12px; line-height: 1.45; color: var(--text-muted); margin: 5px 0 0; }
 .flow-starter-prompt {
-  margin-top: 16px; border: 1px solid var(--border-strong); border-radius: 12px;
-  background: var(--bg); padding: 10px 10px 10px; display: flex; flex-direction: column; gap: 8px;
+  margin-top: 12px; border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--bg); padding: 8px; display: flex; flex-direction: column; gap: 6px;
 }
 .flow-starter-prompt:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 .flow-starter-input {
   border: none; background: transparent; resize: none; width: 100%;
-  font: inherit; font-size: 13.5px; line-height: 1.5; color: var(--text); padding: 2px 4px;
+  font: inherit; font-size: 12.5px; line-height: 1.45; color: var(--text); padding: 1px 3px;
 }
 .flow-starter-input:focus { outline: none; }
 .flow-starter-input::placeholder { color: var(--text-faint); }
 .flow-starter-go {
-  align-self: flex-end; display: inline-flex; align-items: center; gap: 7px;
-  border: none; border-radius: 9px; padding: 8px 13px; cursor: pointer;
-  background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 620;
+  align-self: flex-end; display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: 8px; padding: 6px 11px; cursor: pointer;
+  background: var(--accent); color: #fff; font: inherit; font-size: 12px; font-weight: 620;
 }
 .flow-starter-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
 .flow-starter-go:disabled { opacity: 0.5; cursor: default; }
-.flow-starter-kbd { font-size: 11px; opacity: 0.75; margin-left: 1px; }
+.flow-starter-go svg { width: 13px; height: 13px; }
+.flow-starter-kbd { font-size: 10.5px; opacity: 0.75; margin-left: 1px; }
 .flow-starter-or {
-  display: flex; align-items: center; gap: 12px; margin: 18px 0 14px;
-  font-size: 11.5px; color: var(--text-faint);
+  display: flex; align-items: center; gap: 10px; margin: 12px 0 10px;
+  font-size: 11px; color: var(--text-faint);
 }
 .flow-starter-or::before, .flow-starter-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.flow-starter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.flow-starter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .flow-starter-chip {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--border); background: var(--bg); color: var(--text);
-  border-radius: 10px; padding: 7px 11px 7px 8px; cursor: pointer;
-  font: inherit; font-size: 12.5px; font-weight: 550;
+  border-radius: 9px; padding: 5px 9px 5px 6px; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 550;
 }
+.flow-starter-chip .flow-tile { width: 20px; height: 20px; }
 .flow-starter-chip:hover { border-color: var(--border-strong); background: var(--hover); }
 .flow-starter-chip-more { color: var(--text-muted); }
 .flow-starter-more-ic {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 6px; border: 1px dashed var(--border-strong);
-  font-size: 15px; line-height: 1; color: var(--text-faint);
+  width: 20px; height: 20px; border-radius: 6px; border: 1px dashed var(--border-strong);
+  font-size: 14px; line-height: 1; color: var(--text-faint);
 }
 
 /* HomeSidebar in 'sections' mode fills its parent column instead of being a fixed-width left rail.
