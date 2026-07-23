@@ -56,7 +56,6 @@ import { BreaksQueue } from './BreaksQueue'
 import { ReadinessPanel } from './ReadinessPanel'
 import { DiagnosisOverlay } from './DiagnosisOverlay'
 import { AskClaude } from './AskClaude'
-import { ChatDock } from './ChatDock'
 import { ShareBanner } from './ShareBanner'
 import { ShareDialog } from './ShareDialog'
 import { CommentInbox } from './CommentInbox'
@@ -393,9 +392,6 @@ export function Workbench() {
       <ReadinessPanel />
       <DiagnosisOverlay />
       <AskClaude />
-      {/* The assistant, mounted at the shell so it overlays any page. A launcher summons it from
-          everywhere except the flow canvas, which has its own campaign chat (convergence deferred). */}
-      <ChatDock />
       <ShareDialog />
       <IcpDrawer />
       <PersonalizationDrawer />

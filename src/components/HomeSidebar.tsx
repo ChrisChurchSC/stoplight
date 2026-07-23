@@ -210,7 +210,14 @@ type NavPage =
   | 'flows' | 'tasks' | 'reports'
   | 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'voices' | 'proofpoints' | 'objectives' | 'channelrecords'
 
-export function HomeSidebar() {
+/**
+ * mode controls which parts render, so one nav definition powers two homes:
+ *  - 'full'         : the classic left sidebar (everything). Kept for safety / other callers.
+ *  - 'destinations' : left sidebar, primary destinations only (Campaigns + top items + footer).
+ *  - 'sections'     : the record nav (Chats + Foundation / Prospects / Go-to-market), styled to
+ *                     fill its parent — it now lives in the right sidebar beside Crumbot.
+ */
+export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' | 'sections' } = {}) {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
@@ -251,28 +258,21 @@ export function HomeSidebar() {
   useEffect(() => {
     if (marketerRole) setOpenSections((prev) => new Set([...prev, ...ROLE_PRESETS[marketerRole].sections]))
   }, [marketerRole])
-  // Simple detail level condenses the nav to the core destinations (Home, Campaigns, Timeline,
-  // Library) and hides the discipline sections. A session-level "Show everything" reveal keeps a
-  // Simple user from ever being trapped; the durable switch is Settings + the sidebar mode chip.
+  // Simple detail level keeps the same four left-nav destinations; it only condenses the discipline
+  // sections, which now live in the Crumbot panel (sections mode) rather than this rail.
   const skillLevel = useTrafficStore((s) => s.userPrefs.skillLevel)
-  const [revealNav, setRevealNav] = useState(false)
-  const simpleNav = skillLevel === 'simple' && !revealNav
-  // Tasks stays even in Simple: its badge is the only always-visible overdue-task cue.
-  const SIMPLE_TOP = new Set(['flows', 'calendar', 'tasks', 'library'])
+  const simpleNav = skillLevel === 'simple'
   // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
   type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
   const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
     ({ key, label, ico, page: null, active, onClick, ...extra })
-  // Build lives at the top as flat items (like Home) — not under a collapsible header.
+  // The left rail's primary destinations, below the hardcoded Campaigns front door: Timeline, Tasks,
+  // Reports. Brand moved to the Crumbot panel; Home / Library folded away; Insights folded into Reports.
   const topItems: NavItem[] = [
-    // Home is a secondary dashboard now: Campaigns is the front door (rendered first, below).
-    item('portfolio', 'Home', 'home', page === 'portfolio', () => setPage('portfolio')),
-    // "Brand" opens this brand's own strategy record (single-brand only, never the every-brand list).
-    item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
     item('calendar', 'Timeline', 'calendar', page === 'calendar', () => setPage('calendar')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
-    item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
-    item('insights', 'Insights', 'insights', page === 'reports' || (page === 'content' && libraryMode !== 'catalog'), () => setLibraryMode('data')),
+    // Reports opens the saved reports / insights view (the former "Insights" destination).
+    item('reports', 'Reports', 'reports', page === 'reports' || (page === 'content' && libraryMode !== 'catalog'), () => setLibraryMode('data')),
   ]
   const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     {
@@ -321,6 +321,117 @@ export function HomeSidebar() {
     }
   }, [page, taskBrand])
 
+  // The record nav is the dedicated home for the discipline sections in the right sidebar, so
+  // always show all of them there; Simple-mode condensing only applies in the left rail ('full').
+  const sectionsToShow =
+    mode === 'sections'
+      ? NAV_SECTIONS
+      : simpleNav
+        ? NAV_SECTIONS.filter((sec) => sec === activeSection)
+        : NAV_SECTIONS
+
+  // Chats + the discipline sections, extracted so one definition serves both the left rail ('full')
+  // and the right sidebar ('sections') without re-implementing any of the nav logic.
+  const chatsBlock = (
+    <div className="hsb-chats hsb-chats-promoted">
+      <div className="hsb-sec-row">
+        <button className="hsb-sec" onClick={() => setChatsOpen((o) => !o)}>
+          <span className={`hsb-sec-chev${chatsOpen ? ' open' : ''}`}>
+            <Ico name="caret" />
+          </span>
+          Chats
+          {homeChats.length > 0 ? <span className="nav-count">{homeChats.length}</span> : null}
+        </button>
+        <button className="hsb-sec-add" title="New chat" aria-label="New chat" onClick={newHomeChat}>
+          <Ico name="plus" />
+        </button>
+      </div>
+      {chatsOpen && (
+        <div className="hsb-chat-list">
+          {recentChats.length === 0 ? (
+            <div className="hsb-chat-empty">No chats yet.</div>
+          ) : (
+            recentChats.map((c) => {
+              const active = homeChatOpen && activeHomeChatId === c.id
+              return (
+                <div key={c.id} className={`hsb-chat${active ? ' active' : ''}`} title={c.title}>
+                  <button className="hsb-chat-open" onClick={() => openSavedHomeChat(c.id)}>
+                    <span className="hsb-chat-ic">
+                      <Ico name="chat" />
+                    </span>
+                    <span className="hsb-chat-title">{c.title || 'Untitled chat'}</span>
+                  </button>
+                  <button
+                    className="hsb-chat-del"
+                    title="Delete chat"
+                    aria-label="Delete chat"
+                    onClick={(e) => { e.stopPropagation(); deleteHomeChat(c.id) }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const sectionsBlock = sectionsToShow.map((sec) => {
+    const open = openSections.has(sec.label) || sec === activeSection
+    return (
+      <div className="hsb-chats" key={sec.label}>
+        <div className="hsb-sec-row">
+          <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
+            <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
+              <Ico name="caret" />
+            </span>
+            {sec.label}
+          </button>
+          <InfoTip term={SECTION_TERM[sec.label]} />
+        </div>
+        {open && (
+          <div className="hsb-chat-list">
+            {sec.items.map((it) => (
+              <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+                <span className="nav-ico">
+                  <Ico name={it.ico} />
+                </span>
+                <span className="nav-label">{it.label}</span>
+                {it.badge ? (
+                  <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  })
+
+  // Sections mode: only the record nav, no left-rail chrome (no fixed width, no footer), styled by
+  // .hsb-sections to fill the right sidebar column.
+  if (mode === 'sections') {
+    return (
+      <div className="hsb-sections">
+        {/* Brand sits at the very top of Crumbot's nav: this brand's own strategy record. */}
+        <button
+          className={`nav-item${page === 'brands' ? ' active' : ''}`}
+          onClick={() => setPage('brands')}
+          title="Brand"
+        >
+          <span className="nav-ico">
+            <Ico name="brand" />
+          </span>
+          <span className="nav-label">Brand</span>
+        </button>
+        {chatsBlock}
+        {sectionsBlock}
+      </div>
+    )
+  }
+
   return (
     <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
       <nav className="sidebar-nav">
@@ -334,14 +445,14 @@ export function HomeSidebar() {
         <button
           className={`nav-item${page === 'flows' ? ' active' : ''}`}
           onClick={() => setPage('flows')}
-          title="Campaigns — plan, draft, and talk to the AI on the canvas"
+          title="Campaigns: plan, draft, and talk to the AI on the canvas"
         >
           <span className="nav-ico">
             <Ico name="flows" />
           </span>
           <span className="nav-label">Campaigns</span>
         </button>
-        {(simpleNav ? topItems.filter((it) => SIMPLE_TOP.has(it.key) || it.active) : topItems).map((it) => (
+        {topItems.map((it) => (
           <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
             <span className="nav-ico">
               <Ico name={it.ico} />
@@ -350,94 +461,10 @@ export function HomeSidebar() {
             {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
           </button>
         ))}
-        <div className="hsb-chats hsb-chats-promoted">
-          <div className="hsb-sec-row">
-            <button className="hsb-sec" onClick={() => setChatsOpen((o) => !o)}>
-              <span className={`hsb-sec-chev${chatsOpen ? ' open' : ''}`}>
-                <Ico name="caret" />
-              </span>
-              Chats
-              {homeChats.length > 0 ? <span className="nav-count">{homeChats.length}</span> : null}
-            </button>
-            <button className="hsb-sec-add" title="New chat" aria-label="New chat" onClick={newHomeChat}>
-              <Ico name="plus" />
-            </button>
-          </div>
-          {chatsOpen && (
-            <div className="hsb-chat-list">
-              {recentChats.length === 0 ? (
-                <div className="hsb-chat-empty">No chats yet.</div>
-              ) : (
-                recentChats.map((c) => {
-                  const active = homeChatOpen && activeHomeChatId === c.id
-                  return (
-                    <div key={c.id} className={`hsb-chat${active ? ' active' : ''}`} title={c.title}>
-                      <button className="hsb-chat-open" onClick={() => openSavedHomeChat(c.id)}>
-                        <span className="hsb-chat-ic">
-                          <Ico name="chat" />
-                        </span>
-                        <span className="hsb-chat-title">{c.title || 'Untitled chat'}</span>
-                      </button>
-                      <button
-                        className="hsb-chat-del"
-                        title="Delete chat"
-                        aria-label="Delete chat"
-                        onClick={(e) => { e.stopPropagation(); deleteHomeChat(c.id) }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          )}
-        </div>
-        {(simpleNav ? NAV_SECTIONS.filter((sec) => sec === activeSection) : NAV_SECTIONS).map((sec) => {
-          const open = openSections.has(sec.label) || sec === activeSection
-          return (
-            <div className="hsb-chats" key={sec.label}>
-              <div className="hsb-sec-row">
-                <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
-                  <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
-                    <Ico name="caret" />
-                  </span>
-                  {sec.label}
-                </button>
-                <InfoTip term={SECTION_TERM[sec.label]} />
-              </div>
-              {open && (
-                <div className="hsb-chat-list">
-                  {sec.items.map((it) => (
-                    <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
-                      <span className="nav-ico">
-                        <Ico name={it.ico} />
-                      </span>
-                      <span className="nav-label">{it.label}</span>
-                      {it.badge ? (
-                        <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {skillLevel === 'simple' && (
-          <button
-            className="nav-item hsb-shownav"
-            onClick={() => setRevealNav((v) => !v)}
-            title={revealNav ? 'Show only the essentials' : 'Show every section'}
-          >
-            <span className="nav-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d={revealNav ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
-              </svg>
-            </span>
-            <span className="nav-label">{revealNav ? 'Show less' : 'Show everything'}</span>
-          </button>
-        )}
+        {/* Chats + discipline sections render in the left rail only in the legacy 'full' mode; in
+            'destinations' they live in the Crumbot panel instead ('sections' mode returns earlier). */}
+        {mode === 'full' && chatsBlock}
+        {mode === 'full' && sectionsBlock}
       </nav>
 
       <div className="sidebar-foot">

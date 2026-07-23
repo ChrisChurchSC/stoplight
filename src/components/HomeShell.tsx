@@ -26,7 +26,7 @@ export function HomeShell({ children }: { children: ReactNode }) {
   return (
     <div className="home-shell">
       <BrandRail />
-      <HomeSidebar />
+      <HomeSidebar mode="destinations" />
       <div className="home-main">
         <CanvasProjectTabs />
         {children}

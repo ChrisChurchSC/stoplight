@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Markdown } from '../lib/miniMarkdown'
+import { HomeSidebar } from './HomeSidebar'
 import type { FlowChatMsg, SavedFlowChat } from '../domain/flowAgent'
 
 export type { FlowChatMsg }
@@ -82,7 +83,7 @@ export function FlowChat({
   // Collapsed: a floating launcher over the canvas (no sidebar rail), click to open the card.
   if (collapsed) {
     return (
-      <button className="fchat-launch" title="Open campaign assistant" aria-label="Open campaign assistant" onClick={() => onCollapse(false)}>
+      <button className="fchat-launch" title="Open Crumbot" aria-label="Open Crumbot" onClick={() => onCollapse(false)}>
         <span className="fchat-spark" aria-hidden="true">✦</span>
       </button>
     )
@@ -92,7 +93,7 @@ export function FlowChat({
     <aside className="fchat">
       <header className="fchat-head">
         <span className="fchat-spark" aria-hidden="true">✦</span>
-        <span className="fchat-title">Flow assistant</span>
+        <span className="fchat-title">Crumbot</span>
         <span className="fchat-beta">Beta</span>
         <div className="fchat-head-actions">
           <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={() => (messages.length ? setConfirmNew(true) : onNewChat())}>+</button>
@@ -129,10 +130,17 @@ export function FlowChat({
         </div>
       </header>
 
+      {/* Within a campaign, Crumbot IS the nav home: the record sections (Brand, Chats, Foundation,
+          Prospects, Go-to-market) sit above the chat thread. Scrollable + height-capped so the
+          conversation always keeps room below. */}
+      <div className="fchat-sections">
+        <HomeSidebar mode="sections" />
+      </div>
+
       <div className="fchat-thread" ref={threadRef}>
         {messages.length === 0 && (
           <div className="fchat-empty">
-            <p className="fchat-empty-lead">I&rsquo;m your flow assistant.</p>
+            <p className="fchat-empty-lead">I&rsquo;m Crumbot.</p>
             <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
             <div className="fchat-cards">
               {examples.map((ex) => (

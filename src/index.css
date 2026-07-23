@@ -4051,7 +4051,9 @@ button {
   top: 12px;
   left: 12px;
   z-index: 25;
-  width: 360px;
+  /* A touch wider than the docked records panel so the record nav (sections) reads cleanly above
+     the chat thread within Crumbot. */
+  width: 380px;
   /* Stop short of the bottom so the floating card never covers the canvas toolbar (zoom/tools);
      long chats scroll inside the thread. */
   max-height: calc(100% - 96px);
@@ -4061,6 +4063,16 @@ button {
 }
 .flow-body .fchat-head { border-radius: 14px 14px 0 0; }
 .flow-body .fchat-composer { border-radius: 0 0 14px 14px; }
+/* Crumbot's record nav (Brand + Chats + Foundation / Prospects / Go-to-market) sits between the
+   header and the chat thread. Capped so the conversation keeps the majority of the card; scrolls
+   when the nav is tall. Scoped to the flow-body card so the records-page assistant is unaffected. */
+.flow-body .fchat-sections {
+  flex: 0 0 auto;
+  max-height: 40%;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px 10px;
+}
 /* Floating launcher that opens the card (replaces the docked rail on the canvas). */
 .fchat-launch {
   position: absolute;
@@ -26317,9 +26329,10 @@ table.aud-sheet td.stick .aud-cell {
 /* ---- Dev-only "start from scratch" ---------------------------------------------------------- */
 /* Sits in the empty right end of the dark project strip. Above the Welcome overlay (z 90) on
    purpose, so the first-run flow can be replayed without first clicking through it. */
-/* Clear of the assistant's right-edge rail (46px), and below the open drawer (z 80) so it never
-   sits over the chat. Dev-only, so it just needs to stay out of the way. */
-.devreset { position: fixed; top: 11px; right: 62px; z-index: 70; display: flex; align-items: center; gap: 6px; }
+/* Anchored to the bottom-left of the content area (past the left sidebar), clear of the persistent
+   right sidebar which now owns the whole right edge. Dev-only, so it just needs to stay out of the
+   way. */
+.devreset { position: fixed; bottom: 14px; left: 260px; z-index: 70; display: flex; align-items: center; gap: 6px; }
 .devreset-q { font-size: 11.5px; color: #fff; background: rgba(28, 33, 43, 0.92); padding: 4px 8px; border-radius: 6px; }
 .devreset-btn {
   display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 11.5px; font-weight: 600;
@@ -26384,42 +26397,6 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-outline-empty { font-size: 12px; color: var(--text-faint); padding: 8px 9px; }
 
-/* The assistant as a global overlay + its launcher. The chat is a companion summoned from any
-   page, not a destination you navigate to. */
-.chat-drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 80;
-  width: min(440px, 100vw); background: var(--bg);
-  display: flex; flex-direction: column;
-  border-left: 1px solid var(--border);
-  box-shadow: -12px 0 40px rgba(16, 24, 40, 0.12);
-  animation: chat-drawer-in .18s cubic-bezier(.2,.7,.3,1);
-}
-@keyframes chat-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
-@media (prefers-reduced-motion: reduce) { .chat-drawer { animation: none; } }
-.chat-drawer .hchat { flex: 1; min-height: 0; }
-/* Crumbot reuses the polished .fchat-* chrome (header / empty state / composer) inside the
-   right-hand drawer. The shared .fchat container is a docked 360px left column with a right
-   border, so HomeChat keeps its own .hchat shell and we only borrow the children: drop the
-   .hchat side padding so the fchat-* children provide their own and fill the 440px drawer, then
-   restore the thread's horizontal padding (which relied on that shell padding). */
-.chat-drawer .hchat { padding: 0; max-width: none; }
-.chat-drawer .hchat-thread { padding-left: 16px; padding-right: 16px; }
-.chat-drawer .fchat-composer { padding-left: 16px; padding-right: 16px; }
-/* The collapsed assistant: a slim panel docked flush to the right edge (not a floating button),
-   full height, so it reads as a right-side panel waiting to open. */
-.chat-rail {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
-  width: 46px; border: 0; border-left: 1px solid var(--border);
-  background: var(--surface); color: var(--text-muted); cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding-top: 16px; font: inherit;
-  transition: background .12s, color .12s;
-}
-.chat-rail:hover { background: var(--hover); color: var(--accent); }
-.chat-rail-ico { flex: 0 0 auto; }
-/* Vertical label under the icon, reading bottom-to-top like a docked panel tab. */
-.chat-rail-label {
-  writing-mode: vertical-rl; transform: rotate(180deg);
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
-}
-@media (max-width: 560px) { .chat-rail-label { display: none; } }
+/* HomeSidebar in 'sections' mode fills its parent column instead of being a fixed-width left rail.
+   It now lives inside the flow-canvas Crumbot panel (see .flow-body .fchat-sections). */
+.hsb-sections { width: 100%; background: transparent; display: flex; flex-direction: column; }
