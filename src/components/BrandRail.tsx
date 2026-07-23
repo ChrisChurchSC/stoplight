@@ -28,7 +28,10 @@ const tileBase: React.CSSProperties = {
 const ring = (active: boolean): React.CSSProperties =>
   active ? { boxShadow: '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' } : { boxShadow: '0 1px 2px rgba(16,24,40,.08)' }
 
-export function BrandRail() {
+export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
+  // When the rail hosts a nav (Files / Assets / Crumbot inside a campaign) it widens to fit the
+  // labels; otherwise it stays a thin brand-switcher strip.
+  const railW = children ? 76 : 44
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
@@ -104,7 +107,7 @@ export function BrandRail() {
 
   return (
     <>
-    <div style={{ width: 44, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '9px 0', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
+    <div style={{ width: railW, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '9px 8px', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
       {brands.map((b) => {
         const pfp = b.pfp
         return (
@@ -141,6 +144,9 @@ export function BrandRail() {
         </div>
       )}
 
+      {children && <div style={{ alignSelf: 'stretch', height: 1, background: 'var(--border)', margin: '4px 2px 2px' }} />}
+      {children}
+
       <div style={{ flex: 1 }} />
 
       <button title="Invite a teammate" aria-haspopup="menu" aria-expanded={inviteMenuOpen} onClick={() => (inviteMenuOpen ? setInviteMenuOpen(false) : openInviteMenu())} style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', flex: '0 0 auto', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text, #1a2023)', boxShadow: inviteMenuOpen ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' : undefined }}>
@@ -154,7 +160,7 @@ export function BrandRail() {
     {acctOpen && (
       <>
         <div onClick={() => setAcctOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-        <div role="menu" style={{ position: 'fixed', left: 50, bottom: 12, zIndex: 61, width: 236, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
+        <div role="menu" style={{ position: 'fixed', left: railW + 6, bottom: 12, zIndex: 61, width: 236, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px' }}>
             <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', background: 'var(--accent, #0e6d84)', color: '#fff', fontWeight: 800, fontSize: 12, flex: '0 0 auto' }}>C</span>
             <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>Chris</span>
@@ -190,7 +196,7 @@ export function BrandRail() {
     {inviteMenuOpen && (
       <>
         <div onClick={() => setInviteMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-        <div role="menu" style={{ position: 'fixed', left: 50, bottom: 46, zIndex: 61, width: 248, padding: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
+        <div role="menu" style={{ position: 'fixed', left: railW + 6, bottom: 46, zIndex: 61, width: 248, padding: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', background: 'var(--accent, #0e6d84)', color: '#fff', flex: '0 0 auto' }}>
               <RailIco size={15}><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M19 8v6M22 11h-6" /></RailIco>
