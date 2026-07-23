@@ -217,12 +217,9 @@ type NavPage =
  *  - 'sections'     : the record nav (Chats + Foundation / Prospects / Go-to-market), styled to
  *                     fill its parent — it now lives in the right sidebar beside Crumbot.
  */
-export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' | 'sections' | 'railitems' } = {}) {
+export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' }) {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
-  const userPrefs = useTrafficStore((s) => s.userPrefs)
-  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
-  const modeLabel = [userPrefs.marketerRole, userPrefs.skillLevel].filter(Boolean).map((x) => cap(x as string)).join(' · ')
   const libraryMode = useTrafficStore((s) => s.libraryMode)
   const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
@@ -233,11 +230,6 @@ export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' 
   const newHomeChat = useTrafficStore((s) => s.newHomeChat)
   const openSavedHomeChat = useTrafficStore((s) => s.openSavedHomeChat)
   const deleteHomeChat = useTrafficStore((s) => s.deleteHomeChat)
-  const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
-  const sidebarCollapsed = useTrafficStore((s) => s.sidebarCollapsed)
-  const toggleSidebar = useTrafficStore((s) => s.toggleSidebar)
-  // A flow canvas forces the rail; otherwise the user's manual toggle decides.
-  const railed = flowCanvasOpen || sidebarCollapsed
 
   const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
   const [chatsOpen, setChatsOpen] = useState(false)
@@ -452,82 +444,5 @@ export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' 
     )
   }
 
-  return (
-    <aside className={`sidebar home-sidebar hsb${railed ? ' hsb-rail' : ''}`}>
-      <nav className="sidebar-nav">
-        {/* No global Back here. The rail is a list of destinations, and a history control that
-            appears and disappears shifted every item down a row. Back also only restored the PAGE,
-            never the sub-view you were actually looking at, so it rarely landed where you left.
-            Hierarchy has its own back where a parent really exists: the "Campaigns / <name>"
-            breadcrumb in a campaign, and the record back-link (recordBackTo). */}
-        {/* Campaigns is the primary destination and the app's front door: the flow canvas is where
-            the work happens and where the main chat lives. Rendered first, above everything. */}
-        <button
-          className={`nav-item${page === 'flows' ? ' active' : ''}`}
-          onClick={() => setPage('flows')}
-          title="Campaigns: plan, draft, and talk to the AI on the canvas"
-        >
-          <span className="nav-ico">
-            <Ico name="flows" />
-          </span>
-          <span className="nav-label">Campaigns</span>
-        </button>
-        {topItems.map((it) => (
-          <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
-            <span className="nav-ico">
-              <Ico name={it.ico} />
-            </span>
-            <span className="nav-label">{it.label}</span>
-            {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
-          </button>
-        ))}
-        {/* Chats + discipline sections render in the left rail only in the legacy 'full' mode; in
-            'destinations' they live in the Crumbot panel instead ('sections' mode returns earlier). */}
-        {mode === 'full' && chatsBlock}
-        {mode === 'full' && sectionsBlock}
-      </nav>
-
-      <div className="sidebar-foot">
-        {modeLabel && (
-          <button className="nav-item hsb-modechip" title="Interface preferences (detail level + focus)" onClick={() => setPage('account')}>
-            <span className="nav-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" /></svg>
-            </span>
-            <span className="nav-label">{modeLabel}</span>
-          </button>
-        )}
-        <a
-          className="nav-item hsb-whatsnew"
-          href="/changelog"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="See what's new in Breadcrumbs"
-        >
-          <span className="nav-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3l2.2 5.4L20 9.3l-4 3.9 1 5.6L12 16.9 7 18.8l1-5.6-4-3.9 5.8-.9z" />
-            </svg>
-          </span>
-          <span className="nav-label">What&rsquo;s new</span>
-        </a>
-        {!flowCanvasOpen && (
-          <button
-            className="nav-item hsb-collapse"
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={toggleSidebar}
-          >
-            <span className="nav-ico">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" />
-                <path d={sidebarCollapsed ? 'M13 9l2 3-2 3' : 'M15 9l-2 3 2 3'} />
-              </svg>
-            </span>
-            <span className="nav-label">{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
-          </button>
-        )}
-      </div>
-
-    </aside>
-  )
+  return null
 }

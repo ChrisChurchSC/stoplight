@@ -1834,25 +1834,6 @@ button {
   position: relative;
   transition: width 0.16s ease;
 }
-/* Collapsed icon-rail — used while a flow canvas is open. Hides all text, centers icons. */
-.hsb-rail { width: 62px; padding-left: 8px; padding-right: 8px; overflow: hidden; }
-.hsb-rail .nav-label,
-.hsb-rail .nav-count,
-.hsb-rail .nav-section,
-.hsb-rail .hsb-ws-name,
-.hsb-rail .hsb-ws-caret,
-.hsb-rail .hsb-qa-label,
-.hsb-rail .hsb-kbd,
-.hsb-rail .hsb-sec,
-.hsb-rail .hsb-chat-list,
-.hsb-rail .home-sb-del { display: none !important; }
-.hsb-rail .nav-item,
-.hsb-rail .home-sb-brand-main,
-.hsb-rail .hsb-qa,
-.hsb-rail .hsb-srch,
-.hsb-rail .hsb-ws { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; width: 100%; }
-.hsb-rail .hsb-actions { display: none; }
-.hsb-rail .hsb-chats { display: none; }
 /* The ✕ that closes the filter popover (top-right of the panel). */
 .sidebar-collapse {
   position: absolute;
@@ -2775,58 +2756,6 @@ button {
   line-height: 1.4;
   flex: 0 0 auto;
 }
-/* Crisper, roomier nav items + line icons */
-/* Left destinations rail — Figma-style icon rail: a narrow strip where each item stacks its icon
-   over a small centered label. Collapsing (.hsb-rail) hides labels for an icon-only strip. */
-.hsb:not(.hsb-rail) { width: 92px; padding-left: 8px; padding-right: 8px; }
-.hsb .sidebar-nav { gap: 3px; }
-.hsb .nav-item {
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 9px 4px;
-  border-radius: 11px;
-  font-size: 10.5px;
-  font-weight: 550;
-  line-height: 1.2;
-  text-align: center;
-  color: var(--text-muted);
-  position: relative;
-}
-.hsb .nav-item:hover { background: var(--surface-2); }
-.hsb .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
-.hsb .nav-ico {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-}
-.hsb .nav-ico svg { width: 20px; height: 20px; }
-.hsb .nav-item.active .nav-ico { color: var(--accent); }
-.hsb .nav-label { flex: none; white-space: normal; overflow: visible; text-overflow: clip; max-width: 100%; }
-/* Count/task badge rides the icon's top-right in the vertical layout. */
-.hsb .nav-count {
-  position: absolute;
-  top: 5px;
-  right: 14px;
-  min-width: 15px;
-  padding: 0 4px;
-  line-height: 15px;
-  border-radius: 7px;
-  font-size: 9.5px;
-  font-weight: 700;
-  text-align: center;
-  background: color-mix(in srgb, var(--blue) 22%, transparent);
-  color: var(--blue);
-}
-/* Open-task badge on the Tasks item — neutral, red when anything's overdue. */
-.hsb .nav-count.task-badge { background: var(--surface-2); color: var(--text-muted); }
-.hsb .nav-count.task-badge.overdue { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
-.hsb .sidebar-foot { gap: 2px; }
-
 /* The combined rail's middle nav (BrandRail children): Files / Assets / Crumbot inside a campaign,
    Campaigns / Timeline / Tasks / Reports otherwise. Same icon-over-label treatment as the icon rail. */
 .railnav { display: flex; flex-direction: column; gap: 3px; width: 100%; margin-top: 2px; }
@@ -26310,10 +26239,6 @@ table.aud-sheet td.stick .aud-cell {
     margin-left: 0;
   }
 }
-
-/* Simple-mode "Show everything" nav reveal — a quiet utility action. */
-.hsb-shownav { color: var(--text-faint); }
-.hsb-shownav:hover { color: var(--accent); }
 
 /* Passive role-inference nudge (Home, workspace with data but no chosen focus). */
 .ag2-infer { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; margin-top: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
