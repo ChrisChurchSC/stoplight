@@ -6817,6 +6817,15 @@ button {
 }
 .flow-note-text:focus { outline: none; }
 .flow-note-text::placeholder { color: var(--text-faint); }
+/* Linked kinds (channel → channel record, audience → segment, data source → connector) pick an
+   established record instead of typing freeform. */
+.flow-note-sel {
+  margin: 0 10px 6px; width: calc(100% - 20px);
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
+  font: inherit; font-size: 12px; font-weight: 550; color: var(--text); padding: 5px 7px; cursor: pointer;
+}
+.flow-note-sel:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
+.flow-note-sel:hover { border-color: var(--border-strong); }
 .flow-note-port {
   position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
   width: 20px; height: 20px; border-radius: 50%; cursor: crosshair;

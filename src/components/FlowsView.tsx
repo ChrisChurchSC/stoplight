@@ -260,6 +260,8 @@ interface FlowNote {
   id: string
   kind: FlowNoteKind
   text: string
+  /** For linked kinds (channel asset → an established channel record), the record's id. */
+  refId?: string
 }
 const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder: string; icon: React.ReactNode }> = {
   brief: {
@@ -285,6 +287,13 @@ const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder
 }
 let noteSeq = 0
 const freshNoteId = () => `note_${++noteSeq}`
+// Data-source cards link to an established connector (mirrors the ConnectorsPage list).
+const CONNECTOR_SOURCES: { id: string; label: string }[] = [
+  { id: 'google-analytics', label: 'Google Analytics' },
+  { id: 'search-console', label: 'Search Console' },
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'resend', label: 'Resend' },
+]
 
 const CampaignTile = () => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${CAMPAIGN_TONE} 20%, transparent)`, color: CAMPAIGN_TONE }}>
@@ -1442,6 +1451,14 @@ export function FlowsView() {
     if (sel === id) setSel(null)
   }
   const updateNoteText = (id: string, text: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
+  const setNoteRef = (id: string, refId: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+  // Linked kinds pick from an established record; freeform kinds (brief, note) return null.
+  const noteOptions = (kind: FlowNoteKind): { id: string; label: string }[] | null => {
+    if (kind === 'channel-asset') return channelRecords.map((c) => ({ id: c.id, label: c.name || 'Untitled channel' }))
+    if (kind === 'audience') return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
+    if (kind === 'data-source') return CONNECTOR_SOURCES
+    return null
+  }
   // View mode: add a deliverable straight into the opened flow's campaign (seed its rows
   // and write their copy), so an existing flow can grow without leaving Flows or rebuilding.
   const [addingDeliv, setAddingDeliv] = useState(false)
@@ -2819,10 +2836,28 @@ export function FlowsView() {
                     <span className="flow-note-kind">{meta.label}</span>
                     <button className="flow-note-del" title="Delete" aria-label="Delete card" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteNote(nt.id) }}>✕</button>
                   </div>
+                  {(() => {
+                    const opts = noteOptions(nt.kind)
+                    if (!opts) return null
+                    const noun = meta.label.toLowerCase()
+                    return (
+                      <select
+                        className="flow-note-sel"
+                        value={nt.refId ?? ''}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) => setNoteRef(nt.id, e.target.value)}
+                      >
+                        <option value="">{opts.length ? `Link a ${noun}…` : `No ${noun}s established yet`}</option>
+                        {opts.map((o) => (
+                          <option key={o.id} value={o.id}>{o.label}</option>
+                        ))}
+                      </select>
+                    )
+                  })()}
                   <textarea
                     className="flow-note-text"
                     value={nt.text}
-                    placeholder={meta.placeholder}
+                    placeholder={noteOptions(nt.kind) ? 'Add a note…' : meta.placeholder}
                     rows={2}
                     onMouseDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateNoteText(nt.id, e.target.value)}
