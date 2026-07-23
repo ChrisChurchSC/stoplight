@@ -504,6 +504,10 @@ export function FlowsView() {
   // card when clicked, so the canvas is clean by default.
   const [chatCollapsed, setChatCollapsed] = useState(true)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
+  // The Outline: a navigable map of the campaign's contents (Figma's Layers panel, adapted). Docks
+  // over the canvas's top-left, collapsed by default so the chat stays the star. Clicking a row
+  // selects that node, which highlights it and opens its brief.
+  const [outlineOpen, setOutlineOpen] = useState(false)
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
   const chatCollapsedRef = useRef(chatCollapsed)
   chatCollapsedRef.current = chatCollapsed
@@ -2507,6 +2511,49 @@ export function FlowsView() {
               }}
             />
           )}
+          {/* Outline: a map of the campaign's contents, docked over the canvas top-left. Sits
+              OUTSIDE the transformed stack so it stays put while the canvas pans and zooms.
+              Collapsed by default (a compact pill) so the chat keeps the stage; clicking a row
+              selects that node, highlighting it and opening its brief. */}
+          {(() => {
+            const items = viewing
+              ? viewDelivs.map((d) => ({ id: d.key, label: d.label, count: d.count }))
+              : nodes.map((n) => {
+                  const p = presetByKey(n.presetKey)
+                  return { id: n.id, label: p?.label ?? 'Deliverable', count: p ? subcardCount(p, n.perMonth) : 0 }
+                })
+            const pick = (id: string) => {
+              setSel(id === 'campaign' ? 'campaign' : id)
+              setSelected(id === 'campaign' ? new Set() : new Set([id]))
+              setBriefCollapsed(false)
+            }
+            return (
+              <div className={`flow-outline${outlineOpen ? ' open' : ''}`}>
+                <button className="flow-outline-toggle" onClick={() => setOutlineOpen((o) => !o)} title="Outline: jump to any part of this campaign">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+                  <span>Outline</span>
+                  {items.length > 0 && <span className="flow-outline-count">{items.length}</span>}
+                </button>
+                {outlineOpen && (
+                  <div className="flow-outline-list">
+                    <button className={`flow-outline-row campaign${sel === 'campaign' ? ' on' : ''}`} onClick={() => pick('campaign')}>
+                      <span className="flow-outline-label">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
+                    </button>
+                    {items.length === 0 ? (
+                      <div className="flow-outline-empty">No deliverables yet.</div>
+                    ) : (
+                      items.map((it) => (
+                        <button key={it.id} className={`flow-outline-row${sel === it.id ? ' on' : ''}`} onClick={() => pick(it.id)}>
+                          <span className="flow-outline-label">{it.label}</span>
+                          {it.count > 0 && <span className="flow-outline-n">{it.count}</span>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
             {/* Campaign brief node */}
             <div

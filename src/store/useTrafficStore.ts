@@ -2485,7 +2485,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   timeRange: 'all',
   // A shared session opens on the brand's Flows (its actual work — flow / grid / calendar), not the
   // workspace home, which a stakeholder can't use anyway (they're locked to one client).
-  page: initialShare ? 'flows' : 'portfolio',
+  // Campaigns (the flow canvas) is the front door: it is where the work happens and where the
+  // primary chat lives. Home is a secondary dashboard now, reached from the rail. Shared sessions
+  // also open straight onto the shared flow.
+  page: 'flows',
   focusRecordId: null,
   recordBackTo: null,
   libraryMode: 'catalog',

@@ -265,9 +265,10 @@ export function HomeSidebar() {
     ({ key, label, ico, page: null, active, onClick, ...extra })
   // Build lives at the top as flat items (like Home) — not under a collapsible header.
   const topItems: NavItem[] = [
+    // Home is a secondary dashboard now: Campaigns is the front door (rendered first, below).
+    item('portfolio', 'Home', 'home', page === 'portfolio', () => setPage('portfolio')),
     // "Brand" opens this brand's own strategy record (single-brand only, never the every-brand list).
     item('brands', 'Brand', 'brand', page === 'brands', () => setPage('brands')),
-    item('flows', 'Campaigns', 'flows', page === 'flows', () => setPage('flows')),
     item('calendar', 'Timeline', 'calendar', page === 'calendar', () => setPage('calendar')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
     item('library', 'Library', 'library', page === 'content' && libraryMode === 'catalog', () => setLibraryMode('catalog')),
@@ -328,15 +329,17 @@ export function HomeSidebar() {
             never the sub-view you were actually looking at, so it rarely landed where you left.
             Hierarchy has its own back where a parent really exists: the "Campaigns / <name>"
             breadcrumb in a campaign, and the record back-link (recordBackTo). */}
+        {/* Campaigns is the primary destination and the app's front door: the flow canvas is where
+            the work happens and where the main chat lives. Rendered first, above everything. */}
         <button
-          className={`nav-item${page === 'portfolio' ? ' active' : ''}`}
-          onClick={() => setPage('portfolio')}
-          title="Home — ask anything, what's due next, and what needs attention"
+          className={`nav-item${page === 'flows' ? ' active' : ''}`}
+          onClick={() => setPage('flows')}
+          title="Campaigns — plan, draft, and talk to the AI on the canvas"
         >
           <span className="nav-ico">
-            <Ico name="home" />
+            <Ico name="flows" />
           </span>
-          <span className="nav-label">Home</span>
+          <span className="nav-label">Campaigns</span>
         </button>
         {(simpleNav ? topItems.filter((it) => SIMPLE_TOP.has(it.key) || it.active) : topItems).map((it) => (
           <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>

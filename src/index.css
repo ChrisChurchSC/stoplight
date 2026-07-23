@@ -26340,3 +26340,44 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-muted); font-variant-numeric: tabular-nums;
 }
 .library-del { transition: color .12s; }
+
+/* Flow Outline: the campaign's contents as a navigable map, docked over the canvas top-left.
+   Adapted from Figma's Layers panel. Floats, so it never eats canvas width; collapsed to a pill by
+   default so the chat keeps the stage. */
+.flow-outline {
+  /* left:62 clears the collapsed chat launch button (40px at left:12); when the chat is open it
+     just sits a touch in from the canvas edge. */
+  position: absolute; top: 12px; left: 62px; z-index: 6;
+  display: flex; flex-direction: column; gap: 6px; max-width: 240px;
+}
+.flow-outline-toggle {
+  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.flow-outline-toggle:hover { border-color: var(--border-strong); }
+.flow-outline.open .flow-outline-toggle { border-color: var(--accent); color: var(--accent); }
+.flow-outline-count {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  background: var(--hover); border-radius: 20px; padding: 1px 7px; font-variant-numeric: tabular-nums;
+}
+.flow-outline-list {
+  display: flex; flex-direction: column; gap: 1px; max-height: 60vh; overflow-y: auto;
+  border: 1px solid var(--border); background: var(--surface); border-radius: 10px;
+  padding: 5px; box-shadow: 0 4px 16px rgba(0,0,0,.08);
+}
+.flow-outline-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--text);
+  border-radius: 7px; padding: 7px 9px; cursor: pointer;
+}
+.flow-outline-row:hover { background: var(--hover); }
+.flow-outline-row.on { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+.flow-outline-row.campaign { font-weight: 650; border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; margin-bottom: 3px; }
+.flow-outline-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-outline-n {
+  flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.flow-outline-empty { font-size: 12px; color: var(--text-faint); padding: 8px 9px; }
