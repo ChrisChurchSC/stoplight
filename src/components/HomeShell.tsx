@@ -16,6 +16,10 @@ import { BrandRail } from './BrandRail'
  */
 export function HomeShell({ children }: { children: ReactNode }) {
   const flowOnly = useTrafficStore((s) => !!s.sharedSession?.campaign)
+  // Inside a campaign (the flow canvas is open) the app nav gives way to a focus workspace:
+  // Crumbot docks on the left, the inspector on the right, canvas in the middle. The breadcrumb
+  // ("Campaigns /") is the way back out, so the destinations nav isn't needed here.
+  const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
   if (flowOnly) {
     return (
       <div className="home-shell home-shell-flowonly">
@@ -26,7 +30,7 @@ export function HomeShell({ children }: { children: ReactNode }) {
   return (
     <div className="home-shell">
       <BrandRail />
-      <HomeSidebar mode="destinations" />
+      {!flowCanvasOpen && <HomeSidebar mode="destinations" />}
       <div className="home-main">
         <CanvasProjectTabs />
         {children}
