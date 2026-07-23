@@ -63,7 +63,6 @@ export function HomeAgenda() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const reports = useTrafficStore((s) => s.reports)
   const openHomeChat = useTrafficStore((s) => s.openHomeChat)
-  const openStarterTemplates = useTrafficStore((s) => s.openStarterTemplates)
   const openClientWizard = useTrafficStore((s) => s.openClientWizard)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setUserPrefs = useTrafficStore((s) => s.setUserPrefs)
@@ -285,7 +284,7 @@ export function HomeAgenda() {
                 Add a brand
               </button>
             )}
-            <button className="ag2-chip" onClick={() => openStarterTemplates()}>
+            <button className="ag2-chip" onClick={() => setPage('flows')}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
               Draft a campaign
             </button>

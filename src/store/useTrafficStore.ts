@@ -1919,9 +1919,6 @@ interface TrafficState {
   audienceWizardOpen: boolean
   openAudienceWizard: () => void
   closeAudienceWizard: () => void
-  starterTemplatesOpen: boolean
-  openStarterTemplates: () => void
-  closeStarterTemplates: () => void
   /** The "Invite teammate" modal (share the workspace by link). */
   inviteOpen: boolean
   openInvite: () => void
@@ -2595,7 +2592,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   wizardOpen: false,
   wizardClient: null,
   audienceWizardOpen: false,
-  starterTemplatesOpen: false,
   inviteOpen: false,
   reviewRowId: null,
   comments: {},
@@ -4500,8 +4496,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeWizard: () => set({ wizardOpen: false, wizardClient: null }),
   openAudienceWizard: () => set({ audienceWizardOpen: true }),
   closeAudienceWizard: () => set({ audienceWizardOpen: false }),
-  openStarterTemplates: () => set({ starterTemplatesOpen: true }),
-  closeStarterTemplates: () => set({ starterTemplatesOpen: false }),
 
   openInvite: () => set({ inviteOpen: true }),
   closeInvite: () => set({ inviteOpen: false }),

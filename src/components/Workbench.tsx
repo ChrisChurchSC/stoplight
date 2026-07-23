@@ -63,7 +63,6 @@ import { VersionHistory } from './VersionHistory'
 import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 import { DevReset } from './DevReset'
-import { StarterTemplates } from './StarterTemplates'
 import { Toast } from './Toast'
 
 export function Workbench() {
@@ -406,7 +405,6 @@ export function Workbench() {
       <DrivePicker />
       {wizardOpen && <NewClientWizard client={wizardClient ?? undefined} onClose={closeWizard} />}
       <AudienceWizard />
-      <StarterTemplates />
       {/* Dev only: clears this browser's workspace so a fresh state can be tested. */}
       <DevReset />
       <Toast />

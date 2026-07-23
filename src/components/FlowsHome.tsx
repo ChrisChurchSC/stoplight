@@ -45,7 +45,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
-  const openStarterTemplates = useTrafficStore((s) => s.openStarterTemplates)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
   const addFlightRun = useTrafficStore((s) => s.addFlightRun)
   const patchFlight = useTrafficStore((s) => s.patchFlight)
@@ -573,7 +572,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             className="flow-home-new"
             onClick={() => {
               setNewCampaignParent(null)
-              openStarterTemplates()
+              onNew()
             }}
           >
             ＋ New campaign
