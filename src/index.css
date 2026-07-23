@@ -26384,11 +26384,17 @@ table.aud-sheet td.stick .aud-cell {
 
 /* The assistant as a global overlay + its launcher. The chat is a companion summoned from any
    page, not a destination you navigate to. */
-.chat-overlay {
-  position: fixed; inset: 0; z-index: 80; background: var(--bg);
+.chat-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 80;
+  width: min(440px, 100vw); background: var(--bg);
   display: flex; flex-direction: column;
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 40px rgba(16, 24, 40, 0.12);
+  animation: chat-drawer-in .18s cubic-bezier(.2,.7,.3,1);
 }
-.chat-overlay .hchat { flex: 1; min-height: 0; }
+@keyframes chat-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .chat-drawer { animation: none; } }
+.chat-drawer .hchat { flex: 1; min-height: 0; }
 /* Launcher: a compact pill, bottom-right, above page chrome but below the overlay. */
 .chat-fab {
   position: fixed; right: 20px; bottom: 20px; z-index: 40;

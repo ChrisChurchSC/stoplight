@@ -24,7 +24,9 @@ export function ChatDock() {
   return (
     <>
       {open && (
-        <div className="chat-overlay" role="dialog" aria-label="Assistant">
+        // A side drawer, not a takeover: it pops out from the right and leaves the page visible
+        // beside it, so the chat stays a companion to whatever you are looking at.
+        <div className="chat-drawer" role="dialog" aria-label="Assistant">
           {/* Keyed by session so opening a new or saved chat remounts a fresh thread. */}
           <HomeChat key={session} />
         </div>
