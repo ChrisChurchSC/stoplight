@@ -2826,6 +2826,42 @@ button {
 .hsb .nav-count.task-badge { background: var(--surface-2); color: var(--text-muted); }
 .hsb .nav-count.task-badge.overdue { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 .hsb .sidebar-foot { gap: 2px; }
+
+/* The combined rail's middle nav (BrandRail children): Files / Assets / Crumbot inside a campaign,
+   Campaigns / Timeline / Tasks / Reports otherwise. Same icon-over-label treatment as the icon rail. */
+.railnav { display: flex; flex-direction: column; gap: 3px; width: 100%; margin-top: 2px; }
+.railnav .nav-item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 9px 4px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 550;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 11px;
+  position: relative;
+}
+.railnav .nav-item:hover { background: var(--surface-2); }
+.railnav .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.railnav .nav-ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+.railnav .nav-ico svg { width: 20px; height: 20px; }
+.railnav .nav-label { flex: none; white-space: normal; }
+.railnav .nav-count {
+  position: absolute; top: 4px; right: 10px;
+  min-width: 15px; padding: 0 4px; line-height: 15px;
+  border-radius: 7px; font-size: 9.5px; font-weight: 700; text-align: center;
+  background: var(--surface-2); color: var(--text-muted);
+}
+.railnav .nav-count.overdue { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 /* Chats section (recent saved reports) */
 .hsb-chats {
   margin-top: 8px;

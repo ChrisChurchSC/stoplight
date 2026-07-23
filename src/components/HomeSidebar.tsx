@@ -217,7 +217,7 @@ type NavPage =
  *  - 'sections'     : the record nav (Chats + Foundation / Prospects / Go-to-market), styled to
  *                     fill its parent — it now lives in the right sidebar beside Crumbot.
  */
-export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' | 'sections' } = {}) {
+export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' | 'sections' | 'railitems' } = {}) {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
@@ -409,6 +409,26 @@ export function HomeSidebar({ mode = 'full' }: { mode?: 'full' | 'destinations' 
       </div>
     )
   })
+
+  // Railitems mode: just the destination buttons (Campaigns + Timeline / Tasks / Reports), no shell
+  // or footer, to drop into the combined BrandRail. Styled by .railnav (same as the campaign nav).
+  if (mode === 'railitems') {
+    return (
+      <div className="railnav">
+        <button className={`nav-item${page === 'flows' ? ' active' : ''}`} onClick={() => setPage('flows')} title="Campaigns">
+          <span className="nav-ico"><Ico name="flows" /></span>
+          <span className="nav-label">Campaigns</span>
+        </button>
+        {topItems.map((it) => (
+          <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+            <span className="nav-ico"><Ico name={it.ico} /></span>
+            <span className="nav-label">{it.label}</span>
+            {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
+          </button>
+        ))}
+      </div>
+    )
+  }
 
   // Sections mode: only the record nav, no left-rail chrome (no fixed width, no footer), styled by
   // .hsb-sections to fill the right sidebar column.
