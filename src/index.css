@@ -26381,3 +26381,23 @@ table.aud-sheet td.stick .aud-cell {
   font-variant-numeric: tabular-nums;
 }
 .flow-outline-empty { font-size: 12px; color: var(--text-faint); padding: 8px 9px; }
+
+/* The assistant as a global overlay + its launcher. The chat is a companion summoned from any
+   page, not a destination you navigate to. */
+.chat-overlay {
+  position: fixed; inset: 0; z-index: 80; background: var(--bg);
+  display: flex; flex-direction: column;
+}
+.chat-overlay .hchat { flex: 1; min-height: 0; }
+/* Launcher: a compact pill, bottom-right, above page chrome but below the overlay. */
+.chat-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 40;
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 0; border-radius: 999px; background: var(--accent); color: #fff;
+  font: inherit; font-size: 13.5px; font-weight: 650; padding: 11px 17px 11px 15px;
+  cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  transition: filter .12s, transform .12s;
+}
+.chat-fab:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.chat-fab-label { line-height: 1; }
+@media (max-width: 560px) { .chat-fab-label { display: none; } .chat-fab { padding: 12px; } }

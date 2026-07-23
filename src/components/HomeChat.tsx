@@ -670,8 +670,10 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
   return (
     <div className="hchat">
       <header className="hchat-top">
+        {/* Closes the overlay back to whatever page you were on. Not "Home": the assistant is no
+            longer part of the Home page. */}
         <button className="hchat-back" onClick={() => (embedded ? onExit?.() : closeHomeChat())}>
-          ← Home
+          {embedded ? '← Back' : '✕ Close'}
         </button>
         <button className="hchat-new" onClick={newHomeChat} title="Start a new chat">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>

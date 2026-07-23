@@ -3366,13 +3366,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   closeAsk: () => set({ askOpen: false, askSeed: undefined }),
   // A seeded question always starts a NEW conversation (clear the active saved id) and bumps the
   // session so the chat remounts fresh rather than continuing whatever thread was last open.
+  // The assistant is a companion, not a page: opening it overlays wherever you are and never
+  // navigates. (It used to force page:'portfolio', so summoning the chat teleported you to Home.)
   openHomeChat: (q) =>
-    set((s) => ({ homeChatOpen: true, homeChatSeed: q, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1, page: 'portfolio' })),
+    set((s) => ({ homeChatOpen: true, homeChatSeed: q, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1 })),
   closeHomeChat: () => set({ homeChatOpen: false, homeChatSeed: null }),
   newHomeChat: () =>
-    set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1, page: 'portfolio' })),
+    set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1 })),
   openSavedHomeChat: (id) =>
-    set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: id, homeChatSession: s.homeChatSession + 1, page: 'portfolio' })),
+    set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: id, homeChatSession: s.homeChatSession + 1 })),
   saveHomeChat: (chat) =>
     set((s) => {
       const rest = s.homeChats.filter((c) => c.id !== chat.id)
