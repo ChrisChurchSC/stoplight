@@ -3,7 +3,6 @@ import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { getSession, onAuthChange, signInWithPassword, signUpWithPassword } from '../lib/session'
 import { decodeShareToken } from '../lib/shareLink'
-import { Wordmark } from './Wordmark'
 
 // A valid ?share= link is a self-contained grant (client + role live in the token), so a
 // recipient needs no account — the store reads it on load and pins the shared role. Without
@@ -92,7 +91,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <div className="auth-footer">
         <p className="auth-kicker">Marketing infrastructure<br />and automation platform</p>
         <p className="auth-tagline">Leave a trail worth following. Breadcrumbs turns one brand strategy into personalized campaigns for every audience and channel.</p>
-        <Wordmark className="auth-bottomlogo" />
+        <img src="/login-logo.svg" className="auth-bottomlogo" alt="Breadcrumbs" />
       </div>
     </div>
   )
