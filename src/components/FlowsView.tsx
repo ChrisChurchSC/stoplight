@@ -252,6 +252,40 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
 // is never a blank page. Keys must exist in DELIVERABLE_PRESETS.
 const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 'ebook'] as const
 
+// Freeform canvas cards you drop from the toolbar (a lightweight node primitive shared across the
+// new types). They live in the builder's memory alongside the deliverable nodes, positioned via the
+// same `pos` map and connectable through the same edge system.
+type FlowNoteKind = 'brief' | 'audience' | 'data-source' | 'channel-asset' | 'note'
+interface FlowNote {
+  id: string
+  kind: FlowNoteKind
+  text: string
+}
+const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder: string; icon: React.ReactNode }> = {
+  brief: {
+    label: 'Brief', tone: '#ff6347', placeholder: 'What is this board about?',
+    icon: <path d="M5 21V4h11l-1.5 3.5L16 11H5" />,
+  },
+  audience: {
+    label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?',
+    icon: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M17 8a3 3 0 0 1 0 6M20.5 20a5.5 5.5 0 0 0-4-5.3" /></>,
+  },
+  'data-source': {
+    label: 'Data source', tone: '#12a594', placeholder: 'Which input or data source?',
+    icon: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></>,
+  },
+  'channel-asset': {
+    label: 'Channel asset', tone: '#c99a2e', placeholder: 'Which post or asset?',
+    icon: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M3.5 15l4.5-4 3 2.5 4-4.5 5.5 6" /><circle cx="8.5" cy="9" r="1.4" /></>,
+  },
+  note: {
+    label: 'Note', tone: '#9aa1ac', placeholder: 'Type a note…',
+    icon: <><path d="M5 4h14v10l-5 5H5z" /><path d="M14 19v-5h5" /></>,
+  },
+}
+let noteSeq = 0
+const freshNoteId = () => `note_${++noteSeq}`
+
 const CampaignTile = () => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${CAMPAIGN_TONE} 20%, transparent)`, color: CAMPAIGN_TONE }}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -472,6 +506,9 @@ export function FlowsView() {
   // not touched yet, so it defaults to all of the brand's segments.
   const [briefRefs, setBriefRefs] = useState<FlowReference[] | null>(null)
   const [nodes, setNodes] = useState<FlowDeliverable[]>([])
+  // Freeform toolbar cards (brief / audience / data source / channel asset / note). Ephemeral in the
+  // builder for now; positioned via `pos` and connectable like any other node.
+  const [notes, setNotes] = useState<FlowNote[]>([])
   const [sel, setSel] = useState<'campaign' | string | null>('campaign')
   const [pickAt, setPickAt] = useState<number | null>(null)
   // When the deliverable picker is opened FROM an asset card (its "+"), this holds that
@@ -569,7 +606,8 @@ export function FlowsView() {
   // Canvas controls (the bottom toolbar).
   const [zoom, setZoom] = useState(100)
   const [zoomOpen, setZoomOpen] = useState(false)
-  const [tool, setTool] = useState<'select' | 'pan'>('select')
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [tool, setTool] = useState<'select' | 'pan' | 'connect'>('select')
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
   const spaceHeld = useRef(false)
@@ -1383,6 +1421,27 @@ export function FlowsView() {
     setChatCollapsed(false)
     void runFlowChat(t, 'build')
   }
+  // Drop a freeform card from the toolbar. Cascades to the right of the campaign column so repeated
+  // adds don't stack exactly on top of each other; the user drags it wherever from there.
+  const addNote = (kind: FlowNoteKind) => {
+    const id = freshNoteId()
+    const i = notes.length
+    setNotes((n) => [...n, { id, kind, text: '' }])
+    setPos((p) => ({ ...p, [id]: { x: 300 + (i % 3) * 28, y: 120 + i * 34 } }))
+    setSel(id)
+    setSelected(new Set([id]))
+  }
+  const deleteNote = (id: string) => {
+    setNotes((n) => n.filter((x) => x.id !== id))
+    setConnectors((c) => c.filter((e) => e.from !== id && e.to !== id))
+    setPos((p) => {
+      const next = { ...p }
+      delete next[id]
+      return next
+    })
+    if (sel === id) setSel(null)
+  }
+  const updateNoteText = (id: string, text: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
   // View mode: add a deliverable straight into the opened flow's campaign (seed its rows
   // and write their copy), so an existing flow can grow without leaving Flows or rebuilding.
   const [addingDeliv, setAddingDeliv] = useState(false)
@@ -1510,6 +1569,7 @@ export function FlowsView() {
     setViewName(null)
     setBuilt(null)
     setNodes([])
+    setNotes([])
     setPreview({})
     setName('')
     setSubject('')
@@ -2363,10 +2423,22 @@ export function FlowsView() {
         />
         <div
           ref={canvasRef}
-          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}`}
+          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' ? ' connecting' : ''}`}
           onMouseDown={(e) => {
             // Hand tool (or held space) pans; arrow tool drags a selection box on empty canvas.
             const t = e.target as HTMLElement
+            // Connect tool: press on a card, drag to another, release to link them (drops the line
+            // via the same onMouseUp that the node "+" handle uses).
+            if (tool === 'connect' && !spaceHeld.current) {
+              const nodeEl = t.closest('.flow-node[data-node-id]') as HTMLElement | null
+              const from = nodeEl?.dataset.nodeId
+              if (from) {
+                const cr = e.currentTarget.getBoundingClientRect()
+                drawingFrom.current = from
+                setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+              }
+              return
+            }
             const onBackground = !t.closest('.flow-node, .flow-brief-card, button, input, textarea, select')
             if (tool === 'pan' || spaceHeld.current) {
               pan.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y }
@@ -2726,6 +2798,41 @@ export function FlowsView() {
                 </div>
               )}
             </div>
+
+            {/* Freeform toolbar cards (brief / audience / data source / channel asset / note):
+                absolutely positioned in the stack, dragged, selected, and connected like any node. */}
+            {notes.map((nt) => {
+              const meta = NOTE_META[nt.kind]
+              return (
+                <div
+                  key={nt.id}
+                  className={`flow-node flow-note flow-note-${nt.kind}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
+                  data-node-id={nt.id}
+                  style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
+                  onMouseDown={(e) => startDrag(e, nt.id)}
+                  onClick={(e) => clickSelect(e, nt.id)}
+                >
+                  <div className="flow-note-head">
+                    <span className="flow-note-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
+                    </span>
+                    <span className="flow-note-kind">{meta.label}</span>
+                    <button className="flow-note-del" title="Delete" aria-label="Delete card" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteNote(nt.id) }}>✕</button>
+                  </div>
+                  <textarea
+                    className="flow-note-text"
+                    value={nt.text}
+                    placeholder={meta.placeholder}
+                    rows={2}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => updateNoteText(nt.id, e.target.value)}
+                  />
+                  <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, nt.id)}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  </button>
+                </div>
+              )
+            })}
 
             {/* View mode: reverse-engineered deliverables, draggable + connected like build */}
             {viewing
@@ -3757,6 +3864,11 @@ export function FlowsView() {
               <path d="M5 3.5 19 10l-6.3 1.9L10 19z" />
             </svg>
           </button>
+          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} title="Connect — drag from one card to another to link them" aria-label="Connect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" />
+            </svg>
+          </button>
           <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout — arrange the cards cleanly" aria-label="Tidy layout">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -3767,14 +3879,51 @@ export function FlowsView() {
           </button>
         </div>
         <span className="flow-tb-divider" />
-        <button className="flow-tb-add" onClick={() => { openAddDeliverable() }} disabled={addingDeliv}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="4" />
-            <path d="M12 8v8M8 12h8" />
-          </svg>
-          Add deliverable
-          <span className="flow-tb-kbd">B</span>
-        </button>
+        <div className="flow-tb-addwrap">
+          <button className="flow-tb-add" onClick={() => setAddMenuOpen((o) => !o)} disabled={addingDeliv}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="4" />
+              <path d="M12 8v8M8 12h8" />
+            </svg>
+            Add
+            <span className="flow-tb-caret" aria-hidden="true">▾</span>
+          </button>
+          {addMenuOpen && (
+            <>
+              <div className="flow-tb-add-scrim" onClick={() => setAddMenuOpen(false)} />
+              <div className="flow-tb-add-menu" role="menu">
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('brief') }}>
+                  <span className="flow-tb-add-ic" style={{ color: NOTE_META.brief.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.brief.icon}</svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root</span></span>
+                </button>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('audience') }}>
+                  <span className="flow-tb-add-ic" style={{ color: NOTE_META.audience.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.audience.icon}</svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Audience</span><span className="flow-tb-add-desc">Your fan-out axis</span></span>
+                </button>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); openAddDeliverable() }} disabled={addingDeliv}>
+                  <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Deliverable</span><span className="flow-tb-add-desc">The workhorse node <span className="flow-tb-add-kbd">B</span></span></span>
+                </button>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('data-source') }}>
+                  <span className="flow-tb-add-ic" style={{ color: NOTE_META['data-source'].tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META['data-source'].icon}</svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Data source</span><span className="flow-tb-add-desc">An input you plug in</span></span>
+                </button>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('channel-asset') }}>
+                  <span className="flow-tb-add-ic" style={{ color: NOTE_META['channel-asset'].tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META['channel-asset'].icon}</svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Channel asset</span><span className="flow-tb-add-desc">A last-mile post</span></span>
+                </button>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setTool('connect') }}>
+                  <span className="flow-tb-add-ic" style={{ color: 'var(--text-muted)' }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" /></svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Connector</span><span className="flow-tb-add-desc">Link two cards</span></span>
+                </button>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('note') }}>
+                  <span className="flow-tb-add-ic" style={{ color: NOTE_META.note.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.note.icon}</svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Text note</span><span className="flow-tb-add-desc">Freeform annotation</span></span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         {viewing && (
           <>
             <span className="flow-tb-divider" />
