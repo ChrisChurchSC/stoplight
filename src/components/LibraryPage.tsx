@@ -112,6 +112,8 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
   // Inline editing of a Subject / Hook master (propagation lives on Subjects).
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editVal, setEditVal] = useState('')
+  // The library item whose delete is armed: a first click on an in-use item asks, a second confirms.
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
   const [propagateNote, setPropagateNote] = useState('')
   const startEdit = (id: string, text: string) => {
     setPropagateNote('')
@@ -285,12 +287,28 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 </div>
                 {(() => {
                   const p = audienceProfile(a.name, rows, library.audiences)
-                  return <div className={`library-prof c-${p.confidence}`}>{profileLabel(p, 'on')}</div>
+                  return (
+                    <div className={`library-prof c-${p.confidence}`}>
+                      {p.shipped > 0 && <span className="library-usedin">In {p.shipped} asset{p.shipped === 1 ? '' : 's'}</span>}
+                      {profileLabel(p, 'on')}
+                    </div>
+                  )
                 })()}
               </div>
               <div className="library-item-actions">
-                <button className="library-del" title="Remove" onClick={() => removeLibraryItem('audiences', a.id)}>
-                  ✕
+                <button
+                  className="library-del"
+                  title={audienceProfile(a.name, rows, library.audiences).shipped > 0 ? `Used in ${audienceProfile(a.name, rows, library.audiences).shipped} assets` : 'Remove'}
+                  onClick={() => {
+                    // Removing an audience that live assets target is a destructive surprise, so
+                    // name the blast radius before it happens rather than after.
+                    const n = audienceProfile(a.name, rows, library.audiences).shipped
+                    if (n > 0 && confirmRemoveId !== a.id) { setConfirmRemoveId(a.id); return }
+                    setConfirmRemoveId(null)
+                    removeLibraryItem('audiences', a.id)
+                  }}
+                >
+                  {confirmRemoveId === a.id ? 'Remove anyway?' : '✕'}
                 </button>
               </div>
             </div>
@@ -313,12 +331,29 @@ export function LibraryPage({ inline = false, kinds }: { inline?: boolean; kinds
                 )}
                 {(() => {
                   const p = proofProfile(r.id, rows)
-                  return <div className={`library-prof c-${p.confidence}`}>{profileLabel(p)}</div>
+                  return (
+                    <div className={`library-prof c-${p.confidence}`}>
+                      {p.shipped > 0 && <span className="library-usedin">In {p.shipped} asset{p.shipped === 1 ? '' : 's'}</span>}
+                      {profileLabel(p)}
+                    </div>
+                  )
                 })()}
               </div>
               <div className="library-item-actions">
-                <button className="library-del" title="Remove" onClick={() => removeLibraryItem('rtbs', r.id)}>
-                  ✕
+                <button
+                  className="library-del"
+                  title={proofProfile(r.id, rows).shipped > 0 ? `Used in ${proofProfile(r.id, rows).shipped} assets` : 'Remove'}
+                  onClick={() => {
+                    // A proof point every asset cites is the worst thing to delete by reflex. Name
+                    // the count first; the assets that carry it keep the claim, so this only removes
+                    // it from the shelf, but the user should know it is in use.
+                    const n = proofProfile(r.id, rows).shipped
+                    if (n > 0 && confirmRemoveId !== r.id) { setConfirmRemoveId(r.id); return }
+                    setConfirmRemoveId(null)
+                    removeLibraryItem('rtbs', r.id)
+                  }}
+                >
+                  {confirmRemoveId === r.id ? 'Remove anyway?' : '✕'}
                 </button>
               </div>
             </div>

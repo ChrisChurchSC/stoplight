@@ -26332,3 +26332,11 @@ table.aud-sheet td.stick .aud-cell {
   background: rgba(255, 255, 255, 0.18); color: #fff;
 }
 
+
+/* "In N assets" — the blast-radius count on a library item, so editing or deleting it is never a
+   surprise about how many live assets it touches. */
+.library-usedin {
+  display: inline-block; margin-right: 8px; font-weight: 600;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.library-del { transition: color .12s; }

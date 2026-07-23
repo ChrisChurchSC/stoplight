@@ -5218,6 +5218,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   redraftAssets: async (scope) => {
     const s = get()
     const updates: { id: string; patch: Partial<TrafficRow> }[] = []
+    // When the strategy or audience under an asset changes, copy that was actually WRITTEN (by
+    // Claude or by a person) must not be silently replaced with the template recompose below: that
+    // quietly threw away good copy for worse, with a ripple animation that made it look intentional.
+    // A row that already has copy is flagged as out of date instead, so the change is a visible
+    // choice (regenerate) rather than a destructive surprise. Only genuinely empty rows are filled.
+    const changeReason = scope.audience ? 'Audience changed, so this copy may be out of date' : 'Strategy changed, so this copy may be out of date'
+    const changeFrame = scope.audience ? `Audience → ${scope.audience}` : scope.campaign ? `Campaign → ${scope.campaign}` : 'Strategy change'
     for (const r of s.rows) {
       if (scope.campaign && (r.campaign ?? '').trim() !== scope.campaign.trim()) continue
       if (scope.audience && (r.audience ?? '').trim() !== scope.audience.trim()) continue
@@ -5227,6 +5234,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // redrafted — their words are welded in. A frame change flags them for
       // external rework; it never fake-edits them here.
       if (isLinkedExternal(r)) continue
+      // Real copy is preserved and flagged, never overwritten. `authored` copy is a human's words;
+      // any non-empty messaging is a draft someone may have kept or edited. Either way, recomposing
+      // over it is the exact silent-overwrite this guard exists to stop.
+      if (r.authored || messagingAllText(r).trim()) {
+        if (!r.recheckFlag) updates.push({ id: r.id, patch: { recheckFlag: { reason: changeReason, frame: changeFrame, at: Date.now() } } })
+        continue
+      }
       const aud = (s.clientAudiences[client] ?? []).find(
         (a) => a.name.trim() === (r.audience ?? '').trim(),
       )
@@ -5249,21 +5263,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         proof: lead,
         cta,
       })
-      updates.push({ id: r.id, patch: { messaging, rtbMap } })
+      // A recompose clears any stale flag on this row: it is now freshly on the new frame.
+      updates.push({ id: r.id, patch: { messaging, rtbMap, recheckFlag: undefined } })
     }
     if (!updates.length) return
-    // Flag the affected cards as regenerating so the canvas can animate the
-    // change rippling across them, then apply the re-draft.
-    const ids = updates.map((u) => u.id)
-    set({ regenIds: new Set(ids) })
+    // Animate ONLY the rows that were actually recomposed. Flag-only updates (real copy left in
+    // place, marked out of date) must not ripple, or the animation would again imply the copy was
+    // rewritten when it deliberately was not.
+    const ids = updates.filter((u) => u.patch.messaging).map((u) => u.id)
+    if (ids.length) set({ regenIds: new Set(ids) })
     await get().updateRows(updates)
     // Clear once the (staggered) animation has played — duration 1.5s plus the
     // longest stagger (~0.8s), so the "thinking → resolve" effect fully reads.
-    setTimeout(() => {
-      const remaining = new Set(get().regenIds)
-      for (const id of ids) remaining.delete(id)
-      set({ regenIds: remaining })
-    }, 2500)
+    if (ids.length) {
+      setTimeout(() => {
+        const remaining = new Set(get().regenIds)
+        for (const id of ids) remaining.delete(id)
+        set({ regenIds: remaining })
+      }, 2500)
+    }
   },
 
   removeRow: async (id) => {
