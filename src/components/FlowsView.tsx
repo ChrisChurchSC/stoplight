@@ -492,7 +492,10 @@ export function FlowsView() {
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
   const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
   // How the flow-in-progress is shown: the canvas, or a grid / calendar of its assets.
-  const [flowView, setFlowView] = useState<'flow' | 'grid' | 'calendar'>('flow')
+  // View + Crumbot-collapse live in the store so the campaign icon rail (Files / Assets / Crumbot)
+  // in HomeShell can drive and reflect them.
+  const flowView = useTrafficStore((s) => s.flowView)
+  const setFlowView = useTrafficStore((s) => s.setFlowView)
   // The Flows section opens on an all-flows landing page; picking a flow (or New flow)
   // drops into the canvas. The "Flows" breadcrumb returns here.
   // A single-flow share opens straight in the flow (no all-flows landing to flash or navigate to).
@@ -507,7 +510,8 @@ export function FlowsView() {
   const [chatBusy, setChatBusy] = useState(false)
   // Start collapsed: the assistant rests as a floating launcher over the canvas and opens into a
   // card when clicked, so the canvas is clean by default.
-  const [chatCollapsed, setChatCollapsed] = useState(true)
+  const chatCollapsed = useTrafficStore((s) => s.flowChatCollapsed)
+  const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
   // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
   // opens Crumbot and hands it the brief (its discovery/build flow takes over from there).
