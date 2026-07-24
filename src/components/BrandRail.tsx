@@ -1,36 +1,23 @@
 import { useEffect, useState } from 'react'
 import { can } from '../domain/access'
-import { recordTint } from '../domain/records'
 import { createInvite, signOut } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
- * BrandRail — the far-left vertical switcher (Slack/Linear style). Each brand is a tile; the active
- * one is ringed. "All brands" (grid) is the portfolio view, "+" creates a brand, and the foot holds
- * workspace-level actions (team, settings, account). It's the scope control: clicking a brand sets
- * clientFilter, which the rest of the app filters by.
+ * BrandRail — the far-left vertical rail. Brands no longer live here as tiles: they open as tabs in
+ * the canvas tab strip (like campaigns). The rail now holds the middle nav (its `children`) and the
+ * workspace foot (invite, account, settings). It still keeps the scope pinned to a real brand.
  */
 
-const TILE = 30
 const RailIco = ({ children, size = 18 }: { children: React.ReactNode; size?: number }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {children}
   </svg>
 )
 
-const initials = (name: string) =>
-  (name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('') || name[0] || '?').toUpperCase()
-
-const tileBase: React.CSSProperties = {
-  width: TILE, height: TILE, borderRadius: 9, display: 'grid', placeItems: 'center',
-  flex: '0 0 auto', cursor: 'pointer', border: 'none', padding: 0, transition: 'box-shadow .12s, transform .12s',
-}
-const ring = (active: boolean): React.CSSProperties =>
-  active ? { boxShadow: '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' } : { boxShadow: '0 1px 2px rgba(16,24,40,.08)' }
-
 export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
   // When the rail hosts a nav (Files / Assets / Hansel inside a campaign) it widens to fit the
-  // labels; otherwise it stays a thin brand-switcher strip.
+  // labels; otherwise it stays a thin strip.
   const railW = children ? 76 : 44
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
@@ -38,32 +25,13 @@ export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
   const openInvite = useTrafficStore((s) => s.openInvite)
   const role = useTrafficStore((s) => s.role)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
-  // Show real (named) brands, plus a just-created placeholder while it's the active one — so making
-  // a brand adds its tile to the rail right away, before you name it (upload a pfp / rename later).
-  // De-dupe by name so two records with the same brand name never render as two tiles (the rail
-  // scopes by name, so both would resolve to the same brand and look unclickable); when names
-  // collide, keep the one with a picture, else the first seen.
-  const brands = (() => {
-    const byName = new Map<string, (typeof brandRecords)[number]>()
-    for (const b of brandRecords) {
-      if (!b.name.trim()) continue
-      if (b.name === 'New brand' && clientFilter !== b.name) continue
-      const prev = byName.get(b.name)
-      if (!prev || (b.pfp && !prev.pfp)) byName.set(b.name, b)
-    }
-    return [...byName.values()]
-  })()
-  const is = (v: string) => clientFilter === v
+  const brandNames = brandRecords.map((b) => b.name.trim()).filter((n) => n && n !== 'New brand')
 
-  // No portfolio "all" view — the rail is brand-to-brand only, so land on a real brand.
+  // The app is always scoped to a real brand (there's no "all" portfolio view here).
   useEffect(() => {
-    if (clientFilter === 'all' && brands.length) setClientFilter(brands[0].name)
-  }, [clientFilter, brands, setClientFilter])
+    if (clientFilter === 'all' && brandNames.length) setClientFilter(brandNames[0])
+  }, [clientFilter, brandNames, setClientFilter])
 
-  // A short transition overlay when switching scope, so the change reads as "loading this brand".
-  const [switching, setSwitching] = useState<string | null>(null)
-  // Instant hover tooltip for the "add a brand" (+) tile. Positioned fixed from the button's rect so
-  // it isn't clipped by the rail's overflow. null = not hovering.
   // The account/settings dropdown anchored to the "C" avatar at the foot.
   const [acctOpen, setAcctOpen] = useState(false)
   // The invite popover anchored to the "add teammate" button — same anchored-card pattern as the C menu.
@@ -96,28 +64,9 @@ export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
     setInviteCopied(true)
     window.setTimeout(() => setInviteCopied(false), 1500)
   }
-  const go = (scope: string, label: string) => {
-    if (clientFilter === scope) return
-    setClientFilter(scope)
-    setSwitching(label)
-    window.setTimeout(() => setSwitching(null), 550)
-  }
-
   return (
     <>
     <div style={{ width: railW, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '9px 8px', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
-      {brands.map((b) => {
-        const pfp = b.pfp
-        return (
-          <button key={b.id} title={b.name} onClick={() => go(b.name, b.name)} style={{ ...tileBase, overflow: 'hidden', background: pfp ? 'var(--surface)' : recordTint(b.name), color: '#fff', ...ring(is(b.name)) }}>
-            {pfp
-              ? <img src={pfp} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '.01em' }}>{initials(b.name)}</span>}
-          </button>
-        )
-      })}
-
-
       {children}
 
       <div style={{ flex: 1 }} />
@@ -204,17 +153,6 @@ export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
       </>
     )}
 
-    {switching && (
-      <>
-        <style>{`@keyframes bmr-spin{to{transform:rotate(360deg)}}@keyframes bmr-fade{from{opacity:0}to{opacity:1}}`}</style>
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'color-mix(in srgb, var(--surface, #fff) 80%, transparent)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'bmr-fade .12s ease' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: 'var(--accent, #0e6d84)', animation: 'bmr-spin .7s linear infinite' }} />
-            <div style={{ fontSize: 14, color: 'var(--text-muted, #5a6b72)' }}>Switching to <strong style={{ color: 'var(--text, #1a2023)' }}>{switching}</strong></div>
-          </div>
-        </div>
-      </>
-    )}
     </>
   )
 }
