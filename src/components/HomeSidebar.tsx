@@ -214,10 +214,11 @@ type NavPage =
  * mode controls which parts render, so one nav definition powers two homes:
  *  - 'full'         : the classic left sidebar (everything). Kept for safety / other callers.
  *  - 'destinations' : left sidebar, primary destinations only (Campaigns + top items + footer).
- *  - 'sections'     : the record nav (Chats + Foundation / Prospects / Go-to-market), styled to
- *                     fill its parent — it now lives in the right sidebar beside Crumbot.
+ *  - 'sections'     : the Chats list, styled to fill its parent — lives in the Crumbot panel.
+ *  - 'records'      : the brand's data nav (Brand + Foundation / Prospects / Go-to-market), which
+ *                     lives in the Assets panel.
  */
-export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' }) {
+export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'records' }) {
   const page = useTrafficStore((s) => s.page)
   const setPage = useTrafficStore((s) => s.setPage)
   const libraryMode = useTrafficStore((s) => s.libraryMode)
@@ -422,23 +423,32 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' }) {
     )
   }
 
-  // Sections mode: only the record nav, no left-rail chrome (no fixed width, no footer), styled by
-  // .hsb-sections to fill the right sidebar column.
+  // The Brand strategy-record button — top of the brand's data nav (Assets panel).
+  const brandButton = (
+    <button
+      className={`nav-item${page === 'brands' ? ' active' : ''}`}
+      onClick={() => setPage('brands')}
+      title="Brand"
+    >
+      <span className="nav-ico">
+        <Ico name="brand" />
+      </span>
+      <span className="nav-label">Brand</span>
+    </button>
+  )
+
+  // Sections mode (Crumbot): just the Chats list now. Brand and the Foundation / Prospects /
+  // Go-to-market record sections moved to the Assets panel (records mode).
   if (mode === 'sections') {
+    return <div className="hsb-sections">{chatsBlock}</div>
+  }
+
+  // Records mode (Assets panel): the brand's data — Brand strategy record + the Foundation /
+  // Prospects / Go-to-market discipline sections.
+  if (mode === 'records') {
     return (
       <div className="hsb-sections">
-        {/* Brand sits at the very top of Crumbot's nav: this brand's own strategy record. */}
-        <button
-          className={`nav-item${page === 'brands' ? ' active' : ''}`}
-          onClick={() => setPage('brands')}
-          title="Brand"
-        >
-          <span className="nav-ico">
-            <Ico name="brand" />
-          </span>
-          <span className="nav-label">Brand</span>
-        </button>
-        {chatsBlock}
+        {brandButton}
         {sectionsBlock}
       </div>
     )

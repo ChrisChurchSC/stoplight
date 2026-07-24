@@ -14,6 +14,7 @@ import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/str
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
+import { HomeSidebar } from './HomeSidebar'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -2607,7 +2608,10 @@ export function FlowsView() {
                 </button>
               </div>
               <div className="flow-library-body">
-                <div className="flow-library-secttl">All libraries</div>
+                {/* The brand's data lives here now: Brand strategy record + the Foundation /
+                    Prospects / Go-to-market record sections, above the campaign libraries. */}
+                <HomeSidebar mode="records" />
+                <div className="flow-library-secttl flow-library-secttl-libs">All libraries</div>
                 {libs.length === 0 ? (
                   <div className="flow-library-empty">{q ? 'No libraries match your search.' : 'No campaigns for this brand yet. Build one to fill your library.'}</div>
                 ) : (

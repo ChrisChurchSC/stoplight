@@ -26470,6 +26470,8 @@ table.aud-sheet td.stick .aud-cell {
 .flow-library-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 .flow-library-body { flex: 1; overflow-y: auto; padding: 16px 20px 24px; }
 .flow-library-secttl { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+/* "All libraries" sits below the brand data nav, so it needs a divider + breathing room above. */
+.flow-library-secttl-libs { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 .flow-library-list { display: flex; flex-direction: column; gap: 4px; max-width: 640px; }
 .flow-library-item {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
