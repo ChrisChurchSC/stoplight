@@ -4134,31 +4134,33 @@ export function FlowsView() {
         const libs = brandCampaigns.filter((c) => !q || c.name.toLowerCase().includes(q))
         return (
           <div className="flow-library">
-            <div className="flow-library-head">
-              <span className="flow-library-searchic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              </span>
-              <input className="flow-library-search" placeholder="Search all libraries" value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} />
-            </div>
-            <div className="flow-library-body">
-              <div className="flow-library-secttl">All libraries</div>
-              {libs.length === 0 ? (
-                <div className="flow-library-empty">{q ? 'No libraries match your search.' : 'No campaigns for this brand yet. Build one to fill your library.'}</div>
-              ) : (
-                <div className="flow-library-list">
-                  {libs.map((lib) => (
-                    <button key={lib.name} className="flow-library-item" onClick={() => { openView(lib.name); setFlowView('flow') }}>
-                      <span className="flow-library-ic" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
-                      </span>
-                      <span className="flow-library-txt">
-                        <span className="flow-library-name">{lib.name.replace(`${brand} — `, '')}</span>
-                        <span className="flow-library-count">{lib.count} asset{lib.count === 1 ? '' : 's'}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="flow-library-panel">
+              <div className="flow-library-head">
+                <span className="flow-library-searchic" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                </span>
+                <input className="flow-library-search" placeholder="Search all libraries" value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} />
+              </div>
+              <div className="flow-library-body">
+                <div className="flow-library-secttl">All libraries</div>
+                {libs.length === 0 ? (
+                  <div className="flow-library-empty">{q ? 'No libraries match your search.' : 'No campaigns for this brand yet. Build one to fill your library.'}</div>
+                ) : (
+                  <div className="flow-library-list">
+                    {libs.map((lib) => (
+                      <button key={lib.name} className="flow-library-item" onClick={() => { openView(lib.name); setFlowView('flow') }}>
+                        <span className="flow-library-ic" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
+                        </span>
+                        <span className="flow-library-txt">
+                          <span className="flow-library-name">{lib.name.replace(`${brand} — `, '')}</span>
+                          <span className="flow-library-count">{lib.count} asset{lib.count === 1 ? '' : 's'}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )
