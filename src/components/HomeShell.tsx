@@ -31,32 +31,33 @@ function CampaignNav() {
   const setFlowView = useTrafficStore((s) => s.setFlowView)
   const chatCollapsed = useTrafficStore((s) => s.flowChatCollapsed)
   const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
+  const assetsOpen = useTrafficStore((s) => s.flowAssetsOpen)
+  const setAssetsOpen = useTrafficStore((s) => s.setFlowAssetsOpen)
+  // Files / Assets / Crumbot all act on the ONE canvas: Files is the board itself, Assets and
+  // Crumbot are panels docked onto its left (mutually exclusive — they share the slot). None of
+  // them swaps the canvas out, so switching between them never feels like a different screen.
+  const onBoard = flowView === 'flow'
   return (
     <div className="railnav">
       <button
-        className={`nav-item${flowView === 'flow' ? ' active' : ''}`}
-        onClick={() => setFlowView('flow')}
-        title="Files: the campaign canvas"
+        className={`nav-item${onBoard && !assetsOpen && chatCollapsed ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(true) }}
+        title="Files: the campaign board"
       >
         <span className="nav-ico"><FilesIco /></span>
         <span className="nav-label">Files</span>
       </button>
       <button
-        className={`nav-item${flowView === 'library' ? ' active' : ''}`}
-        onClick={() => setFlowView('library')}
+        className={`nav-item${onBoard && assetsOpen ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setAssetsOpen(!assetsOpen); setChatCollapsed(true) }}
         title="Assets: the brand's asset libraries"
       >
         <span className="nav-ico"><AssetsIco /></span>
         <span className="nav-label">Assets</span>
       </button>
       <button
-        className={`nav-item${flowView === 'flow' && !chatCollapsed ? ' active' : ''}`}
-        // Crumbot only lives on the flow canvas, so bring the view back when opening it from Assets.
-        onClick={() => {
-          const wasFlow = flowView === 'flow'
-          setFlowView('flow')
-          setChatCollapsed(wasFlow ? !chatCollapsed : false)
-        }}
+        className={`nav-item${onBoard && !assetsOpen && !chatCollapsed ? ' active' : ''}`}
+        onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(onBoard ? !chatCollapsed : false) }}
         title="Crumbot: the campaign assistant"
       >
         <span className="nav-ico"><SparkIco /></span>

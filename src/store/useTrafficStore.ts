@@ -1791,14 +1791,18 @@ interface TrafficState {
   /** True while a flow canvas (build or view) is open — collapses the sidebar to a rail. */
   flowCanvasOpen: boolean
   setFlowCanvasOpen: (open: boolean) => void
-  /** Which view of the open campaign is showing. Lifted here so the campaign icon rail (Files /
-   *  Assets / Crumbot in HomeShell) can drive and reflect it. */
-  flowView: 'flow' | 'grid' | 'calendar' | 'library'
-  setFlowView: (v: 'flow' | 'grid' | 'calendar' | 'library') => void
+  /** Which view of the open campaign is showing (the Flow / Grid / Calendar top tabs). Lifted here
+   *  so the campaign icon rail (Files / Assets / Crumbot in HomeShell) can drive and reflect it. */
+  flowView: 'flow' | 'grid' | 'calendar'
+  setFlowView: (v: 'flow' | 'grid' | 'calendar') => void
   /** Whether the campaign's Crumbot panel is collapsed to its rail. Lifted so the icon rail's
    *  Crumbot item can toggle and reflect it. */
   flowChatCollapsed: boolean
   setFlowChatCollapsed: (v: boolean) => void
+  /** Whether the Assets library is docked as the canvas's left panel (shares the slot with Crumbot,
+   *  so the canvas stays put — Assets is a panel ON the one canvas, not a separate view). */
+  flowAssetsOpen: boolean
+  setFlowAssetsOpen: (v: boolean) => void
   /** User-toggled sidebar collapse (persists; works on every page). */
   sidebarCollapsed: boolean
   toggleSidebar: () => void
@@ -2578,6 +2582,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   flowCanvasOpen: false,
   flowView: 'flow',
   flowChatCollapsed: true,
+  flowAssetsOpen: false,
   sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
   recordsChatCollapsed: (() => { try { return localStorage.getItem('stoplight.recordsChatCollapsed') === '1' } catch { return false } })(),
   flowChats: loadFlowChats(),
@@ -3783,6 +3788,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
   setFlowView: (v) => set((s) => (s.flowView === v ? {} : { flowView: v })),
   setFlowChatCollapsed: (v) => set((s) => (s.flowChatCollapsed === v ? {} : { flowChatCollapsed: v })),
+  setFlowAssetsOpen: (v) => set((s) => (s.flowAssetsOpen === v ? {} : { flowAssetsOpen: v })),
   setRecordsChatCollapsed: (v) => {
     try { localStorage.setItem('stoplight.recordsChatCollapsed', v ? '1' : '0') } catch { /* ignore */ }
     set({ recordsChatCollapsed: v })
