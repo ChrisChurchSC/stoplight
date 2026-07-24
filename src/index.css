@@ -3998,9 +3998,7 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
-  /* Mirrored: DOM order is Crumbot, canvas, inspector, but row-reverse lays them out as
-     inspector (left) | canvas | Crumbot (right). Canvas stays centred either way. */
-  flex-direction: row-reverse;
+  /* Crumbot (left) | canvas | inspector (right) — DOM order, no reversal. */
   position: relative;
 }
 /* Records-page assistant: the same chat panel docked on the LEFT, exactly like the flow canvas. */
@@ -4016,13 +4014,7 @@ button {
    toolbar centered. The base .fchat rules (border-right, surface, flex column) already dock it. */
 .flow-body .fchat {
   width: 360px;
-  /* Crumbot docks on the RIGHT (mirrored), so its divider faces the canvas on its left. */
-  border-right: 0;
-  border-left: 1px solid var(--border);
 }
-/* Inspector docks on the LEFT (mirrored), so its divider faces the canvas on its right. */
-.flow-body .flow-panel { border-left: 0; border-right: 1px solid var(--border); }
-.flow-body .flow-panel-rail { border-left: 0; border-right: 1px solid var(--border); }
 /* Crumbot's record nav (Brand + Chats + Foundation / Prospects / Go-to-market) sits between the
    header and the chat thread. Capped so the conversation keeps the majority of the card; scrolls
    when the nav is tall. Scoped to the flow-body card so the records-page assistant is unaffected. */
@@ -4130,9 +4122,9 @@ button {
    and RIGHT is the inspector: when Crumbot rails (left=48) and the inspector is open (right=360) the
    canvas center shifts left by (48-360)/2 = -156px, and vice-versa. */
 /* Collapsed Crumbot is now hidden entirely (0 wide), not a 48px rail. */
-.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% + 180px); }
-.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% - 156px); }
-.flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% + 24px); }
+.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
+.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
+.flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
 .flow-canvas {
   flex: 1;
   min-width: 0;
@@ -26488,10 +26480,10 @@ table.aud-sheet td.stick .aud-cell {
 /* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
    canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */
 .flow-starter {
-  /* Docked to the canvas's left edge — where Crumbot opens on a new campaign — rather than
-     floating in the center. Compact so it doesn't crowd the canvas. */
+  /* Docked to the canvas's top-right by default; draggable anywhere from there. Compact so it
+     doesn't crowd the canvas. */
   position: absolute; z-index: 5;
-  left: 18px; top: 50%; transform: translateY(-50%);
+  right: 18px; top: 18px;
   width: min(324px, calc(100% - 36px));
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 16px; padding: 18px;
