@@ -14,7 +14,6 @@ import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/str
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
-import { HomeSidebar } from './HomeSidebar'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -510,10 +509,14 @@ export function FlowsView() {
   const setBrandTab = useTrafficStore((s) => s.setBrandTab)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
+  const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
+  const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
+  const brandDatasets = useMemo(() => allBrandDatasets.filter((d) => d.brand === brand), [allBrandDatasets, brand])
   // The brand's Segments records (the Segments page IS the brand's audiences).
   const brandSegments = clientAudiences[brand] ?? []
   const audienceNames = useMemo(() => brandSegments.map((a) => a.name), [brandSegments])
@@ -2658,12 +2661,9 @@ export function FlowsView() {
                 </button>
               </div>
               <div className="flow-library-body">
-                {/* The active brand's data: Brand strategy record + the Foundation / Prospects /
-                    Go-to-market record sections. */}
-                <HomeSidebar mode="records" />
                 {/* Libraries organized by brand: one folder per brand, each holding its campaigns.
                     "New brand" starts a folder for a brand you don't have yet. */}
-                <div className="flow-lib-brandshead flow-library-secttl-libs">
+                <div className="flow-lib-brandshead">
                   <span className="flow-library-secttl">Brands</span>
                   <button className="flow-lib-newbrand" onClick={() => setAddingBrand((v) => !v)}>
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -2991,10 +2991,11 @@ export function FlowsView() {
             </div>
           )}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
-            {/* Campaign brief node — the board's root. Hidden on a blank new campaign (canvas starts
-                empty); appears once the campaign gains shape or the brief is summoned. Hideable via
-                delete; "Brief" in the Add menu restores it. */}
-            {!briefHidden && (!blankCampaign || briefSummoned) && (
+            {/* Campaign brief node — the board's root. Shown for an existing campaign (its real root)
+                or when explicitly summoned from the toolbar's "Brief" item. Adding primitives does NOT
+                bring it back — a new campaign's board stays free of an auto-inserted campaign card.
+                Hideable via delete. */}
+            {!briefHidden && (viewing || briefSummoned) && (
             <div
               className={`flow-node flow-tier-campaign${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
               data-node-id="campaign"
@@ -3125,7 +3126,36 @@ export function FlowsView() {
                     <span className="flow-note-kind">{meta.label}</span>
                     <button className="flow-note-del" title="Delete" aria-label="Delete card" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteNote(nt.id) }}>✕</button>
                   </div>
-                  {(() => {
+                  {nt.kind === 'data-source' ? (
+                    // A Data source links one of the brand's data sets (the spreadsheets) or a live
+                    // connector; "New data set" spins up a fresh spreadsheet and links it in one step.
+                    <select
+                      className="flow-note-sel"
+                      value={nt.refId ?? ''}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        if (e.target.value === '__new__') {
+                          const id = addBrandDataset(brand)
+                          setNoteRef(nt.id, id)
+                        } else setNoteRef(nt.id, e.target.value)
+                      }}
+                    >
+                      <option value="">Link a data source…</option>
+                      {brandDatasets.length > 0 && (
+                        <optgroup label="Your data sets">
+                          {brandDatasets.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name || 'Untitled data set'}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="Connectors">
+                        {CONNECTOR_SOURCES.map((o) => (
+                          <option key={o.id} value={o.id}>{o.label}</option>
+                        ))}
+                      </optgroup>
+                      <option value="__new__">+ New data set…</option>
+                    </select>
+                  ) : (() => {
                     const opts = noteOptions(nt.kind)
                     if (!opts) return null
                     const noun = meta.label.toLowerCase()
