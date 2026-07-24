@@ -597,9 +597,12 @@ export function FlowsView() {
   const chatCollapsed = useTrafficStore((s) => s.flowChatCollapsed)
   const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
   const [briefCollapsed, setBriefCollapsed] = useState(false)
-  // The campaign brief is the board's root, rendered unconditionally. Deleting it hides the card
-  // (the campaign data stays); "Brief" in the Add menu brings it back. Reset on entering a campaign.
+  // The campaign brief is the board's root. Deleting it hides the card (the campaign data stays);
+  // "Brief" in the Add menu brings it back. On a brand-new blank campaign it's hidden too (see
+  // blankCampaign) so the canvas starts empty; briefSummoned lets the toolbar force it back even
+  // while blank. Reset on entering a campaign.
   const [briefHidden, setBriefHidden] = useState(false)
+  const [briefSummoned, setBriefSummoned] = useState(false)
   // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
   // opens Crumbot and hands it the brief (its discovery/build flow takes over from there).
   const [starterText, setStarterText] = useState('')
@@ -811,6 +814,9 @@ export function FlowsView() {
     }
     setSel(id)
     setPickAt(null)
+    // Selecting a card reveals its properties — open the inspector if it was collapsed (it starts
+    // collapsed on a blank new campaign).
+    setBriefCollapsed(false)
   }
   const posRef = useRef(pos)
   posRef.current = pos
@@ -1495,6 +1501,7 @@ export function FlowsView() {
     })
     setPickAt(null)
     setSel(node.id)
+    setBriefCollapsed(false)
     void genPreview(node)
   }
   // Empty-canvas starter: hand the typed brief to Crumbot, which runs its discovery/build flow.
@@ -1536,6 +1543,7 @@ export function FlowsView() {
     setPos((p) => ({ ...p, [id]: { x: 300 + (i % 3) * 28, y: 120 + i * 34 } }))
     setSel(id)
     setSelected(new Set([id]))
+    setBriefCollapsed(false)
   }
   const deleteNote = (id: string) => {
     setNotes((n) => n.filter((x) => x.id !== id))
@@ -1707,6 +1715,10 @@ export function FlowsView() {
     setNodes([])
     setNotes([])
     setBriefHidden(false)
+    setBriefSummoned(false)
+    // A fresh campaign opens as a clean, blank canvas: inspector collapsed, just the starter
+    // card + toolbar. The inspector expands the moment a card is selected (see clickSelect).
+    setBriefCollapsed(true)
     setPreview({})
     setName('')
     setSubject('')
@@ -1729,6 +1741,9 @@ export function FlowsView() {
     setPickAt(null)
     setSel('campaign')
     setBriefHidden(false)
+    setBriefSummoned(false)
+    // An existing campaign has content to inspect, so open the panel to its brief.
+    setBriefCollapsed(false)
     // Opening a flow also opens a tab for it (and lights that tab as active), so the
     // top strip tracks the flow you're in, matching how a tab click opens a flow.
     openProject(n)
@@ -2320,6 +2335,10 @@ export function FlowsView() {
   }
 
   const viewing = viewName !== null
+  // A brand-new, untouched campaign — no deliverables, notes, chat, or name yet. It opens with a
+  // blank canvas + the "What are you launching?" starter as the only front door; the brief card
+  // isn't pre-placed until the campaign gains some shape (or the user summons it from the toolbar).
+  const blankCampaign = !viewing && nodes.length === 0 && notes.length === 0 && chatMsgs.length === 0 && !name.trim()
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
   const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
 
@@ -2778,7 +2797,7 @@ export function FlowsView() {
           {/* Empty-canvas starter: the front door before a campaign has any shape. Describe it to
               Crumbot, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
               centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
-          {!viewing && !building && !starterDismissed && nodes.length === 0 && chatMsgs.length === 0 && (
+          {!building && !starterDismissed && blankCampaign && (
             <div
               className="flow-starter"
               onMouseDown={onStarterDragStart}
@@ -2827,8 +2846,10 @@ export function FlowsView() {
             </div>
           )}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
-            {/* Campaign brief node — the board's root. Hideable via delete; "Brief" restores it. */}
-            {!briefHidden && (
+            {/* Campaign brief node — the board's root. Hidden on a blank new campaign (canvas starts
+                empty); appears once the campaign gains shape or the brief is summoned. Hideable via
+                delete; "Brief" in the Add menu restores it. */}
+            {!briefHidden && (!blankCampaign || briefSummoned) && (
             <div
               className={`flow-node flow-tier-campaign${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
               data-node-id="campaign"
@@ -4067,7 +4088,7 @@ export function FlowsView() {
             <>
               <div className="flow-tb-add-menu" role="menu">
                 <div className="flow-tb-add-sec">Structure</div>
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
+                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setBriefSummoned(true); setStarterDismissed(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
                   <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
                   <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root</span></span>
                 </button>
