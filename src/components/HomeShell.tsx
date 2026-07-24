@@ -42,9 +42,9 @@ function CampaignNav() {
         <span className="nav-label">Files</span>
       </button>
       <button
-        className={`nav-item${flowView === 'grid' ? ' active' : ''}`}
-        onClick={() => setFlowView('grid')}
-        title="Assets: the grid of every asset"
+        className={`nav-item${flowView === 'library' ? ' active' : ''}`}
+        onClick={() => setFlowView('library')}
+        title="Assets: the brand's asset libraries"
       >
         <span className="nav-ico"><AssetsIco /></span>
         <span className="nav-label">Assets</span>

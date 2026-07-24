@@ -1793,8 +1793,8 @@ interface TrafficState {
   setFlowCanvasOpen: (open: boolean) => void
   /** Which view of the open campaign is showing. Lifted here so the campaign icon rail (Files /
    *  Assets / Crumbot in HomeShell) can drive and reflect it. */
-  flowView: 'flow' | 'grid' | 'calendar'
-  setFlowView: (v: 'flow' | 'grid' | 'calendar') => void
+  flowView: 'flow' | 'grid' | 'calendar' | 'library'
+  setFlowView: (v: 'flow' | 'grid' | 'calendar' | 'library') => void
   /** Whether the campaign's Crumbot panel is collapsed to its rail. Lifted so the icon rail's
    *  Crumbot item can toggle and reflect it. */
   flowChatCollapsed: boolean
