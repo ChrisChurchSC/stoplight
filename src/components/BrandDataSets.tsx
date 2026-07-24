@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { DatasetGrid } from './DatasetGrid'
+import { MiniSheet } from './MiniSheet'
 
 /**
  * A brand's data sets — the flexible half of the hybrid brand model. Each data set is a blank
@@ -8,26 +9,6 @@ import { DatasetGrid } from './DatasetGrid'
  * Clicking a card opens a simple editable grid (labelled columns + free-text cells, add row/col).
  * Free-form on purpose: nothing here feeds Hansel, so there are no required fields.
  */
-
-// A tiny non-interactive spreadsheet drawn on the card — a header band over a few body rows, with
-// filled cells reflecting where the real data set actually has content, so cards read as "data".
-function MiniSheet({ columns, rows }: { columns: string[]; rows: string[][] }) {
-  const cols = Math.min(Math.max(columns.length, 1), 5)
-  const bodyRows = 4
-  return (
-    <div className="bds-mini" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-      {Array.from({ length: cols }, (_, c) => (
-        <div key={`h${c}`} className="bds-mini-cell head" />
-      ))}
-      {Array.from({ length: bodyRows }, (_, r) =>
-        Array.from({ length: cols }, (_, c) => {
-          const filled = !!rows[r]?.[c]?.trim()
-          return <div key={`${r}-${c}`} className={`bds-mini-cell${filled ? ' filled' : ''}`} />
-        }),
-      )}
-    </div>
-  )
-}
 
 export function BrandDataSets({ brand }: { brand: string }) {
   const datasets = useTrafficStore((s) => s.brandDatasets)

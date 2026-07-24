@@ -14,6 +14,7 @@ import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/str
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
+import { MiniSheet } from './MiniSheet'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -3146,6 +3147,8 @@ export function FlowsView() {
                   {nt.kind === 'data-source' ? (
                     // A Data source links one of the brand's data sets (the spreadsheets) or a live
                     // connector; "New data set" spins up a fresh spreadsheet and links it in one step.
+                    // The card previews the linked set as a mini spreadsheet; double-click opens it.
+                    <>
                     <select
                       className="flow-note-sel"
                       value={nt.refId ?? ''}
@@ -3172,6 +3175,19 @@ export function FlowsView() {
                       </optgroup>
                       <option value="__new__">+ New data set…</option>
                     </select>
+                    {(() => {
+                      const linkedDs = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
+                      return (
+                        <div
+                          className={`flow-note-mini${linkedDs ? ' linked' : ''}`}
+                          title={linkedDs ? `${linkedDs.name || 'Untitled data set'} · double-click to open` : 'Link or create a data set, then double-click to open it'}
+                        >
+                          <MiniSheet columns={linkedDs?.columns ?? ['', '', '', '']} rows={linkedDs?.rows ?? []} bodyRows={3} />
+                          <span className="flow-note-mini-label">{linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}</span>
+                        </div>
+                      )
+                    })()}
+                    </>
                   ) : (() => {
                     const opts = noteOptions(nt.kind)
                     if (!opts) return null

@@ -6862,6 +6862,14 @@ button {
 }
 .flow-note-sel:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
 .flow-note-sel:hover { border-color: var(--border-strong); }
+/* A Data source card previews its linked data set as a mini spreadsheet (double-click to open). */
+.flow-note-mini { margin: 0 10px 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+.flow-note-mini .bds-mini { height: 50px; border-radius: 5px; }
+.flow-note-mini-label {
+  font-size: 11px; font-weight: 600; color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.flow-note-mini.linked .flow-note-mini-label { color: var(--text-muted); }
 .flow-note-port {
   position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
   width: 20px; height: 20px; border-radius: 50%; cursor: crosshair;
