@@ -507,6 +507,8 @@ export function FlowsView() {
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
+  const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
@@ -616,6 +618,15 @@ export function FlowsView() {
   const [starterPos, setStarterPos] = useState<{ x: number; y: number } | null>(null)
   // Search box on the Assets brand-library view.
   const [librarySearch, setLibrarySearch] = useState('')
+  // Assets is organized by brand folders. Which brand folders are expanded (the active brand starts
+  // open), and the inline "New brand" folder-creation input.
+  const [openBrandFolders, setOpenBrandFolders] = useState<Set<string>>(() => new Set())
+  const [addingBrand, setAddingBrand] = useState(false)
+  const [newBrandName, setNewBrandName] = useState('')
+  // The active brand's folder starts expanded (the user can still collapse it).
+  useEffect(() => {
+    if (brand) setOpenBrandFolders((prev) => (prev.has(brand) ? prev : new Set([...prev, brand])))
+  }, [brand])
   // Refs so the Cmd+. shortcut reads the panels' current state without re-binding the listener.
   const chatCollapsedRef = useRef(chatCollapsed)
   chatCollapsedRef.current = chatCollapsed
@@ -2461,6 +2472,36 @@ export function FlowsView() {
     )
   }
 
+  // Assets is a brand-organized library browser: each brand is a folder of its campaign libraries.
+  const librariesForBrand = (b: string) =>
+    canvases
+      .filter((c) => c.client === b && c.name !== CONTENT_LIBRARY_CAMPAIGN)
+      .map((c) => ({ name: c.name, count: c.rows.filter((r) => !r.archivedAt).length }))
+      .sort((a, z) => a.name.localeCompare(z.name))
+  const toggleBrandFolder = (b: string) =>
+    setOpenBrandFolders((prev) => {
+      const next = new Set(prev)
+      next.has(b) ? next.delete(b) : next.add(b)
+      return next
+    })
+  // Open a library: switch scope to its brand (if different) and open the campaign, then close the
+  // panel so the board shows.
+  const openLibrary = (b: string, campaign: string) => {
+    if (b !== brand) setClientFilter(b)
+    openView(campaign)
+    setFlowAssetsOpen(false)
+  }
+  // "Start a folder for a new brand": create + register the brand so its (empty) folder appears.
+  const createBrandFolder = () => {
+    const nm = newBrandName.trim()
+    if (!nm) return
+    const id = addBrandRecord({ name: nm })
+    updateBrandRecord(id, { name: nm })
+    setOpenBrandFolders((prev) => new Set([...prev, nm]))
+    setNewBrandName('')
+    setAddingBrand(false)
+  }
+
   // The outline (campaign + its deliverables) — a map of the board's contents, shown in the
   // inspector's nothing-selected state. Clicking a row selects that node.
   const outlineItems = viewing
@@ -2595,40 +2636,85 @@ export function FlowsView() {
             canvas and inspector stay put — Files / Assets / Crumbot are all the ONE board. */}
         {flowAssetsOpen ? (() => {
           const q = librarySearch.trim().toLowerCase()
-          const libs = brandCampaigns.filter((c) => !q || c.name.toLowerCase().includes(q))
           return (
             <aside className="flow-assets">
               <div className="flow-library-head">
                 <span className="flow-library-searchic" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
                 </span>
-                <input className="flow-library-search" placeholder="Search all libraries" value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} />
+                <input className="flow-library-search" placeholder="Search libraries" value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} />
                 <button className="flow-library-close" title="Close panel" aria-label="Close panel" onClick={() => setFlowAssetsOpen(false)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="M15 9l-2 3 2 3" /></svg>
                 </button>
               </div>
               <div className="flow-library-body">
-                {/* The brand's data lives here now: Brand strategy record + the Foundation /
-                    Prospects / Go-to-market record sections, above the campaign libraries. */}
+                {/* The active brand's data: Brand strategy record + the Foundation / Prospects /
+                    Go-to-market record sections. */}
                 <HomeSidebar mode="records" />
-                <div className="flow-library-secttl flow-library-secttl-libs">All libraries</div>
-                {libs.length === 0 ? (
-                  <div className="flow-library-empty">{q ? 'No libraries match your search.' : 'No campaigns for this brand yet. Build one to fill your library.'}</div>
-                ) : (
-                  <div className="flow-library-list">
-                    {libs.map((lib) => (
-                      <button key={lib.name} className="flow-library-item" onClick={() => { openView(lib.name); setFlowAssetsOpen(false) }}>
-                        <span className="flow-library-ic" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
-                        </span>
-                        <span className="flow-library-txt">
-                          <span className="flow-library-name">{lib.name.replace(`${brand} — `, '')}</span>
-                          <span className="flow-library-count">{lib.count} asset{lib.count === 1 ? '' : 's'}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                {/* Libraries organized by brand: one folder per brand, each holding its campaigns.
+                    "New brand" starts a folder for a brand you don't have yet. */}
+                <div className="flow-lib-brandshead flow-library-secttl-libs">
+                  <span className="flow-library-secttl">Brands</span>
+                  <button className="flow-lib-newbrand" onClick={() => setAddingBrand((v) => !v)}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    New brand
+                  </button>
+                </div>
+                {addingBrand && (
+                  <input
+                    className="flow-lib-newbrand-input"
+                    autoFocus
+                    placeholder="Brand name…"
+                    value={newBrandName}
+                    onChange={(e) => setNewBrandName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); createBrandFolder() }
+                      if (e.key === 'Escape') { setAddingBrand(false); setNewBrandName('') }
+                    }}
+                    onBlur={() => { if (!newBrandName.trim()) setAddingBrand(false) }}
+                  />
                 )}
+                <div className="flow-lib-folders">
+                  {brands.map((b) => {
+                    const libs = librariesForBrand(b.name).filter((l) => !q || l.name.toLowerCase().includes(q) || b.name.toLowerCase().includes(q))
+                    if (q && libs.length === 0 && !b.name.toLowerCase().includes(q)) return null
+                    const open = openBrandFolders.has(b.name) || !!q
+                    return (
+                      <div className="flow-lib-folder" key={b.name}>
+                        <button className={`flow-lib-folder-head${b.name === brand ? ' current' : ''}`} onClick={() => toggleBrandFolder(b.name)}>
+                          <span className={`flow-lib-chev${open ? ' open' : ''}`} aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+                          </span>
+                          <span className="flow-lib-folder-ic" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
+                          </span>
+                          <span className="flow-lib-folder-name">{b.name}</span>
+                          <span className="flow-lib-folder-count">{b.count}</span>
+                        </button>
+                        {open && (
+                          <div className="flow-lib-folder-body">
+                            {libs.length === 0 ? (
+                              <div className="flow-lib-folder-empty">No campaigns yet</div>
+                            ) : (
+                              libs.map((lib) => (
+                                <button key={lib.name} className="flow-library-item" onClick={() => openLibrary(b.name, lib.name)}>
+                                  <span className="flow-library-ic" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
+                                  </span>
+                                  <span className="flow-library-txt">
+                                    <span className="flow-library-name">{lib.name.replace(`${b.name} — `, '')}</span>
+                                    <span className="flow-library-count">{lib.count} asset{lib.count === 1 ? '' : 's'}</span>
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {brands.length === 0 && <div className="flow-library-empty">No brands yet. Start one above.</div>}
+                </div>
               </div>
             </aside>
           )

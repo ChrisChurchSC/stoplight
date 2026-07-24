@@ -26488,6 +26488,40 @@ table.aud-sheet td.stick .aud-cell {
 .flow-library-count { font-size: 12.5px; color: var(--text-muted); }
 .flow-library-empty { font-size: 13.5px; color: var(--text-faint); padding: 20px 2px; max-width: 520px; }
 
+/* Libraries organized by brand: a "Brands" header with a New-brand action, then a folder per brand. */
+.flow-lib-brandshead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.flow-lib-newbrand {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+}
+.flow-lib-newbrand:hover { border-color: var(--accent); color: var(--accent); }
+.flow-lib-newbrand svg { flex: 0 0 auto; }
+.flow-lib-newbrand-input {
+  width: 100%; margin: 8px 0 4px; border: 1px solid var(--accent); border-radius: 9px; background: var(--bg);
+  font: inherit; font-size: 13.5px; color: var(--text); padding: 8px 11px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.flow-lib-newbrand-input:focus { outline: none; }
+.flow-lib-folders { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.flow-lib-folder-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 1px solid transparent; background: none; border-radius: 9px; padding: 8px 10px; cursor: pointer;
+}
+.flow-lib-folder-head:hover { background: var(--surface-2); }
+.flow-lib-folder-head.current .flow-lib-folder-name { font-weight: 700; }
+.flow-lib-chev { flex: 0 0 auto; display: inline-flex; color: var(--text-faint); transition: transform 0.12s ease; }
+.flow-lib-chev svg { width: 15px; height: 15px; }
+.flow-lib-chev.open { transform: rotate(90deg); }
+.flow-lib-folder-ic { flex: 0 0 auto; display: inline-flex; color: var(--text-muted); }
+.flow-lib-folder-ic svg { width: 18px; height: 18px; }
+.flow-lib-folder-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-lib-folder-count {
+  flex: 0 0 auto; min-width: 20px; text-align: center; font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+  background: var(--surface-2); border-radius: 20px; padding: 1px 7px;
+}
+.flow-lib-folder-body { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 4px 18px; }
+.flow-lib-folder-empty { font-size: 12.5px; color: var(--text-faint); padding: 6px 12px; }
+
 /* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
    canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */
 .flow-starter {
