@@ -507,6 +507,7 @@ export function FlowsView() {
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
+  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
@@ -2491,7 +2492,14 @@ export function FlowsView() {
     openView(campaign)
     setFlowAssetsOpen(false)
   }
-  // "Start a folder for a new brand": create + register the brand so its (empty) folder appears.
+  // Clicking a brand opens its brand page on the Data tab — its data sets (the flexible spreadsheets),
+  // with the preset basics one tab over. Scoped to the clicked brand.
+  const openBrand = (b: string) => {
+    if (b !== brand) setClientFilter(b)
+    setBrandTab('data')
+  }
+  // "Start a folder for a new brand": create + register the brand, then drop into its brand page on
+  // the About tab so its basics (the dropdowns Hansel reads) are right there to fill out.
   const createBrandFolder = () => {
     const nm = newBrandName.trim()
     if (!nm) return
@@ -2500,6 +2508,8 @@ export function FlowsView() {
     setOpenBrandFolders((prev) => new Set([...prev, nm]))
     setNewBrandName('')
     setAddingBrand(false)
+    setClientFilter(nm)
+    setBrandTab('about')
   }
 
   // The outline (campaign + its deliverables) — a map of the board's contents, shown in the
@@ -2681,16 +2691,19 @@ export function FlowsView() {
                     const open = openBrandFolders.has(b.name) || !!q
                     return (
                       <div className="flow-lib-folder" key={b.name}>
-                        <button className={`flow-lib-folder-head${b.name === brand ? ' current' : ''}`} onClick={() => toggleBrandFolder(b.name)}>
-                          <span className={`flow-lib-chev${open ? ' open' : ''}`} aria-hidden="true">
+                        <div className={`flow-lib-folder-head${b.name === brand ? ' current' : ''}`}>
+                          <button className={`flow-lib-chev${open ? ' open' : ''}`} title={open ? 'Collapse' : 'Expand'} aria-label={open ? 'Collapse' : 'Expand'} onClick={() => toggleBrandFolder(b.name)}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-                          </span>
-                          <span className="flow-lib-folder-ic" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
-                          </span>
-                          <span className="flow-lib-folder-name">{b.name}</span>
-                          <span className="flow-lib-folder-count">{b.count}</span>
-                        </button>
+                          </button>
+                          {/* The brand row itself opens the brand's page (basics + data sets). */}
+                          <button className="flow-lib-folder-open" title={`Open ${b.name}`} onClick={() => openBrand(b.name)}>
+                            <span className="flow-lib-folder-ic" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
+                            </span>
+                            <span className="flow-lib-folder-name">{b.name}</span>
+                            <span className="flow-lib-folder-count">{b.count}</span>
+                          </button>
+                        </div>
                         {open && (
                           <div className="flow-lib-folder-body">
                             {libs.length === 0 ? (

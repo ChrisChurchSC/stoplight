@@ -137,6 +137,7 @@ import {
   titleFromUrl,
 } from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
+import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -600,6 +601,24 @@ function loadCompanies(): Company[] {
 function saveCompanies(list: Company[]): void {
   try {
     saveRecordList(COMPANIES_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
+// Per-brand freeform data sets (blank spreadsheets) — the flexible half of the brand model.
+const BRAND_DATASETS_KEY = 'stoplight.brandDatasets.v1'
+function loadBrandDatasets(): BrandDataset[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRAND_DATASETS_KEY) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveBrandDatasets(list: BrandDataset[]): void {
+  try {
+    localStorage.setItem(BRAND_DATASETS_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1489,8 +1508,8 @@ interface TrafficState {
   libraryMode: 'catalog' | 'data'
   setLibraryMode: (mode: 'catalog' | 'data') => void
   /** Which Brand sub-view is open — nested under Brand in the sidebar. */
-  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels' | 'visual'
-  setBrandTab: (tab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels' | 'visual') => void
+  brandTab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels' | 'visual' | 'data'
+  setBrandTab: (tab: 'about' | 'goal' | 'voice' | 'audiences' | 'strategy' | 'messaging' | 'channels' | 'visual' | 'data') => void
   /** One messaging system per brand, keyed by brand name (lazy-created). */
   brandSystems: Record<string, MessagingLibrary>
   /** Brand tree + explicit sharing + draft flag, keyed by brand (client) name. The
@@ -1644,6 +1663,15 @@ interface TrafficState {
   addBrandRecord: (partial?: Partial<BrandRecord>) => string
   updateBrandRecord: (id: string, patch: Partial<BrandRecord>) => void
   deleteBrandRecord: (id: string) => void
+  /** Per-brand freeform data sets (blank spreadsheets). */
+  brandDatasets: BrandDataset[]
+  addBrandDataset: (brand: string, name?: string) => string
+  renameBrandDataset: (id: string, name: string) => void
+  deleteBrandDataset: (id: string) => void
+  setDatasetCell: (id: string, row: number, col: number, value: string) => void
+  setDatasetColumn: (id: string, col: number, label: string) => void
+  addDatasetRow: (id: string) => void
+  addDatasetColumn: (id: string) => void
   /** Records › Segments — the account-segments table. */
   segments: Segment[]
   /** Add a segment row (blank defaults unless overridden); returns its id. */
@@ -2545,6 +2573,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   objectives: localDataMode ? loadRecordList<Objective>(OBJECTIVES_KEY) : [],
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
+  brandDatasets: loadBrandDatasets(),
   segments: localDataMode ? loadSegments() : [],
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
@@ -3143,6 +3172,66 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const brandRecords = s.brandRecords.filter((b) => b.id !== id)
       saveRecordList(BRAND_RECORDS_KEY, brandRecords)
       return { brandRecords }
+    }),
+
+  addBrandDataset: (brand, name) => {
+    const ds = blankDataset(brand, name ?? 'Untitled data set')
+    set((s) => {
+      const brandDatasets = [...s.brandDatasets, ds]
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    })
+    return ds.id
+  },
+  renameBrandDataset: (id, name) =>
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) => (d.id === id ? { ...d, name } : d))
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    }),
+  deleteBrandDataset: (id) =>
+    set((s) => {
+      const brandDatasets = s.brandDatasets.filter((d) => d.id !== id)
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    }),
+  setDatasetCell: (id, row, col, value) =>
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) => {
+        if (d.id !== id) return d
+        const rows = d.rows.map((r, ri) =>
+          ri === row ? Array.from({ length: d.columns.length }, (_, ci) => (ci === col ? value : r[ci] ?? '')) : r,
+        )
+        return { ...d, rows }
+      })
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    }),
+  setDatasetColumn: (id, col, label) =>
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        d.id === id ? { ...d, columns: d.columns.map((c, ci) => (ci === col ? label : c)) } : d,
+      )
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    }),
+  addDatasetRow: (id) =>
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        d.id === id ? { ...d, rows: [...d.rows, Array.from({ length: d.columns.length }, () => '')] } : d,
+      )
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    }),
+  addDatasetColumn: (id) =>
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        d.id === id
+          ? { ...d, columns: [...d.columns, `Column ${d.columns.length + 1}`], rows: d.rows.map((r) => [...r, '']) }
+          : d,
+      )
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
     }),
 
   addSegment: (partial) => {

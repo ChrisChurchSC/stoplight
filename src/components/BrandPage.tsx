@@ -5,6 +5,7 @@ import { BrandInfo } from './BrandInfo'
 import { BrandStrategy } from './BrandStrategy'
 import { BrandVoice } from './BrandVoice'
 import { BrandVisual } from './BrandVisual'
+import { BrandDataSets } from './BrandDataSets'
 import { BrandPicker } from './BrandPicker'
 
 /**
@@ -18,6 +19,7 @@ const BRAND_TABS = [
   ['voice', 'Voice'],
   ['visual', 'Visual'],
   ['strategy', 'Strategy'],
+  ['data', 'Data'],
 ] as const
 
 export function BrandPage({ brand }: { brand?: string }) {
@@ -72,6 +74,8 @@ export function BrandPage({ brand }: { brand?: string }) {
         <BrandVoice brand={brand} />
       ) : tab === 'visual' ? (
         <BrandVisual brand={brand} />
+      ) : tab === 'data' ? (
+        <BrandDataSets key={`brand-data-${brand}`} brand={brand} />
       ) : (
         <BrandStrategy key="brand-strategy" brand={brand} />
       )}

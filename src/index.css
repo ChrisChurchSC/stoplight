@@ -26503,15 +26503,21 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-lib-newbrand-input:focus { outline: none; }
 .flow-lib-folders { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
-.flow-lib-folder-head {
-  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-  border: 1px solid transparent; background: none; border-radius: 9px; padding: 8px 10px; cursor: pointer;
-}
+.flow-lib-folder-head { display: flex; align-items: center; gap: 2px; border-radius: 9px; }
 .flow-lib-folder-head:hover { background: var(--surface-2); }
 .flow-lib-folder-head.current .flow-lib-folder-name { font-weight: 700; }
-.flow-lib-chev { flex: 0 0 auto; display: inline-flex; color: var(--text-faint); transition: transform 0.12s ease; }
+/* The chevron toggles expand; the rest of the row opens the brand's page. */
+.flow-lib-chev {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 30px;
+  border: none; background: none; color: var(--text-faint); cursor: pointer; transition: transform 0.12s ease; border-radius: 7px;
+}
+.flow-lib-chev:hover { color: var(--text-muted); }
 .flow-lib-chev svg { width: 15px; height: 15px; }
 .flow-lib-chev.open { transform: rotate(90deg); }
+.flow-lib-folder-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left;
+  border: none; background: none; border-radius: 8px; padding: 8px 8px 8px 2px; cursor: pointer;
+}
 .flow-lib-folder-ic { flex: 0 0 auto; display: inline-flex; color: var(--text-muted); }
 .flow-lib-folder-ic svg { width: 18px; height: 18px; }
 .flow-lib-folder-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -26521,6 +26527,75 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-lib-folder-body { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 4px 18px; }
 .flow-lib-folder-empty { font-size: 12.5px; color: var(--text-faint); padding: 6px 12px; }
+
+/* Brand data sets (BrandPage → Data tab): tiny-spreadsheet cards + a blank-grid editor. */
+.bds { padding: 4px 2px; }
+.bds-lead { font-size: 13.5px; color: var(--text-muted); max-width: 640px; margin-bottom: 18px; line-height: 1.5; }
+.bds-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; max-width: 900px; }
+.bds-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: left;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px; cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.bds-card:hover { border-color: var(--accent); box-shadow: 0 6px 20px -14px rgba(15, 23, 42, 0.5); }
+/* The tiny spreadsheet preview: a header band over body rows, cell borders drawn by the gap. */
+.bds-mini {
+  display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px;
+  overflow: hidden; height: 72px; grid-auto-rows: 1fr;
+}
+.bds-mini-cell { background: var(--surface-2); }
+.bds-mini-cell.head { background: color-mix(in srgb, var(--accent) 22%, var(--surface-2)); }
+.bds-mini-cell.filled { background: color-mix(in srgb, var(--text-faint) 40%, var(--surface)); }
+.bds-card-name { font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bds-card-meta { font-size: 12px; color: var(--text-muted); }
+.bds-card-add { align-items: center; justify-content: center; text-align: center; border-style: dashed; background: var(--bg); }
+.bds-add-plus {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-bottom: 2px;
+  border-radius: 9px; background: var(--surface-2); color: var(--text-muted); font-size: 22px; line-height: 1;
+}
+/* Editor */
+.bds-editor { padding: 4px 2px; }
+.bds-editor-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.bds-back {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+}
+.bds-back:hover { border-color: var(--accent); color: var(--accent); }
+.bds-name-input {
+  flex: 1; min-width: 0; border: 1px solid transparent; background: none; font: inherit; font-size: 20px; font-weight: 700;
+  color: var(--text); padding: 4px 6px; border-radius: 8px;
+}
+.bds-name-input:hover { background: var(--surface-2); }
+.bds-name-input:focus { outline: none; background: var(--surface); border-color: var(--accent); }
+.bds-del {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
+}
+.bds-del:hover { border-color: var(--danger, #dc2626); color: var(--danger, #dc2626); }
+.bds-grid-wrap { max-width: 100%; overflow-x: auto; }
+.bds-grid { border-collapse: collapse; font-size: 13px; }
+.bds-grid th, .bds-grid td { border: 1px solid var(--border); padding: 0; }
+.bds-corner, .bds-rownum {
+  width: 40px; min-width: 40px; background: var(--surface-2); color: var(--text-faint); text-align: center;
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
+}
+.bds-colhead {
+  width: 100%; min-width: 140px; border: none; background: var(--surface-2); font: inherit; font-size: 12.5px;
+  font-weight: 700; color: var(--text); padding: 8px 10px;
+}
+.bds-colhead:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bds-cell {
+  width: 100%; min-width: 140px; border: none; background: var(--surface); font: inherit; font-size: 13px;
+  color: var(--text); padding: 8px 10px;
+}
+.bds-cell:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--bg); }
+.bds-addcol button, .bds-addrow {
+  border: 1px dashed var(--border-strong); background: var(--bg); color: var(--text-muted); cursor: pointer; font: inherit;
+}
+.bds-addcol button { width: 34px; height: 100%; font-size: 16px; }
+.bds-addcol { width: 34px; }
+.bds-addrow { margin-top: 8px; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; }
+.bds-addrow:hover, .bds-addcol button:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
    canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */
