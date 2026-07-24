@@ -26596,6 +26596,25 @@ table.aud-sheet td.stick .aud-cell {
 .bds-addcol { width: 34px; }
 .bds-addrow { margin-top: 8px; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; }
 .bds-addrow:hover, .bds-addcol button:hover { border-color: var(--accent); color: var(--accent); }
+.bds-missing { font-size: 13.5px; color: var(--text-faint); padding: 24px 2px; }
+
+/* A data set opened as its own tab — the full-page spreadsheet. */
+.dataset-page { padding: 24px 32px 48px; }
+.dataset-page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.dataset-page-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent);
+}
+.dataset-page-name {
+  flex: 1; min-width: 0; border: 1px solid transparent; background: none; font: inherit; font-size: 24px; font-weight: 700;
+  color: var(--text); padding: 4px 8px; border-radius: 8px;
+}
+.dataset-page-name:hover { background: var(--surface-2); }
+.dataset-page-name:focus { outline: none; background: var(--surface); border-color: var(--accent); }
+
+/* Non-campaign canvas tabs: a small leading glyph for data-set tabs. */
+.cv-project-tab-ic { display: inline-flex; align-items: center; color: var(--text-muted); margin-right: 5px; }
+.cv-dataset-tab.active .cv-project-tab-ic, .cv-dataset-tab:hover .cv-project-tab-ic { color: var(--accent); }
 
 /* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
    canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */

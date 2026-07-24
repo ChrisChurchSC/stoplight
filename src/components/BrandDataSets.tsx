@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTrafficStore } from '../store/useTrafficStore'
-import { squareRows } from '../domain/brandDataset'
+import { DatasetGrid } from './DatasetGrid'
 
 /**
  * A brand's data sets — the flexible half of the hybrid brand model. Each data set is a blank
@@ -34,10 +34,6 @@ export function BrandDataSets({ brand }: { brand: string }) {
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
   const renameBrandDataset = useTrafficStore((s) => s.renameBrandDataset)
   const deleteBrandDataset = useTrafficStore((s) => s.deleteBrandDataset)
-  const setDatasetCell = useTrafficStore((s) => s.setDatasetCell)
-  const setDatasetColumn = useTrafficStore((s) => s.setDatasetColumn)
-  const addDatasetRow = useTrafficStore((s) => s.addDatasetRow)
-  const addDatasetColumn = useTrafficStore((s) => s.addDatasetColumn)
 
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -46,7 +42,6 @@ export function BrandDataSets({ brand }: { brand: string }) {
 
   // Editor: one open data set as an editable grid.
   if (open) {
-    const rows = squareRows(open.columns, open.rows)
     return (
       <div className="bds-editor">
         <div className="bds-editor-head">
@@ -65,45 +60,7 @@ export function BrandDataSets({ brand }: { brand: string }) {
             Delete
           </button>
         </div>
-        <div className="bds-grid-wrap">
-          <table className="bds-grid">
-            <thead>
-              <tr>
-                <th className="bds-corner" />
-                {open.columns.map((c, ci) => (
-                  <th key={ci}>
-                    <input
-                      className="bds-colhead"
-                      value={c}
-                      onChange={(e) => setDatasetColumn(open.id, ci, e.target.value)}
-                    />
-                  </th>
-                ))}
-                <th className="bds-addcol">
-                  <button title="Add column" aria-label="Add column" onClick={() => addDatasetColumn(open.id)}>+</button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, ri) => (
-                <tr key={ri}>
-                  <td className="bds-rownum">{ri + 1}</td>
-                  {open.columns.map((_, ci) => (
-                    <td key={ci}>
-                      <input
-                        className="bds-cell"
-                        value={r[ci] ?? ''}
-                        onChange={(e) => setDatasetCell(open.id, ri, ci, e.target.value)}
-                      />
-                    </td>
-                  ))}
-                  <td />
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button className="bds-addrow" onClick={() => addDatasetRow(open.id)}>+ Add row</button>
-        </div>
+        <DatasetGrid datasetId={open.id} />
       </div>
     )
   }

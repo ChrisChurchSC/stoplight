@@ -511,6 +511,8 @@ export function FlowsView() {
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
+  const openBrandTab = useTrafficStore((s) => s.openBrandTab)
+  const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
@@ -2495,11 +2497,24 @@ export function FlowsView() {
     openView(campaign)
     setFlowAssetsOpen(false)
   }
-  // Clicking a brand opens its brand page on the Data tab — its data sets (the flexible spreadsheets),
-  // with the preset basics one tab over. Scoped to the clicked brand.
+  // Clicking a brand opens it as a canvas tab: its brand page on the Data tab (the flexible data
+  // sets), with the preset basics one tab over. Scoped to the clicked brand.
   const openBrand = (b: string) => {
     if (b !== brand) setClientFilter(b)
+    openBrandTab(b)
     setBrandTab('data')
+  }
+  // Double-clicking a Data source card opens its linked data set as a full-page spreadsheet tab. If
+  // it isn't linked to a data set yet (empty, or a connector), spin one up, link it, and open it.
+  const openDataCard = (nt: FlowNote) => {
+    const linked = nt.refId && allBrandDatasets.some((d) => d.id === nt.refId) ? nt.refId : null
+    if (linked) {
+      openDatasetTab(linked)
+      return
+    }
+    const id = addBrandDataset(brand)
+    setNoteRef(nt.id, id)
+    openDatasetTab(id)
   }
   // "Start a folder for a new brand": create + register the brand, then drop into its brand page on
   // the About tab so its basics (the dropdowns Hansel reads) are right there to fill out.
@@ -2512,6 +2527,7 @@ export function FlowsView() {
     setNewBrandName('')
     setAddingBrand(false)
     setClientFilter(nm)
+    openBrandTab(nm)
     setBrandTab('about')
   }
 
@@ -3118,6 +3134,7 @@ export function FlowsView() {
                   style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
                   onMouseDown={(e) => startDrag(e, nt.id)}
                   onClick={(e) => clickSelect(e, nt.id)}
+                  onDoubleClick={nt.kind === 'data-source' ? (e) => { e.stopPropagation(); openDataCard(nt) } : undefined}
                 >
                   <div className="flow-note-head">
                     <span className="flow-note-ic" aria-hidden="true">

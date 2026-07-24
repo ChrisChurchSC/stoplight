@@ -40,6 +40,7 @@ import { BrandsView } from './BrandsView'
 import { FlowsView } from './FlowsView'
 import { CampaignCalendar } from './CampaignCalendar'
 import { BrandPage } from './BrandPage'
+import { DatasetPage } from './DatasetPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -298,6 +299,10 @@ export function Workbench() {
           ) : page === 'brand' ? (
             <div className="home-main-scroll">
               <BrandPage brand={scopedBrand} />
+            </div>
+          ) : page === 'dataset' ? (
+            <div className="home-main-scroll">
+              <DatasetPage />
             </div>
           ) : page === 'content' ? (
             <div className="home-main-scroll">

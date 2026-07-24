@@ -3,12 +3,13 @@ import { clientForCampaign } from '../domain/clients'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
- * The project drawer: the campaigns you have open, as folder tabs across the very
- * top of the canvas (flush with the channel filter). Click to flip to a project,
- * × to close it like a browser tab. Opening a campaign's canvas adds its tab.
+ * The project drawer: what you have open across the very top of the canvas, as folder tabs. Holds
+ * three kinds of tab — campaigns (a flow), brands (a brand page), and data sets (a full-page
+ * spreadsheet) — each a closeable browser-style tab. Opening any of them adds its tab.
  */
 export function CanvasProjectTabs() {
   const rows = useTrafficStore((s) => s.rows)
+  const page = useTrafficStore((s) => s.page)
   const campaignFilter = useTrafficStore((s) => s.campaignFilter)
   const openProjects = useTrafficStore((s) => s.openProjects)
   const openProject = useTrafficStore((s) => s.openProject)
@@ -16,6 +17,15 @@ export function CanvasProjectTabs() {
   const setPage = useTrafficStore((s) => s.setPage)
   const openFlow = useTrafficStore((s) => s.openFlow)
   const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
+  const openBrandTabs = useTrafficStore((s) => s.openBrandTabs)
+  const closeBrandTab = useTrafficStore((s) => s.closeBrandTab)
+  const openDatasetTabs = useTrafficStore((s) => s.openDatasetTabs)
+  const activeDatasetId = useTrafficStore((s) => s.activeDatasetId)
+  const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
+  const closeDatasetTab = useTrafficStore((s) => s.closeDatasetTab)
+  const brandDatasets = useTrafficStore((s) => s.brandDatasets)
 
   const assetCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -57,12 +67,27 @@ export function CanvasProjectTabs() {
     }
   }
 
+  const openBrand = (b: string) => {
+    setClientFilter(b)
+    setBrandTab('data')
+  }
+  const closeBrand = (e: React.MouseEvent, b: string) => {
+    e.stopPropagation()
+    const wasActive = page === 'brand' && clientFilter === b
+    closeBrandTab(b)
+    if (wasActive) setPage('flows')
+  }
+  const closeDs = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    closeDatasetTab(id)
+  }
+
   return (
     <div className="cv-projects">
       {projects.map((p) => (
         <span
           key={p.campaign}
-          className={`cv-project-tab${p.campaign === campaignFilter ? ' active' : ''}`}
+          className={`cv-project-tab${p.campaign === campaignFilter && page === 'flows' ? ' active' : ''}`}
           title={`${p.client} · ${p.campaign} (${p.count} assets)`}
           role="button"
           tabIndex={0}
@@ -77,6 +102,49 @@ export function CanvasProjectTabs() {
           </button>
         </span>
       ))}
+      {openBrandTabs.map((b) => (
+        <span
+          key={`brand:${b}`}
+          className={`cv-project-tab cv-brand-tab${page === 'brand' && clientFilter === b ? ' active' : ''}`}
+          title={`Brand · ${b}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => openBrand(b)}
+        >
+          <span className="cv-project-tab-body">
+            <span className="cv-project-tab-client">Brand</span>
+            <span className="cv-project-tab-name">{b}</span>
+          </span>
+          <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeBrand(e, b)}>
+            ✕
+          </button>
+        </span>
+      ))}
+      {openDatasetTabs.map((id) => {
+        const ds = brandDatasets.find((d) => d.id === id)
+        if (!ds) return null
+        return (
+          <span
+            key={`ds:${id}`}
+            className={`cv-project-tab cv-dataset-tab${page === 'dataset' && activeDatasetId === id ? ' active' : ''}`}
+            title={`${ds.brand} · ${ds.name || 'Untitled data set'}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => openDatasetTab(id)}
+          >
+            <span className="cv-project-tab-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></svg>
+            </span>
+            <span className="cv-project-tab-body">
+              <span className="cv-project-tab-client">{ds.brand}</span>
+              <span className="cv-project-tab-name">{ds.name || 'Untitled data set'}</span>
+            </span>
+            <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeDs(e, id)}>
+              ✕
+            </button>
+          </span>
+        )
+      })}
       <span
         className="cv-project-tab cv-project-tab-new"
         role="button"

@@ -1493,7 +1493,7 @@ interface TrafficState {
   timeRange: TimeRange
   setTimeRange: (range: TimeRange) => void
   /** Top-level destination in the global nav rail. */
-  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar'
+  page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar' | 'dataset'
   /** A record id to auto-open in its RecordsTable drawer once that sheet mounts (e.g. clicking a
    *  task's linked company jumps to Companies and pops that row's details). Consumed + cleared by
    *  the table that owns the id. */
@@ -1802,6 +1802,16 @@ interface TrafficState {
   openProjects: string[]
   openProject: (campaign: string) => void
   closeProject: (campaign: string) => void
+  /** Brands opened as canvas tabs (alongside campaigns), so a brand's page is a closeable tab. */
+  openBrandTabs: string[]
+  openBrandTab: (brand: string) => void
+  closeBrandTab: (brand: string) => void
+  /** Data sets opened as canvas tabs — each is a full-page spreadsheet. `activeDatasetId` is the one
+   *  the 'dataset' page renders. */
+  openDatasetTabs: string[]
+  activeDatasetId: string | null
+  openDatasetTab: (id: string) => void
+  closeDatasetTab: (id: string) => void
   /** A campaign the Flows view should open in view mode (the project tabs set this so a
    *  tab opens the flow, not the legacy canvas). '' means open a fresh flow builder.
    *  FlowsView consumes it and calls clearFlowOpen. */
@@ -2017,7 +2027,7 @@ interface TrafficState {
   setClientFilter: (client: string) => void
   setCampaignFilter: (campaign: string) => void
   setView: (view: 'grid' | 'calendar' | 'flow' | 'insights' | 'canvas') => void
-  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar') => void
+  setPage: (page: 'clients' | 'connectors' | 'billing' | 'library' | 'portfolio' | 'content' | 'channels' | 'metrics' | 'brand' | 'account' | 'reports' | 'priorities' | 'records' | 'channelrecords' | 'people' | 'segments' | 'proofpoints' | 'messages' | 'voices' | 'patterns' | 'objectives' | 'triggers' | 'flows' | 'tasks' | 'brands' | 'calendar' | 'dataset') => void
   setIcpOpen: (open: boolean) => void
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
@@ -2605,6 +2615,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   artboards: loadArtboards(),
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
+  openBrandTabs: [],
+  openDatasetTabs: [],
+  activeDatasetId: null,
   // A single-flow share opens straight into that flow (flowOpen drives FlowsView to open it).
   flowOpen: initialShare?.campaign ?? null,
   flowOpenView: 'flow',
@@ -3828,6 +3841,28 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     saveOpenProjects(openProjects)
     set({ openProjects })
   },
+  openBrandTab: (brand) =>
+    set((s) => (s.openBrandTabs.includes(brand) ? {} : { openBrandTabs: [...s.openBrandTabs, brand] })),
+  closeBrandTab: (brand) =>
+    set((s) => ({ openBrandTabs: s.openBrandTabs.filter((b) => b !== brand) })),
+  openDatasetTab: (id) =>
+    set((s) => ({
+      openDatasetTabs: s.openDatasetTabs.includes(id) ? s.openDatasetTabs : [...s.openDatasetTabs, id],
+      activeDatasetId: id,
+      page: 'dataset',
+    })),
+  closeDatasetTab: (id) =>
+    set((s) => {
+      const openDatasetTabs = s.openDatasetTabs.filter((d) => d !== id)
+      // If the closed tab was the one showing, fall back to another data set or leave the page.
+      const wasActive = s.activeDatasetId === id
+      const activeDatasetId = wasActive ? openDatasetTabs[openDatasetTabs.length - 1] ?? null : s.activeDatasetId
+      return {
+        openDatasetTabs,
+        activeDatasetId,
+        page: wasActive && !activeDatasetId ? 'flows' : s.page,
+      }
+    }),
 
   setCampaignStatus: (name, status) =>
     set((s) => {
