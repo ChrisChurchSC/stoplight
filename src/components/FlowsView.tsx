@@ -255,7 +255,9 @@ const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 
 // Freeform canvas cards you drop from the toolbar (a lightweight node primitive shared across the
 // new types). They live in the builder's memory alongside the deliverable nodes, positioned via the
 // same `pos` map and connectable through the same edge system.
-type FlowNoteKind = 'audience' | 'data-source' | 'channel-asset' | 'note'
+type FlowNoteKind =
+  | 'audience' | 'data-source' | 'channel-asset' | 'note'
+  | 'proof-point' | 'goal' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
 interface FlowNote {
   id: string
   kind: FlowNoteKind
@@ -275,6 +277,42 @@ const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder
   'channel-asset': {
     label: 'Channel asset', tone: '#c99a2e', placeholder: 'Which post or asset?',
     icon: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M3.5 15l4.5-4 3 2.5 4-4.5 5.5 6" /><circle cx="8.5" cy="9" r="1.4" /></>,
+  },
+  'proof-point': {
+    label: 'Proof point', tone: '#30a46c', placeholder: 'Which proof point?',
+    icon: <><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>,
+  },
+  goal: {
+    label: 'Goal', tone: '#d9a520', placeholder: 'Which goal?',
+    icon: <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" /></>,
+  },
+  trigger: {
+    label: 'Trigger', tone: '#e5484d', placeholder: 'Which trigger?',
+    icon: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  },
+  message: {
+    label: 'Message', tone: '#9b2dff', placeholder: 'Which message or angle?',
+    icon: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
+  },
+  voice: {
+    label: 'Voice', tone: '#0ea5a5', placeholder: 'Which brand voice?',
+    icon: <path d="M4 10v4M8 6.5v11M12 3v18M16 6.5v11M20 10v4" />,
+  },
+  company: {
+    label: 'Company', tone: '#4c86f0', placeholder: 'Which company?',
+    icon: <><rect x="4" y="3" width="10" height="18" rx="1.2" /><path d="M14 8.5h6V21h-6" /><path d="M7 7h4M7 11h4M7 15h4M17 12h1M17 16h1" /></>,
+  },
+  person: {
+    label: 'Person', tone: '#6d5cff', placeholder: 'Which person?',
+    icon: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></>,
+  },
+  concept: {
+    label: 'Concept', tone: '#ff8c42', placeholder: 'Describe the concept…',
+    icon: <><path d="M9.5 18h5M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2v.2h5v-.2c0-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" /></>,
+  },
+  season: {
+    label: 'Season', tone: '#db6aa0', placeholder: 'A moment or season…',
+    icon: <><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z" /><path d="M5 19c4-2 7-5 9.5-9.5" /></>,
   },
   note: {
     label: 'Note', tone: '#9aa1ac', placeholder: 'Type a note…',
@@ -432,6 +470,8 @@ export function FlowsView() {
   const channelRecords = useTrafficStore((s) => s.channelRecords)
   const allObjectives = useTrafficStore((s) => s.objectives)
   const allMessages = useTrafficStore((s) => s.messages)
+  const allTriggers = useTrafficStore((s) => s.triggers)
+  const allVoices = useTrafficStore((s) => s.voices)
   const brandSystems = useTrafficStore((s) => s.brandSystems)
   const brandMeta = useTrafficStore((s) => s.brandMeta)
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
@@ -482,6 +522,8 @@ export function FlowsView() {
   const objectives = useMemo(() => allObjectives.filter((o) => !o.brand || o.brand === brand), [allObjectives, brand])
   const companies = useMemo(() => allCompanies.filter((c) => !c.brand || c.brand === brand), [allCompanies, brand])
   const people = useMemo(() => allPeople.filter((p) => !p.brand || p.brand === brand), [allPeople, brand])
+  const triggers = useMemo(() => allTriggers.filter((t) => !t.brand || t.brand === brand), [allTriggers, brand])
+  const voices = useMemo(() => allVoices.filter((v) => !v.brand || v.brand === brand), [allVoices, brand])
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
@@ -1505,12 +1547,22 @@ export function FlowsView() {
   }
   const updateNoteText = (id: string, text: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
   const setNoteRef = (id: string, refId: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
-  // Linked kinds pick from an established record; freeform kinds (brief, note) return null.
+  // Linked kinds pick from an established record; freeform kinds (note, concept, season) return null.
+  const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
   const noteOptions = (kind: FlowNoteKind): { id: string; label: string }[] | null => {
-    if (kind === 'channel-asset') return channelRecords.map((c) => ({ id: c.id, label: c.name || 'Untitled channel' }))
-    if (kind === 'audience') return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
-    if (kind === 'data-source') return CONNECTOR_SOURCES
-    return null
+    switch (kind) {
+      case 'channel-asset': return channelRecords.map((c) => ({ id: c.id, label: c.name || 'Untitled channel' }))
+      case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
+      case 'data-source': return CONNECTOR_SOURCES
+      case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
+      case 'company': return named(companies)
+      case 'person': return named(people)
+      case 'goal': return named(objectives)
+      case 'trigger': return named(triggers)
+      case 'message': return named(messages)
+      case 'voice': return named(voices)
+      default: return null
+    }
   }
   // View mode: add a deliverable straight into the opened flow's campaign (seed its rows
   // and write their copy), so an existing flow can grow without leaving Flows or rebuilding.
@@ -2398,6 +2450,15 @@ export function FlowsView() {
     setSelected(id === 'campaign' ? new Set() : new Set([id]))
     setBriefCollapsed(false)
   }
+  // One Add-menu row for a freeform/record card kind (uses NOTE_META for the icon, tone, and label).
+  const noteMenuBtn = (kind: FlowNoteKind, desc: string) => (
+    <button key={kind} className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote(kind) }}>
+      <span className="flow-tb-add-ic" style={{ color: NOTE_META[kind].tone }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[kind].icon}</svg>
+      </span>
+      <span className="flow-tb-add-txt"><span className="flow-tb-add-name">{NOTE_META[kind].label}</span><span className="flow-tb-add-desc">{desc}</span></span>
+    </button>
+  )
 
   return (
     <div className={`flow${chatCollapsed ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}`}>
@@ -4003,34 +4064,35 @@ export function FlowsView() {
           {addMenuOpen && (
             <>
               <div className="flow-tb-add-menu" role="menu">
+                <div className="flow-tb-add-sec">Structure</div>
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
                   <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
                   <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root</span></span>
-                </button>
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('audience') }}>
-                  <span className="flow-tb-add-ic" style={{ color: NOTE_META.audience.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.audience.icon}</svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Audience</span><span className="flow-tb-add-desc">Your fan-out axis</span></span>
                 </button>
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); openAddDeliverable() }} disabled={addingDeliv}>
                   <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg></span>
                   <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Deliverable</span><span className="flow-tb-add-desc">The workhorse node <span className="flow-tb-add-kbd">B</span></span></span>
                 </button>
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('data-source') }}>
-                  <span className="flow-tb-add-ic" style={{ color: NOTE_META['data-source'].tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META['data-source'].icon}</svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Data source</span><span className="flow-tb-add-desc">An input you plug in</span></span>
-                </button>
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('channel-asset') }}>
-                  <span className="flow-tb-add-ic" style={{ color: NOTE_META['channel-asset'].tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META['channel-asset'].icon}</svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Channel asset</span><span className="flow-tb-add-desc">A last-mile post</span></span>
-                </button>
+                {noteMenuBtn('channel-asset', 'A last-mile post')}
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setTool('connect') }}>
                   <span className="flow-tb-add-ic" style={{ color: 'var(--text-muted)' }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" /></svg></span>
                   <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Connector</span><span className="flow-tb-add-desc">Link two cards</span></span>
                 </button>
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote('note') }}>
-                  <span className="flow-tb-add-ic" style={{ color: NOTE_META.note.tone }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META.note.icon}</svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Text note</span><span className="flow-tb-add-desc">Freeform annotation</span></span>
-                </button>
+                <div className="flow-tb-add-sec">Audience &amp; data</div>
+                {noteMenuBtn('audience', 'Your fan-out axis')}
+                {noteMenuBtn('data-source', 'An input you plug in')}
+                {noteMenuBtn('company', 'An account')}
+                {noteMenuBtn('person', 'A contact')}
+                <div className="flow-tb-add-sec">Strategy</div>
+                {noteMenuBtn('message', 'The angle copy is written to')}
+                {noteMenuBtn('goal', 'A north-star objective')}
+                {noteMenuBtn('trigger', 'What fires an action')}
+                {noteMenuBtn('proof-point', 'Evidence to back it up')}
+                {noteMenuBtn('voice', 'How it should sound')}
+                <div className="flow-tb-add-sec">Freeform</div>
+                {noteMenuBtn('concept', 'The big idea')}
+                {noteMenuBtn('season', 'A moment to hit')}
+                {noteMenuBtn('note', 'A sticky note')}
               </div>
             </>
           )}
