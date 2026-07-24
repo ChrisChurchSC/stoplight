@@ -214,7 +214,7 @@ type NavPage =
  * mode controls which parts render, so one nav definition powers two homes:
  *  - 'full'         : the classic left sidebar (everything). Kept for safety / other callers.
  *  - 'destinations' : left sidebar, primary destinations only (Campaigns + top items + footer).
- *  - 'sections'     : the Chats list, styled to fill its parent — lives in the Crumbot panel.
+ *  - 'sections'     : the Chats list, styled to fill its parent — lives in the Hansel panel.
  *  - 'records'      : the brand's data nav (Brand + Foundation / Prospects / Go-to-market), which
  *                     lives in the Assets panel.
  */
@@ -252,7 +252,7 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'record
     if (marketerRole) setOpenSections((prev) => new Set([...prev, ...ROLE_PRESETS[marketerRole].sections]))
   }, [marketerRole])
   // Simple detail level keeps the same four left-nav destinations; it only condenses the discipline
-  // sections, which now live in the Crumbot panel (sections mode) rather than this rail.
+  // sections, which now live in the Hansel panel (sections mode) rather than this rail.
   const skillLevel = useTrafficStore((s) => s.userPrefs.skillLevel)
   const simpleNav = skillLevel === 'simple'
   // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
@@ -260,7 +260,7 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'record
   const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
     ({ key, label, ico, page: null, active, onClick, ...extra })
   // The left rail's primary destinations, below the hardcoded Campaigns front door: Timeline, Tasks,
-  // Reports. Brand moved to the Crumbot panel; Home / Library folded away; Insights folded into Reports.
+  // Reports. Brand moved to the Hansel panel; Home / Library folded away; Insights folded into Reports.
   const topItems: NavItem[] = [
     item('calendar', 'Timeline', 'calendar', page === 'calendar', () => setPage('calendar')),
     item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
@@ -437,7 +437,7 @@ export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'record
     </button>
   )
 
-  // Sections mode (Crumbot): just the Chats list now. Brand and the Foundation / Prospects /
+  // Sections mode (Hansel): just the Chats list now. Brand and the Foundation / Prospects /
   // Go-to-market record sections moved to the Assets panel (records mode).
   if (mode === 'sections') {
     return <div className="hsb-sections">{chatsBlock}</div>

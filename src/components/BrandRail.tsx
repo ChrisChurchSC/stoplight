@@ -29,7 +29,7 @@ const ring = (active: boolean): React.CSSProperties =>
   active ? { boxShadow: '0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #0e6d84)' } : { boxShadow: '0 1px 2px rgba(16,24,40,.08)' }
 
 export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
-  // When the rail hosts a nav (Files / Assets / Crumbot inside a campaign) it widens to fit the
+  // When the rail hosts a nav (Files / Assets / Hansel inside a campaign) it widens to fit the
   // labels; otherwise it stays a thin brand-switcher strip.
   const railW = children ? 76 : 44
   const clientFilter = useTrafficStore((s) => s.clientFilter)

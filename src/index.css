@@ -2756,7 +2756,7 @@ button {
   line-height: 1.4;
   flex: 0 0 auto;
 }
-/* The combined rail's middle nav (BrandRail children): Files / Assets / Crumbot inside a campaign,
+/* The combined rail's middle nav (BrandRail children): Files / Assets / Hansel inside a campaign,
    Campaigns / Timeline / Tasks / Reports otherwise. Same icon-over-label treatment as the icon rail. */
 .railnav { display: flex; flex-direction: column; gap: 3px; width: 100%; margin-top: 2px; }
 .railnav .nav-item {
@@ -3998,7 +3998,7 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
-  /* Crumbot (left) | canvas | inspector (right) — DOM order, no reversal. */
+  /* Hansel (left) | canvas | inspector (right) — DOM order, no reversal. */
   position: relative;
 }
 /* Records-page assistant: the same chat panel docked on the LEFT, exactly like the flow canvas. */
@@ -4015,7 +4015,7 @@ button {
 .flow-body .fchat {
   width: 360px;
 }
-/* Crumbot's record nav (Brand + Chats + Foundation / Prospects / Go-to-market) sits between the
+/* Hansel's record nav (Brand + Chats + Foundation / Prospects / Go-to-market) sits between the
    header and the chat thread. Capped so the conversation keeps the majority of the card; scrolls
    when the nav is tall. Scoped to the flow-body card so the records-page assistant is unaffected. */
 .flow-body .fchat-sections {
@@ -4118,10 +4118,10 @@ button {
 .fchat-rail-btn:hover { border-color: var(--accent); }
 .fchat-rail .fchat-spark { font-size: 15px; }
 /* Keep the toolbar centered over the canvas as the two docked panels collapse. Offset from 50% is
-   (leftWidth - rightWidth)/2; equal widths (both open, or both railed) cancel to 0. LEFT is Crumbot
-   and RIGHT is the inspector: when Crumbot rails (left=48) and the inspector is open (right=360) the
+   (leftWidth - rightWidth)/2; equal widths (both open, or both railed) cancel to 0. LEFT is Hansel
+   and RIGHT is the inspector: when Hansel rails (left=48) and the inspector is open (right=360) the
    canvas center shifts left by (48-360)/2 = -156px, and vice-versa. */
-/* Collapsed Crumbot is now hidden entirely (0 wide), not a 48px rail. */
+/* Collapsed Hansel is now hidden entirely (0 wide), not a 48px rail. */
 .flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
 .flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
 .flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
@@ -6604,7 +6604,7 @@ button {
 /* Bottom canvas controls: zoom · pan/select tools · Add block. */
 .flow-toolbar {
   position: absolute;
-  /* Centered over the canvas. Crumbot (left) and the inspector (right) are both 360px docked
+  /* Centered over the canvas. Hansel (left) and the inspector (right) are both 360px docked
      columns, so when both are open (or both collapsed to their 48px rails) the canvas center is
      the flow center. When only one collapses, the combo rules below nudge the toolbar by half the
      width difference: (leftWidth - rightWidth) / 2 = (360 - 48) / 2 = 156px. */
@@ -26450,7 +26450,7 @@ table.aud-sheet td.stick .aud-cell {
 
 /* Assets → the brand's asset libraries: a searchable list of the brand's campaigns (each a
    collection of assets), no thumbnails. Fills the canvas area when the Assets view is active. */
-/* The Assets library docks as the canvas's LEFT column, sharing Crumbot's slot (same 360px width,
+/* The Assets library docks as the canvas's LEFT column, sharing Hansel's slot (same 360px width,
    border, and surface as .fchat) so the canvas and inspector stay put — Assets is a panel ON the
    one board, not a separate view. */
 .flow-assets { width: 360px; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
@@ -26597,5 +26597,5 @@ table.aud-sheet td.stick .aud-cell {
 }
 
 /* HomeSidebar in 'sections' mode fills its parent column instead of being a fixed-width left rail.
-   It now lives inside the flow-canvas Crumbot panel (see .flow-body .fchat-sections). */
+   It now lives inside the flow-canvas Hansel panel (see .flow-body .fchat-sections). */
 .hsb-sections { width: 100%; background: transparent; display: flex; flex-direction: column; }

@@ -80,14 +80,14 @@ export function FlowChat({
   }
   const examples = flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
 
-  // Collapsed: Crumbot is fully hidden (no rail) — the "Crumbot" item in the left nav reopens it.
+  // Collapsed: Hansel is fully hidden (no rail) — the "Hansel" item in the left nav reopens it.
   if (collapsed) return null
 
   return (
     <aside className="fchat">
       <header className="fchat-head">
         <span className="fchat-spark" aria-hidden="true">✦</span>
-        <span className="fchat-title">Crumbot</span>
+        <span className="fchat-title">Hansel</span>
         <span className="fchat-beta">Beta</span>
         <div className="fchat-head-actions">
           <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={() => (messages.length ? setConfirmNew(true) : onNewChat())}>+</button>
@@ -124,7 +124,7 @@ export function FlowChat({
         </div>
       </header>
 
-      {/* Within a campaign, Crumbot IS the nav home: the record sections (Brand, Chats, Foundation,
+      {/* Within a campaign, Hansel IS the nav home: the record sections (Brand, Chats, Foundation,
           Prospects, Go-to-market) sit above the chat thread. Scrollable + height-capped so the
           conversation always keeps room below. */}
       <div className="fchat-sections">
@@ -134,7 +134,7 @@ export function FlowChat({
       <div className="fchat-thread" ref={threadRef}>
         {messages.length === 0 && (
           <div className="fchat-empty">
-            <p className="fchat-empty-lead">I&rsquo;m Crumbot.</p>
+            <p className="fchat-empty-lead">I&rsquo;m Hansel.</p>
             <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
             <div className="fchat-cards">
               {examples.map((ex) => (

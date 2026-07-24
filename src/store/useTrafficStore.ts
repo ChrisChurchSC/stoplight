@@ -1792,14 +1792,14 @@ interface TrafficState {
   flowCanvasOpen: boolean
   setFlowCanvasOpen: (open: boolean) => void
   /** Which view of the open campaign is showing (the Flow / Grid / Calendar top tabs). Lifted here
-   *  so the campaign icon rail (Files / Assets / Crumbot in HomeShell) can drive and reflect it. */
+   *  so the campaign icon rail (Files / Assets / Hansel in HomeShell) can drive and reflect it. */
   flowView: 'flow' | 'grid' | 'calendar'
   setFlowView: (v: 'flow' | 'grid' | 'calendar') => void
-  /** Whether the campaign's Crumbot panel is collapsed to its rail. Lifted so the icon rail's
-   *  Crumbot item can toggle and reflect it. */
+  /** Whether the campaign's Hansel panel is collapsed to its rail. Lifted so the icon rail's
+   *  Hansel item can toggle and reflect it. */
   flowChatCollapsed: boolean
   setFlowChatCollapsed: (v: boolean) => void
-  /** Whether the Assets library is docked as the canvas's left panel (shares the slot with Crumbot,
+  /** Whether the Assets library is docked as the canvas's left panel (shares the slot with Hansel,
    *  so the canvas stays put — Assets is a panel ON the one canvas, not a separate view). */
   flowAssetsOpen: boolean
   setFlowAssetsOpen: (v: boolean) => void

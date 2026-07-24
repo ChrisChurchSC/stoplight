@@ -22,7 +22,7 @@ const SparkIco = () => (
 )
 
 /**
- * The campaign-scoped nav — Files (the flow canvas), Assets (the grid of asset cards), and Crumbot
+ * The campaign-scoped nav — Files (the flow canvas), Assets (the grid of asset cards), and Hansel
  * (the assistant). Rendered inside the BrandRail so a campaign gets ONE combined left rail; shares
  * the .railnav styling with the destinations nav so both look identical. Driven off the store.
  */
@@ -33,8 +33,8 @@ function CampaignNav() {
   const setChatCollapsed = useTrafficStore((s) => s.setFlowChatCollapsed)
   const assetsOpen = useTrafficStore((s) => s.flowAssetsOpen)
   const setAssetsOpen = useTrafficStore((s) => s.setFlowAssetsOpen)
-  // Files / Assets / Crumbot all act on the ONE canvas: Files is the board itself, Assets and
-  // Crumbot are panels docked onto its left (mutually exclusive — they share the slot). None of
+  // Files / Assets / Hansel all act on the ONE canvas: Files is the board itself, Assets and
+  // Hansel are panels docked onto its left (mutually exclusive — they share the slot). None of
   // them swaps the canvas out, so switching between them never feels like a different screen.
   const onBoard = flowView === 'flow'
   return (
@@ -58,10 +58,10 @@ function CampaignNav() {
       <button
         className={`nav-item${onBoard && !assetsOpen && !chatCollapsed ? ' active' : ''}`}
         onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(onBoard ? !chatCollapsed : false) }}
-        title="Crumbot: the campaign assistant"
+        title="Hansel: the campaign assistant"
       >
         <span className="nav-ico"><SparkIco /></span>
-        <span className="nav-label">Crumbot</span>
+        <span className="nav-label">Hansel</span>
       </button>
     </div>
   )
@@ -70,7 +70,7 @@ function CampaignNav() {
 /**
  * The shared dashboard shell — a single combined left rail, the open-canvas tab bar across the top,
  * and content in the main column. The rail always folds into the BrandRail: brand switcher and "+"
- * on top, the middle nav (Files / Assets / Crumbot inside a campaign, else the app destinations),
+ * on top, the middle nav (Files / Assets / Hansel inside a campaign, else the app destinations),
  * and account at the foot. Children fill the main column and own their own scroll/padding.
  *
  * A single-flow share renders chromeless (no rail or tab bar) so the recipient is confined to the

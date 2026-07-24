@@ -579,7 +579,7 @@ export function FlowsView() {
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
   const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
   // How the flow-in-progress is shown: the canvas, or a grid / calendar of its assets.
-  // View + Crumbot-collapse live in the store so the campaign icon rail (Files / Assets / Crumbot)
+  // View + Hansel-collapse live in the store so the campaign icon rail (Files / Assets / Hansel)
   // in HomeShell can drive and reflect them.
   const flowView = useTrafficStore((s) => s.flowView)
   const setFlowView = useTrafficStore((s) => s.setFlowView)
@@ -609,9 +609,9 @@ export function FlowsView() {
   const [briefHidden, setBriefHidden] = useState(false)
   const [briefSummoned, setBriefSummoned] = useState(false)
   // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
-  // opens Crumbot and hands it the brief (its discovery/build flow takes over from there).
+  // opens Hansel and hands it the brief (its discovery/build flow takes over from there).
   const [starterText, setStarterText] = useState('')
-  // Dismissing the starter card reveals the bare canvas (build by hand via the toolbar or Crumbot).
+  // Dismissing the starter card reveals the bare canvas (build by hand via the toolbar or Hansel).
   // Reset on startNew so a fresh campaign always offers it again.
   const [starterDismissed, setStarterDismissed] = useState(false)
   // Where the starter card sits (canvas-local px). null = its default docked spot on the left.
@@ -1518,7 +1518,7 @@ export function FlowsView() {
     setBriefCollapsed(false)
     void genPreview(node)
   }
-  // Empty-canvas starter: hand the typed brief to Crumbot, which runs its discovery/build flow.
+  // Empty-canvas starter: hand the typed brief to Hansel, which runs its discovery/build flow.
   // Opening the assistant is the whole point, so the conversation continues in one place.
   const submitStarter = () => {
     const t = starterText.trim()
@@ -2632,8 +2632,8 @@ export function FlowsView() {
       {flowView === 'flow' && (
         <>
       <div className="flow-body">
-        {/* The canvas's left slot: the Assets library OR Crumbot (mutually exclusive). Either way the
-            canvas and inspector stay put — Files / Assets / Crumbot are all the ONE board. */}
+        {/* The canvas's left slot: the Assets library OR Hansel (mutually exclusive). Either way the
+            canvas and inspector stay put — Files / Assets / Hansel are all the ONE board. */}
         {flowAssetsOpen ? (() => {
           const q = librarySearch.trim().toLowerCase()
           return (
@@ -2927,7 +2927,7 @@ export function FlowsView() {
           {/* The outline (a map of the campaign's contents) now lives in the inspector's
               nothing-selected state instead of a floating canvas pill. */}
           {/* Empty-canvas starter: the front door before a campaign has any shape. Describe it to
-              Crumbot, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
+              Hansel, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
               centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
           {!building && !starterDismissed && blankCampaign && (
             <div
@@ -2940,7 +2940,7 @@ export function FlowsView() {
               </button>
               <div className="flow-starter-eyebrow">New campaign</div>
               <h2 className="flow-starter-title">What are you launching?</h2>
-              <p className="flow-starter-sub">Describe it and Crumbot drafts the plan, audiences, and copy. Nothing sends until you say so.</p>
+              <p className="flow-starter-sub">Describe it and Hansel drafts the plan, audiences, and copy. Nothing sends until you say so.</p>
               <div className="flow-starter-prompt">
                 <textarea
                   className="flow-starter-input"
@@ -2954,7 +2954,7 @@ export function FlowsView() {
                 />
                 <button className="flow-starter-go" onClick={submitStarter} disabled={!starterText.trim()}>
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5z" /></svg>
-                  Draft with Crumbot
+                  Draft with Hansel
                   <span className="flow-starter-kbd">⌘↵</span>
                 </button>
               </div>
