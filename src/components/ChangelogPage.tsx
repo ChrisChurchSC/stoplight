@@ -43,6 +43,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
+          'The campaign card on the canvas states what the campaign is, and nothing else. Its audience picker, its record tags and the goal card attached underneath are gone: audiences and proof points are cards on the canvas now, and the inspector already held the authoritative Objective and Linked records. Three places to set the same thing meant no clear home for any of them.',
           'Cards are grouped by what a card does rather than by loose topic. What gets made comes first, the context it is made from sits under that in four short groups, and sticky notes come last, with a plain note that nothing downstream reads them.',
           'Cards that get made now look made: a tinted, raised card with a filled label chip, a channel tile and a count. Context cards are flat and recessed with a coloured spine, and one with no record picked yet visibly reads as empty. The campaign brief is the only card with a full-width coloured top edge, so the root of the board is obvious at a glance.',
           'Every individual post on the canvas now carries its own label chip, matching the deliverable above it.',
@@ -54,6 +55,7 @@ const RELEASES: Release[] = [
           'The Channel asset card is gone. It never linked an asset, only a channel, and a deliverable already names its own channel, so the two overlapped: adding one just picked an arbitrary deliverable for that channel at build. Pick the deliverable you actually want, and tag a channel on the brief for planning.',
           'The Connector tool is called Link, and it left the Add menu, because it is a tool rather than a card. It is still the same button in the canvas toolbar.',
           'Card record pickers no longer read "Link a audience" or "No companys established yet".',
+          'Trimmed the campaigns header and the assistant panel: New umbrella and New flight are gone from the header (you can still add a flight from any campaign card), and the Chats row is gone from the assistant panel.',
         ],
       },
     ],

@@ -44,16 +44,12 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
-  const addCampaign = useTrafficStore((s) => s.addCampaign)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
   const addFlightRun = useTrafficStore((s) => s.addFlightRun)
   const patchFlight = useTrafficStore((s) => s.patchFlight)
   const removeFlight = useTrafficStore((s) => s.removeFlight)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolder, setNewFolder] = useState('')
-  const [newUmbrellaOpen, setNewUmbrellaOpen] = useState(false)
-  const [newUmbrella, setNewUmbrella] = useState('')
-  const [flightPickerOpen, setFlightPickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   // Flight pending deletion (folder view): its id + display name + asset count for the confirm modal.
   const [confirmDeleteFlight, setConfirmDeleteFlight] = useState<{ id: string; name: string; count: number } | null>(null)
@@ -113,12 +109,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       }}
     />
   )
-  const addUmbrella = () => {
-    const nm = newUmbrella.trim()
-    if (nm && brand) addCampaign({ name: `${brand} — ${nm}`, client: brand, strategy: 'content-seo', isUmbrella: true })
-    setNewUmbrella('')
-    setNewUmbrellaOpen(false)
-  }
   // Open the campaign builder to create a campaign nested under an umbrella.
   const addCampaignUnder = (umbrella: string) => {
     setNewCampaignParent(umbrella)
@@ -219,8 +209,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       childrenByParent.set(c.parent, arr)
     }
   const topCards = cards.filter((c) => !(c.parent && meta.has(c.parent)))
-  // Campaigns you can add a flight to (real campaigns that have assets, not umbrellas).
-  const flightable = cards.filter((c) => !c.isUmbrella && c.flights.length > 0)
   const unfiled = sortCards(topCards.filter((c) => !c.folder || !folders.includes(c.folder)))
 
   const addFolder = () => {
@@ -517,57 +505,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               ＋ New folder
             </button>
           )}
-          {newUmbrellaOpen ? (
-            <input
-              className="flow-home-folder-input"
-              autoFocus
-              placeholder="Umbrella name"
-              value={newUmbrella}
-              onChange={(e) => setNewUmbrella(e.target.value)}
-              onBlur={addUmbrella}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addUmbrella()
-                if (e.key === 'Escape') {
-                  setNewUmbrella('')
-                  setNewUmbrellaOpen(false)
-                }
-              }}
-            />
-          ) : (
-            <button className="flow-home-folder-new" onClick={() => setNewUmbrellaOpen(true)}>
-              ＋ New umbrella
-            </button>
-          )}
-          <div className="flow-home-flightpick">
-            <button className="flow-home-new" onClick={() => setFlightPickerOpen((o) => !o)}>
-              ＋ New flight
-            </button>
-            {flightPickerOpen && (
-              <>
-                <div className="flow-home-flightpick-scrim" onClick={() => setFlightPickerOpen(false)} />
-                <div className="flow-home-flightpick-menu" role="menu">
-                  <div className="flow-home-flightpick-head">Add a flight to…</div>
-                  {flightable.length === 0 ? (
-                    <div className="flow-home-flightpick-empty">No campaigns to re-run yet.</div>
-                  ) : (
-                    flightable.map((c) => (
-                      <button
-                        key={c.name}
-                        className="flow-home-flightpick-item"
-                        role="menuitem"
-                        onClick={() => {
-                          void addFlightRun(c.name)
-                          setFlightPickerOpen(false)
-                        }}
-                      >
-                        {c.name.replace(`${brand} — `, '')}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-          </div>
           <button
             className="flow-home-new"
             onClick={() => {

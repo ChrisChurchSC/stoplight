@@ -568,7 +568,6 @@ export function FlowsView() {
   const openProject = useTrafficStore((s) => s.openProject)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
-  const setPage = useTrafficStore((s) => s.setPage)
   const setBrandTab = useTrafficStore((s) => s.setBrandTab)
   const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
@@ -647,8 +646,6 @@ export function FlowsView() {
   connectFromRef.current = connectFrom
   const [building, setBuilding] = useState(false)
   // The goal card's objective picker (open state), so you can link/change the goal on the card.
-  const [goalPickOpen, setGoalPickOpen] = useState(false)
-  const goalPickRef = useRef<HTMLDivElement>(null)
   // Build always writes copy now (the toggle was removed); kept as a constant so the
   // preview + build paths that reference it stay unchanged.
   const writeCopy = true
@@ -1313,47 +1310,10 @@ export function FlowsView() {
   const viewPaidRows = useMemo(() => viewRows.filter((r) => CHANNELS[r.channel as ChannelId]?.kind === 'paid'), [viewRows])
   const campaignBudget = viewCampaign?.overallBudget ?? 0
   const assignedBudget = useMemo(() => viewPaidRows.reduce((sum, r) => sum + (r.budget?.amount ?? 0), 0), [viewPaidRows])
-  // The Goal card's lightweight readiness read: does this flow plausibly support its goal? A
-  // heuristic (not a forecast) over asset volume, channel spread, paid coverage and budget vs the
-  // goal type — enough to eyeball "will brief → deliverables → goal actually get there?".
-  const goalRead = useMemo(() => {
-    const objective = viewCampaign?.objective?.trim() || ''
-    const kpi = viewCampaign?.goalKpi?.trim() || ''
-    const target = viewCampaign?.goalTarget
-    const text = `${objective} ${kpi}`.toLowerCase()
-    const conversionGoal = /convert|conversion|sign\s?up|signup|\blead|revenue|\bsale|mql|sql|demo|trial|purchas|subscrib|\bbook/.test(text)
-    const assets = viewRows.length
-    const channels = new Set(viewRows.map((r) => r.channel)).size
-    const hasPaid = viewPaidRows.length > 0
-    const budget = viewCampaign?.overallBudget ?? 0
-    let level: 'red' | 'amber' | 'green' = 'green'
-    let why = ''
-    if (!objective) { level = 'amber'; why = 'No goal linked yet — link an objective to judge fit.' }
-    else if (assets === 0) { level = 'red'; why = 'No assets yet — add a deliverable and generate its copy.' }
-    else if (conversionGoal && !hasPaid) { level = 'amber'; why = 'Conversion goal, but no paid media to drive the volume — add a paid channel.' }
-    else if (budget > 0 && !hasPaid) { level = 'amber'; why = `$${budget.toLocaleString()} budget set, but no paid placement to spend it on.` }
-    else if (channels < 2) { level = 'amber'; why = `Only ${channels} channel — diversify to reach the goal more reliably.` }
-    else { level = 'green'; why = `Good coverage: ${assets} assets across ${channels} channels${hasPaid ? ', incl. paid' : ''}.` }
-    return { objective, kpi, target, level, why }
-  }, [viewCampaign, viewRows, viewPaidRows])
-  // Link (or clear) the flow's goal from the goal card: write the objective's name + KPI + target
-  // onto the campaign, exactly like the brief's Objective select does.
-  const linkObjective = (o: (typeof objectives)[number] | null) => {
-    if (!viewName) return
-    patchCampaign(viewName, {
-      objective: o?.name || undefined,
-      goalKpi: o?.metric?.trim() || undefined,
-      goalTarget: o?.target ? Number(String(o.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
-    })
-    setGoalPickOpen(false)
-  }
-  // Close the goal picker on any outside click (a fixed scrim can't cover the zoomed canvas).
-  useEffect(() => {
-    if (!goalPickOpen) return
-    const onDown = (e: MouseEvent) => { if (!goalPickRef.current?.contains(e.target as Node)) setGoalPickOpen(false) }
-    document.addEventListener('mousedown', onDown, true)
-    return () => document.removeEventListener('mousedown', onDown, true)
-  }, [goalPickOpen])
+  // NOTE: a red/amber/green campaign-readiness heuristic (assets, channel spread, paid coverage,
+  // budget vs goal type) used to live here as `goalRead`, feeding the goal card just removed. It is
+  // worth having again inside src/domain/campaignReview.ts when the review panel is built, rather
+  // than re-invented; this commit in git history has the original.
   const assignEvenly = () => {
     if (!viewPaidRows.length || campaignBudget <= 0) return
     const each = Math.floor(campaignBudget / viewPaidRows.length)
@@ -1397,32 +1357,6 @@ export function FlowsView() {
     if (viewName === null) return replaceBriefRef(key, type, id, label)
     setCampaignReferences(viewName, flowRefs.map((r) => (refKey(r) === key ? { type, id, label } : r)))
     setRefsDirty(true)
-  }
-  // The one audience this campaign is personalized to = its single segment reference (segments ARE
-  // the brand's audiences). Surfaced as a prominent brief field, not a tag chip: picking one replaces
-  // any other segment refs so a campaign personalizes to exactly one audience. Generation already
-  // writes to the segment refs, so this drives it with no extra wiring. In build mode an untouched
-  // brief (null) reads as "not chosen yet" rather than the all-segments default.
-  const chosenSegmentRefs = (viewName !== null ? flowRefs : briefRefs ?? []).filter((r) => r.type === 'segment')
-  // Resolve the picked segment to a brand audience by id OR name — a ref created by the fan-out (or an
-  // older store) can carry a different id than the current clientAudiences record, so match on the
-  // label too, else the selector reads "Choose an audience" for a campaign that clearly has one.
-  const currentAudience =
-    chosenSegmentRefs.length === 1
-      ? brandSegments.find((a) => a.id === chosenSegmentRefs[0].id || a.name === chosenSegmentRefs[0].label)
-      : undefined
-  const personalizedAudienceId = currentAudience?.id ?? ''
-  const setPersonalizedAudience = (segId: string) => {
-    const seg = brandSegments.find((a) => a.id === segId)
-    const base = viewName !== null ? flowRefs : briefRefs ?? []
-    const nonSeg = base.filter((r) => r.type !== 'segment')
-    const next = seg ? [...nonSeg, { type: 'segment' as FlowRefType, id: seg.id, label: seg.name }] : nonSeg
-    if (viewName !== null) {
-      setCampaignReferences(viewName, next)
-      setRefsDirty(true)
-    } else {
-      commitBriefRefs(next)
-    }
   }
   // Editing the CAMPAIGN's records (the brief).
   const campaignTagOps: TagOps = {
@@ -3386,34 +3320,11 @@ export function FlowsView() {
                   <div className="flow-node-desc">
                     {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week flight`}
                   </div>
-                  {/* Personalized to: the one audience this campaign is written for. Its own field, not
-                      a tag, so it reads as the campaign's target; drives which segment generation writes to. */}
-                  <label
-                    className="flow-audience"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span className="flow-audience-lbl">Personalized to</span>
-                    {brandSegments.length ? (
-                      <select
-                        className="flow-audience-sel"
-                        value={personalizedAudienceId}
-                        onChange={(e) => setPersonalizedAudience(e.target.value)}
-                      >
-                        <option value="">Choose an audience…</option>
-                        {brandSegments.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <button className="flow-audience-add" onClick={() => setPage('segments')}>
-                        Add an audience first
-                      </button>
-                    )}
-                  </label>
-                  <CardTags tags={viewing ? flowRefs : briefRefsEffective} excludeGroupKeys={['audience']} overridden={false} ops={campaignTagOps} recordGroups={recordGroups} />
+                  {/* Audience, proof and goal deliberately do NOT live on this card. They are
+                      canvas input cards now ("what it's made from"), and the inspector owns the
+                      authoritative controls (Objective, plus Linked records). Having a third copy
+                      here meant three places to set the same thing and no clear home for any of
+                      them. The card states what the campaign IS; you shape it elsewhere. */}
                 </div>
               </div>
               {!viewing && (
@@ -3422,48 +3333,6 @@ export function FlowsView() {
                   <button className="flow-plus" title="Drag out to add" onMouseDown={(e) => startAdd(e, nodes.length, 'campaign')}>
                     +
                   </button>
-                </div>
-              )}
-              {/* Goal: a tiny card tucked just under the brief so it reads as attached to it —
-                  the flow's north-star plus a red/amber/green read on whether it'll get there. */}
-              {viewing && (
-                <div className="flow-goal-card" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-                  <div className="flow-goal-head">
-                    <span className="flow-goal-eyebrow">Goal</span>
-                    <span className={`flow-goal-dot lvl-${goalRead.level}`} title={goalRead.why} aria-hidden="true" />
-                  </div>
-                  <button type="button" className="flow-goal-tagbtn" title="Choose the goal for this flow" onClick={() => setGoalPickOpen((o) => !o)}>
-                    <span className={`flow-node-tag flow-goal-tag${goalRead.objective ? '' : ' missing-tag'}`}>{goalRead.objective || 'Needs a goal'}</span>
-                  </button>
-                  {goalRead.objective && (goalRead.kpi || goalRead.target != null) && (
-                    <div className="flow-goal-meta">
-                      {[goalRead.kpi, goalRead.target != null ? `Target ${goalRead.target.toLocaleString()}` : ''].filter(Boolean).join(' · ')}
-                    </div>
-                  )}
-                  <div className="flow-goal-why">{goalRead.why}</div>
-                  {goalPickOpen && (
-                      <div className="flow-tagpick flow-goal-pick" ref={goalPickRef} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-                        <div className="flow-tagpick-group">
-                          <div className="flow-tagpick-head">Objectives</div>
-                          {objectives.length === 0 && <div className="flow-tagpick-empty">No objectives yet</div>}
-                          {objectives.map((o) => {
-                            const on = o.name === goalRead.objective
-                            return (
-                              <button key={o.id} type="button" className={`flow-tagpick-item${on ? ' on' : ''}`} onClick={() => linkObjective(o)}>
-                                <span className="flow-tagpick-check" aria-hidden="true">{on ? '✓' : ''}</span>
-                                <span className="flow-tagpick-lbl">{o.name}</span>
-                              </button>
-                            )
-                          })}
-                          {goalRead.objective && (
-                            <button type="button" className="flow-tagpick-item flow-tagpick-clear" onClick={() => linkObjective(null)}>
-                              <span className="flow-tagpick-check" aria-hidden="true" />
-                              <span className="flow-tagpick-lbl">Clear goal</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                  )}
                 </div>
               )}
             </div>

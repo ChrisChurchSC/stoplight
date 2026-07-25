@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Markdown } from '../lib/miniMarkdown'
-import { HomeSidebar } from './HomeSidebar'
 import type { FlowChatMsg, SavedFlowChat } from '../domain/flowAgent'
 
 export type { FlowChatMsg }
@@ -145,13 +144,6 @@ export function FlowChat({
           </div>
         </div>
       </header>
-
-      {/* Within a campaign, Hansel IS the nav home: the record sections (Brand, Chats, Foundation,
-          Prospects, Go-to-market) sit above the chat thread. Scrollable + height-capped so the
-          conversation always keeps room below. */}
-      <div className="fchat-sections">
-        <HomeSidebar mode="sections" />
-      </div>
 
       <div className="fchat-thread" ref={threadRef}>
         {messages.length === 0 && (
