@@ -257,13 +257,13 @@ const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 
 // new types). They live in the builder's memory alongside the deliverable nodes, positioned via the
 // same `pos` map and connectable through the same edge system.
 type FlowNoteKind =
-  | 'audience' | 'data-source' | 'channel-asset' | 'note'
+  | 'audience' | 'data-source' | 'note'
   | 'proof-point' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
 interface FlowNote {
   id: string
   kind: FlowNoteKind
   text: string
-  /** For linked kinds (channel asset → an established channel record), the record's id. */
+  /** For linked kinds (audience → a segment, proof point → an RTB), the record's id. */
   refId?: string
 }
 /**
@@ -292,15 +292,6 @@ const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder
     label: 'Data source', tone: '#12a594', placeholder: 'Which input or data source?', role: 'input', family: 'draws',
     menuDesc: 'A data set or connector to pull from',
     icon: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></>,
-  },
-  'channel-asset': {
-    // Steel blue, not the teal it started with: Voice (#0ea5a5) and Data source (#12a594) already
-    // hold that hue, and gold is spoken for by paid media on the canvas edges.
-    label: 'Channel', tone: '#4a6fa5', placeholder: 'Which channel?', role: 'input', family: 'when',
-    menuDesc: 'Where it runs, with its benchmarks',
-    // A broadcast mark. The old glyph was a picture frame, drawn back when this card claimed to be
-    // a "channel asset"; it links a channel, so it should look like one.
-    icon: <><circle cx="12" cy="9" r="1.8" /><path d="M8.8 5.8a6 6 0 0 0 0 6.4M15.2 5.8a6 6 0 0 1 0 6.4" /><path d="M12 11v8" /></>,
   },
   message: {
     label: 'Message', tone: '#9b2dff', placeholder: 'Which message or angle?', role: 'input', family: 'says',
@@ -358,7 +349,7 @@ const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder
 const INPUT_FAMILIES: { family: CardFamily; label: string }[] = [
   { family: 'who', label: "Who it's for" },
   { family: 'says', label: 'What it says' },
-  { family: 'when', label: 'When and where' },
+  { family: 'when', label: 'When' },
   { family: 'draws', label: 'What it draws on' },
 ]
 const kindsInFamily = (family: CardFamily): FlowNoteKind[] =>
@@ -613,7 +604,7 @@ export function FlowsView() {
   // not touched yet, so it defaults to all of the brand's segments.
   const [briefRefs, setBriefRefs] = useState<FlowReference[] | null>(null)
   const [nodes, setNodes] = useState<FlowDeliverable[]>([])
-  // Freeform toolbar cards (brief / audience / data source / channel asset / note). Ephemeral in the
+  // Freeform palette cards (audience / message / proof point / data source / note). Ephemeral in the
   // builder for now; positioned via `pos` and connectable like any other node.
   const [notes, setNotes] = useState<FlowNote[]>([])
   const [sel, setSel] = useState<'campaign' | string | null>('campaign')
@@ -1674,7 +1665,6 @@ export function FlowsView() {
   const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
   const noteOptions = (kind: FlowNoteKind): { id: string; label: string }[] | null => {
     switch (kind) {
-      case 'channel-asset': return channelRecords.map((c) => ({ id: c.id, label: c.name || 'Untitled channel' }))
       case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
       case 'data-source': return CONNECTOR_SOURCES
       case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
@@ -3318,7 +3308,7 @@ export function FlowsView() {
             </div>
             )}
 
-            {/* Freeform toolbar cards (brief / audience / data source / channel asset / note):
+            {/* Freeform palette cards (audience / message / proof point / data source / note):
                 absolutely positioned in the stack, dragged, selected, and connected like any node. */}
             {notes.map((nt) => {
               const meta = NOTE_META[nt.kind]

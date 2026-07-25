@@ -47,7 +47,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
-          'Channel asset is now just Channel, with an icon that looks like a channel instead of a picture frame. It never linked an asset, only a channel and its delivery benchmarks.',
+          'The Channel asset card is gone. It never linked an asset, only a channel, and a deliverable already names its own channel, so the two overlapped: adding one just picked an arbitrary deliverable for that channel at build. Pick the deliverable you actually want, and tag a channel on the brief for planning.',
           'The Connector tool is called Link, and it left the Add menu, because it is a tool rather than a card. It is still the same button in the canvas toolbar.',
           'Card record pickers no longer read "Link a audience" or "No companys established yet".',
         ],

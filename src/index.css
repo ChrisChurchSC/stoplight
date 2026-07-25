@@ -6856,7 +6856,7 @@ button {
    caption. Nudged to sit on the palette's baseline. */
 .flow-tb-palette .infotip-btn { margin: 0 3px 0 0; }
 
-/* Freeform canvas cards (brief / audience / data source / channel asset / note). One primitive,
+/* Freeform canvas cards (audience / message / proof point / data source / note). One primitive,
    tinted per kind via --note-tone. Absolutely positioned in the stack, dragged/connected like nodes. */
 .flow-note {
   position: absolute; left: 0; top: 0;
