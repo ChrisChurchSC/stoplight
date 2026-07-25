@@ -87,7 +87,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, avoid, assets } = (body ?? {}) as {
+  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets } = (body ?? {}) as {
     icp?: unknown
     campaign?: unknown
     theme?: unknown
@@ -95,10 +95,18 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
     brand?: unknown
     brandGuide?: unknown
     proofPool?: unknown
+    hooks?: unknown
     avoid?: unknown
     assets?: unknown
   }
   const themeStr = typeof theme === 'string' && theme.trim() ? theme.trim() : ''
+  // The brand's hook library. Every request has carried it since the field was added and this
+  // handler silently dropped it: only the offline heuristic writer ever read it, so on the live
+  // AI path not one hook the user wrote has ever reached the model. Sanitized here rather than
+  // trusted, since it is user-authored free text going into a prompt.
+  const hookList = Array.isArray(hooks)
+    ? hooks.filter((h): h is string => typeof h === 'string' && !!h.trim()).map((h) => h.trim().slice(0, 240)).slice(0, 40)
+    : []
   const flightStr = typeof flightWeeks === 'number' && flightWeeks > 0 ? `${flightWeeks} weeks` : 'ongoing'
 
   // Scale the output budget to the batch size: a whole campaign (many assets) plus
@@ -107,7 +115,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   // floored at 8k, capped at Opus's ceiling.
   const assetCount = Array.isArray(assets) ? assets.length : 1
   const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
-  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, ctaSeed, proof, and components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
+  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, ctaSeed, proof, and components + char limits):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
