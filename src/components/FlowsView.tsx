@@ -1358,6 +1358,89 @@ export function FlowsView() {
     setCampaignReferences(viewName, flowRefs.map((r) => (refKey(r) === key ? { type, id, label } : r)))
     setRefsDirty(true)
   }
+  /**
+   * ATTACHING A CARD TO THE CAMPAIGN.
+   *
+   * The campaign card is the hub: connecting a context card to it is how that card joins the
+   * campaign. That is what a connector is FOR. Until now edges were pure SVG, drawn and read only
+   * to paint a path, so the canvas was a picture of the campaign rather than the campaign.
+   *
+   * Direction carries the meaning. Inputs flow INTO the campaign (they feed it); the campaign
+   * flows OUT to deliverables (it produces them). A backwards edge is refused rather than
+   * silently doing nothing.
+   *
+   * An unconnected card is a draft thought: on the board, not yet part of the campaign. That is
+   * what makes it safe to leave loose cards lying around.
+   *
+   * Only the kinds with a FlowRefType can attach, because a ref is what the rest of the app reads.
+   * Of these, segment and proof are the two that actually reach the copy writer today.
+   */
+  const REF_TYPE_FOR_KIND: Partial<Record<FlowNoteKind, FlowRefType>> = {
+    audience: 'segment',
+    'proof-point': 'proof',
+    company: 'company',
+    person: 'person',
+  }
+  /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
+  const refForNote = (nt: FlowNote): FlowReference | null => {
+    const type = REF_TYPE_FOR_KIND[nt.kind]
+    if (!type || !nt.refId) return null
+    const opts = noteOptions(nt.kind)
+    const label = opts?.find((o) => o.id === nt.refId)?.label
+    return label ? { type, id: nt.refId, label } : null
+  }
+  /** Every ref behind a node id: a card contributes its own, a smart object contributes all of its members'. */
+  const refsBehind = (nodeId: string): FlowReference[] => {
+    const g = groups.find((x) => x.id === nodeId)
+    if (g) return g.memberIds.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n).map(refForNote).filter((r): r is FlowReference => !!r)
+    const nt = notes.find((n) => n.id === nodeId)
+    return nt ? [refForNote(nt)].filter((r): r is FlowReference => !!r) : []
+  }
+  /**
+   * Connecting a card to the campaign tags its records on the campaign.
+   *
+   * The default-set trap: briefRefsEffective falls back to defaultBriefRefs, which is EVERY brand
+   * segment. So on an untouched campaign hasRef already matches any audience you attach and the
+   * add would no-op while the UI claimed otherwise. The first explicit segment attach therefore
+   * REPLACES that implicit default rather than adding to it.
+   */
+  const attachToCampaign = (nodeId: string) => {
+    const refs = refsBehind(nodeId)
+    if (!refs.length) return
+    const explicit = viewName !== null ? flowRefs : briefRefs
+    const firstSegment = refs.some((r) => r.type === 'segment') && explicit === null
+    const base = firstSegment ? [] : (explicit ?? [])
+    const next = [...base]
+    for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
+    if (viewName !== null) {
+      setCampaignReferences(viewName, next)
+      setRefsDirty(true)
+    } else {
+      commitBriefRefs(next)
+    }
+  }
+  /** Detaching drops the card's refs, unless another attached card still contributes the same one. */
+  const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]) => {
+    const mine = refsBehind(nodeId)
+    if (!mine.length) return
+    const stillAttached = edges
+      .filter((e) => e.to === 'campaign' && e.from !== nodeId)
+      .flatMap((e) => refsBehind(e.from))
+    const drop = mine.filter((r) => !stillAttached.some((x) => x.type === r.type && x.id === r.id))
+    if (!drop.length) return
+    const base = (viewName !== null ? flowRefs : briefRefsEffective).filter(
+      (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
+    )
+    if (viewName !== null) {
+      setCampaignReferences(viewName, base)
+      setRefsDirty(true)
+    } else {
+      commitBriefRefs(base)
+    }
+  }
+  /** Is this node attached to the campaign right now? Drives the card's "in the campaign" look. */
+  const isAttached = (nodeId: string) => connectors.some((e) => e.from === nodeId && e.to === 'campaign')
+
   // Editing the CAMPAIGN's records (the brief).
   const campaignTagOps: TagOps = {
     refs: activeRefs,
@@ -1597,6 +1680,9 @@ export function FlowsView() {
     setBriefCollapsed(false)
   }
   const deleteNote = (id: string) => {
+    // If it was attached to the campaign, its records go with it (unless another attached card
+    // still contributes the same one).
+    if (connectors.some((e) => e.from === id && e.to === 'campaign')) detachFromCampaign(id, connectors)
     setNotes((n) => n.filter((x) => x.id !== id))
     setConnectors((c) => c.filter((e) => e.from !== id && e.to !== id))
     setPos((p) => {
@@ -3165,7 +3251,14 @@ export function FlowsView() {
               const from = drawingFrom.current
               const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.flow-node[data-node-id]') as HTMLElement | null
               const to = el?.dataset.nodeId
-              if (to && to !== from) setConnectors((c) => (c.some((x) => x.from === from && x.to === to) ? c : [...c, { from, to }]))
+              // Direction carries meaning: a context card flows INTO the campaign. Dropping the
+              // campaign onto a card is the same statement backwards, so accept it and store it
+              // the right way round rather than making the user guess which end to start from.
+              const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
+              if (pair && pair.from !== pair.to) {
+                setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
+                if (pair.to === 'campaign') attachToCampaign(pair.from)
+              }
               drawingFrom.current = null
               setDrawing(null)
             }
@@ -3237,7 +3330,10 @@ export function FlowsView() {
                 <g key={`${cn.from}-${cn.to}-${i}`} className="flow-edge-g">
                   <path className={`flow-edge${paid ? ' paid' : ''}`} d={d} />
                   {/* Wide transparent hit path so the thin dotted edge is easy to click to delete. */}
-                  <path className="flow-edge-hit" d={d} onClick={() => setConnectors((c) => c.filter((_, j) => j !== i))}>
+                  <path className="flow-edge-hit" d={d} onClick={() => {
+                    if (cn.to === 'campaign') detachFromCampaign(cn.from, connectors)
+                    setConnectors((c) => c.filter((_, j) => j !== i))
+                  }}>
                     <title>Click to delete this connection</title>
                   </path>
                 </g>
@@ -3335,6 +3431,17 @@ export function FlowsView() {
                   </button>
                 </div>
               )}
+              {/* The hub's own port. Everything converges here, and until now this was the one
+                  card you could not connect. Drag from a context card to this, or from here to
+                  one: either way round the edge is stored as card into campaign. */}
+              <button
+                className="flow-note-port flow-brief-port"
+                title="Connect a card to this campaign"
+                aria-label="Connect a card to this campaign"
+                onMouseDown={(e) => startConnect(e, 'campaign')}
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
             </div>
             )}
 
@@ -3345,7 +3452,7 @@ export function FlowsView() {
               return (
                 <div
                   key={nt.id}
-                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${isAttached(nt.id) ? ' attached' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
                   data-node-id={nt.id}
                   data-role={meta.role}
                   style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
@@ -3445,7 +3552,7 @@ export function FlowsView() {
               return (
                 <div
                   key={g.id}
-                  className={`flow-node flow-note flow-note-object${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-object${isAttached(g.id) ? ' attached' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
                   data-node-id={g.id}
                   data-role="input"
                   style={{ transform: `translate(${pos[g.id]?.x ?? 0}px, ${pos[g.id]?.y ?? 0}px)` }}

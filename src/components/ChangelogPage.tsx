@@ -25,6 +25,7 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
+          'Connecting a card to the campaign is how you attach it. Draw a line from an audience, a proof point, a company or a contact to the campaign card and it joins the campaign, which means the writer uses it. Delete the line and it is unlinked, but the card stays on the board. Connect a smart object and everything inside attaches at once. A card sitting on its own is a draft thought, and now looks like one.',
           'Smart objects. Select a few context cards and press Cmd+G (or right-click, Group into a smart object) and they collapse into one named card showing what is inside. Double-click it to open it and work on its members on their own canvas, with a breadcrumb back. It names itself after the record you linked. Ungroup spills the cards back out, and nothing is lost.',
           'The canvas has a right-click menu. It carries the actions that only make sense on a specific card: bundle these, open or ungroup an object, delete.',
           'Every kind of card is now an icon in the canvas toolbar, grouped by what it does: what gets made, what it is made from, and notes. One click drops a card, and the groups are split so the toolbar itself shows the difference. The Add dropdown is gone.',

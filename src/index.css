@@ -26038,6 +26038,25 @@ table.aud-sheet td.stick .aud-cell {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent);
 }
 
+/* ATTACHED: this card is part of the campaign, not just sitting on the board.
+   An unconnected card is a draft thought, so the difference has to be visible without reading
+   the edge. Attached cards come forward: full-strength surface, a solid spine, live label. */
+.flow-note[data-role='input']:not(.attached),
+.flow-note-object:not(.attached) {
+  opacity: 0.72;
+}
+.flow-note[data-role='input'].attached { background: var(--surface); }
+.flow-note[data-role='input'].attached .flow-note-kind { color: var(--note-tone, var(--text-muted)); }
+/* The hub's connection port. Sits on the brief's left edge, because context flows IN from the
+   board toward the campaign, and the deliverables hang off its right. */
+.flow-brief-port {
+  right: auto;
+  left: -11px;
+  opacity: 0;
+}
+.flow-node[data-role='brief']:hover .flow-brief-port,
+.flow-canvas.connecting .flow-brief-port { opacity: 1; }
+
 /* ---- BRIEF: reclaims the full-width top edge the inputs just vacated ---- */
 .flow-node[data-role='brief'] {
   border-top: 2px solid var(--accent);
