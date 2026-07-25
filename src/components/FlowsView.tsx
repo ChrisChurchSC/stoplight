@@ -2285,8 +2285,16 @@ export function FlowsView() {
   // Apply the AI's commands to the flow. Build-mode commands mutate the builder (and the
   // canvas) and can end in a `build`; view-mode commands edit the open flow in place.
   // Returns human-readable summaries of what was applied.
-  const applyFlowCommands = async (cmds: FlowCommand[]): Promise<string[]> => {
+  /**
+   * Applies approved commands and reports BOTH what landed and what did not. The skipped list is
+   * the point: the view-mode branch below handles a subset of the vocabulary, and until now every
+   * unhandled op fell out of the loop silently while the UI stamped the whole batch "Applied".
+   * Verified live on 2026-07-25: asking an open campaign to set its budget showed a check mark
+   * next to "Set budget to $9,000" while the stored budget never moved off $24,000.
+   */
+  const applyFlowCommands = async (cmds: FlowCommand[]): Promise<{ applied: string[]; skipped: string[] }> => {
     const applied: string[] = []
+    const skipped: string[] = []
     if (viewName !== null) {
       let vRefs = [...flowRefs]
       const createdRefs: FlowReference[] = []
@@ -2324,12 +2332,31 @@ export function FlowsView() {
           // View mode: persist the motion straight onto the open campaign (build mode uses wStrategy).
           const s = strategyFor(c.value)
           if (s) { patchCampaign(viewName, { strategy: s.key }); applied.push(`Set the strategy to ${s.name}`) }
+        } else if (c.op === 'setSubject') {
+          // Both of these are just campaign fields, and patchCampaign is already used for strategy
+          // two branches up, so there was never a reason for them to be build-mode only.
+          patchCampaign(viewName, { subject: c.value })
+          setRefsDirty(true)
+          applied.push(`Set the campaign theme to "${c.value}"`)
+        } else if (c.op === 'setBudget') {
+          const n = Math.max(0, Number(String(c.value).replace(/[^0-9.]/g, '')) || 0)
+          if (n > 0) {
+            patchCampaign(viewName, { overallBudget: n })
+            applied.push(`Set the budget to $${n.toLocaleString()}`)
+          } else {
+            skipped.push(`Could not read a budget from "${c.value}"`)
+          }
         } else if (c.op === 'regenerate') {
           await regenerateFlow()
           applied.push('Regenerated the copy')
+        } else {
+          // Everything the open-campaign branch genuinely cannot do. Say so by name rather than
+          // dropping it: renaming a built campaign re-keys every row, and build/removeDeliverable
+          // would rewrite work that already exists.
+          skipped.push(`${describeCommand(c)} (not available on a campaign that is already built)`)
         }
       }
-      return applied
+      return { applied, skipped }
     }
     // Build mode: keep a working copy so a same-turn `build` sees every prior edit.
     let wName = name, wSubject = subject, wBudget = budget, wFlight = flightWeeks
@@ -2404,7 +2431,7 @@ export function FlowsView() {
         }
       }
     }
-    return applied
+    return { applied, skipped }
   }
 
   // A human-readable one-liner for a pending command (shown in the Suggestions block).
@@ -2511,8 +2538,8 @@ export function FlowsView() {
     if (!msg?.commands || chatBusy) return
     setChatBusy(true)
     try {
-      await applyFlowCommands(msg.commands)
-      setChatMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, resolved: 'applied' } : x)))
+      const { applied, skipped } = await applyFlowCommands(msg.commands)
+      setChatMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, resolved: 'applied', applied, skipped } : x)))
     } finally {
       setChatBusy(false)
     }

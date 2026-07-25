@@ -97,6 +97,13 @@ export interface FlowChatMsg {
   nextSteps?: string[]
   /** Resolution of the pending suggestions, once acted on. */
   resolved?: 'applied' | 'discarded'
+  /**
+   * What Apply ACTUALLY did, straight from applyFlowCommands. Without these the UI stamped a
+   * check mark on the whole batch regardless, so an op the client silently ignored looked exactly
+   * like one that worked. Kept separate from `suggestions`, which is only what was proposed.
+   */
+  applied?: string[]
+  skipped?: string[]
 }
 
 /** A saved flow chat, kept in history per flow. */

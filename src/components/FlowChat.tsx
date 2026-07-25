@@ -212,14 +212,38 @@ export function FlowChat({
               <Markdown text={m.text} className="fchat-ai-md" />
               {m.suggestions && m.suggestions.length > 0 && (
                 <div className="fchat-sugg-box">
-                  <div className="fchat-sugg-head">{m.resolved ? (m.resolved === 'applied' ? 'Applied' : 'Discarded') : `Suggestions · ${m.suggestions.length}`}</div>
+                  {/* Once applied, the list shown is what APPLY REPORTED, not what was proposed.
+                      Those differ: the open-campaign path cannot run every op, and it used to drop
+                      the rest silently under a check mark. If a batch was applied, m.applied and
+                      m.skipped are authoritative; m.suggestions is only the pre-approval preview. */}
+                  <div className="fchat-sugg-head">
+                    {m.resolved === 'discarded'
+                      ? 'Discarded'
+                      : m.resolved === 'applied'
+                        ? m.skipped && m.skipped.length > 0
+                          ? `Applied ${m.applied?.length ?? 0} of ${(m.applied?.length ?? 0) + m.skipped.length}`
+                          : 'Applied'
+                        : `Suggestions · ${m.suggestions.length}`}
+                  </div>
                   <ul className="fchat-sugg-list">
-                    {m.suggestions.map((s, i) => (
+                    {(m.resolved === 'applied' ? (m.applied ?? []) : m.suggestions).map((s, i) => (
                       <li key={i} className={`fchat-sugg-item${m.resolved === 'applied' ? ' done' : ''}`}>
                         <span className="fchat-sugg-check" aria-hidden="true">{m.resolved === 'applied' ? '✓' : '•'}</span>
                         {s}
                       </li>
                     ))}
+                    {m.resolved === 'applied' && (m.skipped ?? []).map((s, i) => (
+                      <li key={`sk${i}`} className="fchat-sugg-item skipped">
+                        <span className="fchat-sugg-check" aria-hidden="true">–</span>
+                        {s}
+                      </li>
+                    ))}
+                    {m.resolved === 'applied' && !(m.applied ?? []).length && !(m.skipped ?? []).length && (
+                      <li className="fchat-sugg-item skipped">
+                        <span className="fchat-sugg-check" aria-hidden="true">–</span>
+                        Nothing changed.
+                      </li>
+                    )}
                   </ul>
                   {!m.resolved && (
                     <div className="fchat-sugg-foot">
