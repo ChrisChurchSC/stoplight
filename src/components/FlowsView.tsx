@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -294,9 +294,13 @@ const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder
     icon: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></>,
   },
   'channel-asset': {
-    label: 'Channel', tone: '#0b8f7d', placeholder: 'Which channel?', role: 'input', family: 'when',
+    // Steel blue, not the teal it started with: Voice (#0ea5a5) and Data source (#12a594) already
+    // hold that hue, and gold is spoken for by paid media on the canvas edges.
+    label: 'Channel', tone: '#4a6fa5', placeholder: 'Which channel?', role: 'input', family: 'when',
     menuDesc: 'Where it runs, with its benchmarks',
-    icon: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M3.5 15l4.5-4 3 2.5 4-4.5 5.5 6" /><circle cx="8.5" cy="9" r="1.4" /></>,
+    // A broadcast mark. The old glyph was a picture frame, drawn back when this card claimed to be
+    // a "channel asset"; it links a channel, so it should look like one.
+    icon: <><circle cx="12" cy="9" r="1.8" /><path d="M8.8 5.8a6 6 0 0 0 0 6.4M15.2 5.8a6 6 0 0 1 0 6.4" /><path d="M12 11v8" /></>,
   },
   message: {
     label: 'Message', tone: '#9b2dff', placeholder: 'Which message or angle?', role: 'input', family: 'says',
@@ -726,18 +730,8 @@ export function FlowsView() {
   // Canvas controls (the bottom toolbar).
   const [zoom, setZoom] = useState(100)
   const [zoomOpen, setZoomOpen] = useState(false)
-  const [addMenuOpen, setAddMenuOpen] = useState(false)
-  const addWrapRef = useRef<HTMLDivElement>(null)
-  // Close the Add menu on any click outside it (a scrim gets trapped in the toolbar's stacking
-  // context, so canvas clicks miss it).
-  useEffect(() => {
-    if (!addMenuOpen) return
-    const onDoc = (e: MouseEvent) => {
-      if (!addWrapRef.current?.contains(e.target as Node)) setAddMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [addMenuOpen])
+  // The Add dropdown and its click-outside handler are gone: the palette is a row of icons in
+  // the toolbar now, so there is no menu to open or dismiss.
   const [tool, setTool] = useState<'select' | 'pan' | 'connect'>('select')
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
@@ -2407,6 +2401,10 @@ export function FlowsView() {
   const blankCampaign = !viewing && nodes.length === 0 && notes.length === 0 && chatMsgs.length === 0 && !name.trim()
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
   const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
+  // Primitive cards are selectable in BOTH modes and their ids (note_N) match none of the other
+  // inspector branches, so without this they fell through: clicking an Audience card showed you
+  // the Campaign brief panel. Same lookup for build and view.
+  const selNote = notes.find((n) => n.id === sel) ?? null
 
   // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
   // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
@@ -2590,16 +2588,112 @@ export function FlowsView() {
     setSelected(id === 'campaign' ? new Set() : new Set([id]))
     setBriefCollapsed(false)
   }
-  // One Add-menu row for a freeform/record card kind (uses NOTE_META for the icon, tone, and label).
-  // Menu rows keep their PER-KIND tone: the 28px icon chip is where hue genuinely helps you
-  // scan. Only the card chrome goes role-coloured. Copy comes from the registry, so the menu
-  // and the card can't describe the same kind differently.
-  const noteMenuBtn = (kind: FlowNoteKind) => (
-    <button key={kind} className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote(kind) }}>
-      <span className="flow-tb-add-ic" style={{ color: NOTE_META[kind].tone }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[kind].icon}</svg>
-      </span>
-      <span className="flow-tb-add-txt"><span className="flow-tb-add-name">{NOTE_META[kind].label}</span><span className="flow-tb-add-desc">{NOTE_META[kind].menuDesc}</span></span>
+  /**
+   * The inspector panel for a selected primitive card, shared by build and view mode. Everything
+   * the card itself can do is here too (link a record, write the note, open a linked data set,
+   * delete), because the card is small and the inspector is where you expect to adjust a thing.
+   *
+   * It also states what the card DOES, which is the one place we can be unambiguous: an input is
+   * board context and its linked record does not reach the copy writer yet.
+   */
+  const renderNoteInspector = (nt: FlowNote) => {
+    const meta = NOTE_META[nt.kind]
+    const opts = noteOptions(nt.kind)
+    const noun = meta.label.toLowerCase()
+    const linkedDs = nt.kind === 'data-source' && nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
+    return (
+      <>
+        <div className="flow-panel-head">
+          <span className="flow-note-ic flow-insp-ic" style={{ color: meta.tone }} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
+          </span>
+          <span className="flow-panel-title">{meta.label}</span>
+        </div>
+        <div className="flow-inspect">
+          <p className="flow-inspect-desc">{meta.menuDesc}</p>
+          {opts && (
+            <>
+              <label className="flow-inspect-label">
+                {meta.label} record
+              </label>
+              <select
+                className="flow-inspect-input flow-inspect-select"
+                value={nt.refId ?? ''}
+                onChange={(e) => {
+                  if (nt.kind === 'data-source' && e.target.value === '__new__') {
+                    setNoteRef(nt.id, addBrandDataset(brand))
+                  } else setNoteRef(nt.id, e.target.value)
+                }}
+              >
+                <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} established yet`}</option>
+                {nt.kind === 'data-source' ? (
+                  // Mirror the card's own picker: a Data source can link one of the brand's data
+                  // sets OR a live connector. noteOptions only knows the connectors, so listing
+                  // just those would leave a linked DATA SET matching no option, and the select
+                  // would silently show the placeholder on an already-linked card.
+                  <>
+                    {brandDatasets.length > 0 && (
+                      <optgroup label="Your data sets">
+                        {brandDatasets.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name || 'Untitled data set'}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Connectors">
+                      {CONNECTOR_SOURCES.map((o) => (
+                        <option key={o.id} value={o.id}>{o.label}</option>
+                      ))}
+                    </optgroup>
+                    <option value="__new__">+ New data set…</option>
+                  </>
+                ) : (
+                  opts.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))
+                )}
+              </select>
+              {linkedDs && (
+                <button className="flow-insp-open" onClick={() => openDataCard(nt)}>
+                  Open {linkedDs.name || 'this data set'}
+                </button>
+              )}
+            </>
+          )}
+          <label className="flow-inspect-label" style={{ marginTop: opts ? 14 : 0 }}>Note</label>
+          <textarea
+            className="flow-inspect-input"
+            rows={4}
+            value={nt.text}
+            placeholder={meta.placeholder}
+            onChange={(e) => updateNoteText(nt.id, e.target.value)}
+          />
+          {/* Say plainly what this card does. Update BOTH halves when inputs get wired through. */}
+          <div className="flow-inspect-note">
+            {meta.role === 'markup'
+              ? 'A note for your team. Nothing downstream reads it.'
+              : 'Board context. It records what this campaign is made from, and does not change the drafts yet.'}
+          </div>
+          <button className="flow-insp-del" onClick={() => deleteNote(nt.id)}>
+            Delete this card
+          </button>
+        </div>
+      </>
+    )
+  }
+
+  // One palette icon per card kind. Keeps its PER-KIND tone: the icon is all you get at this
+  // size, so hue is doing real scanning work here (the card chrome is what goes role-coloured).
+  // Name and description come from the registry, so the tooltip and the card can't drift.
+  const palBtn = (kind: FlowNoteKind) => (
+    <button
+      key={kind}
+      className="flow-tb-pal"
+      style={{ color: NOTE_META[kind].tone }}
+      title={`${NOTE_META[kind].label}. ${NOTE_META[kind].menuDesc}.`}
+      aria-label={`Add a ${NOTE_META[kind].label.toLowerCase()} card`}
+      onClick={() => addNote(kind)}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[kind].icon}</svg>
     </button>
   )
 
@@ -3540,6 +3634,8 @@ export function FlowsView() {
                   ))}
                 </div>
               </>
+            ) : selNote ? (
+              renderNoteInspector(selNote)
             ) : selPost ? (
               <>
                 <div className="flow-panel-head">
@@ -3925,6 +4021,8 @@ export function FlowsView() {
                 ))}
               </div>
             </>
+          ) : selNote ? (
+            renderNoteInspector(selNote)
           ) : sel === 'campaign' ? (
             <>
               <div className="flow-panel-head">
@@ -4287,6 +4385,41 @@ export function FlowsView() {
       </div>
 
       <div className="flow-toolbar">
+        {/* PALETTE ROW — every kind of card you can add, as icons, grouped by role and split by
+            dividers, so the toolbar itself carries the what-gets-made / what-it's-made-from
+            distinction instead of burying it in a dropdown list. Its own row because the whole
+            palette will not fit beside zoom + tools + Generate when both side panels are open. */}
+        <div className="flow-tb-palette">
+          <span className="flow-tb-pal-lbl">Gets made</span>
+          <button
+            className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
+            title="Brief. The campaign's spec sheet." aria-label="Add the campaign brief"
+            onClick={() => { setBriefHidden(false); setBriefSummoned(true); setStarterDismissed(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
+          </button>
+          <button
+            className="flow-tb-pal" style={{ color: DELIV_TONE }} disabled={addingDeliv}
+            title="Deliverable. A thing you ship, on a cadence. (B)" aria-label="Add a deliverable"
+            onClick={() => openAddDeliverable()}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg>
+          </button>
+          <span className="flow-tb-divider" />
+          <span className="flow-tb-pal-lbl">Made from</span>
+          {/* The honest caveat the dropdown used to carry as a caption now lives in the glossary
+              entry behind this tip, so it is still one hover away. */}
+          <InfoTip term="canvasInput" />
+          {INPUT_FAMILIES.map((f) => (
+            <span className="flow-tb-pal-group" key={f.family} role="group" aria-label={f.label}>
+              {kindsInFamily(f.family).map((k) => palBtn(k))}
+            </span>
+          ))}
+          <span className="flow-tb-divider" />
+          <span className="flow-tb-pal-lbl">Notes</span>
+          {palBtn('note')}
+        </div>
+        <div className="flow-tb-row">
         <div className="flow-tb-zoom-wrap">
           <button className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)} title="Zoom">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -4346,53 +4479,6 @@ export function FlowsView() {
             </svg>
           </button>
         </div>
-        <span className="flow-tb-divider" />
-        <div className="flow-tb-addwrap" ref={addWrapRef}>
-          <button className="flow-tb-add" onClick={() => setAddMenuOpen((o) => !o)} disabled={addingDeliv}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="4" />
-              <path d="M12 8v8M8 12h8" />
-            </svg>
-            Add
-            <span className="flow-tb-caret" aria-hidden="true">▾</span>
-          </button>
-          {addMenuOpen && (
-            <>
-              {/* Grouped by what a card DOES, so reading the menu top to bottom teaches the
-                  canvas: the things that get made, the context they're made from, and the
-                  notes nobody downstream reads. The Connector row is gone (it set a tool, it
-                  never made a card, and it's already the Link button in this same toolbar).
-                  Goal is gone too: the Brief owns the campaign's north-star objective. */}
-              <div className="flow-tb-add-menu" role="menu">
-                <div className="flow-tb-add-sec">What gets made</div>
-                <div className="flow-tb-add-cap">These become real drafts when you build.</div>
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setBriefSummoned(true); setStarterDismissed(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
-                  <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The campaign&rsquo;s spec sheet</span></span>
-                </button>
-                {/* Icon tone is the tone of the card it makes (was CAMPAIGN_TONE, which made the
-                    menu row a different colour from the deliverable it dropped). */}
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); openAddDeliverable() }} disabled={addingDeliv}>
-                  <span className="flow-tb-add-ic" style={{ color: DELIV_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Deliverable</span><span className="flow-tb-add-desc">A thing you ship, on a cadence <span className="flow-tb-add-kbd">B</span></span></span>
-                </button>
-                <div className="flow-tb-add-sec">What it&rsquo;s made from</div>
-                {/* HONEST CAPTION: a card's linked record does not reach the copy writer yet, only
-                    the Brief's own record tags do. Don't soften this line until that's wired. */}
-                <div className="flow-tb-add-cap">Board context for now. Linking a record here does not change the drafts yet.</div>
-                {INPUT_FAMILIES.map((f) => (
-                  <Fragment key={f.family}>
-                    <div className="flow-tb-add-sub">{f.label}</div>
-                    {kindsInFamily(f.family).map((k) => noteMenuBtn(k))}
-                  </Fragment>
-                ))}
-                <div className="flow-tb-add-sec">Thinking out loud</div>
-                <div className="flow-tb-add-cap">For your team to read. The writer never sees these.</div>
-                {noteMenuBtn('note')}
-              </div>
-            </>
-          )}
-        </div>
         {viewing && (
           <>
             <span className="flow-tb-divider" />
@@ -4419,6 +4505,7 @@ export function FlowsView() {
             </button>
           </>
         )}
+        </div>
       </div>
         </>
       )}

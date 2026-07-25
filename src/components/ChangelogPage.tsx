@@ -23,9 +23,16 @@ const RELEASES: Release[] = [
     dateLabel: 'July 25, 2026',
     groups: [
       {
+        tag: 'New',
+        items: [
+          'Every kind of card is now an icon in the canvas toolbar, grouped by what it does: what gets made, what it is made from, and notes. One click drops a card, and the groups are split so the toolbar itself shows the difference. The Add dropdown is gone.',
+          'Click any card and you can adjust it in the inspector. Context cards and sticky notes used to fall through to the campaign brief panel; each one now has its own panel with its record picker, its note, and a delete. A Data source card can open its linked data set straight from there.',
+        ],
+      },
+      {
         tag: 'Improved',
         items: [
-          'The Add menu on a campaign canvas is now grouped by what a card does. What gets made sits at the top, the context it is made from sits under that in four short groups, and sticky notes sit at the bottom with a plain note that nothing downstream reads them.',
+          'Cards are grouped by what a card does rather than by loose topic. What gets made comes first, the context it is made from sits under that in four short groups, and sticky notes come last, with a plain note that nothing downstream reads them.',
           'Cards that get made now look made: a tinted, raised card with a filled label chip, a channel tile and a count. Context cards are flat and recessed with a coloured spine, and one with no record picked yet visibly reads as empty. The campaign brief is the only card with a full-width coloured top edge, so the root of the board is obvious at a glance.',
           'Every individual post on the canvas now carries its own label chip, matching the deliverable above it.',
         ],
@@ -33,7 +40,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
-          'Channel asset is now just Channel. It never linked an asset, only a channel and its delivery benchmarks.',
+          'Channel asset is now just Channel, with an icon that looks like a channel instead of a picture frame. It never linked an asset, only a channel and its delivery benchmarks.',
           'The Connector tool is called Link, and it left the Add menu, because it is a tool rather than a card. It is still the same button in the canvas toolbar.',
           'Card record pickers no longer read "Link a audience" or "No companys established yet".',
         ],

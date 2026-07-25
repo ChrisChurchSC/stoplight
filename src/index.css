@@ -4128,6 +4128,14 @@ button {
 .flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
 .flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
 .flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
+/* And keep it INSIDE the canvas, not just centered on it. The toolbar is positioned against
+   .flow, not .flow-canvas, so a percentage max-width would measure the whole flow and let the
+   palette row overhang under the panels. Same panel arithmetic as the offsets above, minus 24px
+   of breathing room; the palette wraps to a second line rather than clipping. */
+.flow .flow-toolbar { max-width: calc(100% - 732px); }
+.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { max-width: calc(100% - 372px); }
+.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { max-width: calc(100% - 420px); }
+.flow.chat-collapsed.brief-collapsed .flow-toolbar { max-width: calc(100% - 60px); }
 .flow-canvas {
   flex: 1;
   min-width: 0;
@@ -4664,6 +4672,51 @@ button {
   font-size: 11.5px;
   color: var(--text-faint);
   margin: 10px 0 20px;
+}
+/* Selected-card inspector: the kind glyph in the panel head, an action to open a linked data
+   set, and the delete. Sized to sit with .flow-panel-head's existing 30px tiles. */
+.flow-insp-ic {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.flow-insp-ic svg { width: 17px; height: 17px; }
+.flow-insp-open {
+  margin-top: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.flow-insp-open:hover { border-color: var(--border-strong, var(--border)); }
+.flow-insp-del {
+  border: 1px solid var(--border);
+  background: none;
+  border-radius: 9px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.flow-insp-del:hover {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 7%, transparent);
 }
 /* View-mode Audiences: record selector dropdown + add-a-record */
 .flow-aud { position: relative; }
@@ -6614,9 +6667,12 @@ button {
   left: 50%;
   bottom: 20px;
   transform: translateX(-50%);
+  /* Two rows now: the palette of addable cards, then the canvas controls. */
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  max-width: calc(100% - 32px);
   background: var(--surface);
   border: 1px solid var(--border-strong, var(--border));
   border-radius: 13px;
@@ -6723,32 +6779,6 @@ button {
   background: var(--border);
   margin: 4px 4px;
 }
-.flow-tb-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  padding: 7px 10px;
-  border-radius: 9px;
-  cursor: pointer;
-}
-.flow-tb-add svg {
-  width: 17px;
-  height: 17px;
-  color: var(--text-muted);
-}
-.flow-tb-add:hover:not(:disabled) {
-  background: var(--surface-2);
-}
-.flow-tb-add:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
 .flow-tb-kbd {
   font-size: 10.5px;
   font-weight: 700;
@@ -6760,54 +6790,71 @@ button {
 }
 .flow-tb-caret { font-size: 10px; color: var(--text-faint); margin-left: -2px; }
 
-/* Add menu — the toolbar's node palette, opening upward from the bottom bar. */
-.flow-tb-addwrap { position: relative; display: inline-flex; }
-.flow-tb-add-scrim { position: fixed; inset: 0; z-index: 40; }
-.flow-tb-add-menu {
-  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
-  /* Wider + taller than the old flat list: the menu now carries three band heads, four
-     sub-heads and three captions, and the honesty caption at the foot has to stay reachable
-     rather than sitting below the fold. */
-  z-index: 41; width: 268px; padding: 6px;
-  max-height: min(80vh, 720px); overflow-y: auto;
-  background: var(--surface); border: 1px solid var(--border-strong, var(--border));
-  border-radius: 12px; box-shadow: 0 14px 40px -14px rgba(16, 24, 40, 0.32), 0 2px 8px -2px rgba(16, 24, 40, 0.12);
-  display: flex; flex-direction: column; gap: 1px;
+/* PALETTE — one icon per kind of card you can add, on its own row above the canvas controls.
+   Grouped by role and split by dividers, so the toolbar carries the what-gets-made vs
+   what-it's-made-from split physically instead of hiding it in a dropdown list. Its own row
+   because the full palette will not fit beside zoom + tools + Generate when Hansel and the
+   inspector are both open (that leaves the toolbar roughly 744px). */
+.flow-tb-palette {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Wraps between groups when the canvas is narrow. Each family is one inline-flex unit, so a
+     wrap never splits a group down the middle. */
+  flex-wrap: wrap;
+  gap: 3px;
 }
-/* Band head: one of the three roles. The whole teaching burden of the split lands on these,
-   so they get --text-muted, not the palette's faintest token. */
-.flow-tb-add-sec {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--text-muted); padding: 8px 8px 3px;
+/* The controls that were the whole toolbar before the palette moved above them. */
+.flow-tb-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
-.flow-tb-add-sec:first-child { padding-top: 3px; }
-/* Sub-head inside the input band, indented so the nesting reads. */
-.flow-tb-add-sub {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--text-faint); padding: 7px 8px 2px 16px;
+/* Role label. Small, muted, and not a button: it names the group that follows it. */
+.flow-tb-pal-lbl {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 3px 0 2px;
+  white-space: nowrap;
 }
-/* Band caption: the sentence that says what this group actually does. */
-.flow-tb-add-cap { font-size: 11px; line-height: 1.35; color: var(--text-muted); padding: 0 8px 6px; }
-.flow-tb-add-item {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  border: 0; background: none; cursor: pointer; text-align: left;
-  padding: 7px 8px; border-radius: 8px; font: inherit;
+/* A family inside the input role (who it's for / what it says / when and where / what it draws
+   on). Grouped tighter than the gap between families, so the sub-structure reads without a
+   label for each one. */
+.flow-tb-pal-group {
+  display: inline-flex;
+  gap: 1px;
+  margin-right: 4px;
 }
-.flow-tb-add-item:hover:not(:disabled) { background: var(--surface-2); }
-.flow-tb-add-item:disabled { opacity: 0.45; cursor: default; }
-.flow-tb-add-ic {
-  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, currentColor 14%, transparent);
+.flow-tb-pal-group:last-of-type { margin-right: 0; }
+.flow-tb-pal {
+  flex: 0 0 auto;
+  /* 28px, not 36 like the tool buttons: 14 of these plus three labels have to hold one line
+     inside a 716px canvas (both side panels open, the tightest case). */
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.flow-tb-add-ic svg { width: 16px; height: 16px; }
-.flow-tb-add-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.flow-tb-add-name { font-size: 13px; font-weight: 600; color: var(--text); }
-.flow-tb-add-desc { font-size: 11.5px; color: var(--text-muted); }
-.flow-tb-add-kbd {
-  font-size: 10px; font-weight: 700; color: var(--text-faint);
-  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 5px;
-}
+.flow-tb-pal svg { width: 16px; height: 16px; }
+/* Hover tints from the icon's own kind tone (currentColor is set inline per kind), so the
+   feedback names the card you are about to drop. */
+.flow-tb-pal:hover:not(:disabled) { background: color-mix(in srgb, currentColor 15%, transparent); }
+.flow-tb-pal:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.flow-tb-pal:disabled { opacity: 0.4; cursor: default; }
+/* The glossary tip carrying the "board context for now" caveat the dropdown used to state as a
+   caption. Nudged to sit on the palette's baseline. */
+.flow-tb-palette .infotip-btn { margin: 0 3px 0 0; }
 
 /* Freeform canvas cards (brief / audience / data source / channel asset / note). One primitive,
    tinted per kind via --note-tone. Absolutely positioned in the stack, dragged/connected like nodes. */
