@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -258,7 +258,7 @@ const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 
 // same `pos` map and connectable through the same edge system.
 type FlowNoteKind =
   | 'audience' | 'data-source' | 'channel-asset' | 'note'
-  | 'proof-point' | 'goal' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
+  | 'proof-point' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
 interface FlowNote {
   id: string
   kind: FlowNoteKind
@@ -266,60 +266,106 @@ interface FlowNote {
   /** For linked kinds (channel asset → an established channel record), the record's id. */
   refId?: string
 }
-const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder: string; icon: React.ReactNode }> = {
+/**
+ * A card's ROLE is what it does, and it's the axis the canvas is now organized around: an
+ * 'output' becomes real work when you Build (the Brief, its Deliverables, their posts), an
+ * 'input' carries the context a campaign is written from, and 'markup' is for your team to
+ * read. Role drives the data-role attribute every card emits, which is what the two visual
+ * languages hang off (see the role block at the foot of index.css), and it drives the Add
+ * menu's grouping so the toolbar teaches the same split. `family` is the sub-grouping inside
+ * the input band only.
+ *
+ * NOTE ON HONESTY: today an input card is board context and nothing more. Its linked record
+ * does not reach the copy writer; only the Brief's own record tags do, and only their segment
+ * and proof types at that (see poolsFrom in useTrafficStore). The Add menu says so in as many
+ * words. Don't add copy anywhere that promises an input shapes the writing until that's wired.
+ */
+type CardRole = 'input' | 'markup'
+type CardFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
+const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder: string; role: CardRole; family: CardFamily; menuDesc: string; icon: React.ReactNode }> = {
   audience: {
-    label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?',
+    label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?', role: 'input', family: 'who',
+    menuDesc: 'The people it is written for',
     icon: <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M17 8a3 3 0 0 1 0 6M20.5 20a5.5 5.5 0 0 0-4-5.3" /></>,
   },
   'data-source': {
-    label: 'Data source', tone: '#12a594', placeholder: 'Which input or data source?',
+    label: 'Data source', tone: '#12a594', placeholder: 'Which input or data source?', role: 'input', family: 'draws',
+    menuDesc: 'A data set or connector to pull from',
     icon: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></>,
   },
   'channel-asset': {
-    label: 'Channel asset', tone: '#c99a2e', placeholder: 'Which post or asset?',
+    label: 'Channel', tone: '#0b8f7d', placeholder: 'Which channel?', role: 'input', family: 'when',
+    menuDesc: 'Where it runs, with its benchmarks',
     icon: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M3.5 15l4.5-4 3 2.5 4-4.5 5.5 6" /><circle cx="8.5" cy="9" r="1.4" /></>,
   },
-  'proof-point': {
-    label: 'Proof point', tone: '#30a46c', placeholder: 'Which proof point?',
-    icon: <><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>,
-  },
-  goal: {
-    label: 'Goal', tone: '#d9a520', placeholder: 'Which goal?',
-    icon: <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" /></>,
-  },
-  trigger: {
-    label: 'Trigger', tone: '#e5484d', placeholder: 'Which trigger?',
-    icon: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
-  },
   message: {
-    label: 'Message', tone: '#9b2dff', placeholder: 'Which message or angle?',
+    label: 'Message', tone: '#9b2dff', placeholder: 'Which message or angle?', role: 'input', family: 'says',
+    menuDesc: 'The angle the copy argues',
     icon: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
   },
+  'proof-point': {
+    label: 'Proof point', tone: '#30a46c', placeholder: 'Which proof point?', role: 'input', family: 'says',
+    menuDesc: 'Evidence the copy leans on',
+    icon: <><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>,
+  },
+  trigger: {
+    label: 'Trigger', tone: '#e5484d', placeholder: 'Which trigger?', role: 'input', family: 'when',
+    menuDesc: 'The signal that starts it',
+    icon: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  },
   voice: {
-    label: 'Voice', tone: '#0ea5a5', placeholder: 'Which brand voice?',
+    label: 'Voice', tone: '#0ea5a5', placeholder: 'Which brand voice?', role: 'input', family: 'says',
+    menuDesc: 'How it should sound',
     icon: <path d="M4 10v4M8 6.5v11M12 3v18M16 6.5v11M20 10v4" />,
   },
   company: {
-    label: 'Company', tone: '#4c86f0', placeholder: 'Which company?',
+    label: 'Company', tone: '#4c86f0', placeholder: 'Which company?', role: 'input', family: 'who',
+    menuDesc: 'A named account you are writing to',
     icon: <><rect x="4" y="3" width="10" height="18" rx="1.2" /><path d="M14 8.5h6V21h-6" /><path d="M7 7h4M7 11h4M7 15h4M17 12h1M17 16h1" /></>,
   },
   person: {
-    label: 'Person', tone: '#6d5cff', placeholder: 'Which person?',
+    label: 'Person', tone: '#6d5cff', placeholder: 'Which person?', role: 'input', family: 'who',
+    menuDesc: 'A named contact you are writing to',
     icon: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></>,
   },
   concept: {
-    label: 'Concept', tone: '#ff8c42', placeholder: 'Describe the concept…',
+    label: 'Concept', tone: '#ff8c42', placeholder: 'Describe the concept…', role: 'input', family: 'says',
+    menuDesc: 'The big idea, in your words',
     icon: <><path d="M9.5 18h5M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2v.2h5v-.2c0-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" /></>,
   },
   season: {
-    label: 'Season', tone: '#db6aa0', placeholder: 'A moment or season…',
+    label: 'Season', tone: '#db6aa0', placeholder: 'A moment or season…', role: 'input', family: 'when',
+    menuDesc: 'A moment to hit',
     icon: <><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z" /><path d="M5 19c4-2 7-5 9.5-9.5" /></>,
   },
   note: {
-    label: 'Note', tone: '#9aa1ac', placeholder: 'Type a note…',
+    label: 'Note', tone: '#9aa1ac', placeholder: 'Type a note…', role: 'markup', family: 'markup',
+    menuDesc: 'A sticky note on the board',
     icon: <><path d="M5 4h14v10l-5 5H5z" /><path d="M14 19v-5h5" /></>,
   },
 }
+/**
+ * The Add menu's input band, in order. Rows are derived from NOTE_META by family rather than
+ * hand-listed in the JSX, so a new kind lands in the right group by declaring its family and
+ * the menu can't drift from the registry. Kinds with role 'markup' get their own band.
+ * Row order WITHIN a band is NOTE_META's declaration order, so reorder entries there to
+ * reorder the menu.
+ */
+const INPUT_FAMILIES: { family: CardFamily; label: string }[] = [
+  { family: 'who', label: "Who it's for" },
+  { family: 'says', label: 'What it says' },
+  { family: 'when', label: 'When and where' },
+  { family: 'draws', label: 'What it draws on' },
+]
+const kindsInFamily = (family: CardFamily): FlowNoteKind[] =>
+  (Object.keys(NOTE_META) as FlowNoteKind[]).filter((k) => NOTE_META[k].role === 'input' && NOTE_META[k].family === family)
+// A card's record picker builds its own placeholder from the kind's label, which used to read
+// "Link a audience…" and "No companys established yet". Covers every current label (audience,
+// company, person, message, proof point, voice, channel, data source, trigger).
+const articleFor = (noun: string): string => (/^[aeiou]/.test(noun) ? 'an' : 'a')
+const pluralOf = (noun: string): string =>
+  noun === 'person' ? 'people' : noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`
+
 let noteSeq = 0
 const freshNoteId = () => `note_${++noteSeq}`
 // Data-source cards link to an established connector (mirrors the ConnectorsPage list).
@@ -1588,7 +1634,6 @@ export function FlowsView() {
       case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
       case 'company': return named(companies)
       case 'person': return named(people)
-      case 'goal': return named(objectives)
       case 'trigger': return named(triggers)
       case 'message': return named(messages)
       case 'voice': return named(voices)
@@ -2546,12 +2591,15 @@ export function FlowsView() {
     setBriefCollapsed(false)
   }
   // One Add-menu row for a freeform/record card kind (uses NOTE_META for the icon, tone, and label).
-  const noteMenuBtn = (kind: FlowNoteKind, desc: string) => (
+  // Menu rows keep their PER-KIND tone: the 28px icon chip is where hue genuinely helps you
+  // scan. Only the card chrome goes role-coloured. Copy comes from the registry, so the menu
+  // and the card can't describe the same kind differently.
+  const noteMenuBtn = (kind: FlowNoteKind) => (
     <button key={kind} className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); addNote(kind) }}>
       <span className="flow-tb-add-ic" style={{ color: NOTE_META[kind].tone }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[kind].icon}</svg>
       </span>
-      <span className="flow-tb-add-txt"><span className="flow-tb-add-name">{NOTE_META[kind].label}</span><span className="flow-tb-add-desc">{desc}</span></span>
+      <span className="flow-tb-add-txt"><span className="flow-tb-add-name">{NOTE_META[kind].label}</span><span className="flow-tb-add-desc">{NOTE_META[kind].menuDesc}</span></span>
     </button>
   )
 
@@ -3016,6 +3064,7 @@ export function FlowsView() {
             <div
               className={`flow-node flow-tier-campaign${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
               data-node-id="campaign"
+              data-role="brief"
               style={{ transform: `translate(${pos['campaign']?.x ?? 0}px, ${pos['campaign']?.y ?? 0}px)` }}
               onMouseDown={(e) => startDrag(e, 'campaign')}
               onClick={(e) => clickSelect(e, 'campaign')}
@@ -3130,8 +3179,9 @@ export function FlowsView() {
               return (
                 <div
                   key={nt.id}
-                  className={`flow-node flow-note flow-note-${nt.kind}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
                   data-node-id={nt.id}
+                  data-role={meta.role}
                   style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
                   onMouseDown={(e) => startDrag(e, nt.id)}
                   onClick={(e) => clickSelect(e, nt.id)}
@@ -3199,7 +3249,7 @@ export function FlowsView() {
                         onMouseDown={(e) => e.stopPropagation()}
                         onChange={(e) => setNoteRef(nt.id, e.target.value)}
                       >
-                        <option value="">{opts.length ? `Link a ${noun}…` : `No ${noun}s established yet`}</option>
+                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} established yet`}</option>
                         {opts.map((o) => (
                           <option key={o.id} value={o.id}>{o.label}</option>
                         ))}
@@ -3241,6 +3291,7 @@ export function FlowsView() {
                         <div
                           className={`flow-node flow-tier-deliv${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
                           data-node-id={d.key}
+                          data-role="output"
                           onMouseDown={(e) => startDrag(e, d.key)}
                           onClick={(e) => clickSelect(e, d.key)}
                         >
@@ -3264,10 +3315,16 @@ export function FlowsView() {
                                 <div
                                   className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}`}
                                   data-node-id={r.id}
+                                  data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
                                   onMouseDown={(e) => startDrag(e, r.id)}
                                   onClick={(e) => clickSelect(e, r.id)}
                                 >
+                                  {/* Every output wears a filled kind chip; an input never does. Post
+                                      cards were the one output missing theirs. */}
+                                  <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
+                                    Post
+                                  </span>
                                   <div className="flow-node-main">
                                     <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
                                     <div className="flow-node-text">
@@ -3343,6 +3400,7 @@ export function FlowsView() {
                         <div
                           className={`flow-node flow-tier-deliv${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
                           data-node-id={n.id}
+                          data-role="output"
                           onMouseDown={(e) => startDrag(e, n.id)}
                           onClick={(e) => clickSelect(e, n.id)}
                         >
@@ -3381,10 +3439,16 @@ export function FlowsView() {
                                 <div
                                   className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}`}
                                   data-node-id={`${n.id}:${bi}`}
+                                  data-role="output"
                                   style={{ transform: `translate(${pos[`${n.id}:${bi}`]?.x ?? 0}px, ${pos[`${n.id}:${bi}`]?.y ?? 0}px)` }}
                                   onMouseDown={(e) => startDrag(e, `${n.id}:${bi}`)}
                                   onClick={(e) => clickSelect(e, `${n.id}:${bi}`)}
                                 >
+                                  {/* Matches the view-mode post chip. Uses the preset's own word so a
+                                      lead magnet reads Section and a site page reads Page. */}
+                                  <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
+                                    {subcardWord(p)}
+                                  </span>
                                   <div className="flow-node-main">
                                     <PresetTile tone={POST_TONE} channel={p.channel} />
                                     <div className="flow-node-text">
@@ -4268,12 +4332,12 @@ export function FlowsView() {
               <path d="M5 3.5 19 10l-6.3 1.9L10 19z" />
             </svg>
           </button>
-          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} title="Connect — drag from one card to another to link them" aria-label="Connect">
+          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} title="Link. Drag from one card to another to link them." aria-label="Link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" />
             </svg>
           </button>
-          <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout — arrange the cards cleanly" aria-label="Tidy layout">
+          <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout. Arrange the cards cleanly." aria-label="Tidy layout">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1.5" />
               <rect x="14" y="3" width="7" height="7" rx="1.5" />
@@ -4294,37 +4358,37 @@ export function FlowsView() {
           </button>
           {addMenuOpen && (
             <>
+              {/* Grouped by what a card DOES, so reading the menu top to bottom teaches the
+                  canvas: the things that get made, the context they're made from, and the
+                  notes nobody downstream reads. The Connector row is gone (it set a tool, it
+                  never made a card, and it's already the Link button in this same toolbar).
+                  Goal is gone too: the Brief owns the campaign's north-star objective. */}
               <div className="flow-tb-add-menu" role="menu">
-                <div className="flow-tb-add-sec">Structure</div>
+                <div className="flow-tb-add-sec">What gets made</div>
+                <div className="flow-tb-add-cap">These become real drafts when you build.</div>
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setBriefHidden(false); setBriefSummoned(true); setStarterDismissed(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}>
                   <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The board&rsquo;s root</span></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Brief</span><span className="flow-tb-add-desc">The campaign&rsquo;s spec sheet</span></span>
                 </button>
+                {/* Icon tone is the tone of the card it makes (was CAMPAIGN_TONE, which made the
+                    menu row a different colour from the deliverable it dropped). */}
                 <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); openAddDeliverable() }} disabled={addingDeliv}>
-                  <span className="flow-tb-add-ic" style={{ color: CAMPAIGN_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Deliverable</span><span className="flow-tb-add-desc">The workhorse node <span className="flow-tb-add-kbd">B</span></span></span>
+                  <span className="flow-tb-add-ic" style={{ color: DELIV_TONE }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg></span>
+                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Deliverable</span><span className="flow-tb-add-desc">A thing you ship, on a cadence <span className="flow-tb-add-kbd">B</span></span></span>
                 </button>
-                {noteMenuBtn('channel-asset', 'A last-mile post')}
-                <button className="flow-tb-add-item" role="menuitem" onClick={() => { setAddMenuOpen(false); setTool('connect') }}>
-                  <span className="flow-tb-add-ic" style={{ color: 'var(--text-muted)' }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" /></svg></span>
-                  <span className="flow-tb-add-txt"><span className="flow-tb-add-name">Connector</span><span className="flow-tb-add-desc">Link two cards</span></span>
-                </button>
-                <div className="flow-tb-add-sec">Audience &amp; data</div>
-                {noteMenuBtn('audience', 'Your fan-out axis')}
-                {noteMenuBtn('data-source', 'An input you plug in')}
-                {noteMenuBtn('company', 'An account')}
-                {noteMenuBtn('person', 'A contact')}
-                <div className="flow-tb-add-sec">Strategy</div>
-                {noteMenuBtn('message', 'The angle copy is written to')}
-                {/* Goal primitive removed: the Brief owns the campaign's north-star objective, so a
-                    separate Goal card just duplicated it. */}
-                {noteMenuBtn('trigger', 'What fires an action')}
-                {noteMenuBtn('proof-point', 'Evidence to back it up')}
-                {noteMenuBtn('voice', 'How it should sound')}
-                <div className="flow-tb-add-sec">Freeform</div>
-                {noteMenuBtn('concept', 'The big idea')}
-                {noteMenuBtn('season', 'A moment to hit')}
-                {noteMenuBtn('note', 'A sticky note')}
+                <div className="flow-tb-add-sec">What it&rsquo;s made from</div>
+                {/* HONEST CAPTION: a card's linked record does not reach the copy writer yet, only
+                    the Brief's own record tags do. Don't soften this line until that's wired. */}
+                <div className="flow-tb-add-cap">Board context for now. Linking a record here does not change the drafts yet.</div>
+                {INPUT_FAMILIES.map((f) => (
+                  <Fragment key={f.family}>
+                    <div className="flow-tb-add-sub">{f.label}</div>
+                    {kindsInFamily(f.family).map((k) => noteMenuBtn(k))}
+                  </Fragment>
+                ))}
+                <div className="flow-tb-add-sec">Thinking out loud</div>
+                <div className="flow-tb-add-cap">For your team to read. The writer never sees these.</div>
+                {noteMenuBtn('note')}
               </div>
             </>
           )}

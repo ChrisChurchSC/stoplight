@@ -19,6 +19,28 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.8',
+    dateLabel: 'July 25, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The Add menu on a campaign canvas is now grouped by what a card does. What gets made sits at the top, the context it is made from sits under that in four short groups, and sticky notes sit at the bottom with a plain note that nothing downstream reads them.',
+          'Cards that get made now look made: a tinted, raised card with a filled label chip, a channel tile and a count. Context cards are flat and recessed with a coloured spine, and one with no record picked yet visibly reads as empty. The campaign brief is the only card with a full-width coloured top edge, so the root of the board is obvious at a glance.',
+          'Every individual post on the canvas now carries its own label chip, matching the deliverable above it.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Channel asset is now just Channel. It never linked an asset, only a channel and its delivery benchmarks.',
+          'The Connector tool is called Link, and it left the Add menu, because it is a tool rather than a card. It is still the same button in the canvas toolbar.',
+          'Card record pickers no longer read "Link a audience" or "No companys established yet".',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.7',
     dateLabel: 'July 21, 2026',
     groups: [
