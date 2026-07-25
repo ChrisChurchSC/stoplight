@@ -1597,13 +1597,65 @@ export function FlowsView() {
   }
   // Drop a freeform card from the toolbar. Cascades to the right of the campaign column so repeated
   // adds don't stack exactly on top of each other; the user drags it wherever from there.
+  /**
+   * Where a newly added card lands. It used to cascade from a FIXED point (300, 120) by
+   * `notes.length` * a 28x34 step, which failed three ways: the step is far smaller than a 236px
+   * card so every card buried the last one, the anchor ignored pan and zoom so cards could land
+   * off-screen or on top of the brief, and indexing by `notes.length` meant deleting cards reset
+   * the cascade and dropped the next one back on an existing pile.
+   *
+   * Instead: scan the VISIBLE canvas on a grid and take the first slot that overlaps nothing.
+   * `rects` is measured in canvas-local screen pixels, which is also what pendingPlace expects,
+   * so this works at any pan or zoom without converting anything by hand.
+   */
+  const freeSlot = (): { x: number; y: number } => {
+    const cv = canvasRef.current
+    const cw = cv?.clientWidth ?? 900
+    const ch = cv?.clientHeight ?? 600
+    const s = zoom / 100
+    // Reserve box: the widest card (236px) plus a gap, scaled to what's on screen right now.
+    const bw = 252 * s
+    const bh = 132 * s
+    const pad = 14 * s
+    // Measure live rather than reading the `rects` STATE. rects is written by a layout effect, so
+    // at the moment of a click it can still be one commit behind the cards added a moment ago,
+    // and every card after the first would be placed against stale occupancy. Same computation
+    // the measure effect does, just current.
+    const cr = cv?.getBoundingClientRect()
+    // .flow-goal-card is the brief's goal readout: it sits on the canvas and takes up room, but
+    // it isn't a node, so scanning nodes alone would drop a card on top of it.
+    const taken = cv && cr
+      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card')].map((el) => {
+          const r = el.getBoundingClientRect()
+          return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
+        })
+      : Object.values(rects)
+    const clear = (x: number, y: number) =>
+      !taken.some((r) => x < r.x + r.w + pad && x + bw + pad > r.x && y < r.y + r.h + pad && y + bh + pad > r.y)
+    const step = 24 * s
+    // Sweep columns first so cards fill down the left of the free space, then move right.
+    for (let x = pad; x + bw <= cw - pad; x += step) {
+      for (let y = pad; y + bh <= ch - pad; y += step) {
+        if (clear(x, y)) return { x, y }
+      }
+    }
+    // Nothing free on screen: stack below the lowest thing we can see rather than on top of it.
+    const lowest = taken.reduce((m, r) => Math.max(m, r.y + r.h), pad)
+    return { x: pad, y: lowest + pad }
+  }
   const addNote = (kind: FlowNoteKind) => {
     const id = freshNoteId()
-    const i = notes.length
+    const spot = freeSlot()
     setNotes((n) => [...n, { id, kind, text: '' }])
-    setPos((p) => ({ ...p, [id]: { x: 300 + (i % 3) * 28, y: 120 + i * 34 } }))
+    // Provisional position; the pendingPlace effect corrects it to `spot` once the card is
+    // measured, the same way the deliverable picker places a node.
+    setPos((p) => ({ ...p, [id]: { x: 0, y: 0 } }))
+    pendingPlace.current = { id, ...spot }
     setSel(id)
-    setSelected(new Set([id]))
+    // Active selection only. This used to be `new Set([id])`, which put every new card into the
+    // MULTI-selection: startDrag drags the whole `selected` set, so dragging a fresh card could
+    // carry others with it, and the card also picked up the group's .multi styling.
+    setSelected(new Set())
     setBriefCollapsed(false)
   }
   const deleteNote = (id: string) => {
@@ -1944,7 +1996,7 @@ export function FlowsView() {
     })
     setRects(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH])
+  }, [nodes, notes, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH])
 
   // Once a just-created card is measured, nudge it to where it was dropped.
   useEffect(() => {
