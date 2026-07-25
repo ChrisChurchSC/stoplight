@@ -248,10 +248,11 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
   </span>
 )
 
-// Quick-start templates offered on the empty canvas: one high-signal deliverable per motion
-// (email, content, social, web, paid, lead magnet). Clicking one drops that node so the canvas
-// is never a blank page. Keys must exist in DELIVERABLE_PRESETS.
-const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing', 'meta-video', 'ebook'] as const
+// Quick-start templates offered in Hansel's blank-campaign state: one high-signal deliverable per
+// motion (email, content, social, web). Clicking one drops that node, so you can skip the AI and
+// start by hand. Four, not six, so the blank state stays one clear hierarchy rather than three
+// dense rows; "More" opens the full picker. Keys must exist in DELIVERABLE_PRESETS.
+const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing'] as const
 
 // Freeform canvas cards you drop from the toolbar (a lightweight node primitive shared across the
 // new types). They live in the builder's memory alongside the deliverable nodes, positioned via the
@@ -656,14 +657,8 @@ export function FlowsView() {
   // while blank. Reset on entering a campaign.
   const [briefHidden, setBriefHidden] = useState(false)
   const [briefSummoned, setBriefSummoned] = useState(false)
-  // The empty-canvas starter prompt: what the user types before a campaign has any shape. Submitting
-  // opens Hansel and hands it the brief (its discovery/build flow takes over from there).
-  const [starterText, setStarterText] = useState('')
-  // Dismissing the starter card reveals the bare canvas (build by hand via the toolbar or Hansel).
-  // Reset on startNew so a fresh campaign always offers it again.
-  const [starterDismissed, setStarterDismissed] = useState(false)
-  // Where the starter card sits (canvas-local px). null = its default docked spot on the left.
-  const [starterPos, setStarterPos] = useState<{ x: number; y: number } | null>(null)
+  // Hansel's empty state is the blank-campaign front door now, so there's no separate starter
+  // card to hold text, dismiss, or drag.
   // Search box on the Assets brand-library view.
   const [librarySearch, setLibrarySearch] = useState('')
   // Assets is organized by brand folders. Which brand folders are expanded (the active brand starts
@@ -1556,36 +1551,6 @@ export function FlowsView() {
     setBriefCollapsed(false)
     void genPreview(node)
   }
-  // Empty-canvas starter: hand the typed brief to Hansel, which runs its discovery/build flow.
-  // Opening the assistant is the whole point, so the conversation continues in one place.
-  const submitStarter = () => {
-    const t = starterText.trim()
-    if (!t) return
-    setStarterText('')
-    setChatCollapsed(false)
-    void runFlowChat(t, 'build')
-  }
-  // Drag the starter card around the canvas. Grabs from the card body only — its inputs, buttons,
-  // and chips keep working. Position is canvas-local px; the card is an overlay, so it doesn't
-  // pan/zoom with the stack (like the outline and toolbar).
-  const onStarterDragStart = (e: ReactMouseEvent) => {
-    if ((e.target as HTMLElement).closest('textarea, button, input, select')) return
-    e.preventDefault()
-    e.stopPropagation()
-    const startX = e.clientX
-    const startY = e.clientY
-    const cardRect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const cr = canvasRef.current?.getBoundingClientRect()
-    const baseX = cardRect.left - (cr?.left ?? 0)
-    const baseY = cardRect.top - (cr?.top ?? 0)
-    const onMove = (ev: MouseEvent) => setStarterPos({ x: baseX + (ev.clientX - startX), y: baseY + (ev.clientY - startY) })
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
   // Drop a freeform card from the toolbar. Cascades to the right of the campaign column so repeated
   // adds don't stack exactly on top of each other; the user drags it wherever from there.
   /**
@@ -1833,9 +1798,9 @@ export function FlowsView() {
     setSel('campaign')
     setPickAt(null)
     setCampaignFilter('all')
-    setStarterText('')
-    setStarterDismissed(false)
-    setStarterPos(null)
+    // A new campaign opens with Hansel expanded, because Hansel IS the front door now: its
+    // empty state asks what you're launching. Only on creation, so collapsing it later sticks.
+    setChatCollapsed(false)
   }
   const openView = (n: string) => {
     setViewName(n)
@@ -2939,6 +2904,13 @@ export function FlowsView() {
           flowMode={viewing ? 'view' : 'build'}
           history={flowHistory}
           collapsed={chatCollapsed}
+          blank={blankCampaign}
+          templates={STARTER_KEYS.flatMap((k) => {
+            const p = presetByKey(k)
+            return p ? [{ key: k as string, label: p.label, node: <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} /> }] : []
+          })}
+          onTemplate={(k) => { const p = presetByKey(k); if (p) addPreset(p) }}
+          onMoreTemplates={openAddDeliverable}
           onCollapse={setChatCollapsed}
           onSend={runFlowChat}
           onApply={applyPendingChat}
@@ -3140,57 +3112,6 @@ export function FlowsView() {
           )}
           {/* The outline (a map of the campaign's contents) now lives in the inspector's
               nothing-selected state instead of a floating canvas pill. */}
-          {/* Empty-canvas starter: the front door before a campaign has any shape. Describe it to
-              Hansel, or drop a template deliverable. Sits OUTSIDE the transformed stack so it stays
-              centered while the canvas pans/zooms, and yields the moment a chat or a node exists. */}
-          {!building && !starterDismissed && blankCampaign && (
-            <div
-              className="flow-starter"
-              onMouseDown={onStarterDragStart}
-              style={starterPos ? { left: starterPos.x, top: starterPos.y, transform: 'none' } : undefined}
-            >
-              <button className="flow-starter-close" title="Dismiss" aria-label="Dismiss" onClick={() => setStarterDismissed(true)}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-              <div className="flow-starter-eyebrow">New campaign</div>
-              <h2 className="flow-starter-title">What are you launching?</h2>
-              <p className="flow-starter-sub">Describe it and Hansel drafts the plan, audiences, and copy. Nothing sends until you say so.</p>
-              <div className="flow-starter-prompt">
-                <textarea
-                  className="flow-starter-input"
-                  rows={4}
-                  placeholder="A spring launch for our new onboarding flow, aimed at RevOps leads…"
-                  value={starterText}
-                  onChange={(e) => setStarterText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submitStarter() }
-                  }}
-                />
-                <button className="flow-starter-go" onClick={submitStarter} disabled={!starterText.trim()}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5z" /></svg>
-                  Draft with Hansel
-                  <span className="flow-starter-kbd">⌘↵</span>
-                </button>
-              </div>
-              <div className="flow-starter-or"><span>or start from a template</span></div>
-              <div className="flow-starter-chips">
-                {STARTER_KEYS.map((k) => {
-                  const p = presetByKey(k)
-                  if (!p) return null
-                  return (
-                    <button key={k} className="flow-starter-chip" onClick={() => addPreset(p)}>
-                      <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
-                      <span>{p.label}</span>
-                    </button>
-                  )
-                })}
-                <button className="flow-starter-chip flow-starter-chip-more" onClick={openAddDeliverable}>
-                  <span className="flow-starter-more-ic" aria-hidden="true">+</span>
-                  <span>Browse all</span>
-                </button>
-              </div>
-            </div>
-          )}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
             {/* Campaign brief node — the board's root. Shown for an existing campaign (its real root)
                 or when explicitly summoned from the toolbar's "Brief" item. Adding primitives does NOT
@@ -4436,7 +4357,7 @@ export function FlowsView() {
           <button
             className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
             title="Brief. The campaign's spec sheet." aria-label="Add the campaign brief"
-            onClick={() => { setBriefHidden(false); setBriefSummoned(true); setStarterDismissed(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
+            onClick={() => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
           </button>

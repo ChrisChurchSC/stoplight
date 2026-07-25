@@ -6671,6 +6671,12 @@ button {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  /* REQUIRED, not cosmetic. This is an absolutely positioned flex container whose palette row
+     can wrap, and shrink-to-fit then resolves its width BELOW max-content: the row wrapped even
+     with ~460px of canvas to spare, and removing max-width made no difference. max-content asks
+     for the one-line width; max-width below is still the ceiling, so it wraps only when the
+     canvas genuinely can't fit it. */
+  width: max-content;
   gap: 5px;
   max-width: calc(100% - 32px);
   background: var(--surface);
@@ -26768,75 +26774,33 @@ table.aud-sheet td.stick .aud-cell {
 .cv-project-tab-ic { display: inline-flex; align-items: center; color: var(--text-muted); margin-right: 5px; }
 .cv-dataset-tab.active .cv-project-tab-ic, .cv-dataset-tab:hover .cv-project-tab-ic { color: var(--accent); }
 
-/* Empty-canvas starter card: the front door of a fresh campaign. Floats centered over the dotted
-   canvas (like the outline, it sits above the transformed stack so it doesn't pan/zoom). */
-.flow-starter {
-  /* Docked to the canvas's top-right by default; draggable anywhere from there. Compact so it
-     doesn't crowd the canvas. */
-  position: absolute; z-index: 5;
-  right: 18px; top: 18px;
-  width: min(324px, calc(100% - 36px));
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 16px; padding: 18px;
-  box-shadow: 0 14px 38px -18px color-mix(in srgb, var(--text) 28%, transparent), 0 2px 6px -2px color-mix(in srgb, var(--text) 12%, transparent);
-  display: flex; flex-direction: column; gap: 0;
-  cursor: grab;
+/* Hansel's blank-campaign front door. The floating starter card that used to ask this question
+   is gone: it was a second front door whose submit handler only opened this panel and forwarded
+   the text here, so the question now lives where the answer already did. Reuses the chat's own
+   empty-state type; only the eyebrow, the template row, and a little breathing room are new. */
+.fchat-empty-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 4px;
 }
-.flow-starter:active { cursor: grabbing; }
-/* Inputs/buttons inside the card keep their own cursors (drag only grabs the body). */
-.flow-starter textarea, .flow-starter button, .flow-starter .flow-starter-input { cursor: auto; }
-.flow-starter button, .flow-starter-chip, .flow-starter-go, .flow-starter-close { cursor: pointer; }
-.flow-starter-input { cursor: text; }
-.flow-starter-close {
-  position: absolute; top: 10px; right: 10px; z-index: 1;
-  width: 24px; height: 24px; border: 0; border-radius: 7px; cursor: pointer;
-  background: none; color: var(--text-faint);
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.flow-starter-close:hover { background: var(--hover); color: var(--text); }
-.flow-starter-eyebrow {
-  font-size: 10px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--accent); margin-bottom: 5px;
-}
-.flow-starter-title { font-size: 18px; font-weight: 680; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
-.flow-starter-sub { font-size: 12.5px; line-height: 1.5; color: var(--text-muted); margin: 6px 0 0; }
-.flow-starter-prompt {
-  margin-top: 14px; border: 1px solid var(--border-strong); border-radius: 12px;
-  background: var(--bg); padding: 11px; display: flex; flex-direction: column; gap: 8px;
-}
-.flow-starter-prompt:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
-.flow-starter-input {
-  border: none; background: transparent; resize: none; width: 100%;
-  font: inherit; font-size: 13px; line-height: 1.5; color: var(--text); padding: 1px 3px;
-  min-height: 74px;
-}
-.flow-starter-input:focus { outline: none; }
-.flow-starter-input::placeholder { color: var(--text-faint); }
-.flow-starter-go {
-  align-self: flex-end; display: inline-flex; align-items: center; gap: 5px;
-  border: none; border-radius: 8px; padding: 5px 9px; cursor: pointer;
-  background: var(--accent); color: #fff; font: inherit; font-size: 11.5px; font-weight: 620;
-}
-.flow-starter-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
-.flow-starter-go:disabled { opacity: 0.5; cursor: default; }
-.flow-starter-go svg { width: 12px; height: 12px; }
-.flow-starter-kbd { font-size: 10px; opacity: 0.7; margin-left: 1px; }
-.flow-starter-or {
-  display: flex; align-items: center; gap: 10px; margin: 12px 0 10px;
+.fchat-empty-blank .fchat-empty-lead { font-size: 18px; font-weight: 680; letter-spacing: -0.01em; }
+/* "or start from a template" rule, matching the divider the starter card used. */
+.fchat-or {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 8px;
   font-size: 11px; color: var(--text-faint);
 }
-.flow-starter-or::before, .flow-starter-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.flow-starter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.flow-starter-chip {
+.fchat-or::before, .fchat-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.fchat-tmpl { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchat-tmpl-chip {
   display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--border); background: var(--bg); color: var(--text);
-  border-radius: 9px; padding: 5px 9px 5px 6px; cursor: pointer;
-  font: inherit; font-size: 11.5px; font-weight: 550;
+  border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+  padding: 5px 9px 5px 6px; font: inherit; font-size: 12px; font-weight: 550; color: var(--text);
+  cursor: pointer;
 }
-.flow-starter-chip .flow-tile { width: 20px; height: 20px; }
-.flow-starter-chip:hover { border-color: var(--border-strong); background: var(--hover); }
-.flow-starter-chip-more { color: var(--text-muted); }
-.flow-starter-more-ic {
+.fchat-tmpl-chip .flow-tile { width: 20px; height: 20px; }
+.fchat-tmpl-chip:hover:not(:disabled) { border-color: var(--border-strong); background: var(--hover); }
+.fchat-tmpl-chip:disabled { opacity: 0.5; cursor: default; }
+.fchat-tmpl-more { color: var(--text-muted); }
+.fchat-tmpl-more-ic {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; border-radius: 6px; border: 1px dashed var(--border-strong);
   font-size: 14px; line-height: 1; color: var(--text-faint);

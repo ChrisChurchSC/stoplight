@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Markdown } from '../lib/miniMarkdown'
 import { HomeSidebar } from './HomeSidebar'
 import type { FlowChatMsg, SavedFlowChat } from '../domain/flowAgent'
@@ -18,10 +18,22 @@ const AnalyzeIco = () => (
 )
 
 interface Example { title: string; desc: string; prompt: string; mode?: ChatIntent }
+/**
+ * A BLANK campaign gets prompts that START one. The build examples below assume a campaign
+ * already exists ("add a newsletter", "tag the right records"), which is the wrong offer on an
+ * empty canvas, and the old lead example was a Giving Tuesday push: a fundraising burst is a
+ * strange default for every brand. These three each produce a whole campaign from nothing and
+ * name no industry.
+ */
+const START_EXAMPLES: Example[] = [
+  { title: 'Launch something new', desc: 'A dated push for a product or feature, across the channels you already use.', prompt: 'Build a 6-week launch campaign for a new product across our main channels' },
+  { title: 'Start an always-on engine', desc: 'A repeatable monthly cadence: a newsletter, social posts, and articles.', prompt: 'Set up an always-on content engine with a monthly newsletter, 4 social posts a month, and 2 articles a month' },
+  { title: 'Run a seasonal push', desc: 'A short burst timed to a date that matters to your audience.', prompt: 'Build a 2-week seasonal campaign timed to a moment that matters to our audience' },
+]
 const BUILD_EXAMPLES: Example[] = [
-  { title: 'Build a Giving Tuesday push', desc: 'A short fundraising burst tagged to your donors, copy written.', prompt: 'Build a 2-week Giving Tuesday push' },
-  { title: 'Add a weekly newsletter + socials', desc: 'Add a newsletter and 4 Instagram posts a month.', prompt: 'Add a weekly newsletter and 4 Instagram posts a month' },
-  { title: 'Tag the right records', desc: 'Point this campaign at the segments it targets.', prompt: 'Tag this campaign to the impact investor segment' },
+  { title: 'Add a newsletter and socials', desc: 'Add a newsletter and 4 Instagram posts a month.', prompt: 'Add a weekly newsletter and 4 Instagram posts a month' },
+  { title: 'Tag the right records', desc: 'Point this campaign at the segments it targets.', prompt: 'Tag this campaign to the segments it targets' },
+  { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this campaign?", mode: 'analyze' },
 ]
 const VIEW_EXAMPLES: Example[] = [
   { title: 'Regenerate the copy', desc: 'Rewrite every asset so they read distinct and on-brand.', prompt: 'Regenerate the copy for this campaign' },
@@ -41,6 +53,10 @@ export function FlowChat({
   flowMode,
   history,
   collapsed,
+  blank = false,
+  templates = [],
+  onTemplate,
+  onMoreTemplates,
   onCollapse,
   onSend,
   onApply,
@@ -54,6 +70,12 @@ export function FlowChat({
   flowMode: 'build' | 'view'
   history: SavedFlowChat[]
   collapsed: boolean
+  /** The campaign has no shape yet, so this panel IS the front door (see the empty state). */
+  blank?: boolean
+  /** Quick-start deliverables offered on a blank campaign. Dropping one skips the AI entirely. */
+  templates?: { key: string; label: string; node: ReactNode }[]
+  onTemplate?: (key: string) => void
+  onMoreTemplates?: () => void
   onCollapse: (v: boolean) => void
   onSend: (text: string, intent: ChatIntent) => void
   onApply: (msgId: string) => void
@@ -78,7 +100,7 @@ export function FlowChat({
     setQ('')
     onSend(t, intent)
   }
-  const examples = flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
+  const examples = blank ? START_EXAMPLES : flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
 
   // Collapsed: Hansel is fully hidden (no rail) — the "Hansel" item in the left nav reopens it.
   if (collapsed) return null
@@ -133,9 +155,23 @@ export function FlowChat({
 
       <div className="fchat-thread" ref={threadRef}>
         {messages.length === 0 && (
-          <div className="fchat-empty">
-            <p className="fchat-empty-lead">I&rsquo;m Hansel.</p>
-            <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
+          /* On a blank campaign this panel is the ONLY front door: the floating starter card
+             that used to ask this question was a second, redundant one, and its submit handler
+             just opened this panel and sent the text here anyway. So ask it here, where the
+             answer already lives, and keep the composer below as the single input. */
+          <div className={`fchat-empty${blank ? ' fchat-empty-blank' : ''}`}>
+            {blank ? (
+              <>
+                <p className="fchat-empty-eyebrow">New campaign</p>
+                <p className="fchat-empty-lead">What are you launching?</p>
+                <p className="fchat-empty-sub">Describe it below and I&rsquo;ll draft the plan, the audiences, and the copy. Nothing sends until you say so.</p>
+              </>
+            ) : (
+              <>
+                <p className="fchat-empty-lead">I&rsquo;m Hansel.</p>
+                <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
+              </>
+            )}
             <div className="fchat-cards">
               {examples.map((ex) => (
                 <button key={ex.title} className="fchat-card" disabled={busy} onClick={() => onSend(ex.prompt, ex.mode ?? intent)}>
@@ -147,6 +183,25 @@ export function FlowChat({
                 </button>
               ))}
             </div>
+            {blank && templates.length > 0 && (
+              <>
+                <div className="fchat-or"><span>or start from a template</span></div>
+                <div className="fchat-tmpl">
+                  {templates.map((t) => (
+                    <button key={t.key} className="fchat-tmpl-chip" disabled={busy} onClick={() => onTemplate?.(t.key)}>
+                      {t.node}
+                      <span>{t.label}</span>
+                    </button>
+                  ))}
+                  {onMoreTemplates && (
+                    <button className="fchat-tmpl-chip fchat-tmpl-more" disabled={busy} onClick={onMoreTemplates}>
+                      <span className="fchat-tmpl-more-ic" aria-hidden="true">+</span>
+                      <span>More</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
         {messages.map((m) =>
@@ -206,7 +261,16 @@ export function FlowChat({
             className="fchat-input"
             rows={2}
             value={q}
-            placeholder={intent === 'build' ? 'Describe an edit to make…' : 'Ask about this campaign…'}
+            /* On a blank campaign there is nothing to "edit" yet, so the composer asks for the
+               campaign itself. This is the starter card's old placeholder, which is where the
+               example belongs now that this is the only input. */
+            placeholder={
+              intent === 'analyze'
+                ? 'Ask about this campaign…'
+                : blank
+                  ? 'A spring launch for our new onboarding flow, aimed at RevOps leads…'
+                  : 'Describe an edit to make…'
+            }
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
