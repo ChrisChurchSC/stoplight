@@ -34,6 +34,7 @@ const RELEASES: Release[] = [
         items: [
           'New cards land in free space instead of on each other. Every card used to drop at the same point with a step far smaller than the card itself, so they buried one another, ignored where you had panned to, and could land on top of the brief. A new card now takes the first clear spot on screen.',
           'A new card is no longer added to the multi-selection, so dragging one never drags cards you did not mean to move.',
+          'Your brand hooks now actually reach the writer. They were being sent with every draft and ignored, so the opening lines you wrote never influenced a single AI-written asset.',
         ],
       },
       {
