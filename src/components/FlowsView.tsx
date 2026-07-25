@@ -1906,6 +1906,13 @@ export function FlowsView() {
     if (target) void genPreview(target)
   }
   const startNew = () => {
+    // Hand the outgoing conversation to history, then clear it. Without this the thread follows
+    // you into the next campaign: you see the previous campaign's transcript, its Apply button
+    // still points at a pending edit for the campaign you left, and because blankCampaign requires
+    // chatMsgs.length === 0 the "What are you launching?" front door never renders again for the
+    // rest of the session. Persist BEFORE clearing so the thread stays reopenable from history.
+    persistActiveChat()
+    setChatMsgs([])
     setViewName(null)
     setBuilt(null)
     setNodes([])
@@ -1932,6 +1939,9 @@ export function FlowsView() {
     setChatCollapsed(false)
   }
   const openView = (n: string) => {
+    // Same reset as startNew: a campaign's chat belongs to that campaign.
+    persistActiveChat()
+    setChatMsgs([])
     setViewName(n)
     setBuilt(null)
     setPickAt(null)
