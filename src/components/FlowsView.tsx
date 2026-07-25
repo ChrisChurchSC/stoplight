@@ -364,6 +364,26 @@ const pluralOf = (noun: string): string =>
 
 let noteSeq = 0
 const freshNoteId = () => `note_${++noteSeq}`
+
+/**
+ * A SMART OBJECT: a named bundle of context cards, collapsed to one card on the board. Group a
+ * few with Cmd+G (or the right-click menu), double-click to open it and work on its members on
+ * their own canvas, ungroup to spill them back out.
+ *
+ * The point is reuse: "the RevOps pitch" as one object holding an audience, a message and two
+ * proof points, instead of four loose cards you re-make on every campaign. It stays inside one
+ * campaign for now because cards are still ephemeral React state; once they persist on Campaign
+ * this is what gets promoted to a brand-level library, and applying one will set several of the
+ * campaign's refs at once.
+ */
+interface FlowGroup {
+  id: string
+  name: string
+  /** FlowNote ids. Members are hidden from the outer canvas and drawn inside the object. */
+  memberIds: string[]
+}
+let groupSeq = 0
+const freshGroupId = () => `grp_${++groupSeq}`
 // Data-source cards link to an established connector (mirrors the ConnectorsPage list).
 const CONNECTOR_SOURCES: { id: string; label: string }[] = [
   { id: 'google-analytics', label: 'Google Analytics' },
@@ -608,6 +628,15 @@ export function FlowsView() {
   // Freeform palette cards (audience / message / proof point / data source / note). Ephemeral in the
   // builder for now; positioned via `pos` and connectable like any other node.
   const [notes, setNotes] = useState<FlowNote[]>([])
+  // Smart objects: bundles of the cards above. Ephemeral alongside `notes` for now.
+  const [groups, setGroups] = useState<FlowGroup[]>([])
+  // Which smart object you're inside, if any. Non-null swaps the canvas to that object's members
+  // and adds a breadcrumb segment, so editing one feels like editing a small campaign.
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null)
+  // Right-click menu on the canvas. There was no context menu anywhere in the app before this;
+  // it exists for "group into a smart object" but is the obvious home for per-card actions.
+  // `on` is the id right-clicked (a card, an object, or null for empty canvas).
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; on: string | null } | null>(null)
   const [sel, setSel] = useState<'campaign' | string | null>('campaign')
   const [pickAt, setPickAt] = useState<number | null>(null)
   // When the deliverable picker is opened FROM an asset card (its "+"), this holds that
@@ -922,6 +951,11 @@ export function FlowsView() {
           e.preventDefault()
           ids.forEach((id) => {
             if (id === 'campaign') setBriefHidden(true)
+            // Delete on a smart object UNGROUPS it rather than destroying it. One keystroke
+            // silently taking three or four cards with it is too sharp an edge; the card's ✕ does
+            // the same thing, and the right-click menu has an explicit "delete object and its
+            // cards" for when that's what you mean.
+            else if (groupsRef.current.some((g) => g.id === id)) ungroupRef.current(id)
             else if (notesRef.current.some((nt) => nt.id === id)) deleteNote(id)
             else if (nodesRef.current.some((n) => n.id === id)) removeNode(id)
           })
@@ -943,6 +977,18 @@ export function FlowsView() {
           spaceHeld.current = true
           setSpaceCursor(true)
         }
+        return
+      }
+      // Cmd/Ctrl+G bundles the selected cards into a smart object (the universal "group" chord).
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        groupSelectionRef.current()
+        return
+      }
+      // Escape steps out of a smart object you're inside.
+      if (e.key === 'Escape' && openGroupRef.current) {
+        e.preventDefault()
+        setOpenGroupId(null)
         return
       }
       if (e.key.toLowerCase() === 'b' && viewName === null) {
@@ -1603,6 +1649,8 @@ export function FlowsView() {
     const id = freshNoteId()
     const spot = freeSlot()
     setNotes((n) => [...n, { id, kind, text: '' }])
+    // Added while inside a smart object: it belongs to that object, not the outer board.
+    if (openGroupId) setGroups((gs) => gs.map((g) => (g.id === openGroupId ? { ...g, memberIds: [...g.memberIds, id] } : g)))
     // Provisional position; the pendingPlace effect corrects it to `spot` once the card is
     // measured, the same way the deliverable picker places a node.
     setPos((p) => ({ ...p, [id]: { x: 0, y: 0 } }))
@@ -1624,6 +1672,87 @@ export function FlowsView() {
     })
     if (sel === id) setSel(null)
   }
+  // ---- Smart objects ----------------------------------------------------------------------
+  // Which group a card belongs to (a card is in at most one).
+  const groupOf = (noteId: string): FlowGroup | undefined => groups.find((g) => g.memberIds.includes(noteId))
+  const openGroup = openGroupId ? groups.find((g) => g.id === openGroupId) ?? null : null
+  // Cards drawn on the CURRENT canvas: inside an object, only its members; outside, only cards
+  // that aren't in one (grouped cards live inside their object, not loose on the board).
+  const visibleNotes = openGroup
+    ? notes.filter((n) => openGroup.memberIds.includes(n.id))
+    : notes.filter((n) => !groupOf(n.id))
+  // Name a fresh object after what it's about: the first member with a linked record wins, else
+  // the first member's kind. Beats "Smart object 3" as a default you'd have to fix every time.
+  const suggestGroupName = (ids: string[]): string => {
+    for (const id of ids) {
+      const nt = notes.find((n) => n.id === id)
+      if (!nt) continue
+      const opts = noteOptions(nt.kind)
+      const label = nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : nt.text.trim().split('\n')[0]
+      if (label) return label.slice(0, 48)
+    }
+    const first = notes.find((n) => n.id === ids[0])
+    return first ? `${NOTE_META[first.kind].label} bundle` : 'Smart object'
+  }
+  /** Bundle the selected cards. Needs 2+, and only cards (a deliverable isn't context). */
+  const groupSelection = () => {
+    const ids = [...selected].filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
+    if (ids.length < 2) return
+    recordHistory(true)
+    const id = freshGroupId()
+    // The object takes the top-left-most member's spot, so it appears where the cards were.
+    const spot = ids
+      .map((m) => pos[m] ?? { x: 0, y: 0 })
+      .reduce((a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) }))
+    setGroups((g) => [...g, { id, name: suggestGroupName(ids), memberIds: ids }])
+    setPos((p) => ({ ...p, [id]: spot }))
+    // Members keep their own pos: it becomes their layout INSIDE the object.
+    setSel(id)
+    setSelected(new Set())
+    setBriefCollapsed(false)
+  }
+  /** Spill an object's members back onto the board and drop the object. */
+  const ungroup = (gid: string) => {
+    const g = groups.find((x) => x.id === gid)
+    if (!g) return
+    recordHistory(true)
+    if (openGroupId === gid) setOpenGroupId(null)
+    setGroups((gs) => gs.filter((x) => x.id !== gid))
+    setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
+    setPos((p) => {
+      const next = { ...p }
+      delete next[gid]
+      return next
+    })
+    setSel(g.memberIds[0] ?? null)
+    setSelected(new Set())
+  }
+  /** Delete an object AND its members (ungroup first if you only want the object gone). */
+  const deleteGroup = (gid: string) => {
+    const g = groups.find((x) => x.id === gid)
+    if (!g) return
+    recordHistory(true)
+    if (openGroupId === gid) setOpenGroupId(null)
+    g.memberIds.forEach((m) => deleteNote(m))
+    setGroups((gs) => gs.filter((x) => x.id !== gid))
+    setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
+    if (sel === gid) setSel(null)
+  }
+  const renameGroup = (gid: string, name: string) => setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, name } : g)))
+  // The global keydown effect below runs with deps [nodes.length, viewName] and reads everything
+  // else through refs, so Cmd+G goes through one too rather than capturing a stale selection.
+  const groupSelectionRef = useRef(groupSelection)
+  groupSelectionRef.current = groupSelection
+  const openGroupRef = useRef<string | null>(openGroupId)
+  openGroupRef.current = openGroupId
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
+  const ungroupRef = useRef(ungroup)
+  ungroupRef.current = ungroup
+  /** Drop a member out of an object without deleting the card. */
+  const removeFromGroup = (gid: string, noteId: string) =>
+    setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
+
   const updateNoteText = (id: string, text: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
   const setNoteRef = (id: string, refId: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
   // Linked kinds pick from an established record; freeform kinds (note, concept, season) return null.
@@ -2412,6 +2541,7 @@ export function FlowsView() {
   // inspector branches, so without this they fell through: clicking an Audience card showed you
   // the Campaign brief panel. Same lookup for build and view.
   const selNote = notes.find((n) => n.id === sel) ?? null
+  const selGroup = groups.find((g) => g.id === sel) ?? null
 
   // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
   // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
@@ -2688,6 +2818,53 @@ export function FlowsView() {
     )
   }
 
+  /** The inspector for a selected smart object: name it, see and edit what's inside, open it. */
+  const renderGroupInspector = (g: FlowGroup) => {
+    const members = g.memberIds.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n)
+    return (
+      <>
+        <div className="flow-panel-head">
+          <span className="flow-note-ic flow-insp-ic" style={{ color: 'var(--accent-2)' }} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
+            </svg>
+          </span>
+          <span className="flow-panel-title">{g.name || 'Smart object'}</span>
+        </div>
+        <div className="flow-inspect">
+          <p className="flow-inspect-desc">A bundle of context cards you can reuse as one thing.</p>
+          <label className="flow-inspect-label">Name</label>
+          <input className="flow-inspect-input" value={g.name} placeholder="Name this object…" onChange={(e) => renameGroup(g.id, e.target.value)} />
+          <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
+          <div className="flow-obj-list">
+            {members.map((m) => {
+              const opts = noteOptions(m.kind)
+              const linked = m.refId && opts ? opts.find((o) => o.id === m.refId)?.label : ''
+              return (
+                <div key={m.id} className="flow-obj-row">
+                  <span className="flow-obj-row-ic" style={{ color: NOTE_META[m.kind].tone }} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[m.kind].icon}</svg>
+                  </span>
+                  <span className="flow-obj-row-txt">
+                    <span className="flow-obj-row-kind">{NOTE_META[m.kind].label}</span>
+                    <span className="flow-obj-row-val">{linked || m.text.trim().split('\n')[0] || 'Nothing picked yet'}</span>
+                  </span>
+                  <button className="flow-obj-row-out" title="Move out of this object" aria-label="Move out of this object" onClick={() => removeFromGroup(g.id, m.id)}>✕</button>
+                </div>
+              )
+            })}
+            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside. Open it and add a card, or ungroup it.</div>}
+          </div>
+          <button className="flow-insp-open" onClick={() => setOpenGroupId(g.id)}>Open this object</button>
+          <div className="flow-inspect-note">
+            Board context, like the cards inside it. Nothing here changes the drafts yet.
+          </div>
+          <button className="flow-insp-del" onClick={() => ungroup(g.id)}>Ungroup</button>
+        </div>
+      </>
+    )
+  }
+
   // One palette icon per card kind. Keeps its PER-KIND tone: the icon is all you get at this
   // size, so hue is doing real scanning work here (the card chrome is what goes role-coloured).
   // Name and description come from the registry, so the tooltip and the card can't drift.
@@ -2726,6 +2903,19 @@ export function FlowsView() {
               {viewing ? viewShort : name.trim() || 'New campaign'}
               <span className="flow-switcher-caret">▾</span>
             </button>
+          )}
+          {/* Inside a smart object: a third crumb segment, so the way back out is where you'd look
+              for it rather than only on Escape. */}
+          {openGroup && (
+            <>
+              <span className="flow-crumb-sep">/</span>
+              <button className="flow-crumb-obj" onClick={() => setOpenGroupId(null)} title="Back to the campaign canvas">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" />
+                </svg>
+                {openGroup.name || 'Smart object'}
+              </button>
+            </>
           )}
           {!flowShareLock && switcherOpen && (
             <>
@@ -2923,6 +3113,19 @@ export function FlowsView() {
         <div
           ref={canvasRef}
           className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' ? ' connecting' : ''}`}
+          onContextMenu={(e) => {
+            const el = (e.target as HTMLElement).closest('.flow-node[data-node-id]') as HTMLElement | null
+            const id = el?.dataset.nodeId ?? null
+            // Right-clicking an unselected card selects it first, so the menu acts on what you
+            // clicked rather than on a stale selection somewhere else on the board.
+            if (id && !selected.has(id)) {
+              setSel(id)
+              setSelected(new Set())
+            }
+            const cr = canvasRef.current?.getBoundingClientRect()
+            e.preventDefault()
+            setCtxMenu({ x: e.clientX - (cr?.left ?? 0), y: e.clientY - (cr?.top ?? 0), on: id })
+          }}
           onMouseDown={(e) => {
             // Hand tool (or held space) pans; arrow tool drags a selection box on empty canvas.
             const t = e.target as HTMLElement
@@ -3231,7 +3434,7 @@ export function FlowsView() {
 
             {/* Freeform palette cards (audience / message / proof point / data source / note):
                 absolutely positioned in the stack, dragged, selected, and connected like any node. */}
-            {notes.map((nt) => {
+            {visibleNotes.map((nt) => {
               const meta = NOTE_META[nt.kind]
               return (
                 <div
@@ -3322,6 +3525,55 @@ export function FlowsView() {
                     onChange={(e) => updateNoteText(nt.id, e.target.value)}
                   />
                   <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, nt.id)}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  </button>
+                </div>
+              )
+            })}
+
+            {/* SMART OBJECTS. Collapsed bundles of the cards above: one card showing the name and
+                what's inside. Double-click opens it (the canvas swaps to its members). Not drawn
+                while you're inside one, since objects don't nest yet. */}
+            {!openGroup && groups.map((g) => {
+              const members = g.memberIds.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n)
+              return (
+                <div
+                  key={g.id}
+                  className={`flow-node flow-note flow-note-object${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
+                  data-node-id={g.id}
+                  data-role="input"
+                  style={{ transform: `translate(${pos[g.id]?.x ?? 0}px, ${pos[g.id]?.y ?? 0}px)` }}
+                  onMouseDown={(e) => startDrag(e, g.id)}
+                  onClick={(e) => clickSelect(e, g.id)}
+                  onDoubleClick={(e) => { e.stopPropagation(); setOpenGroupId(g.id) }}
+                  title="Double-click to open"
+                >
+                  <div className="flow-note-head">
+                    <span className="flow-note-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
+                      </svg>
+                    </span>
+                    <span className="flow-note-kind">Smart object</span>
+                    <button className="flow-note-del" title="Ungroup" aria-label="Ungroup" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); ungroup(g.id) }}>✕</button>
+                  </div>
+                  <input
+                    className="flow-obj-name"
+                    value={g.name}
+                    placeholder="Name this object…"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => renameGroup(g.id, e.target.value)}
+                  />
+                  {/* What's inside, at a glance: one tinted glyph per member. */}
+                  <div className="flow-obj-members">
+                    {members.map((m) => (
+                      <span key={m.id} className="flow-obj-chip" style={{ color: NOTE_META[m.kind].tone }} title={NOTE_META[m.kind].label}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[m.kind].icon}</svg>
+                      </span>
+                    ))}
+                    <span className="flow-obj-count">{members.length} inside</span>
+                  </div>
+                  <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, g.id)}>
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                   </button>
                 </div>
@@ -3597,6 +3849,8 @@ export function FlowsView() {
                   ))}
                 </div>
               </>
+            ) : selGroup ? (
+              renderGroupInspector(selGroup)
             ) : selNote ? (
               renderNoteInspector(selNote)
             ) : selPost ? (
@@ -3984,6 +4238,8 @@ export function FlowsView() {
                 ))}
               </div>
             </>
+          ) : selGroup ? (
+            renderGroupInspector(selGroup)
           ) : selNote ? (
             renderNoteInspector(selNote)
           ) : sel === 'campaign' ? (
@@ -4346,6 +4602,61 @@ export function FlowsView() {
         </aside>
         )}
       </div>
+
+      {/* Right-click menu. Its items are the ones that only make sense on a specific target, so
+          they'd be noise in the toolbar: bundle these cards, open or ungroup an object, delete. */}
+      {ctxMenu && (() => {
+        const onGroup = ctxMenu.on ? groups.find((g) => g.id === ctxMenu.on) : undefined
+        const onCard = ctxMenu.on ? notes.find((n) => n.id === ctxMenu.on) : undefined
+        // Cards eligible to bundle: the selection if it has 2+, else nothing to group.
+        const groupable = [...selected].filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
+        const close = () => setCtxMenu(null)
+        return (
+          <>
+            <div className="flow-ctx-scrim" onMouseDown={close} onContextMenu={(e) => { e.preventDefault(); close() }} />
+            <div className="flow-ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }} role="menu">
+              {onGroup ? (
+                <>
+                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); setOpenGroupId(onGroup.id) }}>
+                    Open<span className="flow-ctx-kbd">dbl-click</span>
+                  </button>
+                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); ungroup(onGroup.id) }}>Ungroup</button>
+                  <div className="flow-ctx-sep" />
+                  <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deleteGroup(onGroup.id) }}>
+                    Delete object and its cards
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="flow-ctx-item"
+                    role="menuitem"
+                    disabled={groupable.length < 2}
+                    title={groupable.length < 2 ? 'Select two or more cards first' : undefined}
+                    onClick={() => { close(); groupSelection() }}
+                  >
+                    Group into a smart object<span className="flow-ctx-kbd">⌘G</span>
+                  </button>
+                  {openGroup && onCard && (
+                    <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); removeFromGroup(openGroup.id, onCard.id) }}>
+                      Move out of this object
+                    </button>
+                  )}
+                  {onCard && (
+                    <>
+                      <div className="flow-ctx-sep" />
+                      <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deleteNote(onCard.id) }}>Delete card</button>
+                    </>
+                  )}
+                  {!ctxMenu.on && groupable.length < 2 && (
+                    <div className="flow-ctx-hint">Select two or more cards to bundle them.</div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )
+      })()}
 
       <div className="flow-toolbar">
         {/* PALETTE ROW — every kind of card you can add, as icons, grouped by role and split by

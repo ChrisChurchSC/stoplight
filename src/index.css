@@ -26066,6 +26066,91 @@ table.aud-sheet td.stick .aud-cell {
   box-shadow: 0 0 0 2px color-mix(in srgb, #d9a520 45%, transparent), 0 6px 16px -5px rgba(150, 120, 20, 0.34);
 }
 
+/* ---- SMART OBJECTS: a bundle of context cards, collapsed to one card ----
+   Keeps the input material (flat, recessed, left spine) because a bundle of context IS context.
+   What marks it as a container is a stacked edge and a member row, not a different fill, so the
+   role language stays intact. */
+.flow-note-object[data-role='input'] {
+  /* The stack: two offset pseudo-edges behind the card, so it reads as several things in one. */
+  --obj-tone: var(--accent-2);
+  border-left-color: var(--obj-tone);
+  box-shadow: 3px -3px 0 -1px var(--surface-2), 3px -3px 0 0 var(--border), 6px -6px 0 -1px var(--surface-2), 6px -6px 0 0 var(--border);
+}
+.flow-note-object[data-role='input'] .flow-note-ic { color: var(--obj-tone); }
+/* The label and member row are plain text, so dragging across them selects it. Cards elsewhere
+   get away without this because their body is a textarea. The name input opts back in. */
+.flow-note-object[data-role='input'] { user-select: none; }
+.flow-note-object[data-role='input'] .flow-obj-name { user-select: text; }
+.flow-note-object[data-role='input'].sel {
+  border-color: var(--obj-tone);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--obj-tone) 40%, transparent), 3px -3px 0 -1px var(--surface-2), 3px -3px 0 0 var(--border), 6px -6px 0 -1px var(--surface-2), 6px -6px 0 0 var(--border);
+}
+.flow-obj-name {
+  margin: 0 9px 6px; width: calc(100% - 18px); box-sizing: border-box;
+  border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
+  padding: 0; cursor: text;
+}
+.flow-obj-name:focus { outline: none; }
+.flow-obj-name::placeholder { color: var(--text-faint); font-weight: 550; }
+/* What's inside, at a glance: one tinted glyph per member plus a count. */
+.flow-obj-members { display: flex; align-items: center; gap: 4px; padding: 0 9px 9px; flex-wrap: wrap; }
+.flow-obj-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 5px;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+.flow-obj-chip svg { width: 13px; height: 13px; }
+.flow-obj-count { font-size: 11px; color: var(--text-faint); margin-left: 2px; }
+/* The crumb segment shown while you're inside an object. */
+.flow-crumb-obj {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--accent-2); cursor: pointer; padding: 2px 4px; border-radius: 7px;
+}
+.flow-crumb-obj:hover { background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+
+/* ---- Right-click menu (the canvas had none before smart objects) ---- */
+.flow-ctx-scrim { position: absolute; inset: 0; z-index: 60; }
+.flow-ctx {
+  position: absolute; z-index: 61; min-width: 216px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--border-strong, var(--border));
+  border-radius: 11px; box-shadow: 0 14px 40px -14px rgba(16, 24, 40, 0.32), 0 2px 8px -2px rgba(16, 24, 40, 0.12);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.flow-ctx-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  padding: 7px 9px; border-radius: 7px; font: inherit; font-size: 13px; color: var(--text);
+}
+.flow-ctx-item:hover:not(:disabled) { background: var(--surface-2); }
+.flow-ctx-item:disabled { opacity: 0.4; cursor: default; }
+.flow-ctx-item.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
+.flow-ctx-kbd { margin-left: auto; font-size: 10.5px; color: var(--text-faint); }
+.flow-ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+.flow-ctx-hint { font-size: 11.5px; line-height: 1.4; color: var(--text-faint); padding: 3px 9px 6px; }
+
+/* ---- Smart-object inspector: the members list ---- */
+.flow-obj-list { display: flex; flex-direction: column; gap: 4px; }
+.flow-obj-row {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: 7px 8px;
+}
+.flow-obj-row-ic {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.flow-obj-row-ic svg { width: 14px; height: 14px; }
+.flow-obj-row-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.flow-obj-row-kind { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.flow-obj-row-val { font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-obj-row-out {
+  flex: 0 0 auto; width: 20px; height: 20px; border: 0; border-radius: 6px; cursor: pointer;
+  background: none; color: var(--text-faint); font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.flow-obj-row-out:hover { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+
 /* Transient bottom toast for lightweight recommendations. */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(520px, calc(100vw - 40px)); background: var(--text); color: var(--surface); border-radius: 11px; box-shadow: 0 8px 28px rgba(16,24,40,.24); padding: 11px 12px 11px 14px; cursor: pointer; animation: toast-in .18s ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }

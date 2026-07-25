@@ -25,6 +25,8 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
+          'Smart objects. Select a few context cards and press Cmd+G (or right-click, Group into a smart object) and they collapse into one named card showing what is inside. Double-click it to open it and work on its members on their own canvas, with a breadcrumb back. It names itself after the record you linked. Ungroup spills the cards back out, and nothing is lost.',
+          'The canvas has a right-click menu. It carries the actions that only make sense on a specific card: bundle these, open or ungroup an object, delete.',
           'Every kind of card is now an icon in the canvas toolbar, grouped by what it does: what gets made, what it is made from, and notes. One click drops a card, and the groups are split so the toolbar itself shows the difference. The Add dropdown is gone.',
           'A new campaign starts in one place. The floating "What are you launching?" card is gone and its question now opens Hansel itself, so there is a single front door instead of two that did the same thing. It offers three ways to start a campaign, or a template to drop by hand, and it steps aside the moment the campaign has any shape.',
           'Click any card and you can adjust it in the inspector. Context cards and sticky notes used to fall through to the campaign brief panel; each one now has its own panel with its record picker, its note, and a delete. A Data source card can open its linked data set straight from there.',
