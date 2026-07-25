@@ -4316,7 +4316,8 @@ export function FlowsView() {
                 {noteMenuBtn('person', 'A contact')}
                 <div className="flow-tb-add-sec">Strategy</div>
                 {noteMenuBtn('message', 'The angle copy is written to')}
-                {noteMenuBtn('goal', 'A north-star objective')}
+                {/* Goal primitive removed: the Brief owns the campaign's north-star objective, so a
+                    separate Goal card just duplicated it. */}
                 {noteMenuBtn('trigger', 'What fires an action')}
                 {noteMenuBtn('proof-point', 'Evidence to back it up')}
                 {noteMenuBtn('voice', 'How it should sound')}
