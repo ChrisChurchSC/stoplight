@@ -184,15 +184,21 @@ const DELIVERABLE_GROUPS: { group: string; label: string; tone: string; icon: Re
 
 const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing'] as const
 
-// Freeform canvas cards you drop from the toolbar (a lightweight node primitive shared across the
-// new types). They live in the builder's memory alongside the deliverable nodes, positioned via the
-// same `pos` map and connectable through the same edge system.
-type FlowNoteKind =
+/**
+ * OBJECTS. One thing on the campaign board: an audience, a message, a proof point, a note. Dropped
+ * from the toolbar, wired to the campaign card to count, and convertible into a SMART OBJECT (a
+ * named bundle that can be assigned to a brand folder and reused across campaigns).
+ *
+ * ⚠️ "object" in the UI covers BOTH arrays on this board. Context objects live in `objects`
+ * (CanvasObject, below) and the things that get made live in `nodes` (FlowDeliverable). A reader who
+ * greps `objects` and assumes it holds the whole board will be wrong; BoardObject is the union.
+ */
+type CanvasObjectKind =
   | 'audience' | 'data-source' | 'note'
   | 'proof-point' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
-interface FlowNote {
+interface CanvasObject {
   id: string
-  kind: FlowNoteKind
+  kind: CanvasObjectKind
   text: string
   /** For linked kinds (audience → a segment, proof point → an RTB), the record's id. */
   refId?: string
@@ -201,7 +207,7 @@ interface FlowNote {
    * raw record, never both: the object is the reusable unit and its refs are what reach the
    * campaign.
    */
-  objectId?: string
+  smartObjectId?: string
 }
 /**
  * A card's ROLE is what it does, and it's the axis the canvas is now organized around: an
@@ -217,9 +223,19 @@ interface FlowNote {
  * and proof types at that (see poolsFrom in useTrafficStore). The Add menu says so in as many
  * words. Don't add copy anywhere that promises an input shapes the writing until that's wired.
  */
-type CardRole = 'input' | 'markup'
-type CardFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
-const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder: string; role: CardRole; family: CardFamily; menuDesc: string; icon: React.ReactNode }> = {
+/**
+ * What an object DOES, and the value of its data-role attribute.
+ *
+ * This used to declare only input and markup while the DOM emitted four values, so the type did not
+ * describe reality. 'brief' and 'output' are emitted from the campaign card, the deliverables and
+ * the post sub-cards. ⚠️ 'output' currently matches ZERO css rules: output styling comes from the
+ * tier classes and --shadow-raise, not from the role, so the attribute is a hook nothing reads yet.
+ * Kept because it makes the board self-describing in the DOM, and named here so the next person
+ * does not spend an afternoon looking for the rule that styles it.
+ */
+type ObjectRole = 'output' | 'input' | 'markup' | 'brief'
+type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
+const OBJECT_META: Record<CanvasObjectKind, { label: string; tone: string; placeholder: string; role: ObjectRole; family: ObjectFamily; menuDesc: string; icon: React.ReactNode }> = {
   audience: {
     label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?', role: 'input', family: 'who',
     menuDesc: 'The people it is written for',
@@ -277,20 +293,20 @@ const NOTE_META: Record<FlowNoteKind, { label: string; tone: string; placeholder
   },
 }
 /**
- * The Add menu's input band, in order. Rows are derived from NOTE_META by family rather than
+ * The Add menu's input band, in order. Rows are derived from OBJECT_META by family rather than
  * hand-listed in the JSX, so a new kind lands in the right group by declaring its family and
  * the menu can't drift from the registry. Kinds with role 'markup' get their own band.
- * Row order WITHIN a band is NOTE_META's declaration order, so reorder entries there to
+ * Row order WITHIN a band is OBJECT_META's declaration order, so reorder entries there to
  * reorder the menu.
  */
-const INPUT_FAMILIES: { family: CardFamily; label: string }[] = [
+const INPUT_FAMILIES: { family: ObjectFamily; label: string }[] = [
   { family: 'who', label: "Who it's for" },
   { family: 'says', label: 'What it says' },
   { family: 'when', label: 'When' },
   { family: 'draws', label: 'What it draws on' },
 ]
-const kindsInFamily = (family: CardFamily): FlowNoteKind[] =>
-  (Object.keys(NOTE_META) as FlowNoteKind[]).filter((k) => NOTE_META[k].role === 'input' && NOTE_META[k].family === family)
+const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
+  (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter((k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family)
 // A card's record picker builds its own placeholder from the kind's label, which used to read
 // "Link a audience…" and "No companys established yet". Covers every current label (audience,
 // company, person, message, proof point, voice, channel, data source, trigger).
@@ -298,13 +314,16 @@ const articleFor = (noun: string): string => (/^[aeiou]/.test(noun) ? 'an' : 'a'
 const pluralOf = (noun: string): string =>
   noun === 'person' ? 'people' : noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`
 
-let noteSeq = 0
-const freshNoteId = () => `note_${++noteSeq}`
+/** Everything on the board: context objects plus the deliverables that get made. */
+export type BoardObject = CanvasObject | FlowDeliverable
+
+let objectSeq = 0
+const freshObjectId = () => `co_${++objectSeq}`
 
 /**
  * A SMART OBJECT: a named bundle of context cards, collapsed to one card on the board. Group a
  * few with Cmd+G (or the right-click menu), double-click to open it and work on its members on
- * their own canvas, ungroup to spill them back out.
+ * their own canvas, releasePlacement to spill them back out.
  *
  * The point is reuse: "the RevOps pitch" as one object holding an audience, a message and two
  * proof points, instead of four loose cards you re-make on every campaign. It stays inside one
@@ -312,19 +331,19 @@ const freshNoteId = () => `note_${++noteSeq}`
  * this is what gets promoted to a brand-level library, and applying one will set several of the
  * campaign's refs at once.
  */
-interface FlowGroup {
+interface SmartPlacement {
   id: string
   /**
    * The brand-library SmartObject this placement shows. The NAME and the REFS live there, not
    * here, which is what makes an object reusable: the same object can sit on several campaigns
    * and renaming it once renames it everywhere. This record is just "it is on this canvas".
    */
-  objectId: string
-  /** FlowNote ids currently drawn inside it on this canvas. */
+  smartObjectId: string
+  /** CanvasObject ids currently drawn inside it on this canvas. */
   memberIds: string[]
 }
-let groupSeq = 0
-const freshGroupId = () => `grp_${++groupSeq}`
+let placementSeq = 0
+const freshGroupId = () => `pl_${++placementSeq}`
 // Data-source cards link to an established connector (mirrors the ConnectorsPage list).
 const CONNECTOR_SOURCES: { id: string; label: string }[] = [
   { id: 'google-analytics', label: 'Google Analytics' },
@@ -578,12 +597,12 @@ export function FlowsView() {
   const [nodes, setNodes] = useState<FlowDeliverable[]>([])
   // Freeform palette cards (audience / message / proof point / data source / note). Ephemeral in the
   // builder for now; positioned via `pos` and connectable like any other node.
-  const [notes, setNotes] = useState<FlowNote[]>([])
-  // Smart objects: bundles of the cards above. Ephemeral alongside `notes` for now.
-  const [groups, setGroups] = useState<FlowGroup[]>([])
+  const [objects, setObjects] = useState<CanvasObject[]>([])
+  // Smart objects: bundles of the cards above. Ephemeral alongside `objects` for now.
+  const [placements, setPlacements] = useState<SmartPlacement[]>([])
   // Which smart object you're inside, if any. Non-null swaps the canvas to that object's members
   // and adds a breadcrumb segment, so editing one feels like editing a small campaign.
-  const [openGroupId, setOpenGroupId] = useState<string | null>(null)
+  const [openPlacementId, setOpenGroupId] = useState<string | null>(null)
   // Right-click menu on the canvas. There was no context menu anywhere in the app before this;
   // it exists for "group into a smart object" but is the obvious home for per-card actions.
   // `on` is the id right-clicked (a card, an object, or null for empty canvas).
@@ -915,8 +934,8 @@ export function FlowsView() {
             // silently taking three or four cards with it is too sharp an edge; the card's ✕ does
             // the same thing, and the right-click menu has an explicit "delete object and its
             // cards" for when that's what you mean.
-            else if (groupsRef.current.some((g) => g.id === id)) ungroupRef.current(id)
-            else if (notesRef.current.some((nt) => nt.id === id)) deleteNote(id)
+            else if (placementsRef.current.some((g) => g.id === id)) releaseRef.current(id)
+            else if (objectsRef.current.some((nt) => nt.id === id)) deleteObject(id)
             else if (nodesRef.current.some((n) => n.id === id)) removeNode(id)
           })
           setSel(null)
@@ -942,11 +961,11 @@ export function FlowsView() {
       // Cmd/Ctrl+G bundles the selected cards into a smart object (the universal "group" chord).
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault()
-        groupSelectionRef.current()
+        convertSelectionRef.current()
         return
       }
       // Escape steps out of a smart object you're inside.
-      if (e.key === 'Escape' && openGroupRef.current) {
+      if (e.key === 'Escape' && openPlacementRef.current) {
         e.preventDefault()
         setOpenGroupId(null)
         return
@@ -1013,8 +1032,8 @@ export function FlowsView() {
   nodesRef.current = nodes
   // Fresh refs for the Delete/Backspace shortcut, whose keydown listener is bound less often than
   // these change.
-  const notesRef = useRef(notes)
-  notesRef.current = notes
+  const objectsRef = useRef(objects)
+  objectsRef.current = objects
   const selRef = useRef(sel)
   selRef.current = sel
   const selectedRef = useRef(selected)
@@ -1339,31 +1358,31 @@ export function FlowsView() {
    * Only the kinds with a FlowRefType can attach, because a ref is what the rest of the app reads.
    * Of these, segment and proof are the two that actually reach the copy writer today.
    */
-  const REF_TYPE_FOR_KIND: Partial<Record<FlowNoteKind, FlowRefType>> = {
+  const REF_TYPE_FOR_KIND: Partial<Record<CanvasObjectKind, FlowRefType>> = {
     audience: 'segment',
     'proof-point': 'proof',
     company: 'company',
     person: 'person',
   }
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
-  const refForNote = (nt: FlowNote): FlowReference | null => {
+  const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
     if (!type || !nt.refId) return null
-    const opts = noteOptions(nt.kind)
+    const opts = objectOptions(nt.kind)
     const label = opts?.find((o) => o.id === nt.refId)?.label
     return label ? { type, id: nt.refId, label } : null
   }
   /** Every ref behind a node id: a card contributes its own, a smart object contributes all of its members'. */
   const refsBehind = (nodeId: string): FlowReference[] => {
-    const g = groups.find((x) => x.id === nodeId)
+    const g = placements.find((x) => x.id === nodeId)
     // The library object is the source of truth for what is inside; the placed cards are a view.
-    if (g) return objectFor(g)?.refs ?? []
-    const nt = notes.find((n) => n.id === nodeId)
+    if (g) return smartObjectFor(g)?.refs ?? []
+    const nt = objects.find((n) => n.id === nodeId)
     if (!nt) return []
     // A card linking an OBJECT contributes everything inside it, which is the point of objects:
     // attach one card, and the contact plus their proof and message all reach the campaign.
-    if (nt.objectId) return smartObjects.find((o) => o.id === nt.objectId)?.refs ?? []
-    return [refForNote(nt)].filter((r): r is FlowReference => !!r)
+    if (nt.smartObjectId) return smartObjects.find((o) => o.id === nt.smartObjectId)?.refs ?? []
+    return [refForObject(nt)].filter((r): r is FlowReference => !!r)
   }
   /**
    * Connecting a card to the campaign tags its records on the campaign.
@@ -1556,7 +1575,7 @@ export function FlowsView() {
     if (n === viewCampaign?.overallBudget) return
     patchCampaign(viewName, { overallBudget: n })
     // A budget needs to be assigned to paid assets. Flag it if there's nowhere to put it, or if
-    // it isn't fully assigned across the paid placements yet.
+    // it isn't fully assigned across the paid groups yet.
     if (n && n > 0) {
       if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
       else if (assignedBudget < n) showToast(`$${n.toLocaleString()} budget set — assign it across your paid assets so it's fully allocated.`)
@@ -1587,9 +1606,9 @@ export function FlowsView() {
   // adds don't stack exactly on top of each other; the user drags it wherever from there.
   /**
    * Where a newly added card lands. It used to cascade from a FIXED point (300, 120) by
-   * `notes.length` * a 28x34 step, which failed three ways: the step is far smaller than a 236px
+   * `objects.length` * a 28x34 step, which failed three ways: the step is far smaller than a 236px
    * card so every card buried the last one, the anchor ignored pan and zoom so cards could land
-   * off-screen or on top of the brief, and indexing by `notes.length` meant deleting cards reset
+   * off-screen or on top of the brief, and indexing by `objects.length` meant deleting cards reset
    * the cascade and dropped the next one back on an existing pile.
    *
    * Instead: scan the VISIBLE canvas on a grid and take the first slot that overlaps nothing.
@@ -1631,12 +1650,12 @@ export function FlowsView() {
     const lowest = taken.reduce((m, r) => Math.max(m, r.y + r.h), pad)
     return { x: pad, y: lowest + pad }
   }
-  const addNote = (kind: FlowNoteKind) => {
-    const id = freshNoteId()
+  const addObject = (kind: CanvasObjectKind) => {
+    const id = freshObjectId()
     const spot = freeSlot()
-    setNotes((n) => [...n, { id, kind, text: '' }])
+    setObjects((n) => [...n, { id, kind, text: '' }])
     // Added while inside a smart object: it belongs to that object, not the outer board.
-    if (openGroupId) setGroups((gs) => gs.map((g) => (g.id === openGroupId ? { ...g, memberIds: [...g.memberIds, id] } : g)))
+    if (openPlacementId) setPlacements((gs) => gs.map((g) => (g.id === openPlacementId ? { ...g, memberIds: [...g.memberIds, id] } : g)))
     // Provisional position; the pendingPlace effect corrects it to `spot` once the card is
     // measured, the same way the deliverable picker places a node.
     setPos((p) => ({ ...p, [id]: { x: 0, y: 0 } }))
@@ -1648,11 +1667,11 @@ export function FlowsView() {
     setSelected(new Set())
     setBriefCollapsed(false)
   }
-  const deleteNote = (id: string) => {
+  const deleteObject = (id: string) => {
     // If it was attached to the campaign, its records go with it (unless another attached card
     // still contributes the same one).
     if (connectors.some((e) => e.from === id && e.to === 'campaign')) detachFromCampaign(id, connectors)
-    setNotes((n) => n.filter((x) => x.id !== id))
+    setObjects((n) => n.filter((x) => x.id !== id))
     setConnectors((c) => c.filter((e) => e.from !== id && e.to !== id))
     setPos((p) => {
       const next = { ...p }
@@ -1675,8 +1694,8 @@ export function FlowsView() {
    * re-implementing it here and drifting.
    */
   /** Kinds whose record this card can create. Freeform kinds have no record; Data source has its own. */
-  const CREATABLE_KINDS = new Set<FlowNoteKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger'])
-  const createRecordForKind = (kind: FlowNoteKind, rawName: string): { id: string; label: string } | null => {
+  const CREATABLE_KINDS = new Set<CanvasObjectKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger'])
+  const createRecordForKind = (kind: CanvasObjectKind, rawName: string): { id: string; label: string } | null => {
     const nm = rawName.trim()
     if (!nm) return null
     switch (kind) {
@@ -1701,12 +1720,12 @@ export function FlowsView() {
   /** Which card is currently naming a new record (null = none). */
   const [creatingFor, setCreatingFor] = useState<string | null>(null)
   const [creatingName, setCreatingName] = useState('')
-  const submitCreate = (nt: FlowNote) => {
+  const submitCreate = (nt: CanvasObject) => {
     const made = createRecordForKind(nt.kind, creatingName)
     setCreatingFor(null)
     setCreatingName('')
     if (!made) return
-    setNoteRef(nt.id, made.id)
+    setObjectRef(nt.id, made.id)
     // If the card is already attached to the campaign, the new record joins it immediately, so
     // creating from an attached card does the whole job in one gesture.
     if (isAttached(nt.id)) attachToCampaign(nt.id)
@@ -1714,41 +1733,41 @@ export function FlowsView() {
 
   // ---- Smart objects ----------------------------------------------------------------------
   // Which group a card belongs to (a card is in at most one).
-  const groupOf = (noteId: string): FlowGroup | undefined => groups.find((g) => g.memberIds.includes(noteId))
+  const placementOf = (noteId: string): SmartPlacement | undefined => placements.find((g) => g.memberIds.includes(noteId))
   /**
    * OBJECTS A CARD CAN PICK. A Person card offers person objects, an Audience card segment ones.
    * Split into the ones already on this campaign (placed on the canvas) and the rest of the
    * brand's library, because "which of these is already in play" is the first thing you want to
    * know when you open the picker.
    */
-  const objectsForKind = (kind: FlowNoteKind): { onCampaign: SmartObject[]; library: SmartObject[] } => {
+  const objectsForKind = (kind: CanvasObjectKind): { onCampaign: SmartObject[]; library: SmartObject[] } => {
     const refType = REF_TYPE_FOR_KIND[kind]
     const mine = smartObjects.filter((o) => o.brand === brand && o.kind === refType)
-    const placed = new Set(groups.map((g) => g.objectId))
+    const placed = new Set(placements.map((g) => g.smartObjectId))
     return { onCampaign: mine.filter((o) => placed.has(o.id)), library: mine.filter((o) => !placed.has(o.id)) }
   }
 
   /** The brand-library object a canvas placement shows. */
-  const objectFor = (g: FlowGroup) => smartObjects.find((o) => o.id === g.objectId)
-  const groupName = (g: FlowGroup) => objectFor(g)?.name ?? 'Smart object'
-  const openGroup = openGroupId ? groups.find((g) => g.id === openGroupId) ?? null : null
+  const smartObjectFor = (g: SmartPlacement) => smartObjects.find((o) => o.id === g.smartObjectId)
+  const placementName = (g: SmartPlacement) => smartObjectFor(g)?.name ?? 'Smart object'
+  const openPlacement = openPlacementId ? placements.find((g) => g.id === openPlacementId) ?? null : null
   // Cards drawn on the CURRENT canvas: inside an object, only its members; outside, only cards
   // that aren't in one (grouped cards live inside their object, not loose on the board).
-  const visibleNotes = openGroup
-    ? notes.filter((n) => openGroup.memberIds.includes(n.id))
-    : notes.filter((n) => !groupOf(n.id))
+  const visibleObjects = openPlacement
+    ? objects.filter((n) => openPlacement.memberIds.includes(n.id))
+    : objects.filter((n) => !placementOf(n.id))
   // Name a fresh object after what it's about: the first member with a linked record wins, else
   // the first member's kind. Beats "Smart object 3" as a default you'd have to fix every time.
-  const suggestGroupName = (ids: string[]): string => {
+  const suggestPlacementName = (ids: string[]): string => {
     for (const id of ids) {
-      const nt = notes.find((n) => n.id === id)
+      const nt = objects.find((n) => n.id === id)
       if (!nt) continue
-      const opts = noteOptions(nt.kind)
+      const opts = objectOptions(nt.kind)
       const label = nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : nt.text.trim().split('\n')[0]
       if (label) return label.slice(0, 48)
     }
-    const first = notes.find((n) => n.id === ids[0])
-    return first ? `${NOTE_META[first.kind].label} bundle` : 'Smart object'
+    const first = objects.find((n) => n.id === ids[0])
+    return first ? `${OBJECT_META[first.kind].label} bundle` : 'Smart object'
   }
   /**
    * Bundle the selected cards into a smart object. ONE is enough: an object is a named, reusable
@@ -1756,9 +1775,9 @@ export function FlowsView() {
    * natural way to start one you will add to. Only cards, since a deliverable is not context.
    * Falls back to the single active selection so Cmd+G works without a marquee.
    */
-  const groupSelection = () => {
+  const convertSelection = () => {
     const pool = selected.size ? [...selected] : sel ? [sel] : []
-    const ids = pool.filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
+    const ids = pool.filter((id) => objects.some((n) => n.id === id) && !placementOf(id))
     if (!ids.length) return
     recordHistory(true)
     const id = freshGroupId()
@@ -1769,9 +1788,9 @@ export function FlowsView() {
     // The object goes in the brand's library, so it outlives this campaign and can be reused.
     // What it holds is the RECORDS behind the cards, not the cards, which is what makes it
     // portable: another campaign places the same object and gets the same records.
-    const refs = ids.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n).map(refForNote).filter((r): r is FlowReference => !!r)
-    const objectId = addSmartObject(brand, suggestGroupName(ids), refs)
-    setGroups((g) => [...g, { id, objectId, memberIds: ids }])
+    const refs = ids.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n).map(refForObject).filter((r): r is FlowReference => !!r)
+    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs)
+    setPlacements((g) => [...g, { id, smartObjectId, memberIds: ids }])
     setPos((p) => ({ ...p, [id]: spot }))
     // Members keep their own pos: it becomes their layout INSIDE the object.
     setSel(id)
@@ -1779,12 +1798,12 @@ export function FlowsView() {
     setBriefCollapsed(false)
   }
   /** Spill an object's members back onto the board and drop the object. */
-  const ungroup = (gid: string) => {
-    const g = groups.find((x) => x.id === gid)
+  const releasePlacement = (gid: string) => {
+    const g = placements.find((x) => x.id === gid)
     if (!g) return
     recordHistory(true)
-    if (openGroupId === gid) setOpenGroupId(null)
-    setGroups((gs) => gs.filter((x) => x.id !== gid))
+    if (openPlacementId === gid) setOpenGroupId(null)
+    setPlacements((gs) => gs.filter((x) => x.id !== gid))
     setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
     setPos((p) => {
       const next = { ...p }
@@ -1794,41 +1813,41 @@ export function FlowsView() {
     setSel(g.memberIds[0] ?? null)
     setSelected(new Set())
   }
-  /** Delete an object AND its members (ungroup first if you only want the object gone). */
-  const deleteGroup = (gid: string) => {
-    const g = groups.find((x) => x.id === gid)
+  /** Delete an object AND its members (releasePlacement first if you only want the object gone). */
+  const deletePlacement = (gid: string) => {
+    const g = placements.find((x) => x.id === gid)
     if (!g) return
     recordHistory(true)
-    if (openGroupId === gid) setOpenGroupId(null)
-    g.memberIds.forEach((m) => deleteNote(m))
-    setGroups((gs) => gs.filter((x) => x.id !== gid))
+    if (openPlacementId === gid) setOpenGroupId(null)
+    g.memberIds.forEach((m) => deleteObject(m))
+    setPlacements((gs) => gs.filter((x) => x.id !== gid))
     setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
     if (sel === gid) setSel(null)
   }
   // Renaming renames the LIBRARY object, so it changes everywhere the object is placed.
-  const renameGroup = (gid: string, name: string) => {
-    const g = groups.find((x) => x.id === gid)
-    if (g) updateSmartObject(g.objectId, { name })
+  const renamePlacement = (gid: string, name: string) => {
+    const g = placements.find((x) => x.id === gid)
+    if (g) updateSmartObject(g.smartObjectId, { name })
   }
   // The global keydown effect below runs with deps [nodes.length, viewName] and reads everything
   // else through refs, so Cmd+G goes through one too rather than capturing a stale selection.
-  const groupSelectionRef = useRef(groupSelection)
-  groupSelectionRef.current = groupSelection
-  const openGroupRef = useRef<string | null>(openGroupId)
-  openGroupRef.current = openGroupId
-  const groupsRef = useRef(groups)
-  groupsRef.current = groups
-  const ungroupRef = useRef(ungroup)
-  ungroupRef.current = ungroup
+  const convertSelectionRef = useRef(convertSelection)
+  convertSelectionRef.current = convertSelection
+  const openPlacementRef = useRef<string | null>(openPlacementId)
+  openPlacementRef.current = openPlacementId
+  const placementsRef = useRef(placements)
+  placementsRef.current = placements
+  const releaseRef = useRef(releasePlacement)
+  releaseRef.current = releasePlacement
   /** Drop a member out of an object without deleting the card. */
-  const removeFromGroup = (gid: string, noteId: string) =>
-    setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
+  const removeFromPlacement = (gid: string, noteId: string) =>
+    setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
 
-  const updateNoteText = (id: string, text: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
-  const setNoteRef = (id: string, refId: string) => setNotes((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+  const updateObjectText = (id: string, text: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
+  const setObjectRef = (id: string, refId: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
   // Linked kinds pick from an established record; freeform kinds (note, concept, season) return null.
   const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
-  const noteOptions = (kind: FlowNoteKind): { id: string; label: string }[] | null => {
+  const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
     switch (kind) {
       case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
       case 'data-source': return CONNECTOR_SOURCES
@@ -1987,10 +2006,10 @@ export function FlowsView() {
     setViewName(null)
     setBuilt(null)
     setNodes([])
-    setNotes([])
+    setObjects([])
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
     // (The library OBJECTS survive: that is the point of them. Only "it is on this canvas" resets.)
-    setGroups([])
+    setPlacements([])
     setOpenGroupId(null)
     setBriefHidden(false)
     setBriefSummoned(false)
@@ -2018,8 +2037,8 @@ export function FlowsView() {
     // openView cleared none of these, so opening a built campaign showed the previous one's board.
     persistActiveChat()
     setChatMsgs([])
-    setNotes([])
-    setGroups([])
+    setObjects([])
+    setPlacements([])
     setOpenGroupId(null)
     setViewName(n)
     setBuilt(null)
@@ -2170,7 +2189,7 @@ export function FlowsView() {
     })
     setRects(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, notes, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH])
+  }, [nodes, objects, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH])
 
   // Once a just-created card is measured, nudge it to where it was dropped.
   useEffect(() => {
@@ -2648,17 +2667,17 @@ export function FlowsView() {
   }
 
   const viewing = viewName !== null
-  // A brand-new, untouched campaign — no deliverables, notes, chat, or name yet. It opens with a
+  // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
   // blank canvas + the "What are you launching?" starter as the only front door; the brief card
   // isn't pre-placed until the campaign gains some shape (or the user summons it from the toolbar).
-  const blankCampaign = !viewing && nodes.length === 0 && notes.length === 0 && chatMsgs.length === 0 && !name.trim()
+  const blankCampaign = !viewing && nodes.length === 0 && objects.length === 0 && chatMsgs.length === 0 && !name.trim()
   const selDeliv = viewing ? viewDelivs.find((d) => d.key === sel) : null
   const selPost = viewing ? viewRows.find((r) => r.id === sel) : null
   // Primitive cards are selectable in BOTH modes and their ids (note_N) match none of the other
   // inspector branches, so without this they fell through: clicking an Audience card showed you
   // the Campaign brief panel. Same lookup for build and view.
-  const selNote = notes.find((n) => n.id === sel) ?? null
-  const selGroup = groups.find((g) => g.id === sel) ?? null
+  const selObject = objects.find((n) => n.id === sel) ?? null
+  const selGroup = placements.find((g) => g.id === sel) ?? null
 
   // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
   // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
@@ -2804,14 +2823,14 @@ export function FlowsView() {
   }
   // Double-clicking a Data source card opens its linked data set as a full-page spreadsheet tab. If
   // it isn't linked to a data set yet (empty, or a connector), spin one up, link it, and open it.
-  const openDataCard = (nt: FlowNote) => {
+  const openDataCard = (nt: CanvasObject) => {
     const linked = nt.refId && allBrandDatasets.some((d) => d.id === nt.refId) ? nt.refId : null
     if (linked) {
       openDatasetTab(linked)
       return
     }
     const id = addBrandDataset(brand)
-    setNoteRef(nt.id, id)
+    setObjectRef(nt.id, id)
     openDatasetTab(id)
   }
   // "Start a folder for a new brand": create + register the brand, then drop into its brand page on
@@ -2857,34 +2876,34 @@ export function FlowsView() {
           icon: <PresetTile tone={DELIV_TONE} channel={p?.channel} />,
         }
       })
-  const noteLayer = (nt: FlowNote, depth = 0): Layer => {
-    const opts = noteOptions(nt.kind)
+  const objectLayer = (nt: CanvasObject, depth = 0): Layer => {
+    const opts = objectOptions(nt.kind)
     // An object-linked card has no refId, so reading refId alone showed it in Layers as its bare
     // kind ("Person") rather than what it points at. Check the object first.
-    const obj = nt.objectId ? smartObjects.find((o) => o.id === nt.objectId) : undefined
+    const obj = nt.smartObjectId ? smartObjects.find((o) => o.id === nt.smartObjectId) : undefined
     const linked = obj ? obj.name : nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : ''
     return {
       id: nt.id,
-      label: linked || nt.text.trim().split('\n')[0] || NOTE_META[nt.kind].label,
-      sub: NOTE_META[nt.kind].label,
+      label: linked || nt.text.trim().split('\n')[0] || OBJECT_META[nt.kind].label,
+      sub: OBJECT_META[nt.kind].label,
       icon: (
-        <span className="flow-layer-ic" style={{ color: NOTE_META[nt.kind].tone }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[nt.kind].icon}</svg>
+        <span className="flow-layer-ic" style={{ color: OBJECT_META[nt.kind].tone }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[nt.kind].icon}</svg>
         </span>
       ),
       depth,
       // Only inputs can attach: a sticky note is deliberately outside the machine, so flagging it
       // as "not attached" would be noise about a state it can never be in.
-      attached: NOTE_META[nt.kind].role === 'input' ? isAttached(nt.id) : undefined,
+      attached: OBJECT_META[nt.kind].role === 'input' ? isAttached(nt.id) : undefined,
     }
   }
   // Cards loose on the board, then each smart object with its members nested under it.
   const inputLayers: Layer[] = [
-    ...notes.filter((n) => NOTE_META[n.kind].role === 'input' && !groupOf(n.id)).map((n) => noteLayer(n)),
-    ...groups.flatMap((g) => [
+    ...objects.filter((n) => OBJECT_META[n.kind].role === 'input' && !placementOf(n.id)).map((n) => objectLayer(n)),
+    ...placements.flatMap((g) => [
       {
         id: g.id,
-        label: groupName(g),
+        label: placementName(g),
         sub: 'Smart object',
         count: g.memberIds.length,
         attached: isAttached(g.id),
@@ -2897,12 +2916,12 @@ export function FlowsView() {
         ),
       } as Layer,
       ...g.memberIds
-        .map((m) => notes.find((n) => n.id === m))
-        .filter((n): n is FlowNote => !!n && NOTE_META[n.kind].role === 'input')
-        .map((n) => noteLayer(n, 1)),
+        .map((m) => objects.find((n) => n.id === m))
+        .filter((n): n is CanvasObject => !!n && OBJECT_META[n.kind].role === 'input')
+        .map((n) => objectLayer(n, 1)),
     ]),
   ]
-  const markupLayers: Layer[] = notes.filter((n) => NOTE_META[n.kind].role === 'markup' && !groupOf(n.id)).map((n) => noteLayer(n))
+  const markupLayers: Layer[] = objects.filter((n) => OBJECT_META[n.kind].role === 'markup' && !placementOf(n.id)).map((n) => objectLayer(n))
   const pickOutline = (id: string) => {
     setSel(id === 'campaign' ? 'campaign' : id)
     setSelected(id === 'campaign' ? new Set() : new Set([id]))
@@ -2916,9 +2935,9 @@ export function FlowsView() {
    * It also states what the card DOES, which is the one place we can be unambiguous: an input is
    * board context and its linked record does not reach the copy writer yet.
    */
-  const renderNoteInspector = (nt: FlowNote) => {
-    const meta = NOTE_META[nt.kind]
-    const opts = noteOptions(nt.kind)
+  const renderObjectInspector = (nt: CanvasObject) => {
+    const meta = OBJECT_META[nt.kind]
+    const opts = objectOptions(nt.kind)
     const noun = meta.label.toLowerCase()
     const linkedDs = nt.kind === 'data-source' && nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
     return (
@@ -2938,20 +2957,20 @@ export function FlowsView() {
               card is attached. */}
           {REF_TYPE_FOR_KIND[nt.kind] && (() => {
             const { onCampaign, library } = objectsForKind(nt.kind)
-            const linked = smartObjects.find((o) => o.id === nt.objectId)
+            const linked = smartObjects.find((o) => o.id === nt.smartObjectId)
             const noun = meta.label.toLowerCase()
             return (
               <>
-                <label className="flow-inspect-label">{meta.label} object</label>
+                <label className="flow-inspect-label">{meta.label} smart object</label>
                 <select
                   className="flow-inspect-input flow-inspect-select"
-                  value={nt.objectId ?? ''}
+                  value={nt.smartObjectId ?? ''}
                   onChange={(e) => {
-                    setNotes((n) => n.map((x) => (x.id === nt.id ? { ...x, objectId: e.target.value || undefined } : x)))
+                    setObjects((n) => n.map((x) => (x.id === nt.id ? { ...x, smartObjectId: e.target.value || undefined } : x)))
                     if (isAttached(nt.id)) attachToCampaign(nt.id)
                   }}
                 >
-                  <option value="">{onCampaign.length + library.length ? `Link ${articleFor(noun)} ${noun} object…` : `No ${noun} objects yet`}</option>
+                  <option value="">{onCampaign.length + library.length ? `Link ${articleFor(noun)} ${noun} smart object…` : `No ${noun} smart objects yet`}</option>
                   {onCampaign.length > 0 && (
                     <optgroup label="On this campaign">
                       {onCampaign.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -2980,8 +2999,8 @@ export function FlowsView() {
                         </span>
                         <button
                           className="flow-obj-row-out"
-                          title="Take this out of the object"
-                          aria-label="Take this out of the object"
+                          title="Take this out of the smart object"
+                          aria-label="Take this out of the smart object"
                           onClick={() => {
                             updateSmartObject(linked.id, { refs: linked.refs.filter((x) => !(x.type === r.type && x.id === r.id)) })
                             if (isAttached(nt.id)) detachFromCampaign(nt.id, connectors)
@@ -2992,7 +3011,7 @@ export function FlowsView() {
                       </div>
                     ))}
                     <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                      Editing this object changes it everywhere it is used, not just here.
+                      Editing this smart object changes it everywhere it is used, not just here.
                     </div>
                   </div>
                 )}
@@ -3011,14 +3030,14 @@ export function FlowsView() {
                 value={nt.refId ?? ''}
                 onChange={(e) => {
                   if (nt.kind === 'data-source' && e.target.value === '__new__') {
-                    setNoteRef(nt.id, addBrandDataset(brand))
-                  } else setNoteRef(nt.id, e.target.value)
+                    setObjectRef(nt.id, addBrandDataset(brand))
+                  } else setObjectRef(nt.id, e.target.value)
                 }}
               >
                 <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} established yet`}</option>
                 {nt.kind === 'data-source' ? (
                   // Mirror the card's own picker: a Data source can link one of the brand's data
-                  // sets OR a live connector. noteOptions only knows the connectors, so listing
+                  // sets OR a live connector. objectOptions only knows the connectors, so listing
                   // just those would leave a linked DATA SET matching no option, and the select
                   // would silently show the placeholder on an already-linked card.
                   <>
@@ -3055,7 +3074,7 @@ export function FlowsView() {
             rows={4}
             value={nt.text}
             placeholder={meta.placeholder}
-            onChange={(e) => updateNoteText(nt.id, e.target.value)}
+            onChange={(e) => updateObjectText(nt.id, e.target.value)}
           />
           {/* Say plainly what this card does. Update BOTH halves when inputs get wired through. */}
           <div className="flow-inspect-note">
@@ -3063,8 +3082,8 @@ export function FlowsView() {
               ? 'A note for your team. Nothing downstream reads it.'
               : 'Board context. It records what this campaign is made from, and does not change the drafts yet.'}
           </div>
-          <button className="flow-insp-del" onClick={() => deleteNote(nt.id)}>
-            Delete this card
+          <button className="flow-insp-del" onClick={() => deleteObject(nt.id)}>
+            Delete this object
           </button>
         </div>
       </>
@@ -3072,8 +3091,8 @@ export function FlowsView() {
   }
 
   /** The inspector for a selected smart object: name it, see and edit what's inside, open it. */
-  const renderGroupInspector = (g: FlowGroup) => {
-    const members = g.memberIds.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n)
+  const renderPlacementInspector = (g: SmartPlacement) => {
+    const members = g.memberIds.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
     return (
       <>
         <div className="flow-panel-head">
@@ -3082,37 +3101,37 @@ export function FlowsView() {
               <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
             </svg>
           </span>
-          <span className="flow-panel-title">{groupName(g)}</span>
+          <span className="flow-panel-title">{placementName(g)}</span>
         </div>
         <div className="flow-inspect">
-          <p className="flow-inspect-desc">A bundle of context cards you can reuse as one thing.</p>
+          <p className="flow-inspect-desc">Several objects bundled and named, so you can reuse them instead of rebuilding them.</p>
           <label className="flow-inspect-label">Name</label>
-          <input className="flow-inspect-input" value={groupName(g)} placeholder="Name this object…" onChange={(e) => renameGroup(g.id, e.target.value)} />
+          <input className="flow-inspect-input" value={placementName(g)} placeholder="Name this object…" onChange={(e) => renamePlacement(g.id, e.target.value)} />
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
           <div className="flow-obj-list">
             {members.map((m) => {
-              const opts = noteOptions(m.kind)
+              const opts = objectOptions(m.kind)
               const linked = m.refId && opts ? opts.find((o) => o.id === m.refId)?.label : ''
               return (
                 <div key={m.id} className="flow-obj-row">
-                  <span className="flow-obj-row-ic" style={{ color: NOTE_META[m.kind].tone }} aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[m.kind].icon}</svg>
+                  <span className="flow-obj-row-ic" style={{ color: OBJECT_META[m.kind].tone }} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[m.kind].icon}</svg>
                   </span>
                   <span className="flow-obj-row-txt">
-                    <span className="flow-obj-row-kind">{NOTE_META[m.kind].label}</span>
+                    <span className="flow-obj-row-kind">{OBJECT_META[m.kind].label}</span>
                     <span className="flow-obj-row-val">{linked || m.text.trim().split('\n')[0] || 'Nothing picked yet'}</span>
                   </span>
-                  <button className="flow-obj-row-out" title="Move out of this object" aria-label="Move out of this object" onClick={() => removeFromGroup(g.id, m.id)}>✕</button>
+                  <button className="flow-obj-row-out" title="Move out of this object" aria-label="Move out of this object" onClick={() => removeFromPlacement(g.id, m.id)}>✕</button>
                 </div>
               )
             })}
-            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside. Open it and add a card, or ungroup it.</div>}
+            {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside. Open it and add an object, or release it.</div>}
           </div>
-          <button className="flow-insp-open" onClick={() => setOpenGroupId(g.id)}>Open this object</button>
+          <button className="flow-insp-open" onClick={() => setOpenGroupId(g.id)}>Open this smart object</button>
           <div className="flow-inspect-note">
             Board context, like the cards inside it. Nothing here changes the drafts yet.
           </div>
-          <button className="flow-insp-del" onClick={() => ungroup(g.id)}>Ungroup</button>
+          <button className="flow-insp-del" onClick={() => releasePlacement(g.id)}>Release</button>
         </div>
       </>
     )
@@ -3163,16 +3182,16 @@ export function FlowsView() {
   // One palette icon per card kind. Keeps its PER-KIND tone: the icon is all you get at this
   // size, so hue is doing real scanning work here (the card chrome is what goes role-coloured).
   // Name and description come from the registry, so the tooltip and the card can't drift.
-  const palBtn = (kind: FlowNoteKind) => (
+  const palBtn = (kind: CanvasObjectKind) => (
     <button
       key={kind}
       className="flow-tb-pal"
-      style={{ color: NOTE_META[kind].tone }}
-      title={`${NOTE_META[kind].label}. ${NOTE_META[kind].menuDesc}.`}
-      aria-label={`Add a ${NOTE_META[kind].label.toLowerCase()} card`}
-      onClick={() => addNote(kind)}
+      style={{ color: OBJECT_META[kind].tone }}
+      title={`${OBJECT_META[kind].label}. ${OBJECT_META[kind].menuDesc}.`}
+      aria-label={`Add a ${OBJECT_META[kind].label.toLowerCase()} object`}
+      onClick={() => addObject(kind)}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[kind].icon}</svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[kind].icon}</svg>
     </button>
   )
 
@@ -3223,10 +3242,10 @@ export function FlowsView() {
             </Fragment>
           )))}
           {outputLayers.length === 0 && inputLayers.length === 0 && markupLayers.length === 0 && (
-            <div className="flow-outline-empty">Nothing on the board yet. Add a card from the toolbar.</div>
+            <div className="flow-outline-empty">Nothing on the board yet. Add an object from the toolbar.</div>
           )}
         </div>
-        <div className="flow-ov-note">Click a row to open that card. Pick the campaign to set its flight and budget.</div>
+        <div className="flow-ov-note">Click a row to open that object. Pick the campaign to set its flight and budget.</div>
       </div>
     </>
   )
@@ -3256,14 +3275,14 @@ export function FlowsView() {
           )}
           {/* Inside a smart object: a third crumb segment, so the way back out is where you'd look
               for it rather than only on Escape. */}
-          {openGroup && (
+          {openPlacement && (
             <>
               <span className="flow-crumb-sep">/</span>
               <button className="flow-crumb-obj" onClick={() => setOpenGroupId(null)} title="Back to the campaign canvas">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" />
                 </svg>
-                {groupName(openGroup)}
+                {placementName(openPlacement)}
               </button>
             </>
           )}
@@ -3702,8 +3721,8 @@ export function FlowsView() {
               {!viewing && (
                 <button
                   className="flow-brief-del"
-                  title="Delete the brief card"
-                  aria-label="Delete the brief card"
+                  title="Delete the brief"
+                  aria-label="Delete the brief"
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); setBriefHidden(true); if (sel === 'campaign') setSel(null) }}
                 >
@@ -3736,8 +3755,8 @@ export function FlowsView() {
                   one: either way round the edge is stored as card into campaign. */}
               <button
                 className="flow-note-port flow-brief-port"
-                title="Connect a card to this campaign"
-                aria-label="Connect a card to this campaign"
+                title="Connect an object to this campaign"
+                aria-label="Connect an object to this campaign"
                 onMouseDown={(e) => startConnect(e, 'campaign')}
               >
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -3747,8 +3766,8 @@ export function FlowsView() {
 
             {/* Freeform palette cards (audience / message / proof point / data source / note):
                 absolutely positioned in the stack, dragged, selected, and connected like any node. */}
-            {visibleNotes.map((nt) => {
-              const meta = NOTE_META[nt.kind]
+            {visibleObjects.map((nt) => {
+              const meta = OBJECT_META[nt.kind]
               return (
                 <div
                   key={nt.id}
@@ -3765,7 +3784,7 @@ export function FlowsView() {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
                     </span>
                     <span className="flow-note-kind">{meta.label}</span>
-                    <button className="flow-note-del" title="Delete" aria-label="Delete card" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteNote(nt.id) }}>✕</button>
+                    <button className="flow-note-del" title="Delete" aria-label="Delete object" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteObject(nt.id) }}>✕</button>
                   </div>
                   {nt.kind === 'data-source' ? (
                     // A Data source links one of the brand's data sets (the spreadsheets) or a live
@@ -3779,8 +3798,8 @@ export function FlowsView() {
                       onChange={(e) => {
                         if (e.target.value === '__new__') {
                           const id = addBrandDataset(brand)
-                          setNoteRef(nt.id, id)
-                        } else setNoteRef(nt.id, e.target.value)
+                          setObjectRef(nt.id, id)
+                        } else setObjectRef(nt.id, e.target.value)
                       }}
                     >
                       <option value="">Link a data source…</option>
@@ -3812,7 +3831,7 @@ export function FlowsView() {
                     })()}
                     </>
                   ) : (() => {
-                    const opts = noteOptions(nt.kind)
+                    const opts = objectOptions(nt.kind)
                     if (!opts) return null
                     const noun = meta.label.toLowerCase()
                     // Naming a new record: the picker becomes a name field. Enter creates and links
@@ -3841,7 +3860,7 @@ export function FlowsView() {
                         onMouseDown={(e) => e.stopPropagation()}
                         onChange={(e) => {
                           if (e.target.value === '__new__') { setCreatingName(''); setCreatingFor(nt.id); return }
-                          setNoteRef(nt.id, e.target.value)
+                          setObjectRef(nt.id, e.target.value)
                           // Re-attach so a changed record reaches the campaign without redrawing the edge.
                           if (isAttached(nt.id)) attachToCampaign(nt.id)
                         }}
@@ -3859,10 +3878,10 @@ export function FlowsView() {
                   <textarea
                     className="flow-note-text"
                     value={nt.text}
-                    placeholder={noteOptions(nt.kind) ? 'Add a note…' : meta.placeholder}
+                    placeholder={objectOptions(nt.kind) ? 'Add a note…' : meta.placeholder}
                     rows={2}
                     onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => updateNoteText(nt.id, e.target.value)}
+                    onChange={(e) => updateObjectText(nt.id, e.target.value)}
                   />
                   <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, nt.id)}>
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -3874,8 +3893,8 @@ export function FlowsView() {
             {/* SMART OBJECTS. Collapsed bundles of the cards above: one card showing the name and
                 what's inside. Double-click opens it (the canvas swaps to its members). Not drawn
                 while you're inside one, since objects don't nest yet. */}
-            {!openGroup && groups.map((g) => {
-              const members = g.memberIds.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n)
+            {!openPlacement && placements.map((g) => {
+              const members = g.memberIds.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
               return (
                 <div
                   key={g.id}
@@ -3895,20 +3914,20 @@ export function FlowsView() {
                       </svg>
                     </span>
                     <span className="flow-note-kind">Smart object</span>
-                    <button className="flow-note-del" title="Ungroup" aria-label="Ungroup" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); ungroup(g.id) }}>✕</button>
+                    <button className="flow-note-del" title="Release" aria-label="Release" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); releasePlacement(g.id) }}>✕</button>
                   </div>
                   <input
                     className="flow-obj-name"
-                    value={groupName(g)}
+                    value={placementName(g)}
                     placeholder="Name this object…"
                     onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => renameGroup(g.id, e.target.value)}
+                    onChange={(e) => renamePlacement(g.id, e.target.value)}
                   />
                   {/* What's inside, at a glance: one tinted glyph per member. */}
                   <div className="flow-obj-members">
                     {members.map((m) => (
-                      <span key={m.id} className="flow-obj-chip" style={{ color: NOTE_META[m.kind].tone }} title={NOTE_META[m.kind].label}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[m.kind].icon}</svg>
+                      <span key={m.id} className="flow-obj-chip" style={{ color: OBJECT_META[m.kind].tone }} title={OBJECT_META[m.kind].label}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[m.kind].icon}</svg>
                       </span>
                     ))}
                     <span className="flow-obj-count">{members.length} inside</span>
@@ -4195,9 +4214,9 @@ export function FlowsView() {
                 </div>
               </>
             ) : selGroup ? (
-              renderGroupInspector(selGroup)
-            ) : selNote ? (
-              renderNoteInspector(selNote)
+              renderPlacementInspector(selGroup)
+            ) : selObject ? (
+              renderObjectInspector(selObject)
             ) : selPost ? (
               <>
                 <div className="flow-panel-head">
@@ -4586,9 +4605,9 @@ export function FlowsView() {
               </div>
             </>
           ) : selGroup ? (
-            renderGroupInspector(selGroup)
-          ) : selNote ? (
-            renderNoteInspector(selNote)
+            renderPlacementInspector(selGroup)
+          ) : selObject ? (
+            renderObjectInspector(selObject)
           ) : sel === 'campaign' ? (
             <>
               <div className="flow-panel-head">
@@ -4927,12 +4946,12 @@ export function FlowsView() {
       </div>
 
       {/* Right-click menu. Its items are the ones that only make sense on a specific target, so
-          they'd be noise in the toolbar: bundle these cards, open or ungroup an object, delete. */}
+          they'd be noise in the toolbar: bundle these cards, open or releasePlacement an object, delete. */}
       {ctxMenu && (() => {
-        const onGroup = ctxMenu.on ? groups.find((g) => g.id === ctxMenu.on) : undefined
-        const onCard = ctxMenu.on ? notes.find((n) => n.id === ctxMenu.on) : undefined
+        const onGroup = ctxMenu.on ? placements.find((g) => g.id === ctxMenu.on) : undefined
+        const onCard = ctxMenu.on ? objects.find((n) => n.id === ctxMenu.on) : undefined
         // Cards eligible to bundle: the selection if it has 2+, else nothing to group.
-        const groupable = (selected.size ? [...selected] : sel ? [sel] : []).filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
+        const convertible = (selected.size ? [...selected] : sel ? [sel] : []).filter((id) => objects.some((n) => n.id === id) && !placementOf(id))
         const close = () => setCtxMenu(null)
         return (
           <>
@@ -4943,9 +4962,9 @@ export function FlowsView() {
                   <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); setOpenGroupId(onGroup.id) }}>
                     Open<span className="flow-ctx-kbd">dbl-click</span>
                   </button>
-                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); ungroup(onGroup.id) }}>Ungroup</button>
+                  <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); releasePlacement(onGroup.id) }}>Release</button>
                   <div className="flow-ctx-sep" />
-                  <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deleteGroup(onGroup.id) }}>
+                  <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deletePlacement(onGroup.id) }}>
                     Delete object and its cards
                   </button>
                 </>
@@ -4954,26 +4973,26 @@ export function FlowsView() {
                   <button
                     className="flow-ctx-item"
                     role="menuitem"
-                    disabled={!groupable.length}
-                    title={!groupable.length ? 'Select a card first' : undefined}
-                    onClick={() => { close(); groupSelection() }}
+                    disabled={!convertible.length}
+                    title={!convertible.length ? 'Select an object first' : undefined}
+                    onClick={() => { close(); convertSelection() }}
                   >
-                    {groupable.length > 1 ? 'Group into a smart object' : 'Make a smart object'}
+                    {convertible.length > 1 ? 'Bundle into a smart object' : 'Make a smart object'}
                     <span className="flow-ctx-kbd">⌘G</span>
                   </button>
-                  {openGroup && onCard && (
-                    <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); removeFromGroup(openGroup.id, onCard.id) }}>
+                  {openPlacement && onCard && (
+                    <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); removeFromPlacement(openPlacement.id, onCard.id) }}>
                       Move out of this object
                     </button>
                   )}
                   {onCard && (
                     <>
                       <div className="flow-ctx-sep" />
-                      <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deleteNote(onCard.id) }}>Delete card</button>
+                      <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deleteObject(onCard.id) }}>Delete object</button>
                     </>
                   )}
-                  {!ctxMenu.on && !groupable.length && (
-                    <div className="flow-ctx-hint">Select a card to make it a smart object.</div>
+                  {!ctxMenu.on && !convertible.length && (
+                    <div className="flow-ctx-hint">Select an object to make it a smart object.</div>
                   )}
                 </>
               )}
@@ -5028,17 +5047,17 @@ export function FlowsView() {
             return palGroup(
               f.family,
               {
-                title: `${NOTE_META[lead].label}. ${NOTE_META[lead].menuDesc}.`,
-                tone: NOTE_META[lead].tone,
-                icon: NOTE_META[lead].icon,
-                onClick: () => addNote(lead),
+                title: `${OBJECT_META[lead].label}. ${OBJECT_META[lead].menuDesc}.`,
+                tone: OBJECT_META[lead].tone,
+                icon: OBJECT_META[lead].icon,
+                onClick: () => addObject(lead),
               },
               kinds.map((k) => ({
-                label: NOTE_META[k].label,
-                hint: NOTE_META[k].menuDesc,
-                tone: NOTE_META[k].tone,
-                icon: NOTE_META[k].icon,
-                onClick: () => addNote(k),
+                label: OBJECT_META[k].label,
+                hint: OBJECT_META[k].menuDesc,
+                tone: OBJECT_META[k].tone,
+                icon: OBJECT_META[k].icon,
+                onClick: () => addObject(k),
               })),
             )
           })}
@@ -5091,12 +5110,12 @@ export function FlowsView() {
               <path d="M5 3.5 19 10l-6.3 1.9L10 19z" />
             </svg>
           </button>
-          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} title="Link. Drag from one card to another to link them." aria-label="Link">
+          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} title="Link. Drag from one object to another to link them." aria-label="Link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" />
             </svg>
           </button>
-          <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout. Arrange the cards cleanly." aria-label="Tidy layout">
+          <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout. Arrange the objects cleanly." aria-label="Tidy layout">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1.5" />
               <rect x="14" y="3" width="7" height="7" rx="1.5" />

@@ -19,6 +19,19 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.9',
+    dateLabel: 'July 26, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Cards are called objects. One thing on a campaign board is an object: an audience, a message, a proof point, a note. Bundle a few and you get a smart object, which is the same word Photoshop uses for the same idea, and it makes the next part say what it means.',
+          'A smart object now says whether it lives in this campaign or in your brand folder. A bundle starts out local to the campaign you made it on. When it is good enough to reuse, you assign it to the brand and every campaign can reach it. Ungroup is called Release, because a smart object is a linked copy rather than a container you break open.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.8',
     dateLabel: 'July 25, 2026',
     groups: [

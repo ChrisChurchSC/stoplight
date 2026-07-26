@@ -150,16 +150,30 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "The Companies, People, Audiences, Channels, and Proof records this campaign draws on. Audiences and Proof shape the copy: linking them pins which audience each asset speaks to and which proof it leans on. Companies, People, and Channels are for targeting and structure, not for wording.",
     seeAlso: ['canvasOutput', 'canvasInput'],
   },
+  object: {
+    term: 'Object',
+    short:
+      "One thing on a campaign board: an audience, a message, a proof point, a note. Drop it from the toolbar, and wire it to the campaign card to make it count. Objects point at your records and add instruction on top; they never redefine a record.",
+    seeAlso: ['smartObject', 'canvasInput'],
+  },
+  smartObject: {
+    term: 'Smart object',
+    short:
+      "Several objects bundled and named, so you can reuse them instead of rebuilding them. It starts out living inside one campaign; assign it to the brand's folder and every campaign for that brand can reach it.",
+    more:
+      'Double-click a smart object and it opens in its own tab on a blank canvas holding only its contents. Inside it, being on the canvas is being in the object, so there is nothing to wire. Once it is in a brand folder, editing it changes it everywhere it is used.',
+    seeAlso: ['object', 'brand'],
+  },
   canvasOutput: {
     term: 'What gets made',
     short:
-      "Cards on a campaign canvas that turn into real work: the Brief, its Deliverables, and the individual posts under them. Building the campaign writes real drafts for these. They read as raised, tinted cards with a label chip and a count.",
+      "Objects on a campaign canvas that turn into real work: the Brief, its Deliverables, and the individual posts under them. Building the campaign writes real drafts for these. They read as raised, tinted cards with a label chip and a count.",
     seeAlso: ['canvasInput', 'campaign'],
   },
   canvasInput: {
     term: "What it's made from",
     short:
-      "Cards that carry the context a campaign is written from: audiences, messages, proof, voice, channels, and your own notes on the idea. They sit flat on the board so they never look like something you ship.",
+      "Objects that carry the context a campaign is written from: audiences, messages, proof, voice, channels, and your own notes on the idea. They sit flat on the board so they never look like something you ship.",
     more:
       'Today these are board context. Linking a record on one of these cards records your thinking but does not change the drafts yet. What the writer reads is the campaign brief and its linked records.',
     seeAlso: ['canvasOutput', 'linkedRecords'],
