@@ -4938,11 +4938,11 @@ export function FlowsView() {
 
       <div className="flow-toolbar">
         {/* PALETTE ROW — every kind of card you can add, as icons, grouped by role and split by
-            dividers, so the toolbar itself carries the what-gets-made / what-it's-made-from
-            distinction instead of burying it in a dropdown list. Its own row because the whole
+            dividers. The group LABELS are gone: the dividers carry the grouping, each button's
+            tooltip carries its name, and the caret menus spell out every option in words, so the
+            labels were paying rent in the one place with the least room. Its own row because the
             palette will not fit beside zoom + tools + Generate when both side panels are open. */}
         <div className="flow-tb-palette">
-          <span className="flow-tb-pal-lbl">Gets made</span>
           <button
             className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
             title="Brief. The campaign's spec sheet." aria-label="Add the campaign brief"
@@ -4969,7 +4969,6 @@ export function FlowsView() {
             })),
           )}
           <span className="flow-tb-divider" />
-          <span className="flow-tb-pal-lbl">Made from</span>
           {/* The honest caveat the dropdown used to carry as a caption now lives in the glossary
               entry behind this tip, so it is still one hover away. */}
           <InfoTip term="canvasInput" />
@@ -4998,7 +4997,6 @@ export function FlowsView() {
             )
           })}
           <span className="flow-tb-divider" />
-          <span className="flow-tb-pal-lbl">Notes</span>
           {palBtn('note')}
         </div>
         <div className="flow-tb-row">
