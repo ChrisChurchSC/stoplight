@@ -12,6 +12,7 @@ import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../doma
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
 import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
+import { FOLDER_SEP, buildFolderPath, folderName, folderParent, isDescendantFolder, sanitizeSegment, withAncestors } from '../domain/campaignFolders'
 import { newFlight, flightForRow, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
 import { setBrandCalibration } from '../domain/journeyPerf'
@@ -1972,13 +1973,19 @@ interface TrafficState {
    *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
   campaignFolderView: string | null
   setCampaignFolderView: (folder: string | null) => void
-  /** File a campaign under a folder (within its brand). undefined = unfiled. */
+  /** File a campaign under a folder PATH (within its brand). undefined = unfiled. */
   setCampaignFolder: (name: string, folder: string | undefined) => void
-  /** Create an (initially empty) folder for a brand. No-op if it already exists. */
-  createCampaignFolder: (brand: string, folder: string) => void
-  /** Rename a brand's folder, moving every campaign filed under it. */
+  /**
+   * Create an (initially empty) folder for a brand, nested under `parent` when given. No-op if it
+   * already exists, if the name is empty, or if it would nest deeper than MAX_FOLDER_DEPTH.
+   */
+  createCampaignFolder: (brand: string, folder: string, parent?: string) => void
+  /**
+   * Rename a brand's folder. `to` is the new NAME, not a path: the folder keeps its place in the
+   * tree, and its subfolders and their campaigns follow it.
+   */
   renameCampaignFolder: (brand: string, from: string, to: string) => void
-  /** Delete a brand's folder; its campaigns fall back to unfiled. */
+  /** Delete a brand's folder and every folder under it; their campaigns fall back to unfiled. */
   deleteCampaignFolder: (brand: string, folder: string) => void
   /** Clone a campaign + all its assets into a new variant campaign (non-destructive
    *  "duplicate & try"); switches to it and returns the new campaign name. */
@@ -4162,51 +4169,68 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         campaignList = [...s.campaignList, { name, client, strategy: 'Current state', folder }]
       }
       saveCampaigns(campaignList)
-      // Filing under a folder that isn't registered yet (e.g. drag-created) adds it.
+      // Filing under a folder that isn't registered yet (e.g. drag-created) adds it, along with
+      // every ancestor the path implies, so the tree has no hole where a parent should be.
       let campaignFolders = s.campaignFolders
       if (folder) {
         const brand = clientForCampaign(name)
         const list = campaignFolders[brand] ?? []
-        if (!list.includes(folder)) {
-          campaignFolders = { ...campaignFolders, [brand]: [...list, folder] }
+        const missing = withAncestors([folder]).filter((p) => !list.includes(p))
+        if (missing.length) {
+          campaignFolders = { ...campaignFolders, [brand]: [...list, ...missing] }
           saveCampaignFolders(campaignFolders)
         }
       }
       return { campaignList, campaignFolders }
     }),
 
-  createCampaignFolder: (brand, folder) =>
+  createCampaignFolder: (brand, folder, parent) =>
     set((s) => {
-      const trimmed = folder.trim()
-      if (!trimmed) return {}
+      const path = buildFolderPath(parent ?? '', folder)
+      // null = empty name, or deeper than folders go. Either way there is nothing to create.
+      if (!path) return {}
       const list = s.campaignFolders[brand] ?? []
-      if (list.includes(trimmed)) return {}
-      const campaignFolders = { ...s.campaignFolders, [brand]: [...list, trimmed] }
+      if (list.includes(path)) return {}
+      const campaignFolders = { ...s.campaignFolders, [brand]: [...list, path] }
       saveCampaignFolders(campaignFolders)
       return { campaignFolders }
     }),
 
   renameCampaignFolder: (brand, from, to) =>
     set((s) => {
-      const trimmed = to.trim()
-      if (!trimmed || trimmed === from) return {}
+      // `to` is a NAME. Renaming moves nothing: the folder keeps its parent, so only the last
+      // segment of its path changes, and every descendant path is rewritten under the new prefix.
+      const seg = sanitizeSegment(to)
+      if (!seg || seg === folderName(from)) return {}
+      const parent = folderParent(from)
+      const target = parent ? `${parent}${FOLDER_SEP}${seg}` : seg
+      const rewrite = (p: string): string =>
+        p === from ? target : isDescendantFolder(p, from) ? target + p.slice(from.length) : p
       const list = s.campaignFolders[brand] ?? []
-      // Merge into an existing folder if the target name already exists.
-      const next = list.includes(trimmed) ? list.filter((f) => f !== from) : list.map((f) => (f === from ? trimmed : f))
-      const campaignFolders = { ...s.campaignFolders, [brand]: next }
+      // Renaming onto a sibling that already exists MERGES the two, so dedupe.
+      const campaignFolders = { ...s.campaignFolders, [brand]: [...new Set(list.map(rewrite))] }
       saveCampaignFolders(campaignFolders)
-      const campaignList = s.campaignList.map((c) => (c.client === brand && c.folder === from ? { ...c, folder: trimmed } : c))
+      const campaignList = s.campaignList.map((c) =>
+        c.client === brand && c.folder && (c.folder === from || isDescendantFolder(c.folder, from))
+          ? { ...c, folder: rewrite(c.folder) }
+          : c,
+      )
       saveCampaigns(campaignList)
       return { campaignFolders, campaignList }
     }),
 
   deleteCampaignFolder: (brand, folder) =>
     set((s) => {
+      // Deleting a folder deletes the folders inside it. Leaving them would orphan them: their
+      // paths would still name a parent that no longer exists, so they would never render.
+      const gone = (p: string) => p === folder || isDescendantFolder(p, folder)
       const list = s.campaignFolders[brand] ?? []
-      const campaignFolders = { ...s.campaignFolders, [brand]: list.filter((f) => f !== folder) }
+      const campaignFolders = { ...s.campaignFolders, [brand]: list.filter((f) => !gone(f)) }
       saveCampaignFolders(campaignFolders)
-      // Its campaigns fall back to unfiled — the campaigns themselves are untouched.
-      const campaignList = s.campaignList.map((c) => (c.client === brand && c.folder === folder ? { ...c, folder: undefined } : c))
+      // Their campaigns fall back to unfiled — the campaigns themselves are untouched.
+      const campaignList = s.campaignList.map((c) =>
+        c.client === brand && c.folder && gone(c.folder) ? { ...c, folder: undefined } : c,
+      )
       saveCampaigns(campaignList)
       return { campaignFolders, campaignList }
     }),

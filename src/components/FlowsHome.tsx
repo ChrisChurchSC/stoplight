@@ -1,19 +1,33 @@
-import { useRef, useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent, type ReactElement } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import type { ChannelId } from '../domain/types'
-import { flightForRow } from '../domain/flight'
+import {
+  MAX_FOLDER_DEPTH,
+  buildFolderTree,
+  canNestUnder,
+  countDeep,
+  folderName,
+  withAncestors,
+  type FolderNode,
+} from '../domain/campaignFolders'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 
 /**
- * The Flows landing page: every one of a brand's campaigns shown as a flow card, organized
- * into FOLDERS (reusing the shared campaign-folder system, so a flow's folder is the same
- * whether seen here or in Campaigns). Create folders, file flows into them, and click a card
- * to open that flow in the canvas. Mirrors the Campaigns overview.
+ * The campaigns landing page: every one of a brand's campaigns shown as a card, organized into
+ * FOLDERS (the shared campaign-folder system, so a campaign's folder is the same whether seen here
+ * or in Campaigns). Create folders, nest them up to MAX_FOLDER_DEPTH deep, file campaigns into them
+ * by dragging, and click a card to open it in the canvas.
+ *
+ * TWO THINGS ONLY: campaigns and folders. This view used to also own the flight level — a "＋
+ * Flight" on every card, and a campaign with more than one run drilling in like a directory. That
+ * meant the only way to get a folder was to schedule a second run of something, and it put "when
+ * does this run" in the same control as "how do I organize fifty of these". Folders are now real and
+ * nestable, and the flight level is gone from here.
  */
 interface FlowCard {
   name: string
@@ -26,8 +40,6 @@ interface FlowCard {
   parent?: string
   /** The single audience this campaign is personalized to (its segment reference label). */
   personalizedTo?: string
-  /** This campaign's flights (one scheduled run each), for the overview + folder drill-in. */
-  flights: { id: string; name: string; assetCount: number; types: number; channels: ChannelId[]; start: number; end: number }[]
   /** A manually-created umbrella container (renders as an umbrella even with no children yet). */
   isUmbrella?: boolean
 }
@@ -36,33 +48,40 @@ const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1,
 
 export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (name: string) => void; onNew: () => void }) {
   const rows = useTrafficStore((s) => s.rows)
-  const flights = useTrafficStore((s) => s.flights)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const campaignFolders = useTrafficStore((s) => s.campaignFolders)
   const createCampaignFolder = useTrafficStore((s) => s.createCampaignFolder)
   const setCampaignFolder = useTrafficStore((s) => s.setCampaignFolder)
   const deleteCampaignFolder = useTrafficStore((s) => s.deleteCampaignFolder)
+  const renameCampaignFolder = useTrafficStore((s) => s.renameCampaignFolder)
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
-  const addFlightRun = useTrafficStore((s) => s.addFlightRun)
-  const patchFlight = useTrafficStore((s) => s.patchFlight)
-  const removeFlight = useTrafficStore((s) => s.removeFlight)
-  const [newFolderOpen, setNewFolderOpen] = useState(false)
+  // Which folder a new-folder input is open under. '' = a new top-level folder, null = closed.
+  const [newFolderUnder, setNewFolderUnder] = useState<string | null>(null)
   const [newFolder, setNewFolder] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  // Flight pending deletion (folder view): its id + display name + asset count for the confirm modal.
-  const [confirmDeleteFlight, setConfirmDeleteFlight] = useState<{ id: string; name: string; count: number } | null>(null)
-  // A multi-flight campaign drilled into like a folder: shows its flights as rows. null = grid view.
-  const [openFolder, setOpenFolder] = useState<string | null>(null)
-  // Inline rename in progress. kind distinguishes a campaign/umbrella (key = full campaign name) from
-  // a flight (key = flight id). value holds the editable text (short name for campaigns).
-  const [renaming, setRenaming] = useState<{ kind: 'campaign' | 'flight'; key: string } | null>(null)
+  // A folder pending deletion: its path, plus how many campaigns and subfolders go with it.
+  const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<{ path: string; campaigns: number; subfolders: number } | null>(null)
+  // Collapsed folders, by path. Default expanded. Kept separate from the umbrella `collapsed` set
+  // because a folder path and a campaign name share no namespace and could collide.
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
+  const toggleFolder = (path: string) =>
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  // Inline rename in progress. kind distinguishes a campaign/umbrella (key = full campaign name)
+  // from a folder (key = folder path). value holds the editable text: for a campaign the short name,
+  // for a folder its last segment.
+  const [renaming, setRenaming] = useState<{ kind: 'campaign' | 'folder'; key: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
   // Escape cancels a rename; guards against the input's onBlur firing a stray commit right after.
   const renameSkipRef = useRef(false)
   const brandPrefix = `${brand} — `
-  const startRename = (kind: 'campaign' | 'flight', key: string, current: string) => {
+  const startRename = (kind: 'campaign' | 'folder', key: string, current: string) => {
     renameSkipRef.current = false
     setRenaming({ kind, key })
     setRenameValue(current)
@@ -77,8 +96,8 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     if (!renaming) return
     const v = renameValue.trim()
     if (v) {
-      if (renaming.kind === 'flight') {
-        patchFlight(renaming.key, { name: v })
+      if (renaming.kind === 'folder') {
+        renameCampaignFolder(brand, renaming.key, v)
       } else {
         const nextFull = renaming.key.startsWith(brandPrefix) ? brandPrefix + v : v
         void renameCampaign(renaming.key, nextFull)
@@ -92,7 +111,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     setRenaming(null)
     setRenameValue('')
   }
-  // Shared inline rename input for cards/heads/flights.
+  // Shared inline rename input for cards, umbrella heads and folder heads.
   const renameInput = (placeholder: string) => (
     <input
       className="flow-home-rename-input"
@@ -117,11 +136,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   // Drag a flow card onto a folder section to file it there (replaces the folder dropdown).
   const [dragName, setDragName] = useState<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
-  // A flight's month window, e.g. "Sep" or "Sep - Oct".
-  const flightWindow = (start: number, end: number) => {
-    const mo = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short' })
-    return mo(start) === mo(end) ? mo(start) : `${mo(start)} - ${mo(end)}`
-  }
   // Umbrellas that are collapsed (children hidden). Default expanded.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const toggleUmbrella = (name: string) =>
@@ -131,17 +145,25 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       else next.add(name)
       return next
     })
+  // A folder (or the unfiled section) as a drop target. `folder` is a full path, so dropping onto a
+  // nested folder files the campaign at that depth.
   const sectionDrop = (folder: string | undefined) => {
     const key = folder ?? '__unfiled__'
     return {
       active: dropKey === key,
+      // stopPropagation on both, because folder sections now NEST: without it a drop on a
+      // subfolder would bubble to its parent, whose handler would immediately refile the campaign
+      // one level shallower, and the highlight would land on the parent rather than the folder
+      // under the cursor.
       onDragOver: (e: DragEvent) => {
         e.preventDefault()
+        e.stopPropagation()
         e.dataTransfer.dropEffect = 'move'
         if (dropKey !== key) setDropKey(key)
       },
       onDrop: (e: DragEvent) => {
         e.preventDefault()
+        e.stopPropagation()
         const n = e.dataTransfer.getData('text/plain')
         if (n) setCampaignFolder(n, folder)
         setDropKey(null)
@@ -165,25 +187,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   ].filter((n) => n !== CONTENT_LIBRARY_CAMPAIGN)
   const cards: FlowCard[] = names.map((name) => {
     const cRows = brandRows.filter((r) => (r.campaign ?? '').trim() === name)
-    // This campaign's flights, each with its resolved assets and derived window.
-    const campFlights = flights
-      .filter((f) => f.campaign === name)
-      .map((f) => {
-        const fRows = cRows.filter((r) => flightForRow(r, flights)?.id === f.id)
-        const times = fRows.map((r) => Date.parse(r.scheduledAt)).filter((t) => !Number.isNaN(t))
-        const start = times.length ? Math.min(...times) : Date.parse(f.startAt)
-        const end = times.length ? Math.max(...times) : start
-        return {
-          id: f.id,
-          name: f.name,
-          assetCount: fRows.length,
-          types: new Set(fRows.map((r) => `${r.channel}/${r.assetType}`)).size,
-          channels: [...new Set(fRows.map((r) => r.channel))] as ChannelId[],
-          start,
-          end,
-        }
-      })
-      .sort((a, b) => a.start - b.start)
     return {
       name,
       status: deriveCampaignStatus(meta.get(name), cRows),
@@ -193,7 +196,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       folder: meta.get(name)?.folder,
       parent: meta.get(name)?.parent,
       personalizedTo: meta.get(name)?.references?.find((r) => r.type === 'segment')?.label,
-      flights: campFlights,
       isUmbrella: meta.get(name)?.isUmbrella,
     }
   })
@@ -209,25 +211,46 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       childrenByParent.set(c.parent, arr)
     }
   const topCards = cards.filter((c) => !(c.parent && meta.has(c.parent)))
-  const unfiled = sortCards(topCards.filter((c) => !c.folder || !folders.includes(c.folder)))
+  // Ancestors count as known folders even if only a leaf path was ever registered, so a campaign
+  // filed deep does not read as unfiled while its folder renders above it.
+  const knownFolders = new Set(withAncestors(folders))
+  const unfiled = sortCards(topCards.filter((c) => !c.folder || !knownFolders.has(c.folder)))
+  const folderTree = buildFolderTree(folders, sortCards(topCards), (c) => c.folder)
 
   const addFolder = () => {
-    if (newFolder.trim()) createCampaignFolder(brand, newFolder.trim())
+    // newFolderUnder is the parent path; '' means top level. null can't reach here.
+    if (newFolder.trim() && newFolderUnder !== null) createCampaignFolder(brand, newFolder, newFolderUnder)
     setNewFolder('')
-    setNewFolderOpen(false)
+    setNewFolderUnder(null)
   }
+  // The new-folder input, shared by the header (top level) and each folder head (a subfolder).
+  const newFolderInput = (
+    <input
+      className="flow-home-folder-input"
+      autoFocus
+      placeholder="Folder name"
+      value={newFolder}
+      onChange={(e) => setNewFolder(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onBlur={addFolder}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') addFolder()
+        if (e.key === 'Escape') {
+          setNewFolder('')
+          setNewFolderUnder(null)
+        }
+      }}
+    />
+  )
 
   const renderCard = (c: FlowCard) => {
-    // A campaign with more than one flight behaves like a folder: clicking it drills into the
-    // flight list rather than opening the canvas directly.
-    const isFolder = c.flights.length > 1
     const isRenaming = renaming?.kind === 'campaign' && renaming.key === c.name
     const short = c.name.replace(brandPrefix, '')
     return (
       <div
         key={c.name}
-        className={`flow-home-card${isFolder ? ' is-folder' : ''}${dragName === c.name ? ' dragging' : ''}`}
-        data-flights={isFolder ? Math.min(c.flights.length, 5) : undefined}
+        className={`flow-home-card${dragName === c.name ? ' dragging' : ''}`}
         draggable={!isRenaming}
         onDragStart={(e) => {
           e.dataTransfer.setData('text/plain', c.name)
@@ -255,15 +278,8 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         {isRenaming ? (
           <div className="flow-home-card-open flow-home-card-renaming">{renameInput('Campaign name')}</div>
         ) : (
-        <button className="flow-home-card-open" onClick={() => (isFolder ? setOpenFolder(c.name) : onOpen(c.name))}>
+        <button className="flow-home-card-open" onClick={() => onOpen(c.name)}>
           <div className="flow-home-card-name">
-            {isFolder && (
-              <span className="flow-home-card-folder-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                </svg>
-              </span>
-            )}
             <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
             <span className="flow-home-card-title-text">{c.name.replace(`${brand} — `, '')}</span>
             {c.personalizedTo && (
@@ -278,7 +294,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           </div>
           <div className="flow-home-card-meta">
             {c.types} deliverable{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
-            {isFolder ? ` · ${c.flights.length} flights` : ''}
           </div>
           <div className="flow-home-chans">
             {c.channels.slice(0, 8).map((ch) => (
@@ -289,17 +304,6 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             {c.channels.length > 8 && <span className="flow-home-chan more">+{c.channels.length - 8}</span>}
           </div>
         </button>
-        )}
-        {!isRenaming && isFolder && (
-          <div className="flow-home-card-folder-hint" aria-hidden="true">
-            Open campaign →
-          </div>
-        )}
-        {/* Re-run: add another flight of this campaign (clones its assets into a new window). */}
-        {!isRenaming && c.flights.length > 0 && (
-          <button className="flow-home-flight-add" onClick={() => void addFlightRun(c.name)} title="Add another flight of this campaign (clones its assets into a new window)">
-            ＋ Flight
-          </button>
         )}
       </div>
     )
@@ -366,110 +370,102 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     )
   }
 
-  // Drilled into a multi-flight campaign: show its flights as a folder of rows.
-  const folderCard = openFolder ? cards.find((c) => c.name === openFolder) : null
-  if (folderCard && folderCard.flights.length > 1) {
-    const title = folderCard.name.replace(`${brand} — `, '')
+  /**
+   * One folder and everything under it. Recursive, so the depth of the markup is the depth of the
+   * tree; the cap lives on the "＋ Subfolder" button, which is simply absent at MAX_FOLDER_DEPTH.
+   */
+  const renderFolder = (node: FolderNode<FlowCard>): ReactElement => {
+    const drop = sectionDrop(node.path)
+    const isCollapsed = collapsedFolders.has(node.path)
+    const isRenaming = renaming?.kind === 'folder' && renaming.key === node.path
+    // The count is deep, so collapsing a parent doesn't make its campaigns look like they vanished.
+    const total = countDeep(node)
+    const empty = !node.items.length && !node.children.length
     return (
-      <div className="flow-home">
-        <header className="flow-home-head">
-          <div>
-            <button className="flow-home-back" onClick={() => setOpenFolder(null)}>
-              <span aria-hidden="true">←</span> All campaigns
-            </button>
-            <h1 className="flow-home-title flow-home-folder-title">
-              <span className="flow-home-folder-title-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                </svg>
-              </span>
-              {title}
-            </h1>
-            <p className="flow-home-sub">
-              {folderCard.flights.length} flights · {folderCard.assetCount} asset{folderCard.assetCount === 1 ? '' : 's'}
-            </p>
-          </div>
-          <div className="flow-home-actions">
-            <button className="flow-home-new" onClick={() => void addFlightRun(folderCard.name)}>
-              ＋ Flight
-            </button>
-            <button className="flow-home-new" onClick={() => onOpen(folderCard.name)}>
-              Open in canvas
-            </button>
-          </div>
-        </header>
-        <div className="flow-home-grid">
-          {folderCard.flights.map((f) => {
-            const isRenaming = renaming?.kind === 'flight' && renaming.key === f.id
-            return (
-            <div key={f.id} className="flow-home-card">
-              {!isRenaming && (
-                <div className="flow-home-card-actions">
-                  <button className="flow-home-rename" title="Rename flight" aria-label="Rename flight" onClick={() => startRename('flight', f.id, f.name)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-                    </svg>
-                  </button>
-                  <button className="flow-home-del" title="Delete flight" aria-label="Delete flight" onClick={() => setConfirmDeleteFlight({ id: f.id, name: f.name, count: f.assetCount })}>
-                    ✕
-                  </button>
-                </div>
-              )}
-              {isRenaming ? (
-                <div className="flow-home-card-open flow-home-card-renaming">{renameInput('Flight name')}</div>
-              ) : (
-                <button className="flow-home-card-open" onClick={() => onOpen(folderCard.name)}>
-                  <div className="flow-home-card-name">
-                    <span className={`flow-home-dot s-${folderCard.status}`} aria-hidden="true" />
-                    <span className="flow-home-card-title-text">{f.name}</span>
-                  </div>
-                  <div className="flow-home-card-meta">
-                    {f.types} deliverable{f.types === 1 ? '' : 's'} · {f.assetCount} asset{f.assetCount === 1 ? '' : 's'} · {flightWindow(f.start, f.end)}
-                  </div>
-                  <div className="flow-home-chans">
-                    {f.channels.slice(0, 8).map((ch) => (
-                      <span key={ch} className="flow-home-chan-ico" title={CHANNELS[ch]?.label ?? ch}>
-                        <ChannelIcon channel={ch} size={16} />
-                      </span>
-                    ))}
-                    {f.channels.length > 8 && <span className="flow-home-chan more">+{f.channels.length - 8}</span>}
-                  </div>
-                </button>
-              )}
-            </div>
-            )
-          })}
-        </div>
-        {confirmDeleteFlight && (
-          <>
-            <div className="drawer-scrim" onClick={() => setConfirmDeleteFlight(null)} />
-            <div className="confirm-modal" role="dialog" aria-label="Delete flight">
-              <strong className="confirm-title">Delete {confirmDeleteFlight.name}?</strong>
-              <p className="confirm-text">
-                This archives the flight and its {confirmDeleteFlight.count} asset{confirmDeleteFlight.count === 1 ? '' : 's'}. It won't show here anymore.
-              </p>
-              <div className="confirm-foot">
-                <button className="btn sm" onClick={() => setConfirmDeleteFlight(null)}>
-                  Cancel
-                </button>
-                <span className="spacer" />
+      <section
+        key={node.path}
+        className={`flow-home-group${drop.active ? ' drop-active' : ''}${node.depth > 1 ? ' flow-home-group-sub' : ''}`}
+        data-depth={node.depth}
+        onDragOver={drop.onDragOver}
+        onDrop={drop.onDrop}
+      >
+        <div className="flow-home-group-h">
+          <button
+            className="flow-home-folder-toggle"
+            onClick={() => toggleFolder(node.path)}
+            aria-label={isCollapsed ? `Expand ${node.name}` : `Collapse ${node.name}`}
+            aria-expanded={!isCollapsed}
+          >
+            {isCollapsed ? '▸' : '▾'}
+          </button>
+          <span className="flow-home-folder-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            </svg>
+          </span>
+          {isRenaming ? (
+            renameInput('Folder name')
+          ) : (
+            <>
+              <span className="flow-home-folder-name">{node.name}</span>
+              <span className="flow-home-group-n">{total}</span>
+              {canNestUnder(node.path) ? (
                 <button
-                  className="btn sm danger"
-                  onClick={() => {
-                    void removeFlight(confirmDeleteFlight.id)
-                    setConfirmDeleteFlight(null)
-                  }}
+                  className="flow-home-folder-sub"
+                  title="New folder inside this one"
+                  onClick={() => { setNewFolder(''); setNewFolderUnder(node.path) }}
                 >
-                  Delete flight
+                  ＋ Subfolder
                 </button>
-              </div>
-            </div>
+              ) : (
+                // Say why there's no ＋ Subfolder here, rather than leaving a hole where one sits
+                // on every other folder.
+                <span className="flow-home-folder-max" title={`Folders nest ${MAX_FOLDER_DEPTH} levels deep`}>
+                  Deepest level
+                </span>
+              )}
+              <button
+                className="flow-home-rename"
+                title="Rename folder"
+                aria-label={`Rename ${node.name}`}
+                onClick={() => startRename('folder', node.path, node.name)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                </svg>
+              </button>
+              <button
+                className="flow-home-folder-del"
+                title={node.children.length ? 'Delete this folder and the folders inside it' : 'Delete folder (its campaigns become unfiled)'}
+                aria-label={`Delete ${node.name}`}
+                onClick={() => {
+                  // Deleting an empty leaf is not worth a modal; anything holding campaigns or
+                  // subfolders is, because it takes the subfolders with it.
+                  if (empty) deleteCampaignFolder(brand, node.path)
+                  else setConfirmDeleteFolder({ path: node.path, campaigns: total, subfolders: node.children.length })
+                }}
+              >
+                ✕
+              </button>
+            </>
+          )}
+        </div>
+        {!isCollapsed && (
+          <>
+            {newFolderUnder === node.path && <div className="flow-home-folder-new-row">{newFolderInput}</div>}
+            {empty ? (
+              <div className="flow-home-empty-folder">Empty. Drag a campaign here to file it.</div>
+            ) : (
+              node.items.length > 0 && <div className="flow-home-grid">{node.items.map(renderTop)}</div>
+            )}
+            {node.children.length > 0 && <div className="flow-home-subfolders">{node.children.map(renderFolder)}</div>}
           </>
         )}
-      </div>
+      </section>
     )
   }
+
 
   return (
     <div className="flow-home">
@@ -480,28 +476,14 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             <InfoTip term="campaign" />
           </h1>
           <p className="flow-home-sub">
-            {cards.length} flow{cards.length === 1 ? '' : 's'} · {folders.length} folder{folders.length === 1 ? '' : 's'} for {brand || 'this brand'}
+            {cards.length} campaign{cards.length === 1 ? '' : 's'} · {knownFolders.size} folder{knownFolders.size === 1 ? '' : 's'} for {brand || 'this brand'}
           </p>
         </div>
         <div className="flow-home-actions">
-          {newFolderOpen ? (
-            <input
-              className="flow-home-folder-input"
-              autoFocus
-              placeholder="Folder name"
-              value={newFolder}
-              onChange={(e) => setNewFolder(e.target.value)}
-              onBlur={addFolder}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addFolder()
-                if (e.key === 'Escape') {
-                  setNewFolder('')
-                  setNewFolderOpen(false)
-                }
-              }}
-            />
+          {newFolderUnder === '' ? (
+            newFolderInput
           ) : (
-            <button className="flow-home-folder-new" onClick={() => setNewFolderOpen(true)}>
+            <button className="flow-home-folder-new" onClick={() => { setNewFolder(''); setNewFolderUnder('') }}>
               ＋ New folder
             </button>
           )}
@@ -518,42 +500,18 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       </header>
 
       <div className="flow-home-groups">
-        {folders.map((folder) => {
-          const group = sortCards(topCards.filter((c) => c.folder === folder))
-          const drop = sectionDrop(folder)
-          return (
-            <section key={folder} className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
-              <div className="flow-home-group-h">
-                <span className="flow-home-folder-ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  </svg>
-                </span>
-                {folder}
-                <span className="flow-home-group-n">{group.length}</span>
-                <button className="flow-home-folder-del" title="Delete folder (flows become unfiled)" onClick={() => deleteCampaignFolder(brand, folder)}>
-                  ✕
-                </button>
-              </div>
-              {group.length === 0 ? (
-                <div className="flow-home-empty-folder">Empty. Drag a campaign here to file it.</div>
-              ) : (
-                <div className="flow-home-grid">{group.map(renderTop)}</div>
-              )}
-            </section>
-          )
-        })}
+        {folderTree.map(renderFolder)}
 
         {(() => {
           const drop = sectionDrop(undefined)
           return (
             <section className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
               <div className="flow-home-group-h">
-                {folders.length ? 'Unfiled' : 'All campaigns'}
+                {knownFolders.size ? 'Unfiled' : 'All campaigns'}
                 <span className="flow-home-group-n">{unfiled.length}</span>
               </div>
               {unfiled.length === 0 ? (
-                <div className="flow-home-empty-folder">No flows here yet.</div>
+                <div className="flow-home-empty-folder">No campaigns here yet.</div>
               ) : (
                 <div className="flow-home-grid">{unfiled.map(renderTop)}</div>
               )}
@@ -581,6 +539,41 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
                 }}
               >
                 Delete flow
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {confirmDeleteFolder && (
+        <>
+          <div className="drawer-scrim" onClick={() => setConfirmDeleteFolder(null)} />
+          <div className="confirm-modal" role="dialog" aria-label="Delete folder">
+            <strong className="confirm-title">Delete {folderName(confirmDeleteFolder.path)}?</strong>
+            <p className="confirm-text">
+              {confirmDeleteFolder.subfolders > 0 && (
+                <>
+                  This also deletes the {confirmDeleteFolder.subfolders} folder
+                  {confirmDeleteFolder.subfolders === 1 ? '' : 's'} inside it.{' '}
+                </>
+              )}
+              {confirmDeleteFolder.campaigns > 0
+                ? `The ${confirmDeleteFolder.campaigns} campaign${confirmDeleteFolder.campaigns === 1 ? '' : 's'} inside become unfiled. No campaign is deleted.`
+                : 'No campaigns are affected.'}
+            </p>
+            <div className="confirm-foot">
+              <button className="btn sm" onClick={() => setConfirmDeleteFolder(null)}>
+                Cancel
+              </button>
+              <span className="spacer" />
+              <button
+                className="btn sm danger"
+                onClick={() => {
+                  deleteCampaignFolder(brand, confirmDeleteFolder.path)
+                  setConfirmDeleteFolder(null)
+                }}
+              >
+                Delete folder
               </button>
             </div>
           </div>

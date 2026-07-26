@@ -5832,6 +5832,84 @@ button {
   color: var(--danger, #d3543f);
   background: var(--surface-2);
 }
+/* NESTED FOLDERS (up to four levels). Depth reads from the rule on the left, not from indentation
+   alone, so a subfolder three levels down still lines up with its siblings instead of drifting off
+   the right edge of a wide grid. */
+.flow-home-subfolders {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 16px;
+}
+.flow-home-group-sub {
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+.flow-home-folder-toggle {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  /* Big enough to read as a chevron. At 10px in --text-faint these looked like bullet points. */
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 5px;
+  /* Fixed width so a folder's name doesn't shift left when it collapses (▸ is narrower than ▾). */
+  width: 17px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.flow-home-folder-toggle:hover {
+  background: var(--hover, #eef2f3);
+  color: var(--text);
+}
+.flow-home-folder-name {
+  color: var(--text);
+}
+/* Subfolder / rename / delete stay out of the way until the folder is hovered, so a deep tree reads
+   as names and counts rather than as rows of controls. */
+.flow-home-folder-sub,
+.flow-home-folder-max {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.flow-home-folder-sub {
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.flow-home-folder-sub:hover {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.flow-home-folder-max {
+  border: 1px solid transparent;
+  color: var(--text-faint);
+  cursor: default;
+}
+/* A folder head is neither a card nor an umbrella head, so it reveals its own controls — including
+   .flow-home-rename, whose only reveal rules were scoped to those two. */
+.flow-home-group-h:hover .flow-home-folder-sub,
+.flow-home-group-h:hover .flow-home-folder-max,
+.flow-home-group-h:hover .flow-home-rename,
+.flow-home-folder-sub:focus-visible,
+.flow-home-rename:focus-visible {
+  opacity: 1;
+}
+.flow-home-folder-new-row {
+  margin-bottom: 12px;
+}
 .flow-home-empty-folder {
   font-size: 12px;
   color: var(--text-faint);
@@ -6435,98 +6513,6 @@ button {
   border-color: var(--accent);
   color: var(--accent);
 }
-/* "+ Flight" (re-run) on a campaign card. */
-.flow-home-flight-add {
-  margin: 0 12px 12px;
-  align-self: flex-start;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  padding: 4px 11px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.flow-home-flight-add:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-/* A multi-flight campaign card looks like a stack: a folder you click into. The stack DEPTH tracks
-   the flight count (one peeking card per flight), set via data-flights and capped at 5 cards. Each
-   layer is a surface fill (masks the one in front, inset 1px) plus a border edge, offset 4px more.
-   The layers live in a --stack var so :hover can compose them with the lift glow in one rule. */
-.flow-home-card.is-folder {
-  --stack: 4px 4px 0 -1px var(--surface), 4px 4px 0 0 var(--border);
-  box-shadow: var(--stack);
-}
-.flow-home-card.is-folder[data-flights='3'] {
-  --stack: 4px 4px 0 -1px var(--surface), 4px 4px 0 0 var(--border), 8px 8px 0 -1px var(--surface), 8px 8px 0 0 var(--border);
-}
-.flow-home-card.is-folder[data-flights='4'] {
-  --stack: 4px 4px 0 -1px var(--surface), 4px 4px 0 0 var(--border), 8px 8px 0 -1px var(--surface), 8px 8px 0 0 var(--border),
-    12px 12px 0 -1px var(--surface), 12px 12px 0 0 var(--border);
-}
-.flow-home-card.is-folder[data-flights='5'] {
-  --stack: 4px 4px 0 -1px var(--surface), 4px 4px 0 0 var(--border), 8px 8px 0 -1px var(--surface), 8px 8px 0 0 var(--border),
-    12px 12px 0 -1px var(--surface), 12px 12px 0 0 var(--border), 16px 16px 0 -1px var(--surface), 16px 16px 0 0 var(--border);
-}
-.flow-home-card.is-folder:hover {
-  border-color: var(--text-faint);
-  box-shadow: var(--stack), 0 6px 16px rgba(16, 24, 40, 0.1);
-}
-.flow-home-card-folder-ico {
-  display: inline-flex;
-  color: var(--text-muted);
-}
-.flow-home-card-folder-ico svg {
-  width: 15px;
-  height: 15px;
-}
-.flow-home-card-folder-hint {
-  margin: 0 15px 4px;
-  font-size: 11.5px;
-  font-weight: 650;
-  color: var(--text-faint);
-}
-.flow-home-card.is-folder:hover .flow-home-card-folder-hint {
-  color: var(--accent);
-}
-/* Drilled-in folder view: back link on its own line, then folder title. */
-.flow-home-back {
-  display: flex;
-  width: fit-content;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 0;
-  margin-bottom: 10px;
-}
-.flow-home-back:hover {
-  color: var(--accent);
-}
-.flow-home-folder-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.flow-home-folder-title-ico {
-  display: inline-flex;
-  color: var(--text-faint);
-}
-.flow-home-folder-title-ico svg {
-  width: 19px;
-  height: 19px;
-}
-/* The drilled-in folder view renders each flight with the campaign-card look
-   (.flow-home-card in .flow-home-grid), just without the .is-folder stacked shadow. */
 .flow-home-chan.more {
   font-size: 10px;
   font-weight: 600;

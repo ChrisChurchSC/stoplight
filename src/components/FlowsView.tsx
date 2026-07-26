@@ -3350,7 +3350,7 @@ export function FlowsView() {
             <div className="flow-outline-empty">Nothing on the board yet. Add an object from the toolbar.</div>
           )}
         </div>
-        <div className="flow-ov-note">Click a row to open that object. Pick the campaign to set its flight and budget.</div>
+        <div className="flow-ov-note">Click a row to open that object. Pick the campaign to set its length and budget.</div>
       </div>
     </>
   )
@@ -3844,7 +3844,7 @@ export function FlowsView() {
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
                   <div className="flow-node-desc">
-                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week flight`}
+                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week campaign`}
                   </div>
                   {/* Audience, proof and goal deliberately do NOT live on this card. They are
                       canvas input cards now ("what it's made from"), and the inspector owns the
@@ -4652,7 +4652,7 @@ export function FlowsView() {
                     )
                   })()}
                   <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    Flight length
+                    Campaign length
                   </label>
                   <div className="flow-step">
                     <button onClick={() => patchCampaign(viewName, { durationWeeks: Math.max(1, (viewFlight ?? 1) - 1) })}>−</button>
@@ -4804,7 +4804,7 @@ export function FlowsView() {
                   </>
                 )}
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Flight length
+                  Campaign length
                 </label>
                 <div className="flow-step">
                   <button onClick={() => { setFlightWeeks((w) => Math.max(1, w - 1)); scheduleRedraftAll() }}>−</button>

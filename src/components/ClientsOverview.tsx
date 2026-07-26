@@ -1,4 +1,5 @@
 import { type DragEvent as ReactDragEvent, useEffect, useMemo, useState } from 'react'
+import { folderDepth, folderName, withAncestors } from '../domain/campaignFolders'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
@@ -265,7 +266,10 @@ export function ClientsOverview() {
   )
 
   // Inside a brand folder, campaigns group under named folders (plus an Unfiled bucket).
-  const folderNames = brandFolder ? (campaignFolders[brandFolder] ?? []) : []
+  // Folder paths, ancestors included and sorted parent-before-child. This view lists folders flat
+  // rather than as a tree, so a nested folder shows its own NAME indented by depth; showing the raw
+  // "Year-End Giving/Paid/Meta" path as a heading read as one strangely-named folder.
+  const folderNames = brandFolder ? withAncestors(campaignFolders[brandFolder] ?? []) : []
   const cardsInFolder = (folder: string) =>
     shown.filter((c) => (folder ? c.folder === folder : !c.folder || !folderNames.includes(c.folder)))
   const toggleCollapsed = (key: string) =>
@@ -369,6 +373,7 @@ export function ClientsOverview() {
                   <section
                     key={key}
                     className={`folder-group${dragOver === key ? ' drop-over' : ''}`}
+                    style={folder && folderDepth(folder) > 1 ? { marginLeft: (folderDepth(folder) - 1) * 18 } : undefined}
                     onDragOver={(e) => {
                       e.preventDefault()
                       if (dragOver !== key) setDragOver(key)
@@ -411,16 +416,16 @@ export function ClientsOverview() {
                           onDoubleClick={() => {
                             if (folder) {
                               setEditFolder(folder)
-                              setEditName(folder)
+                              setEditName(folderName(folder))
                             }
                           }}
                         >
-                          {folder || 'Unfiled'} <span className="folder-group-count">{cards.length}</span>
+                          {folder ? folderName(folder) : 'Unfiled'} <span className="folder-group-count">{cards.length}</span>
                         </button>
                       )}
                       {folder && (
                         <div className="folder-group-actions">
-                          <button className="folder-act" title="Rename folder" onClick={() => { setEditFolder(folder); setEditName(folder) }}>
+                          <button className="folder-act" title="Rename folder" onClick={() => { setEditFolder(folder); setEditName(folderName(folder)) }}>
                             ✎
                           </button>
                           <button

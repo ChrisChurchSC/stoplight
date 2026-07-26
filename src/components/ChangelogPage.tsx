@@ -25,6 +25,7 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
+          'Folders nest, four levels deep. A folder can hold folders, so fifty campaigns organize the way you actually think about them: a quarter, then paid inside it, then the channel. Drag a campaign onto any folder at any depth to file it. Renaming a folder keeps everything inside it; deleting one takes the folders inside it and leaves every campaign, unfiled.',
           'The assistant is called Gretel.',
           'A deliverable starts with one asset instead of a month of them. Dropping an Instagram reel used to put four assets and four briefs on the board before you had decided anything. The cadence is still there as the suggested default, and the count control adds more when you mean to.',
           'The campaign trail reads as two small buttons with a flag, matching the campaign card it points at, and an unnamed campaign no longer offers a dropdown onto a list of campaigns you are not in yet.',
@@ -36,6 +37,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'Delete works on a built deliverable. Selecting one and pressing Delete did nothing at all, and there was no ✕ or menu item either. Deleting a deliverable now takes the posts under it, because that is what a deliverable is, and it undoes in one step. A single post can be deleted on its own.',
           'Your brand hooks reach the writer. They were being sent with every draft and dropped by the server, so the opening lines you wrote only ever influenced copy when there was no API key.',
           'An asset told to lean on a specific proof point can now actually cite it. The proof was picked from your whole library while a narrower list was sent to the writer, so it could be pointed at evidence it was not allowed to use.',
           'Copy written to an audience you keep in the audience selector is no longer flagged as drifting off-segment. The coherence check was reading a different audience list than the writer was.',
@@ -45,6 +47,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
+          'The campaigns page is campaigns and folders, nothing else. Flights are gone from it. A campaign with more than one scheduled run used to pretend to be a folder and drill into a list of runs, which meant the only way to get a folder was to schedule a second run of something. Real folders replace it, and the length of a campaign is now called its length.',
           'Cards are called objects. One thing on a campaign board is an object: an audience, a message, a proof point, a note. Bundle a few and you get a smart object, which is the same word Photoshop uses for the same idea, and it makes the next part say what it means.',
           'A smart object now says whether it lives in this campaign or in your brand folder. A bundle starts out local to the campaign you made it on. When it is good enough to reuse, you assign it to the brand and every campaign can reach it. Ungroup is called Release, because a smart object is a linked copy rather than a container you break open.',
         ],
