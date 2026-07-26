@@ -467,6 +467,13 @@ export function FlowsView() {
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
+  // Record-create actions, so a card can make the thing it needs instead of dead-ending on
+  // "No audiences established yet".
+  const addCompany = useTrafficStore((s) => s.addCompany)
+  const addPerson = useTrafficStore((s) => s.addPerson)
+  const addMessage = useTrafficStore((s) => s.addMessage)
+  const addVoice = useTrafficStore((s) => s.addVoice)
+  const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
   const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
@@ -1586,6 +1593,57 @@ export function FlowsView() {
     })
     if (sel === id) setSel(null)
   }
+  /**
+   * CREATE A RECORD FROM THE CARD THAT NEEDS IT.
+   *
+   * A card links an established record, so on a fresh brand every picker dead-ended: "No audiences
+   * established yet" with nowhere to go. The Data source card already solved this with its
+   * "+ New data set…" option; this gives every other record-linked kind the same move.
+   *
+   * What gets created is a labeled PLACEHOLDER, the same contract the chat's createAudience and
+   * createProof commands follow: a name you chose and nothing invented around it. Audience and
+   * proof route through ensureAudienceRef / ensureProofRef so they inherit that hardening
+   * (dedup against the brand's full set, no dangling refs on an empty brand) rather than
+   * re-implementing it here and drifting.
+   */
+  /** Kinds whose record this card can create. Freeform kinds have no record; Data source has its own. */
+  const CREATABLE_KINDS = new Set<FlowNoteKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger'])
+  const createRecordForKind = (kind: FlowNoteKind, rawName: string): { id: string; label: string } | null => {
+    const nm = rawName.trim()
+    if (!nm) return null
+    switch (kind) {
+      case 'audience': {
+        const r = ensureAudienceRef(nm)
+        return r ? { id: r.ref.id, label: r.ref.label } : null
+      }
+      case 'proof-point': {
+        const r = ensureProofRef(nm)
+        return r ? { id: r.ref.id, label: r.ref.label } : null
+      }
+      // The records slices take a Partial and return the new id. Brand-scoped so the record shows
+      // up in the same rail the card was dropped in.
+      case 'company': return { id: addCompany({ name: nm, brand: brand || undefined }), label: nm }
+      case 'person': return { id: addPerson({ name: nm, brand: brand || undefined }), label: nm }
+      case 'message': return { id: addMessage({ name: nm, brand: brand || undefined }), label: nm }
+      case 'voice': return { id: addVoice({ name: nm, brand: brand || undefined }), label: nm }
+      case 'trigger': return { id: addTrigger({ name: nm, brand: brand || undefined }), label: nm }
+      default: return null
+    }
+  }
+  /** Which card is currently naming a new record (null = none). */
+  const [creatingFor, setCreatingFor] = useState<string | null>(null)
+  const [creatingName, setCreatingName] = useState('')
+  const submitCreate = (nt: FlowNote) => {
+    const made = createRecordForKind(nt.kind, creatingName)
+    setCreatingFor(null)
+    setCreatingName('')
+    if (!made) return
+    setNoteRef(nt.id, made.id)
+    // If the card is already attached to the campaign, the new record joins it immediately, so
+    // creating from an attached card does the whole job in one gesture.
+    if (isAttached(nt.id)) attachToCampaign(nt.id)
+  }
+
   // ---- Smart objects ----------------------------------------------------------------------
   // Which group a card belongs to (a card is in at most one).
   const groupOf = (noteId: string): FlowGroup | undefined => groups.find((g) => g.memberIds.includes(noteId))
@@ -3444,17 +3502,44 @@ export function FlowsView() {
                     const opts = noteOptions(nt.kind)
                     if (!opts) return null
                     const noun = meta.label.toLowerCase()
+                    // Naming a new record: the picker becomes a name field. Enter creates and links
+                    // it, Escape backs out. Same one-step move the Data source card already had.
+                    if (creatingFor === nt.id) {
+                      return (
+                        <input
+                          className="flow-note-sel flow-note-new"
+                          autoFocus
+                          placeholder={`Name the new ${noun}…`}
+                          value={creatingName}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onChange={(e) => setCreatingName(e.target.value)}
+                          onBlur={() => submitCreate(nt)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); submitCreate(nt) }
+                            if (e.key === 'Escape') { e.preventDefault(); setCreatingFor(null); setCreatingName('') }
+                          }}
+                        />
+                      )
+                    }
                     return (
                       <select
                         className="flow-note-sel"
                         value={nt.refId ?? ''}
                         onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) => setNoteRef(nt.id, e.target.value)}
+                        onChange={(e) => {
+                          if (e.target.value === '__new__') { setCreatingName(''); setCreatingFor(nt.id); return }
+                          setNoteRef(nt.id, e.target.value)
+                          // Re-attach so a changed record reaches the campaign without redrawing the edge.
+                          if (isAttached(nt.id)) attachToCampaign(nt.id)
+                        }}
                       >
-                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} established yet`}</option>
+                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} yet`}</option>
                         {opts.map((o) => (
                           <option key={o.id} value={o.id}>{o.label}</option>
                         ))}
+                        {/* Every record-linked card can make the thing it needs. Without this a
+                            fresh brand dead-ends here with nowhere to go. */}
+                        {CREATABLE_KINDS.has(nt.kind) && <option value="__new__">+ New {noun}…</option>}
                       </select>
                     )
                   })()}

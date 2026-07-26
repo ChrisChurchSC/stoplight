@@ -26190,6 +26190,10 @@ table.aud-sheet td.stick .aud-cell {
   border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 4px; margin-left: 6px;
 }
 
+/* Naming a new record from a card: the picker turns into a text field in place. */
+.flow-note-new { cursor: text; }
+.flow-note-new:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
+
 /* Transient bottom toast for lightweight recommendations. */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(520px, calc(100vw - 40px)); background: var(--text); color: var(--surface); border-radius: 11px; box-shadow: 0 8px 28px rgba(16,24,40,.24); padding: 11px 12px 11px 14px; cursor: pointer; animation: toast-in .18s ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
