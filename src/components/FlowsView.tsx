@@ -493,6 +493,7 @@ export function FlowsView() {
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
+  const removeRows = useTrafficStore((s) => s.removeRows)
   const updateRows = useTrafficStore((s) => s.updateRows)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
@@ -921,6 +922,10 @@ export function FlowsView() {
         const ids = selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []
         if (ids.length) {
           e.preventDefault()
+          // Row deletions are async and go through the sheet, so they are collected across the
+          // whole selection and sent as ONE action: selecting a deliverable and two loose posts is
+          // a single undo entry, not three.
+          const rowIds = new Set<string>()
           ids.forEach((id) => {
             if (id === 'campaign') setBriefHidden(true)
             // Delete on a smart object UNGROUPS it rather than destroying it. One keystroke
@@ -930,7 +935,17 @@ export function FlowsView() {
             else if (placementsRef.current.some((g) => g.id === id)) releaseRef.current(id)
             else if (objectsRef.current.some((nt) => nt.id === id)) deleteObject(id)
             else if (nodesRef.current.some((n) => n.id === id)) removeNode(id)
+            // A BUILT deliverable is not a node: it is derived from its rows, keyed by
+            // channel|type. So deleting it means deleting the posts under it (variants included) —
+            // there is nothing else to delete. Until this branch existed, Delete on a built
+            // deliverable silently did nothing at all.
+            else {
+              const deliv = viewDelivsRef.current.find((d) => d.key === id)
+              if (deliv) deliv.rows.forEach((r) => rowIds.add(r.id))
+              else if (viewRowsRef.current.some((r) => r.id === id)) rowIds.add(id)
+            }
           })
+          if (rowIds.size) void removeRows([...rowIds])
           setSel(null)
           setSelected(new Set())
         }
@@ -1214,6 +1229,12 @@ export function FlowsView() {
     }
     return [...map.values()].sort((a, b) => b.count - a.count)
   }, [viewRows])
+  // Read by the Delete handler, which is declared above this but only ever RUNS on a keystroke,
+  // long after render has assigned these. Same pattern as releaseRef.
+  const viewDelivsRef = useRef(viewDelivs)
+  viewDelivsRef.current = viewDelivs
+  const viewRowsRef = useRef(viewRows)
+  viewRowsRef.current = viewRows
   // Auto-place each branched deliverable just to the RIGHT of the asset it hangs off (several
   // branches off one asset stack down its right side), so a journey reads left→right with a short
   // connector instead of dropping to the bottom of the column. Corrects toward the target across
@@ -4068,6 +4089,18 @@ export function FlowsView() {
                                   two amber "Needs a..." prompts on every card on the board. */}
                             </div>
                           </div>
+                          {/* A built deliverable IS its posts, so removing it removes them. Says
+                              how many, because this is the one ✕ on the board that takes other
+                              cards with it. */}
+                          <button
+                            className="flow-node-x is-corner"
+                            title={`Delete this deliverable and its ${d.rows.length} post${d.rows.length === 1 ? '' : 's'}`}
+                            aria-label={`Delete ${d.label} and its ${d.rows.length} post${d.rows.length === 1 ? '' : 's'}`}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => { e.stopPropagation(); void removeRows(d.rows.map((r) => r.id)) }}
+                          >
+                            ✕
+                          </button>
                         </div>
                         <div className="flow-branch-list">
                           {posts.map((r) => {
@@ -4115,6 +4148,15 @@ export function FlowsView() {
                                       })()}
                                     </div>
                                   ) : null}
+                                  <button
+                                    className="flow-node-x is-corner"
+                                    title="Delete this post"
+                                    aria-label={`Delete post ${c.head}`}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); void removeRow(r.id) }}
+                                  >
+                                    ✕
+                                  </button>
                                   <button
                                     className="flow-branch-plus"
                                     title="Add a next step from this asset"
@@ -5040,6 +5082,9 @@ export function FlowsView() {
       {ctxMenu && (() => {
         const onGroup = ctxMenu.on ? placements.find((g) => g.id === ctxMenu.on) : undefined
         const onCard = ctxMenu.on ? objects.find((n) => n.id === ctxMenu.on) : undefined
+        // Built outputs: a deliverable (derived, keyed channel|type) or one post under it.
+        const onDeliv = ctxMenu.on ? viewDelivs.find((d) => d.key === ctxMenu.on) : undefined
+        const onPost = ctxMenu.on && !onDeliv ? viewRows.find((r) => r.id === ctxMenu.on) : undefined
         // Cards eligible to bundle: the selection if it has 2+, else nothing to group.
         const convertible = (selected.size ? [...selected] : sel ? [sel] : []).filter((id) => objects.some((n) => n.id === id) && !placementOf(id))
         const close = () => setCtxMenu(null)
@@ -5047,7 +5092,18 @@ export function FlowsView() {
           <>
             <div className="flow-ctx-scrim" onMouseDown={close} onContextMenu={(e) => { e.preventDefault(); close() }} />
             <div className="flow-ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }} role="menu">
-              {onGroup ? (
+              {onDeliv || onPost ? (
+                <button
+                  className="flow-ctx-item danger"
+                  role="menuitem"
+                  onClick={() => { close(); void (onDeliv ? removeRows(onDeliv.rows.map((r) => r.id)) : removeRow(onPost!.id)) }}
+                >
+                  {onDeliv
+                    ? `Delete deliverable and its ${onDeliv.rows.length} post${onDeliv.rows.length === 1 ? '' : 's'}`
+                    : 'Delete post'}
+                  <span className="flow-ctx-kbd">⌫</span>
+                </button>
+              ) : onGroup ? (
                 <>
                   <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); setOpenGroupId(onGroup.id) }}>
                     Open<span className="flow-ctx-kbd">dbl-click</span>

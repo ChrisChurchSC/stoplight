@@ -2126,6 +2126,12 @@ interface TrafficState {
    *  so a strategy/audience change is visibly seen rippling across the cards. */
   regenIds: Set<string>
   removeRow: (id: string) => Promise<void>
+  /**
+   * Delete several rows as ONE action. Deleting a deliverable on the canvas means deleting every
+   * post under it, and looping removeRow would push one undo entry and run one refresh per post:
+   * a twelve-post deliverable would take twelve Cmd+Z to bring back, having redrawn twelve times.
+   */
+  removeRows: (ids: string[]) => Promise<void>
   // ---- Asset lifecycle ----
   /** Hand-author a first-class asset into a campaign (no generation). Tagged `authored`. */
   addAsset: (brand: string, campaign: string, patch: Partial<TrafficRow>) => Promise<TrafficRow>
@@ -5532,6 +5538,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   removeRow: async (id) => {
     pushUndo(get().rows)
     await sheet.remove(id)
+    await get().refresh()
+  },
+
+  removeRows: async (ids) => {
+    if (!ids.length) return
+    pushUndo(get().rows)
+    // Sequential, not Promise.all: the Supabase adapter deletes by id and a burst of parallel
+    // writes has no ordering guarantee, so a failure halfway leaves an unpredictable set behind.
+    for (const id of ids) await sheet.remove(id)
     await get().refresh()
   },
 

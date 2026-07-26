@@ -4420,6 +4420,21 @@ button {
   color: var(--danger, #d3543f);
   background: var(--surface-2);
 }
+/* The ✕ on a BUILT output (a deliverable or a post). The build-mode ✕ sits in a flex row of node
+   buttons; these cards have no such row, so it pins to the card's top-right corner instead — the
+   kind chip already holds the top-left. */
+.flow-node-x.is-corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  line-height: 1;
+}
+.flow-node.sel .flow-node-x.is-corner,
+.flow-node.multi .flow-node-x.is-corner,
+.flow-node-x:focus-visible {
+  opacity: 1;
+}
 /* Redraft copy from the current briefs. Reveals on hover; spins while generating. */
 .flow-node-regen {
   flex: 0 0 auto;
