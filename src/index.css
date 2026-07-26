@@ -26207,6 +26207,45 @@ table.aud-sheet td.stick .aud-cell {
   border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 4px; margin-left: 6px;
 }
 
+/* A palette entry with variants: button + caret, Figma-style. The button does the common thing;
+   the caret opens the rest. This is what lets the bar offer eight motions and eleven card kinds
+   without being nineteen icons wide. */
+.flow-tb-palwrap { position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; }
+.flow-tb-palwrap .flow-tb-pal { padding-right: 0; }
+.flow-tb-palcaret {
+  width: 13px; height: 28px; border: 0; background: none; padding: 0; cursor: pointer;
+  color: var(--text-faint); display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 0 6px 6px 0;
+}
+.flow-tb-palcaret svg { width: 9px; height: 9px; }
+.flow-tb-palcaret:hover { color: var(--text); background: var(--surface-2); }
+.flow-tb-palcaret.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.flow-tb-palscrim { position: fixed; inset: 0; z-index: 60; }
+.flow-tb-palmenu {
+  position: absolute; z-index: 61; bottom: calc(100% + 9px); left: -6px;
+  min-width: 208px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--border-strong, var(--border));
+  border-radius: 11px; box-shadow: 0 14px 40px -14px rgba(16, 24, 40, 0.32), 0 2px 8px -2px rgba(16, 24, 40, 0.12);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.flow-tb-palitem {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  padding: 6px 8px; border-radius: 7px; font: inherit; font-size: 13px; color: var(--text);
+}
+.flow-tb-palitem:hover { background: var(--surface-2); }
+.flow-tb-palitem-ic {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.flow-tb-palitem-ic svg { width: 14px; height: 14px; }
+.flow-tb-palitem-lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-tb-palitem-hint {
+  flex: 0 0 auto; font-size: 11px; color: var(--text-faint); max-width: 130px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* Naming a new record from a card: the picker turns into a text field in place. */
 .flow-note-new { cursor: text; }
 .flow-note-new:focus { outline: none; border-color: var(--note-tone, var(--accent)); }

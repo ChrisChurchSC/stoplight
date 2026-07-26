@@ -147,6 +147,31 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
 // motion (email, content, social, web). Clicking one drops that node, so you can skip the AI and
 // start by hand. Four, not six, so the blank state stays one clear hierarchy rather than three
 // dense rows; "More" opens the full picker. Keys must exist in DELIVERABLE_PRESETS.
+/**
+ * The eight motions a deliverable can belong to, matching DELIVERABLE_PRESETS' own `group` values
+ * exactly. They sit in the toolbar's "Gets made" band so the palette offers the KIND of work you
+ * are adding, not one generic "Deliverable" button that hides eight very different choices behind
+ * a single click. Picking one opens the deliverable picker scoped to that motion.
+ */
+const DELIVERABLE_GROUPS: { group: string; label: string; tone: string; icon: ReactNode }[] = [
+  { group: 'Social', label: 'Social', tone: '#2f6fe0',
+    icon: <><circle cx="7" cy="8" r="2.6" /><circle cx="17" cy="6" r="2.2" /><circle cx="16" cy="17" r="2.6" /><path d="M9.3 9.3l4.6 6M9.2 7.2l5.6-1" /></> },
+  { group: 'Email & lifecycle', label: 'Email', tone: '#0e8f7d',
+    icon: <><rect x="3" y="5.5" width="18" height="13" rx="2.2" /><path d="M3.6 7l8.4 6 8.4-6" /></> },
+  { group: 'Content & SEO', label: 'Content', tone: '#7a52d1',
+    icon: <><path d="M5 3.5h9l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20z" /><path d="M14 3.5V9h5" /><path d="M8.5 13h6M8.5 16.5h4" /></> },
+  { group: 'Web', label: 'Web', tone: '#c2410c',
+    icon: <><rect x="3" y="4.5" width="18" height="15" rx="2.2" /><path d="M3 9h18" /><circle cx="6.4" cy="6.8" r="0.7" /><circle cx="8.8" cy="6.8" r="0.7" /></> },
+  { group: 'Paid', label: 'Paid', tone: '#c9302c',
+    icon: <><path d="M3.5 9.5v5a1.5 1.5 0 0 0 1.5 1.5h2.2L14 20V4l-6.8 4H5a1.5 1.5 0 0 0-1.5 1.5z" /><path d="M17.5 9a4.5 4.5 0 0 1 0 6" /></> },
+  { group: 'Video', label: 'Video', tone: '#8a34d6',
+    icon: <><rect x="2.8" y="5.5" width="13" height="13" rx="2.4" /><path d="M16 11l5-3v8l-5-3z" /></> },
+  { group: 'Lead magnets', label: 'Lead magnet', tone: '#b8860b',
+    icon: <><path d="M5.5 4h7l5.5 5.5V20a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M12.5 4v6h5.5" /><path d="M12 12.5v5M9.5 15.5l2.5 2.5 2.5-2.5" /></> },
+  { group: 'Events', label: 'Events', tone: '#0f766e',
+    icon: <><rect x="3.5" y="5" width="17" height="15" rx="2.2" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></> },
+]
+
 const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing'] as const
 
 // Freeform canvas cards you drop from the toolbar (a lightweight node primitive shared across the
@@ -558,6 +583,11 @@ export function FlowsView() {
   // a card, and hid the list that says what is on the canvas at all.
   const [sel, setSel] = useState<'campaign' | string | null>(null)
   const [pickAt, setPickAt] = useState<number | null>(null)
+  // When the picker is opened from a motion button, it shows only that motion's presets.
+  const [pickGroup, setPickGroup] = useState<string | null>(null)
+  // Which palette dropdown is open. The toolbar had grown to 21 icons; a button now does the
+  // common thing and its caret opens the variants, so the bar stays short.
+  const [palMenu, setPalMenu] = useState<string | null>(null)
   // When the deliverable picker is opened FROM an asset card (its "+"), this holds that
   // source asset's row id. The new deliverable's rows get branchOf = that asset's name, so
   // the canvas draws a journey edge from the asset to the new deliverable (asset → next step).
@@ -913,6 +943,7 @@ export function FlowsView() {
       }
       if (e.key.toLowerCase() === 'b' && viewName === null) {
         e.preventDefault()
+        setPickGroup(null)
         setPickAt(nodes.length)
         setSel(null)
       }
@@ -2012,12 +2043,13 @@ export function FlowsView() {
   const grouped = useMemo(() => {
     const map = new Map<string, DeliverablePreset[]>()
     for (const p of DELIVERABLE_PRESETS) {
+      if (pickGroup && p.group !== pickGroup) continue
       const arr = map.get(p.group) ?? []
       arr.push(p)
       map.set(p.group, arr)
     }
     return [...map.entries()]
-  }, [])
+  }, [pickGroup])
 
   // Every deliverable is pre-wired to each of its per-month post cards (the same SVG
   // connectors you can draw by hand), so they arrive connected to the main card.
@@ -3039,6 +3071,48 @@ export function FlowsView() {
       </>
     )
   }
+
+  /**
+   * A palette entry with variants: the button does the common thing, the caret opens the rest.
+   * Borrowed from Figma's toolbar, and the reason the bar can offer eight motions and eleven card
+   * kinds without becoming eight plus eleven icons.
+   */
+  const palGroup = (
+    key: string,
+    main: { title: string; tone: string; icon: ReactNode; onClick: () => void },
+    items: { label: string; hint?: string; tone: string; icon: ReactNode; onClick: () => void }[],
+  ) => (
+    <span className="flow-tb-palwrap" key={key}>
+      <button className="flow-tb-pal" style={{ color: main.tone }} title={main.title} onClick={main.onClick}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{main.icon}</svg>
+      </button>
+      <button
+        className={`flow-tb-palcaret${palMenu === key ? ' on' : ''}`}
+        title="More"
+        aria-label={`More ${key} options`}
+        aria-expanded={palMenu === key}
+        onClick={() => setPalMenu((m) => (m === key ? null : key))}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {palMenu === key && (
+        <>
+          <div className="flow-tb-palscrim" onMouseDown={() => setPalMenu(null)} />
+          <div className="flow-tb-palmenu" role="menu">
+            {items.map((it) => (
+              <button key={it.label} className="flow-tb-palitem" role="menuitem" onClick={() => { setPalMenu(null); it.onClick() }}>
+                <span className="flow-tb-palitem-ic" style={{ color: it.tone }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+                </span>
+                <span className="flow-tb-palitem-lbl">{it.label}</span>
+                {it.hint && <span className="flow-tb-palitem-hint">{it.hint}</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
+  )
 
   // One palette icon per card kind. Keeps its PER-KIND tone: the icon is all you get at this
   // size, so hue is doing real scanning work here (the card chrome is what goes role-coloured).
@@ -4876,23 +4950,53 @@ export function FlowsView() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
           </button>
-          <button
-            className="flow-tb-pal" style={{ color: DELIV_TONE }} disabled={addingDeliv}
-            title="Deliverable. A thing you ship, on a cadence. (B)" aria-label="Add a deliverable"
-            onClick={() => openAddDeliverable()}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg>
-          </button>
+          {/* Deliverable, with the eight motions the presets already carry behind its caret. The
+              button opens everything; the caret picks a motion and scopes the picker to it. */}
+          {palGroup(
+            'deliverable',
+            {
+              title: 'Deliverable. A thing you ship, on a cadence. (B)',
+              tone: DELIV_TONE,
+              icon: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></>,
+              onClick: () => { setPickGroup(null); openAddDeliverable() },
+            },
+            DELIVERABLE_GROUPS.map((g) => ({
+              label: g.label,
+              hint: `${DELIVERABLE_PRESETS.filter((p) => p.group === g.group).length}`,
+              tone: g.tone,
+              icon: g.icon,
+              onClick: () => { setPickGroup(g.group); openAddDeliverable() },
+            })),
+          )}
           <span className="flow-tb-divider" />
           <span className="flow-tb-pal-lbl">Made from</span>
           {/* The honest caveat the dropdown used to carry as a caption now lives in the glossary
               entry behind this tip, so it is still one hover away. */}
           <InfoTip term="canvasInput" />
-          {INPUT_FAMILIES.map((f) => (
-            <span className="flow-tb-pal-group" key={f.family} role="group" aria-label={f.label}>
-              {kindsInFamily(f.family).map((k) => palBtn(k))}
-            </span>
-          ))}
+          {/* One entry per family: the button drops that family's most common card, the caret
+              offers the rest. Eleven kinds inline was most of why the bar had outgrown the canvas. */}
+          {INPUT_FAMILIES.map((f) => {
+            const kinds = kindsInFamily(f.family)
+            if (!kinds.length) return null
+            const lead = kinds[0]
+            if (kinds.length === 1) return palBtn(lead)
+            return palGroup(
+              f.family,
+              {
+                title: `${NOTE_META[lead].label}. ${NOTE_META[lead].menuDesc}.`,
+                tone: NOTE_META[lead].tone,
+                icon: NOTE_META[lead].icon,
+                onClick: () => addNote(lead),
+              },
+              kinds.map((k) => ({
+                label: NOTE_META[k].label,
+                hint: NOTE_META[k].menuDesc,
+                tone: NOTE_META[k].tone,
+                icon: NOTE_META[k].icon,
+                onClick: () => addNote(k),
+              })),
+            )
+          })}
           <span className="flow-tb-divider" />
           <span className="flow-tb-pal-lbl">Notes</span>
           {palBtn('note')}
