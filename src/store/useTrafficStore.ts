@@ -166,7 +166,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
-import { type FlowBoard } from '../domain/flowBoard'
+import { REF_TYPE_FOR_OBJECT_KIND, type FlowBoard } from '../domain/flowBoard'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -3271,13 +3271,71 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   updateSmartObject: (id, patch) =>
     set((s) => {
+      const before = s.smartObjects.find((o) => o.id === id)
       const smartObjects = s.smartObjects.map((o) =>
         // Re-derive the kind whenever the contents change, so an object built around a contact
         // stops being offered by a Person card if the contact is removed.
         o.id === id ? { ...o, ...patch, kind: patch.refs ? kindForRefs(patch.refs, o.kind) : o.kind } : o,
       )
       saveSmartObjects(smartObjects)
-      return { smartObjects }
+      if (!before || !patch.refs) return { smartObjects }
+      /**
+       * PROPAGATION. The inspector promises "editing this smart object changes it everywhere it is
+       * used", and only half of that was true: every card renders from the library, so the contents
+       * did update on sight, but attaching a card COPIES its records onto Campaign.references, and
+       * those copies were left behind. So an edit changed what campaign B showed while campaign B
+       * still generated from the old set.
+       *
+       * Contributions are compared by type+id only, never by label, which is what lets this run in
+       * the store: a plain card's contribution is derivable from its kind and refId with no record
+       * lookup at all.
+       */
+      const after = patch.refs
+      const same = (a: FlowReference, b: FlowReference) => a.type === b.type && a.id === b.id
+      const removed = before.refs.filter((r) => !after.some((x) => same(x, r)))
+      const added = after.filter((r) => !before.refs.some((x) => same(x, r)))
+      if (!removed.length && !added.length) return { smartObjects }
+
+      const patched = new Map<string, FlowReference[]>()
+      for (const b of s.flowBoards) {
+        const camp = s.campaignList.find((c) => c.name === b.key)
+        // No campaign means the builder's unsaved slot, which has no references to rewrite.
+        if (!camp) continue
+        const attachedTo = (nodeId: string) => b.connectors.some((c) => c.from === nodeId && c.to === 'campaign')
+        const mine = [
+          ...b.placements.filter((p) => p.smartObjectId === id).map((p) => p.id),
+          ...b.objects.filter((o) => o.smartObjectId === id).map((o) => o.id),
+        ].filter(attachedTo)
+        // Not attached here: the object sits on the board without feeding the brief, so the
+        // campaign's references never came from it and must not be touched.
+        if (!mine.length) continue
+        // Identity of everything the board's OTHER attached nodes contribute. A record still
+        // supplied by one of them survives the removal.
+        const elsewhere = new Set<string>()
+        for (const c of b.connectors) {
+          if (c.to !== 'campaign' || mine.includes(c.from)) continue
+          const obj = b.objects.find((x) => x.id === c.from)
+          const linkedId = b.placements.find((x) => x.id === c.from)?.smartObjectId ?? obj?.smartObjectId
+          if (linkedId) {
+            for (const r of smartObjects.find((o) => o.id === linkedId)?.refs ?? []) elsewhere.add(`${r.type}:${r.id}`)
+          } else if (obj?.refId) {
+            const t = REF_TYPE_FOR_OBJECT_KIND[obj.kind]
+            if (t) elsewhere.add(`${t}:${obj.refId}`)
+          }
+        }
+        const current = camp.references ?? []
+        const kept = current.filter((r) => !removed.some((d) => same(d, r)) || elsewhere.has(`${r.type}:${r.id}`))
+        const next = [...kept, ...added.filter((a) => !kept.some((x) => same(x, a)))]
+        if (next.length !== current.length || next.some((r, i) => !same(r, current[i]))) patched.set(camp.name, next)
+      }
+      if (!patched.size) return { smartObjects }
+      const campaignList = s.campaignList.map((c) =>
+        patched.has(c.name) ? { ...c, references: patched.get(c.name) } : c,
+      )
+      saveCampaigns(campaignList)
+      // The last coherence result was computed against the refs this just changed, so it no longer
+      // describes the campaign. Null re-offers the check rather than showing a stale verdict.
+      return { smartObjects, campaignList, coherenceCheckedHash: null }
     }),
   deleteSmartObject: (id) =>
     set((s) => {

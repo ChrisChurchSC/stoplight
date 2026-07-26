@@ -19,6 +19,21 @@ export type ObjectRole = 'output' | 'input' | 'markup' | 'brief'
 /** The sub-grouping inside the input role, used by the toolbar palette. */
 export type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
 
+/**
+ * The record type an object of each kind contributes to the campaign. Only four kinds carry a
+ * record; the rest (message, voice, note, …) speak to the copy writer through direction instead.
+ *
+ * Lives here rather than in FlowsView because the STORE needs it: propagating a smart-object edit
+ * across campaigns has to know what a plain card contributes, and comparing contributions needs
+ * only a type and an id, never a label.
+ */
+export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person'>> = {
+  audience: 'segment',
+  'proof-point': 'proof',
+  company: 'company',
+  person: 'person',
+}
+
 export interface CanvasObject {
   id: string
   kind: CanvasObjectKind

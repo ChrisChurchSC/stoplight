@@ -4,7 +4,7 @@ import { CHANNELS } from '../domain/channels'
 // component that renders it. OBJECT_META stays here: it carries JSX icons.
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type ObjectRole, type SmartPlacement,
-  boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
+  REF_TYPE_FOR_OBJECT_KIND, boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
 import type { SmartObject } from '../domain/smartObject'
@@ -1385,12 +1385,8 @@ export function FlowsView() {
    * Only the kinds with a FlowRefType can attach, because a ref is what the rest of the app reads.
    * Of these, segment and proof are the two that actually reach the copy writer today.
    */
-  const REF_TYPE_FOR_KIND: Partial<Record<CanvasObjectKind, FlowRefType>> = {
-    audience: 'segment',
-    'proof-point': 'proof',
-    company: 'company',
-    person: 'person',
-  }
+  // Moved to the domain: the store needs the same map to propagate a smart-object edit.
+  const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
   const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
@@ -1445,6 +1441,38 @@ export function FlowsView() {
     if (!drop.length) return
     const base = (viewName !== null ? flowRefs : briefRefsEffective).filter(
       (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
+    )
+    if (viewName !== null) {
+      setCampaignReferences(viewName, base)
+      setRefsDirty(true)
+    } else {
+      commitBriefRefs(base)
+    }
+  }
+  /**
+   * Drop ONE record from the campaign, unless some other attached card still contributes it. The
+   * per-ref counterpart to detachFromCampaign, which drops everything behind a node.
+   *
+   * `edited` carries the smart object's POST-edit refs. Both this and refsBehind read `smartObjects`
+   * from the render closure, so a store write in the same handler is not visible yet: without the
+   * override, a second attached card linking the same object would still appear to contribute the
+   * record that was just removed, and the drop would be skipped.
+   */
+  const dropRefFromCampaign = (
+    ref: FlowReference,
+    fromNodeId: string,
+    edited?: { objectId: string; refs: FlowReference[] },
+  ) => {
+    const linkedObjectOf = (nodeId: string): string | undefined =>
+      placements.find((x) => x.id === nodeId)?.smartObjectId ?? objects.find((n) => n.id === nodeId)?.smartObjectId
+    const behind = (nodeId: string): FlowReference[] =>
+      edited && linkedObjectOf(nodeId) === edited.objectId ? edited.refs : refsBehind(nodeId)
+    const stillAttached = connectors
+      .filter((e) => e.to === 'campaign' && e.from !== fromNodeId)
+      .flatMap((e) => behind(e.from))
+    if (stillAttached.some((x) => x.type === ref.type && x.id === ref.id)) return
+    const base = (viewName !== null ? flowRefs : briefRefsEffective).filter(
+      (r) => !(r.type === ref.type && r.id === ref.id),
     )
     if (viewName !== null) {
       setCampaignReferences(viewName, base)
@@ -3093,8 +3121,14 @@ export function FlowsView() {
                           title="Take this out of the smart object"
                           aria-label="Take this out of the smart object"
                           onClick={() => {
-                            updateSmartObject(linked.id, { refs: linked.refs.filter((x) => !(x.type === r.type && x.id === r.id)) })
-                            if (isAttached(nt.id)) detachFromCampaign(nt.id, connectors)
+                            const nextRefs = linked.refs.filter((x) => !(x.type === r.type && x.id === r.id))
+                            updateSmartObject(linked.id, { refs: nextRefs })
+                            // Drop just THIS record from the campaign. This used to call
+                            // detachFromCampaign, which reads refsBehind from the pre-edit
+                            // smartObjects closure: it saw the object's whole old ref list and
+                            // dropped every one, so taking a single proof point out of a bundle also
+                            // detached its audience and its message from the campaign.
+                            if (isAttached(nt.id)) dropRefFromCampaign(r, nt.id, { objectId: linked.id, refs: nextRefs })
                           }}
                         >
                           ✕
