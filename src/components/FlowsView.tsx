@@ -1666,10 +1666,16 @@ export function FlowsView() {
     const first = notes.find((n) => n.id === ids[0])
     return first ? `${NOTE_META[first.kind].label} bundle` : 'Smart object'
   }
-  /** Bundle the selected cards. Needs 2+, and only cards (a deliverable isn't context). */
+  /**
+   * Bundle the selected cards into a smart object. ONE is enough: an object is a named, reusable
+   * thing, and a bundle of one is both legitimate ("the RevOps audience" as its own object) and the
+   * natural way to start one you will add to. Only cards, since a deliverable is not context.
+   * Falls back to the single active selection so Cmd+G works without a marquee.
+   */
   const groupSelection = () => {
-    const ids = [...selected].filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
-    if (ids.length < 2) return
+    const pool = selected.size ? [...selected] : sel ? [sel] : []
+    const ids = pool.filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
+    if (!ids.length) return
     recordHistory(true)
     const id = freshGroupId()
     // The object takes the top-left-most member's spot, so it appears where the cards were.
@@ -4658,7 +4664,7 @@ export function FlowsView() {
         const onGroup = ctxMenu.on ? groups.find((g) => g.id === ctxMenu.on) : undefined
         const onCard = ctxMenu.on ? notes.find((n) => n.id === ctxMenu.on) : undefined
         // Cards eligible to bundle: the selection if it has 2+, else nothing to group.
-        const groupable = [...selected].filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
+        const groupable = (selected.size ? [...selected] : sel ? [sel] : []).filter((id) => notes.some((n) => n.id === id) && !groupOf(id))
         const close = () => setCtxMenu(null)
         return (
           <>
@@ -4680,11 +4686,12 @@ export function FlowsView() {
                   <button
                     className="flow-ctx-item"
                     role="menuitem"
-                    disabled={groupable.length < 2}
-                    title={groupable.length < 2 ? 'Select two or more cards first' : undefined}
+                    disabled={!groupable.length}
+                    title={!groupable.length ? 'Select a card first' : undefined}
                     onClick={() => { close(); groupSelection() }}
                   >
-                    Group into a smart object<span className="flow-ctx-kbd">⌘G</span>
+                    {groupable.length > 1 ? 'Group into a smart object' : 'Make a smart object'}
+                    <span className="flow-ctx-kbd">⌘G</span>
                   </button>
                   {openGroup && onCard && (
                     <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); removeFromGroup(openGroup.id, onCard.id) }}>
@@ -4697,8 +4704,8 @@ export function FlowsView() {
                       <button className="flow-ctx-item danger" role="menuitem" onClick={() => { close(); deleteNote(onCard.id) }}>Delete card</button>
                     </>
                   )}
-                  {!ctxMenu.on && groupable.length < 2 && (
-                    <div className="flow-ctx-hint">Select two or more cards to bundle them.</div>
+                  {!ctxMenu.on && !groupable.length && (
+                    <div className="flow-ctx-hint">Select a card to make it a smart object.</div>
                   )}
                 </>
               )}
