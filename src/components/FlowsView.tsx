@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
-import { type SmartObject, describeSmartObject } from '../domain/smartObject'
+import type { SmartObject } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
@@ -100,6 +100,16 @@ const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Channels', types: ['channel'] },
   { label: 'Proof points', types: ['proof'] },
 ]
+// What to call each record type in the UI. The stored strings are historical ('segment' is what
+// a user calls an audience), and renaming them would be a migration through share snapshots.
+const REF_TYPE_LABEL: Record<FlowRefType, string> = {
+  segment: 'Audience',
+  company: 'Company',
+  person: 'Contact',
+  proof: 'Proof point',
+  channel: 'Channel',
+  'media-mix': 'Media mix',
+}
 const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {RECORD_TYPE_ICON[type]}
@@ -2950,15 +2960,48 @@ export function FlowsView() {
                     </optgroup>
                   )}
                 </select>
-                {linked && <div className="flow-inspect-note" style={{ margin: '6px 0 0' }}>Inside: {describeSmartObject(linked)}</div>}
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Or link a single record</label>
+                {/* What the card actually resolves to. A summary line was not enough: an
+                    object-linked card is the one case where you could not determine, or change,
+                    which records the card contributes. They are listed and removable here. */}
+                {linked && (
+                  <div className="flow-obj-list" style={{ marginTop: 8 }}>
+                    {linked.refs.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside this object yet.</div>}
+                    {linked.refs.map((r) => (
+                      <div key={`${r.type}:${r.id}`} className="flow-obj-row">
+                        <span className="flow-obj-row-ic" style={{ color: 'var(--accent-2)' }} aria-hidden="true">
+                          <RecordTypeIcon type={r.type} />
+                        </span>
+                        <span className="flow-obj-row-txt">
+                          <span className="flow-obj-row-kind">{REF_TYPE_LABEL[r.type]}</span>
+                          <span className="flow-obj-row-val">{r.label}</span>
+                        </span>
+                        <button
+                          className="flow-obj-row-out"
+                          title="Take this out of the object"
+                          aria-label="Take this out of the object"
+                          onClick={() => {
+                            updateSmartObject(linked.id, { refs: linked.refs.filter((x) => !(x.type === r.type && x.id === r.id)) })
+                            if (isAttached(nt.id)) detachFromCampaign(nt.id, connectors)
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
+                      Editing this object changes it everywhere it is used, not just here.
+                    </div>
+                  </div>
+                )}
               </>
             )
           })()}
           {opts && (
             <>
-              <label className="flow-inspect-label">
-                {meta.label} record
+              <label className="flow-inspect-label" style={{ marginTop: REF_TYPE_FOR_KIND[nt.kind] ? 14 : 0 }}>
+                {/* When an object picker sits above, this is the alternative, so say so once here
+                    rather than stacking a second label on top of it. */}
+                {REF_TYPE_FOR_KIND[nt.kind] ? `Or one ${meta.label.toLowerCase()} record` : `${meta.label} record`}
               </label>
               <select
                 className="flow-inspect-input flow-inspect-select"
