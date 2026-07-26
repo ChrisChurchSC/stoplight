@@ -4,10 +4,11 @@ import { CHANNELS } from '../domain/channels'
 // component that renders it. OBJECT_META stays here: it carries JSX icons.
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type ObjectRole, type SmartPlacement,
-  REF_TYPE_FOR_OBJECT_KIND, boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
+  type FlowBoard,
+  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
-import type { SmartObject } from '../domain/smartObject'
+import { type SmartObject, describeSmartObject, scopeOf, visibleOnCampaign } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
@@ -467,6 +468,7 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
+  const adoptBuilderBoard = useTrafficStore((s) => s.adoptBuilderBoard)
   const setCampaignDirection = useTrafficStore((s) => s.setCampaignDirection)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
@@ -529,6 +531,7 @@ export function FlowsView() {
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
+  const promoteSmartObject = useTrafficStore((s) => s.promoteSmartObject)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
   const addCompany = useTrafficStore((s) => s.addCompany)
@@ -1791,17 +1794,29 @@ export function FlowsView() {
   const placementOf = (noteId: string): SmartPlacement | undefined => placements.find((g) => g.memberIds.includes(noteId))
   /**
    * OBJECTS A CARD CAN PICK. A Person card offers person objects, an Audience card segment ones.
-   * Split into the ones already on this campaign (placed on the canvas) and the rest of the
-   * brand's library, because "which of these is already in play" is the first thing you want to
-   * know when you open the picker.
+   *
+   * Split by SCOPE: the ones local to this campaign, then the brand library. It used to split on
+   * "placed on this canvas or not", which described the same brand-wide list twice and gave the two
+   * groups no meaning beyond a layout detail. Scope is the distinction that matters, because it says
+   * whether editing the object reaches other campaigns.
    */
   const objectsForKind = (kind: CanvasObjectKind): { onCampaign: SmartObject[]; library: SmartObject[] } => {
     const refType = REF_TYPE_FOR_KIND[kind]
-    const mine = smartObjects.filter((o) => o.brand === brand && o.kind === refType)
-    const placed = new Set(placements.map((g) => g.smartObjectId))
-    return { onCampaign: mine.filter((o) => placed.has(o.id)), library: mine.filter((o) => !placed.has(o.id)) }
+    // visibleOnCampaign, not `o.brand === brand`: another campaign's local objects belong to this
+    // brand too, and offering them here is exactly what scoping exists to prevent.
+    const mine = smartObjects.filter((o) => o.kind === refType && visibleOnCampaign(o, brand, viewName ?? BUILDER_BOARD_KEY))
+    return {
+      onCampaign: mine.filter((o) => scopeOf(o) === 'campaign'),
+      library: mine.filter((o) => scopeOf(o) === 'brand'),
+    }
   }
 
+  /**
+   * A campaign name without its brand prefix, for prose. The builder slot has no name to show, so
+   * it reads as "an unsaved campaign" rather than leaking '__new-flow__'.
+   */
+  const shortCampaignName = (name: string): string =>
+    name === BUILDER_BOARD_KEY ? 'an unsaved campaign' : name.replace(`${brand} — `, '')
   /** The brand-library object a canvas placement shows. */
   const smartObjectFor = (g: SmartPlacement) => smartObjects.find((o) => o.id === g.smartObjectId)
   const placementName = (g: SmartPlacement) => smartObjectFor(g)?.name ?? 'Smart object'
@@ -1840,11 +1855,14 @@ export function FlowsView() {
     const spot = ids
       .map((m) => pos[m] ?? { x: 0, y: 0 })
       .reduce((a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) }))
-    // The object goes in the brand's library, so it outlives this campaign and can be reused.
     // What it holds is the RECORDS behind the cards, not the cards, which is what makes it
     // portable: another campaign places the same object and gets the same records.
+    //
+    // LOCAL to this campaign, not the brand library. ⌘G used to write straight to the brand, so
+    // every bundle anyone made anywhere joined the brand's shared vocabulary the moment it existed
+    // and the library filled with one-offs. Promote it from the inspector when it earns reuse.
     const refs = ids.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n).map(refForObject).filter((r): r is FlowReference => !!r)
-    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs)
+    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs, 'campaign', boardKey)
     setPlacements((g) => [...g, { id, smartObjectId, memberIds: ids }])
     setPos((p) => ({ ...p, [id]: spot }))
     // Members keep their own pos: it becomes their layout INSIDE the object.
@@ -2068,7 +2086,7 @@ export function FlowsView() {
     setConnectors([])
     setOpenGroupId(null)
     // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
-    saveFlowBoard({ key: '__new-flow__', objects: [], placements: [], pos: {}, connectors: [] })
+    saveFlowBoard({ key: BUILDER_BOARD_KEY, objects: [], placements: [], pos: {}, connectors: [] })
     setBriefHidden(false)
     setBriefSummoned(false)
     // A fresh campaign opens as a clean, blank canvas: inspector collapsed, just the starter
@@ -2243,17 +2261,22 @@ export function FlowsView() {
    * Keyed the same way the chat is (chatFlowKey), so the unbuilt builder gets its own slot and its
    * board is not lost the moment you name the campaign.
    */
-  const boardKey = viewName ?? '__new-flow__'
+  const boardKey = viewName ?? BUILDER_BOARD_KEY
+  /**
+   * The board as it stands, ready to persist. Only the positions of things actually on THIS board:
+   * pos also holds deliverable and post ids, which belong to the flow layout rather than the board.
+   */
+  const boardSnapshot = (key: string): FlowBoard => {
+    const ids = new Set([...objects.map((o) => o.id), ...placements.map((p) => p.id), 'campaign'])
+    const boardPos: Record<string, { x: number; y: number }> = {}
+    for (const [k, v] of Object.entries(pos)) if (ids.has(k)) boardPos[k] = v
+    return { key, objects, placements, pos: boardPos, connectors }
+  }
   const boardSaveTimer = useRef<number | null>(null)
   useEffect(() => {
     if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
     boardSaveTimer.current = window.setTimeout(() => {
-      // Only the positions of things actually on THIS board; pos also holds deliverable and post
-      // ids, which belong to the flow layout rather than to the board.
-      const ids = new Set([...objects.map((o) => o.id), ...placements.map((p) => p.id), 'campaign'])
-      const boardPos: Record<string, { x: number; y: number }> = {}
-      for (const [k, v] of Object.entries(pos)) if (ids.has(k)) boardPos[k] = v
-      saveFlowBoard({ key: boardKey, objects, placements, pos: boardPos, connectors })
+      saveFlowBoard(boardSnapshot(boardKey))
     }, 600)
     return () => {
       if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
@@ -2320,6 +2343,14 @@ export function FlowsView() {
       if (brand && cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
       if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
+      // Hand the builder's board and any object made on it to the campaign that now exists. Without
+      // this, opening the built campaign loads its own empty board over the top and every input card
+      // placed before Build is gone.
+      //
+      // Flushed first, because the board save is debounced 600ms: hitting Build straight after
+      // placing a card would otherwise find nothing in the builder slot to hand over.
+      saveFlowBoard(boardSnapshot(BUILDER_BOARD_KEY))
+      adoptBuilderBoard(campaignName)
       // Carry build-mode direction onto the campaign the moment it exists, BEFORE the assets are
       // seeded, so the first draft is written to it and a regeneration later still has it.
       if (builderDirection.length) setCampaignDirection(campaignName, builderDirection)
@@ -2744,7 +2775,7 @@ export function FlowsView() {
 
   // New chat + history. The active chat is saved to history (keyed by the flow) before
   // it's cleared or another is opened.
-  const chatFlowKey = viewName ?? '__new-flow__'
+  const chatFlowKey = viewName ?? BUILDER_BOARD_KEY
   const flowHistory = useMemo(() => flowChats.filter((c) => c.flowKey === chatFlowKey), [flowChats, chatFlowKey])
   const persistActiveChat = () => {
     if (!chatMsgs.length) return
@@ -3069,8 +3100,8 @@ export function FlowsView() {
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">{meta.menuDesc}</p>
-          {/* OBJECTS, not raw records. A Person card offers the brand's person objects, the ones
-              already on this campaign first. The object is the reusable unit ("the RevOps buyer",
+          {/* OBJECTS, not raw records. A Person card offers person objects: this campaign's own
+              first, then the brand library. The object is the reusable unit ("the RevOps buyer",
               carrying the contact plus the proof and message that go with them); the record is
               just its contents. Picking one pulls everything inside it into the campaign when the
               card is attached. */}
@@ -3091,7 +3122,7 @@ export function FlowsView() {
                 >
                   <option value="">{onCampaign.length + library.length ? `Link ${articleFor(noun)} ${noun} smart object…` : `No ${noun} smart objects yet`}</option>
                   {onCampaign.length > 0 && (
-                    <optgroup label="On this campaign">
+                    <optgroup label="Only on this campaign">
                       {onCampaign.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </optgroup>
                   )}
@@ -3135,9 +3166,29 @@ export function FlowsView() {
                         </button>
                       </div>
                     ))}
-                    <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                      Editing this smart object changes it everywhere it is used, not just here.
-                    </div>
+                    {/* WHERE IT LIVES, and what editing it therefore costs. One flat sentence used
+                        to claim every object reached every campaign, which was the wrong warning for
+                        a local object and, until propagation landed, not quite true of a brand one. */}
+                    {scopeOf(linked) === 'brand' ? (
+                      <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
+                        In the brand library{linked.campaign ? `, promoted from ${shortCampaignName(linked.campaign)}` : ''}. Editing
+                        it changes every campaign using it, not just this one.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
+                          Only on this campaign. Edit it freely: nothing else uses it.
+                        </div>
+                        <button
+                          className="flow-obj-promote"
+                          title="Move this into the brand library so every campaign can use it"
+                          onClick={() => promoteSmartObject(linked.id, brand)}
+                          disabled={!brand}
+                        >
+                          Add to the brand library
+                        </button>
+                      </>
+                    )}
                     {/* Deleting the OBJECT, as opposed to taking one record out of it or removing
                         the card from this board. It had no control anywhere until now, so a smart
                         object could be made but never unmade. Counted across boards rather than
@@ -3616,6 +3667,36 @@ export function FlowsView() {
                         </div>
                         {open && (
                           <div className="flow-lib-folder-body">
+                            {/* THE BRAND LIBRARY, visible from outside a canvas. Promotion says an
+                                object "goes in the brand folder", and until now the brand folder had
+                                no such shelf: the only place a promoted object appeared was a card
+                                picker on some other campaign. Local objects are deliberately absent —
+                                they belong to one board, and listing them here would say otherwise. */}
+                            {(() => {
+                              const shelf = smartObjects
+                                .filter((o) => o.brand === b.name && scopeOf(o) === 'brand')
+                                .filter((o) => !q || o.name.toLowerCase().includes(q))
+                                .sort((x, y) => x.name.localeCompare(y.name))
+                              if (!shelf.length) return null
+                              return (
+                                <div className="flow-lib-objects">
+                                  <div className="flow-lib-objects-h">Smart objects</div>
+                                  {shelf.map((o) => (
+                                    <div key={o.id} className="flow-lib-object" title={describeSmartObject(o)}>
+                                      <span className="flow-lib-object-ic" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                                          <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
+                                        </svg>
+                                      </span>
+                                      <span className="flow-lib-object-txt">
+                                        <span className="flow-lib-object-name">{o.name}</span>
+                                        <span className="flow-lib-object-sub">{describeSmartObject(o)}</span>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })()}
                             {libs.length === 0 ? (
                               <div className="flow-lib-folder-empty">No campaigns yet</div>
                             ) : (
@@ -4080,12 +4161,15 @@ export function FlowsView() {
                 while you're inside one, since objects don't nest yet. */}
             {!openPlacement && placements.map((g) => {
               const members = g.memberIds.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
+              const so = smartObjectFor(g)
+              const scope = so ? scopeOf(so) : 'campaign'
               return (
                 <div
                   key={g.id}
                   className={`flow-node flow-note flow-note-object${isAttached(g.id) ? ' attached' : ''}${connectOver === g.id ? ' drop-target' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
                   data-node-id={g.id}
                   data-role="input"
+                  data-scope={scope}
                   style={{ transform: `translate(${pos[g.id]?.x ?? 0}px, ${pos[g.id]?.y ?? 0}px)` }}
                   onMouseDown={(e) => startDrag(e, g.id)}
                   onClick={(e) => clickSelect(e, g.id)}
@@ -4099,6 +4183,17 @@ export function FlowsView() {
                       </svg>
                     </span>
                     <span className="flow-note-kind">Smart object</span>
+                    {/* A brand object is a LINKED copy: the chain says an edit here is an edit
+                        everywhere, which is exactly the thing you want to know before you touch it.
+                        A local object wears nothing, because there is nothing to warn about. */}
+                    {scope === 'brand' && (
+                      <span className="flow-obj-linked" title="In the brand library: editing this changes every campaign using it" aria-label="In the brand library">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+                          <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
+                        </svg>
+                      </span>
+                    )}
                     <button className="flow-note-del" title="Release" aria-label="Release" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); releasePlacement(g.id) }}>✕</button>
                   </div>
                   <input

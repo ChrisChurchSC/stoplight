@@ -126,7 +126,18 @@ export function buildShareSnapshot(state: SnapshotState, client: string, campaig
   // Smart objects have to travel with the board: a placement holds only a smartObjectId, so without
   // the objects themselves pruneBoard would drop every placement on the recipient's side and the
   // shared canvas would arrive with its smart objects missing.
-  set('stoplight.smartObjects.v1', byField(state.smartObjects, 'brand', client))
+  //
+  // Scoped, not just filtered by brand. A campaign-scoped object carries its brand too, so byField
+  // alone would send the names of objects local to campaigns this link does not share.
+  set(
+    'stoplight.smartObjects.v1',
+    byField(state.smartObjects, 'brand', client).filter((o) => {
+      const scope = (o as Record<string, unknown>).scope
+      // A missing scope predates the ladder and was a brand-library object.
+      if (scope !== 'campaign') return true
+      return campInShare(String((o as Record<string, unknown>).campaign ?? ''))
+    }),
+  )
   set('stoplight.targetLists.v1', byField(state.targetLists, 'brand', client))
   set('stoplight.libraryFolders.v1', byField(state.libraryFolders, 'brand', client))
 

@@ -70,6 +70,13 @@ export interface FlowBoard {
 export const emptyBoard = (key: string): FlowBoard => ({ key, objects: [], placements: [], pos: {}, connectors: [] })
 
 /**
+ * The board key for a campaign that does not exist yet. The builder needs its own slot so a
+ * half-typed name does not scatter boards, and everything keyed to it has to be handed over to the
+ * real campaign the moment Build names one (see adoptBuilderBoard).
+ */
+export const BUILDER_BOARD_KEY = '__new-flow__'
+
+/**
  * Ids must be unique across sessions now that they persist. These were module-level counters
  * (`co_1`, `pl_1`), which reset to 1 on every reload: two objects created in two sessions on the
  * same board would have collided, and pos is keyed by id, so they would have stacked and dragged

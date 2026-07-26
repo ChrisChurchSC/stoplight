@@ -13,10 +13,34 @@ import type { FlowReference, FlowRefType } from './clients'
  * link an object. Holding REFERENCES instead breaks the cycle and makes the object the durable
  * thing, with cards as views onto it.
  */
+/**
+ * WHERE a smart object lives. The ladder has two rungs and you climb it deliberately.
+ *
+ * 'campaign' is where every object starts: made on one board, usable only there. That is the honest
+ * default, because most bundles are made in the middle of thinking and are not yet worth anyone
+ * else's attention. 'brand' is the promotion: it moves into the brand folder and every campaign can
+ * reach it, and from then on an edit reaches all of them.
+ *
+ * Cmd+G used to write straight to the brand library, so every bundle anyone made anywhere became
+ * part of the brand's shared vocabulary the moment it existed. The library filled with one-offs and
+ * stopped being worth reading.
+ */
+export type SmartObjectScope = 'campaign' | 'brand'
+
 export interface SmartObject {
   id: string
-  /** The brand whose library owns it. Objects are reusable across that brand's campaigns. */
-  brand: string
+  /**
+   * The brand whose library owns it. Set once it is promoted; a campaign-scoped object may carry it
+   * too (it is where it will land), so `scope` is what decides visibility, never the presence of
+   * this field.
+   */
+  brand?: string
+  /** Which rung it sits on. Absent on objects written before the ladder existed: those were all
+   *  brand-library objects, so a missing scope reads as 'brand' (see scopeOf). */
+  scope?: SmartObjectScope
+  /** The campaign it was made on. Required in practice for a campaign-scoped object: without it,
+   *  nothing can tell which board may see it. */
+  campaign?: string
   name: string
   /**
    * What KIND of thing this object is, which is what a card's picker filters on: a Person card
@@ -30,6 +54,19 @@ export interface SmartObject {
 
 export function freshSmartObjectId(): string {
   return `obj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+}
+
+/**
+ * An object's scope, defaulting a missing one to 'brand'. Every object written before the scope
+ * field existed WAS in the brand library, so reading the absence as 'campaign' would make a
+ * library's worth of objects vanish from the pickers that offer them.
+ */
+export const scopeOf = (o: SmartObject): SmartObjectScope => o.scope ?? 'brand'
+
+/** Is this object reachable from a board? Brand objects always; a local one only on its own board. */
+export const visibleOnCampaign = (o: SmartObject, brand: string, campaign: string | null): boolean => {
+  if (o.brand && o.brand !== brand) return false
+  return scopeOf(o) === 'brand' ? true : !!campaign && o.campaign === campaign
 }
 
 /**

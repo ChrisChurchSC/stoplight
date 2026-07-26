@@ -138,7 +138,7 @@ import {
   titleFromUrl,
 } from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
-import { type SmartObject, freshSmartObjectId, kindForRefs } from '../domain/smartObject'
+import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs } from '../domain/smartObject'
 import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
@@ -166,7 +166,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
-import { REF_TYPE_FOR_OBJECT_KIND, type FlowBoard } from '../domain/flowBoard'
+import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, type FlowBoard } from '../domain/flowBoard'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -1707,10 +1707,42 @@ interface TrafficState {
   deleteBrandRecord: (id: string) => void
   /** Per-brand freeform data sets (blank spreadsheets). */
   brandDatasets: BrandDataset[]
-  /** Brand-level reusable record bundles. A card links one of these rather than a raw record. */
+  /**
+   * Reusable record bundles. A card links one of these rather than a raw record. Two scopes: an
+   * object starts local to the campaign it was made on and is PROMOTED to the brand when it earns
+   * reuse (see SmartObjectScope).
+   */
   smartObjects: SmartObject[]
-  addSmartObject: (brand: string, name: string, refs: FlowReference[]) => string
+  /**
+   * Make a bundle. `campaign` is the board it was made on, and with scope 'campaign' it is also the
+   * only board that can see it. Pass scope 'brand' only for something deliberately created as
+   * shared; ⌘G always makes a local one.
+   */
+  addSmartObject: (
+    brand: string,
+    name: string,
+    refs: FlowReference[],
+    scope: SmartObjectScope,
+    campaign?: string,
+  ) => string
   updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs'>>) => void
+  /**
+   * Hand the builder's work to the campaign Build just named: its board is re-keyed, and any smart
+   * object made on the builder slot is re-stamped to the real campaign.
+   *
+   * Without this the builder's cards were LOST on build. The board saves under BUILDER_BOARD_KEY
+   * while the campaign has no name, then opening the built campaign loads its own (empty) board and
+   * overwrites the React state, so every input card placed before Build disappeared. A
+   * campaign-scoped smart object would have been stranded the same way: still keyed to a slot no
+   * board uses, so nothing could see it.
+   */
+  adoptBuilderBoard: (campaign: string) => void
+  /**
+   * Move a campaign-scoped object into the brand library, where every campaign can reach it and an
+   * edit reaches all of them. One-way: there is no demote, because campaigns may already be using it
+   * by the time you would want one, and silently taking it back would break their briefs.
+   */
+  promoteSmartObject: (id: string, brand: string) => void
   deleteSmartObject: (id: string) => void
   addBrandDataset: (brand: string, name?: string) => string
   renameBrandDataset: (id: string, name: string) => void
@@ -3260,15 +3292,53 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { brandRecords }
     }),
 
-  addSmartObject: (brand, name, refs) => {
+  addSmartObject: (brand, name, refs, scope, campaign) => {
     const id = freshSmartObjectId()
     set((s) => {
-      const smartObjects = [...s.smartObjects, { id, brand, name, kind: kindForRefs(refs), refs }]
+      // brand is recorded even on a local object: it is where a later promotion lands, and it keeps
+      // the brand purge able to sweep it.
+      const smartObjects = [...s.smartObjects, { id, brand, scope, campaign, name, kind: kindForRefs(refs), refs }]
       saveSmartObjects(smartObjects)
       return { smartObjects }
     })
     return id
   },
+  adoptBuilderBoard: (campaign) =>
+    set((s) => {
+      const builder = s.flowBoards.find((b) => b.key === BUILDER_BOARD_KEY)
+      // Only campaign-scoped objects made on the builder slot; a brand object is already reachable.
+      const strays = s.smartObjects.filter((o) => o.scope === 'campaign' && o.campaign === BUILDER_BOARD_KEY)
+      if (!builder && !strays.length) return {}
+      const patch: Partial<TrafficState> = {}
+      // Never clobber a board the campaign already has: Build can run again on a campaign that has
+      // since been worked on, and the builder slot would be stale.
+      const alreadyHasBoard = s.flowBoards.some((b) => b.key === campaign)
+      if (builder && !alreadyHasBoard) {
+        const flowBoards = [
+          ...s.flowBoards.filter((b) => b.key !== BUILDER_BOARD_KEY && b.key !== campaign),
+          { ...builder, key: campaign },
+        ]
+        saveFlowBoards(flowBoards)
+        patch.flowBoards = flowBoards
+      }
+      if (strays.length) {
+        const ids = new Set(strays.map((o) => o.id))
+        const smartObjects = s.smartObjects.map((o) => (ids.has(o.id) ? { ...o, campaign } : o))
+        saveSmartObjects(smartObjects)
+        patch.smartObjects = smartObjects
+      }
+      return patch
+    }),
+  promoteSmartObject: (id, brand) =>
+    set((s) => {
+      const smartObjects = s.smartObjects.map((o) =>
+        // `campaign` is kept, not cleared: it records where the object came from, which is what the
+        // inspector's provenance line reads.
+        o.id === id ? { ...o, scope: 'brand' as const, brand } : o,
+      )
+      saveSmartObjects(smartObjects)
+      return { smartObjects }
+    }),
   updateSmartObject: (id, patch) =>
     set((s) => {
       const before = s.smartObjects.find((o) => o.id === id)

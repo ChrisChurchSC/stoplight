@@ -37,6 +37,9 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'Editing a smart object now actually reaches the campaigns using it. The card showed the change everywhere on sight, but attaching one copies its records onto the campaign, and those copies were left behind: campaign B displayed the new version and still generated from the old one.',
+          'Taking one record out of a smart object no longer detaches the rest. Removing a single proof point also dropped that object’s audience and message from the campaign.',
+          'Input cards placed before you hit Build survive it. The board was saved under a slot for the not-yet-named campaign and never handed over, so opening the campaign you had just built loaded an empty canvas over the top of your work.',
           'Delete works on a built deliverable. Selecting one and pressing Delete did nothing at all, and there was no ✕ or menu item either. Deleting a deliverable now takes the posts under it, because that is what a deliverable is, and it undoes in one step. A single post can be deleted on its own.',
           'Your brand hooks reach the writer. They were being sent with every draft and dropped by the server, so the opening lines you wrote only ever influenced copy when there was no API key.',
           'An asset told to lean on a specific proof point can now actually cite it. The proof was picked from your whole library while a narrower list was sent to the writer, so it could be pointed at evidence it was not allowed to use.',
@@ -49,7 +52,7 @@ const RELEASES: Release[] = [
         items: [
           'The campaigns page is campaigns and folders, nothing else. Flights are gone from it. A campaign with more than one scheduled run used to pretend to be a folder and drill into a list of runs, which meant the only way to get a folder was to schedule a second run of something. Real folders replace it, and the length of a campaign is now called its length.',
           'Cards are called objects. One thing on a campaign board is an object: an audience, a message, a proof point, a note. Bundle a few and you get a smart object, which is the same word Photoshop uses for the same idea, and it makes the next part say what it means.',
-          'A smart object now says whether it lives in this campaign or in your brand folder. A bundle starts out local to the campaign you made it on. When it is good enough to reuse, you assign it to the brand and every campaign can reach it. Ungroup is called Release, because a smart object is a linked copy rather than a container you break open.',
+          'A smart object now says whether it lives in this campaign or in your brand folder, and it is true rather than aspirational. ⌘G makes one local to the campaign you are on: edit it freely, nothing else uses it. When it earns reuse, "Add to the brand library" moves it, and from then on it wears a chain, shows where it was promoted from, and an edit reaches every campaign using it. Your brand folder now lists what is in it. Before this, everything anyone bundled anywhere joined the brand library the moment it existed, so the library filled with one-offs.',
         ],
       },
     ],
