@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
+import { type SmartObject, describeSmartObject } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
@@ -278,8 +279,13 @@ const freshNoteId = () => `note_${++noteSeq}`
  */
 interface FlowGroup {
   id: string
-  name: string
-  /** FlowNote ids. Members are hidden from the outer canvas and drawn inside the object. */
+  /**
+   * The brand-library SmartObject this placement shows. The NAME and the REFS live there, not
+   * here, which is what makes an object reusable: the same object can sit on several campaigns
+   * and renaming it once renames it everywhere. This record is just "it is on this canvas".
+   */
+  objectId: string
+  /** FlowNote ids currently drawn inside it on this canvas. */
   memberIds: string[]
 }
 let groupSeq = 0
@@ -473,6 +479,10 @@ export function FlowsView() {
   const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
   const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
+  // Brand-library smart objects: the reusable bundles a card picks from.
+  const smartObjects = useTrafficStore((s) => s.smartObjects)
+  const addSmartObject = useTrafficStore((s) => s.addSmartObject)
+  const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
   const addCompany = useTrafficStore((s) => s.addCompany)
@@ -1305,9 +1315,14 @@ export function FlowsView() {
   /** Every ref behind a node id: a card contributes its own, a smart object contributes all of its members'. */
   const refsBehind = (nodeId: string): FlowReference[] => {
     const g = groups.find((x) => x.id === nodeId)
-    if (g) return g.memberIds.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n).map(refForNote).filter((r): r is FlowReference => !!r)
+    // The library object is the source of truth for what is inside; the placed cards are a view.
+    if (g) return objectFor(g)?.refs ?? []
     const nt = notes.find((n) => n.id === nodeId)
-    return nt ? [refForNote(nt)].filter((r): r is FlowReference => !!r) : []
+    if (!nt) return []
+    // A card linking an OBJECT contributes everything inside it, which is the point of objects:
+    // attach one card, and the contact plus their proof and message all reach the campaign.
+    if (nt.objectId) return smartObjects.find((o) => o.id === nt.objectId)?.refs ?? []
+    return [refForNote(nt)].filter((r): r is FlowReference => !!r)
   }
   /**
    * Connecting a card to the campaign tags its records on the campaign.
@@ -1659,6 +1674,22 @@ export function FlowsView() {
   // ---- Smart objects ----------------------------------------------------------------------
   // Which group a card belongs to (a card is in at most one).
   const groupOf = (noteId: string): FlowGroup | undefined => groups.find((g) => g.memberIds.includes(noteId))
+  /**
+   * OBJECTS A CARD CAN PICK. A Person card offers person objects, an Audience card segment ones.
+   * Split into the ones already on this campaign (placed on the canvas) and the rest of the
+   * brand's library, because "which of these is already in play" is the first thing you want to
+   * know when you open the picker.
+   */
+  const objectsForKind = (kind: FlowNoteKind): { onCampaign: SmartObject[]; library: SmartObject[] } => {
+    const refType = REF_TYPE_FOR_KIND[kind]
+    const mine = smartObjects.filter((o) => o.brand === brand && o.kind === refType)
+    const placed = new Set(groups.map((g) => g.objectId))
+    return { onCampaign: mine.filter((o) => placed.has(o.id)), library: mine.filter((o) => !placed.has(o.id)) }
+  }
+
+  /** The brand-library object a canvas placement shows. */
+  const objectFor = (g: FlowGroup) => smartObjects.find((o) => o.id === g.objectId)
+  const groupName = (g: FlowGroup) => objectFor(g)?.name ?? 'Smart object'
   const openGroup = openGroupId ? groups.find((g) => g.id === openGroupId) ?? null : null
   // Cards drawn on the CURRENT canvas: inside an object, only its members; outside, only cards
   // that aren't in one (grouped cards live inside their object, not loose on the board).
@@ -1694,7 +1725,12 @@ export function FlowsView() {
     const spot = ids
       .map((m) => pos[m] ?? { x: 0, y: 0 })
       .reduce((a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) }))
-    setGroups((g) => [...g, { id, name: suggestGroupName(ids), memberIds: ids }])
+    // The object goes in the brand's library, so it outlives this campaign and can be reused.
+    // What it holds is the RECORDS behind the cards, not the cards, which is what makes it
+    // portable: another campaign places the same object and gets the same records.
+    const refs = ids.map((m) => notes.find((n) => n.id === m)).filter((n): n is FlowNote => !!n).map(refForNote).filter((r): r is FlowReference => !!r)
+    const objectId = addSmartObject(brand, suggestGroupName(ids), refs)
+    setGroups((g) => [...g, { id, objectId, memberIds: ids }])
     setPos((p) => ({ ...p, [id]: spot }))
     // Members keep their own pos: it becomes their layout INSIDE the object.
     setSel(id)
@@ -1728,7 +1764,11 @@ export function FlowsView() {
     setConnectors((c) => c.filter((e) => e.from !== gid && e.to !== gid))
     if (sel === gid) setSel(null)
   }
-  const renameGroup = (gid: string, name: string) => setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, name } : g)))
+  // Renaming renames the LIBRARY object, so it changes everywhere the object is placed.
+  const renameGroup = (gid: string, name: string) => {
+    const g = groups.find((x) => x.id === gid)
+    if (g) updateSmartObject(g.objectId, { name })
+  }
   // The global keydown effect below runs with deps [nodes.length, viewName] and reads everything
   // else through refs, so Cmd+G goes through one too rather than capturing a stale selection.
   const groupSelectionRef = useRef(groupSelection)
@@ -1907,6 +1947,10 @@ export function FlowsView() {
     setBuilt(null)
     setNodes([])
     setNotes([])
+    // Placements belong to the campaign you made them on, same as the cards and the chat thread.
+    // (The library OBJECTS survive: that is the point of them. Only "it is on this canvas" resets.)
+    setGroups([])
+    setOpenGroupId(null)
     setBriefHidden(false)
     setBriefSummoned(false)
     // A fresh campaign opens as a clean, blank canvas: inspector collapsed, just the starter
@@ -1929,9 +1973,13 @@ export function FlowsView() {
     setChatCollapsed(false)
   }
   const openView = (n: string) => {
-    // Same reset as startNew: a campaign's chat belongs to that campaign.
+    // Same reset as startNew: a campaign's chat, cards and object placements belong to it.
+    // openView cleared none of these, so opening a built campaign showed the previous one's board.
     persistActiveChat()
     setChatMsgs([])
+    setNotes([])
+    setGroups([])
+    setOpenGroupId(null)
     setViewName(n)
     setBuilt(null)
     setPickAt(null)
@@ -2791,7 +2839,7 @@ export function FlowsView() {
     ...groups.flatMap((g) => [
       {
         id: g.id,
-        label: g.name || 'Smart object',
+        label: groupName(g),
         sub: 'Smart object',
         count: g.memberIds.length,
         attached: isAttached(g.id),
@@ -2838,6 +2886,43 @@ export function FlowsView() {
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">{meta.menuDesc}</p>
+          {/* OBJECTS, not raw records. A Person card offers the brand's person objects, the ones
+              already on this campaign first. The object is the reusable unit ("the RevOps buyer",
+              carrying the contact plus the proof and message that go with them); the record is
+              just its contents. Picking one pulls everything inside it into the campaign when the
+              card is attached. */}
+          {REF_TYPE_FOR_KIND[nt.kind] && (() => {
+            const { onCampaign, library } = objectsForKind(nt.kind)
+            const linked = smartObjects.find((o) => o.id === nt.objectId)
+            const noun = meta.label.toLowerCase()
+            return (
+              <>
+                <label className="flow-inspect-label">{meta.label} object</label>
+                <select
+                  className="flow-inspect-input flow-inspect-select"
+                  value={nt.objectId ?? ''}
+                  onChange={(e) => {
+                    setNotes((n) => n.map((x) => (x.id === nt.id ? { ...x, objectId: e.target.value || undefined } : x)))
+                    if (isAttached(nt.id)) attachToCampaign(nt.id)
+                  }}
+                >
+                  <option value="">{onCampaign.length + library.length ? `Link ${articleFor(noun)} ${noun} object…` : `No ${noun} objects yet`}</option>
+                  {onCampaign.length > 0 && (
+                    <optgroup label="On this campaign">
+                      {onCampaign.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </optgroup>
+                  )}
+                  {library.length > 0 && (
+                    <optgroup label="In the brand library">
+                      {library.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+                {linked && <div className="flow-inspect-note" style={{ margin: '6px 0 0' }}>Inside: {describeSmartObject(linked)}</div>}
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Or link a single record</label>
+              </>
+            )
+          })()}
           {opts && (
             <>
               <label className="flow-inspect-label">
@@ -2919,12 +3004,12 @@ export function FlowsView() {
               <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
             </svg>
           </span>
-          <span className="flow-panel-title">{g.name || 'Smart object'}</span>
+          <span className="flow-panel-title">{groupName(g)}</span>
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">A bundle of context cards you can reuse as one thing.</p>
           <label className="flow-inspect-label">Name</label>
-          <input className="flow-inspect-input" value={g.name} placeholder="Name this object…" onChange={(e) => renameGroup(g.id, e.target.value)} />
+          <input className="flow-inspect-input" value={groupName(g)} placeholder="Name this object…" onChange={(e) => renameGroup(g.id, e.target.value)} />
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
           <div className="flow-obj-list">
             {members.map((m) => {
@@ -3058,7 +3143,7 @@ export function FlowsView() {
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" />
                 </svg>
-                {openGroup.name || 'Smart object'}
+                {groupName(openGroup)}
               </button>
             </>
           )}
@@ -3694,7 +3779,7 @@ export function FlowsView() {
                   </div>
                   <input
                     className="flow-obj-name"
-                    value={g.name}
+                    value={groupName(g)}
                     placeholder="Name this object…"
                     onMouseDown={(e) => e.stopPropagation()}
                     onChange={(e) => renameGroup(g.id, e.target.value)}
