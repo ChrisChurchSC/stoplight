@@ -612,6 +612,11 @@ function saveCompanies(list: Company[]): void {
 
 // Per-brand SMART OBJECTS: named, reusable bundles of records ("the RevOps buyer"). Brand-level
 // rather than per-campaign, because being reusable across campaigns is the whole point.
+//
+// SYNCED, not localStorage-only. "Assign it to the brand and every campaign can reach it" is a
+// promise about a shared library, and a library that lives in one browser profile cannot keep it:
+// a teammate, or the same person on a second device, would see an empty brand folder. Done before
+// the promote button exists so the promise is true the day it ships.
 const SMART_OBJECTS_KEY = 'stoplight.smartObjects.v1'
 function loadSmartObjects(): SmartObject[] {
   try {
@@ -623,7 +628,7 @@ function loadSmartObjects(): SmartObject[] {
 }
 function saveSmartObjects(list: SmartObject[]): void {
   try {
-    localStorage.setItem(SMART_OBJECTS_KEY, JSON.stringify(list))
+    persistState(SMART_OBJECTS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -2498,6 +2503,9 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   const flowChats = s.flowChats.filter((c) => !ofBrand(c.flowKey))
   const openProjects = s.openProjects.filter((c) => !ofBrand(c))
   const brandRecords = s.brandRecords.filter((b) => b.name.trim() !== name)
+  // Smart objects are keyed by brand NAME, so leaving them would hand a RECREATED brand of the same
+  // name a library of bundles pointing at records that no longer exist.
+  const smartObjects = s.smartObjects.filter((o) => o.brand !== name)
   const driveLinks = dropKey(s.driveLinks)
   const clientProfiles = dropKey(s.clientProfiles)
   const clientAudiences = dropKey(s.clientAudiences)
@@ -2538,6 +2546,7 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   saveFlowChats(flowChats)
   saveOpenProjects(openProjects)
   saveRecordList(BRAND_RECORDS_KEY, brandRecords)
+  saveSmartObjects(smartObjects)
   saveDriveLinks(driveLinks)
   saveClientProfiles(clientProfiles)
   saveClientAudiences(clientAudiences)
@@ -2568,7 +2577,7 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
 
   return {
     clientList, campaignList, canvases, artboards, reports, pinnedInsights, versions, mediaMixes,
-    flights, flowChats, openProjects, brandRecords, driveLinks, clientProfiles, clientAudiences,
+    flights, flowChats, openProjects, brandRecords, smartObjects, driveLinks, clientProfiles, clientAudiences,
     brandSystems, brandMeta, brandGuides, brandActuals, campaignFolders, campaignConditions, activeCanvas, brandFieldSources,
   }
 }
@@ -5298,6 +5307,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.mediaMixes.v1': 'mediaMixes',
       'stoplight.flowChats.v1': 'flowChats',
       'stoplight.flowBoards.v1': 'flowBoards',
+      'stoplight.smartObjects.v1': 'smartObjects',
       'stoplight.homeChats.v1': 'homeChats',
     }
     const state = await hydrateState()
@@ -5362,7 +5372,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         'stoplight.clients.v1', 'stoplight.clientProfiles.v1', 'stoplight.clientAudiences.v1',
         'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1', 'stoplight.brandFieldSources.v1',
         'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.flights.v1', 'stoplight.canvases.v1',
-        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.flowBoards.v1', 'stoplight.homeChats.v1',
+        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.flowBoards.v1',
+        'stoplight.smartObjects.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
       ]
       for (const key of STATE_MIGRATIONS) {

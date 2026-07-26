@@ -23,6 +23,7 @@ export interface SnapshotState {
   rows?: unknown[]
   campaignList?: unknown[]
   flowBoards?: unknown[]
+  smartObjects?: unknown[]
   clientAudiences?: Record<string, unknown>
   brandSystems?: Record<string, unknown>
   clientProfiles?: Record<string, unknown>
@@ -122,6 +123,10 @@ export function buildShareSnapshot(state: SnapshotState, client: string, campaig
 
   // Required `brand` field (strict).
   set('stoplight.mediaMixes.v1', byField(state.mediaMixes, 'brand', client))
+  // Smart objects have to travel with the board: a placement holds only a smartObjectId, so without
+  // the objects themselves pruneBoard would drop every placement on the recipient's side and the
+  // shared canvas would arrive with its smart objects missing.
+  set('stoplight.smartObjects.v1', byField(state.smartObjects, 'brand', client))
   set('stoplight.targetLists.v1', byField(state.targetLists, 'brand', client))
   set('stoplight.libraryFolders.v1', byField(state.libraryFolders, 'brand', client))
 

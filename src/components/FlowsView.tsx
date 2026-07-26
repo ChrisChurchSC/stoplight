@@ -528,6 +528,7 @@ export function FlowsView() {
   const smartObjects = useTrafficStore((s) => s.smartObjects)
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
+  const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
   const addCompany = useTrafficStore((s) => s.addCompany)
@@ -794,6 +795,14 @@ export function FlowsView() {
   // The card an in-progress connection is currently over. Drawing a line used to give no feedback
   // about WHERE it would land, so you released and hoped. The target lights up instead.
   const [connectOver, setConnectOver] = useState<string | null>(null)
+  // The smart object whose delete button is armed (click-again-to-confirm). Id, not a boolean, so
+  // selecting a different object disarms it rather than leaving a live delete under the cursor.
+  const [confirmDeleteObject, setConfirmDeleteObject] = useState<string | null>(null)
+  // Selecting anything else disarms it too, so coming back to a card never finds a live delete
+  // waiting from minutes ago.
+  useEffect(() => {
+    setConfirmDeleteObject(null)
+  }, [sel])
   const drawingFrom = useRef<string | null>(null)
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
@@ -3095,6 +3104,37 @@ export function FlowsView() {
                     <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
                       Editing this smart object changes it everywhere it is used, not just here.
                     </div>
+                    {/* Deleting the OBJECT, as opposed to taking one record out of it or removing
+                        the card from this board. It had no control anywhere until now, so a smart
+                        object could be made but never unmade. Counted across boards rather than
+                        described vaguely, because this reaches campaigns you cannot see from here. */}
+                    {(() => {
+                      const usedOn = flowBoards.filter((b) => b.placements.some((p) => p.smartObjectId === linked.id)).length
+                      const armed = confirmDeleteObject === linked.id
+                      return (
+                        <button
+                          className={`flow-obj-del${armed ? ' armed' : ''}`}
+                          onClick={() => {
+                            if (!armed) {
+                              setConfirmDeleteObject(linked.id)
+                              return
+                            }
+                            setConfirmDeleteObject(null)
+                            const gone = linked.id
+                            deleteSmartObject(gone)
+                            // pruneBoard clears dangling references, but only on LOAD. Without
+                            // this the placements and cards pointing at the deleted object would
+                            // sit on the live board as ghosts until a reload.
+                            placements.filter((p) => p.smartObjectId === gone).forEach((p) => releasePlacement(p.id))
+                            setObjects((os) => os.map((o) => (o.smartObjectId === gone ? { ...o, smartObjectId: undefined } : o)))
+                          }}
+                        >
+                          {armed
+                            ? `Click again to delete${usedOn > 1 ? ` from all ${usedOn} campaigns` : ''}`
+                            : 'Delete this smart object'}
+                        </button>
+                      )
+                    })()}
                   </div>
                 )}
               </>
