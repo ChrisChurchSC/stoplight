@@ -25,6 +25,7 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
+          'A smart object can be opened as its own tab, beside your campaigns and data sets. It stays open while you move between campaigns, so an object can sit next to the campaign using it. Double-clicking one on the canvas still opens it in place, with a breadcrumb back.',
           'Folders nest, four levels deep. A folder can hold folders, so fifty campaigns organize the way you actually think about them: a quarter, then paid inside it, then the channel. Drag a campaign onto any folder at any depth to file it. Renaming a folder keeps everything inside it; deleting one takes the folders inside it and leaves every campaign, unfiled.',
           'The assistant is called Gretel.',
           'A deliverable starts with one asset instead of a month of them. Dropping an Instagram reel used to put four assets and four briefs on the board before you had decided anything. The cadence is still there as the suggested default, and the count control adds more when you mean to.',
@@ -37,6 +38,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'A smart object holding no records stops posing as an audience. Bundling a message card and a note produced an object filed as an audience, so it was offered by every Audience picker in the app. An object with no records now belongs to no record picker, and it reports what it holds instead of calling itself empty.',
           'Editing a smart object now actually reaches the campaigns using it. The card showed the change everywhere on sight, but attaching one copies its records onto the campaign, and those copies were left behind: campaign B displayed the new version and still generated from the old one.',
           'Taking one record out of a smart object no longer detaches the rest. Removing a single proof point also dropped that object’s audience and message from the campaign.',
           'Input cards placed before you hit Build survive it. The board was saved under a slot for the not-yet-named campaign and never handed over, so opening the campaign you had just built loaded an empty canvas over the top of your work.',

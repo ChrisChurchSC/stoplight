@@ -25,6 +25,11 @@ export function CanvasProjectTabs() {
   const activeDatasetId = useTrafficStore((s) => s.activeDatasetId)
   const openDatasetTab = useTrafficStore((s) => s.openDatasetTab)
   const closeDatasetTab = useTrafficStore((s) => s.closeDatasetTab)
+  const smartObjects = useTrafficStore((s) => s.smartObjects)
+  const openObjectTabs = useTrafficStore((s) => s.openObjectTabs)
+  const activeObjectId = useTrafficStore((s) => s.activeObjectId)
+  const openObjectTab = useTrafficStore((s) => s.openObjectTab)
+  const closeObjectTab = useTrafficStore((s) => s.closeObjectTab)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
 
   const assetCounts = useMemo(() => {
@@ -80,6 +85,10 @@ export function CanvasProjectTabs() {
   const closeDs = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     closeDatasetTab(id)
+  }
+  const closeObj = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    closeObjectTab(id)
   }
 
   return (
@@ -140,6 +149,36 @@ export function CanvasProjectTabs() {
               <span className="cv-project-tab-name">{ds.name || 'Untitled data set'}</span>
             </span>
             <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeDs(e, id)}>
+              ✕
+            </button>
+          </span>
+        )
+      })}
+      {openObjectTabs.map((id) => {
+        const o = smartObjects.find((x) => x.id === id)
+        // The guard matters: deleting an object with its tab still open would otherwise crash the
+        // whole strip rather than dropping one tab.
+        if (!o) return null
+        const where = o.scope === 'campaign' ? 'Only on this campaign' : o.brand ?? 'Brand library'
+        return (
+          <span
+            key={`obj:${id}`}
+            className={`cv-project-tab cv-object-tab${page === 'object' && activeObjectId === id ? ' active' : ''}`}
+            title={`${where} · ${o.name || 'Untitled smart object'}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => openObjectTab(id)}
+          >
+            <span className="cv-project-tab-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
+              </svg>
+            </span>
+            <span className="cv-project-tab-body">
+              <span className="cv-project-tab-client">{where}</span>
+              <span className="cv-project-tab-name">{o.name || 'Untitled smart object'}</span>
+            </span>
+            <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeObj(e, id)}>
               ✕
             </button>
           </span>

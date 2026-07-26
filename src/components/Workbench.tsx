@@ -41,6 +41,7 @@ import { FlowsView } from './FlowsView'
 import { CampaignCalendar } from './CampaignCalendar'
 import { BrandPage } from './BrandPage'
 import { DatasetPage } from './DatasetPage'
+import { ObjectPage } from './ObjectPage'
 import { BillingPage } from './BillingPage'
 import { Portfolio } from './Portfolio'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -303,6 +304,10 @@ export function Workbench() {
           ) : page === 'dataset' ? (
             <div className="home-main-scroll">
               <DatasetPage />
+            </div>
+          ) : page === 'object' ? (
+            <div className="home-main-scroll">
+              <ObjectPage />
             </div>
           ) : page === 'content' ? (
             <div className="home-main-scroll">

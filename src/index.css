@@ -4724,6 +4724,10 @@ button {
   text-align: left;
 }
 .flow-insp-open:hover { border-color: var(--border-strong, var(--border)); }
+/* The second open (its own tab) is the quieter of the two: same shape, no fill, so the in-place
+   open stays the primary action. */
+.flow-insp-open.subtle { background: none; color: var(--text-muted); margin-top: 6px; }
+.flow-insp-open.subtle:hover { color: var(--text); }
 .flow-insp-del {
   border: 1px solid var(--border);
   background: none;
@@ -27083,6 +27087,33 @@ table.aud-sheet td.stick .aud-cell {
 /* Non-campaign canvas tabs: a small leading glyph for data-set tabs. */
 .cv-project-tab-ic { display: inline-flex; align-items: center; color: var(--text-muted); margin-right: 5px; }
 .cv-dataset-tab.active .cv-project-tab-ic, .cv-dataset-tab:hover .cv-project-tab-ic { color: var(--accent); }
+.cv-object-tab.active .cv-project-tab-ic, .cv-object-tab:hover .cv-project-tab-ic { color: var(--accent); }
+
+/* THE OBJECT PAGE: a smart object as its own tab. Shares the data-set page's frame, so the two
+   full-page tab surfaces read as siblings rather than as two unrelated screens. */
+.objpage-body { display: flex; flex-direction: column; gap: 14px; }
+.objpage-sub { font-size: 12.5px; color: var(--text-muted); }
+.objpage-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.objpage-card {
+  border: 1px solid var(--border);
+  border-top-width: 2px;
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.objpage-card-h {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.objpage-card-h svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.objpage-card-body { font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.objpage-card-empty { color: var(--text-faint); font-style: italic; }
 
 /* Gretel's blank-campaign front door. The floating starter card that used to ask this question
    is gone: it was a second front door whose submit handler only opened this panel and forwarded
