@@ -2859,7 +2859,10 @@ export function FlowsView() {
       })
   const noteLayer = (nt: FlowNote, depth = 0): Layer => {
     const opts = noteOptions(nt.kind)
-    const linked = nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : ''
+    // An object-linked card has no refId, so reading refId alone showed it in Layers as its bare
+    // kind ("Person") rather than what it points at. Check the object first.
+    const obj = nt.objectId ? smartObjects.find((o) => o.id === nt.objectId) : undefined
+    const linked = obj ? obj.name : nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : ''
     return {
       id: nt.id,
       label: linked || nt.text.trim().split('\n')[0] || NOTE_META[nt.kind].label,
