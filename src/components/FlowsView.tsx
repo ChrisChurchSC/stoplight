@@ -4506,7 +4506,19 @@ export function FlowsView() {
               <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d="M9 9l2 3-2 3" />
             </svg>
           </button>
-          {viewing ? (
+          {/* A smart object and a context card inspect the SAME WAY whether the campaign is built
+              or not, so these two branches sit above the view/build split rather than once in each
+              arm. They were byte-identical in both, which is a standing invitation to fix a bug in
+              one copy and ship the other: adding the scope line and the promote control had to be
+              checked twice for exactly that reason.
+
+              Precedence is unchanged. Both arms tested pickAt first and then these two, so the
+              `pickAt === null &&` guard keeps the deliverable picker winning when it is open. */}
+          {pickAt === null && selGroup ? (
+            renderPlacementInspector(selGroup)
+          ) : pickAt === null && selObject ? (
+            renderObjectInspector(selObject)
+          ) : viewing ? (
             pickAt !== null ? (
               <>
                 <div className="flow-panel-head">
@@ -4536,10 +4548,6 @@ export function FlowsView() {
                   ))}
                 </div>
               </>
-            ) : selGroup ? (
-              renderPlacementInspector(selGroup)
-            ) : selObject ? (
-              renderObjectInspector(selObject)
             ) : selPost ? (
               <>
                 <div className="flow-panel-head">
@@ -4927,10 +4935,6 @@ export function FlowsView() {
                 ))}
               </div>
             </>
-          ) : selGroup ? (
-            renderPlacementInspector(selGroup)
-          ) : selObject ? (
-            renderObjectInspector(selObject)
           ) : sel === 'campaign' ? (
             <>
               <div className="flow-panel-head">
