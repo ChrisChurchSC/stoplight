@@ -154,3 +154,20 @@ export function classifyRowAudience(copy: string, audiences: AudienceType[]): st
   }
   return best && best.score >= 2 ? best.name : undefined
 }
+
+/**
+ * The brand's EFFECTIVE audience set. Audiences live in two places: the brand's system library and
+ * clientAudiences (what the audience selector and the canvas write to). Generation reads the merge,
+ * with clientAudiences winning a name collision because it is the actively-maintained source.
+ *
+ * ⚠️ This lives in the domain, not the store, because the COHERENCE GATE needs the same merge. It
+ * used to derive audiences from brandSystems alone, so it judged copy against a different audience
+ * set than the one generation wrote from, and a clientAudiences persona read as off-segment drift.
+ * The store imports coherenceChecks, so coherenceChecks cannot import the store.
+ */
+export function mergeAudiences(systemAuds: AudienceType[], clientAuds: AudienceType[]): AudienceType[] {
+  const byName = new Map<string, AudienceType>()
+  for (const a of systemAuds) byName.set(a.name, a)
+  for (const a of clientAuds) byName.set(a.name, a)
+  return [...byName.values()]
+}

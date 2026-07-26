@@ -106,6 +106,20 @@ export interface CopyWriter {
  * Claude). Falls back to the heuristic writer when the backend is absent, has no
  * API key (501), or errors — so drafting always works, key or not.
  */
+/**
+ * The SYSTEM prompt tells the model "Do not use em dashes anywhere in the copy", and the model
+ * mostly obeys and sometimes does not (observed: "every 10 minutes—so you're reading"). Nothing
+ * enforced it: sanitizeToBrand strips them, but it only ever ran inside the heuristic writer, so
+ * model output reached the product unchecked. A house style that is only a request is not a rule.
+ *
+ * Deliberately narrow. This is not a second sanitizer competing with the prompt: it replaces the
+ * one typographic mark the brand forbids, and leaves wording alone.
+ */
+function stripEmDashes(d: AssetDraft): AssetDraft {
+  const fix = (t: string) => t.replace(/\s*[—–]\s*/g, ', ').replace(/,\s*,/g, ',').replace(/\s{2,}/g, ' ').trim()
+  return { ...d, components: d.components.map((c) => ({ ...c, value: fix(c.value) })) }
+}
+
 export class ClaudeCopyWriter implements CopyWriter {
   constructor(private fallback: CopyWriter) {}
 
@@ -119,7 +133,7 @@ export class ClaudeCopyWriter implements CopyWriter {
       if (!res.ok) throw new Error(`draft-copy ${res.status}`)
       const out = (await res.json()) as DraftResult
       if (!out?.drafts?.length) throw new Error('empty draft')
-      return { ...out, source: 'claude' }
+      return { ...out, drafts: out.drafts.map(stripEmDashes), source: 'claude' }
     } catch {
       const fb = await this.fallback.draft(req)
       return { ...fb, source: 'heuristic' }

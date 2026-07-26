@@ -19,7 +19,7 @@ import { actualsProvider } from '../adapters/actuals'
 import { getActiveWorkspaceId } from '../lib/session'
 import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
-import { classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, type AudienceType } from '../domain/audiences'
+import { classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, type AudienceType, mergeAudiences } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -910,12 +910,6 @@ function saveClientAudiences(map: Record<string, AudienceType[]>): void {
  * (inherited) personas are kept. This is why generation always sees the full persona — role, angle,
  * pains — regardless of which store holds it, so a "Personalized to" pick actually personalizes.
  */
-function mergeAudiences(systemAuds: AudienceType[], clientAuds: AudienceType[]): AudienceType[] {
-  const byName = new Map<string, AudienceType>()
-  for (const a of systemAuds) byName.set(a.name, a)
-  for (const a of clientAuds) byName.set(a.name, a)
-  return [...byName.values()]
-}
 
 
 // Messaging systems — ONE per brand. Each brand owns a self-contained library
@@ -6464,7 +6458,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             ? `Campaign goal: ${campMeta.objective.trim()}`
             : campaign.trim() || undefined
         // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: activeProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+        // ⚠️ The sent pool must be the union of the campaign-narrowed pool AND every proof actually
+        // assigned to an asset. A pinned proof (cond.proofId) is resolved against the FULL brand
+        // library above, while activeProof is narrowed to the campaign's proof refs, so a condition
+        // could hand an asset a proof whose id is absent from the pool we send. The prompt tells the
+        // model not to invent proof when the pool is non-empty, so that combination told it to lean
+        // on a proof it was not allowed to cite.
+        const assignedProof = assets
+          .map((a) => a.proof)
+          .filter((pr): pr is { id: string; label: string; detail?: string } => !!pr)
+        const sentProof = [...activeProof]
+        for (const pr of assignedProof) {
+          if (!sentProof.some((x) => x.id === pr.id)) {
+            const full = proofPool.find((x) => x.id === pr.id)
+            if (full) sentProof.push(full)
+          }
+        }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
@@ -6759,7 +6769,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         ? (get().accountsByBrand[clientFilter] ?? []).map((acc) => acc.name)
         : get().accountsForCampaign(campaignFilter).map((acc) => acc.name)
     const partners = clientProfiles[clientFilter]?.notableClients ?? []
-    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta, { targetAccounts, partners })
+    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta, { targetAccounts, partners }, get().clientAudiences)
     const baseline = get().brandBaselineFor(clientFilter)
     try {
       const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })

@@ -23,6 +23,15 @@ const RELEASES: Release[] = [
     dateLabel: 'July 26, 2026',
     groups: [
       {
+        tag: 'Fixed',
+        items: [
+          'Your brand hooks reach the writer. They were being sent with every draft and dropped by the server, so the opening lines you wrote only ever influenced copy when there was no API key.',
+          'An asset told to lean on a specific proof point can now actually cite it. The proof was picked from your whole library while a narrower list was sent to the writer, so it could be pointed at evidence it was not allowed to use.',
+          'Copy written to an audience you keep in the audience selector is no longer flagged as drifting off-segment. The coherence check was reading a different audience list than the writer was.',
+          'Em dashes no longer slip into generated copy. The instruction was in the prompt and the model mostly obeyed it, but nothing enforced it, so the occasional one reached the page.',
+        ],
+      },
+      {
         tag: 'Improved',
         items: [
           'Cards are called objects. One thing on a campaign board is an object: an audience, a message, a proof point, a note. Bundle a few and you get a smart object, which is the same word Photoshop uses for the same idea, and it makes the next part say what it means.',

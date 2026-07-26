@@ -1,3 +1,4 @@
+import { mergeAudiences, type AudienceType } from './audiences'
 import { type BrandMetaMap, type BrandSource, resolveBrandScope, scopeBrands } from './brand'
 import type { BreakEvidence, BreakSeverity, CoherenceBreak } from './breaks'
 import type { ClientProfile } from './clients'
@@ -82,13 +83,23 @@ export function buildCoherenceVocab(
   clientProfiles: Record<string, ClientProfile>,
   brandMeta: BrandMetaMap = {},
   accounts: { targetAccounts?: string[]; partners?: string[] } = {},
+  /**
+   * ⚠️ REQUIRED for the gate to judge the same audiences generation wrote from. Audiences live in
+   * the brand's system library AND in clientAudiences, and generation reads mergeAudiences of the
+   * two with clientAudiences winning. Without this the gate derived audiences from brandSystems
+   * alone, so a clientAudiences-only persona read as off-segment drift against copy written to it.
+   * Defaulted so existing callers still compile, but every real caller should pass it.
+   */
+  clientAudiences: Record<string, AudienceType[]> = {},
 ): CoherenceVocab {
   // The baseline is the brand's EFFECTIVE library: its own assets plus those inherited
   // from ancestors and explicitly shared in. Those in-scope brands are part of the
   // brand's own vocabulary, so their terms must never read as contamination.
   const sources = scopeBrands(client, brandMeta)
   const inScope = new Set(sources.map((s) => s.brand))
-  const sys = resolveBrandScope(client, brandSystems, brandMeta).library
+  const scoped = resolveBrandScope(client, brandSystems, brandMeta).library
+  // The EFFECTIVE audience set, matching generation exactly (see mergeAudiences).
+  const sys = { ...scoped, audiences: mergeAudiences(scoped.audiences, clientAudiences[client] ?? []) }
   const ownTerms = new Set<string>()
   // Profile terms come from the bound brand and every ancestor (inheritance), so a
   // sub-brand legitimately uses its parent's products / values / one-liner.
