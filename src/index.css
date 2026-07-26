@@ -2759,7 +2759,7 @@ button {
   line-height: 1.4;
   flex: 0 0 auto;
 }
-/* The combined rail's middle nav (BrandRail children): Files / Assets / Hansel inside a campaign,
+/* The combined rail's middle nav (BrandRail children): Files / Assets / Gretel inside a campaign,
    Campaigns / Timeline / Tasks / Reports otherwise. Same icon-over-label treatment as the icon rail. */
 .railnav { display: flex; flex-direction: column; gap: 3px; width: 100%; margin-top: 2px; }
 .railnav .nav-item {
@@ -3828,7 +3828,10 @@ button {
 }
 .flow-crumb-ic {
   color: var(--accent);
+  display: inline-flex;
+  align-items: center;
 }
+.flow-crumb-ic svg { width: 15px; height: 15px; }
 .flow-crumb-sep {
   color: var(--text-faint);
   margin: 0 1px;
@@ -3851,17 +3854,21 @@ button {
 .flow-switcher {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
   font: inherit;
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--text);
-  padding: 5px 10px;
+  padding: 4px 9px;
   border-radius: 8px;
   cursor: pointer;
 }
+/* An unnamed campaign has nothing to switch away from, so it is a label wearing the same shape
+   rather than a menu that opens onto a list you are not in yet. */
+.flow-switcher-flat { cursor: default; }
+.flow-switcher-flat:hover { background: var(--surface); }
 .flow-switcher:hover {
   background: var(--surface-2);
 }
@@ -4001,7 +4008,7 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
-  /* Hansel (left) | canvas | inspector (right) — DOM order, no reversal. */
+  /* Gretel (left) | canvas | inspector (right) — DOM order, no reversal. */
   position: relative;
 }
 /* Records-page assistant: the same chat panel docked on the LEFT, exactly like the flow canvas. */
@@ -4018,7 +4025,7 @@ button {
 .flow-body .fchat {
   width: 360px;
 }
-/* Hansel's record nav (Brand + Chats + Foundation / Prospects / Go-to-market) sits between the
+/* Gretel's record nav (Brand + Chats + Foundation / Prospects / Go-to-market) sits between the
    header and the chat thread. Capped so the conversation keeps the majority of the card; scrolls
    when the nav is tall. Scoped to the flow-body card so the records-page assistant is unaffected. */
 .flow-body .fchat-sections {
@@ -4121,10 +4128,10 @@ button {
 .fchat-rail-btn:hover { border-color: var(--accent); }
 .fchat-rail .fchat-spark { font-size: 15px; }
 /* Keep the toolbar centered over the canvas as the two docked panels collapse. Offset from 50% is
-   (leftWidth - rightWidth)/2; equal widths (both open, or both railed) cancel to 0. LEFT is Hansel
-   and RIGHT is the inspector: when Hansel rails (left=48) and the inspector is open (right=360) the
+   (leftWidth - rightWidth)/2; equal widths (both open, or both railed) cancel to 0. LEFT is Gretel
+   and RIGHT is the inspector: when Gretel rails (left=48) and the inspector is open (right=360) the
    canvas center shifts left by (48-360)/2 = -156px, and vice-versa. */
-/* Collapsed Hansel is now hidden entirely (0 wide), not a 48px rail. */
+/* Collapsed Gretel is now hidden entirely (0 wide), not a 48px rail. */
 .flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { left: calc(50% - 180px); }
 .flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { left: calc(50% + 156px); }
 .flow.chat-collapsed.brief-collapsed .flow-toolbar { left: calc(50% - 24px); }
@@ -6522,16 +6529,23 @@ button {
 .flow-home-empty p {
   margin-bottom: 14px;
 }
+/* Both crumb items are small buttons of one family: same height, radius and type, so the trail
+   reads as two controls rather than a link next to a pill. */
 .flow-crumb-home {
-  border: 0;
+  border: 1px solid transparent;
   background: none;
   font: inherit;
-  color: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 0;
+  padding: 4px 9px;
+  border-radius: 8px;
 }
 .flow-crumb-home:hover {
-  color: var(--accent);
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
 }
 /* The grid + calendar views that replace the canvas body. */
 .flow-alt {
@@ -6660,7 +6674,7 @@ button {
 /* Bottom canvas controls: zoom · pan/select tools · Add block. */
 .flow-toolbar {
   position: absolute;
-  /* Centered over the canvas. Hansel (left) and the inspector (right) are both 360px docked
+  /* Centered over the canvas. Gretel (left) and the inspector (right) are both 360px docked
      columns, so when both are open (or both collapsed to their 48px rails) the canvas center is
      the flow center. When only one collapses, the combo rules below nudge the toolbar by half the
      width difference: (leftWidth - rightWidth) / 2 = (360 - 48) / 2 = 156px. */
@@ -6799,7 +6813,7 @@ button {
 /* PALETTE — one icon per kind of card you can add, on its own row above the canvas controls.
    Grouped by role and split by dividers, so the toolbar carries the what-gets-made vs
    what-it's-made-from split physically instead of hiding it in a dropdown list. Its own row
-   because the full palette will not fit beside zoom + tools + Generate when Hansel and the
+   because the full palette will not fit beside zoom + tools + Generate when Gretel and the
    inspector are both open (that leaves the toolbar roughly 744px). */
 .flow-tb-palette {
   display: flex;
@@ -26813,7 +26827,7 @@ table.aud-sheet td.stick .aud-cell {
 
 /* Assets → the brand's asset libraries: a searchable list of the brand's campaigns (each a
    collection of assets), no thumbnails. Fills the canvas area when the Assets view is active. */
-/* The Assets library docks as the canvas's LEFT column, sharing Hansel's slot (same 360px width,
+/* The Assets library docks as the canvas's LEFT column, sharing Gretel's slot (same 360px width,
    border, and surface as .fchat) so the canvas and inspector stay put — Assets is a panel ON the
    one board, not a separate view. */
 .flow-assets { width: 360px; flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
@@ -26979,7 +26993,7 @@ table.aud-sheet td.stick .aud-cell {
 .cv-project-tab-ic { display: inline-flex; align-items: center; color: var(--text-muted); margin-right: 5px; }
 .cv-dataset-tab.active .cv-project-tab-ic, .cv-dataset-tab:hover .cv-project-tab-ic { color: var(--accent); }
 
-/* Hansel's blank-campaign front door. The floating starter card that used to ask this question
+/* Gretel's blank-campaign front door. The floating starter card that used to ask this question
    is gone: it was a second front door whose submit handler only opened this panel and forwarded
    the text here, so the question now lives where the answer already did. Reuses the chat's own
    empty-state type; only the eyebrow, the template row, and a little breathing room are new. */
@@ -27012,5 +27026,5 @@ table.aud-sheet td.stick .aud-cell {
 }
 
 /* HomeSidebar in 'sections' mode fills its parent column instead of being a fixed-width left rail.
-   It now lives inside the flow-canvas Hansel panel (see .flow-body .fchat-sections). */
+   It now lives inside the flow-canvas Gretel panel (see .flow-body .fchat-sections). */
 .hsb-sections { width: 100%; background: transparent; display: flex; flex-direction: column; }

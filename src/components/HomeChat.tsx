@@ -47,7 +47,7 @@ const SparkIco = () => (
   </svg>
 )
 
-// The three starter prompts shown on a fresh Hansel chat. Each runs through the existing `run`
+// The three starter prompts shown on a fresh Gretel chat. Each runs through the existing `run`
 // engine, so they behave exactly like typing the prompt.
 const EMPTY_CARDS = [
   { title: 'Draft a campaign', desc: 'Start a new campaign from a goal.', prompt: 'Draft a new campaign' },
@@ -686,7 +686,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
     <div className="hchat">
       <header className="fchat-head">
         <span className="fchat-spark" aria-hidden="true">✦</span>
-        <span className="fchat-title">Hansel</span>
+        <span className="fchat-title">Gretel</span>
         <span className="fchat-beta">Beta</span>
         <div className="fchat-head-actions">
           <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={newHomeChat}>+</button>
@@ -705,7 +705,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
       <div className="hchat-thread">
         {messages.length === 0 && (
           <div className="fchat-empty">
-            <p className="fchat-empty-lead">I&rsquo;m Hansel.</p>
+            <p className="fchat-empty-lead">I&rsquo;m Gretel.</p>
             <p className="fchat-empty-sub">
               Ask me anything about your campaigns, brands, and what to do next. I can draft, answer, and point you to what needs attention.
             </p>
@@ -823,7 +823,7 @@ export function HomeChat({ embedded = false, seed, onExit }: { embedded?: boolea
         <div ref={endRef} />
       </div>
 
-      <div className="fchat-disclaim">Hansel can make mistakes. Check important details.</div>
+      <div className="fchat-disclaim">Gretel can make mistakes. Check important details.</div>
       <div className="fchat-composer">
         <div className="hchat-actions">
           {clientFilter && clientFilter !== 'all' && (

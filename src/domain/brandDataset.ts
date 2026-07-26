@@ -2,7 +2,7 @@ import { freshRecordId } from './records'
 
 /**
  * A brand "data set" — the flexible half of the hybrid brand model. Where the preset brand basics
- * feed Hansel's generation, a data set is a blank spreadsheet the user fills out however they like
+ * feed Gretel's generation, a data set is a blank spreadsheet the user fills out however they like
  * (competitor research, campaign learnings, whatever). Free-form on purpose: columns and rows are
  * just labelled strings, so nothing here is assumed to be AI-legible. Stored per brand.
  */

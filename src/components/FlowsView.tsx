@@ -137,7 +137,19 @@ const subcardWord = (p: DeliverablePreset): string =>
 const subcardCount = (p: DeliverablePreset, perMonth: number): number =>
   hasSubcards(p) ? Math.min(perMonth, 12) : 0
 // Count a freshly-added deliverable starts with (lead magnets get a few sections).
-const startCount = (p: DeliverablePreset): number => (p.channel === 'lead-magnet' ? 4 : p.perMonth)
+/**
+ * How many assets a freshly placed deliverable starts with: ONE.
+ *
+ * It used to start at the preset's own cadence, so dropping an Instagram reel immediately put four
+ * assets and four mini briefs on the board before you had decided anything. The cadence is a
+ * planning default, not a decision made by placing a card. Add more with the ×N control on the
+ * card or in the inspector, where it reads as a choice.
+ *
+ * ⚠️ This is the STARTING count only. presetByKey(...).perMonth is untouched, so the picker still
+ * shows "4 / month" as the preset's suggested cadence, and Gretel can still ask for a count
+ * explicitly (applyFlowCommands passes c.perMonth when the model names one).
+ */
+const startCount = (_p: DeliverablePreset): number => 1
 // The noun for a blueprint's deliverable, so the picker's help text fits the channel
 // (the picker now serves emails, pages, articles and ads — not just emails).
 const blueprintNoun = (channel: ChannelId): string =>
@@ -160,7 +172,7 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
   </span>
 )
 
-// Quick-start templates offered in Hansel's blank-campaign state: one high-signal deliverable per
+// Quick-start templates offered in Gretel's blank-campaign state: one high-signal deliverable per
 // motion (email, content, social, web). Clicking one drops that node, so you can skip the AI and
 // start by hand. Four, not six, so the blank state stays one clear hierarchy rather than three
 // dense rows; "More" opens the full picker. Keys must exist in DELIVERABLE_PRESETS.
@@ -614,7 +626,7 @@ export function FlowsView() {
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
   const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
   // How the flow-in-progress is shown: the canvas, or a grid / calendar of its assets.
-  // View + Hansel-collapse live in the store so the campaign icon rail (Files / Assets / Hansel)
+  // View + Gretel-collapse live in the store so the campaign icon rail (Files / Assets / Gretel)
   // in HomeShell can drive and reflect them.
   const flowView = useTrafficStore((s) => s.flowView)
   const setFlowView = useTrafficStore((s) => s.setFlowView)
@@ -643,7 +655,7 @@ export function FlowsView() {
   // while blank. Reset on entering a campaign.
   const [briefHidden, setBriefHidden] = useState(false)
   const [briefSummoned, setBriefSummoned] = useState(false)
-  // Hansel's empty state is the blank-campaign front door now, so there's no separate starter
+  // Gretel's empty state is the blank-campaign front door now, so there's no separate starter
   // card to hold text, dismiss, or drag.
   // Search box on the Assets brand-library view.
   const [librarySearch, setLibrarySearch] = useState('')
@@ -2016,7 +2028,7 @@ export function FlowsView() {
     setSel(null)
     setPickAt(null)
     setCampaignFilter('all')
-    // A new campaign opens with Hansel expanded, because Hansel IS the front door now: its
+    // A new campaign opens with Gretel expanded, because Gretel IS the front door now: its
     // empty state asks what you're launching. Only on creation, so collapsing it later sticks.
     setChatCollapsed(false)
   }
@@ -2883,7 +2895,7 @@ export function FlowsView() {
     openDatasetTab(id)
   }
   // "Start a folder for a new brand": create + register the brand, then drop into its brand page on
-  // the About tab so its basics (the dropdowns Hansel reads) are right there to fill out.
+  // the About tab so its basics (the dropdowns Gretel reads) are right there to fill out.
   const createBrandFolder = () => {
     const nm = newBrandName.trim()
     if (!nm) return
@@ -3327,7 +3339,9 @@ export function FlowsView() {
       <header className="flow-top">
         <div className="flow-crumb">
           <span className="flow-crumb-ic" aria-hidden="true">
-            ⋔
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 21V4h11l-1.5 3.5L16 11H5" />
+            </svg>
           </span>
           {flowShareLock ? (
             <span className="flow-crumb-home" style={{ cursor: 'default' }}>Campaign</span>
@@ -3340,10 +3354,14 @@ export function FlowsView() {
           {flowShareLock ? (
             <span className="flow-switcher" style={{ cursor: 'default' }}>{viewing ? viewShort : name.trim() || 'Campaign'}</span>
           ) : (
-            <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
-              {viewing ? viewShort : name.trim() || 'New campaign'}
-              <span className="flow-switcher-caret">▾</span>
-            </button>
+            viewing || name.trim() ? (
+              <button className="flow-switcher" onClick={() => setSwitcherOpen((o) => !o)}>
+                {viewing ? viewShort : name.trim()}
+                <span className="flow-switcher-caret">▾</span>
+              </button>
+            ) : (
+              <span className="flow-switcher flow-switcher-flat">New campaign</span>
+            )
           )}
           {/* Inside a smart object: a third crumb segment, so the way back out is where you'd look
               for it rather than only on Escape. */}
@@ -3442,8 +3460,8 @@ export function FlowsView() {
       {flowView === 'flow' && (
         <>
       <div className="flow-body">
-        {/* The canvas's left slot: the Assets library OR Hansel (mutually exclusive). Either way the
-            canvas and inspector stay put — Files / Assets / Hansel are all the ONE board. */}
+        {/* The canvas's left slot: the Assets library OR Gretel (mutually exclusive). Either way the
+            canvas and inspector stay put — Files / Assets / Gretel are all the ONE board. */}
         {flowAssetsOpen ? (() => {
           const q = librarySearch.trim().toLowerCase()
           return (

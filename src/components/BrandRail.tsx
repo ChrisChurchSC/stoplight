@@ -16,7 +16,7 @@ const RailIco = ({ children, size = 18 }: { children: React.ReactNode; size?: nu
 )
 
 export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
-  // When the rail hosts a nav (Files / Assets / Hansel inside a campaign) it widens to fit the
+  // When the rail hosts a nav (Files / Assets / Gretel inside a campaign) it widens to fit the
   // labels; otherwise it stays a thin strip.
   const railW = children ? 76 : 44
   const clientFilter = useTrafficStore((s) => s.clientFilter)

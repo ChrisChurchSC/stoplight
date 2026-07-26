@@ -7,7 +7,7 @@ import { MiniSheet } from './MiniSheet'
  * A brand's data sets — the flexible half of the hybrid brand model. Each data set is a blank
  * spreadsheet the user fills out however they like; the cards preview them as tiny spreadsheets.
  * Clicking a card opens a simple editable grid (labelled columns + free-text cells, add row/col).
- * Free-form on purpose: nothing here feeds Hansel, so there are no required fields.
+ * Free-form on purpose: nothing here feeds Gretel, so there are no required fields.
  */
 
 export function BrandDataSets({ brand }: { brand: string }) {

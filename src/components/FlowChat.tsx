@@ -101,14 +101,14 @@ export function FlowChat({
   }
   const examples = blank ? START_EXAMPLES : flowMode === 'build' ? BUILD_EXAMPLES : VIEW_EXAMPLES
 
-  // Collapsed: Hansel is fully hidden (no rail) — the "Hansel" item in the left nav reopens it.
+  // Collapsed: Gretel is fully hidden (no rail) — the "Gretel" item in the left nav reopens it.
   if (collapsed) return null
 
   return (
     <aside className="fchat">
       <header className="fchat-head">
         <span className="fchat-spark" aria-hidden="true">✦</span>
-        <span className="fchat-title">Hansel</span>
+        <span className="fchat-title">Gretel</span>
         <span className="fchat-beta">Beta</span>
         <div className="fchat-head-actions">
           <button className="fchat-hbtn" title="New chat" aria-label="New chat" onClick={() => (messages.length ? setConfirmNew(true) : onNewChat())}>+</button>
@@ -160,7 +160,7 @@ export function FlowChat({
               </>
             ) : (
               <>
-                <p className="fchat-empty-lead">I&rsquo;m Hansel.</p>
+                <p className="fchat-empty-lead">I&rsquo;m Gretel.</p>
                 <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
               </>
             )}
