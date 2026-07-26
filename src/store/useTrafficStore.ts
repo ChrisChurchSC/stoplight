@@ -165,6 +165,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
+import { type FlowBoard } from '../domain/flowBoard'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -693,6 +694,26 @@ function saveOnboarding(state: OnboardingState): void {
 }
 
 // Flow-canvas chat history — past conversations per flow.
+// Campaign BOARDS: the objects, smart-object placements, positions and links on a campaign canvas.
+// Persisted per campaign so a board survives a reload and a campaign switch, and synced like
+// flowChats so it follows the user to a second device.
+const FLOW_BOARDS_KEY = 'stoplight.flowBoards.v1'
+function loadFlowBoards(): FlowBoard[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FLOW_BOARDS_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveFlowBoards(list: FlowBoard[]): void {
+  try {
+    persistState(FLOW_BOARDS_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
 const FLOW_CHATS_KEY = 'stoplight.flowChats.v1'
 function loadFlowChats(): SavedFlowChat[] {
   try {
@@ -1869,6 +1890,10 @@ interface TrafficState {
   setRecordsChatCollapsed: (v: boolean) => void
   /** Saved flow-chat conversations, per flow (newest first). */
   flowChats: SavedFlowChat[]
+  /** One board per campaign (plus the builder's own slot for an unbuilt campaign). */
+  flowBoards: FlowBoard[]
+  /** Write a campaign's whole board. An empty board is stored as a removal, not as a blank row. */
+  saveFlowBoard: (board: FlowBoard) => void
   /** Upsert a saved flow chat by id. */
   saveFlowChat: (chat: SavedFlowChat) => void
   /** Delete a saved flow chat by id. */
@@ -2653,6 +2678,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   sidebarCollapsed: (() => { try { return localStorage.getItem('stoplight.sidebarCollapsed') === '1' } catch { return false } })(),
   recordsChatCollapsed: (() => { try { return localStorage.getItem('stoplight.recordsChatCollapsed') === '1' } catch { return false } })(),
   flowChats: loadFlowChats(),
+  flowBoards: loadFlowBoards(),
   campaignList: loadCampaigns(),
   campaignFolders: loadCampaignFolders(),
   flights: loadFlights(),
@@ -4083,6 +4109,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { campaignList }
     }),
 
+  saveFlowBoard: (board) =>
+    set((s) => {
+      // An empty board is a REMOVAL, not a blank row: otherwise every campaign you ever opened
+      // leaves a row behind, and the slice grows with visits rather than with work.
+      const empty = !board.objects.length && !board.placements.length && !board.connectors.length
+      const rest = s.flowBoards.filter((b) => b.key !== board.key)
+      const flowBoards = empty ? rest : [...rest, board]
+      saveFlowBoards(flowBoards)
+      return { flowBoards }
+    }),
+
   setCampaignDirection: (name, direction) =>
     set((s) => {
       const idx = s.campaignList.findIndex((c) => c.name === name)
@@ -5230,6 +5267,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.reports.v1': 'reports',
       'stoplight.mediaMixes.v1': 'mediaMixes',
       'stoplight.flowChats.v1': 'flowChats',
+      'stoplight.flowBoards.v1': 'flowBoards',
       'stoplight.homeChats.v1': 'homeChats',
     }
     const state = await hydrateState()
@@ -5294,7 +5332,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         'stoplight.clients.v1', 'stoplight.clientProfiles.v1', 'stoplight.clientAudiences.v1',
         'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1', 'stoplight.brandFieldSources.v1',
         'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.flights.v1', 'stoplight.canvases.v1',
-        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.homeChats.v1',
+        'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.flowBoards.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
       ]
       for (const key of STATE_MIGRATIONS) {

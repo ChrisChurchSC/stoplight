@@ -1,5 +1,11 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
+// The board's types live in the domain because a persisted slice must be typed outside the
+// component that renders it. OBJECT_META stays here: it carries JSX icons.
+import {
+  type CanvasObject, type CanvasObjectKind, type ObjectFamily, type ObjectRole, type SmartPlacement,
+  boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
+} from '../domain/flowBoard'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
 import type { SmartObject } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
@@ -194,22 +200,6 @@ const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing'] as const
  * (CanvasObject, below) and the things that get made live in `nodes` (FlowDeliverable). A reader who
  * greps `objects` and assumes it holds the whole board will be wrong; BoardObject is the union.
  */
-type CanvasObjectKind =
-  | 'audience' | 'data-source' | 'note'
-  | 'proof-point' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
-interface CanvasObject {
-  id: string
-  kind: CanvasObjectKind
-  text: string
-  /** For linked kinds (audience → a segment, proof point → an RTB), the record's id. */
-  refId?: string
-  /**
-   * The brand-library SMART OBJECT this card links, when it links one. A card links an object OR a
-   * raw record, never both: the object is the reusable unit and its refs are what reach the
-   * campaign.
-   */
-  smartObjectId?: string
-}
 /**
  * A card's ROLE is what it does, and it's the axis the canvas is now organized around: an
  * 'output' becomes real work when you Build (the Brief, its Deliverables, their posts), an
@@ -235,8 +225,6 @@ interface CanvasObject {
  * Kept because it makes the board self-describing in the DOM, and named here so the next person
  * does not spend an afternoon looking for the rule that styles it.
  */
-type ObjectRole = 'output' | 'input' | 'markup' | 'brief'
-type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
 const OBJECT_META: Record<CanvasObjectKind, { label: string; tone: string; placeholder: string; role: ObjectRole; family: ObjectFamily; menuDesc: string; icon: React.ReactNode }> = {
   audience: {
     label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?', role: 'input', family: 'who',
@@ -319,8 +307,6 @@ const pluralOf = (noun: string): string =>
 /** Everything on the board: context objects plus the deliverables that get made. */
 export type BoardObject = CanvasObject | FlowDeliverable
 
-let objectSeq = 0
-const freshObjectId = () => `co_${++objectSeq}`
 
 /**
  * A SMART OBJECT: a named bundle of context cards, collapsed to one card on the board. Group a
@@ -333,19 +319,6 @@ const freshObjectId = () => `co_${++objectSeq}`
  * this is what gets promoted to a brand-level library, and applying one will set several of the
  * campaign's refs at once.
  */
-interface SmartPlacement {
-  id: string
-  /**
-   * The brand-library SmartObject this placement shows. The NAME and the REFS live there, not
-   * here, which is what makes an object reusable: the same object can sit on several campaigns
-   * and renaming it once renames it everywhere. This record is just "it is on this canvas".
-   */
-  smartObjectId: string
-  /** CanvasObject ids currently drawn inside it on this canvas. */
-  memberIds: string[]
-}
-let placementSeq = 0
-const freshGroupId = () => `pl_${++placementSeq}`
 // Data-source cards link to an established connector (mirrors the ConnectorsPage list).
 const CONNECTOR_SOURCES: { id: string; label: string }[] = [
   { id: 'google-analytics', label: 'Google Analytics' },
@@ -480,6 +453,8 @@ export function FlowsView() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
+  const flowBoards = useTrafficStore((s) => s.flowBoards)
+  const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const setCampaignDirection = useTrafficStore((s) => s.setCampaignDirection)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
@@ -2020,7 +1995,10 @@ export function FlowsView() {
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
     // (The library OBJECTS survive: that is the point of them. Only "it is on this canvas" resets.)
     setPlacements([])
+    setConnectors([])
     setOpenGroupId(null)
+    // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
+    saveFlowBoard({ key: '__new-flow__', objects: [], placements: [], pos: {}, connectors: [] })
     setBriefHidden(false)
     setBriefSummoned(false)
     // A fresh campaign opens as a clean, blank canvas: inspector collapsed, just the starter
@@ -2043,13 +2021,22 @@ export function FlowsView() {
     setChatCollapsed(false)
   }
   const openView = (n: string) => {
-    // Same reset as startNew: a campaign's chat, cards and object placements belong to it.
-    // openView cleared none of these, so opening a built campaign showed the previous one's board.
     persistActiveChat()
     setChatMsgs([])
-    setObjects([])
-    setPlacements([])
     setOpenGroupId(null)
+    // LOAD this campaign's board instead of clearing it. These two lines used to be setObjects([])
+    // and setPlacements([]), with a comment saying the board belongs to the campaign you left:
+    // right about the problem, and the only fix available while the board was session state.
+    // Prune on load, because refId and smartObjectId are unvalidated cross-namespace keys, so a
+    // record deleted since you were last here would leave an object pointing at nothing.
+    const loaded = pruneBoard(boardFor(flowBoards, n), {
+      objectKinds: new Set(Object.keys(OBJECT_META)),
+      smartObjectIds: new Set(smartObjects.map((o) => o.id)),
+    })
+    setObjects(loaded.objects)
+    setPlacements(loaded.placements)
+    setConnectors(loaded.connectors)
+    setPos((p) => ({ ...p, ...loaded.pos }))
     setViewName(n)
     setBuilt(null)
     setPickAt(null)
@@ -2177,6 +2164,32 @@ export function FlowsView() {
   const flowCampaign = viewName ?? `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
   // Whether this campaign has any built rows yet (so the grid/calendar can hint to Build).
   const hasBuiltRows = useTrafficStore((s) => s.rows.some((r) => r.campaign === flowCampaign))
+
+  /**
+   * PERSIST THE BOARD. Debounced, because pos changes on every frame of a drag and the auto-place
+   * effect writes it again while a freshly added node settles (it is stabilised only by a 2px
+   * epsilon and the placedRef latch), so an eager save would write dozens of times per interaction.
+   *
+   * Keyed the same way the chat is (chatFlowKey), so the unbuilt builder gets its own slot and its
+   * board is not lost the moment you name the campaign.
+   */
+  const boardKey = viewName ?? '__new-flow__'
+  const boardSaveTimer = useRef<number | null>(null)
+  useEffect(() => {
+    if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
+    boardSaveTimer.current = window.setTimeout(() => {
+      // Only the positions of things actually on THIS board; pos also holds deliverable and post
+      // ids, which belong to the flow layout rather than to the board.
+      const ids = new Set([...objects.map((o) => o.id), ...placements.map((p) => p.id), 'campaign'])
+      const boardPos: Record<string, { x: number; y: number }> = {}
+      for (const [k, v] of Object.entries(pos)) if (ids.has(k)) boardPos[k] = v
+      saveFlowBoard({ key: boardKey, objects, placements, pos: boardPos, connectors })
+    }, 600)
+    return () => {
+      if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardKey, objects, placements, connectors, pos])
 
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
   // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's

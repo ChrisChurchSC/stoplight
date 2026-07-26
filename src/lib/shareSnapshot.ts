@@ -22,6 +22,7 @@ import { isSupabaseConfigured, supabase } from './supabase'
 export interface SnapshotState {
   rows?: unknown[]
   campaignList?: unknown[]
+  flowBoards?: unknown[]
   clientAudiences?: Record<string, unknown>
   brandSystems?: Record<string, unknown>
   clientProfiles?: Record<string, unknown>
@@ -97,6 +98,11 @@ export function buildShareSnapshot(state: SnapshotState, client: string, campaig
   // Direct `client` field — for a single-flow share, narrow campaigns/canvases/reports to the flow.
   const campaigns = byField(state.campaignList, 'client', client)
   set('stoplight.campaigns.v1', campaign ? campaigns.filter((c) => (c as Record<string, unknown>).name === campaign) : campaigns)
+  // Campaign boards are keyed by campaign NAME, not by client, so scope them through campInShare
+  // rather than byField. A share link should show the board the recipient is looking at, and only
+  // that one: the builder's own '__new-flow__' slot is never a real campaign and never travels.
+  const boards = asArr(state.flowBoards).filter((b) => campInShare(String((b as Record<string, unknown>).key ?? '')))
+  set('stoplight.flowBoards.v1', boards)
   const canvases = byField(state.canvases, 'client', client)
   set('stoplight.canvases.v1', campaign ? canvases.filter((c) => (c as Record<string, unknown>).campaign === campaign) : canvases)
   const reports = byField(state.reports, 'client', client)

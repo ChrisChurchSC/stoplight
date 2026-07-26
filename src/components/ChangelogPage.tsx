@@ -25,6 +25,7 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
+          'Your board survives. The objects you place, the smart objects on the canvas, where you put them and the lines you draw between them are saved per campaign, so they are still there after a reload, after switching campaigns, and on a second device. Before this, closing the tab lost the lot.',
           'An object now changes the copy. Open one and it asks one or two things about this campaign: which pain an audience object leans on and which objection the copy must beat, the claim a message object asserts and the near-miss to avoid, the figure a proof object cites, the line a voice object should sound like. What you write is sent to the writer for every deliverable that object is wired to, and the preview rewrites itself as you type.',
           'An object asks for an instruction, not a definition. What an audience IS still lives on the record, edited in Records, one definition for the brand. What it means for THIS campaign lives on the object. The free-text note stays, moved to the bottom and labelled, because it is for your team and is never sent to the writer.',
         ],
