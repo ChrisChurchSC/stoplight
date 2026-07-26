@@ -26,6 +26,7 @@ const RELEASES: Release[] = [
         tag: 'New',
         items: [
           'Connecting a card to the campaign is how you attach it. Draw a line from an audience, a proof point, a company or a contact to the campaign card and it joins the campaign, which means the writer uses it. Delete the line and it is unlinked, but the card stays on the board. Connect a smart object and everything inside attaches at once. A card sitting on its own is a draft thought, and now looks like one.',
+          'The inspector lists every card on the board as layers, grouped by what each card does and using the same three words as the toolbar. Smart objects nest their contents underneath them, and a context card that is not attached to the campaign says so. Click a row to select that card. It used to list deliverables only, so context cards and smart objects were invisible unless you could see them on the canvas.',
           'Smart objects. Select a few context cards and press Cmd+G (or right-click, Group into a smart object) and they collapse into one named card showing what is inside. Double-click it to open it and work on its members on their own canvas, with a breadcrumb back. It names itself after the record you linked. Ungroup spills the cards back out, and nothing is lost.',
           'The canvas has a right-click menu. It carries the actions that only make sense on a specific card: bundle these, open or ungroup an object, delete.',
           'Every kind of card is now an icon in the canvas toolbar, grouped by what it does: what gets made, what it is made from, and notes. One click drops a card, and the groups are split so the toolbar itself shows the difference. The Add dropdown is gone.',
@@ -44,6 +45,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
+          'Deliverable cards no longer carry audience and proof tags either, for the same reason as the campaign card. A deliverable inherits the campaign records, and the per-deliverable override still lives in the inspector, where it reads as the exception it is rather than as two amber "Needs a..." prompts on every card on the board.',
           'The campaign card on the canvas states what the campaign is, and nothing else. Its audience picker, its record tags and the goal card attached underneath are gone: audiences and proof points are cards on the canvas now, and the inspector already held the authoritative Objective and Linked records. Three places to set the same thing meant no clear home for any of them.',
           'Cards are grouped by what a card does rather than by loose topic. What gets made comes first, the context it is made from sits under that in four short groups, and sticky notes come last, with a plain note that nothing downstream reads them.',
           'Cards that get made now look made: a tinted, raised card with a filled label chip, a channel tile and a count. Context cards are flat and recessed with a coloured spine, and one with no record picked yet visibly reads as empty. The campaign brief is the only card with a full-width coloured top edge, so the root of the board is obvious at a glance.',

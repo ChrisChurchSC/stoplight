@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -93,16 +93,6 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   ),
 }
 const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix' }
-// Record types roll up into a few card categories. Audience (segment / company / person) is
-// the WHO at three granularities; Channel is the where; Proof the why. A card shows one row per
-// category. Required categories (an audience + a proof) read in the accent color, and a required
-// category with no tag shows an amber "Needs …" flag so the gap is obvious.
-type CardGroup = { key: string; label: string; need: string; types: FlowRefType[]; required: boolean; icon: ReactNode }
-const CARD_GROUPS: CardGroup[] = [
-  { key: 'audience', label: 'Audience', need: 'an audience', types: ['segment', 'company', 'person'], required: true, icon: RECORD_TYPE_ICON.person },
-  { key: 'channel', label: 'Channel', need: 'a channel', types: ['channel'], required: false, icon: RECORD_TYPE_ICON.channel },
-  { key: 'proof', label: 'Proof', need: 'a proof point', types: ['proof'], required: true, icon: RECORD_TYPE_ICON.proof },
-]
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -115,102 +105,6 @@ const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   </svg>
 )
 
-// Most chips a record-tag row shows before collapsing the rest into a "+N" pill, so a card stays
-// one clean line per category instead of clipping tags mid-word.
-const TAG_CAP = 2
-type RecordOptionGroup = { type: FlowRefType; label: string; items: { id: string; label: string }[] }
-// A node card's record tags, grouped into card categories (Audience / Channel / Proof). Each group
-// is CLICKABLE: clicking its chips (or its "Needs …" flag) opens an inline picker to add/remove the
-// records for that category right on the card. `overridden` tints a deliverable whose records
-// differ from the campaign's. `ops` writes to the right target (campaign brief or a deliverable).
-function CardTags({ tags, overridden, ops, recordGroups, excludeGroupKeys }: {
-  tags: FlowReference[]
-  overridden: boolean
-  ops: TagOps
-  recordGroups: RecordOptionGroup[]
-  /** Category keys to omit (e.g. 'audience' on the campaign brief, where a dedicated
-   *  "Personalized to" selector owns the audience instead of a tag row). */
-  excludeGroupKeys?: string[]
-}) {
-  const [openKey, setOpenKey] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const stop = (e: ReactMouseEvent) => e.stopPropagation()
-  // Close the picker on any click outside it. A fixed-position scrim can't cover the viewport from
-  // inside the zoom-transformed canvas, so listen on the document instead.
-  useEffect(() => {
-    if (!openKey) return
-    const onDown = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setOpenKey(null) }
-    document.addEventListener('mousedown', onDown, true)
-    return () => document.removeEventListener('mousedown', onDown, true)
-  }, [openKey])
-  const groups = CARD_GROUPS
-    .filter((g) => !excludeGroupKeys?.includes(g.key))
-    .map((g) => ({ ...g, items: tags.filter((t) => g.types.includes(t.type)) }))
-    .filter((g) => g.items.length || g.required)
-  if (!groups.length) return null
-  return (
-    <div className={`flow-node-taggroups${overridden ? ' overridden' : ''}`} title={overridden ? 'Overriding the campaign records' : undefined}>
-      {groups.map((g) => {
-        const missing = g.required && !g.items.length
-        const open = openKey === g.key
-        const optionGroups = recordGroups.filter((rg) => g.types.includes(rg.type))
-        return (
-          <div key={g.key} className={`flow-node-taggroup${g.required ? ' required' : ''}${missing ? ' missing' : ''}`}>
-            <span className="flow-node-taggroup-ic" title={g.label} aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{g.icon}</svg>
-            </span>
-            <div className="flow-node-taggroup-chips">
-              <button
-                type="button"
-                className="flow-node-tagedit"
-                title={`Choose ${g.label.toLowerCase()} records`}
-                onMouseDown={stop}
-                onClick={(e) => { stop(e); setOpenKey(open ? null : g.key) }}
-              >
-                {g.items.length ? (
-                  <>
-                    {g.items.slice(0, TAG_CAP).map((r) => (
-                      <span key={`${r.type}:${r.id}`} className="flow-node-tag">{r.label}</span>
-                    ))}
-                    {g.items.length > TAG_CAP && (
-                      <span className="flow-node-tag flow-node-tag-more">+{g.items.length - TAG_CAP}</span>
-                    )}
-                  </>
-                ) : (
-                  <span className="flow-node-tag missing-tag">Needs {g.need}</span>
-                )}
-              </button>
-            </div>
-            {open && (
-                  <div className="flow-tagpick" ref={menuRef} onMouseDown={stop} onClick={stop}>
-                    {optionGroups.map((rg) => (
-                      <div key={rg.type} className="flow-tagpick-group">
-                        <div className="flow-tagpick-head">{rg.label}</div>
-                        {rg.items.length === 0 && <div className="flow-tagpick-empty">None yet</div>}
-                        {rg.items.map((it) => {
-                          const on = ops.has(rg.type, it.id)
-                          return (
-                            <button
-                              key={it.id}
-                              type="button"
-                              className={`flow-tagpick-item${on ? ' on' : ''}`}
-                              onClick={(e) => { stop(e); on ? ops.remove(`${rg.type}:${it.id}`) : ops.add(rg.type, it.id, it.label) }}
-                            >
-                              <span className="flow-tagpick-check" aria-hidden="true">{on ? '✓' : ''}</span>
-                              <span className="flow-tagpick-lbl">{it.label}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-              )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 // A recurring deliverable (newsletter, social) breaks into monthly posts. A lead magnet
 // (ebook, whitepaper) breaks into sections, and a web page (homepage, pricing, landing)
@@ -2771,12 +2665,47 @@ export function FlowsView() {
 
   // The outline (campaign + its deliverables) — a map of the board's contents, shown in the
   // inspector's nothing-selected state. Clicking a row selects that node.
-  const outlineItems = viewing
+  /**
+   * LAYERS: everything on the board, in one list, grouped by what each card does. The outline this
+   * replaced listed deliverables only, so the eleven kinds of context card and every smart object
+   * were invisible unless you could see them on the canvas. Click a row to select that card.
+   *
+   * Grouped by the same three words the toolbar palette uses, so the panel and the palette teach
+   * one vocabulary. A smart object nests its members underneath it, indented.
+   */
+  type Layer = { id: string; label: string; sub?: string; count?: number; tone?: string; depth?: number; attached?: boolean }
+  const outputLayers: Layer[] = viewing
     ? viewDelivs.map((d) => ({ id: d.key, label: d.label, count: d.count }))
     : nodes.map((n) => {
         const p = presetByKey(n.presetKey)
         return { id: n.id, label: p?.label ?? 'Deliverable', count: p ? subcardCount(p, n.perMonth) : 0 }
       })
+  const noteLayer = (nt: FlowNote, depth = 0): Layer => {
+    const opts = noteOptions(nt.kind)
+    const linked = nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : ''
+    return {
+      id: nt.id,
+      label: linked || nt.text.trim().split('\n')[0] || NOTE_META[nt.kind].label,
+      sub: NOTE_META[nt.kind].label,
+      tone: NOTE_META[nt.kind].tone,
+      depth,
+      // Only inputs can attach: a sticky note is deliberately outside the machine, so flagging it
+      // as "not attached" would be noise about a state it can never be in.
+      attached: NOTE_META[nt.kind].role === 'input' ? isAttached(nt.id) : undefined,
+    }
+  }
+  // Cards loose on the board, then each smart object with its members nested under it.
+  const inputLayers: Layer[] = [
+    ...notes.filter((n) => NOTE_META[n.kind].role === 'input' && !groupOf(n.id)).map((n) => noteLayer(n)),
+    ...groups.flatMap((g) => [
+      { id: g.id, label: g.name || 'Smart object', sub: 'Smart object', count: g.memberIds.length, tone: 'var(--accent-2)', attached: isAttached(g.id) } as Layer,
+      ...g.memberIds
+        .map((m) => notes.find((n) => n.id === m))
+        .filter((n): n is FlowNote => !!n && NOTE_META[n.kind].role === 'input')
+        .map((n) => noteLayer(n, 1)),
+    ]),
+  ]
+  const markupLayers: Layer[] = notes.filter((n) => NOTE_META[n.kind].role === 'markup' && !groupOf(n.id)).map((n) => noteLayer(n))
   const pickOutline = (id: string) => {
     setSel(id === 'campaign' ? 'campaign' : id)
     setSelected(id === 'campaign' ? new Set() : new Set([id]))
@@ -3624,7 +3553,12 @@ export function FlowsView() {
                             <div className="flow-node-text">
                               <div className="flow-node-label">{d.label}</div>
                               <div className="flow-node-desc">×{d.count}</div>
-                              <CardTags tags={delivEffRefs(d)} overridden={d.rows.some((r) => r.references && r.references.length)} ops={delivTagOps(d)} recordGroups={recordGroups} />
+                              {/* No record tags here, for the same reason the campaign card lost
+                                  its own: audience and proof are context you attach by connecting
+                                  a card to the campaign. A deliverable inherits the campaign's
+                                  records, and the per-deliverable OVERRIDE still lives in the
+                                  inspector, where it reads as the exception it is rather than as
+                                  two amber "Needs a..." prompts on every card on the board. */}
                             </div>
                           </div>
                         </div>
@@ -4592,21 +4526,38 @@ export function FlowsView() {
               </div>
               <div className="flow-overview">
                 <div className="flow-ov-note">Pick the campaign brief to set audiences and flight, or add deliverables. When it looks right, build it into a real draft campaign.</div>
-                {/* Outline: the board's contents (campaign + its deliverables). Click a row to open it. */}
+                {/* LAYERS: everything on the board, grouped by what each card does, using the same
+                    three words as the toolbar palette. Click a row to select that card. */}
                 <div className="flow-outline-list">
-                  <div className="flow-outline-head">Outline</div>
+                  <div className="flow-outline-head">Layers</div>
                   <button className={`flow-outline-row campaign${sel === 'campaign' ? ' on' : ''}`} onClick={() => pickOutline('campaign')}>
                     <span className="flow-outline-label">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
                   </button>
-                  {outlineItems.length === 0 ? (
-                    <div className="flow-outline-empty">No deliverables yet.</div>
-                  ) : (
-                    outlineItems.map((it) => (
-                      <button key={it.id} className={`flow-outline-row${sel === it.id ? ' on' : ''}`} onClick={() => pickOutline(it.id)}>
-                        <span className="flow-outline-label">{it.label}</span>
-                        {it.count > 0 && <span className="flow-outline-n">{it.count}</span>}
-                      </button>
-                    ))
+                  {([
+                    { head: 'Gets made', rows: outputLayers },
+                    { head: "Made from", rows: inputLayers },
+                    { head: 'Notes', rows: markupLayers },
+                  ] as const).map((sec) => (sec.rows.length === 0 ? null : (
+                    <Fragment key={sec.head}>
+                      <div className="flow-outline-sec">{sec.head}</div>
+                      {sec.rows.map((it) => (
+                        <button
+                          key={it.id}
+                          className={`flow-outline-row${sel === it.id ? ' on' : ''}${it.depth ? ' nested' : ''}`}
+                          onClick={() => pickOutline(it.id)}
+                          title={it.sub ? `${it.sub}${it.attached === false ? ', not attached to the campaign' : ''}` : undefined}
+                        >
+                          {it.tone && <span className="flow-outline-dot" style={{ background: it.tone }} aria-hidden="true" />}
+                          <span className="flow-outline-label">{it.label}</span>
+                          {/* An unattached context card is a draft thought, so say so here too. */}
+                          {it.attached === false && <span className="flow-outline-off" title="Not attached to the campaign">not attached</span>}
+                          {it.count ? <span className="flow-outline-n">{it.count}</span> : null}
+                        </button>
+                      ))}
+                    </Fragment>
+                  )))}
+                  {outputLayers.length === 0 && inputLayers.length === 0 && markupLayers.length === 0 && (
+                    <div className="flow-outline-empty">Nothing on the board yet.</div>
                   )}
                 </div>
               </div>

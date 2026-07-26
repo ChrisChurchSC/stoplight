@@ -26175,6 +26175,21 @@ table.aud-sheet td.stick .aud-cell {
 .fchat-sugg-item.skipped { color: var(--text-faint); }
 .fchat-sugg-item.skipped .fchat-sugg-check { color: var(--text-faint); }
 
+/* Layers list: a section head per role, a tone dot per kind, members of a smart object indented
+   under it, and a quiet flag on any context card not attached to the campaign. */
+.flow-outline-sec {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint); padding: 10px 8px 3px;
+}
+.flow-outline-row.nested { padding-left: 24px; }
+.flow-outline-dot {
+  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 2px; margin-right: 7px;
+}
+.flow-outline-off {
+  flex: 0 0 auto; font-size: 10px; color: var(--text-faint);
+  border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 4px; margin-left: 6px;
+}
+
 /* Transient bottom toast for lightweight recommendations. */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(520px, calc(100vw - 40px)); background: var(--text); color: var(--surface); border-radius: 11px; box-shadow: 0 8px 28px rgba(16,24,40,.24); padding: 11px 12px 11px 14px; cursor: pointer; animation: toast-in .18s ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
