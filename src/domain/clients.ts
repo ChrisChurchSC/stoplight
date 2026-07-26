@@ -224,6 +224,12 @@ export interface Campaign {
   goalTarget?: number
   /** Records this flow references (Companies / People / Segments / Media mix). Read when generating assets. */
   references?: FlowReference[]
+  /**
+   * The campaign's DIRECTION: the instructions its objects give the copy writer, keyed by the
+   * object kind that set them. Lives on the campaign rather than on the object because objects are
+   * still session state; this way nothing a marketer types is silently lost on reload.
+   */
+  direction?: { kind: string; key: string; value: string }[]
   /** Flight length in weeks; omitted/0 = ongoing. */
   durationWeeks?: number
   /** Overall campaign budget (media + content/production). Drives mediaBudget. */

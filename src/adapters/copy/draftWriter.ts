@@ -2,6 +2,7 @@ import { clientForCampaign, UNASSIGNED, type ClientProfile } from '../../domain/
 import { funnelStageFor, type FunnelStage } from '../../domain/funnel'
 import type { MessagingField } from '../../domain/messaging'
 import type { BrandGuide } from '../../domain/readiness'
+import type { DirectionEntry } from '../../domain/direction'
 import type { Rtb } from '../../domain/rtb'
 import type { ChannelId } from '../../domain/types'
 import type { Icp } from '../icp/types'
@@ -49,6 +50,12 @@ export interface DraftAsset {
    *  …) — the non-structural lineage. Copy is localized to it so variants of one base
    *  asset come out DISTINCT (not duplicate). */
   context?: Record<string, string>
+  /**
+   * The planner's instructions for THIS asset, from the objects wired to it. Rides inside the
+   * assets array (which the server stringifies wholesale) rather than as a top-level field, so it
+   * cannot be lost at the destructure the way `hooks` was.
+   */
+  direction?: DirectionEntry[]
   /** A conditioned lead hook ("if audience = X then lead with …") — the copy opens on it. */
   hook?: string
   /** Stable index in the batch — lets the heuristic vary deterministically. */

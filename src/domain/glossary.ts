@@ -175,7 +175,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     short:
       "Objects that carry the context a campaign is written from: audiences, messages, proof, voice, channels, and your own notes on the idea. They sit flat on the board so they never look like something you ship.",
     more:
-      'Today these are board context. Linking a record on one of these cards records your thinking but does not change the drafts yet. What the writer reads is the campaign brief and its linked records.',
+      'An object names a record and adds an instruction about this campaign: which pain to lean on, which objection to beat, the claim to assert. That instruction is sent to the writer for every deliverable the object is wired to. The free-text note on an object is for your team and is never sent.',
     seeAlso: ['canvasOutput', 'linkedRecords'],
   },
 }

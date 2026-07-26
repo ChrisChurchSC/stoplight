@@ -165,6 +165,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
+import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
 import { ClaudeIcpReviewer } from '../adapters/icp/claudeReviewer'
@@ -1892,6 +1893,8 @@ interface TrafficState {
   setCampaignSubject: (name: string, subject: string) => void
   /** Set the records a flow references (Companies / People / Segments / Media mix). Read when generating assets. */
   setCampaignReferences: (name: string, references: FlowReference[]) => void
+  /** The campaign's object direction: what its objects instruct the copy writer to do. */
+  setCampaignDirection: (name: string, direction: { kind: string; key: string; value: string }[]) => void
   /** Patch arbitrary campaign metadata (flight length, budget, …) on an existing campaign.
    *  A no-op if the campaign isn't found (only meaningful for built flows). */
   patchCampaign: (name: string, patch: Partial<Campaign>) => void
@@ -2246,6 +2249,8 @@ interface TrafficState {
     flightWeeks?: number
     /** Optional email-blueprint guidance per slot (framework / subject formula / CTA / levers). */
     steps?: ({ framework?: string; subjectFormula?: string; cta?: string; levers?: string } | undefined)[]
+    /** What the campaign's objects instruct, so preview copy matches what a build would write. */
+    direction?: { kind: string; key: string; value: string }[]
   }) => Promise<{ source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] } | null>
   /** Plan a personalization fan-out without committing (count-before-commit). */
   fanOutPreview: (
@@ -4073,6 +4078,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const client = clientForCampaign(name)
         registerCampaign(name, client)
         campaignList = [...s.campaignList, { name, client, strategy: 'Current state', references }]
+      }
+      saveCampaigns(campaignList)
+      return { campaignList }
+    }),
+
+  setCampaignDirection: (name, direction) =>
+    set((s) => {
+      const idx = s.campaignList.findIndex((c) => c.name === name)
+      let campaignList: Campaign[]
+      if (idx >= 0) {
+        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, direction } : c))
+      } else {
+        const client = clientForCampaign(name)
+        registerCampaign(name, client)
+        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', direction }]
       }
       saveCampaigns(campaignList)
       return { campaignList }
@@ -6337,6 +6357,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // (unchanged behavior). Company / person / channel tags are structural references
         // (who/where, not copy content), so they don't constrain the pools here.
         const campaignRefs = get().campaignList.find((c) => c.name === campaign)?.references ?? []
+        // What the campaign's objects instruct, persisted on the campaign so a regeneration months
+        // later still writes to the direction that produced the original draft.
+        const campaignDirection = get().campaignList.find((c) => c.name === campaign)?.direction ?? []
         // Compute the pinned audience + proof pools from a reference list. A deliverable can
         // OVERRIDE the campaign's refs per-asset (row.references), so each row pins from its own
         // effective set — one deliverable can target a different segment/proof than the rest.
@@ -6443,6 +6466,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
+            // The objects wired to this campaign, as per-asset instructions. buildDirection is the
+            // ONLY producer: it caps, prioritises and drops unknown keys, so a stale persisted key
+            // can never reach the prompt.
+            direction: campaignDirection.length ? buildDirection(campaignDirection) : undefined,
             index: i,
           }
         })
@@ -6527,7 +6554,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     return copySource
   },
 
-  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, proof: proofRefLabels, theme, flightWeeks, steps }) => {
+  previewFlowCopy: async ({ client, channel, assetType, briefs, audiences, proof: proofRefLabels, theme, flightWeeks, steps, direction }) => {
     if (!briefs.length) return null
     // Same hard boundary as draftCopy: a brand must be bound to generate. A brandless
     // (or non-draft-brandless) client has no voice/proof to write from.
@@ -6579,6 +6606,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           if (st?.levers) ctx.levers = st.levers
           return Object.keys(ctx).length ? ctx : undefined
         })(),
+        // Same producer as the build path. Missing this is how a second silently unwired path
+        // gets created: the canvas preview would show copy the build would not write.
+        direction: direction?.length ? buildDirection(direction) : undefined,
         index: i,
       }
     })

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
+import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
 import type { SmartObject } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -218,10 +219,11 @@ interface CanvasObject {
  * menu's grouping so the toolbar teaches the same split. `family` is the sub-grouping inside
  * the input band only.
  *
- * NOTE ON HONESTY: today an input card is board context and nothing more. Its linked record
- * does not reach the copy writer; only the Brief's own record tags do, and only their segment
- * and proof types at that (see poolsFrom in useTrafficStore). The Add menu says so in as many
- * words. Don't add copy anywhere that promises an input shapes the writing until that's wired.
+ * WHAT AN INPUT OBJECT DOES, as of the direction wiring: it names a record AND carries an
+ * instruction about this campaign (see src/domain/direction.ts). The instruction reaches the copy
+ * writer as a named per-asset slot for every deliverable the object is wired to. The record it
+ * names still only narrows the pools via the campaign's refs, and the free-text note is never
+ * sent. This comment previously forbade promising otherwise; that promise is now kept.
  */
 /**
  * What an object DOES, and the value of its data-role attribute.
@@ -478,6 +480,7 @@ export function FlowsView() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
+  const setCampaignDirection = useTrafficStore((s) => s.setCampaignDirection)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
@@ -600,6 +603,9 @@ export function FlowsView() {
   const [objects, setObjects] = useState<CanvasObject[]>([])
   // Smart objects: bundles of the cards above. Ephemeral alongside `objects` for now.
   const [placements, setPlacements] = useState<SmartPlacement[]>([])
+  // Before a campaign exists there is nothing to persist onto, so build-mode direction is held here
+  // and written through to the campaign by buildFlow.
+  const [builderDirection, setBuilderDirection] = useState<{ kind: string; key: string; value: string }[]>([])
   // Which smart object you're inside, if any. Non-null swaps the canvas to that object's members
   // and adds a breadcrumb segment, so editing one feels like editing a small campaign.
   const [openPlacementId, setOpenGroupId] = useState<string | null>(null)
@@ -1024,6 +1030,9 @@ export function FlowsView() {
   flightRef.current = flightWeeks
   const audRef = useRef(audSelection)
   audRef.current = audSelection
+  // Direction, held in a ref for the same reason as subject/flight/audience: the debounced redraft
+  // runs from a timer callback and must read the LATEST value, not a stale closure.
+  const directionRef = useRef<{ kind: string; key: string; value: string }[]>([])
   const proofRef = useRef(proofRefLabels)
   proofRef.current = proofRefLabels
   const writeCopyRef = useRef(writeCopy)
@@ -1074,6 +1083,7 @@ export function FlowsView() {
         theme: subjectRef.current.trim() || undefined,
         flightWeeks: flightRef.current,
         steps,
+        direction: directionRef.current,
       })
       setPreview((pv) => ({ ...pv, [node.id]: { loading: false, source: res?.source ?? null, posts: res?.posts ?? [] } }))
     } catch {
@@ -2227,6 +2237,9 @@ export function FlowsView() {
       if (brand && cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
       if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
+      // Carry build-mode direction onto the campaign the moment it exists, BEFORE the assets are
+      // seeded, so the first draft is written to it and a regeneration later still has it.
+      if (builderDirection.length) setCampaignDirection(campaignName, builderDirection)
       const allNewIds: string[] = []
       for (const n of cfg.nodes) {
         const p = presetByKey(n.presetKey)
@@ -2676,6 +2689,29 @@ export function FlowsView() {
   // Primitive cards are selectable in BOTH modes and their ids (note_N) match none of the other
   // inspector branches, so without this they fell through: clicking an Audience card showed you
   // the Campaign brief panel. Same lookup for build and view.
+  /**
+   * DIRECTION read/write. Stored on the CAMPAIGN, keyed by object kind plus direction key, because
+   * objects are still session state and nothing typed should be lost on reload. One value per
+   * (kind, key) per campaign: two audience objects share the pain slot, which is the same
+   * "an asset gets one claim" rule the builder enforces by priority.
+   */
+  const campaignDirection = (viewing ? viewCampaign?.direction : builderDirection) ?? []
+  const directionValue = (kind: CanvasObjectKind, key: DirectionKey): string =>
+    campaignDirection.find((d) => d.kind === kind && d.key === key)?.value ?? ''
+  const setDirectionValue = (kind: CanvasObjectKind, key: DirectionKey, value: string) => {
+    const next = campaignDirection.filter((d) => !(d.kind === kind && d.key === key))
+    if (value.trim()) next.push({ kind, key, value })
+    if (viewing && viewName) setCampaignDirection(viewName, next)
+    else setBuilderDirection(next)
+    // Redraft the previews so typing an instruction visibly rewrites the copy on every deliverable
+    // it reaches. Debounced by scheduleRedraftAll, so a sentence typed a character at a time is one
+    // regeneration pass rather than forty.
+    directionRef.current = next
+    if (!viewing) scheduleRedraftAll()
+    else setRefsDirty(true)
+  }
+  directionRef.current = campaignDirection
+
   const selObject = objects.find((n) => n.id === sel) ?? null
   const selGroup = placements.find((g) => g.id === sel) ?? null
 
@@ -3068,19 +3104,42 @@ export function FlowsView() {
               )}
             </>
           )}
-          <label className="flow-inspect-label" style={{ marginTop: opts ? 14 : 0 }}>Note</label>
+          {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
+              fields per kind, each landing in a named slot in every wired asset's payload. This is
+              the whole point of an object: not which record it names, but what it says about it. */}
+          {(DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => (
+            <Fragment key={k}>
+              <label className="flow-inspect-label" style={{ marginTop: i === 0 && !opts ? 0 : 14 }}>
+                {DIRECTION_FIELD[k].label}
+              </label>
+              <textarea
+                className="flow-inspect-input"
+                rows={2}
+                maxLength={capFor(k)}
+                value={directionValue(nt.kind, k)}
+                placeholder={DIRECTION_FIELD[k].hint}
+                onChange={(e) => setDirectionValue(nt.kind, k, e.target.value)}
+              />
+            </Fragment>
+          ))}
+          <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+            {meta.role === 'markup' ? 'Note' : 'Team note'}
+          </label>
           <textarea
             className="flow-inspect-input"
-            rows={4}
+            rows={3}
             value={nt.text}
-            placeholder={meta.placeholder}
+            placeholder={meta.role === 'markup' ? meta.placeholder : 'Not sent to the writer'}
             onChange={(e) => updateObjectText(nt.id, e.target.value)}
           />
-          {/* Say plainly what this card does. Update BOTH halves when inputs get wired through. */}
+          {/* Say plainly what this object does. These two lines are the acceptance test for the
+              direction wiring: the second used to end "does not change the drafts yet". */}
           <div className="flow-inspect-note">
             {meta.role === 'markup'
               ? 'A note for your team. Nothing downstream reads it.'
-              : 'Board context. It records what this campaign is made from, and does not change the drafts yet.'}
+              : (DIRECTION_KEYS[nt.kind] ?? []).length
+                ? 'What you write above is sent to the writer for every deliverable this object is wired to. The free-text note is not.'
+                : 'Board context. It names what this campaign is made from.'}
           </div>
           <button className="flow-insp-del" onClick={() => deleteObject(nt.id)}>
             Delete this object
