@@ -160,6 +160,12 @@ interface FlowNote {
   text: string
   /** For linked kinds (audience → a segment, proof point → an RTB), the record's id. */
   refId?: string
+  /**
+   * The brand-library SMART OBJECT this card links, when it links one. A card links an object OR a
+   * raw record, never both: the object is the reusable unit and its refs are what reach the
+   * campaign.
+   */
+  objectId?: string
 }
 /**
  * A card's ROLE is what it does, and it's the axis the canvas is now organized around: an
@@ -537,7 +543,10 @@ export function FlowsView() {
   // it exists for "group into a smart object" but is the obvious home for per-card actions.
   // `on` is the id right-clicked (a card, an object, or null for empty canvas).
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; on: string | null } | null>(null)
-  const [sel, setSel] = useState<'campaign' | string | null>('campaign')
+  // Nothing selected by default: the inspector's resting state is the LAYERS list, everything on
+  // the board. Opening onto the campaign brief form showed one card's fields before you had picked
+  // a card, and hid the list that says what is on the canvas at all.
+  const [sel, setSel] = useState<'campaign' | string | null>(null)
   const [pickAt, setPickAt] = useState<number | null>(null)
   // When the deliverable picker is opened FROM an asset card (its "+"), this holds that
   // source asset's row id. The new deliverable's rows get branchOf = that asset's name, so
@@ -719,6 +728,9 @@ export function FlowsView() {
   }, [flowScreen, flowView])
   const [connectors, setConnectors] = useState<{ from: string; to: string }[]>([])
   const [drawing, setDrawing] = useState<{ from: string; x: number; y: number } | null>(null)
+  // The card an in-progress connection is currently over. Drawing a line used to give no feedback
+  // about WHERE it would land, so you released and hoped. The target lights up instead.
+  const [connectOver, setConnectOver] = useState<string | null>(null)
   const drawingFrom = useRef<string | null>(null)
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
@@ -1909,7 +1921,7 @@ export function FlowsView() {
     setMessageId('')
     setBriefRefs(null)
     lastSubjectRef.current = ''
-    setSel('campaign')
+    setSel(null)
     setPickAt(null)
     setCampaignFilter('all')
     // A new campaign opens with Hansel expanded, because Hansel IS the front door now: its
@@ -1923,7 +1935,7 @@ export function FlowsView() {
     setViewName(n)
     setBuilt(null)
     setPickAt(null)
-    setSel('campaign')
+    setSel(null)
     setBriefHidden(false)
     setBriefSummoned(false)
     // An existing campaign has content to inspect, so open the panel to its brief.
@@ -2737,12 +2749,23 @@ export function FlowsView() {
    * Grouped by the same three words the toolbar palette uses, so the panel and the palette teach
    * one vocabulary. A smart object nests its members underneath it, indented.
    */
-  type Layer = { id: string; label: string; sub?: string; count?: number; tone?: string; depth?: number; attached?: boolean }
+  type Layer = { id: string; label: string; sub?: string; count?: number; icon?: ReactNode; depth?: number; attached?: boolean }
+  // Deliverables carry their CHANNEL mark, the same one the card shows, so the list reads as the
+  // board rather than as a table of names.
   const outputLayers: Layer[] = viewing
-    ? viewDelivs.map((d) => ({ id: d.key, label: d.label, count: d.count }))
+    ? viewDelivs.map((d) => ({
+        id: d.key, label: d.label, count: d.count, sub: d.channel,
+        icon: <PresetTile tone={DELIV_TONE} channel={d.channel as ChannelId} />,
+      }))
     : nodes.map((n) => {
         const p = presetByKey(n.presetKey)
-        return { id: n.id, label: p?.label ?? 'Deliverable', count: p ? subcardCount(p, n.perMonth) : 0 }
+        return {
+          id: n.id,
+          label: p?.label ?? 'Deliverable',
+          count: p ? subcardCount(p, n.perMonth) : 0,
+          sub: p?.channel,
+          icon: <PresetTile tone={DELIV_TONE} channel={p?.channel} />,
+        }
       })
   const noteLayer = (nt: FlowNote, depth = 0): Layer => {
     const opts = noteOptions(nt.kind)
@@ -2751,7 +2774,11 @@ export function FlowsView() {
       id: nt.id,
       label: linked || nt.text.trim().split('\n')[0] || NOTE_META[nt.kind].label,
       sub: NOTE_META[nt.kind].label,
-      tone: NOTE_META[nt.kind].tone,
+      icon: (
+        <span className="flow-layer-ic" style={{ color: NOTE_META[nt.kind].tone }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[nt.kind].icon}</svg>
+        </span>
+      ),
       depth,
       // Only inputs can attach: a sticky note is deliberately outside the machine, so flagging it
       // as "not attached" would be noise about a state it can never be in.
@@ -2762,7 +2789,20 @@ export function FlowsView() {
   const inputLayers: Layer[] = [
     ...notes.filter((n) => NOTE_META[n.kind].role === 'input' && !groupOf(n.id)).map((n) => noteLayer(n)),
     ...groups.flatMap((g) => [
-      { id: g.id, label: g.name || 'Smart object', sub: 'Smart object', count: g.memberIds.length, tone: 'var(--accent-2)', attached: isAttached(g.id) } as Layer,
+      {
+        id: g.id,
+        label: g.name || 'Smart object',
+        sub: 'Smart object',
+        count: g.memberIds.length,
+        attached: isAttached(g.id),
+        icon: (
+          <span className="flow-layer-ic" style={{ color: 'var(--accent-2)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
+            </svg>
+          </span>
+        ),
+      } as Layer,
       ...g.memberIds
         .map((m) => notes.find((n) => n.id === m))
         .filter((n): n is FlowNote => !!n && NOTE_META[n.kind].role === 'input')
@@ -2929,6 +2969,61 @@ export function FlowsView() {
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{NOTE_META[kind].icon}</svg>
     </button>
+  )
+
+  /**
+   * The inspector's RESTING state: everything on the board, grouped by what each card does.
+   * Shown whenever nothing is selected, in BOTH build and view mode. It used to be build-mode
+   * only, with view mode falling through to the campaign brief form, so the panel showed one
+   * card's fields before you had picked a card.
+   */
+  const renderLayers = () => (
+    <>
+      <div className="flow-panel-head">
+        <span className="flow-panel-title">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</span>
+      </div>
+      <div className="flow-overview">
+        <div className="flow-outline-list">
+          <div className="flow-outline-head">Layers</div>
+          <button className={`flow-outline-row layer campaign${sel === 'campaign' ? ' on' : ''}`} onClick={() => pickOutline('campaign')}>
+            <CampaignTile />
+            <span className="flow-layer-txt">
+              <span className="flow-layer-name">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
+              <span className="flow-layer-sub">Campaign brief</span>
+            </span>
+          </button>
+          {([
+            { head: 'Gets made', rows: outputLayers },
+            { head: 'Made from', rows: inputLayers },
+            { head: 'Notes', rows: markupLayers },
+          ] as const).map((sec) => (sec.rows.length === 0 ? null : (
+            <Fragment key={sec.head}>
+              <div className="flow-outline-sec">{sec.head}</div>
+              {sec.rows.map((it) => (
+                <button
+                  key={it.id}
+                  className={`flow-outline-row layer${sel === it.id ? ' on' : ''}${it.depth ? ' nested' : ''}`}
+                  onClick={() => pickOutline(it.id)}
+                  title={it.sub ? `${it.sub}${it.attached === false ? ', not attached to the campaign' : ''}` : undefined}
+                >
+                  {it.icon}
+                  <span className="flow-layer-txt">
+                    <span className="flow-layer-name">{it.label}</span>
+                    {it.sub && <span className="flow-layer-sub">{it.sub}</span>}
+                  </span>
+                  {it.attached === false && <span className="flow-outline-off" title="Not attached to the campaign">unattached</span>}
+                  {it.count ? <span className="flow-layer-n">{it.count}</span> : null}
+                </button>
+              ))}
+            </Fragment>
+          )))}
+          {outputLayers.length === 0 && inputLayers.length === 0 && markupLayers.length === 0 && (
+            <div className="flow-outline-empty">Nothing on the board yet. Add a card from the toolbar.</div>
+          )}
+        </div>
+        <div className="flow-ov-note">Click a row to open that card. Pick the campaign to set its flight and budget.</div>
+      </div>
+    </>
   )
 
   return (
@@ -3162,7 +3257,7 @@ export function FlowsView() {
         )}
         <div
           ref={canvasRef}
-          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' ? ' connecting' : ''}`}
+          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}`}
           onContextMenu={(e) => {
             const el = (e.target as HTMLElement).closest('.flow-node[data-node-id]') as HTMLElement | null
             const id = el?.dataset.nodeId ?? null
@@ -3208,6 +3303,11 @@ export function FlowsView() {
             if (drawingFrom.current) {
               const cr = e.currentTarget.getBoundingClientRect()
               setDrawing({ from: drawingFrom.current, x: e.clientX - cr.left, y: e.clientY - cr.top })
+              // What would this land on? Anything but the card we started from.
+              const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)
+                ?.closest('.flow-node[data-node-id]') as HTMLElement | null
+              const id = over?.dataset.nodeId ?? null
+              setConnectOver(id && id !== drawingFrom.current ? id : null)
             } else if (dragging.current) {
               const scale = zoom / 100
               const dx = (e.clientX - dragging.current.x) / scale
@@ -3240,6 +3340,7 @@ export function FlowsView() {
               addDrag.current = null
               drawingFrom.current = null
               setDrawing(null)
+              setConnectOver(null)
             } else if (drawingFrom.current) {
               const from = drawingFrom.current
               const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.flow-node[data-node-id]') as HTMLElement | null
@@ -3254,6 +3355,7 @@ export function FlowsView() {
               }
               drawingFrom.current = null
               setDrawing(null)
+              setConnectOver(null)
             }
             if (marqueeStart.current) {
               const r = e.currentTarget.getBoundingClientRect()
@@ -3382,7 +3484,7 @@ export function FlowsView() {
                 Hideable via delete. */}
             {!briefHidden && (viewing || briefSummoned) && (
             <div
-              className={`flow-node flow-tier-campaign${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
+              className={`flow-node flow-tier-campaign${connectOver === 'campaign' ? ' drop-target' : ''}${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
               data-node-id="campaign"
               data-role="brief"
               style={{ transform: `translate(${pos['campaign']?.x ?? 0}px, ${pos['campaign']?.y ?? 0}px)` }}
@@ -3445,7 +3547,7 @@ export function FlowsView() {
               return (
                 <div
                   key={nt.id}
-                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${isAttached(nt.id) ? ' attached' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${isAttached(nt.id) ? ' attached' : ''}${connectOver === nt.id ? ' drop-target' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
                   data-node-id={nt.id}
                   data-role={meta.role}
                   style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
@@ -3572,7 +3674,7 @@ export function FlowsView() {
               return (
                 <div
                   key={g.id}
-                  className={`flow-node flow-note flow-note-object${isAttached(g.id) ? ' attached' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-object${isAttached(g.id) ? ' attached' : ''}${connectOver === g.id ? ' drop-target' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
                   data-node-id={g.id}
                   data-role="input"
                   style={{ transform: `translate(${pos[g.id]?.x ?? 0}px, ${pos[g.id]?.y ?? 0}px)` }}
@@ -3631,7 +3733,7 @@ export function FlowsView() {
                         style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined }}
                       >
                         <div
-                          className={`flow-node flow-tier-deliv${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
+                          className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
                           data-node-id={d.key}
                           data-role="output"
                           onMouseDown={(e) => startDrag(e, d.key)}
@@ -3745,7 +3847,7 @@ export function FlowsView() {
                       <div className="flow-link" />
                       <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 168}px` : undefined }}>
                         <div
-                          className={`flow-node flow-tier-deliv${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
+                          className={`flow-node flow-tier-deliv${connectOver === n.id ? ' drop-target' : ''}${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
                           data-node-id={n.id}
                           data-role="output"
                           onMouseDown={(e) => startDrag(e, n.id)}
@@ -4107,6 +4209,8 @@ export function FlowsView() {
                   })()}
                 </div>
               </>
+            ) : sel !== 'campaign' ? (
+              renderLayers()
             ) : (
               <>
                 <div className="flow-panel-head">
@@ -4611,48 +4715,7 @@ export function FlowsView() {
               )
             })()
           ) : (
-            <>
-              <div className="flow-panel-head">
-                <span className="flow-panel-title">{name.trim() || 'Untitled campaign'}</span>
-              </div>
-              <div className="flow-overview">
-                <div className="flow-ov-note">Pick the campaign brief to set audiences and flight, or add deliverables. When it looks right, build it into a real draft campaign.</div>
-                {/* LAYERS: everything on the board, grouped by what each card does, using the same
-                    three words as the toolbar palette. Click a row to select that card. */}
-                <div className="flow-outline-list">
-                  <div className="flow-outline-head">Layers</div>
-                  <button className={`flow-outline-row campaign${sel === 'campaign' ? ' on' : ''}`} onClick={() => pickOutline('campaign')}>
-                    <span className="flow-outline-label">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
-                  </button>
-                  {([
-                    { head: 'Gets made', rows: outputLayers },
-                    { head: "Made from", rows: inputLayers },
-                    { head: 'Notes', rows: markupLayers },
-                  ] as const).map((sec) => (sec.rows.length === 0 ? null : (
-                    <Fragment key={sec.head}>
-                      <div className="flow-outline-sec">{sec.head}</div>
-                      {sec.rows.map((it) => (
-                        <button
-                          key={it.id}
-                          className={`flow-outline-row${sel === it.id ? ' on' : ''}${it.depth ? ' nested' : ''}`}
-                          onClick={() => pickOutline(it.id)}
-                          title={it.sub ? `${it.sub}${it.attached === false ? ', not attached to the campaign' : ''}` : undefined}
-                        >
-                          {it.tone && <span className="flow-outline-dot" style={{ background: it.tone }} aria-hidden="true" />}
-                          <span className="flow-outline-label">{it.label}</span>
-                          {/* An unattached context card is a draft thought, so say so here too. */}
-                          {it.attached === false && <span className="flow-outline-off" title="Not attached to the campaign">not attached</span>}
-                          {it.count ? <span className="flow-outline-n">{it.count}</span> : null}
-                        </button>
-                      ))}
-                    </Fragment>
-                  )))}
-                  {outputLayers.length === 0 && inputLayers.length === 0 && markupLayers.length === 0 && (
-                    <div className="flow-outline-empty">Nothing on the board yet.</div>
-                  )}
-                </div>
-              </div>
-            </>
+            renderLayers()
           )}
         </aside>
         )}

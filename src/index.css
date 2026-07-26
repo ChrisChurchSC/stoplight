@@ -26181,9 +26181,26 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-faint); padding: 10px 8px 3px;
 }
-.flow-outline-row.nested { padding-left: 24px; }
-.flow-outline-dot {
-  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 2px; margin-right: 7px;
+.flow-outline-row.nested { padding-left: 30px; }
+/* A layer row reads like the card it points at: its own mark, its name, and what kind it is. */
+.flow-outline-row.layer { display: flex; align-items: center; gap: 9px; padding: 7px 8px; }
+.flow-outline-row.layer .flow-tile { width: 26px; height: 26px; flex: 0 0 auto; }
+.flow-layer-ic {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.flow-layer-ic svg { width: 15px; height: 15px; }
+.flow-layer-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; text-align: left; }
+.flow-layer-name { font-size: 13px; font-weight: 570; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-layer-sub {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.flow-layer-n {
+  flex: 0 0 auto; font-size: 11px; font-weight: 650; color: var(--text-muted);
+  background: var(--surface-2); border-radius: 999px; padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
 }
 .flow-outline-off {
   flex: 0 0 auto; font-size: 10px; color: var(--text-faint);
@@ -26193,6 +26210,27 @@ table.aud-sheet td.stick .aud-cell {
 /* Naming a new record from a card: the picker turns into a text field in place. */
 .flow-note-new { cursor: text; }
 .flow-note-new:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
+
+/* DROP TARGET: the card an in-progress connection is over. Drawing a line gave no feedback about
+   where it would land, so you released and hoped. This is deliberately louder than hover, because
+   it answers "will it connect to THIS one" mid-gesture: a thick accent ring, a lift, and a slight
+   scale so the card visibly comes to meet the line. */
+.flow-node.drop-target {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 9px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-raise) !important;
+  transform-origin: center;
+  z-index: 6;
+}
+/* Connecting to the CAMPAIGN is the meaningful one (it attaches the card), so say so louder. */
+.flow-node[data-role='brief'].drop-target::after {
+  content: 'Attach to this campaign';
+  position: absolute; left: 50%; bottom: -26px; transform: translateX(-50%);
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: var(--accent); color: #fff; border-radius: 6px; padding: 3px 8px;
+  pointer-events: none;
+}
+/* While drawing, everything else recedes so the target reads as the one live thing. */
+.flow-canvas.connecting .flow-node:not(.drop-target) { opacity: 0.75; }
 
 /* Transient bottom toast for lightweight recommendations. */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(520px, calc(100vw - 40px)); background: var(--text); color: var(--surface); border-radius: 11px; box-shadow: 0 8px 28px rgba(16,24,40,.24); padding: 11px 12px 11px 14px; cursor: pointer; animation: toast-in .18s ease-out; }

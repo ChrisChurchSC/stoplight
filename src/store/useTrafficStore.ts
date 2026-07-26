@@ -137,6 +137,7 @@ import {
   titleFromUrl,
 } from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
+import { type SmartObject, freshSmartObjectId, kindForRefs } from '../domain/smartObject'
 import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
@@ -601,6 +602,25 @@ function loadCompanies(): Company[] {
 function saveCompanies(list: Company[]): void {
   try {
     saveRecordList(COMPANIES_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
+// Per-brand SMART OBJECTS: named, reusable bundles of records ("the RevOps buyer"). Brand-level
+// rather than per-campaign, because being reusable across campaigns is the whole point.
+const SMART_OBJECTS_KEY = 'stoplight.smartObjects.v1'
+function loadSmartObjects(): SmartObject[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(SMART_OBJECTS_KEY) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveSmartObjects(list: SmartObject[]): void {
+  try {
+    localStorage.setItem(SMART_OBJECTS_KEY, JSON.stringify(list))
   } catch {
     /* ignore */
   }
@@ -1665,6 +1685,11 @@ interface TrafficState {
   deleteBrandRecord: (id: string) => void
   /** Per-brand freeform data sets (blank spreadsheets). */
   brandDatasets: BrandDataset[]
+  /** Brand-level reusable record bundles. A card links one of these rather than a raw record. */
+  smartObjects: SmartObject[]
+  addSmartObject: (brand: string, name: string, refs: FlowReference[]) => string
+  updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs'>>) => void
+  deleteSmartObject: (id: string) => void
   addBrandDataset: (brand: string, name?: string) => string
   renameBrandDataset: (id: string, name: string) => void
   deleteBrandDataset: (id: string) => void
@@ -2584,6 +2609,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
   brandDatasets: loadBrandDatasets(),
+  smartObjects: loadSmartObjects(),
   segments: localDataMode ? loadSegments() : [],
   mediaMixes: loadMediaMixes(),
   pinnedInsights: loadPinned(),
@@ -3185,6 +3211,32 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const brandRecords = s.brandRecords.filter((b) => b.id !== id)
       saveRecordList(BRAND_RECORDS_KEY, brandRecords)
       return { brandRecords }
+    }),
+
+  addSmartObject: (brand, name, refs) => {
+    const id = freshSmartObjectId()
+    set((s) => {
+      const smartObjects = [...s.smartObjects, { id, brand, name, kind: kindForRefs(refs), refs }]
+      saveSmartObjects(smartObjects)
+      return { smartObjects }
+    })
+    return id
+  },
+  updateSmartObject: (id, patch) =>
+    set((s) => {
+      const smartObjects = s.smartObjects.map((o) =>
+        // Re-derive the kind whenever the contents change, so an object built around a contact
+        // stops being offered by a Person card if the contact is removed.
+        o.id === id ? { ...o, ...patch, kind: patch.refs ? kindForRefs(patch.refs, o.kind) : o.kind } : o,
+      )
+      saveSmartObjects(smartObjects)
+      return { smartObjects }
+    }),
+  deleteSmartObject: (id) =>
+    set((s) => {
+      const smartObjects = s.smartObjects.filter((o) => o.id !== id)
+      saveSmartObjects(smartObjects)
+      return { smartObjects }
     }),
 
   addBrandDataset: (brand, name) => {
