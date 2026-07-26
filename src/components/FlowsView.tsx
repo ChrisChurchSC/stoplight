@@ -3358,9 +3358,31 @@ export function FlowsView() {
             {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside. Open it and add an object, or release it.</div>}
           </div>
           <button className="flow-insp-open" onClick={() => setOpenGroupId(g.id)}>Open this smart object</button>
-          <div className="flow-inspect-note">
-            Board context, like the cards inside it. Nothing here changes the drafts yet.
-          </div>
+          {/* WHERE IT LIVES, on the object's own panel. This is where you look when you select a
+              smart object, so promoting it from the member card's inspector alone would have hidden
+              the ladder behind a card you had no reason to click. */}
+          {(() => {
+            const so = smartObjectFor(g)
+            if (!so) return null
+            return scopeOf(so) === 'brand' ? (
+              <div className="flow-inspect-note">
+                In the brand library{so.campaign ? `, promoted from ${shortCampaignName(so.campaign)}` : ''}. Editing it
+                changes every campaign using it, not just this one.
+              </div>
+            ) : (
+              <>
+                <div className="flow-inspect-note">Only on this campaign. Edit it freely: nothing else uses it.</div>
+                <button
+                  className="flow-obj-promote"
+                  title="Move this into the brand library so every campaign can use it"
+                  onClick={() => promoteSmartObject(so.id, brand)}
+                  disabled={!brand}
+                >
+                  Add to the brand library
+                </button>
+              </>
+            )
+          })()}
           <button className="flow-insp-del" onClick={() => releasePlacement(g.id)}>Release</button>
         </div>
       </>
