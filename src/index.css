@@ -26060,8 +26060,11 @@ table.aud-sheet td.stick .aud-cell {
 /* ATTACHED: this card is part of the campaign, not just sitting on the board.
    An unconnected card is a draft thought, so the difference has to be visible without reading
    the edge. Attached cards come forward: full-strength surface, a solid spine, live label. */
-.flow-note[data-role='input']:not(.attached),
-.flow-note-object:not(.attached) {
+/* Gated on .has-hub: "unattached" only means something when there is a campaign card to attach TO.
+   Without the gate, a canvas with no hub dimmed every card at once and read as "all of this is
+   provisional" when the truth was that nothing could be attached in the first place. */
+.flow.has-hub .flow-note[data-role='input']:not(.attached),
+.flow.has-hub .flow-note-object:not(.attached) {
   opacity: 0.72;
 }
 .flow-note[data-role='input'].attached { background: var(--surface); }

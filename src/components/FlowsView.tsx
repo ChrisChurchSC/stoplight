@@ -873,8 +873,17 @@ export function FlowsView() {
         setBriefCollapsed(anyOpen)
         return
       }
+      // SELECT belongs here as much as INPUT does. A native select uses letter keys for type-ahead,
+      // so pressing "b" in the inspector's audience or smart-object dropdown to jump to an option
+      // also fired the canvas 'b' shortcut: preventDefault swallowed the type-ahead, the inspector
+      // closed and the deliverable picker opened. Backspace in the same dropdown deleted the
+      // selected card. `closest` rather than a tagName test, so a control's inner element counts too.
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (t?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return
+      // A dialog or drawer renders OUTSIDE the page router, layered over a still-mounted canvas, so
+      // its keystrokes reach this listener: Backspace with a card selected silently deleted that
+      // card behind the open dialog.
+      if (t?.closest('[role="dialog"], .drawer, .confirm-modal')) return
       // Delete / Backspace removes the selected card(s) — deliverable or freeform note. The campaign
       // brief is the board's root, so it's never deleted this way.
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -918,6 +927,10 @@ export function FlowsView() {
         return
       }
       if (e.key === ' ') {
+        // Space is hold-to-pan, but it is also how a keyboard user activates a focused button, and
+        // this preventDefault was unconditional: tabbing to any button on the canvas and pressing
+        // Space panned instead of pressing it.
+        if (t?.closest('button, a[href], [role="button"]')) return
         e.preventDefault()
         if (!spaceHeld.current) {
           spaceHeld.current = true
@@ -1432,7 +1445,17 @@ export function FlowsView() {
     }
   }
   /** Is this node attached to the campaign right now? Drives the card's "in the campaign" look. */
-  const isAttached = (nodeId: string) => connectors.some((e) => e.from === nodeId && e.to === 'campaign')
+  /**
+   * Attached means "wired to the campaign hub", so it is only meaningful while the hub is on the
+   * board. Hiding the brief used to leave the edges behind: every card attached beforehand kept its
+   * full-strength styling while everything added after had nothing to attach to, so brightness
+   * silently came to mean "you made this before you deleted the brief".
+   *
+   * Gated rather than stripped, deliberately. Deleting the edges would lose state that re-summoning
+   * the brief cannot bring back; this way the board goes uniformly quiet and comes back exactly as
+   * it was.
+   */
+  const isAttached = (nodeId: string) => hasHub && connectors.some((e) => e.from === nodeId && e.to === 'campaign')
 
   // Editing the CAMPAIGN's records (the brief).
   const campaignTagOps: TagOps = {
@@ -2755,6 +2778,14 @@ export function FlowsView() {
   }
 
   const viewing = viewName !== null
+  /**
+   * Is the campaign hub actually ON the board? Unattached cards are dimmed to mark them as draft
+   * thoughts, but "attached" means an edge to the campaign card — so on a canvas with no campaign
+   * card, nothing CAN be attached and every card dimmed at once, saying "all of this is provisional"
+   * when the truth is there is nothing to attach to. Mirrors the hub's own render condition.
+   */
+  const hasHub = !briefHidden && (viewing || briefSummoned)
+
   // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
   // blank canvas + the "What are you launching?" starter as the only front door; the brief card
   // isn't pre-placed until the campaign gains some shape (or the user summons it from the toolbar).
@@ -3473,7 +3504,9 @@ export function FlowsView() {
   )
 
   return (
-    <div className={`flow${chatCollapsed && !flowAssetsOpen ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}`}>
+    <div
+      className={`flow${chatCollapsed && !flowAssetsOpen ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}${hasHub ? ' has-hub' : ''}`}
+    >
       <header className="flow-top">
         <div className="flow-crumb">
           <span className="flow-crumb-ic" aria-hidden="true">

@@ -38,6 +38,8 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'Keyboard shortcuts no longer fire out of a dropdown. Pressing b in the inspector’s audience or smart-object menu to jump to an option also fired the canvas shortcut: the inspector closed and the deliverable picker opened. Backspace in the same menu deleted the selected card. Space now presses a focused button instead of panning, and a keystroke inside an open dialog no longer reaches the canvas behind it.',
+          'Cards are no longer greyed out on a canvas with no campaign card. Dimming marks a card as not yet part of the campaign, so with nothing to attach to it greyed out everything at once. Hiding the campaign card also used to leave the cards attached beforehand at full strength, so brightness came to mean “you made this before you deleted the brief”.',
           'A smart object holding no records stops posing as an audience. Bundling a message card and a note produced an object filed as an audience, so it was offered by every Audience picker in the app. An object with no records now belongs to no record picker, and it reports what it holds instead of calling itself empty.',
           'Editing a smart object now actually reaches the campaigns using it. The card showed the change everywhere on sight, but attaching one copies its records onto the campaign, and those copies were left behind: campaign B displayed the new version and still generated from the old one.',
           'Taking one record out of a smart object no longer detaches the rest. Removing a single proof point also dropped that object’s audience and message from the campaign.',
