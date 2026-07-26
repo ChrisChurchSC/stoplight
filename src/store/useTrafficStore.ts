@@ -138,7 +138,7 @@ import {
   titleFromUrl,
 } from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
-import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs } from '../domain/smartObject'
+import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
 import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
@@ -166,7 +166,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
-import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, type FlowBoard } from '../domain/flowBoard'
+import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -621,7 +621,10 @@ const SMART_OBJECTS_KEY = 'stoplight.smartObjects.v1'
 function loadSmartObjects(): SmartObject[] {
   try {
     const v = JSON.parse(localStorage.getItem(SMART_OBJECTS_KEY) ?? '[]')
-    return Array.isArray(v) ? v : []
+    // withContents migrates on READ: an object written before contents existed synthesizes one card
+    // per ref. One-way and read-tolerant, so a ref whose type maps to no card kind keeps
+    // contributing what it always did and simply gets no card.
+    return Array.isArray(v) ? (v as SmartObject[]).map(withContents) : []
   } catch {
     return []
   }
@@ -1724,6 +1727,9 @@ interface TrafficState {
     refs: FlowReference[],
     scope: SmartObjectScope,
     campaign?: string,
+    /** The cards the object is made of. Passed in because the caller has them and refs cannot
+     *  reconstruct the ones that carry no record. */
+    contents?: CanvasObject[],
   ) => string
   updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs'>>) => void
   /**
@@ -3292,12 +3298,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { brandRecords }
     }),
 
-  addSmartObject: (brand, name, refs, scope, campaign) => {
+  addSmartObject: (brand, name, refs, scope, campaign, contents) => {
     const id = freshSmartObjectId()
     set((s) => {
       // brand is recorded even on a local object: it is where a later promotion lands, and it keeps
       // the brand purge able to sweep it.
-      const smartObjects = [...s.smartObjects, { id, brand, scope, campaign, name, kind: kindForRefs(refs), refs }]
+      //
+      // contents are the CARDS the object was built from, passed in rather than derived: the caller
+      // has them, and deriving them back from refs would lose every card that carries no record (a
+      // message, a note), which is exactly what contents exist to keep.
+      const layout: Record<string, { x: number; y: number }> = {}
+      ;(contents ?? []).forEach((c, i) => { layout[c.id] = { x: 40, y: 40 + i * 120 } })
+      const smartObjects = [
+        ...s.smartObjects,
+        { id, brand, scope, campaign, name, kind: kindForRefs(refs), refs, contents: contents ?? [], layout },
+      ]
       saveSmartObjects(smartObjects)
       return { smartObjects }
     })
@@ -3343,9 +3358,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => {
       const before = s.smartObjects.find((o) => o.id === id)
       const smartObjects = s.smartObjects.map((o) =>
-        // Re-derive the kind whenever the contents change, so an object built around a contact
-        // stops being offered by a Person card if the contact is removed.
-        o.id === id ? { ...o, ...patch, kind: patch.refs ? kindForRefs(patch.refs, o.kind) : o.kind } : o,
+        // Re-derive the kind whenever the records change, so an object built around a contact stops
+        // being offered by a Person card once the contact is removed. No fallback to the previous
+        // kind: an object left holding no records has NO kind, which is what keeps it out of every
+        // record picker rather than parking it in the Audience one.
+        o.id === id ? { ...o, ...patch, kind: patch.refs ? kindForRefs(patch.refs) : o.kind } : o,
       )
       saveSmartObjects(smartObjects)
       if (!before || !patch.refs) return { smartObjects }

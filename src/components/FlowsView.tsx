@@ -8,7 +8,7 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
-import { type SmartObject, describeSmartObject, scopeOf, visibleOnCampaign } from '../domain/smartObject'
+import { type SmartObject, describeSmartObject, scopeOf, visibleOnCampaign, wouldCycle } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
@@ -528,6 +528,8 @@ export function FlowsView() {
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
   // Brand-library smart objects: the reusable bundles a card picks from.
   const smartObjects = useTrafficStore((s) => s.smartObjects)
+  // By id, for the walks that follow nested contents (the cycle guard, the ref resolver).
+  const smartObjectsById = useMemo(() => new Map(smartObjects.map((o) => [o.id, o])), [smartObjects])
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
@@ -1804,7 +1806,17 @@ export function FlowsView() {
     const refType = REF_TYPE_FOR_KIND[kind]
     // visibleOnCampaign, not `o.brand === brand`: another campaign's local objects belong to this
     // brand too, and offering them here is exactly what scoping exists to prevent.
-    const mine = smartObjects.filter((o) => o.kind === refType && visibleOnCampaign(o, brand, viewName ?? BUILDER_BOARD_KEY))
+    //
+    // The CYCLE GUARD: when the picker is being shown inside an open object, any candidate that
+    // already contains that object is withheld. Contents can nest, so without this you could put an
+    // object inside itself and the resolver would only stop because of its depth cap.
+    const host = openPlacement ? smartObjectFor(openPlacement)?.id : undefined
+    const mine = smartObjects.filter(
+      (o) =>
+        o.kind === refType &&
+        visibleOnCampaign(o, brand, viewName ?? BUILDER_BOARD_KEY) &&
+        !(host && wouldCycle(o.id, host, smartObjectsById)),
+    )
     return {
       onCampaign: mine.filter((o) => scopeOf(o) === 'campaign'),
       library: mine.filter((o) => scopeOf(o) === 'brand'),
@@ -1861,8 +1873,12 @@ export function FlowsView() {
     // LOCAL to this campaign, not the brand library. ⌘G used to write straight to the brand, so
     // every bundle anyone made anywhere joined the brand's shared vocabulary the moment it existed
     // and the library filled with one-offs. Promote it from the inspector when it earns reuse.
-    const refs = ids.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n).map(refForObject).filter((r): r is FlowReference => !!r)
-    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs, 'campaign', boardKey)
+    const members = ids.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
+    const refs = members.map(refForObject).filter((r): r is FlowReference => !!r)
+    // The CARDS go in as well as the records they resolve to. Records alone would drop every member
+    // that carries none — a message, a voice, a note — so bundling "the RevOps angle" out of a
+    // message and a proof point would have quietly kept the proof and thrown the message away.
+    const smartObjectId = addSmartObject(brand, suggestPlacementName(ids), refs, 'campaign', boardKey, members)
     setPlacements((g) => [...g, { id, smartObjectId, memberIds: ids }])
     setPos((p) => ({ ...p, [id]: spot }))
     // Members keep their own pos: it becomes their layout INSIDE the object.
