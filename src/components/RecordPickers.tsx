@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatZip, isZip, stateForZip, zipOf } from '../domain/zip'
 
 /**
  * PICK-FIRST CONTROLS for the fields on a card.
@@ -181,5 +182,55 @@ export function RecordMulti({
         </select>
       )}
     </div>
+  )
+}
+
+/**
+ * A ZIP, typed, with the place it resolves to shown back.
+ *
+ * The confirmation line is the whole point: five digits look identical whether they are right or a
+ * typo, so the field has to say what it understood. "07740 · New Jersey" is checkable at a glance;
+ * "07740" alone is not.
+ *
+ * Commits only a valid five-digit ZIP, and says so while you are short of one rather than after you
+ * leave. An unresolvable but well-formed ZIP still commits — plenty of prefixes are unallocated, and
+ * refusing one the user knows is real would be the field claiming an authority it does not have.
+ */
+export function ZipField({
+  value,
+  onCommit,
+}: {
+  value: string
+  onCommit: (v: string) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? zipOf(value)
+  const state = stateForZip(shown)
+  const complete = isZip(shown)
+  return (
+    <>
+      <input
+        className="flow-recform-input"
+        inputMode="numeric"
+        maxLength={5}
+        value={shown}
+        placeholder="ZIP code"
+        onChange={(e) => {
+          // Digits only, so a pasted "NJ 07740" narrows to the part this field can use.
+          const next = e.target.value.replace(/\D/g, '').slice(0, 5)
+          setDraft(next)
+          if (isZip(next)) onCommit(formatZip(next))
+          else if (next === '') onCommit('')
+        }}
+        onBlur={() => setDraft(null)}
+      />
+      {shown && (
+        <span className={`flow-zip-echo${complete && !state ? ' unknown' : ''}`}>
+          {complete
+            ? state ?? 'Not a ZIP we recognise. Saved anyway.'
+            : `${5 - shown.length} more digit${shown.length === 4 ? '' : 's'}`}
+        </span>
+      )}
+    </>
   )
 }

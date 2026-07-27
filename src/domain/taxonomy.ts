@@ -164,6 +164,54 @@ export const GOAL_LIBRARY = [
 ]
 
 /**
+ * OCCUPATIONS for a persona, as a starting vocabulary.
+ *
+ * Deliberately NOT the JOB_FUNCTIONS list above. That one is B2B job families for targeting a buyer
+ * inside a company (RevOps, Procurement); this is what a person does for a living, which is what a
+ * consumer persona needs and what shapes how they talk. A brand selling to anglers needs
+ * "Electrician", not "Customer Success".
+ *
+ * Spread across trades, services, health, education, transport and desk work rather than weighted to
+ * office roles, because a persona list that is 80% knowledge work quietly tells every brand its
+ * customers are knowledge workers.
+ */
+export const OCCUPATIONS = [
+  'Electrician', 'Plumber', 'Carpenter', 'Contractor', 'Mechanic', 'Welder', 'HVAC technician',
+  'Landscaper', 'Construction manager', 'Truck driver', 'Delivery driver', 'Warehouse worker',
+  'Farmer', 'Fisherman', 'Charter captain',
+  'Nurse', 'Doctor', 'Dentist', 'Pharmacist', 'Physical therapist', 'Paramedic', 'Care worker',
+  'Teacher', 'Professor', 'School administrator', 'Coach',
+  'Police officer', 'Firefighter', 'Military service member',
+  'Chef', 'Restaurant owner', 'Bartender', 'Barista', 'Retail manager', 'Salon owner',
+  'Accountant', 'Lawyer', 'Financial advisor', 'Insurance agent', 'Real estate agent',
+  'Small business owner', 'Founder', 'Consultant', 'Freelancer',
+  'Software engineer', 'Designer', 'Product manager', 'Marketer', 'Salesperson', 'Recruiter',
+  'Operations manager', 'Project manager', 'Analyst', 'Executive assistant', 'Office manager',
+  'Journalist', 'Photographer', 'Artist', 'Musician',
+  'Student', 'Retired', 'Stay-at-home parent', 'Between jobs',
+]
+
+/**
+ * HOBBIES AND INTERESTS, as tags.
+ *
+ * The field a persona is most often judged on by whoever reads the card, and the one most likely to
+ * be typed four different ways ("fishing", "Fishing", "loves to fish", "goes fishing weekends") if
+ * it is left as free text. Tags make two personas comparable at a glance.
+ */
+export const HOBBIES = [
+  'Fishing', 'Hunting', 'Boating', 'Camping', 'Hiking', 'Climbing', 'Skiing', 'Surfing', 'Cycling',
+  'Running', 'Swimming', 'Golf', 'Tennis', 'Yoga', 'Weight training', 'Martial arts',
+  'Watching football', 'Watching basketball', 'Watching baseball', 'Watching soccer', 'Motorsport',
+  'Coaching kids sports', 'Youth sports parent',
+  'Cooking', 'Baking', 'Barbecue', 'Wine', 'Craft beer', 'Coffee', 'Eating out',
+  'Gardening', 'Home improvement', 'Woodworking', 'Cars', 'Motorcycles', 'Model building',
+  'Photography', 'Painting', 'Drawing', 'Music', 'Playing an instrument', 'Live music', 'Podcasts',
+  'Reading', 'Writing', 'Board games', 'Video games', 'Tabletop RPGs', 'Puzzles',
+  'Travel', 'Road trips', 'Birdwatching', 'Astronomy', 'Volunteering', 'Church', 'Investing',
+  'Dogs', 'Cats', 'Horses', 'Time with family', 'Time with friends',
+]
+
+/**
  * Common objections, as a starting vocabulary. The sibling of PAIN_LIBRARY and GOAL_LIBRARY, and
  * the one that was missing — which is why "Beat this objection" was the last field on an audience
  * card with nothing to pick from.

@@ -12,7 +12,7 @@ import { downstreamTargets, reachesOutput, resolveBoardDirection } from '../doma
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
-import { PEOPLE_FIELDS } from '../domain/people'
+import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -24,8 +24,9 @@ import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
-import { BUYING_TRIGGERS, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_LIBRARY, INDUSTRIES, PAIN_LIBRARY, SENIORITIES } from '../domain/taxonomy'
-import { RecordCombo, RecordMulti, type OptionGroup } from './RecordPickers'
+import { BUYING_TRIGGERS, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_LIBRARY, HOBBIES, INDUSTRIES, OCCUPATIONS, PAIN_LIBRARY, SENIORITIES } from '../domain/taxonomy'
+import { BufferedInput } from './BufferedInput'
+import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
@@ -3971,65 +3972,103 @@ export function FlowsView() {
 
               A Data source card still reaches its data set: double-clicking one opens it, creating it
               if it does not exist yet (openDataCard). */}
-          {/* THE PERSONA a Person card names, EDITABLE HERE. It is read off the record, and writes go
-              straight back to it, so the same persona sharpens on every campaign that names them.
-
-              Every field shows, filled or not, which is the opposite of the read-only version this
-              replaces. A list that hides its empties is right for a report and wrong for a form: the
-              gaps ARE the prompt, and "Who else decides" you have never answered is the field most
-              worth answering. The six pick-lists come from the record schema rather than a second
-              list here, so adding an option in one place changes both surfaces. */}
+          {/* THE PERSON a card names, edited here.
+              Name, age, income, location, occupation, hobbies — the six that decide who this is —
+              then the fields that decide how to write to them. Each field gets the control its
+              content deserves rather than one control repeated ten times: a band is a dropdown, a
+              ZIP is five digits with the state echoed back, an occupation is a long list you should
+              be able to type past, and hobbies are tags because a persona is compared to other
+              personas and free text makes that impossible. */}
           {nt.kind === 'person' && nt.refId && (() => {
             const per = allPeople.find((x) => x.id === nt.refId)
             if (!per) return null
-            const fields = PEOPLE_FIELDS.filter((f) => f.group === 'Persona')
+            const others = allPeople.filter((o) => o.id !== per.id)
+            const own = (key: keyof Person): string[] => others.map((o) => String(o[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Person>) => updatePerson(per.id, patch)
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const pick = (label: string, key: keyof Person, options: readonly string[]) =>
+              field(label, (
+                <select className="flow-recform-select as-written" value={String(per[key] ?? '')} onChange={(e) => set({ [key]: e.target.value })}>
+                  <option value="">—</option>
+                  {options.map((o) => (<option key={o} value={o}>{o}</option>))}
+                  {per[key] && !options.includes(String(per[key])) && <option value={String(per[key])}>{String(per[key])}</option>}
+                </select>
+              ))
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  {per.name}
+                  Who this is
                   <span className="flow-persona-tag" title="A representative person, not a real customer. The writer may not quote them or cite them as a customer.">composite</span>
                 </label>
                 <div className="flow-recform">
-                  {fields.map((f) => {
-                    const v = String((per as unknown as Record<string, unknown>)[f.key] ?? '')
-                    return (
-                      <div key={f.key} className="flow-recform-field">
-                        <span className="flow-recform-key">{f.label}</span>
-                        {f.options ? (
-                          <select
-                            className="flow-recform-select"
-                            value={v}
-                            onChange={(e) => updatePerson(per.id, { [f.key]: e.target.value })}
-                          >
-                            <option value="">—</option>
-                            {f.options.map((o) => (
-                              <option key={o} value={o}>{o}</option>
-                            ))}
-                            {/* A value typed before this became a pick-list still selects, rather than
-                                silently reading as blank and being overwritten on the next edit. */}
-                            {v && !f.options.includes(v) && <option value={v}>{v}</option>}
-                          </select>
-                        ) : (
-                          /* The four fields with no pick-list of their own still lead with what this
-                             brand has already written on its other people, so the same occupation or
-                             the same turn of phrase is reused rather than retyped slightly differently.
-                             Typing stays one option down the list. */
-                          <RecordCombo
-                            value={v}
-                            groups={[{
-                              label: 'From your other people',
-                              options: allPeople
-                                .filter((o) => o.id !== per.id)
-                                .map((o) => String((o as unknown as Record<string, unknown>)[f.key] ?? ''))
-                                .filter(Boolean),
-                            }]}
-                            placeholder={f.label}
-                            onCommit={(nv) => updatePerson(per.id, { [f.key]: nv })}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
+                  {/* NAME is an input, never a pick-list: it is the one field whose whole job is to be
+                      new. Everything else on this card is chosen; this is what you are choosing it for. */}
+                  {field('Name', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={per.name}
+                      placeholder="Name this person"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {pick('Age', 'age', AGE_BANDS)}
+                  {pick('Household income', 'householdIncome', INCOME_BANDS)}
+                  {field('Location', <ZipField value={per.location ?? ''} onCommit={(v) => set({ location: v })} />)}
+                  {/* OCCUPATION is a combo, not a hard pick-list: sixty jobs cover a lot and will
+                      never cover a brand's actual customers, and the wrong job is worse than a typed one. */}
+                  {field('Occupation', (
+                    <RecordCombo
+                      value={per.occupation ?? ''}
+                      groups={[
+                        { label: 'From your other people', options: own('occupation') },
+                        { label: 'Common jobs', options: [...OCCUPATIONS] },
+                      ]}
+                      placeholder="What they do for a living"
+                      onCommit={(v) => set({ occupation: v })}
+                    />
+                  ))}
+                  {field('Hobbies and interests', (
+                    <RecordMulti
+                      values={splitLines(per.hobbies)}
+                      groups={[
+                        { label: 'From your other people', options: others.flatMap((o) => splitLines(o.hobbies)) },
+                        { label: 'Common interests', options: [...HOBBIES] },
+                      ]}
+                      addLabel="Add an interest"
+                      onCommit={(v) => set({ hobbies: v.join('\n') })}
+                    />
+                  ))}
+                </div>
+                {/* The rest of the persona: not who they are, but how to write to them. Kept apart
+                    because the six above are answered once and these are what actually move the copy
+                    — saysLike more than any other field on the record. */}
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>How to write to them</label>
+                <div className="flow-recform">
+                  {pick('How much they know', 'expertise', EXPERTISE_LEVELS)}
+                  {pick('What they want', 'optimizingFor', MOTIVES)}
+                  {pick('When they would read this', 'readsWhen', READING_MOMENTS)}
+                  {pick('Who else decides', 'decidesWith', DECIDERS)}
+                  {field('What they use today', (
+                    <RecordCombo
+                      value={per.usesNow ?? ''}
+                      groups={[{ label: 'From your other people', options: own('usesNow') }]}
+                      placeholder="What they reach for instead"
+                      onCommit={(v) => set({ usesNow: v })}
+                    />
+                  ))}
+                  {field('How they talk', (
+                    <RecordCombo
+                      value={per.saysLike ?? ''}
+                      groups={[{ label: 'From your other people', options: own('saysLike') }]}
+                      placeholder="Their own words and phrases"
+                      onCommit={(v) => set({ saysLike: v })}
+                    />
+                  ))}
                 </div>
               </>
             )
