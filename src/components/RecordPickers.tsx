@@ -54,11 +54,14 @@ export function RecordCombo({
   value,
   groups,
   placeholder,
+  maxLength,
   onCommit,
 }: {
   value: string
   groups: OptionGroup[]
   placeholder: string
+  /** Cap on a typed value, so a combo can stand in for a capped textarea without losing the cap. */
+  maxLength?: number
   onCommit: (v: string) => void
 }) {
   const [typing, setTyping] = useState(false)
@@ -71,6 +74,7 @@ export function RecordCombo({
       <input
         className="flow-recform-input"
         autoFocus
+        maxLength={maxLength}
         value={draft}
         placeholder={placeholder}
         onChange={(e) => setDraft(e.target.value)}

@@ -4924,6 +4924,10 @@ button {
 
 /* CHIPS for a field that holds several values. Read far more often than edited, so the selection
    stays visible at rest rather than only while a control has focus. */
+/* A single picker standing where a labelled textarea used to be: it keeps the left rule and the
+   surface, but drops the internal label, because the panel already printed one above it. */
+.flow-recform-solo { margin-top: 4px; padding-top: 8px; padding-bottom: 9px; }
+
 .flow-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 1px; }
 .flow-chip {
   display: inline-flex; align-items: center; gap: 3px;

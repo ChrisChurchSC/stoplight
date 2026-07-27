@@ -4162,49 +4162,64 @@ export function FlowsView() {
               </div>
             )
           })()}
-          {(DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => (
-            <Fragment key={k}>
-              {/* The first field is now the top of the panel on every kind, since no picker sits
-                  above it any more. */}
-              <label className="flow-inspect-label" style={{ marginTop: i === 0 ? 0 : 14 }}>
-                {DIRECTION_FIELD[k].label}
-              </label>
-              <textarea
-                className="flow-inspect-input"
-                rows={2}
-                maxLength={capFor(k)}
-                value={directionValue(nt, k)}
-                placeholder={DIRECTION_FIELD[k].hint}
-                onChange={(e) => setDirectionValue(nt, k, e.target.value)}
-              />
-              {/* SUGGESTIONS from the brand's own material. Offered only while the field is empty:
-                  once something is written, a row of chips under it is clutter, and the point was
-                  to save the first typing, not to keep proposing alternatives.
-                  Nothing here is invented — every chip is a string already written on a record, so a
-                  thin library shows nothing rather than a plausible guess the user never made. */}
-              {/* Offered when THIS CARD is blank, even if it is showing a value inherited from the
-                  legacy campaign-wide list: an inherited value is not something anyone typed here,
-                  and clicking a chip is how you make it the card's own. */}
-              {!(nt.direction ?? []).some((d) => d.key === k && d.value.trim()) && (() => {
-                const presets = directionPresets(k, presetSourcesFor(nt))
-                if (!presets.length) return null
-                return (
-                  <div className="flow-preset-row">
-                    {presets.map((p) => (
-                      <button
-                        key={p.value}
-                        className="flow-preset-chip"
-                        title={`From ${p.from}`}
-                        onClick={() => setDirectionValue(nt, k, p.value)}
-                      >
-                        {p.value.length > 54 ? `${p.value.slice(0, 54)}…` : p.value}
-                      </button>
-                    ))}
+          {(DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => {
+            /**
+             * AN INSTRUCTION, PICKED. The suggestions used to be chips under the box, shown only
+             * while it was empty — which made typing the default and offered nothing once you had
+             * written anything. Now they are the control: a dropdown of the brand's own material,
+             * with typing one option down the list.
+             *
+             * A field with NOTHING honest to offer stays a textarea. An empty dropdown is not a
+             * dropdown, and this is common: most of these keys have no library (see
+             * directionPresets, which invents nothing), and a card with no record linked has no
+             * audience to draw pains or objections from at all.
+             */
+            const presets = directionPresets(k, presetSourcesFor(nt))
+            const byFrom = new Map<string, string[]>()
+            for (const p of presets) {
+              const list = byFrom.get(p.from)
+              if (list) list.push(p.value)
+              else byFrom.set(p.from, [p.value])
+            }
+            const groups: OptionGroup[] = [...byFrom].map(([label, options]) => ({ label: `From ${label}`, options }))
+            return (
+              <Fragment key={k}>
+                <label className="flow-inspect-label" style={{ marginTop: i === 0 ? 0 : 14 }}>
+                  {DIRECTION_FIELD[k].label}
+                </label>
+                {groups.length ? (
+                  <div className="flow-recform-field flow-recform-solo">
+                    <RecordCombo
+                      value={directionValue(nt, k)}
+                      groups={groups}
+                      placeholder={DIRECTION_FIELD[k].hint}
+                      maxLength={capFor(k)}
+                      onCommit={(v) => setDirectionValue(nt, k, v)}
+                    />
                   </div>
-                )
-              })()}
-            </Fragment>
-          ))}
+                ) : (
+                  <textarea
+                    className="flow-inspect-input"
+                    rows={2}
+                    maxLength={capFor(k)}
+                    value={directionValue(nt, k)}
+                    placeholder={DIRECTION_FIELD[k].hint}
+                    onChange={(e) => setDirectionValue(nt, k, e.target.value)}
+                  />
+                )}
+              </Fragment>
+            )
+          })}
+          {/* Why the fields above may have nothing to pick from. Record-linked kinds draw their
+              suggestions off the record they name, so an unlinked card is the usual reason a
+              dropdown is missing — and until now the panel just showed bare boxes and left you to
+              work that out. */}
+          {REF_TYPE_FOR_OBJECT_KIND[nt.kind] && !nt.refId && (
+            <div className="flow-inspect-note" style={{ marginTop: 10 }}>
+              Link {articleFor(OBJECT_META[nt.kind].label.toLowerCase())} {OBJECT_META[nt.kind].label.toLowerCase()} above and these fields offer its own
+              wording to pick from, instead of asking you to type it.
+            </div>
+          )}
           {renderCardComments(nt.id)}
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>
             {meta.role === 'markup' ? 'Note' : 'Team note'}
