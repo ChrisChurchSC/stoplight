@@ -67,6 +67,17 @@ export interface FlowBoard {
   connectors: { from: string; to: string }[]
 }
 
+/**
+ * The canvas id of the DELIVERABLE an asset belongs to. A deliverable is not stored: it is derived
+ * by grouping a campaign's assets on this key, so the key is its identity everywhere — in `pos`, in
+ * a connector endpoint, and in what pruneBoard will accept.
+ *
+ * Shared because two copies of this template would drift, and a drift means an edge silently
+ * pointing at a deliverable that no longer answers to that name.
+ */
+export const deliverableKeyFor = (r: { channel: string; assetType?: string; branchOf?: string }): string =>
+  `${r.channel}|${r.assetType ?? ''}${r.branchOf ? `|↳${r.branchOf}` : ''}`
+
 export const emptyBoard = (key: string): FlowBoard => ({ key, objects: [], placements: [], pos: {}, connectors: [] })
 
 /**
@@ -97,7 +108,19 @@ export function boardFor(boards: FlowBoard[], key: string): FlowBoard {
  */
 export function pruneBoard(
   board: FlowBoard,
-  known: { objectKinds: Set<string>; smartObjectIds: Set<string> },
+  known: {
+    objectKinds: Set<string>
+    smartObjectIds: Set<string>
+    /**
+     * The OUTPUT ids an edge may legally point at: deliverable keys and post row ids. Without this
+     * the only survivors were board ids and anything containing a colon, and neither a deliverable
+     * key ("blog|article") nor a row id ("row_…") has one — so every wire from a card to a
+     * deliverable or a post was deleted on the next openView. The records it had written stayed on
+     * the rows, so the copy kept the context while the wire that explained it disappeared and could
+     * never be undrawn.
+     */
+    targetIds?: Set<string>
+  },
 ): FlowBoard {
   const objects = board.objects.filter((o) => known.objectKinds.has(o.kind))
   const objectIds = new Set(objects.map((o) => o.id))
@@ -112,6 +135,8 @@ export function pruneBoard(
     pos: board.pos,
     // An edge to a node that no longer exists would draw to nowhere, and an attachment edge would
     // keep contributing refs for a deleted object.
-    connectors: board.connectors.filter((c) => (liveIds.has(c.from) || c.from.includes(':')) && (liveIds.has(c.to) || c.to.includes(':'))),
+    // An endpoint is legal if it is on the board, is a live output, or is a build-mode brief
+    // sub-card (`${nodeId}:${briefIndex}` — the one id shape that genuinely carries a colon).
+    connectors: board.connectors.filter((c) => [c.from, c.to].every((e) => liveIds.has(e) || known.targetIds?.has(e) || e.includes(':'))),
   }
 }

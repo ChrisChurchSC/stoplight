@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
+  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -1317,7 +1317,7 @@ export function FlowsView() {
       // A deliverable that branches off a specific asset (a downstream journey step) groups
       // on its own, keyed by its source, so it never merges with the campaign-level deliverables
       // of the same channel/type.
-      const key = `${r.channel}|${r.assetType}${r.branchOf ? `|↳${r.branchOf}` : ''}`
+      const key = deliverableKeyFor(r)
       const cur = map.get(key)
       if (cur) { cur.count++; cur.rows.push(r) }
       else {
@@ -2585,9 +2585,16 @@ export function FlowsView() {
     // right about the problem, and the only fix available while the board was session state.
     // Prune on load, because refId and smartObjectId are unvalidated cross-namespace keys, so a
     // record deleted since you were last here would leave an object pointing at nothing.
+    // The campaign's live outputs, so a wire to a deliverable or a post survives the prune. Built
+    // from the STORE, not from viewDelivs: viewDelivs derives from viewName, which is set below, so
+    // at this moment it still describes the campaign being left.
+    const openingRows = useTrafficStore
+      .getState()
+      .rows.filter((r) => (r.campaign ?? '').trim() === n && !r.archivedAt)
     const loaded = pruneBoard(boardFor(flowBoards, n), {
       objectKinds: new Set(Object.keys(OBJECT_META)),
       smartObjectIds: new Set(smartObjects.map((o) => o.id)),
+      targetIds: new Set(openingRows.flatMap((r) => [r.id, deliverableKeyFor(r)])),
     })
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
