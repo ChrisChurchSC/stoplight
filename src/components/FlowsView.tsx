@@ -1476,6 +1476,7 @@ export function FlowsView() {
    */
   const presetSourcesFor = (nt: CanvasObject): DirectionPresetSources => {
     const aud = nt.kind === 'audience' && nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined
+    const per = nt.kind === 'person' && nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined
     const profile = brand ? clientProfiles[brand] : undefined
     const sys = brand ? resolveBrandScope(brand, brandSystems, brandMeta).library : undefined
     return {
@@ -1487,6 +1488,9 @@ export function FlowsView() {
       hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean),
       proof: brandProof.map((p) => ({ label: p.label, metric: p.metric })),
       messages: messages.map((m) => ({ angle: m.angle })),
+      persona: per
+        ? { optimizingFor: per.optimizingFor, saysLike: per.saysLike, usesNow: per.usesNow, hobbies: per.hobbies }
+        : undefined,
     }
   }
   // Every Records page, as selectable tag groups: Companies / People / Segments / Channels /
@@ -3934,6 +3938,49 @@ export function FlowsView() {
 
               A Data source card still reaches its data set: double-clicking one opens it, creating it
               if it does not exist yet (openDataCard). */}
+          {/* THE PERSONA a Person card names, read from the record so the card can be judged without
+              opening Records. Only the fields that are filled in: a persona with three good lines is
+              more useful than ten empty ones, and showing the empties would suggest a form to
+              complete rather than a person to write to. */}
+          {nt.kind === 'person' && nt.refId && (() => {
+            const per = allPeople.find((x) => x.id === nt.refId)
+            if (!per) return null
+            const rows: { label: string; value: string }[] = []
+            const add = (label: string, v: unknown) => { const t = String(v ?? '').trim(); if (t) rows.push({ label, value: t }) }
+            add('Occupation', per.occupation || per.title)
+            add('Age', per.age)
+            add('Household income', per.householdIncome)
+            add('Hobbies', per.hobbies)
+            add('Knows', per.expertise)
+            add('Wants', per.optimizingFor)
+            add('Uses today', per.usesNow)
+            add('Talks like', per.saysLike)
+            add('Reads this', per.readsWhen)
+            add('Decides with', per.decidesWith)
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                  {per.name}
+                  <span className="flow-persona-tag" title="A representative person, not a real customer. The writer may not quote them or cite them as a customer.">composite</span>
+                </label>
+                {rows.length === 0 ? (
+                  <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
+                    No persona yet. Fill one in under Records › People and this card starts telling the
+                    writer who it is for.
+                  </div>
+                ) : (
+                  <div className="flow-told">
+                    {rows.map((r) => (
+                      <div key={r.label} className="flow-told-row">
+                        <span className="flow-told-key">{r.label}</span>
+                        <span className="flow-told-val">{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )
+          })()}
           {/* APPLIED TO: what this card feeds, and the one action that follows from it.
               A readout, not a control: wires are drawn and cut on the canvas, and a second place to
               edit them would be a second thing to keep in step with the first. Naming the targets is

@@ -4826,6 +4826,17 @@ button {
 }
 .flow-note-cmt svg { width: 12px; height: 12px; }
 
+/* "composite" on a persona: says out loud that this is a representative person, because the writer
+   is bound by it and the user should know the bound exists. */
+.flow-persona-tag {
+  margin-left: 7px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
 .flow-preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .flow-preset-chip {
   border: 1px dashed var(--border);

@@ -72,6 +72,8 @@ Keep one dominant CTA per email.
 
 Write copy for EVERY component of EVERY asset. Each component's hardLimit is an ABSOLUTE maximum: never exceed it — a value over the limit gets trimmed and reads as truncated, so write to fit. Aim at the recommended length when one is given, not the max. Headlines and titles are TIGHT: a headline or SEO title must be a short, punchy line, not a full sentence or a subtitle-laden description (a long-form or pillar guide still gets a short title, not a paragraph). Primary text can breathe; CTAs are short action labels, not sentences.
 
+PERSONAS ARE COMPOSITE. When the campaign carries one, it is a representative person built to stand in for a segment, not a real customer. Write TO them: use their vocabulary (saysLike is how they actually talk, and it should shape your word choice more than any other field), pitch the explanation at their expertise, aim at what they are optimizing for, and displace what they use today. You may extrapolate colour that is consistent with them. You must NEVER present them as a real customer, quote them as a testimonial, attribute a claim or a result to them, or use their name in a way that implies they exist. If the copy names anybody, it names nobody.
+
 THE AUDIENCE CARRIES TWO NEGATIVES and both are binding. Its antiMessage is the sentence this audience must never be told: do not write it, and do not write a paraphrase of it. Its objections are what they already believe against you: answer them rather than pretend they are not there. A draft that trips either is wrong even if everything else about it is good.
 
 PROOF CARRIES ITS NUMBERS. When a proof point has a metric, state it: a quantified claim is the reason that proof was chosen. When it has a source, do not contradict it, and never invent a figure or an attribution that is not in the proof you were given.
@@ -94,7 +96,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model } = (body ?? {}) as {
+  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas } = (body ?? {}) as {
     icp?: unknown
     campaign?: unknown
     theme?: unknown
@@ -106,12 +108,20 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
     avoid?: unknown
     assets?: unknown
     model?: unknown
+    personas?: unknown
   }
   // The campaign's model pick. Validated against the catalog rather than forwarded: this is a
   // client-supplied string heading for a provider, and an id the app does not offer is a stale
   // saved value or a hand-edited one, which should fall back to the tier default rather than 404.
   const pick = typeof model === 'string' && AI_MODEL_IDS.has(model) && model !== 'auto' ? model : undefined
   const themeStr = typeof theme === 'string' && theme.trim() ? theme.trim() : ''
+  // Sanitized rather than trusted: user-authored free text going into a prompt, and a persona with
+  // no name is not a persona.
+  const personaList = Array.isArray(personas)
+    ? (personas as Record<string, unknown>[])
+        .filter((p) => p && typeof p === 'object' && typeof p.name === 'string' && p.name.trim())
+        .slice(0, 6)
+    : []
   // The brand's hook library. Every request has carried it since the field was added and this
   // handler silently dropped it: only the offline heuristic writer ever read it, so on the live
   // AI path not one hook the user wrote has ever reached the model. Sanitized here rather than
@@ -127,7 +137,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   // floored at 8k, capped at Opus's ceiling.
   const assetCount = Array.isArray(assets) ? assets.length : 1
   const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
-  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, including its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
+  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience, including its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
 
   const client = makeModelClient('copy', pick)
   const message = await client.messages.create({

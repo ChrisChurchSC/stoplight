@@ -32,6 +32,8 @@ export interface DirectionPresetSources {
   proof?: { label: string; metric?: string }[]
   /** Message records, for a message card's claim. */
   messages?: { angle?: string }[]
+  /** The persona a Person card names, for the one instruction a person carries. */
+  persona?: { optimizingFor?: string; saysLike?: string; usesNow?: string; hobbies?: string }
 }
 
 const clean = (v: string | undefined): string => (v ?? '').trim()
@@ -78,9 +80,17 @@ export function directionPresets(key: DirectionKey, src: DirectionPresetSources)
     case 'avoidSay':
       for (const a of split(src.audience?.antiMessage)) push(a, "this audience's anti-message")
       break
+    case 'caresAbout':
+      // A person's one instruction, suggested from the persona itself: what they are optimizing for
+      // is the closest thing on the record to what they care about, and their own words are the
+      // point of writing to a person rather than a bracket.
+      if (src.persona?.optimizingFor) push(src.persona.optimizingFor, 'what they want')
+      if (src.persona?.saysLike) push(src.persona.saysLike, 'how they talk')
+      if (src.persona?.usesNow) push(`Getting off ${src.persona.usesNow}`, 'what they use today')
+      break
     default:
-      // justDid, ask, situation, caresAbout, moment, permission: nothing in the library answers
-      // these, and inventing one would put words the user never wrote in front of the copy writer.
+      // justDid, ask, situation, moment, permission: nothing in the library answers these, and
+      // inventing one would put words the user never wrote in front of the copy writer.
       break
   }
   return out.slice(0, 8)

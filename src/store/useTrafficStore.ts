@@ -112,7 +112,7 @@ import { type OnboardingState, type OnboardingStepId, DEFAULT_ONBOARDING } from 
 import type { SavedFlowChat } from '../domain/flowAgent'
 import type { SavedHomeChat } from '../domain/homeChat'
 import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
-import { type Person, freshPersonId, seedPeople } from '../domain/people'
+import { type Person, freshPersonId, hasPersona, seedPeople } from '../domain/people'
 import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Voice, freshVoiceId } from '../domain/voice'
@@ -6745,7 +6745,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const prIds = new Set(refList.filter((x) => x.type === 'proof').map((x) => x.id))
           const prLabels = new Set(refList.filter((x) => x.type === 'proof').map((x) => x.label))
           const prf = proofPool.filter((p) => prIds.has(p.id) || prLabels.has(p.label))
-          return { audiencePool: auds.length ? auds : libAudiences, activeProof: prf.length ? prf : proofPool }
+          /**
+           * PERSONAS. A person ref resolved nowhere until now: poolsFrom read segment and proof
+           * only, so wiring a Person card to a deliverable passed the one instruction typed on it
+           * and left the record it named as decoration.
+           *
+           * Unlike audiences and proof there is no fallback to "all of them": an unnamed persona is
+           * not a default, it is nobody. A campaign with no person ref sends none.
+           */
+          const perIds = new Set(refList.filter((x) => x.type === 'person').map((x) => x.id))
+          const perNames = new Set(refList.filter((x) => x.type === 'person').map((x) => x.label))
+          const people = get().people.filter((pp) => perIds.has(pp.id) || perNames.has(pp.name))
+          return {
+            audiencePool: auds.length ? auds : libAudiences,
+            activeProof: prf.length ? prf : proofPool,
+            personas: people.filter(hasPersona),
+          }
         }
         const campaignPools = poolsFrom(campaignRefs)
         const activeProof = campaignPools.activeProof
@@ -6908,8 +6923,26 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // The model, resolved campaign-first: this campaign's pick, else the workspace pick, else
         // nothing sent so the server keeps its per-task defaults. Resolved here rather than in the
         // writer because this is the only place that knows which campaign a batch belongs to.
+        /**
+         * The personas this campaign writes to. Campaign-level rather than per asset: a persona is
+         * who the campaign is FOR, and a deliverable that wants a different one says so by wiring a
+         * different Person card to itself, which shows up in its own references.
+         */
+        const personas = campaignPools.personas.map((pp) => ({
+          name: pp.name,
+          age: pp.age,
+          occupation: (pp.occupation || pp.title || '').trim() || undefined,
+          householdIncome: pp.householdIncome?.trim() || undefined,
+          hobbies: pp.hobbies?.trim() || undefined,
+          saysLike: pp.saysLike?.trim() || undefined,
+          usesNow: pp.usesNow?.trim() || undefined,
+          expertise: pp.expertise || undefined,
+          optimizingFor: pp.optimizingFor?.trim() || undefined,
+          readsWhen: pp.readsWhen?.trim() || undefined,
+          decidesWith: pp.decidesWith?.trim() || undefined,
+        }))
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.

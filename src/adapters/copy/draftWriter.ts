@@ -77,6 +77,24 @@ export interface DraftRequest {
   proofPool?: Rtb[]
   /** The brand's hook list (opening lines) — used as openings where they fit. */
   hooks?: string[]
+  /**
+   * The COMPOSITE personas this campaign is written to: one concrete person standing in for a
+   * segment, so the copy sounds written to somebody rather than to an age bracket. Never a real
+   * customer, which is what bounds what the writer may do with them.
+   */
+  personas?: {
+    name: string
+    age?: string
+    occupation?: string
+    householdIncome?: string
+    hobbies?: string
+    saysLike?: string
+    usesNow?: string
+    expertise?: string
+    optimizingFor?: string
+    readsWhen?: string
+    decidesWith?: string
+  }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**
