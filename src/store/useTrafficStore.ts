@@ -6783,12 +6783,26 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             fields: messagingFields(r.channel, r.assetType),
             stage,
             audience: aud
-              ? { name: aud.name, role: aud.role, angle: aud.messageAngle, pains: aud.pains }
+              ? {
+                  name: aud.name,
+                  role: aud.role,
+                  angle: aud.messageAngle,
+                  pains: aud.pains,
+                  // Both were recorded on the audience and never sent, so the model could write the
+                  // exact line the brand had written down as the one to avoid and pass every check.
+                  // objections is what the copy must disarm; antiMessage is the sentence not to write.
+                  objections: aud.objections?.trim() || undefined,
+                  antiMessage: aud.antiMessage?.trim() || undefined,
+                }
               : r.audience
                 ? { name: r.audience }
                 : undefined,
             ctaSeed: cond.cta ?? nextStepCta.get(r.assetName) ?? pickCta(stage),
-            proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
+            // metric and source were dropped, so "lean on this proof" reached the model without the
+            // number that makes it proof or the citation that makes it safe to state.
+            proof: proof
+              ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+              : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
             // WHAT THIS ASSET IS WRITTEN UNDER. Its own wired instructions first, then the
@@ -6815,12 +6829,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // goal fill it out, so the theme is meaningful even when the Subject alone is thin. Falls back
         // to the campaign name so there is always an anchor. Duration is the timeframe.
         const campMeta = get().campaignList.find((c) => c.name === campaign)
-        const themeParts = [campMeta?.subject?.trim(), campMeta?.goalMessage?.trim()].filter(Boolean)
-        const theme = themeParts.length
-          ? themeParts.join('. ')
-          : campMeta?.objective?.trim()
-            ? `Campaign goal: ${campMeta.objective.trim()}`
-            : campaign.trim() || undefined
+        // The objective is part of the throughline, not a fallback for having no subject. It was
+        // used ONLY when subject and goalMessage were both empty, so it was dropped precisely when a
+        // campaign was best specified — and it is now a chosen preset carrying a KPI, which makes it
+        // the most concrete statement of what the copy is for.
+        const goalPart = campMeta?.objective?.trim()
+          ? `Campaign goal: ${campMeta.objective.trim()}${campMeta.goalKpi?.trim() ? ` (measured on ${campMeta.goalKpi.trim()})` : ''}`
+          : ''
+        const themeParts = [campMeta?.subject?.trim(), campMeta?.goalMessage?.trim(), goalPart].filter(Boolean)
+        const theme = themeParts.length ? themeParts.join('. ') : campaign.trim() || undefined
         // The brand's hook list seeds openings so bodies don't lead with a fixed phrase.
         // ⚠️ The sent pool must be the union of the campaign-narrowed pool AND every proof actually
         // assigned to an asset. A pinned proof (cond.proofId) is resolved against the FULL brand
@@ -6939,13 +6956,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         fields,
         stage,
         audience: aud
-          ? { name: aud.name, role: aud.role, angle: aud.messageAngle, pains: aud.pains }
+          ? {
+                  name: aud.name,
+                  role: aud.role,
+                  angle: aud.messageAngle,
+                  pains: aud.pains,
+                  // Both were recorded on the audience and never sent, so the model could write the
+                  // exact line the brand had written down as the one to avoid and pass every check.
+                  // objections is what the copy must disarm; antiMessage is the sentence not to write.
+                  objections: aud.objections?.trim() || undefined,
+                  antiMessage: aud.antiMessage?.trim() || undefined,
+                }
           : audName
             ? { name: audName }
             : undefined,
         // A blueprint step's CTA wins over the rotated library CTA when present.
         ctaSeed: steps?.[i]?.cta || (sys.ctas.length ? sys.ctas[i % sys.ctas.length].label : undefined),
-        proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
+        proof: proof
+          ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+          : undefined,
         // The mini brief drives this slot's copy (mirrors lineage.brief on a real build),
         // plus any blueprint guidance (framework / subject formula / allowed levers).
         context: (() => {
