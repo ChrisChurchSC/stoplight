@@ -8,10 +8,11 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
+import { reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { AI_MODELS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
-import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
+import { DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -1614,6 +1615,16 @@ export function FlowsView() {
    * it was.
    */
   const isAttached = (nodeId: string) => hasHub && connectors.some((e) => e.from === nodeId && e.to === 'campaign')
+  /**
+   * Does this card reach any output at all — the brief, a deliverable, a post — however indirectly?
+   *
+   * Governs how a card LOOKS, which since 2b is a different question from whether its records are on
+   * the campaign. Instructions now travel along wires, so a card wired to a deliverable informs that
+   * deliverable while touching no campaign records: dimming it as "not part of the campaign" would
+   * be false. A cluster of cards wired only to each other still dims, because it reaches nothing.
+   */
+  const informsOutput = (nodeId: string) =>
+    reachesOutput({ key: boardKey, objects, placements, pos: {}, connectors }, nodeId)
 
   // Editing the CAMPAIGN's records (the brief).
   const campaignTagOps: TagOps = {
@@ -1828,6 +1839,7 @@ export function FlowsView() {
           </div>
         )}
         {direct.length > 0 && renderRecordTags({ ...campaignTagOps, refs: direct }, 'Linked directly, with no card on the board')}
+        {renderResolvedDirection('campaign')}
       </>
     )
   }
@@ -1844,6 +1856,10 @@ export function FlowsView() {
     const targetIds = ids && ids.length ? ids : viewRows.map((r) => r.id)
     if (!targetIds.length) return
     recordHistory(true)
+    // Flush the board before generating. The autosave is debounced 600ms, and draftCopy resolves the
+    // graph from the SAVED board — so drawing a wire and hitting Generate inside that window would
+    // write copy that ignores the wire you just drew. buildFlow already does this for the same reason.
+    saveFlowBoard(boardSnapshot(boardKey))
     setRegenerating(true)
     try {
       await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
@@ -2050,6 +2066,49 @@ export function FlowsView() {
   // ---- Smart objects ----------------------------------------------------------------------
   // Which group a card belongs to (a card is in at most one).
   const placementOf = (noteId: string): SmartPlacement | undefined => placements.find((g) => g.memberIds.includes(noteId))
+  /**
+   * WHAT THIS WILL BE TOLD: the instructions that actually reach a target, after the wires are walked
+   * and buildDirection has capped and prioritised them.
+   *
+   * The phase's honesty valve, not polish. A graph that resolves differently from how it looks is
+   * worse than no graph, and buildDirection drops entries silently — one per key, six per asset — so
+   * without this a user could wire four cards into an email and never learn that two were discarded.
+   */
+  const renderResolvedDirection = (target: string) => {
+    const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+    const resolved = resolveBoardDirection(board)
+    const raw = [
+      ...(resolved.byTarget.get(target) ?? []),
+      ...(target === 'campaign' ? [] : resolved.campaign),
+      ...campaignDirection,
+    ]
+    if (!raw.length) return null
+    const kept = buildDirection(raw.map((r) => ({ key: r.key, value: r.value })))
+    const keptKeys = new Set<string>(kept.map((k) => k.key))
+    // Anything the cap or the one-per-key rule threw away, named rather than vanished.
+    const dropped = raw.filter((r, i) => !keptKeys.has(r.key) || raw.findIndex((x) => x.key === r.key) !== i)
+    return (
+      <>
+        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+          What this will be told · {kept.length}
+        </label>
+        <div className="flow-told">
+          {kept.map((k) => (
+            <div key={k.key} className="flow-told-row">
+              <span className="flow-told-key">{k.label}</span>
+              <span className="flow-told-val">{k.value}</span>
+            </div>
+          ))}
+        </div>
+        {dropped.length > 0 && (
+          <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+            {dropped.length} more {dropped.length === 1 ? 'instruction' : 'instructions'} reached here and
+            {dropped.length === 1 ? ' was' : ' were'} dropped: an asset carries one instruction per kind.
+          </div>
+        )}
+      </>
+    )
+  }
   /**
    * A list of context rows, shared by the campaign brief, a deliverable and a post so all three read
    * the same. `onRemove` is omitted where the row is inherited and cannot be unwired from here.
@@ -3547,7 +3606,7 @@ export function FlowsView() {
       depth,
       // Only inputs can attach: a sticky note is deliberately outside the machine, so flagging it
       // as "not attached" would be noise about a state it can never be in.
-      attached: OBJECT_META[nt.kind].role === 'input' ? isAttached(nt.id) : undefined,
+      attached: OBJECT_META[nt.kind].role === 'input' ? informsOutput(nt.id) : undefined,
     }
   }
   // Cards loose on the board, then each smart object with its members nested under it.
@@ -3559,7 +3618,7 @@ export function FlowsView() {
         label: placementName(g),
         sub: 'Smart object',
         count: g.memberIds.length,
-        attached: isAttached(g.id),
+        attached: informsOutput(g.id),
         icon: (
           <span className="flow-layer-ic" style={{ color: 'var(--accent-2)' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -4497,7 +4556,7 @@ export function FlowsView() {
               return (
                 <div
                   key={nt.id}
-                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${isAttached(nt.id) ? ' attached' : ''}${connectOver === nt.id ? ' drop-target' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${informsOutput(nt.id) ? ' attached' : ''}${connectOver === nt.id ? ' drop-target' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
                   data-node-id={nt.id}
                   data-role={meta.role}
                   style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
@@ -4626,7 +4685,7 @@ export function FlowsView() {
               return (
                 <div
                   key={g.id}
-                  className={`flow-node flow-note flow-note-object${isAttached(g.id) ? ' attached' : ''}${connectOver === g.id ? ' drop-target' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-object${informsOutput(g.id) ? ' attached' : ''}${connectOver === g.id ? ' drop-target' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
                   data-node-id={g.id}
                   data-role="input"
                   data-scope={scope}
@@ -5285,6 +5344,7 @@ export function FlowsView() {
                             its own context now, which is the same gesture as everywhere else on the
                             board rather than a second, record-shaped mechanism reachable only from a
                             footnote. An override that already exists stays explained and reversible. */}
+                        {renderResolvedDirection(selDeliv.key)}
                         {overridden && (
                           <div className="flow-inspect-note" style={{ marginTop: 8 }}>
                             This deliverable ignores the campaign's context and uses only what is pinned

@@ -4762,6 +4762,22 @@ button {
 /* "Informing the messaging": the cards wired to the campaign. A row is a card, not a record, so it
    is taller than a tag row and reads name-over-contents. The whole row is the hit target for
    selecting that card on the canvas; the ✕ only disconnects. */
+/* "What this will be told": the resolved instructions, after the wires are walked and the cap
+   applied. Reads as a quiet receipt rather than an editable field, because it is neither. */
+.flow-told { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.flow-told-row {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--surface-2);
+  border-radius: 0 8px 8px 0;
+}
+.flow-told-key {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.flow-told-val { font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+
 .flow-ctxlist { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .flow-ctxrow {
   display: flex;

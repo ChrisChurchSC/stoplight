@@ -166,7 +166,8 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
-import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
+import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
+import { resolveBoardDirection } from '../domain/boardResolve'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -6669,10 +6670,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
          * regression, with typed instructions reaching no writer at all.
          */
         const board = boardFor(get().flowBoards, campaign)
-        const campaignDirection = [
-          ...board.objects.flatMap((o) => (o.direction ?? []).map((d) => ({ kind: o.kind as string, key: d.key, value: d.value }))),
-          ...(get().campaignList.find((c) => c.name === campaign)?.direction ?? []),
-        ]
+        // The graph, resolved once for the batch rather than per asset.
+        const resolved = resolveBoardDirection(board)
+        const campaignDirection = get().campaignList.find((c) => c.name === campaign)?.direction ?? []
         // Compute the pinned audience + proof pools from a reference list. A deliverable can
         // OVERRIDE the campaign's refs per-asset (row.references), so each row pins from its own
         // effective set — one deliverable can target a different segment/proof than the rest.
@@ -6779,10 +6779,22 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             proof: proof ? { id: proof.id, label: proof.label, detail: proof.detail } : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
-            // The objects wired to this campaign, as per-asset instructions. buildDirection is the
-            // ONLY producer: it caps, prioritises and drops unknown keys, so a stale persisted key
-            // can never reach the prompt.
-            direction: campaignDirection.length ? buildDirection(campaignDirection) : undefined,
+            // WHAT THIS ASSET IS WRITTEN UNDER. Its own wired instructions first, then the
+            // campaign-wide ones, then the legacy list. Order is the whole mechanism: buildDirection
+            // keeps the first entry it sees per key, so a card wired straight to this deliverable
+            // beats a card wired to the brief, which is what makes a wire mean anything.
+            //
+            // buildDirection stays the ONLY producer: it caps, prioritises and drops unknown keys,
+            // so a stale persisted key can never reach the prompt.
+            direction: (() => {
+              const mine = [
+                ...(resolved.byTarget.get(deliverableKeyFor(r)) ?? []),
+                ...(resolved.byTarget.get(r.id) ?? []),
+                ...resolved.campaign,
+                ...campaignDirection,
+              ]
+              return mine.length ? buildDirection(mine) : undefined
+            })(),
             index: i,
           }
         })
