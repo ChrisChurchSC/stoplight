@@ -74,6 +74,15 @@ export interface SmartObject {
   contents?: CanvasObject[]
   /** Where the contents sit on the object's own canvas, by object id. */
   layout?: Record<string, { x: number; y: number }>
+  /**
+   * A folder PATH inside its brand's library ("Buyers/RevOps"), or undefined for unfiled. Same
+   * path-as-structure trick campaign folders use, and the same helpers read it.
+   *
+   * No registry of folders: a folder exists because an object is filed in it. That means there is no
+   * such thing as an empty one, which is right for a shelf — an empty folder in a library is a
+   * promise nobody kept — and it means filing the last object out of a folder removes the folder.
+   */
+  folder?: string
 }
 
 /** How deep nested objects resolve before the walk stops. Bounds the cycle the picker also blocks. */

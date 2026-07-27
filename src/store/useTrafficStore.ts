@@ -1749,6 +1749,11 @@ interface TrafficState {
    * by the time you would want one, and silently taking it back would break their briefs.
    */
   promoteSmartObject: (id: string, brand: string) => void
+  /**
+   * File a smart object under a folder path in its brand's library. undefined = unfiled. Folders are
+   * not registered anywhere: filing the last object out of one is what removes it.
+   */
+  setSmartObjectFolder: (id: string, folder: string | undefined) => void
   deleteSmartObject: (id: string) => void
   addBrandDataset: (brand: string, name?: string) => string
   renameBrandDataset: (id: string, name: string) => void
@@ -3352,6 +3357,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         patch.smartObjects = smartObjects
       }
       return patch
+    }),
+  setSmartObjectFolder: (id, folder) =>
+    set((s) => {
+      const smartObjects = s.smartObjects.map((o) => (o.id === id ? { ...o, folder } : o))
+      saveSmartObjects(smartObjects)
+      return { smartObjects }
     }),
   promoteSmartObject: (id, brand) =>
     set((s) => {

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 // The board's types live in the domain because a persisted slice must be typed outside the
 // component that renders it. OBJECT_META stays here: it carries JSX icons.
@@ -7,6 +7,7 @@ import {
   type FlowBoard,
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
+import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf, visibleOnCampaign, wouldCycle } from '../domain/smartObject'
@@ -480,6 +481,7 @@ export function FlowsView() {
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
   const promoteSmartObject = useTrafficStore((s) => s.promoteSmartObject)
+  const setSmartObjectFolder = useTrafficStore((s) => s.setSmartObjectFolder)
   // Record-create actions, so a card can make the thing it needs instead of dead-ending on
   // "No audiences established yet".
   const addCompany = useTrafficStore((s) => s.addCompany)
@@ -751,6 +753,13 @@ export function FlowsView() {
   // a live drop target. A custom mime type rather than text/plain: the board already accepts a
   // campaign NAME as text/plain on the campaigns page, and a stray text drop must not place an object.
   const [dragObjectId, setDragObjectId] = useState<string | null>(null)
+  // The folder head currently under a dragged object ('__unfiled__' for the loose group).
+  const [objDropFolder, setObjDropFolder] = useState<string | null>(null)
+  // Right-click menu on a shelf row: which object, and where to draw it.
+  const [shelfMenu, setShelfMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  // The folder-name input, open for one object at a time.
+  const [namingFolderFor, setNamingFolderFor] = useState<string | null>(null)
+  const [newObjFolder, setNewObjFolder] = useState('')
   // The smart object whose delete button is armed (click-again-to-confirm). Id, not a boolean, so
   // selecting a different object disarms it rather than leaving a live delete under the cursor.
   const [confirmDeleteObject, setConfirmDeleteObject] = useState<string | null>(null)
@@ -1991,8 +2000,13 @@ export function FlowsView() {
           e.dataTransfer.effectAllowed = 'copy'
           setDragObjectId(o.id)
         }}
-        onDragEnd={() => setDragObjectId(null)}
+        onDragEnd={() => { setDragObjectId(null); setObjDropFolder(null) }}
         onDoubleClick={() => openObjectTab(o.id)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setShelfMenu({ id: o.id, x: e.clientX, y: e.clientY })
+        }}
       >
         <span className="flow-lib-object-ic" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -2017,6 +2031,78 @@ export function FlowsView() {
           )}
         </span>
       </div>
+    )
+  }
+  /**
+   * A shelf of smart objects as a folder tree. Folders are paths on the objects themselves, so the
+   * tree is derived rather than registered: there is no empty folder to render, and filing the last
+   * object out of one removes it.
+   *
+   * A folder head is a drop target for the same drag that places an object on the canvas, so one
+   * gesture does both jobs depending on where you let go.
+   */
+  const renderObjectShelf = (list: SmartObject[]) => {
+    const tree = buildFolderTree(list.map((o) => o.folder).filter((f): f is string => !!f), list, (o) => o.folder)
+    const unfiled = list.filter((o) => !o.folder)
+    const folderDrop = (path: string | undefined) => ({
+      onDragOver: (e: ReactDragEvent) => {
+        if (!e.dataTransfer.types.includes(SMART_OBJECT_DND)) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        const key = path ?? '__unfiled__'
+        if (objDropFolder !== key) setObjDropFolder(key)
+      },
+      onDrop: (e: ReactDragEvent) => {
+        const id = e.dataTransfer.getData(SMART_OBJECT_DND)
+        setObjDropFolder(null)
+        setDragObjectId(null)
+        if (!id) return
+        e.preventDefault()
+        e.stopPropagation()
+        setSmartObjectFolder(id, path)
+      },
+    })
+    const renderNode = (node: FolderNode<SmartObject>): ReactNode => {
+      const drop = folderDrop(node.path)
+      return (
+        <div key={node.path} className="flow-lib-objfolder" style={{ marginLeft: (node.depth - 1) * 10 }}>
+          <div
+            className={`flow-lib-objfolder-h${objDropFolder === node.path ? ' drop' : ''}`}
+            onDragOver={drop.onDragOver}
+            onDrop={drop.onDrop}
+            onDragLeave={() => setObjDropFolder((p) => (p === node.path ? null : p))}
+          >
+            <span className="flow-lib-objfolder-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+            </span>
+            {node.name}
+            <span className="flow-lib-objfolder-n">{countDeep(node)}</span>
+          </div>
+          {node.items.map(renderShelfObject)}
+          {node.children.map(renderNode)}
+        </div>
+      )
+    }
+    const unfiledDrop = folderDrop(undefined)
+    return (
+      <>
+        {tree.map(renderNode)}
+        {/* The unfiled objects are also a drop target, so filing something OUT of a folder is the
+            same gesture as filing it in. Without it, a folder would be a one-way door. */}
+        <div
+          className={`flow-lib-objunfiled${objDropFolder === '__unfiled__' ? ' drop' : ''}`}
+          onDragOver={unfiledDrop.onDragOver}
+          onDrop={unfiledDrop.onDrop}
+          onDragLeave={() => setObjDropFolder((p) => (p === '__unfiled__' ? null : p))}
+        >
+          {tree.length > 0 && unfiled.length > 0 && <div className="flow-lib-objects-h">Unfiled</div>}
+          {unfiled.map(renderShelfObject)}
+          {tree.length > 0 && unfiled.length === 0 && (
+            <div className="flow-lib-folder-empty">Drag here to take an object out of its folder.</div>
+          )}
+        </div>
+      </>
     )
   }
   /** The brand-library object a canvas placement shows. */
@@ -3903,7 +3989,7 @@ export function FlowsView() {
                           No smart objects here yet. Select cards on the canvas and press ⌘G.
                         </div>
                       ) : (
-                        <div className="flow-lib-objects">{here.map(renderShelfObject)}</div>
+                        <div className="flow-lib-objects">{renderObjectShelf(here)}</div>
                       )}
                     </>
                   )
@@ -3965,7 +4051,7 @@ export function FlowsView() {
                               return (
                                 <div className="flow-lib-objects">
                                   <div className="flow-lib-objects-h">Smart objects</div>
-                                  {shelf.map(renderShelfObject)}
+                                  {renderObjectShelf(shelf)}
                                 </div>
                               )
                             })()}
@@ -5543,6 +5629,72 @@ export function FlowsView() {
 
       {/* Right-click menu. Its items are the ones that only make sense on a specific target, so
           they'd be noise in the toolbar: bundle these cards, open or releasePlacement an object, delete. */}
+      {/* RIGHT-CLICK ON A SHELF ROW: file it, or take it out. The drag onto a folder head does the
+          same job, but a menu is the discoverable one and it is the only way to make a folder that
+          does not exist yet — folders are paths on the objects, so naming one here is what creates
+          it. Positioned in viewport coordinates because the panel scrolls. */}
+      {shelfMenu && (() => {
+        const o = smartObjects.find((x) => x.id === shelfMenu.id)
+        const close = () => { setShelfMenu(null); setNamingFolderFor(null); setNewObjFolder('') }
+        if (!o) return null
+        // Folders already in use by this object's own shelf, so the menu offers real destinations.
+        const siblings = smartObjects.filter((x) =>
+          scopeOf(x) === scopeOf(o) && (scopeOf(o) === 'brand' ? x.brand === o.brand : x.campaign === o.campaign),
+        )
+        const folders = withAncestors(siblings.map((x) => x.folder).filter((f): f is string => !!f))
+        const naming = namingFolderFor === o.id
+        const commit = () => {
+          const path = buildFolderPath('', newObjFolder)
+          if (path) setSmartObjectFolder(o.id, path)
+          close()
+        }
+        return (
+          <>
+            <div className="flow-ctx-scrim" onMouseDown={close} onContextMenu={(e) => { e.preventDefault(); close() }} />
+            <div className="flow-ctx flow-ctx-fixed" style={{ left: shelfMenu.x, top: shelfMenu.y }} role="menu">
+              <div className="flow-ctx-hint">{o.name || 'Untitled smart object'}</div>
+              {folders
+                .filter((f) => f !== o.folder && canNestUnder(f))
+                .map((f) => (
+                  <button key={f} className="flow-ctx-item" role="menuitem" onClick={() => { setSmartObjectFolder(o.id, f); close() }}>
+                    Move to {folderName(f)}
+                  </button>
+                ))}
+              {naming ? (
+                <input
+                  className="flow-home-folder-input"
+                  autoFocus
+                  placeholder={`Folder name (up to ${MAX_FOLDER_DEPTH} levels)`}
+                  value={newObjFolder}
+                  onChange={(e) => setNewObjFolder(e.target.value)}
+                  onBlur={commit}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') commit()
+                    if (e.key === 'Escape') close()
+                  }}
+                />
+              ) : (
+                <button className="flow-ctx-item" role="menuitem" onClick={() => { setNewObjFolder(''); setNamingFolderFor(o.id) }}>
+                  New folder…
+                </button>
+              )}
+              {o.folder && (
+                <>
+                  <div className="flow-ctx-sep" />
+                  <button className="flow-ctx-item" role="menuitem" onClick={() => { setSmartObjectFolder(o.id, undefined); close() }}>
+                    Take out of {folderName(o.folder)}
+                  </button>
+                </>
+              )}
+              <div className="flow-ctx-sep" />
+              <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); openObjectTab(o.id) }}>
+                Open in its own tab<span className="flow-ctx-kbd">dbl-click</span>
+              </button>
+            </div>
+          </>
+        )
+      })()}
       {ctxMenu && (() => {
         const onGroup = ctxMenu.on ? placements.find((g) => g.id === ctxMenu.on) : undefined
         const onCard = ctxMenu.on ? objects.find((n) => n.id === ctxMenu.on) : undefined

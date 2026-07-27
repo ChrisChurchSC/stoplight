@@ -26214,6 +26214,9 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 11px; box-shadow: 0 14px 40px -14px rgba(16, 24, 40, 0.32), 0 2px 8px -2px rgba(16, 24, 40, 0.12);
   display: flex; flex-direction: column; gap: 1px;
 }
+/* The shelf menu is opened from a SCROLLING panel, so it positions against the viewport rather than
+   against the .flow root the canvas menu uses. */
+.flow-ctx.flow-ctx-fixed { position: fixed; }
 .flow-ctx-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
   border: 0; background: none; cursor: pointer; text-align: left;
@@ -27077,6 +27080,25 @@ table.aud-sheet td.stick .aud-cell {
 .flow-lib-object-chip { display: inline-flex; }
 .flow-lib-object-chip svg { width: 12px; height: 12px; }
 .flow-lib-object-more { font-size: 10px; color: var(--text-faint); }
+/* FOLDERS ON THE SHELF. Derived from paths on the objects, so a folder head only ever appears with
+   something in it. A head is a drop target for the same drag that places an object on the canvas. */
+.flow-lib-objfolder { display: flex; flex-direction: column; }
+.flow-lib-objfolder-h {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 5px 10px 3px; margin: 2px 8px 0;
+  border: 1px dashed transparent; border-radius: 8px;
+}
+.flow-lib-objfolder-h.drop { border-color: var(--accent); color: var(--accent); }
+.flow-lib-objfolder-ic { display: inline-flex; }
+.flow-lib-objfolder-ic svg { width: 13px; height: 13px; }
+.flow-lib-objfolder-n {
+  font-size: 10px; font-weight: 600; color: var(--text-faint);
+  background: var(--surface-2); border-radius: 999px; padding: 0 6px;
+}
+.flow-lib-objunfiled { border: 1px dashed transparent; border-radius: 9px; margin: 2px 4px; }
+.flow-lib-objunfiled.drop { border-color: var(--accent); }
 /* The canvas while a smart object is being dragged over it, so the drop is not a guess. */
 .flow-canvas.obj-drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
