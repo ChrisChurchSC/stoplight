@@ -168,6 +168,7 @@ import {
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { resolveBoardDirection } from '../domain/boardResolve'
+import { freshCommentId, type CardComment } from '../domain/cardComments'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -617,6 +618,25 @@ function loadCompanies(): Company[] {
 function saveCompanies(list: Company[]): void {
   try {
     saveRecordList(COMPANIES_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
+// COMMENTS on canvas cards. Synced like the board itself: a comment nobody else can see is not a
+// comment, it is a note.
+const CARD_COMMENTS_KEY = 'stoplight.cardComments.v1'
+function loadCardComments(): CardComment[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CARD_COMMENTS_KEY) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveCardComments(list: CardComment[]): void {
+  try {
+    persistState(CARD_COMMENTS_KEY, list)
   } catch {
     /* ignore */
   }
@@ -2343,6 +2363,11 @@ interface TrafficState {
   lastCopyAt: number | null
   /** Dismiss the "written offline" notice until the next generation. */
   clearCopySource: () => void
+  /** Comments on canvas cards, threaded per card (see domain/cardComments). */
+  cardComments: CardComment[]
+  addCardComment: (campaign: string, cardId: string, author: string, text: string) => void
+  resolveCardComment: (id: string, resolved: boolean) => void
+  deleteCardComment: (id: string) => void
   /** Live preview: draft copy for a set of not-yet-built deliverable slots WITHOUT
    *  seeding any rows or touching localStorage. Resolves one {headline, primary} per
    *  slot (in order) plus which writer produced it, so the Flows builder can show
@@ -2747,6 +2772,30 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   lastCopySource: null,
   lastCopyAt: null,
   clearCopySource: () => set({ lastCopySource: null }),
+  cardComments: loadCardComments(),
+  addCardComment: (campaign, cardId, author, text) =>
+    set((s) => {
+      const t = text.trim()
+      if (!t) return {}
+      const cardComments = [
+        ...s.cardComments,
+        { id: freshCommentId(), campaign, cardId, author: author.trim() || 'Someone', text: t, at: Date.now() },
+      ]
+      saveCardComments(cardComments)
+      return { cardComments }
+    }),
+  resolveCardComment: (id, resolved) =>
+    set((s) => {
+      const cardComments = s.cardComments.map((c) => (c.id === id ? { ...c, resolvedAt: resolved ? Date.now() : undefined } : c))
+      saveCardComments(cardComments)
+      return { cardComments }
+    }),
+  deleteCardComment: (id) =>
+    set((s) => {
+      const cardComments = s.cardComments.filter((c) => c.id !== id)
+      saveCardComments(cardComments)
+      return { cardComments }
+    }),
   brandSystems: loadBrandSystems(),
   brandMeta: loadBrandMeta(),
   brandNotice: null,
@@ -5533,6 +5582,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.flowChats.v1': 'flowChats',
       'stoplight.flowBoards.v1': 'flowBoards',
       'stoplight.smartObjects.v1': 'smartObjects',
+      'stoplight.cardComments.v1': 'cardComments',
       'stoplight.homeChats.v1': 'homeChats',
     }
     const state = await hydrateState()
@@ -5598,7 +5648,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         'stoplight.brandSystems.v1', 'stoplight.brandMeta.v1', 'stoplight.brandGuides.v1', 'stoplight.brandFieldSources.v1',
         'stoplight.campaigns.v1', 'stoplight.campaignFolders.v1', 'stoplight.flights.v1', 'stoplight.canvases.v1',
         'stoplight.reports.v1', 'stoplight.mediaMixes.v1', 'stoplight.flowChats.v1', 'stoplight.flowBoards.v1',
-        'stoplight.smartObjects.v1', 'stoplight.homeChats.v1',
+        'stoplight.smartObjects.v1', 'stoplight.cardComments.v1', 'stoplight.homeChats.v1',
         TASKS_KEY, RECORD_GROUPING_KEY,
       ]
       for (const key of STATE_MIGRATIONS) {

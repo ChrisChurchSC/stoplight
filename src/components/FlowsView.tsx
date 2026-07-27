@@ -8,8 +8,11 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
-import { reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
+import { downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
+import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
+import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
+import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
@@ -419,6 +422,31 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
+  const cardComments = useTrafficStore((s) => s.cardComments)
+  /**
+   * The name a new comment is signed with, from the signed-in user. Captured onto each comment when
+   * it is posted rather than looked up later, so a thread still reads correctly after someone
+   * leaves. Falls back to "You" with no backend configured, which is the local-only case.
+   */
+  const [commenterName, setCommenterName] = useState('')
+  useEffect(() => {
+    let live = true
+    void getSession().then((sess) => { if (live) setCommenterName(firstNameOf(sess?.user ?? null)) })
+    const off = onAuthChange((u) => setCommenterName(firstNameOf(u)))
+    return () => { live = false; off() }
+  }, [])
+  // One clock for every relative timestamp on screen, ticking a minute at a time: per-comment timers
+  // would be dozens of intervals for a readout that changes once a minute.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(t)
+  }, [])
+  const addCardComment = useTrafficStore((s) => s.addCardComment)
+  const resolveCardComment = useTrafficStore((s) => s.resolveCardComment)
+  const deleteCardComment = useTrafficStore((s) => s.deleteCardComment)
+  // Per-card draft, so switching cards mid-sentence does not lose what was typed on the first.
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const lastCopySource = useTrafficStore((s) => s.lastCopySource)
   const clearCopySource = useTrafficStore((s) => s.clearCopySource)
   const adoptBuilderBoard = useTrafficStore((s) => s.adoptBuilderBoard)
@@ -1440,6 +1468,27 @@ export function FlowsView() {
   const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
   // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
   const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
+  /**
+   * The brand material a card's instruction suggestions are drawn from: the audience it names (when
+   * it names one), the brand's differentiators and voice, its hooks, its proof pool and its message
+   * records. Everything here is something the user already wrote; see directionPresets, which
+   * invents nothing.
+   */
+  const presetSourcesFor = (nt: CanvasObject): DirectionPresetSources => {
+    const aud = nt.kind === 'audience' && nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined
+    const profile = brand ? clientProfiles[brand] : undefined
+    const sys = brand ? resolveBrandScope(brand, brandSystems, brandMeta).library : undefined
+    return {
+      audience: aud
+        ? { pains: aud.pains, objections: aud.objections, antiMessage: aud.antiMessage, goals: aud.goals, messageAngle: aud.messageAngle }
+        : undefined,
+      differentiators: profile?.differentiators,
+      voice: profile?.voice,
+      hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean),
+      proof: brandProof.map((p) => ({ label: p.label, metric: p.metric })),
+      messages: messages.map((m) => ({ angle: m.angle })),
+    }
+  }
   // Every Records page, as selectable tag groups: Companies / People / Segments / Channels /
   // Proof points / Media mix. Segments ARE the brand's audiences (from clientAudiences).
   const recordGroups = useMemo(
@@ -2107,6 +2156,66 @@ export function FlowsView() {
             {dropped.length} more {dropped.length === 1 ? 'instruction' : 'instructions'} reached here and
             {dropped.length === 1 ? ' was' : ' were'} dropped: an asset carries one instruction per kind.
           </div>
+        )}
+      </>
+    )
+  }
+  /**
+   * The comment thread on a card.
+   *
+   * Deliberately not the "Team note" one field below it, and the two are worth keeping apart: the
+   * note is one piece of text belonging to the card, a comment is a remark by a person at a time.
+   * Neither is ever sent to the writer.
+   */
+  const renderCardComments = (cardId: string) => {
+    const thread = commentsFor(cardComments, boardKey, cardId)
+    const open = thread.filter((c: CardComment) => !c.resolvedAt)
+    const done = thread.filter((c: CardComment) => c.resolvedAt)
+    const draft = commentDraft[cardId] ?? ''
+    const post = () => {
+      addCardComment(boardKey, cardId, commenterName || 'You', draft)
+      setCommentDraft((d) => ({ ...d, [cardId]: '' }))
+    }
+    return (
+      <>
+        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+          Comments{open.length ? ` · ${open.length}` : ''}
+        </label>
+        {thread.length > 0 && (
+          <div className="flow-cmt-list">
+            {[...open, ...done].map((c: CardComment) => (
+              <div key={c.id} className={`flow-cmt${c.resolvedAt ? ' resolved' : ''}`}>
+                <div className="flow-cmt-h">
+                  <span className="flow-cmt-who">{c.author}</span>
+                  <span className="flow-cmt-when">{commentAge(c.at, now)}</span>
+                  <button
+                    className="flow-cmt-act"
+                    title={c.resolvedAt ? 'Reopen' : 'Mark resolved'}
+                    onClick={() => resolveCardComment(c.id, !c.resolvedAt)}
+                  >
+                    {c.resolvedAt ? '↩' : '✓'}
+                  </button>
+                  <button className="flow-cmt-act" title="Delete" onClick={() => deleteCardComment(c.id)}>✕</button>
+                </div>
+                <div className="flow-cmt-body">{c.text}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <textarea
+          className="flow-inspect-input"
+          rows={2}
+          value={draft}
+          placeholder={thread.length ? 'Reply…' : 'Leave a comment for your team…'}
+          onChange={(e) => setCommentDraft((d) => ({ ...d, [cardId]: e.target.value }))}
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            // Enter posts, Shift+Enter breaks the line: a comment is usually one sentence.
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post() }
+          }}
+        />
+        {draft.trim() && (
+          <button className="flow-insp-open subtle" onClick={post}>Post comment</button>
         )}
       </>
     )
@@ -3825,6 +3934,64 @@ export function FlowsView() {
 
               A Data source card still reaches its data set: double-clicking one opens it, creating it
               if it does not exist yet (openDataCard). */}
+          {/* APPLIED TO: what this card feeds, and the one action that follows from it.
+              A readout, not a control: wires are drawn and cut on the canvas, and a second place to
+              edit them would be a second thing to keep in step with the first. Naming the targets is
+              what it is for, since a card three hops upstream reaches deliverables you cannot see
+              from it. */}
+          {(() => {
+            const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+            const targets = downstreamTargets(board, nt.id)
+            if (!targets.length) {
+              return (
+                <div className="flow-inspect-note" style={{ marginTop: 14 }}>
+                  Not applied to anything yet. Draw a line from this card to the campaign, a
+                  deliverable or a post, and what it says is used when they are written.
+                </div>
+              )
+            }
+            const named = targets.map((t) => {
+              if (t === 'campaign') return { id: t, label: 'The whole campaign', sub: 'every asset' }
+              const d = viewDelivs.find((x) => x.key === t)
+              if (d) return { id: t, label: d.label, sub: `${d.count} asset${d.count === 1 ? '' : 's'}` }
+              const r = viewRows.find((x) => x.id === t)
+              if (r) return { id: t, label: r.assetName, sub: 'one post' }
+              return { id: t, label: t, sub: '' }
+            })
+            // Every asset this card reaches, for the rewrite below.
+            const rowIds = targets.flatMap((t) =>
+              t === 'campaign'
+                ? viewRows.map((r) => r.id)
+                : viewDelivs.find((x) => x.key === t)?.rows.map((r) => r.id) ?? (viewRows.some((r) => r.id === t) ? [t] : []),
+            )
+            const unique = [...new Set(rowIds)]
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                  Applied to · {named.length}
+                </label>
+                <div className="flow-told">
+                  {named.map((n) => (
+                    <div key={n.id} className="flow-told-row">
+                      <span className="flow-told-key">{n.sub}</span>
+                      <span className="flow-told-val">{n.label}</span>
+                    </div>
+                  ))}
+                </div>
+                {viewing && unique.length > 0 && (
+                  <button
+                    className="flow-insp-open subtle"
+                    disabled={regenerating}
+                    onClick={() => void regenerateFlow(unique)}
+                  >
+                    {regenerating
+                      ? 'Rewriting…'
+                      : `Rewrite the ${unique.length} asset${unique.length === 1 ? '' : 's'} this applies to`}
+                  </button>
+                )}
+              </>
+            )
+          })()}
           {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
               fields per kind, each landing in a named slot in every wired asset's payload. This is
               the whole point of an object: not which record it names, but what it says about it.
@@ -3860,8 +4027,35 @@ export function FlowsView() {
                 placeholder={DIRECTION_FIELD[k].hint}
                 onChange={(e) => setDirectionValue(nt, k, e.target.value)}
               />
+              {/* SUGGESTIONS from the brand's own material. Offered only while the field is empty:
+                  once something is written, a row of chips under it is clutter, and the point was
+                  to save the first typing, not to keep proposing alternatives.
+                  Nothing here is invented — every chip is a string already written on a record, so a
+                  thin library shows nothing rather than a plausible guess the user never made. */}
+              {/* Offered when THIS CARD is blank, even if it is showing a value inherited from the
+                  legacy campaign-wide list: an inherited value is not something anyone typed here,
+                  and clicking a chip is how you make it the card's own. */}
+              {!(nt.direction ?? []).some((d) => d.key === k && d.value.trim()) && (() => {
+                const presets = directionPresets(k, presetSourcesFor(nt))
+                if (!presets.length) return null
+                return (
+                  <div className="flow-preset-row">
+                    {presets.map((p) => (
+                      <button
+                        key={p.value}
+                        className="flow-preset-chip"
+                        title={`From ${p.from}`}
+                        onClick={() => setDirectionValue(nt, k, p.value)}
+                      >
+                        {p.value.length > 54 ? `${p.value.slice(0, 54)}…` : p.value}
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
             </Fragment>
           ))}
+          {renderCardComments(nt.id)}
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>
             {meta.role === 'markup' ? 'Note' : 'Team note'}
           </label>
@@ -4707,6 +4901,16 @@ export function FlowsView() {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
                     </span>
                     <span className="flow-note-kind">{meta.label}</span>
+                    {/* An unresolved comment is a question waiting on somebody. Shown on the card
+                        so it is visible from the board, not only once you open the inspector. */}
+                    {openCommentCount(cardComments, boardKey, nt.id) > 0 && (
+                      <span className="flow-note-cmt" title={`${openCommentCount(cardComments, boardKey, nt.id)} open comment(s)`}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.8-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z" />
+                        </svg>
+                        {openCommentCount(cardComments, boardKey, nt.id)}
+                      </span>
+                    )}
                     <button className="flow-note-del" title="Delete" aria-label="Delete object" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteObject(nt.id) }}>✕</button>
                   </div>
                   {nt.kind === 'data-source' ? (

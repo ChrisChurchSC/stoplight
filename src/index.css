@@ -4796,6 +4796,55 @@ button {
 }
 .flow-offline-x:hover { color: var(--text); }
 
+/* Suggested instruction values, from the brand's own records. Chips rather than a dropdown: they
+   are full sentences of varying length, and a select would truncate every one of them to its width. */
+/* A comment thread on a card. Distinct from the Team note below it: a note belongs to the card, a
+   comment belongs to a person at a time. Neither reaches the writer. */
+.flow-cmt-list { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; margin-bottom: 8px; }
+.flow-cmt {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 10px 8px;
+  background: var(--surface);
+}
+.flow-cmt.resolved { opacity: 0.55; }
+.flow-cmt.resolved .flow-cmt-body { text-decoration: line-through; }
+.flow-cmt-h { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.flow-cmt-who { font-size: 11.5px; font-weight: 650; color: var(--text); }
+.flow-cmt-when { font-size: 10.5px; color: var(--text-faint); flex: 1; }
+.flow-cmt-act {
+  border: 0; background: none; cursor: pointer; padding: 1px 4px; border-radius: 5px;
+  font-size: 11px; color: var(--text-faint); opacity: 0;
+}
+.flow-cmt:hover .flow-cmt-act, .flow-cmt-act:focus-visible { opacity: 1; }
+.flow-cmt-act:hover { color: var(--text); background: var(--surface-2); }
+.flow-cmt-body { font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+/* The count on the card itself, so an open question is visible from the board. */
+.flow-note-cmt {
+  display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto;
+  font-size: 10px; font-weight: 700; color: var(--accent);
+}
+.flow-note-cmt svg { width: 12px; height: 12px; }
+
+.flow-preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.flow-preset-chip {
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  max-width: 100%;
+}
+.flow-preset-chip:hover {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .flow-told { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .flow-told-row {
   display: flex; flex-direction: column; gap: 1px;

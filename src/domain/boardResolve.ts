@@ -104,6 +104,44 @@ export function resolveBoardDirection(
   return { campaign, byTarget }
 }
 
+/** Who each node points AT. Shared by the two forward walks so they cannot disagree. */
+function forwardEdges(board: FlowBoard): Map<string, string[]> {
+  const outgoing = new Map<string, string[]>()
+  for (const c of board.connectors) {
+    const list = outgoing.get(c.from)
+    if (list) { if (!list.includes(c.to)) list.push(c.to) } else outgoing.set(c.from, [c.to])
+  }
+  return outgoing
+}
+
+/**
+ * What a card FEEDS: every output it reaches, following wires forwards.
+ *
+ * The mirror of upstreamObjects, and the thing two different questions both need — "what does this
+ * card apply to" and "rewrite everything this card informs". Returns output ids (the brief, a
+ * deliverable key, a post row id), never other cards: a card in the middle of a chain applies to
+ * what the chain ends at, not to its neighbour.
+ */
+export function downstreamTargets(board: FlowBoard, nodeId: string, maxDepth = MAX_OBJECT_DEPTH): string[] {
+  const outgoing = forwardEdges(board)
+  const boardIds = new Set<string>([...board.objects.map((o) => o.id), ...board.placements.map((p) => p.id)])
+  const out: string[] = []
+  const seen = new Set<string>([nodeId])
+  let frontier = outgoing.get(nodeId) ?? []
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const next: string[] = []
+    for (const id of frontier) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      // Not a card on this board, so it is an output: the brief, a deliverable, a post.
+      if (!boardIds.has(id)) { if (!out.includes(id)) out.push(id); continue }
+      for (const dn of outgoing.get(id) ?? []) if (!seen.has(dn)) next.push(dn)
+    }
+    frontier = next
+  }
+  return out
+}
+
 /**
  * Does this card reach any OUTPUT — the campaign brief, a deliverable or a post — however indirectly?
  *
@@ -112,12 +150,7 @@ export function resolveBoardDirection(
  * reaching nothing at all.
  */
 export function reachesOutput(board: FlowBoard, nodeId: string, maxDepth = MAX_OBJECT_DEPTH): boolean {
-  const outgoing = new Map<string, string[]>()
-  for (const c of board.connectors) {
-    const list = outgoing.get(c.from)
-    if (list) list.push(c.to)
-    else outgoing.set(c.from, [c.to])
-  }
+  const outgoing = forwardEdges(board)
   const boardIds = new Set<string>([...board.objects.map((o) => o.id), ...board.placements.map((p) => p.id)])
   const seen = new Set<string>([nodeId])
   let frontier = outgoing.get(nodeId) ?? []
