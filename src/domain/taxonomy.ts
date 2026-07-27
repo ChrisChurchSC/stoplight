@@ -163,6 +163,29 @@ export const GOAL_LIBRARY = [
   'win enterprise deals',
 ]
 
+/**
+ * Common objections, as a starting vocabulary. The sibling of PAIN_LIBRARY and GOAL_LIBRARY, and
+ * the one that was missing — which is why "Beat this objection" was the last field on an audience
+ * card with nothing to pick from.
+ *
+ * Phrased as the buyer's own thought rather than as a category ("we already use something else",
+ * not "incumbent"), because the writer is answering the thought and a category tells it nothing
+ * about the words to use. Deliberately generic: a brand's real objections belong on its audience
+ * records, and these exist to be replaced by them.
+ */
+export const OBJECTION_LIBRARY = [
+  'it costs too much',
+  'we already use something else',
+  'switching would take too long',
+  'not convinced it would actually work',
+  'not a priority right now',
+  'it looks complicated to set up',
+  'the free option is good enough',
+  'we tried something like this before',
+  'someone else has to approve it',
+  'we can do this ourselves',
+]
+
 export const BUYING_TRIGGERS = [
   'new funding round',
   'leadership change',

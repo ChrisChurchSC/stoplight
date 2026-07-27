@@ -1,4 +1,5 @@
 import type { DirectionKey } from './direction'
+import { GOAL_LIBRARY, OBJECTION_LIBRARY, PAIN_LIBRARY } from './taxonomy'
 
 /**
  * SUGGESTED VALUES for an instruction field, drawn from what the brand already has.
@@ -8,9 +9,15 @@ import type { DirectionKey } from './direction'
  * different from the record it names. So the presets are the brand's OWN material, offered for a
  * click, and typing something else is always available.
  *
- * NOTHING IS INVENTED HERE. Every suggestion is a string the user has already written somewhere, so
- * an empty library offers an empty list rather than a plausible-sounding guess. A guess in this field
- * would reach the copy writer as though the user had asserted it.
+ * NOTHING IS GENERATED HERE, and the distinction matters. A suggestion is either a string the user
+ * has already written on one of their own records, or an entry in a hand-written starter library
+ * that ships with the app (PAIN_LIBRARY, OBJECTION_LIBRARY, GOAL_LIBRARY) and is labelled as such.
+ * Neither is a guess about this brand. What is forbidden is a model-written or inferred suggestion,
+ * because a guess in these fields reaches the copy writer as though the user had asserted it.
+ *
+ * The user's own material always sorts FIRST. A brand that has written its own pains should never
+ * have to scroll past a generic list to find them, and once it has written enough the library is
+ * effectively gone.
  */
 
 /** What a suggestion is, and where it came from, so the picker can say. */
@@ -42,6 +49,13 @@ export interface DirectionPresetSources {
   audienceFrom?: string
 }
 
+/** The starter vocabularies, offered under their own heading after the brand's own writing. */
+const LIBRARY_FOR: Partial<Record<DirectionKey, readonly string[]>> = {
+  pain: PAIN_LIBRARY,
+  objection: OBJECTION_LIBRARY,
+  caresAbout: GOAL_LIBRARY,
+}
+
 const clean = (v: string | undefined): string => (v ?? '').trim()
 const split = (v: string | undefined): string[] =>
   clean(v)
@@ -52,9 +66,10 @@ const split = (v: string | undefined): string[] =>
 /**
  * Suggestions for one instruction key. Deduped, capped, and never fabricated.
  *
- * Keys with no honest source (justDid, ask, situation, caresAbout, moment, permission) return
- * nothing: they describe a moment or an account, which the brand library does not hold, and a
- * plausible filler would be worse than an empty list.
+ * Keys with no honest source (justDid, ask, situation, moment, permission) still return nothing:
+ * they describe a moment or an account, which neither the brand's records nor a generic list can
+ * hold, and a plausible filler would be worse than an empty list. The card renders those as a plain
+ * text box rather than an empty dropdown.
  */
 export function directionPresets(key: DirectionKey, src: DirectionPresetSources): DirectionPreset[] {
   const out: DirectionPreset[] = []
@@ -100,5 +115,8 @@ export function directionPresets(key: DirectionKey, src: DirectionPresetSources)
       // inventing one would put words the user never wrote in front of the copy writer.
       break
   }
-  return out.slice(0, 8)
+  // The starter list goes last, so a brand's own wording is always what you see first. push() dedupes
+  // case-insensitively, so a library entry the brand has already written does not appear twice.
+  for (const v of LIBRARY_FOR[key] ?? []) push(v, 'the common list')
+  return out.slice(0, 14)
 }
