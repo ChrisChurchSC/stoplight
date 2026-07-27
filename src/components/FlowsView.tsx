@@ -12,6 +12,8 @@ import { downstreamTargets, reachesOutput, resolveBoardDirection } from '../doma
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
+import { PEOPLE_FIELDS } from '../domain/people'
+import { BufferedInput } from './BufferedInput'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -422,6 +424,7 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
+  const updatePerson = useTrafficStore((s) => s.updatePerson)
   const cardComments = useTrafficStore((s) => s.cardComments)
   /**
    * The name a new comment is signed with, from the signed-in user. Captured onto each comment when
@@ -3938,46 +3941,56 @@ export function FlowsView() {
 
               A Data source card still reaches its data set: double-clicking one opens it, creating it
               if it does not exist yet (openDataCard). */}
-          {/* THE PERSONA a Person card names, read from the record so the card can be judged without
-              opening Records. Only the fields that are filled in: a persona with three good lines is
-              more useful than ten empty ones, and showing the empties would suggest a form to
-              complete rather than a person to write to. */}
+          {/* THE PERSONA a Person card names, EDITABLE HERE. It is read off the record, and writes go
+              straight back to it, so the same persona sharpens on every campaign that names them.
+
+              Every field shows, filled or not, which is the opposite of the read-only version this
+              replaces. A list that hides its empties is right for a report and wrong for a form: the
+              gaps ARE the prompt, and "Who else decides" you have never answered is the field most
+              worth answering. The six pick-lists come from the record schema rather than a second
+              list here, so adding an option in one place changes both surfaces. */}
           {nt.kind === 'person' && nt.refId && (() => {
             const per = allPeople.find((x) => x.id === nt.refId)
             if (!per) return null
-            const rows: { label: string; value: string }[] = []
-            const add = (label: string, v: unknown) => { const t = String(v ?? '').trim(); if (t) rows.push({ label, value: t }) }
-            add('Occupation', per.occupation || per.title)
-            add('Age', per.age)
-            add('Household income', per.householdIncome)
-            add('Hobbies', per.hobbies)
-            add('Knows', per.expertise)
-            add('Wants', per.optimizingFor)
-            add('Uses today', per.usesNow)
-            add('Talks like', per.saysLike)
-            add('Reads this', per.readsWhen)
-            add('Decides with', per.decidesWith)
+            const fields = PEOPLE_FIELDS.filter((f) => f.group === 'Persona')
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                   {per.name}
                   <span className="flow-persona-tag" title="A representative person, not a real customer. The writer may not quote them or cite them as a customer.">composite</span>
                 </label>
-                {rows.length === 0 ? (
-                  <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                    No persona yet. Fill one in under Records › People and this card starts telling the
-                    writer who it is for.
-                  </div>
-                ) : (
-                  <div className="flow-told">
-                    {rows.map((r) => (
-                      <div key={r.label} className="flow-told-row">
-                        <span className="flow-told-key">{r.label}</span>
-                        <span className="flow-told-val">{r.value}</span>
+                <div className="flow-persona-form">
+                  {fields.map((f) => {
+                    const v = String((per as unknown as Record<string, unknown>)[f.key] ?? '')
+                    return (
+                      <div key={f.key} className="flow-persona-field">
+                        <span className="flow-persona-key">{f.label}</span>
+                        {f.options ? (
+                          <select
+                            className="flow-persona-select"
+                            value={v}
+                            onChange={(e) => updatePerson(per.id, { [f.key]: e.target.value })}
+                          >
+                            <option value="">—</option>
+                            {f.options.map((o) => (
+                              <option key={o} value={o}>{o}</option>
+                            ))}
+                            {/* A value typed before this became a pick-list still selects, rather than
+                                silently reading as blank and being overwritten on the next edit. */}
+                            {v && !f.options.includes(v) && <option value={v}>{v}</option>}
+                          </select>
+                        ) : (
+                          <BufferedInput
+                            className="flow-persona-input"
+                            value={v}
+                            placeholder="—"
+                            onCommit={(nv) => updatePerson(per.id, { [f.key]: nv })}
+                          />
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )
+                  })}
+                </div>
               </>
             )
           })()}
