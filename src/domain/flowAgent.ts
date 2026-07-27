@@ -45,6 +45,17 @@ export type FlowCommand =
   | { op: 'setDirection'; ref: string; entries: { key: string; value: string }[] }
   /** Choose the model this campaign generates with (an AI_MODELS id, or 'auto'). */
   | { op: 'setModel'; value: string }
+  /**
+   * Wire one thing to another. An arrow from A to B means "A helps write B", so everything A
+   * instructs travels with B to every output B is wired to.
+   *
+   * Both ends resolve the same way: a ref handle from this batch, then a card already on the board
+   * by its label, then the literal 'campaign' for the brief, then a deliverable by PRESET KEY. The
+   * composite board key for a deliverable is never exposed to the model — it would have to be
+   * guessed, and a guess points at nothing.
+   */
+  | { op: 'connect'; from: string; to: string }
+  | { op: 'disconnect'; from: string; to: string }
   | { op: 'build' }
   | { op: 'regenerate' }
 

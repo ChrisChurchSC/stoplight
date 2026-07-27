@@ -3109,7 +3109,56 @@ export function FlowsView() {
       if (viewName) patchCampaign(viewName, { aiModel: c.value === 'auto' ? undefined : c.value })
       const m = AI_MODELS.find((x) => x.id === c.value)
       applied.push(`This campaign now writes with ${m?.label ?? c.value}`)
+      return
     }
+    if (c.op === 'connect' || c.op === 'disconnect') {
+      const from = resolveEndpoint(c.from, batchRefs)
+      const to = resolveEndpoint(c.to, batchRefs)
+      if (!from) { skipped.push(`Could not find "${c.from}" on the board`); return }
+      if (!to) { skipped.push(`Could not find "${c.to}" on the board`); return }
+      if (from === to) { skipped.push('A card cannot be wired to itself'); return }
+      if (c.op === 'connect') {
+        setConnectors((cs) => (cs.some((x) => x.from === from && x.to === to) ? cs : [...cs, { from, to }]))
+        // The same two calls the drag gesture makes, so a wire drawn by the chat and one drawn by
+        // hand are the same wire: records onto the campaign or onto the target's rows.
+        if (to === 'campaign') attachToCampaign(from)
+        else if (isContextNode(from)) attachToTarget(from, to)
+        applied.push(`Wired ${c.from} into ${c.to}`)
+      } else {
+        setConnectors((cs) => cs.filter((x) => !(x.from === from && x.to === to)))
+        if (to === 'campaign') detachFromCampaign(from, connectors)
+        else if (isContextNode(from)) detachFromTarget(from, to, connectors)
+        applied.push(`Unwired ${c.from} from ${c.to}`)
+      }
+    }
+  }
+  /**
+   * A name the model used, resolved to a real board id.
+   *
+   * In order: a handle from this batch, a card on the board by the record it names, the brief, then
+   * a deliverable by PRESET KEY — which is what the model is given, unlike the composite board key,
+   * which it would have to guess. Returns null rather than guessing when two cards share a label:
+   * silently wiring the wrong one is worse than saying so.
+   */
+  const resolveEndpoint = (name: string, batchRefs: Map<string, string>): string | null => {
+    const handle = batchRefs.get(name)
+    if (handle) return handle
+    const n = name.trim().toLowerCase()
+    if (n === 'campaign' || n === 'brief' || n === 'the campaign') return 'campaign'
+    const byLabel = objects.filter((o) => refForObject(o)?.label?.toLowerCase() === n)
+    if (byLabel.length === 1) return byLabel[0].id
+    if (byLabel.length > 1) return null
+    const byKind = objects.filter((o) => OBJECT_META[o.kind]?.label.toLowerCase() === n)
+    if (byKind.length === 1) return byKind[0].id
+    const preset = presetByKey(name) ?? DELIVERABLE_PRESETS.find((p) => p.label.toLowerCase() === n)
+    if (preset) {
+      const d = viewDelivs.find((x) => x.channel === preset.channel && x.assetType === preset.assetType)
+      if (d) return d.key
+      // Build mode has no rows yet, so the deliverable is still a node on the board.
+      const node = nodes.find((x) => x.presetKey === preset.key)
+      if (node) return node.id
+    }
+    return null
   }
 
   const applyFlowCommands = async (cmds: FlowCommand[]): Promise<{ applied: string[]; skipped: string[] }> => {
@@ -3175,7 +3224,7 @@ export function FlowsView() {
         } else if (c.op === 'regenerate') {
           await regenerateFlow()
           applied.push('Regenerated the copy')
-        } else if (c.op === 'createObject' || c.op === 'setDirection' || c.op === 'setModel') {
+        } else if (c.op === 'createObject' || c.op === 'setDirection' || c.op === 'setModel' || c.op === 'connect' || c.op === 'disconnect') {
           // Board ops work on a BUILT campaign too, and this is where they matter most: adding an
           // instruction to a live campaign and regenerating is the loop the board exists for.
           // Shared with the build-mode branch so the two cannot drift into different behaviour.
@@ -3254,6 +3303,8 @@ export function FlowsView() {
         case 'createObject':
         case 'setDirection':
         case 'setModel':
+        case 'connect':
+        case 'disconnect':
           applyBoardCommand(c, { applied, skipped, batchRefs })
           break
         case 'build': {
@@ -3291,6 +3342,8 @@ export function FlowsView() {
         const m = AI_MODELS.find((x) => x.id === c.value)
         return `Write this campaign with ${m?.label ?? c.value}`
       }
+      case 'connect': return `Wire ${c.from} into ${c.to}`
+      case 'disconnect': return `Unwire ${c.from} from ${c.to}`
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
       case 'createProof': return `Add a proof point "${c.text}" and tag it`

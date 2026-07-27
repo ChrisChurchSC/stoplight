@@ -22,7 +22,7 @@ const COMMAND_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'setStrategy', 'createObject', 'setDirection', 'setModel', 'build', 'regenerate'] },
+          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'setStrategy', 'createObject', 'setDirection', 'setModel', 'connect', 'disconnect', 'build', 'regenerate'] },
           value: { type: 'string' },
           weeks: { type: 'number' },
           preset: { type: 'string' },
@@ -35,6 +35,8 @@ const COMMAND_SCHEMA = {
           ref: { type: 'string' },
           kind: { type: 'string' },
           record: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
           direction: {
             type: 'array',
             items: {
@@ -82,6 +84,9 @@ Do three things:
      Write direction as an INSTRUCTION about this campaign, not a definition of the thing. "pain: they think switching costs a whole season" is direction; "an audience of anglers" is not. Any other key is dropped.
    - setDirection {ref, entries}: sharpen a card that already exists. "ref" is either a handle from this batch or the label of a card on the board.
    - setModel {value}: choose the model this campaign generates with. Only use a value the user named, and only from the models offered.
+   - connect {from, to}: wire one thing into another. An arrow from A to B means "A helps write B": everything A instructs travels with B to every deliverable B is wired to, up to four hops. Name either end by a ref handle from this batch, by the record a card names ("Serious recreational anglers"), by "campaign" for the brief, or by a deliverable's preset key.
+     THIS IS HOW AN INSTRUCTION REACHES SOMETHING. A card with direction that is wired to nothing changes no copy. Wire to "campaign" when the instruction is true of the whole campaign; wire to a specific deliverable when it is only true there. Prefer the narrower one: "answer the migration objection in the nurture emails" is a wire to the nurture email, not to the campaign.
+   - disconnect {from, to}: remove a wire.
    - build: build the campaign and write copy for every asset (build mode only; do this when the user asks to build/create/generate it, after adding deliverables).
    - regenerate: rewrite the flow's asset copy (view mode only; use when the user asks to redo/refresh the copy).
 3. Return a "nextSteps" array of 2 or 3 SHORT follow-up prompts the user could tap next, phrased as things they would say to you (e.g. "Schedule these over 4 weeks", "Add a proof point", "Make the tone warmer", "Add an email"). Pick the most useful next moves given what is now missing or unfinished on this flow. When you ask an intake question (see Rules), put 2 or 3 concrete ANSWER OPTIONS here instead so the user can tap one. Keep each under about 6 words. Omit the field if nothing is useful.
@@ -119,6 +124,12 @@ export class NoKeyError extends Error {
 function noEmDashes<T>(v: T): T {
   if (typeof v === 'string') return v.replace(/\s*—\s*/g, (_m, i, s: string) => (i === 0 || i + _m.length >= s.length ? ' ' : ', ')).replace(/\s+([,.!?])/g, '$1').trim() as unknown as T
   if (Array.isArray(v)) return v.map(noEmDashes) as unknown as T
+  // Objects too, so a value nested inside a command is cleaned. It only walked strings and arrays,
+  // so command text got through: an instruction written onto a card carried the dash, and from there
+  // into the prompt that writes every asset the card is wired to.
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, noEmDashes(x)])) as unknown as T
+  }
   return v
 }
 
@@ -144,10 +155,12 @@ export async function runFlowAgent(body: unknown): Promise<unknown> {
 
   const block = message.content.find((b: Anthropic.ContentBlock) => b.type === 'text')
   const text = block && block.type === 'text' ? block.text : '{}'
-  const out = JSON.parse(text) as { reply?: string; nextSteps?: string[] }
+  const out = JSON.parse(text) as { reply?: string; nextSteps?: string[]; commands?: unknown[] }
   if (out && typeof out === 'object') {
     if (out.reply) out.reply = noEmDashes(out.reply)
     if (Array.isArray(out.nextSteps)) out.nextSteps = noEmDashes(out.nextSteps)
+    // Commands carry user-visible text too: a card's direction ends up in the copy prompt.
+    if (Array.isArray(out.commands)) out.commands = noEmDashes(out.commands)
   }
   return out
 }
