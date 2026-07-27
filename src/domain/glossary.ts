@@ -159,7 +159,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   smartObject: {
     term: 'Smart object',
     short:
-      "Several objects bundled and named, so you can reuse them instead of rebuilding them. It starts out living inside one campaign; assign it to the brand's folder and every campaign for that brand can reach it.",
+      "A named card you can reuse instead of rebuilding it, holding one card or several bundled together. It starts out living inside one campaign; assign it to the brand's folder and every campaign for that brand can reach it.",
     more:
       'Double-click a smart object and it opens in its own tab on a blank canvas holding only its contents. Inside it, being on the canvas is being in the object, so there is nothing to wire. Once it is in a brand folder, editing it changes it everywhere it is used.',
     seeAlso: ['object', 'brand'],

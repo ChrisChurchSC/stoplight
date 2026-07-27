@@ -47,6 +47,8 @@ import { FlowsHome } from './FlowsHome'
 
 // Per-tier tones — the card badge + tile match its tier tint: campaign (tomato), deliverable
 // (blue), post (purple).
+/** Drag payload for a smart object leaving the Assets panel for the canvas. */
+const SMART_OBJECT_DND = 'application/x-breadcrumbs-smart-object'
 const CAMPAIGN_TONE = '#ff6347'
 const DELIV_TONE = '#2f6fe0'
 const POST_TONE = '#8a34d6'
@@ -745,6 +747,10 @@ export function FlowsView() {
   // The card an in-progress connection is currently over. Drawing a line used to give no feedback
   // about WHERE it would land, so you released and hoped. The target lights up instead.
   const [connectOver, setConnectOver] = useState<string | null>(null)
+  // The smart object currently being dragged out of the Assets panel, so the canvas can show it is
+  // a live drop target. A custom mime type rather than text/plain: the board already accepts a
+  // campaign NAME as text/plain on the campaigns page, and a stray text drop must not place an object.
+  const [dragObjectId, setDragObjectId] = useState<string | null>(null)
   // The smart object whose delete button is armed (click-again-to-confirm). Id, not a boolean, so
   // selecting a different object disarms it rather than leaving a live delete under the cursor.
   const [confirmDeleteObject, setConfirmDeleteObject] = useState<string | null>(null)
@@ -1913,6 +1919,106 @@ export function FlowsView() {
    */
   const shortCampaignName = (name: string): string =>
     name === BUILDER_BOARD_KEY ? 'an unsaved campaign' : name.replace(`${brand} — `, '')
+  /**
+   * The cards a smart object holds, for a preview. Contents when it has them; otherwise the member
+   * cards of its placement on THIS board, which is the only place the cards of an object made before
+   * contents existed can still be found. Falling straight through to "Empty" would have been honest
+   * and useless: the object plainly has cards, they are on the canvas.
+   */
+  const objectCards = (o: SmartObject): CanvasObject[] => {
+    if (o.contents?.length) return o.contents
+    const g = placements.find((p) => p.smartObjectId === o.id)
+    if (!g) return []
+    return g.memberIds.map((m) => objects.find((n) => n.id === m)).filter((n): n is CanvasObject => !!n)
+  }
+  /** A one-line preview: what the object will put on the board, in the words already on the cards. */
+  const objectPreview = (o: SmartObject): string => {
+    const cards = objectCards(o)
+    if (!cards.length) return o.refs.length ? describeSmartObject(o) : 'Nothing inside yet'
+    const named = cards
+      .map((c) => {
+        const own = refForObject(c)
+        return own?.label ?? c.text.trim().split('\n')[0] ?? ''
+      })
+      .filter(Boolean)
+    // A bundle named after its lead record ("Manager/Brand Deals") would otherwise print that record
+    // again directly under its own name.
+    const fresh = named.filter((l) => l !== o.name)
+    if (!fresh.length) {
+      // Nothing left to say in words. Two different reasons, and they need different sentences: the
+      // cards are genuinely blank, or the only thing in them is the name already above.
+      const kinds = [...new Set(cards.map((c) => OBJECT_META[c.kind]?.label).filter(Boolean))]
+      if (named.length) return kinds.join(' · ')
+      return `${cards.length} card${cards.length === 1 ? '' : 's'}, none filled in`
+    }
+    const head = fresh.slice(0, 2).join(' · ')
+    return fresh.length > 2 ? `${head} · +${fresh.length - 2}` : head
+  }
+  /**
+   * Drop a smart object onto the board at a point. Its cards are recreated with FRESH ids, because
+   * the same object can sit on two boards at once and a board's ids have to be unique; the object
+   * itself stays the source of truth, and the cards are views onto it.
+   */
+  const placeSmartObject = (o: SmartObject, at: { x: number; y: number }) => {
+    recordHistory(true)
+    const cards = objectCards(o).map((c) => ({ ...c, id: freshObjectId() }))
+    const pid = freshGroupId()
+    setObjects((os) => [...os, ...cards])
+    setPlacements((ps) => [...ps, { id: pid, smartObjectId: o.id, memberIds: cards.map((c) => c.id) }])
+    setPos((p) => ({ ...p, [pid]: { x: 0, y: 0 } }))
+    // Same two-step the toolbar uses: place provisionally, then let the measure pass nudge it to the
+    // drop point once the card has a real rect.
+    pendingPlace.current = { id: pid, ...at }
+    setSel(pid)
+    setSelected(new Set())
+    setBriefCollapsed(false)
+  }
+  /**
+   * A smart object as a row in the Assets panel. Built to read like the inspector's own object rows:
+   * the layered glyph, the name, then what is inside. Draggable onto the canvas, and a double-click
+   * opens it in its own tab.
+   */
+  const renderShelfObject = (o: SmartObject) => {
+    const cards = objectCards(o)
+    return (
+      <div
+        key={o.id}
+        className="flow-lib-object"
+        draggable
+        title={`${o.name} — drag onto the canvas, or double-click to open`}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(SMART_OBJECT_DND, o.id)
+          e.dataTransfer.effectAllowed = 'copy'
+          setDragObjectId(o.id)
+        }}
+        onDragEnd={() => setDragObjectId(null)}
+        onDoubleClick={() => openObjectTab(o.id)}
+      >
+        <span className="flow-lib-object-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
+          </svg>
+        </span>
+        <span className="flow-lib-object-txt">
+          <span className="flow-lib-object-name">{o.name || 'Untitled smart object'}</span>
+          <span className="flow-lib-object-sub">{objectPreview(o)}</span>
+          {/* One tinted glyph per card inside, the same read as the smart-object card on the canvas:
+              you can tell an audience-plus-proof bundle from an audience-plus-message one without
+              opening either. */}
+          {cards.length > 0 && (
+            <span className="flow-lib-object-chips">
+              {cards.slice(0, 6).map((c) => (
+                <span key={c.id} className="flow-lib-object-chip" style={{ color: OBJECT_META[c.kind]?.tone }} title={OBJECT_META[c.kind]?.label}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[c.kind]?.icon}</svg>
+                </span>
+              ))}
+              {cards.length > 6 && <span className="flow-lib-object-more">+{cards.length - 6}</span>}
+            </span>
+          )}
+        </span>
+      </div>
+    )
+  }
   /** The brand-library object a canvas placement shows. */
   const smartObjectFor = (g: SmartPlacement) => smartObjects.find((o) => o.id === g.smartObjectId)
   const placementName = (g: SmartPlacement) => smartObjectFor(g)?.name ?? 'Smart object'
@@ -1932,8 +2038,13 @@ export function FlowsView() {
       const label = nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : nt.text.trim().split('\n')[0]
       if (label) return label.slice(0, 48)
     }
+    // Nothing inside is filled in yet, so name it after what it holds. "Bundle" only when there is
+    // something to bundle: one empty audience card became "Audience bundle", which called a single
+    // card a bundle and read as a stray placeholder in the library.
     const first = objects.find((n) => n.id === ids[0])
-    return first ? `${OBJECT_META[first.kind].label} bundle` : 'Smart object'
+    if (!first) return 'Smart object'
+    const kind = OBJECT_META[first.kind].label
+    return ids.length > 1 ? `${kind} bundle` : kind
   }
   /**
    * Bundle the selected cards into a smart object. ONE is enough: an object is a named, reusable
@@ -3442,7 +3553,13 @@ export function FlowsView() {
           <span className="flow-panel-title">{placementName(g)}</span>
         </div>
         <div className="flow-inspect">
-          <p className="flow-inspect-desc">Several objects bundled and named, so you can reuse them instead of rebuilding them.</p>
+          {/* "Bundled" only describes a MULTI-card object. Said of one card it was simply untrue, and
+              it made a legitimate single-card object look like a mistake. */}
+          <p className="flow-inspect-desc">
+            {members.length > 1
+              ? 'Several cards bundled and named, so you can reuse them instead of rebuilding them.'
+              : 'A named card you can reuse instead of rebuilding it. Drag more cards in to bundle them together.'}
+          </p>
           <label className="flow-inspect-label">Name</label>
           <input className="flow-inspect-input" value={placementName(g)} placeholder="Name this object…" onChange={(e) => renamePlacement(g.id, e.target.value)} />
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
@@ -3765,6 +3882,32 @@ export function FlowsView() {
               <div className="flow-library-body">
                 {/* Libraries organized by brand: one folder per brand, each holding its campaigns.
                     "New brand" starts a folder for a brand you don't have yet. */}
+                {/* THIS CAMPAIGN FIRST. A campaign-scoped object exists only on the board you are
+                    looking at, so burying it under a brand folder said the opposite of what scoping
+                    means. Brand folders below hold the promoted ones, which every campaign can reach. */}
+                {(() => {
+                  const here = smartObjects
+                    .filter((o) => scopeOf(o) === 'campaign' && o.campaign === boardKey)
+                    .filter((o) => !q || o.name.toLowerCase().includes(q))
+                    .sort((x, y) => x.name.localeCompare(y.name))
+                  return (
+                    <>
+                      <div className="flow-lib-brandshead">
+                        <span className="flow-library-secttl">
+                          {viewName ? viewName.replace(`${brand} — `, '') : 'This campaign'}
+                        </span>
+                        <span className="flow-lib-folder-count">{here.length}</span>
+                      </div>
+                      {here.length === 0 ? (
+                        <div className="flow-lib-folder-empty">
+                          No smart objects here yet. Select cards on the canvas and press ⌘G.
+                        </div>
+                      ) : (
+                        <div className="flow-lib-objects">{here.map(renderShelfObject)}</div>
+                      )}
+                    </>
+                  )
+                })()}
                 <div className="flow-lib-brandshead">
                   <span className="flow-library-secttl">Brands</span>
                   <button className="flow-lib-newbrand" onClick={() => setAddingBrand((v) => !v)}>
@@ -3822,19 +3965,7 @@ export function FlowsView() {
                               return (
                                 <div className="flow-lib-objects">
                                   <div className="flow-lib-objects-h">Smart objects</div>
-                                  {shelf.map((o) => (
-                                    <div key={o.id} className="flow-lib-object" title={describeSmartObject(o)}>
-                                      <span className="flow-lib-object-ic" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                                          <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
-                                        </svg>
-                                      </span>
-                                      <span className="flow-lib-object-txt">
-                                        <span className="flow-lib-object-name">{o.name}</span>
-                                        <span className="flow-lib-object-sub">{describeSmartObject(o)}</span>
-                                      </span>
-                                    </div>
-                                  ))}
+                                  {shelf.map(renderShelfObject)}
                                 </div>
                               )
                             })()}
@@ -3888,7 +4019,26 @@ export function FlowsView() {
         )}
         <div
           ref={canvasRef}
-          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}`}
+          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}${dragObjectId ? ' obj-drop' : ''}`}
+          // Drop target for a smart object dragged out of the Assets panel. dropEffect must be set
+          // on EVERY dragover or the browser refuses the drop, and preventDefault on both is what
+          // stops the page navigating to the drag payload instead.
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes(SMART_OBJECT_DND)) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'copy'
+          }}
+          onDrop={(e) => {
+            const id = e.dataTransfer.getData(SMART_OBJECT_DND)
+            setDragObjectId(null)
+            if (!id) return
+            e.preventDefault()
+            const o = smartObjects.find((x) => x.id === id)
+            const cr = canvasRef.current?.getBoundingClientRect()
+            if (!o || !cr) return
+            // Canvas-relative, which is the space freeSlot and pendingPlace both work in.
+            placeSmartObject(o, { x: e.clientX - cr.left, y: e.clientY - cr.top })
+          }}
           onContextMenu={(e) => {
             const el = (e.target as HTMLElement).closest('.flow-node[data-node-id]') as HTMLElement | null
             const id = el?.dataset.nodeId ?? null

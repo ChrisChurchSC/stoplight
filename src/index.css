@@ -27046,8 +27046,21 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-faint); padding: 4px 12px 3px;
 }
-.flow-lib-object { display: flex; align-items: center; gap: 8px; padding: 4px 12px; }
-.flow-lib-object-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent); opacity: 0.7; }
+/* A smart object in the Assets panel. Reads like the inspector's object rows — glyph, name, then
+   what is inside — and is a drag handle onto the canvas, so it gets a card's affordances. */
+.flow-lib-object {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 10px;
+  margin: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: grab;
+}
+.flow-lib-object:hover { border-color: var(--border); background: var(--surface-2); }
+.flow-lib-object:active { cursor: grabbing; }
+.flow-lib-object-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent); opacity: 0.7; margin-top: 1px; }
 .flow-lib-object-ic svg { width: 14px; height: 14px; }
 .flow-lib-object-txt { display: flex; flex-direction: column; min-width: 0; }
 .flow-lib-object-name {
@@ -27058,6 +27071,14 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 11px; color: var(--text-faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* One tinted glyph per card inside: an audience-plus-proof bundle reads differently from an
+   audience-plus-message one without opening either. */
+.flow-lib-object-chips { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.flow-lib-object-chip { display: inline-flex; }
+.flow-lib-object-chip svg { width: 12px; height: 12px; }
+.flow-lib-object-more { font-size: 10px; color: var(--text-faint); }
+/* The canvas while a smart object is being dragged over it, so the drop is not a guess. */
+.flow-canvas.obj-drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
 /* Brand data sets (BrandPage → Data tab): tiny-spreadsheet cards + a blank-grid editor. */
 .bds { padding: 4px 2px; }

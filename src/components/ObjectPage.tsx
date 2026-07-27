@@ -62,7 +62,7 @@ export function ObjectPage() {
       <div className="objpage-body">
         <div className="objpage-sub">{describeSmartObject(object)}</div>
         {contents.length === 0 ? (
-          <div className="bds-missing">Nothing inside yet. Bundle cards on a campaign canvas with ⌘G.</div>
+          <div className="bds-missing">Nothing inside yet. Select a card on a campaign canvas and press ⌘G, or several to bundle them.</div>
         ) : (
           <div className="objpage-cards">
             {contents.map((c) => {
