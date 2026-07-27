@@ -1489,10 +1489,10 @@ export function FlowsView() {
   })
   // The Record Tags block (label + one row per tag with a swap dropdown + remove, then "Add a
   // record"), shared by the build brief, the built-flow brief, and a deliverable's override.
-  const renderRecordTags = (ops: TagOps) => (
+  const renderRecordTags = (ops: TagOps, heading?: string) => (
     <>
       <div className="flow-inspect-label" style={{ marginTop: 16 }}>
-        Linked records{ops.refs.length ? ` · ${ops.refs.length}` : ''}
+        {heading ?? `Linked records${ops.refs.length ? ` · ${ops.refs.length}` : ''}`}
         <InfoTip term="linkedRecords" />
       </div>
       {ops.refs.map((ref) => {
@@ -1543,6 +1543,122 @@ export function FlowsView() {
       </div>
     </>
   )
+  /**
+   * WHAT INFORMS THE MESSAGING: the cards wired to the campaign card, in place of a flat list of
+   * records.
+   *
+   * The record list was the wrong unit here. Connecting a card to the campaign is HOW a record gets
+   * onto the campaign, so the list was a readout of a consequence: "Sebastian Elghanian" told you a
+   * contact was linked but not that it arrived inside "the RevOps buyer" object, nor which card to
+   * open to change it. Rows here name the object and say what it contributes, and clicking one
+   * selects that card on the canvas.
+   *
+   * The second group is the honest part. A record can reach the campaign with no card behind it: an
+   * untouched campaign defaults to every brand segment, the picker adds refs directly, and so does
+   * the chat. Showing only connected cards would have left those invisible and unremovable while
+   * they still steered every draft, so they keep the old swap-and-remove rows under their own head.
+   */
+  const renderCampaignContext = () => {
+    const rows = connectors
+      .filter((e) => e.to === 'campaign')
+      .map((e) => {
+        const g = placements.find((p) => p.id === e.from)
+        if (g) {
+          const so = smartObjectFor(g)
+          return {
+            id: g.id,
+            tone: '#8a34d6',
+            icon: (
+              <><path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" /></>
+            ),
+            kindLabel: 'Smart object',
+            label: placementName(g),
+            detail: so ? describeSmartObject(so) : 'Empty',
+            refs: refsBehind(g.id),
+          }
+        }
+        const nt = objects.find((n) => n.id === e.from)
+        if (!nt) return null
+        const meta = OBJECT_META[nt.kind]
+        const linked = smartObjects.find((o) => o.id === nt.smartObjectId)
+        const own = refForObject(nt)
+        return {
+          id: nt.id,
+          tone: meta.tone,
+          icon: meta.icon,
+          kindLabel: meta.label,
+          label: linked?.name ?? own?.label ?? nt.text.trim().split('\n')[0] ?? '',
+          detail: linked ? describeSmartObject(linked) : '',
+          refs: refsBehind(nt.id),
+        }
+      })
+      .filter((r): r is NonNullable<typeof r> => !!r)
+
+    const covered = new Set(rows.flatMap((r) => r.refs).map(refKey))
+    const direct = activeRefs.filter((r) => !covered.has(refKey(r)))
+
+    return (
+      <>
+        <div className="flow-inspect-label" style={{ marginTop: 16 }}>
+          Informing the messaging{rows.length ? ` · ${rows.length}` : ''}
+          <InfoTip term="linkedRecords" />
+        </div>
+        {rows.length === 0 ? (
+          <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
+            Nothing connected yet. Draw a line from a card to the campaign and what it holds reaches
+            the writer.
+          </div>
+        ) : (
+          <div className="flow-ctxlist">
+            {rows.map((r) => (
+              <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
+                <button
+                  className="flow-ctxrow-open"
+                  title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+                  onClick={() => { setSel(r.id); setSelected(new Set()) }}
+                >
+                  <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+                  </span>
+                  <span className="flow-ctxrow-txt">
+                    <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
+                    <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
+                    {/* What it actually contributes, because a card can be connected and still be
+                        empty, and an empty card reaching the writer is worth seeing. Suppressed when
+                        it would only repeat the name, which is the common case for a plain card
+                        carrying one record. */}
+                    {(() => {
+                      const sub =
+                        r.refs.length === 0
+                          ? 'Contributes nothing yet'
+                          : r.detail ||
+                            (r.refs.length === 1 && r.refs[0].label === r.label
+                              ? ''
+                              : r.refs.map((x) => x.label).join(' · '))
+                      return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
+                    })()}
+                  </span>
+                </button>
+                {/* Disconnects: the card stays on the board, it just stops feeding the campaign. */}
+                <button
+                  className="flow-ctxrow-del"
+                  title="Disconnect from the campaign (the card stays on the board)"
+                  aria-label={`Disconnect ${r.label || r.kindLabel}`}
+                  onClick={() => {
+                    setConnectors((c) => c.filter((x) => !(x.from === r.id && x.to === 'campaign')))
+                    detachFromCampaign(r.id, connectors)
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {direct.length > 0 && renderRecordTags({ ...campaignTagOps, refs: direct }, 'Linked directly, with no card on the board')}
+      </>
+    )
+  }
   // The "Add a record" drawer edits whatever opened it: the campaign, or a deliverable's
   // override. Resolve the deliverable fresh each render so it stays reactive after edits.
   const pickerTargetDeliv = pickerDeliv ? viewDelivs.find((d) => d.key === pickerDeliv) : undefined
@@ -4894,7 +5010,7 @@ export function FlowsView() {
                   ) : (
                     <div className="flow-budget-ok">✓ ${campaignBudget.toLocaleString()} fully assigned across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}.</div>
                   ))}
-                  {renderRecordTags(campaignTagOps)}
+                  {renderCampaignContext()}
                   <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
                   <div className="flow-deliv-list">
                     {viewDelivs.map((d) => (
@@ -5033,7 +5149,7 @@ export function FlowsView() {
                     No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
                   </div>
                 )}
-                {renderRecordTags(campaignTagOps)}
+                {renderCampaignContext()}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
                     ? `Build writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
