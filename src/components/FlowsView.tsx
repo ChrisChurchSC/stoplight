@@ -13,7 +13,7 @@ import { commentAge, commentsFor, openCommentCount, type CardComment } from '../
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { PEOPLE_FIELDS } from '../domain/people'
-import { BufferedInput } from './BufferedInput'
+import { BufferedInput, BufferedTextarea } from './BufferedInput'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -24,7 +24,7 @@ import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
-import { newAudience } from '../domain/audiences'
+import { COMPANY_SIZES, FUNNEL_STAGE_OPTIONS, SENIORITIES, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
@@ -425,6 +425,16 @@ export function FlowsView() {
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
+  /**
+   * Patch one audience in the brand's list. The store takes the whole list, so the read-modify-write
+   * lives here rather than at every call site — six fields editable on a card is six chances to drop
+   * the other audiences by rebuilding the array wrong.
+   */
+  const patchAudience = (id: string, patch: Partial<AudienceType>) => {
+    const list = clientAudiences[brand] ?? []
+    if (!list.some((a) => a.id === id)) return
+    setClientAudiences(brand, list.map((a) => (a.id === id ? { ...a, ...patch } : a)))
+  }
   const cardComments = useTrafficStore((s) => s.cardComments)
   /**
    * The name a new comment is signed with, from the signed-in user. Captured onto each comment when
@@ -3959,15 +3969,15 @@ export function FlowsView() {
                   {per.name}
                   <span className="flow-persona-tag" title="A representative person, not a real customer. The writer may not quote them or cite them as a customer.">composite</span>
                 </label>
-                <div className="flow-persona-form">
+                <div className="flow-recform">
                   {fields.map((f) => {
                     const v = String((per as unknown as Record<string, unknown>)[f.key] ?? '')
                     return (
-                      <div key={f.key} className="flow-persona-field">
-                        <span className="flow-persona-key">{f.label}</span>
+                      <div key={f.key} className="flow-recform-field">
+                        <span className="flow-recform-key">{f.label}</span>
                         {f.options ? (
                           <select
-                            className="flow-persona-select"
+                            className="flow-recform-select"
                             value={v}
                             onChange={(e) => updatePerson(per.id, { [f.key]: e.target.value })}
                           >
@@ -3981,7 +3991,7 @@ export function FlowsView() {
                           </select>
                         ) : (
                           <BufferedInput
-                            className="flow-persona-input"
+                            className="flow-recform-input"
                             value={v}
                             placeholder="—"
                             onCommit={(nv) => updatePerson(per.id, { [f.key]: nv })}
@@ -3990,6 +4000,56 @@ export function FlowsView() {
                       </div>
                     )
                   })}
+                </div>
+              </>
+            )
+          })()}
+          {/* THE AUDIENCE this card names, editable here for the same reason the persona is: the card
+              is where you decide whether the audience is right, so it is where you fix it.
+
+              Three pick-lists and the rest prose, which is the honest split. An audience IS its
+              pains, objections and anti-message; those specific sentences are what make it this
+              audience rather than a demographic bracket, and a dropdown over them would hand every
+              brand the same four segments.
+
+              Pains is a list stored as an array and edited as lines, because that is how anyone
+              writes them. The three "who they are" selects set register and how much you have to
+              explain — they are not subject matter, and the prompt says so. */}
+          {nt.kind === 'audience' && nt.refId && (() => {
+            const aud = brandSegments.find((a) => a.id === nt.refId)
+            if (!aud) return null
+            const area = (label: string, value: string, onCommit: (v: string) => void, placeholder: string) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                <BufferedTextarea className="flow-recform-area" value={value} placeholder={placeholder} onCommit={onCommit} />
+              </div>
+            )
+            const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                <select className="flow-recform-select" value={value} onChange={(e) => patchAudience(aud.id, { [key]: e.target.value })}>
+                  <option value="">—</option>
+                  {/* Stored value, shown with a capital. funnelStage is held lowercase to match every
+                      other reader of it, and only the label should differ. */}
+                  {options.map((o) => (<option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>))}
+                  {value && !options.includes(value) && <option value={value}>{value}</option>}
+                </select>
+              </div>
+            )
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>{aud.name || 'Untitled audience'}</label>
+                <div className="flow-recform">
+                  {area('Who exactly', aud.definition ?? '', (v) => patchAudience(aud.id, { definition: v }), 'Sharper than the role. One line.')}
+                  {area('What is wrong today', asList(aud.pains).join('\n'), (v) => patchAudience(aud.id, { pains: splitLines(v) }), 'One pain per line')}
+                  {area('What good looks like', aud.goals ?? '', (v) => patchAudience(aud.id, { goals: v }), 'What they are actually after')}
+                  {area('Why now', asList(aud.triggers).join('\n'), (v) => patchAudience(aud.id, { triggers: splitLines(v) }), 'One trigger per line')}
+                  {area('What they believe against you', aud.objections ?? '', (v) => patchAudience(aud.id, { objections: v }), 'The copy has to answer these')}
+                  {area('Never say', aud.antiMessage ?? '', (v) => patchAudience(aud.id, { antiMessage: v }), 'The sentence that loses them')}
+                  {area('The angle', aud.messageAngle ?? '', (v) => patchAudience(aud.id, { messageAngle: v }), 'How the promise is framed for them')}
+                  {select('Seniority', aud.seniority ?? '', SENIORITIES, 'seniority')}
+                  {select('Company size', aud.companySize ?? '', COMPANY_SIZES, 'companySize')}
+                  {select('Stage', aud.funnelStage ?? '', FUNNEL_STAGE_OPTIONS, 'funnelStage')}
                 </div>
               </>
             )

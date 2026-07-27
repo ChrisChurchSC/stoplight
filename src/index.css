@@ -4878,23 +4878,24 @@ button {
 }
 .flow-told-val { font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
 
-/* THE PERSONA FORM in the inspector. Same left-rule shape as .flow-told so the card still reads as
-   one idea, but every row is a control: the persona is edited where it is judged, not in Records.
-   An unfilled row stays visible and quiet, because the gap is the prompt. */
-.flow-persona-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.flow-persona-field {
+/* THE RECORD FORM in the inspector: the linked record's copy-changing fields, edited on the card.
+   Same left-rule shape as .flow-told so a card still reads as one idea, but every row is a control —
+   a record is edited where it is judged, not in Records. An unfilled row stays visible and quiet,
+   because the gap is the prompt. Shared by every card kind that names a record. */
+.flow-recform { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.flow-recform-field {
   display: flex; flex-direction: column; gap: 2px;
   padding: 6px 10px 7px;
   border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   background: var(--surface-2);
   border-radius: 0 8px 8px 0;
 }
-.flow-persona-key {
+.flow-recform-key {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-faint);
 }
-.flow-persona-select,
-.flow-persona-input {
+.flow-recform-select,
+.flow-recform-input {
   width: 100%;
   border: none;
   background: none;
@@ -4905,10 +4906,18 @@ button {
   padding: 0;
   overflow-wrap: anywhere;
 }
-.flow-persona-select { cursor: pointer; margin-left: -2px; }
+.flow-recform-select { cursor: pointer; margin-left: -2px; }
+/* Prose fields (pains, objections, the anti-message) grow with their content rather than scrolling a
+   two-line box: these are read to be judged, and a clipped objection is one you cannot judge. */
+.flow-recform-area {
+  width: 100%; border: none; background: none; outline: none;
+  font: inherit; font-size: 12.5px; line-height: 1.45; color: var(--text);
+  padding: 0; resize: vertical; min-height: 34px; overflow-wrap: anywhere;
+}
+.flow-recform-area::placeholder { color: var(--text-faint); }
 /* The options are written as sentences; the record selects' capitalize must not follow them here. */
-.flow-persona-input::placeholder { color: var(--text-faint); }
-.flow-persona-field:focus-within {
+.flow-recform-input::placeholder { color: var(--text-faint); }
+.flow-recform-field:focus-within {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
 }

@@ -82,6 +82,58 @@ export interface AudienceType {
   approved?: boolean
 }
 
+/**
+ * PICK-LISTS FOR THE AUDIENCE. Only the three fields that genuinely enumerate.
+ *
+ * An audience is mostly prose by nature — its pains, objections, anti-message and angle are the
+ * specific sentences that make it this audience and not a bracket — so it gets far fewer dropdowns
+ * than a persona does, and pretending otherwise would flatten the fields that carry the value.
+ */
+export const SENIORITIES = [
+  'Individual contributor', 'Manager', 'Director', 'VP', 'C-level', 'Founder or owner',
+] as const
+
+export const COMPANY_SIZES = [
+  '1-10', '11-50', '51-200', '201-1000', '1000+',
+] as const
+
+/** Stored lowercase, because that is what funnelStage already holds everywhere else. Capitalizing
+ *  these for the picker would fork the vocabulary and quietly stop matching the existing records. */
+export const FUNNEL_STAGE_OPTIONS = [
+  'awareness', 'consideration', 'conversion', 'retention',
+] as const
+
+/**
+ * Read a list field that is TYPED as an array but is not guaranteed to be one.
+ *
+ * pains, triggers and goalTags are `string[]` in the type and plain JSON on disk, written by imports,
+ * the agent tools and hand-edits as well as by this app. A string where an array was expected used to
+ * throw inside the draft loop, which killed the whole generation for every asset in the campaign and
+ * surfaced as Generate doing nothing at all: the throw happened in an un-awaited promise, so no error
+ * ever reached the user.
+ *
+ * Splitting a bare string rather than discarding it, because the content is right and only the shape
+ * is wrong.
+ */
+export const asList = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim())
+  : typeof v === 'string' ? splitLines(v)
+  : []
+
+/**
+ * A free-text field that holds several items into a list. `goals` is one textarea in the UI and
+ * several distinct wants in practice, and a writer handed one blob treats it as a single thought.
+ *
+ * Splits on newlines and semicolons only, NOT on sentence ends: a want is often a sentence, and
+ * splitting "Wants to stop losing Saturdays. Will not pay for another subscription." into two
+ * fragments loses that the second qualifies the first.
+ */
+export const splitLines = (v: string | undefined): string[] =>
+  (v ?? '')
+    .split(/[\n;]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 2)
+
 /** A blank audience with every field defaulted — the one place defaults live. */
 export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
   return {

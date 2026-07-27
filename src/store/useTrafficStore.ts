@@ -20,7 +20,7 @@ import { actualsProvider } from '../adapters/actuals'
 import { getActiveWorkspaceId } from '../lib/session'
 import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
-import { classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, type AudienceType, mergeAudiences } from '../domain/audiences'
+import { asList, classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, splitLines, type AudienceType, mergeAudiences } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -6852,12 +6852,30 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
                   name: aud.name,
                   role: aud.role,
                   angle: aud.messageAngle,
-                  pains: aud.pains,
+                  pains: asList(aud.pains),
                   // Both were recorded on the audience and never sent, so the model could write the
                   // exact line the brand had written down as the one to avoid and pass every check.
                   // objections is what the copy must disarm; antiMessage is the sentence not to write.
                   objections: aud.objections?.trim() || undefined,
                   antiMessage: aud.antiMessage?.trim() || undefined,
+                  // The rest was the same bug, one layer down: recorded on the audience, read by the
+                  // heuristic composer and the rails, and never put in front of the writer.
+                  //
+                  // WANTS is the one that costs most to omit. Pains say what is wrong and wants say
+                  // what good looks like, and copy written from pain alone lands as a complaint. It
+                  // is the audience's answer to the field that visibly moved the persona copy.
+                  definition: aud.definition?.trim() || undefined,
+                  wants: [...asList(aud.goalTags), ...splitLines(aud.goals)].slice(0, 8),
+                  triggers: asList(aud.triggers).slice(0, 6),
+                  // How to SOUND to this audience, distinct from the brand voice: same brand, and a
+                  // sceptical buyer still wants a different register from an enthusiast.
+                  tone: (Array.isArray(aud.descriptors) ? aud.descriptors : []).map((d) => (d?.note?.trim() ? `${d.label} (${d.note.trim()})` : d?.label)).filter(Boolean).slice(0, 6),
+                  // Who they are, only where it was filled in. Register and vocabulary follow from
+                  // seniority and industry far more than from anything else on the record.
+                  seniority: aud.seniority?.trim() || undefined,
+                  industry: aud.industry?.trim() || undefined,
+                  companySize: aud.companySize?.trim() || undefined,
+                  funnelStage: aud.funnelStage?.trim() || undefined,
                 }
               : r.audience
                 ? { name: r.audience }
@@ -7043,7 +7061,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
                   name: aud.name,
                   role: aud.role,
                   angle: aud.messageAngle,
-                  pains: aud.pains,
+                  pains: asList(aud.pains),
                   // Both were recorded on the audience and never sent, so the model could write the
                   // exact line the brand had written down as the one to avoid and pass every check.
                   // objections is what the copy must disarm; antiMessage is the sentence not to write.

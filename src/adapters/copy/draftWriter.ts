@@ -23,13 +23,36 @@ export interface DraftProof {
   detail?: string
 }
 /** Who an asset speaks to — enough context to write to this segment, not a generic buyer. */
+/**
+ * The segment an asset is written for, as the writer receives it.
+ *
+ * Everything below `pains` was already recorded on the audience and none of it was being sent, so a
+ * user could fill the record in carefully and change nothing about the copy. The type had drifted
+ * too: objections and antiMessage were on the wire before they were ever declared here.
+ */
 export interface DraftAudience {
   name: string
   role?: string
+  /** A one-line definition of the sub-segment — sharper than role. */
+  definition?: string
   /** The message angle that lands for this segment. */
   angle?: string
-  /** This segment's pains. */
+  /** This segment's pains: what is wrong today. */
   pains?: string[]
+  /** What good looks like to them. Pains without wants read as a complaint. */
+  wants?: string[]
+  /** What makes them hesitate — the copy has to disarm these. */
+  objections?: string
+  /** The sentence NOT to write to them. */
+  antiMessage?: string
+  /** Why now: the buying triggers worth naming. */
+  triggers?: string[]
+  /** How to sound to them, distinct from the brand voice. */
+  tone?: string[]
+  seniority?: string
+  industry?: string
+  companySize?: string
+  funnelStage?: string
 }
 export interface DraftAsset {
   rowId: string
