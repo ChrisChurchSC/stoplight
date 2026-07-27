@@ -10,9 +10,9 @@ import {
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
-import { AI_MODELS } from '../domain/aiModels'
+import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
-import { DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
+import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
@@ -3057,9 +3057,70 @@ export function FlowsView() {
    * Verified live on 2026-07-25: asking an open campaign to set its budget showed a check mark
    * next to "Set budget to $9,000" while the stored budget never moved off $24,000.
    */
+  /**
+   * The board commands, shared by both apply branches.
+   *
+   * createObject / setDirection / setModel mean the same thing on an unbuilt campaign and a live
+   * one, and adding an instruction to a live campaign then regenerating is the loop the board exists
+   * for. Two copies of this would have been two behaviours the moment one was edited.
+   */
+  const applyBoardCommand = (
+    c: FlowCommand,
+    ctx: { applied: string[]; skipped: string[]; batchRefs: Map<string, string> },
+  ) => {
+    const { applied, skipped, batchRefs } = ctx
+    if (c.op === 'createObject') {
+      const kind = c.kind as CanvasObjectKind
+      if (!OBJECT_META[kind]) { skipped.push(`Unknown card kind "${c.kind}"`); return }
+      const id = freshObjectId()
+      // A record NAME goes through the same create-or-reuse path the card's own picker uses, so the
+      // agent can name an audience without inventing a record around it.
+      const rec = c.record?.trim() ? createRecordForKind(kind, c.record.trim()) : undefined
+      // Validated by the same closed vocabulary as every other source of direction: an unknown key
+      // is dropped here rather than persisted and silently ignored at draft time.
+      const dir = (c.direction ?? []).filter((d) => ALL_DIRECTION_KEYS.has(d.key as DirectionKey) && d.value?.trim())
+      const spot = freeSlot()
+      setObjects((os) => [...os, { id, kind, text: c.text?.trim() ?? '', refId: rec?.id, direction: dir.length ? dir : undefined }])
+      setPos((pp) => ({ ...pp, [id]: { x: 0, y: 0 } }))
+      pendingPlace.current = { id, ...spot }
+      batchRefs.set(c.ref, id)
+      const meta = OBJECT_META[kind]
+      applied.push(`Added ${articleFor(meta.label.toLowerCase())} ${meta.label.toLowerCase()} card${rec ? ` for "${rec.label}"` : ''}`)
+      return
+    }
+    if (c.op === 'setDirection') {
+      const targetId = batchRefs.get(c.ref) ?? objects.find((o) => refForObject(o)?.label === c.ref)?.id
+      if (!targetId) { skipped.push(`No card called "${c.ref}"`); return }
+      const entries = c.entries.filter((d) => ALL_DIRECTION_KEYS.has(d.key as DirectionKey) && d.value?.trim())
+      if (!entries.length) { skipped.push(`No usable instruction for "${c.ref}"`); return }
+      setObjects((os) =>
+        os.map((o) => {
+          if (o.id !== targetId) return o
+          const keep = (o.direction ?? []).filter((d) => !entries.some((e) => e.key === d.key))
+          return { ...o, direction: [...keep, ...entries] }
+        }),
+      )
+      setRefsDirty(true)
+      applied.push(`Set ${entries.length} instruction${entries.length === 1 ? '' : 's'} on ${c.ref}`)
+      return
+    }
+    if (c.op === 'setModel') {
+      if (!AI_MODEL_IDS.has(c.value)) { skipped.push(`Unknown model "${c.value}"`); return }
+      if (viewName) patchCampaign(viewName, { aiModel: c.value === 'auto' ? undefined : c.value })
+      const m = AI_MODELS.find((x) => x.id === c.value)
+      applied.push(`This campaign now writes with ${m?.label ?? c.value}`)
+    }
+  }
+
   const applyFlowCommands = async (cmds: FlowCommand[]): Promise<{ applied: string[]; skipped: string[] }> => {
     const applied: string[] = []
     const skipped: string[] = []
+    /**
+     * The batch's ref handles: the model's own names for cards it created ('a1', 'msg') mapped to
+     * the real ids they became. Scoped to one batch because that is exactly how long they mean
+     * anything — the model invents them per reply and has never seen a co_… id.
+     */
+    const batchRefs = new Map<string, string>()
     if (viewName !== null) {
       let vRefs = [...flowRefs]
       const createdRefs: FlowReference[] = []
@@ -3114,6 +3175,11 @@ export function FlowsView() {
         } else if (c.op === 'regenerate') {
           await regenerateFlow()
           applied.push('Regenerated the copy')
+        } else if (c.op === 'createObject' || c.op === 'setDirection' || c.op === 'setModel') {
+          // Board ops work on a BUILT campaign too, and this is where they matter most: adding an
+          // instruction to a live campaign and regenerating is the loop the board exists for.
+          // Shared with the build-mode branch so the two cannot drift into different behaviour.
+          applyBoardCommand(c, { applied, skipped, batchRefs })
         } else {
           // Everything the open-campaign branch genuinely cannot do. Say so by name rather than
           // dropping it: renaming a built campaign re-keys every row, and build/removeDeliverable
@@ -3185,6 +3251,11 @@ export function FlowsView() {
           }
           break
         }
+        case 'createObject':
+        case 'setDirection':
+        case 'setModel':
+          applyBoardCommand(c, { applied, skipped, batchRefs })
+          break
         case 'build': {
           // Segment refs ONLY feed the audience rotation; proof/company/etc. refs must not leak
           // into row.audience (that would create phantom audiences). Mirrors audSelection.
@@ -3208,6 +3279,18 @@ export function FlowsView() {
       case 'setFlight': return `Set flight to ${c.weeks} week${c.weeks === 1 ? '' : 's'}`
       case 'addDeliverable': { const p = presetByKey(c.preset); return `Add ${p?.label ?? c.preset}${c.perMonth ? ` (${c.perMonth}/month)` : ''}` }
       case 'removeDeliverable': { const p = presetByKey(c.preset); return `Remove ${p?.label ?? c.preset}` }
+      case 'createObject': {
+        const label = OBJECT_META[c.kind as CanvasObjectKind]?.label ?? c.kind
+        const what = c.record?.trim() || c.text?.trim()?.split('\n')[0] || ''
+        const dir = c.direction?.length ? `, with ${c.direction.length} instruction${c.direction.length === 1 ? '' : 's'}` : ''
+        return `Add ${articleFor(label.toLowerCase())} ${label.toLowerCase()} card${what ? ` for ${what}` : ''}${dir}`
+      }
+      case 'setDirection':
+        return `Set ${c.entries.length} instruction${c.entries.length === 1 ? '' : 's'} on ${c.ref}`
+      case 'setModel': {
+        const m = AI_MODELS.find((x) => x.id === c.value)
+        return `Write this campaign with ${m?.label ?? c.value}`
+      }
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
       case 'createProof': return `Add a proof point "${c.text}" and tag it`

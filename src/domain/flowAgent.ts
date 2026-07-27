@@ -23,6 +23,28 @@ export type FlowCommand =
   // Set the campaign's GTM strategy / motion (a strategyMenu key). This is the campaign's purpose
   // made concrete: it drives the funnel, KPIs, and deliverable set. Confirm it with the user first.
   | { op: 'setStrategy'; value: string }
+  /**
+   * Put a CARD on the board. One op for all eleven kinds rather than eleven ops.
+   *
+   * `ref` is a handle the model invents for this batch ('a1', 'msg'), never a real board id: the
+   * model has never seen a co_… id and would hallucinate them, and a later connect in the same batch
+   * needs a way to name what it just made. `record` is a NAME, routed through the same
+   * create-or-reuse path a card's own picker uses, so the model can name an audience without
+   * inventing a record around it. `direction` is the instruction the card carries, validated by
+   * buildDirection's closed vocabulary like every other source of direction.
+   */
+  | {
+      op: 'createObject'
+      ref: string
+      kind: string
+      record?: string
+      text?: string
+      direction?: { key: string; value: string }[]
+    }
+  /** Sharpen a card already on the board (or one this batch created), by ref or by label. */
+  | { op: 'setDirection'; ref: string; entries: { key: string; value: string }[] }
+  /** Choose the model this campaign generates with (an AI_MODELS id, or 'auto'). */
+  | { op: 'setModel'; value: string }
   | { op: 'build' }
   | { op: 'regenerate' }
 

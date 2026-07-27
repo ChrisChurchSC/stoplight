@@ -22,7 +22,7 @@ const COMMAND_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'setStrategy', 'build', 'regenerate'] },
+          op: { type: 'string', enum: ['setName', 'setSubject', 'setBudget', 'setFlight', 'addDeliverable', 'removeDeliverable', 'setRecordTags', 'createAudience', 'createProof', 'setStrategy', 'createObject', 'setDirection', 'setModel', 'build', 'regenerate'] },
           value: { type: 'string' },
           weeks: { type: 'number' },
           preset: { type: 'string' },
@@ -30,6 +30,29 @@ const COMMAND_SCHEMA = {
           labels: { type: 'array', items: { type: 'string' } },
           name: { type: 'string' },
           text: { type: 'string' },
+          // Board ops: a handle you invent for a card in THIS batch, the card's kind, and the
+          // instruction it carries.
+          ref: { type: 'string' },
+          kind: { type: 'string' },
+          record: { type: 'string' },
+          direction: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { key: { type: 'string' }, value: { type: 'string' } },
+              required: ['key', 'value'],
+            },
+          },
+          entries: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { key: { type: 'string' }, value: { type: 'string' } },
+              required: ['key', 'value'],
+            },
+          },
         },
         required: ['op'],
       },
@@ -54,6 +77,11 @@ Do three things:
    - createAudience {name}: create a NEW placeholder audience and tag the flow to it. Use this ONLY when the campaign needs an audience that is NOT already in the provided records.segments list (for example a cold-start brand with no audiences yet). It makes a labeled placeholder the user fills in later, so pick a clear, specific name (e.g. "New homeowners", "Enterprise IT buyers") but NEVER invent persona details, ages, or demographics. Prefer tagging an existing audience via setRecordTags when a suitable one exists.
    - createProof {text}: add a NEW proof point (a reason to believe, e.g. "40% faster onboarding", "SOC 2 certified") as an unvetted DRAFT and tag the flow to it. Use when the campaign needs proof that is not in the provided proof records. Keep the text short and concrete; do not fabricate specific numbers or claims you were not given, prefer a plausible placeholder the user will verify. Prefer tagging an existing proof point via setRecordTags when one fits.
    - setStrategy {value}: set the campaign's GTM strategy / motion. "value" MUST be one of the strategyMenu keys. The strategy is the campaign's purpose made concrete: it decides the funnel, the KPIs, and the kind of deliverables. Set it (after confirming with the user, see DISCOVERY) BEFORE you build, so the campaign is built to a real motion, not a default.
+   - createObject {ref, kind, record?, text?, direction?}: put a CARD on the campaign board. Kinds: audience, message, proof-point, voice, trigger, company, person, concept, season, data-source, note. A card is not a record: it is a note-to-the-writer about THIS campaign. "ref" is a short handle you invent for this batch ("a1", "msg") so a later command can point at the card you just made; never use a real id. "record" is a NAME to link (an audience name, a proof point) and it is created or reused for you. "direction" is the instruction the card carries, and it is the whole reason to make one.
+     Direction keys, one or two per kind: audience → pain, objection. message → claim, notThis. proof-point → figure. voice → likeThis, avoidSay. trigger → justDid, ask. company → situation. person → caresAbout. concept → claim, likeThis. season → moment, permission. data-source → figure. A note carries none: it is for the team and never reaches the writer.
+     Write direction as an INSTRUCTION about this campaign, not a definition of the thing. "pain: they think switching costs a whole season" is direction; "an audience of anglers" is not. Any other key is dropped.
+   - setDirection {ref, entries}: sharpen a card that already exists. "ref" is either a handle from this batch or the label of a card on the board.
+   - setModel {value}: choose the model this campaign generates with. Only use a value the user named, and only from the models offered.
    - build: build the campaign and write copy for every asset (build mode only; do this when the user asks to build/create/generate it, after adding deliverables).
    - regenerate: rewrite the flow's asset copy (view mode only; use when the user asks to redo/refresh the copy).
 3. Return a "nextSteps" array of 2 or 3 SHORT follow-up prompts the user could tap next, phrased as things they would say to you (e.g. "Schedule these over 4 weeks", "Add a proof point", "Make the tone warmer", "Add an email"). Pick the most useful next moves given what is now missing or unfinished on this flow. When you ask an intake question (see Rules), put 2 or 3 concrete ANSWER OPTIONS here instead so the user can tap one. Keep each under about 6 words. Omit the field if nothing is useful.
@@ -67,6 +95,7 @@ Rules:
 - When flow.strategy is set, the motion is ALREADY DECIDED. Skip step 2 entirely: do not re-recommend, do not re-confirm, do not emit setStrategy again. Move on to what is still missing. Only change it if the user asks to.
 - Use brandFacts to AVOID re-asking what the app already knows (objective, positioning, primary audience, the brand's resolved strategy). Confirm a known fact in one line with a change option in nextSteps, never ask for it fresh.
 - The context has an "intent". When intent is "analyze", you are in READ-ONLY mode: answer the user's question about the flow with insight and suggestions, and return an EMPTY commands array (make no edits). When intent is "build", you may return edit commands.
+- THE BOARD IS THE BRIEF. Cards carry the instructions the copy is written under, so when the user tells you something about how the copy should read ("lean on the migration fear", "never call it a weather app", "our claim is live data beats forecasts"), that is a createObject or setDirection, NOT a line in your reply that disappears. A campaign whose instructions live only in the chat log writes generic copy.
 - Only use preset keys and existing record labels that appear in the provided lists. Never invent preset keys or setRecordTags labels. The ONE exception is createAudience, which is how you introduce an audience that does not exist yet, use it rather than tagging an unrelated record or leaving a campaign with no audience.
 - In "build" mode you are shaping a NEW flow; in "view" mode you are editing an existing one (do not setName/setFlight/build there; use regenerate to refresh copy).
 - If the user asks to build a themed campaign (e.g. "a 2-week Giving Tuesday push"), the theme is the SUBJECT, not the motion. A theme usually implies its purpose, so do not re-ask step 1: infer it, recommend the matching motion in one line, and confirm it in the same turn (a seasonal push is normally a promo motion). Then set the subject, set the flight, setStrategy, add a sensible set of deliverables, tag the relevant records, and build.
