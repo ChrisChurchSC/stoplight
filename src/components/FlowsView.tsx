@@ -1493,10 +1493,29 @@ export function FlowsView() {
     const per = nt.kind === 'person' && nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined
     const profile = brand ? clientProfiles[brand] : undefined
     const sys = brand ? resolveBrandScope(brand, brandSystems, brandMeta).library : undefined
+    /**
+     * WITH NO RECORD LINKED, fall back to the brand's whole audience set rather than to nothing.
+     *
+     * This used to return undefined, so an unlinked card offered no suggestions and quietly degraded
+     * to a blank box — which is exactly the state a card is in when you first drop it, and so the
+     * state most in need of a starting point. The brand's other audiences are still the brand's own
+     * writing, so nothing is invented by pooling them; the only thing lost is the certainty that a
+     * given pain belongs to THIS audience, and there is no this-audience yet to be wrong about.
+     */
+    const pooled = aud
+      ? undefined
+      : {
+          pains: asList(brandSegments.flatMap((a) => asList(a.pains))),
+          objections: brandSegments.map((a) => a.objections ?? '').filter(Boolean).join('\n'),
+          antiMessage: brandSegments.map((a) => a.antiMessage ?? '').filter(Boolean).join('\n'),
+          goals: brandSegments.map((a) => a.goals ?? '').filter(Boolean).join('\n'),
+          messageAngle: brandSegments.map((a) => a.messageAngle ?? '').filter(Boolean).join('\n'),
+        }
     return {
       audience: aud
         ? { pains: aud.pains, objections: aud.objections, antiMessage: aud.antiMessage, goals: aud.goals, messageAngle: aud.messageAngle }
-        : undefined,
+        : pooled,
+      audienceFrom: aud ? undefined : 'your audiences',
       differentiators: profile?.differentiators,
       voice: profile?.voice,
       hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean),

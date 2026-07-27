@@ -34,6 +34,12 @@ export interface DirectionPresetSources {
   messages?: { angle?: string }[]
   /** The persona a Person card names, for the one instruction a person carries. */
   persona?: { optimizingFor?: string; saysLike?: string; usesNow?: string; hobbies?: string }
+  /**
+   * What to CALL the audience source in the "from …" line. Defaults to "this audience", which is
+   * right when the card names one; a card that names none pools every audience the brand has, and
+   * saying "this audience" about a pool would claim a precision the suggestion does not have.
+   */
+  audienceFrom?: string
 }
 
 const clean = (v: string | undefined): string => (v ?? '').trim()
@@ -52,23 +58,24 @@ const split = (v: string | undefined): string[] =>
  */
 export function directionPresets(key: DirectionKey, src: DirectionPresetSources): DirectionPreset[] {
   const out: DirectionPreset[] = []
+  const audFrom = src.audienceFrom ?? 'this audience'
   const push = (value: string, from: string) => {
     const v = value.trim()
     if (v.length > 2 && !out.some((o) => o.value.toLowerCase() === v.toLowerCase())) out.push({ value: v, from })
   }
   switch (key) {
     case 'pain':
-      for (const p of src.audience?.pains ?? []) push(p, 'this audience')
+      for (const p of src.audience?.pains ?? []) push(p, audFrom)
       break
     case 'objection':
-      for (const o of split(src.audience?.objections)) push(o, 'this audience')
+      for (const o of split(src.audience?.objections)) push(o, audFrom)
       break
     case 'claim':
       for (const d of src.differentiators ?? []) push(d, 'the brand')
       for (const m of src.messages ?? []) if (m.angle) push(m.angle, 'a message record')
       break
     case 'notThis':
-      for (const a of split(src.audience?.antiMessage)) push(a, "this audience's anti-message")
+      for (const a of split(src.audience?.antiMessage)) push(a, `${audFrom}'s anti-message`)
       break
     case 'figure':
       for (const p of src.proof ?? []) push(p.metric?.trim() ? `${p.metric} (${p.label})` : p.label, 'the proof pool')
@@ -78,7 +85,7 @@ export function directionPresets(key: DirectionKey, src: DirectionPresetSources)
       if (src.voice) push(clean(src.voice), 'the brand voice')
       break
     case 'avoidSay':
-      for (const a of split(src.audience?.antiMessage)) push(a, "this audience's anti-message")
+      for (const a of split(src.audience?.antiMessage)) push(a, `${audFrom}'s anti-message`)
       break
     case 'caresAbout':
       // A person's one instruction, suggested from the persona itself: what they are optimizing for
