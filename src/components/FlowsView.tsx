@@ -880,6 +880,8 @@ export function FlowsView() {
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
   const placedRef = useRef<Set<string>>(new Set())
+  /** Corrective passes per deliverable, so auto-placement can never chase a moving target forever. */
+  const placePassRef = useRef<Map<string, number>>(new Map())
   // Undo / redo timeline for the canvas (Cmd+Z / Cmd+Shift+Z). Each entry snapshots the card
   // layout, plus the flow rows for data actions, so moves, Tidy, add, and Generate all reverse.
   type HistEntry = { pos: Record<string, { x: number; y: number }>; rows: TrafficRow[] | null }
@@ -1399,9 +1401,32 @@ export function FlowsView() {
   // connector instead of dropping to the bottom of the column. Corrects toward the target across
   // frames using freshly measured rects, then LOCKS the deliverable once it settles (recorded in
   // placedRef) so a hand drag afterwards is respected. Tidy clears placedRef to re-run it.
-  useEffect(() => { placedRef.current = new Set() }, [viewName])
+  useEffect(() => { placedRef.current = new Set(); placePassRef.current = new Map() }, [viewName])
   useLayoutEffect(() => {
     if (viewName === null) return
+    const cv = canvasRef.current
+    if (!cv) return
+    /**
+     * MEASURE LIVE, NOT FROM `rects`.
+     *
+     * This effect is declared ABOVE the effect that writes `rects`, and React runs layout effects in
+     * declaration order — so reading `rects` here always yields the PREVIOUS commit's geometry while
+     * setPos below is applied to the CURRENT position. Every correction was therefore counted twice
+     * before it could be observed, and the screen-space error followed e(n+1) = e(n) - e(n-1): an
+     * undamped oscillator that only ever reaches the 2px latch if the first two errors happen to be
+     * equal. Any other starting geometry orbits forever, setPos re-triggers the measure effect,
+     * measure re-triggers this one, and React white-screens the canvas on its update-depth limit.
+     *
+     * Measuring the DOM here makes the delta exact, so a card lands in one pass and latches on the
+     * next. The old comment claimed this already used "freshly measured rects"; it did not.
+     */
+    const cr = cv.getBoundingClientRect()
+    const rectOf = (id: string): { x: number; y: number; w: number; h: number } | null => {
+      const el = cv.querySelector(`.flow-node[data-node-id="${CSS.escape(id)}"]`)
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
+    }
     const scale = zoom / 100
     const gap = 130 * scale // canvas-space gap to the right of the source asset
     const bySource = new Map<string, ViewDeliverable[]>()
@@ -1416,19 +1441,30 @@ export function FlowsView() {
     for (const [src, list] of bySource) {
       const srcRow = viewRows.find((r) => r.assetName === src)
       if (!srcRow) continue
-      const sr = rects[srcRow.id]
+      const sr = rectOf(srcRow.id)
       if (!sr) continue
       let offset = 0 // canvas-space vertical offset accumulated down the stack
       for (const d of list) {
         if (!placedRef.current.has(d.key)) {
-          const dr = rects[d.key]
+          const dr = rectOf(d.key)
           if (dr) {
             const dxScreen = sr.x + sr.w + gap - dr.x
             const dyScreen = sr.y + offset * scale - dr.y
-            // Settled: lock it and stop correcting (so a later hand drag sticks). Else nudge it
-            // toward the target; measuring fresh rects each pass keeps this stable.
+            // Settled: lock it and stop correcting (so a later hand drag sticks).
             if (Math.abs(dxScreen) < 2 && Math.abs(dyScreen) < 2) placedRef.current.add(d.key)
-            else deltas[d.key] = { dx: dxScreen / scale, dy: dyScreen / scale }
+            else {
+              /**
+               * BACKSTOP. With live measurement this should latch on the second pass, but this is
+               * geometry: a source that reflows when its own branch moves, or a card whose size
+               * depends on its position, could still chase. Latch after a few passes rather than
+               * trust the maths — a card a few pixels off is a cosmetic bug, an uncapped setPos is
+               * a white screen, and this effect has already shipped one of those.
+               */
+              const n = (placePassRef.current.get(d.key) ?? 0) + 1
+              placePassRef.current.set(d.key, n)
+              if (n > 8) placedRef.current.add(d.key)
+              else deltas[d.key] = { dx: dxScreen / scale, dy: dyScreen / scale }
+            }
           }
         }
         offset += Math.max(1, d.rows.length) * 168 + 56 // this branch's block height + a gap
@@ -2988,7 +3024,20 @@ export function FlowsView() {
       const id = (el as HTMLElement).dataset.nodeId
       if (id) next[id] = { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
     })
-    setRects(next)
+    // Keep the previous object when nothing moved. A fresh identity every run made `rects` a
+    // re-render source in its own right and fed anything keyed on it, which is what turned one
+    // mis-converging placement into a runaway loop rather than a wobble.
+    setRects((prev) => {
+      const keys = Object.keys(next)
+      const same =
+        keys.length === Object.keys(prev).length &&
+        keys.every((k) => {
+          const a = prev[k]
+          const b = next[k]
+          return a && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
+        })
+      return same ? prev : next
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, objects, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH])
 
