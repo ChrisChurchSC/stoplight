@@ -25,6 +25,17 @@ export interface RecordField {
   tier?: 'core' | 'advanced'
 }
 
+/**
+ * Is this pick-list written as sentences rather than one-word enum values?
+ *
+ * The selects title-case their value so a stored `lead` reads as `Lead`. That is right for the
+ * short lowercase enums and wrong for anything phrased as a sentence, where it produces
+ * "Not Wasting Their Time". One predicate, shared by the table and the drawer, so a field cannot
+ * render capitalized in one and not the other.
+ */
+export const optionsAreSentences = (options: readonly string[] | undefined): boolean =>
+  !!options?.some((o) => o.includes(' ') || /^[A-Z]/.test(o))
+
 /** A field that also appears as a table column (adds a pixel width). */
 export interface RecordColumn extends RecordField {
   width: number

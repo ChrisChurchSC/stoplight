@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react'
-import { recordTint, type RecordField } from '../domain/records'
+import { optionsAreSentences, recordTint, type RecordField } from '../domain/records'
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
 
 /** Split a colors field value ("#FAF, #3EC") into individual swatches. */
@@ -103,7 +103,7 @@ export function RecordDrawer<T extends { id: string }>({
                       )}
                     </div>
                   ) : f.options ? (
-                    <select className="rd-input rd-select" style={{ color: v ? recordTint(v) : undefined }} value={v} onChange={(e) => set(f.key, e.target.value)}>
+                    <select className={`rd-input rd-select${optionsAreSentences(f.options) ? ' as-written' : ''}`} style={{ color: v ? recordTint(v) : undefined }} value={v} onChange={(e) => set(f.key, e.target.value)}>
                       <option value="">—</option>
                       {f.options.map((o) => (
                         <option key={o} value={o}>

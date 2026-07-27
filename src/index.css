@@ -3413,6 +3413,14 @@ button {
   width: 100%;
   text-transform: capitalize;
 }
+/* Options already written as sentences keep their own casing. The capitalize above exists for the
+   one-word enums stored lowercase (lead, contact, champion); applied to "Not wasting their time" it
+   produces "Not Wasting Their Time", which reads like a headline nobody wrote. */
+.rec-status.as-written,
+.rd-select.as-written {
+  text-transform: none;
+}
+
 .rec-status-client {
   color: var(--green, #33b579);
 }

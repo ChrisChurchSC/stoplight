@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type ClipboardEvent as ReactClipboardEvent } from 'react'
-import { recordTint, visibleForSkill, type RecordColumn, type RecordField } from '../domain/records'
+import { optionsAreSentences, recordTint, visibleForSkill, type RecordColumn, type RecordField } from '../domain/records'
 import { loadRecordGrouping, saveRecordGrouping } from '../domain/recordGrouping'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { RecordDrawer } from './RecordDrawer'
@@ -442,7 +442,7 @@ export function RecordsTable<T extends { id: string }>({
                           </select>
                         ) : col.options ? (
                           <select
-                            className="rec-status rec-ref"
+                            className={`rec-status rec-ref${optionsAreSentences(col.options) ? ' as-written' : ''}`}
                             style={{ color: v ? recordTint(v) : undefined }}
                             value={v}
                             onChange={(e) => set(r.id, col.key, e.target.value)}
