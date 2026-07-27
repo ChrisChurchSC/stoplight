@@ -43,6 +43,16 @@ export interface CanvasObject {
   refId?: string
   /** The brand-library smart object this shows, when it shows one instead of a raw record. */
   smartObjectId?: string
+  /**
+   * What this card instructs the writer to do, as direction entries (see src/domain/direction.ts).
+   *
+   * ON THE OBJECT, not on the campaign. Direction used to be keyed by (campaign, kind), so a board
+   * could hold only ONE audience pain no matter how many audience cards were on it: a second card
+   * showed the first one's text and overwrote it on edit. That was defensible while the board was
+   * session state and a card could not outlive a reload. The board is durable now, so the
+   * instruction belongs to the card that carries it.
+   */
+  direction?: { key: string; value: string }[]
 }
 
 /**

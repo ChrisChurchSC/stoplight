@@ -166,7 +166,7 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
-import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
+import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
 import { claudeAgent, type AgentAction } from '../adapters/agent/claudeAgent'
@@ -1986,6 +1986,8 @@ interface TrafficState {
   /** Set the records a flow references (Companies / People / Segments / Media mix). Read when generating assets. */
   setCampaignReferences: (name: string, references: FlowReference[]) => void
   /** The campaign's object direction: what its objects instruct the copy writer to do. */
+  /** RETIRED: direction lives on the card now (CanvasObject.direction). Kept while
+   *  Campaign.direction is still READ as an inherited fallback; nothing writes it. */
   setCampaignDirection: (name: string, direction: { kind: string; key: string; value: string }[]) => void
   /** Patch arbitrary campaign metadata (flight length, budget, …) on an existing campaign.
    *  A no-op if the campaign isn't found (only meaningful for built flows). */
@@ -6657,7 +6659,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const campaignRefs = get().campaignList.find((c) => c.name === campaign)?.references ?? []
         // What the campaign's objects instruct, persisted on the campaign so a regeneration months
         // later still writes to the direction that produced the original draft.
-        const campaignDirection = get().campaignList.find((c) => c.name === campaign)?.direction ?? []
+        /**
+         * Every instruction on this campaign's BOARD, plus whatever legacy campaign-wide direction
+         * predates the move onto cards.
+         *
+         * Cards first, because buildDirection keeps the first entry it sees for a key: a card's own
+         * pain must beat the inherited campaign one it is shown as a fallback for. This is the read
+         * half of the same change — storing per card without reading per card would have shipped a
+         * regression, with typed instructions reaching no writer at all.
+         */
+        const board = boardFor(get().flowBoards, campaign)
+        const campaignDirection = [
+          ...board.objects.flatMap((o) => (o.direction ?? []).map((d) => ({ kind: o.kind as string, key: d.key, value: d.value }))),
+          ...(get().campaignList.find((c) => c.name === campaign)?.direction ?? []),
+        ]
         // Compute the pinned audience + proof pools from a reference list. A deliverable can
         // OVERRIDE the campaign's refs per-asset (row.references), so each row pins from its own
         // effective set — one deliverable can target a different segment/proof than the rest.

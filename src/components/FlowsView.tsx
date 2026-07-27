@@ -419,7 +419,6 @@ export function FlowsView() {
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const adoptBuilderBoard = useTrafficStore((s) => s.adoptBuilderBoard)
-  const setCampaignDirection = useTrafficStore((s) => s.setCampaignDirection)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
@@ -560,7 +559,7 @@ export function FlowsView() {
   const [placements, setPlacements] = useState<SmartPlacement[]>([])
   // Before a campaign exists there is nothing to persist onto, so build-mode direction is held here
   // and written through to the campaign by buildFlow.
-  const [builderDirection, setBuilderDirection] = useState<{ kind: string; key: string; value: string }[]>([])
+
   // Which smart object you're inside, if any. Non-null swaps the canvas to that object's members
   // and adds a breadcrumb segment, so editing one feels like editing a small campaign.
   const [openPlacementId, setOpenGroupId] = useState<string | null>(null)
@@ -1135,7 +1134,9 @@ export function FlowsView() {
         theme: subjectRef.current.trim() || undefined,
         flightWeeks: flightRef.current,
         steps,
-        direction: directionRef.current,
+        // Every card's instruction on this board, so a preview reflects what was typed on the cards
+        // rather than the legacy campaign-wide list.
+        direction: boardDirectionRef.current,
       })
       setPreview((pv) => ({ ...pv, [node.id]: { loading: false, source: res?.source ?? null, posts: res?.posts ?? [] } }))
     } catch {
@@ -2829,7 +2830,8 @@ export function FlowsView() {
       adoptBuilderBoard(campaignName)
       // Carry build-mode direction onto the campaign the moment it exists, BEFORE the assets are
       // seeded, so the first draft is written to it and a regeneration later still has it.
-      if (builderDirection.length) setCampaignDirection(campaignName, builderDirection)
+      // Builder-mode direction is no longer stamped onto the campaign: it lives on the cards, and
+      // adoptBuilderBoard (below) hands the whole board to the campaign Build just named.
       const allNewIds: string[] = []
       for (const n of cfg.nodes) {
         const p = presetByKey(n.presetKey)
@@ -3293,22 +3295,51 @@ export function FlowsView() {
    * (kind, key) per campaign: two audience objects share the pain slot, which is the same
    * "an asset gets one claim" rule the builder enforces by priority.
    */
-  const campaignDirection = (viewing ? viewCampaign?.direction : builderDirection) ?? []
-  const directionValue = (kind: CanvasObjectKind, key: DirectionKey): string =>
-    campaignDirection.find((d) => d.kind === kind && d.key === key)?.value ?? ''
-  const setDirectionValue = (kind: CanvasObjectKind, key: DirectionKey, value: string) => {
-    const next = campaignDirection.filter((d) => !(d.kind === kind && d.key === key))
-    if (value.trim()) next.push({ kind, key, value })
-    if (viewing && viewName) setCampaignDirection(viewName, next)
-    else setBuilderDirection(next)
+  /**
+   * LEGACY direction, kept readable for one release. Everything written before direction moved onto
+   * the card lives here, keyed (campaign, kind); it is shown as an inherited value and is never
+   * written to again.
+   */
+  const campaignDirection = (viewing ? viewCampaign?.direction : undefined) ?? []
+  /**
+   * A card's instruction, read from the CARD. Falls back to the campaign's entry for its kind, which
+   * is where every instruction written before this phase still lives: those are shown as inherited
+   * rather than migrated wholesale, because a campaign entry with two audience cards on the board
+   * cannot be attributed to either of them (see adoptCampaignDirection).
+   */
+  const directionValue = (nt: CanvasObject, key: DirectionKey): string => {
+    const own = nt.direction?.find((d) => d.key === key)?.value
+    if (own !== undefined) return own
+    return campaignDirection.find((d) => d.kind === nt.kind && d.key === key)?.value ?? ''
+  }
+  const setDirectionValue = (nt: CanvasObject, key: DirectionKey, value: string) => {
+    setObjects((os) =>
+      os.map((o) => {
+        if (o.id !== nt.id) return o
+        const rest = (o.direction ?? []).filter((d) => d.key !== key)
+        return { ...o, direction: value.trim() ? [...rest, { key, value }] : rest }
+      }),
+    )
+    // The board autosave (debounced 600ms) persists it; no new plumbing.
+    //
     // Redraft the previews so typing an instruction visibly rewrites the copy on every deliverable
     // it reaches. Debounced by scheduleRedraftAll, so a sentence typed a character at a time is one
     // regeneration pass rather than forty.
-    directionRef.current = next
     if (!viewing) scheduleRedraftAll()
     else setRefsDirty(true)
   }
   directionRef.current = campaignDirection
+  /**
+   * Every instruction on the board, flattened with its kind so the preview and the copy request read
+   * the same shape they always did. Cards first: an inherited campaign value for a kind is only a
+   * fallback, and buildDirection keeps the first entry it sees per key.
+   */
+  const boardDirection = [
+    ...objects.flatMap((o) => (o.direction ?? []).map((d) => ({ kind: o.kind as string, key: d.key, value: d.value }))),
+    ...campaignDirection,
+  ]
+  const boardDirectionRef = useRef(boardDirection)
+  boardDirectionRef.current = boardDirection
 
   const selObject = objects.find((n) => n.id === sel) ?? null
   const selGroup = placements.find((g) => g.id === sel) ?? null
@@ -3605,7 +3636,7 @@ export function FlowsView() {
               smart object, or fill this in — were both on the panel with nothing saying that is the
               choice, and a card left with neither reads exactly like one that is finished. */}
           {(DIRECTION_KEYS[nt.kind] ?? []).length > 0 && (() => {
-            const filled = (DIRECTION_KEYS[nt.kind] ?? []).some((k) => directionValue(nt.kind, k).trim())
+            const filled = (DIRECTION_KEYS[nt.kind] ?? []).some((k) => directionValue(nt, k).trim())
             if (filled || nt.smartObjectId) return null
             return (
               <div className="flow-inspect-note" style={{ marginTop: 14, marginBottom: -4 }}>
@@ -3628,9 +3659,9 @@ export function FlowsView() {
                 className="flow-inspect-input"
                 rows={2}
                 maxLength={capFor(k)}
-                value={directionValue(nt.kind, k)}
+                value={directionValue(nt, k)}
                 placeholder={DIRECTION_FIELD[k].hint}
-                onChange={(e) => setDirectionValue(nt.kind, k, e.target.value)}
+                onChange={(e) => setDirectionValue(nt, k, e.target.value)}
               />
             </Fragment>
           ))}
