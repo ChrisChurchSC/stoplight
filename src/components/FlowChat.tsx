@@ -31,7 +31,7 @@ const START_EXAMPLES: Example[] = [
 ]
 const BUILD_EXAMPLES: Example[] = [
   { title: 'Add a newsletter and socials', desc: 'Add a newsletter and 4 Instagram posts a month.', prompt: 'Add a weekly newsletter and 4 Instagram posts a month' },
-  { title: 'Tag the right records', desc: 'Point this campaign at the segments it targets.', prompt: 'Tag this campaign to the segments it targets' },
+  { title: 'Wire in the right context', desc: 'Point this campaign at the audiences it targets.', prompt: 'Tag this campaign to the segments it targets' },
   { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this campaign?", mode: 'analyze' },
 ]
 const VIEW_EXAMPLES: Example[] = [
@@ -161,7 +161,7 @@ export function FlowChat({
             ) : (
               <>
                 <p className="fchat-empty-lead">I&rsquo;m Gretel.</p>
-                <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, tag records, set a budget and flight, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
+                <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, wire in context, set a budget and length, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
               </>
             )}
             <div className="fchat-cards">

@@ -6781,6 +6781,10 @@ button {
 /* Bottom canvas controls: zoom · pan/select tools · Add block. */
 .flow-toolbar {
   position: absolute;
+  /* Above the connector layers. .flow-edges-top carries z-index 5 so endpoint dots sit on top of the
+     cards, and the toolbar had no z-index at all — so those dots drew straight through it. 6 rather
+     than something larger, to stay well under the menus and drawers that must cover the toolbar. */
+  z-index: 6;
   /* Centered over the canvas. Gretel (left) and the inspector (right) are both 360px docked
      columns, so when both are open (or both collapsed to their 48px rails) the canvas center is
      the flow center. When only one collapses, the combo rules below nudge the toolbar by half the

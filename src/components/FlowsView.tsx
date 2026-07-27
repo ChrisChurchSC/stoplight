@@ -9,8 +9,9 @@ import {
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
+import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
-import { type SmartObject, describeSmartObject, scopeOf, visibleOnCampaign, wouldCycle } from '../domain/smartObject'
+import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
@@ -123,14 +124,6 @@ const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
 ]
 // What to call each record type in the UI. The stored strings are historical ('segment' is what
 // a user calls an audience), and renaming them would be a migration through share snapshots.
-const REF_TYPE_LABEL: Record<FlowRefType, string> = {
-  segment: 'Audience',
-  company: 'Company',
-  person: 'Contact',
-  proof: 'Proof point',
-  channel: 'Channel',
-  'media-mix': 'Media mix',
-}
 const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     {RECORD_TYPE_ICON[type]}
@@ -484,8 +477,6 @@ export function FlowsView() {
   const addBrandDataset = useTrafficStore((s) => s.addBrandDataset)
   // Brand-library smart objects: the reusable bundles a card picks from.
   const smartObjects = useTrafficStore((s) => s.smartObjects)
-  // By id, for the walks that follow nested contents (the cycle guard, the ref resolver).
-  const smartObjectsById = useMemo(() => new Map(smartObjects.map((o) => [o.id, o])), [smartObjects])
   const addSmartObject = useTrafficStore((s) => s.addSmartObject)
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
@@ -537,15 +528,26 @@ export function FlowsView() {
   const [objectiveId, setObjectiveId] = useState('')
   const [messageId, setMessageId] = useState('')
   const linkedObjective = objectives.find((o) => o.id === objectiveId)
-  // The linked objective mapped onto the campaign's goal fields — the metric becomes the KPI and
-  // the target's leading number becomes the goal target.
+  /**
+   * A standard objective, when the builder picked one instead of a brand record. Carried in the same
+   * `objectiveId` state under a `preset:` prefix rather than as a second piece of state, so exactly
+   * one objective can be chosen and buildFlow needs no second branch.
+   */
+  const builderPreset = objectiveId.startsWith('preset:')
+    ? OBJECTIVE_PRESETS.find((p) => p.id === objectiveId.slice('preset:'.length))
+    : undefined
+  // The chosen objective mapped onto the campaign's goal fields — the metric becomes the KPI and,
+  // for a brand record, the target's leading number becomes the goal target. A preset brings no
+  // target: nobody can guess your number.
   const objectiveCfg = linkedObjective
     ? {
         text: linkedObjective.name,
         kpi: linkedObjective.metric?.trim() || undefined,
         target: linkedObjective.target ? Number(String(linkedObjective.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
       }
-    : undefined
+    : builderPreset
+      ? { text: builderPreset.name, kpi: builderPreset.kpi }
+      : undefined
   // Build-mode record-tag selection (Companies / People / Segments / Media mix). null =
   // not touched yet, so it defaults to all of the brand's segments.
   const [briefRefs, setBriefRefs] = useState<FlowReference[] | null>(null)
@@ -1325,7 +1327,18 @@ export function FlowsView() {
         map.set(key, { key, label, tone, channel: r.channel as ChannelId, assetType: r.assetType ?? '', count: 1, rows: [r] })
       }
     }
-    return [...map.values()].sort((a, b) => b.count - a.count)
+    // Ordered by WHEN the deliverable's first asset goes out, not by how many assets it has.
+    //
+    // Sorting on count meant the column reordered every time you changed one: take a deliverable from
+    // 3 assets to 5 and it leapt over its neighbours mid-click, which is the jump that survived
+    // top-anchoring the card. Count is also arbitrary as an order — a board reads top to bottom, so
+    // chronological is the one that means something, and it does not move when a count changes.
+    return [...map.values()].sort((a, b) => {
+      const at = Math.min(...a.rows.map((r) => Date.parse(r.scheduledAt || '') || Infinity))
+      const bt = Math.min(...b.rows.map((r) => Date.parse(r.scheduledAt || '') || Infinity))
+      if (at !== bt) return at - bt
+      return a.label.localeCompare(b.label)
+    })
   }, [viewRows])
   // Read by the Delete handler, which is declared above this but only ever RUNS on a keystroke,
   // long after render has assigned these. Same pattern as releaseRef.
@@ -1538,37 +1551,54 @@ export function FlowsView() {
       commitBriefRefs(base)
     }
   }
+  /** Is this a context card or a smart object, i.e. something that can INFORM an output? */
+  const isContextNode = (id: string) => objects.some((n) => n.id === id) || placements.some((p) => p.id === id)
   /**
-   * Drop ONE record from the campaign, unless some other attached card still contributes it. The
-   * per-ref counterpart to detachFromCampaign, which drops everything behind a node.
-   *
-   * `edited` carries the smart object's POST-edit refs. Both this and refsBehind read `smartObjects`
-   * from the render closure, so a store write in the same handler is not visible yet: without the
-   * override, a second attached card linking the same object would still appear to contribute the
-   * record that was just removed, and the drop would be skipped.
+   * The assets behind a connector target: every asset of a deliverable, or the one asset of a post.
+   * Empty for the campaign, which is handled by attachToCampaign instead.
    */
-  const dropRefFromCampaign = (
-    ref: FlowReference,
-    fromNodeId: string,
-    edited?: { objectId: string; refs: FlowReference[] },
-  ) => {
-    const linkedObjectOf = (nodeId: string): string | undefined =>
-      placements.find((x) => x.id === nodeId)?.smartObjectId ?? objects.find((n) => n.id === nodeId)?.smartObjectId
-    const behind = (nodeId: string): FlowReference[] =>
-      edited && linkedObjectOf(nodeId) === edited.objectId ? edited.refs : refsBehind(nodeId)
-    const stillAttached = connectors
-      .filter((e) => e.to === 'campaign' && e.from !== fromNodeId)
-      .flatMap((e) => behind(e.from))
-    if (stillAttached.some((x) => x.type === ref.type && x.id === ref.id)) return
-    const base = (viewName !== null ? flowRefs : briefRefsEffective).filter(
-      (r) => !(r.type === ref.type && r.id === ref.id),
+  const rowsForTarget = (target: string): TrafficRow[] => {
+    const d = viewDelivs.find((x) => x.key === target)
+    if (d) return d.rows
+    const r = viewRows.find((x) => x.id === target)
+    return r ? [r] : []
+  }
+  /**
+   * Wire an object straight to a deliverable or a post: its records go onto those assets, so they
+   * reach the writer for exactly those and nothing else.
+   *
+   * MATERIALIZES onto the rows, the same way attachToCampaign writes campaign references. The
+   * alternative was resolving the board's edges at draft time, which would have meant the copy path
+   * learning about connectors; this keeps one rule — a ref reaches the writer because it is ON the
+   * asset — and it means the override the inspector already showed is the same mechanism.
+   */
+  const attachToTarget = (nodeId: string, target: string) => {
+    const refs = refsBehind(nodeId)
+    const rows = rowsForTarget(target)
+    if (!refs.length || !rows.length) return
+    // Start from whatever those assets already write to: their own override if they have one, else
+    // the campaign's, so wiring an object ADDS context rather than replacing the campaign's.
+    const base = rows.find((r) => r.references && r.references.length)?.references ?? flowRefs
+    const next = [...base]
+    for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
+    void updateRows(rows.map((r) => ({ id: r.id, patch: { references: next } })))
+    setRefsDirty(true)
+  }
+  /** The counterpart: drop this object's records from those assets, unless another wired card gives them. */
+  const detachFromTarget = (nodeId: string, target: string, edges: { from: string; to: string }[]) => {
+    const mine = refsBehind(nodeId)
+    const rows = rowsForTarget(target)
+    if (!mine.length || !rows.length) return
+    const stillWired = edges
+      .filter((e) => e.to === target && e.from !== nodeId)
+      .flatMap((e) => refsBehind(e.from))
+    const drop = mine.filter((r) => !stillWired.some((x) => x.type === r.type && x.id === r.id))
+    if (!drop.length) return
+    const base = (rows.find((r) => r.references && r.references.length)?.references ?? flowRefs).filter(
+      (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
     )
-    if (viewName !== null) {
-      setCampaignReferences(viewName, base)
-      setRefsDirty(true)
-    } else {
-      commitBriefRefs(base)
-    }
+    void updateRows(rows.map((r) => ({ id: r.id, patch: { references: base } })))
+    setRefsDirty(true)
   }
   /** Is this node attached to the campaign right now? Drives the card's "in the campaign" look. */
   /**
@@ -1669,7 +1699,7 @@ export function FlowsView() {
       <div className="flow-tagrow flow-tagrow-add">
         <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
         <button className="flow-aud-btn flow-tagrow-addbtn" onClick={ops.openPicker}>
-          <span className="flow-aud-btn-txt flow-tagrow-add-txt">Pin a record directly</span>
+          <span className="flow-aud-btn-txt flow-tagrow-add-txt">Pin one directly</span>
         </button>
       </div>
     </>
@@ -1689,10 +1719,16 @@ export function FlowsView() {
    * the chat. Showing only connected cards would have left those invisible and unremovable while
    * they still steered every draft, so they keep the old swap-and-remove rows under their own head.
    */
-  /** The rows behind "Informing the messaging": one per card wired to the campaign. */
-  const campaignContextRows = () => {
+  /**
+   * The rows behind "Informing the messaging": one per card wired to `target`.
+   *
+   * `target` is 'campaign' for the brief, a deliverable key, or a post's row id. Wiring an object
+   * straight to a deliverable was already drawable and already stored — the edge simply did nothing,
+   * because only edges to 'campaign' were acted on.
+   */
+  const contextRowsFor = (target: string) => {
     return connectors
-      .filter((e) => e.to === 'campaign')
+      .filter((e) => e.to === target)
       .map((e) => {
         const g = placements.find((p) => p.id === e.from)
         if (g) {
@@ -1727,7 +1763,7 @@ export function FlowsView() {
       .filter((r): r is NonNullable<typeof r> => !!r)
   }
   const renderCampaignContext = () => {
-    const rows = campaignContextRows()
+    const rows = contextRowsFor('campaign')
     const covered = new Set(rows.flatMap((r) => r.refs).map(refKey))
     const direct = activeRefs.filter((r) => !covered.has(refKey(r)))
 
@@ -2013,34 +2049,50 @@ export function FlowsView() {
   // Which group a card belongs to (a card is in at most one).
   const placementOf = (noteId: string): SmartPlacement | undefined => placements.find((g) => g.memberIds.includes(noteId))
   /**
-   * OBJECTS A CARD CAN PICK. A Person card offers person objects, an Audience card segment ones.
-   *
-   * Split by SCOPE: the ones local to this campaign, then the brand library. It used to split on
-   * "placed on this canvas or not", which described the same brand-wide list twice and gave the two
-   * groups no meaning beyond a layout detail. Scope is the distinction that matters, because it says
-   * whether editing the object reaches other campaigns.
+   * A list of context rows, shared by the campaign brief, a deliverable and a post so all three read
+   * the same. `onRemove` is omitted where the row is inherited and cannot be unwired from here.
    */
-  const objectsForKind = (kind: CanvasObjectKind): { onCampaign: SmartObject[]; library: SmartObject[] } => {
-    const refType = REF_TYPE_FOR_KIND[kind]
-    // visibleOnCampaign, not `o.brand === brand`: another campaign's local objects belong to this
-    // brand too, and offering them here is exactly what scoping exists to prevent.
-    //
-    // The CYCLE GUARD: when the picker is being shown inside an open object, any candidate that
-    // already contains that object is withheld. Contents can nest, so without this you could put an
-    // object inside itself and the resolver would only stop because of its depth cap.
-    const host = openPlacement ? smartObjectFor(openPlacement)?.id : undefined
-    const mine = smartObjects.filter(
-      (o) =>
-        o.kind === refType &&
-        visibleOnCampaign(o, brand, viewName ?? BUILDER_BOARD_KEY) &&
-        !(host && wouldCycle(o.id, host, smartObjectsById)),
-    )
-    return {
-      onCampaign: mine.filter((o) => scopeOf(o) === 'campaign'),
-      library: mine.filter((o) => scopeOf(o) === 'brand'),
-    }
-  }
-
+  const renderContextRows = (
+    rows: ReturnType<typeof contextRowsFor>,
+    onRemove?: (id: string) => void,
+  ) => (
+    <div className="flow-ctxlist">
+      {rows.map((r) => (
+        <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
+          <button
+            className="flow-ctxrow-open"
+            title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+            onClick={() => { setSel(r.id); setSelected(new Set()) }}
+          >
+            <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+            </span>
+            <span className="flow-ctxrow-txt">
+              <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
+              <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
+              {(() => {
+                const sub =
+                  r.refs.length === 0
+                    ? 'Contributes nothing yet'
+                    : r.detail || (r.refs.length === 1 && r.refs[0].label === r.label ? '' : r.refs.map((x) => x.label).join(' · '))
+                return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
+              })()}
+            </span>
+          </button>
+          {onRemove && (
+            <button
+              className="flow-ctxrow-del"
+              title="Unwire it (the card stays on the board)"
+              aria-label={`Unwire ${r.label || r.kindLabel}`}
+              onClick={() => onRemove(r.id)}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
   /**
    * A campaign name without its brand prefix, for prose. The builder slot has no name to show, so
    * it reads as "an unsaved campaign" rather than leaking '__new-flow__'.
@@ -3499,9 +3551,7 @@ export function FlowsView() {
    */
   const renderObjectInspector = (nt: CanvasObject) => {
     const meta = OBJECT_META[nt.kind]
-    const opts = objectOptions(nt.kind)
     const noun = meta.label.toLowerCase()
-    const linkedDs = nt.kind === 'data-source' && nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
     return (
       <>
         <div className="flow-panel-head">
@@ -3517,182 +3567,53 @@ export function FlowsView() {
               carrying the contact plus the proof and message that go with them); the record is
               just its contents. Picking one pulls everything inside it into the campaign when the
               card is attached. */}
-          {REF_TYPE_FOR_KIND[nt.kind] && (() => {
-            const { onCampaign, library } = objectsForKind(nt.kind)
-            const linked = smartObjects.find((o) => o.id === nt.smartObjectId)
-            const noun = meta.label.toLowerCase()
-            return (
-              <>
-                <label className="flow-inspect-label">{meta.label} smart object</label>
-                <select
-                  className="flow-inspect-input flow-inspect-select"
-                  value={nt.smartObjectId ?? ''}
-                  onChange={(e) => {
-                    setObjects((n) => n.map((x) => (x.id === nt.id ? { ...x, smartObjectId: e.target.value || undefined } : x)))
-                    if (isAttached(nt.id)) attachToCampaign(nt.id)
-                  }}
-                >
-                  <option value="">{onCampaign.length + library.length ? `Link ${articleFor(noun)} ${noun} smart object…` : `No ${noun} smart objects yet`}</option>
-                  {onCampaign.length > 0 && (
-                    <optgroup label="Only on this campaign">
-                      {onCampaign.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </optgroup>
-                  )}
-                  {library.length > 0 && (
-                    <optgroup label="In the brand library">
-                      {library.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </optgroup>
-                  )}
-                </select>
-                {/* What the card actually resolves to. A summary line was not enough: an
-                    object-linked card is the one case where you could not determine, or change,
-                    which records the card contributes. They are listed and removable here. */}
-                {linked && (
-                  <div className="flow-obj-list" style={{ marginTop: 8 }}>
-                    {linked.refs.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside this object yet.</div>}
-                    {linked.refs.map((r) => (
-                      <div key={`${r.type}:${r.id}`} className="flow-obj-row">
-                        <span className="flow-obj-row-ic" style={{ color: 'var(--accent-2)' }} aria-hidden="true">
-                          <RecordTypeIcon type={r.type} />
-                        </span>
-                        <span className="flow-obj-row-txt">
-                          <span className="flow-obj-row-kind">{REF_TYPE_LABEL[r.type]}</span>
-                          <span className="flow-obj-row-val">{r.label}</span>
-                        </span>
-                        <button
-                          className="flow-obj-row-out"
-                          title="Take this out of the smart object"
-                          aria-label="Take this out of the smart object"
-                          onClick={() => {
-                            const nextRefs = linked.refs.filter((x) => !(x.type === r.type && x.id === r.id))
-                            updateSmartObject(linked.id, { refs: nextRefs })
-                            // Drop just THIS record from the campaign. This used to call
-                            // detachFromCampaign, which reads refsBehind from the pre-edit
-                            // smartObjects closure: it saw the object's whole old ref list and
-                            // dropped every one, so taking a single proof point out of a bundle also
-                            // detached its audience and its message from the campaign.
-                            if (isAttached(nt.id)) dropRefFromCampaign(r, nt.id, { objectId: linked.id, refs: nextRefs })
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    {/* WHERE IT LIVES, and what editing it therefore costs. One flat sentence used
-                        to claim every object reached every campaign, which was the wrong warning for
-                        a local object and, until propagation landed, not quite true of a brand one. */}
-                    {scopeOf(linked) === 'brand' ? (
-                      <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                        In the brand library{linked.campaign ? `, promoted from ${shortCampaignName(linked.campaign)}` : ''}. Editing
-                        it changes every campaign using it, not just this one.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                          Only on this campaign. Edit it freely: nothing else uses it.
-                        </div>
-                        <button
-                          className="flow-obj-promote"
-                          title="Move this into the brand library so every campaign can use it"
-                          onClick={() => promoteSmartObject(linked.id, brand)}
-                          disabled={!brand}
-                        >
-                          Add to the brand library
-                        </button>
-                      </>
-                    )}
-                    {/* Deleting the OBJECT, as opposed to taking one record out of it or removing
-                        the card from this board. It had no control anywhere until now, so a smart
-                        object could be made but never unmade. Counted across boards rather than
-                        described vaguely, because this reaches campaigns you cannot see from here. */}
-                    {(() => {
-                      const usedOn = flowBoards.filter((b) => b.placements.some((p) => p.smartObjectId === linked.id)).length
-                      const armed = confirmDeleteObject === linked.id
-                      return (
-                        <button
-                          className={`flow-obj-del${armed ? ' armed' : ''}`}
-                          onClick={() => {
-                            if (!armed) {
-                              setConfirmDeleteObject(linked.id)
-                              return
-                            }
-                            setConfirmDeleteObject(null)
-                            const gone = linked.id
-                            deleteSmartObject(gone)
-                            // pruneBoard clears dangling references, but only on LOAD. Without
-                            // this the placements and cards pointing at the deleted object would
-                            // sit on the live board as ghosts until a reload.
-                            placements.filter((p) => p.smartObjectId === gone).forEach((p) => releasePlacement(p.id))
-                            setObjects((os) => os.map((o) => (o.smartObjectId === gone ? { ...o, smartObjectId: undefined } : o)))
-                          }}
-                        >
-                          {armed
-                            ? `Click again to delete${usedOn > 1 ? ` from all ${usedOn} campaigns` : ''}`
-                            : 'Delete this smart object'}
-                        </button>
-                      )
-                    })()}
-                  </div>
-                )}
-              </>
-            )
-          })()}
-          {opts && (
-            <>
-              <label className="flow-inspect-label" style={{ marginTop: REF_TYPE_FOR_KIND[nt.kind] ? 14 : 0 }}>
-                {/* When an object picker sits above, this is the alternative, so say so once here
-                    rather than stacking a second label on top of it. */}
-                {REF_TYPE_FOR_KIND[nt.kind] ? `Or one ${meta.label.toLowerCase()} record` : `${meta.label} record`}
-              </label>
-              <select
-                className="flow-inspect-input flow-inspect-select"
-                value={nt.refId ?? ''}
-                onChange={(e) => {
-                  if (nt.kind === 'data-source' && e.target.value === '__new__') {
-                    setObjectRef(nt.id, addBrandDataset(brand))
-                  } else setObjectRef(nt.id, e.target.value)
-                }}
-              >
-                <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} established yet`}</option>
-                {nt.kind === 'data-source' ? (
-                  // Mirror the card's own picker: a Data source can link one of the brand's data
-                  // sets OR a live connector. objectOptions only knows the connectors, so listing
-                  // just those would leave a linked DATA SET matching no option, and the select
-                  // would silently show the placeholder on an already-linked card.
-                  <>
-                    {brandDatasets.length > 0 && (
-                      <optgroup label="Your data sets">
-                        {brandDatasets.map((d) => (
-                          <option key={d.id} value={d.id}>{d.name || 'Untitled data set'}</option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label="Connectors">
-                      {CONNECTOR_SOURCES.map((o) => (
-                        <option key={o.id} value={o.id}>{o.label}</option>
-                      ))}
-                    </optgroup>
-                    <option value="__new__">+ New data set…</option>
-                  </>
-                ) : (
-                  opts.map((o) => (
-                    <option key={o.id} value={o.id}>{o.label}</option>
-                  ))
-                )}
-              </select>
-              {linkedDs && (
-                <button className="flow-insp-open" onClick={() => openDataCard(nt)}>
-                  Open {linkedDs.name || 'this data set'}
-                </button>
-              )}
-            </>
-          )}
+          {/* NO PICKERS ON A CARD. It carried a smart-object picker and, under that, a
+              single-record picker: two ways to answer the same question, on the card that is itself
+              the answer. A card now says what it INSTRUCTS, and ⌘G (or the right-click menu) is how
+              it becomes a smart object — one gesture, on the board, rather than a dropdown that
+              quietly swapped what the card meant.
+
+              The linked object's contents, its promote and its delete moved with it. They belong on
+              the smart object's own inspector, which is where selecting one already takes you. */}
+          {/* A CARD POINTS AT A SMART OBJECT, or it carries direction. There is no third option.
+              The "Or just one audience" picker is gone from every kind that HAS a smart-object
+              picker: it offered the same thing one rung lower, so the panel asked the same question
+              twice and a card could end up naming a record its linked object was going to ignore.
+
+              Kept on the kinds with NO smart-object picker (message, voice, trigger, season, concept,
+              data source), where it is the only way to point the card at anything. */}
+          {/* NO RECORD PICKER EITHER, on any kind. A card is what it INSTRUCTS: the fields below are
+              the whole of it. The picker was the last place the panel asked "which stored thing is
+              this" instead of "what should the copy do", and keeping it on the handful of kinds that
+              had no smart object made those kinds behave differently for no reason a user could see.
+
+              A Data source card still reaches its data set: double-clicking one opens it, creating it
+              if it does not exist yet (openDataCard). */}
           {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
               fields per kind, each landing in a named slot in every wired asset's payload. This is
-              the whole point of an object: not which record it names, but what it says about it. */}
+              the whole point of an object: not which record it names, but what it says about it.
+
+              Stated plainly at the top, because the two ways to make a card count — point it at a
+              smart object, or fill this in — were both on the panel with nothing saying that is the
+              choice, and a card left with neither reads exactly like one that is finished. */}
+          {(DIRECTION_KEYS[nt.kind] ?? []).length > 0 && (() => {
+            const filled = (DIRECTION_KEYS[nt.kind] ?? []).some((k) => directionValue(nt.kind, k).trim())
+            if (filled || nt.smartObjectId) return null
+            return (
+              <div className="flow-inspect-note" style={{ marginTop: 14, marginBottom: -4 }}>
+                {/* Only offer the smart object as an alternative on the kinds that HAVE one: a
+                    trigger has no object picker, so telling you to use it was pointing at nothing. */}
+                {nt.refId || !REF_TYPE_FOR_KIND[nt.kind]
+                  ? 'Nothing here reaches the writer yet. Fill in one of these and it does.'
+                  : `Pick a smart object above, or fill this in: either makes this ${noun} count for the copy.`}
+              </div>
+            )
+          })()}
           {(DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => (
             <Fragment key={k}>
-              <label className="flow-inspect-label" style={{ marginTop: i === 0 && !opts ? 0 : 14 }}>
+              {/* The first field is now the top of the panel on every kind, since no picker sits
+                  above it any more. */}
+              <label className="flow-inspect-label" style={{ marginTop: i === 0 ? 0 : 14 }}>
                 {DIRECTION_FIELD[k].label}
               </label>
               <textarea
@@ -3811,6 +3732,32 @@ export function FlowsView() {
             )
           })()}
           <button className="flow-insp-del" onClick={() => releasePlacement(g.id)}>Release</button>
+          {/* Deleting the OBJECT, as opposed to releasing it back into loose cards. This lived on the
+              card's inspector next to its smart-object picker; the picker is gone, so it moved to the
+              object's own panel, which is where it belonged anyway. Counted across boards rather than
+              described vaguely, because it reaches campaigns you cannot see from here. */}
+          {(() => {
+            const so = smartObjectFor(g)
+            if (!so) return null
+            const usedOn = flowBoards.filter((b) => b.placements.some((p) => p.smartObjectId === so.id)).length
+            const armed = confirmDeleteObject === so.id
+            return (
+              <button
+                className={`flow-obj-del${armed ? ' armed' : ''}`}
+                onClick={() => {
+                  if (!armed) { setConfirmDeleteObject(so.id); return }
+                  setConfirmDeleteObject(null)
+                  deleteSmartObject(so.id)
+                  placements.filter((p) => p.smartObjectId === so.id).forEach((p) => releasePlacement(p.id))
+                  setObjects((os) => os.map((o) => (o.smartObjectId === so.id ? { ...o, smartObjectId: undefined } : o)))
+                }}
+              >
+                {armed
+                  ? `Click again to delete${usedOn > 1 ? ` from all ${usedOn} campaigns` : ''}`
+                  : 'Delete this smart object'}
+              </button>
+            )
+          })()}
         </div>
       </>
     )
@@ -4309,6 +4256,10 @@ export function FlowsView() {
               if (pair && pair.from !== pair.to) {
                 setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
                 if (pair.to === 'campaign') attachToCampaign(pair.from)
+                // A card wired to a DELIVERABLE or a POST informs just that one. The edge was already
+                // drawable and already saved; nothing acted on it, so it looked connected and changed
+                // nothing about the copy.
+                else if (isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
               }
               drawingFrom.current = null
               setDrawing(null)
@@ -4384,6 +4335,9 @@ export function FlowsView() {
                   {/* Wide transparent hit path so the thin dotted edge is easy to click to delete. */}
                   <path className="flow-edge-hit" d={d} onClick={() => {
                     if (cn.to === 'campaign') detachFromCampaign(cn.from, connectors)
+                    // Deleting the edge to a deliverable or post takes its records off those assets
+                    // too, or the wire would be gone while its context kept steering the copy.
+                    else if (isContextNode(cn.from)) detachFromTarget(cn.from, cn.to, connectors)
                     setConnectors((c) => c.filter((_, j) => j !== i))
                   }}>
                     <title>Click to delete this connection</title>
@@ -5008,6 +4962,21 @@ export function FlowsView() {
                     {selPost.audience ? ` · ${selPost.audience}` : ''}
                     {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
                   </p>
+                  {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
+                      Same list, same rules: what it holds reaches the writer for this one asset. */}
+                  {(() => {
+                    const wired = contextRowsFor(selPost.id)
+                    if (!wired.length) return null
+                    return (
+                      <>
+                        <label className="flow-inspect-label">Wired to this post only · {wired.length}</label>
+                        {renderContextRows(wired, (id) => {
+                          setConnectors((c) => c.filter((x) => !(x.from === id && x.to === selPost.id)))
+                          detachFromTarget(id, selPost.id, connectors)
+                        })}
+                      </>
+                    )
+                  })()}
                   {CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' && (
                     <>
                       <label className="flow-inspect-label">Budget for this asset</label>
@@ -5218,7 +5187,8 @@ export function FlowsView() {
                       the override, when there is one, still shows exactly what it pins. */}
                   {(() => {
                     const overridden = selDeliv.rows.some((r) => r.references && r.references.length)
-                    const inherited = campaignContextRows()
+                    const inherited = contextRowsFor('campaign')
+                    const wired = contextRowsFor(selDeliv.key)
                     return (
                       <>
                         <label className="flow-inspect-label" style={{ marginTop: 16 }}>
@@ -5249,53 +5219,45 @@ export function FlowsView() {
                               </div>
                             ))}
                           </div>
-                        ) : inherited.length === 0 ? (
+                        ) : inherited.length === 0 && !wired.length ? (
                           <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
                             Nothing is wired to the campaign yet, so this deliverable has no context to
-                            write from.
+                            write from. Draw a line from a card to this deliverable to give it its own.
                           </div>
                         ) : (
-                          <div className="flow-ctxlist">
-                            {inherited.map((r) => (
-                              <div key={r.id} className="flow-ctxrow">
-                                <button
-                                  className="flow-ctxrow-open"
-                                  title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
-                                  onClick={() => { setSel(r.id); setSelected(new Set()) }}
-                                >
-                                  <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
-                                  </span>
-                                  <span className="flow-ctxrow-txt">
-                                    <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
-                                    <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
-                                  </span>
-                                </button>
-                              </div>
-                            ))}
+                          renderContextRows(inherited)
+                        )}
+                        {/* WIRED STRAIGHT TO THIS ONE, above and beyond the campaign's. Its own head,
+                            because "this applies to this deliverable only" is the whole difference and
+                            mixing the two lists would lose it. */}
+                        {wired.length > 0 && (
+                          <>
+                            <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                              Wired to this deliverable only · {wired.length}
+                            </label>
+                            {renderContextRows(wired, (id) => {
+                              setConnectors((c) => c.filter((x) => !(x.from === id && x.to === selDeliv.key)))
+                              detachFromTarget(id, selDeliv.key, connectors)
+                            })}
+                          </>
+                        )}
+                        {/* Nothing here when it is simply inheriting. The "pin different records"
+                            link is gone: wiring a card straight to this deliverable is how you give it
+                            its own context now, which is the same gesture as everywhere else on the
+                            board rather than a second, record-shaped mechanism reachable only from a
+                            footnote. An override that already exists stays explained and reversible. */}
+                        {overridden && (
+                          <div className="flow-inspect-note" style={{ marginTop: 8 }}>
+                            This deliverable ignores the campaign's context and uses only what is pinned
+                            above.{' '}
+                            <button
+                              className="flow-reset-link"
+                              onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
+                            >
+                              Go back to the campaign's
+                            </button>
                           </div>
                         )}
-                        <div className="flow-inspect-note" style={{ marginTop: 8 }}>
-                          {overridden ? (
-                            <>
-                              This deliverable ignores the campaign's context and uses only what is
-                              pinned above.{' '}
-                              <button
-                                className="flow-reset-link"
-                                onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
-                              >
-                                Go back to the campaign's
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              Inherited from the campaign.{' '}
-                              <button className="flow-reset-link" onClick={() => delivTagOps(selDeliv).openPicker()}>
-                                Pin different records for just this deliverable
-                              </button>
-                            </>
-                          )}
-                        </div>
                       </>
                     )
                   })()}
@@ -5370,8 +5332,11 @@ export function FlowsView() {
                     onBlur={commitViewSubject}
                   />
                   <div className="flow-inspect-note" style={{ marginTop: 4 }}>The angle every asset's copy is written to; change it, then Generate to redraft them all.</div>
-                  {objectives.length > 0 && (() => {
+                  {(() => {
                     const linked = objectives.find((o) => o.name === (viewCampaign?.objective ?? ''))
+                    // A campaign stores its objective as a NAME, so a preset is recognised by matching
+                    // that name back. No id to store and nothing to migrate.
+                    const presetObjective = linked ? undefined : objectivePresetByName(viewCampaign?.objective)
                     return (
                       <>
                         <label className="flow-inspect-label" style={{ marginTop: 14 }}>
@@ -5379,10 +5344,18 @@ export function FlowsView() {
                         </label>
                         <select
                           className="flow-inspect-input flow-inspect-select"
-                          value={linked?.id ?? ''}
+                          value={linked?.id ?? (presetObjective ? `preset:${presetObjective.id}` : '')}
                           onChange={(e) => {
-                            const o = objectives.find((x) => x.id === e.target.value)
                             if (!viewName) return
+                            const v = e.target.value
+                            const preset = v.startsWith('preset:') ? OBJECTIVE_PRESETS.find((p) => p.id === v.slice(7)) : undefined
+                            if (preset) {
+                              // A preset brings its metric with it, so choosing an objective fills the
+                              // KPI too. The target stays for you to set: nobody can guess your number.
+                              patchCampaign(viewName, { objective: preset.name, goalKpi: preset.kpi })
+                              return
+                            }
+                            const o = objectives.find((x) => x.id === v)
                             patchCampaign(viewName, {
                               objective: o?.name || undefined,
                               goalKpi: o?.metric?.trim() || undefined,
@@ -5390,13 +5363,32 @@ export function FlowsView() {
                             })
                           }}
                         >
-                          <option value="">Link an objective…</option>
-                          {objectives.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.name}
-                            </option>
-                          ))}
+                          <option value="">What is this campaign for?</option>
+                          {/* Presets first, because they are the answer most of the time. A brand's
+                              own objective records sit under their own group: a preset is a starting
+                              point, not a replacement for one somebody has defined precisely. */}
+                          <optgroup label="Standard objectives">
+                            {OBJECTIVE_PRESETS.map((p) => (
+                              <option key={p.id} value={`preset:${p.id}`}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {objectives.length > 0 && (
+                            <optgroup label={`${brand || 'This brand'}'s objectives`}>
+                              {objectives.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
                         </select>
+                        {presetObjective && (
+                          <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+                            {presetObjective.hint} Measured on {presetObjective.kpi.toLowerCase()}.
+                          </div>
+                        )}
                         {linked && (linked.metric || linked.target) && (
                           <div className="flow-inspect-note" style={{ marginTop: 4 }}>
                             Goal: {[linked.metric, linked.target].filter(Boolean).join(' · ')}
@@ -5533,19 +5525,35 @@ export function FlowsView() {
                 </label>
                 <textarea className="flow-inspect-input" rows={2} value={subject} placeholder="What is this campaign for?" onChange={(e) => setSubject(e.target.value)} onBlur={onSubjectCommit} />
                 <div className="flow-inspect-note" style={{ marginTop: 4 }}>The angle every asset's copy is written to; changing it redrafts them all.</div>
-                {objectives.length > 0 && (
+                {(
                   <>
                     <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                       Objective
                     </label>
                     <select className="flow-inspect-input flow-inspect-select" value={objectiveId} onChange={(e) => setObjectiveId(e.target.value)}>
-                      <option value="">Link an objective…</option>
-                      {objectives.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.name}
-                        </option>
-                      ))}
+                      <option value="">What is this campaign for?</option>
+                      <optgroup label="Standard objectives">
+                        {OBJECTIVE_PRESETS.map((p) => (
+                          <option key={p.id} value={`preset:${p.id}`}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {objectives.length > 0 && (
+                        <optgroup label={`${brand || 'This brand'}'s objectives`}>
+                          {objectives.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
+                    {builderPreset && (
+                      <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+                        {builderPreset.hint} Measured on {builderPreset.kpi.toLowerCase()}.
+                      </div>
+                    )}
                     {linkedObjective && (linkedObjective.metric || linkedObjective.target) && (
                       <div className="flow-inspect-note" style={{ marginTop: 4 }}>
                         Goal: {[linkedObjective.metric, linkedObjective.target].filter(Boolean).join(' · ')}
@@ -6126,7 +6134,7 @@ export function FlowsView() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
               </svg>
-              {regenerating ? 'Generating…' : refsDirty ? 'Generate with records' : 'Generate'}
+              {regenerating ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
             </button>
           </>
         )}
