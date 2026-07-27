@@ -13,7 +13,6 @@ import { commentAge, commentsFor, openCommentCount, type CardComment } from '../
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { PEOPLE_FIELDS } from '../domain/people'
-import { BufferedInput, BufferedTextarea } from './BufferedInput'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -24,7 +23,9 @@ import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
-import { COMPANY_SIZES, FUNNEL_STAGE_OPTIONS, SENIORITIES, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
+import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
+import { BUYING_TRIGGERS, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_LIBRARY, INDUSTRIES, PAIN_LIBRARY, SENIORITIES } from '../domain/taxonomy'
+import { RecordCombo, RecordMulti, type OptionGroup } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
@@ -3990,10 +3991,20 @@ export function FlowsView() {
                             {v && !f.options.includes(v) && <option value={v}>{v}</option>}
                           </select>
                         ) : (
-                          <BufferedInput
-                            className="flow-recform-input"
+                          /* The four fields with no pick-list of their own still lead with what this
+                             brand has already written on its other people, so the same occupation or
+                             the same turn of phrase is reused rather than retyped slightly differently.
+                             Typing stays one option down the list. */
+                          <RecordCombo
                             value={v}
-                            placeholder="—"
+                            groups={[{
+                              label: 'From your other people',
+                              options: allPeople
+                                .filter((o) => o.id !== per.id)
+                                .map((o) => String((o as unknown as Record<string, unknown>)[f.key] ?? ''))
+                                .filter(Boolean),
+                            }]}
+                            placeholder={f.label}
                             onCommit={(nv) => updatePerson(per.id, { [f.key]: nv })}
                           />
                         )}
@@ -4004,51 +4015,70 @@ export function FlowsView() {
               </>
             )
           })()}
-          {/* THE AUDIENCE this card names, editable here for the same reason the persona is: the card
-              is where you decide whether the audience is right, so it is where you fix it.
+          {/* THE AUDIENCE this card names, PICKED rather than typed.
+              Every field is a dropdown; typing is an option inside each one rather than the default.
+              Four audiences whose pains are the same thought worded four ways are four vocabularies
+              and no way to see they agree, and that is what free text produces.
 
-              Three pick-lists and the rest prose, which is the honest split. An audience IS its
-              pains, objections and anti-message; those specific sentences are what make it this
-              audience rather than a demographic bracket, and a dropdown over them would hand every
-              brand the same four segments.
-
-              Pains is a list stored as an array and edited as lines, because that is how anyone
-              writes them. The three "who they are" selects set register and how much you have to
-              explain — they are not subject matter, and the prompt says so. */}
+              The suggestions are the brand's OWN values for the field first, taken from its other
+              audiences, then the shared library. Nothing is generated: a suggestion is either
+              something this user wrote or a hand-written library entry, because anything invented
+              here would reach the copy writer as though they had asserted it. */}
           {nt.kind === 'audience' && nt.refId && (() => {
             const aud = brandSegments.find((a) => a.id === nt.refId)
             if (!aud) return null
-            const area = (label: string, value: string, onCommit: (v: string) => void, placeholder: string) => (
+            // What this brand has already said, gathered off its OTHER audiences.
+            const others = brandSegments.filter((a) => a.id !== aud.id)
+            const own = (pick: (a: AudienceType) => unknown): string[] =>
+              others.flatMap((a) => { const v = pick(a); return Array.isArray(v) ? asList(v) : splitLines(String(v ?? '')) })
+            const groups = (mine: string[], lib: readonly string[]): OptionGroup[] => [
+              { label: 'From your other audiences', options: mine },
+              { label: 'Common ones', options: [...lib] },
+            ]
+            const field = (label: string, node: ReactNode) => (
               <div key={label} className="flow-recform-field">
                 <span className="flow-recform-key">{label}</span>
-                <BufferedTextarea className="flow-recform-area" value={value} placeholder={placeholder} onCommit={onCommit} />
+                {node}
               </div>
             )
-            const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                <select className="flow-recform-select" value={value} onChange={(e) => patchAudience(aud.id, { [key]: e.target.value })}>
+            const combo = (label: string, value: string, g: OptionGroup[], placeholder: string, key: keyof AudienceType) =>
+              field(label, <RecordCombo value={value} groups={g} placeholder={placeholder} onCommit={(v) => patchAudience(aud.id, { [key]: v })} />)
+            const multi = (label: string, values: string[], g: OptionGroup[], addLabel: string, key: keyof AudienceType) =>
+              field(label, <RecordMulti values={values} groups={g} addLabel={addLabel} onCommit={(v) => patchAudience(aud.id, { [key]: v })} />)
+            const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) =>
+              field(label, (
+                <select className="flow-recform-select as-written" value={value} onChange={(e) => patchAudience(aud.id, { [key]: e.target.value })}>
                   <option value="">—</option>
-                  {/* Stored value, shown with a capital. funnelStage is held lowercase to match every
+                  {/* Stored value, shown with a capital: funnelStage is held lowercase to match every
                       other reader of it, and only the label should differ. */}
                   {options.map((o) => (<option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>))}
                   {value && !options.includes(value) && <option value={value}>{value}</option>}
                 </select>
-              </div>
-            )
+              ))
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>{aud.name || 'Untitled audience'}</label>
                 <div className="flow-recform">
-                  {area('Who exactly', aud.definition ?? '', (v) => patchAudience(aud.id, { definition: v }), 'Sharper than the role. One line.')}
-                  {area('What is wrong today', asList(aud.pains).join('\n'), (v) => patchAudience(aud.id, { pains: splitLines(v) }), 'One pain per line')}
-                  {area('What good looks like', aud.goals ?? '', (v) => patchAudience(aud.id, { goals: v }), 'What they are actually after')}
-                  {area('Why now', asList(aud.triggers).join('\n'), (v) => patchAudience(aud.id, { triggers: splitLines(v) }), 'One trigger per line')}
-                  {area('What they believe against you', aud.objections ?? '', (v) => patchAudience(aud.id, { objections: v }), 'The copy has to answer these')}
-                  {area('Never say', aud.antiMessage ?? '', (v) => patchAudience(aud.id, { antiMessage: v }), 'The sentence that loses them')}
-                  {area('The angle', aud.messageAngle ?? '', (v) => patchAudience(aud.id, { messageAngle: v }), 'How the promise is framed for them')}
+                  {combo('Who exactly', aud.definition ?? '', [
+                    { label: 'From your other audiences', options: own((a) => a.definition) },
+                    { label: 'Their roles', options: others.map((a) => a.role).filter(Boolean) },
+                  ], 'Sharper than the role. One line.', 'definition')}
+                  {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_LIBRARY), 'Add a pain', 'pains')}
+                  {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_LIBRARY), 'Add a want', 'goalTags')}
+                  {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), BUYING_TRIGGERS), 'Add a trigger', 'triggers')}
+                  {combo('What they believe against you', aud.objections ?? '', [
+                    { label: 'From your other audiences', options: own((a) => a.objections) },
+                  ], 'The copy has to answer this', 'objections')}
+                  {combo('Never say', aud.antiMessage ?? '', [
+                    { label: 'From your other audiences', options: own((a) => a.antiMessage) },
+                  ], 'The sentence that loses them', 'antiMessage')}
+                  {combo('The angle', aud.messageAngle ?? '', [
+                    { label: 'From your other audiences', options: own((a) => a.messageAngle) },
+                    { label: 'Your message records', options: messages.map((m) => m.angle ?? '').filter(Boolean) },
+                  ], 'How the promise is framed for them', 'messageAngle')}
                   {select('Seniority', aud.seniority ?? '', SENIORITIES, 'seniority')}
-                  {select('Company size', aud.companySize ?? '', COMPANY_SIZES, 'companySize')}
+                  {select('Company size', aud.companySize ?? '', TAXONOMY_COMPANY_SIZES, 'companySize')}
+                  {select('Industry', aud.industry ?? '', INDUSTRIES, 'industry')}
                   {select('Stage', aud.funnelStage ?? '', FUNNEL_STAGE_OPTIONS, 'funnelStage')}
                 </div>
               </>

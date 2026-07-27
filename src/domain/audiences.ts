@@ -82,21 +82,6 @@ export interface AudienceType {
   approved?: boolean
 }
 
-/**
- * PICK-LISTS FOR THE AUDIENCE. Only the three fields that genuinely enumerate.
- *
- * An audience is mostly prose by nature — its pains, objections, anti-message and angle are the
- * specific sentences that make it this audience and not a bracket — so it gets far fewer dropdowns
- * than a persona does, and pretending otherwise would flatten the fields that carry the value.
- */
-export const SENIORITIES = [
-  'Individual contributor', 'Manager', 'Director', 'VP', 'C-level', 'Founder or owner',
-] as const
-
-export const COMPANY_SIZES = [
-  '1-10', '11-50', '51-200', '201-1000', '1000+',
-] as const
-
 /** Stored lowercase, because that is what funnelStage already holds everywhere else. Capitalizing
  *  these for the picker would fork the vocabulary and quietly stop matching the existing records. */
 export const FUNNEL_STAGE_OPTIONS = [
