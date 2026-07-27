@@ -5051,17 +5051,24 @@ button {
 /* Per-month posts branched out to the right of a deliverable (like a Switch node). */
 .flow-branched {
   position: relative;
-  /* Reserve vertical room (min-height set inline per post count) and center the
-     deliverable in it, so its branched-out posts don't overlap the next deliverable. */
+  /* Reserve vertical room (min-height set inline per post count) so branched-out posts don't overlap
+     the next deliverable.
+
+     TOP-anchored, not centred. Centring meant the card sat in the middle of its reserved height, so
+     adding one asset grew the box by a post and slid the card down half a post — the card moved under
+     the cursor while you were clicking +. Anchored at the top it does not move at all when its count
+     changes. The deliverables BELOW still shift down by the growth, which is not avoidable while the
+     column reserves room: the alternative is one deliverable's posts overlapping the next. */
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .flow-branch-list {
   position: absolute;
   left: calc(100% + 68px);
-  top: 50%;
-  transform: translateY(-50%);
+  /* Level with the card for the same reason, and it reads as a list hanging off the card rather than
+     a block balanced against it. */
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -5367,6 +5374,45 @@ button {
   width: 34px;
   height: 32px;
 }
+/* The typed count. Sits between the − and + as plain text, no spinners: they would be a third
+   control for the same number inside 90px. Belt and braces, since a stray type="number" elsewhere
+   would otherwise reintroduce them. */
+.flow-step-input {
+  width: 54px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: center;
+  height: 32px;
+  padding: 0 4px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.flow-step-input::-webkit-outer-spin-button,
+.flow-step-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.flow-step-input:focus { outline: none; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+/* Apply, shown only while a typed count differs from the real one. */
+.flow-step-apply {
+  display: block;
+  margin-top: 8px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 7px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.flow-step-apply:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.flow-step-apply:disabled { border-color: var(--border); color: var(--text-faint); background: none; cursor: default; }
 .flow-step button:hover {
   background: var(--surface-2);
   color: var(--text);

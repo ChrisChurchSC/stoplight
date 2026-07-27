@@ -1154,33 +1154,84 @@ export function FlowsView() {
   // latest asset into a fresh draft, one slot later, and rewrite its copy) or drop the latest.
   // Build-mode uses the per-month stepper instead (assets aren't seeded yet).
   const [countBusy, setCountBusy] = useState(false)
-  const changeDelivCount = async (deliv: { key: string; rows: TrafficRow[] }, delta: number) => {
-    if (countBusy || !deliv.rows.length) return
-    const ordered = [...deliv.rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
-    const last = ordered[ordered.length - 1]
-    if (!last) return
+  /**
+   * Move a deliverable's asset count by `delta`, one asset per step. Any magnitude, so the typed
+   * count can ask for eleven more at once; it was ±1 only, which is why the stepper was the only way
+   * to set a count and getting from 4 to 16 meant twelve clicks.
+   *
+   * Copy is drafted ONCE for everything added rather than per asset: a model call each would have
+   * made a typed jump twelve round-trips.
+   */
+  const MAX_DELIV_STEP = 60
+  /**
+   * The typed asset count while it is being typed. Held separately from the real count so a
+   * half-typed "1" on the way to "16" does not delete fifteen assets on each keystroke: nothing
+   * happens until blur or Enter.
+   */
+  const [delivCountDraft, setDelivCountDraft] = useState<string | null>(null)
+  const changeDelivCount = async (
+    deliv: { key: string; rows: TrafficRow[] },
+    delta: number,
+    opts?: { draftNew?: boolean },
+  ): Promise<string[]> => {
+    if (countBusy || !deliv.rows.length || !delta) return deliv.rows.map((r) => r.id)
     setCountBusy(true)
+    const added: string[] = []
     try {
-      if (delta > 0) {
-        const before = new Set(useTrafficStore.getState().rows.map((r) => r.id))
-        await duplicateRow(last.id)
-        const fresh = useTrafficStore.getState().rows.find((r) => !before.has(r.id))
-        if (fresh) {
-          // A genuinely new asset: clear the cloned copy so it drafts anew, and push its slot
-          // one week past the last so it doesn't stack on the same date.
+      let ordered = [...deliv.rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
+      const steps = Math.min(Math.abs(delta), MAX_DELIV_STEP)
+      for (let i = 0; i < steps; i++) {
+        const last = ordered[ordered.length - 1]
+        if (!last) break
+        if (delta > 0) {
+          const before = new Set(useTrafficStore.getState().rows.map((r) => r.id))
+          await duplicateRow(last.id)
+          const fresh = useTrafficStore.getState().rows.find((r) => !before.has(r.id))
+          if (!fresh) break
+          // A genuinely new asset: clear the cloned copy so it drafts anew, and push its slot one
+          // week past the last so it doesn't stack on the same date.
           const next = new Date(last.scheduledAt ? Date.parse(last.scheduledAt) : Date.now())
           next.setDate(next.getDate() + 7)
-          await updateRow(fresh.id, { messaging: {}, scheduledAt: next.toISOString() })
-          await draftCopy([fresh.id])
+          const scheduledAt = next.toISOString()
+          await updateRow(fresh.id, { messaging: {}, scheduledAt })
+          added.push(fresh.id)
+          ordered = [...ordered, { ...fresh, scheduledAt }]
+        } else {
+          // Never below one: a deliverable with no assets is not a deliverable.
+          if (ordered.length <= 1) break
+          await removeRow(last.id)
+          ordered = ordered.slice(0, -1)
         }
-      } else if (ordered.length > 1) {
-        await removeRow(last.id)
       }
+      // Skipped when the caller is about to regenerate the whole deliverable: drafting a clone and
+      // then immediately rewriting it is two model calls for one asset.
+      if (added.length && opts?.draftNew !== false) await draftCopy(added)
+      return ordered.map((r) => r.id)
     } finally {
       setCountBusy(false)
       // Keep this deliverable selected so the inspector stays open on it after the refresh.
       setSel(deliv.key)
     }
+  }
+  /**
+   * Apply a typed asset count, then rewrite the deliverable's copy.
+   *
+   * Two things the steppers do not do. The count is STAGED until Apply, so typing "1" on the way to
+   * "16" cannot delete fifteen assets one keystroke at a time. And applying REGENERATES, so the
+   * result reads as one deliberate run of sixteen rather than four originals plus twelve clones of
+   * the last one.
+   */
+  const applyDelivCount = async (deliv: ViewDeliverable) => {
+    const raw = delivCountDraft
+    if (raw === null) return
+    const want = Math.round(Number(raw))
+    setDelivCountDraft(null)
+    // A blank or nonsense entry reverts rather than clamping to 1 and deleting the lot.
+    if (!Number.isFinite(want) || want < 1) return
+    const target = Math.min(want, MAX_DELIV_STEP)
+    if (target === deliv.count) return
+    const ids = await changeDelivCount(deliv, target - deliv.count, { draftNew: false })
+    if (ids.length) await regenerateFlow(ids)
   }
   const applyBlueprintView = async (rows: TrafficRow[], bp: EmailBlueprint) => {
     if (blueprintBusy || !rows.length) return
@@ -1504,10 +1555,15 @@ export function FlowsView() {
   })
   // The Record Tags block (label + one row per tag with a swap dropdown + remove, then "Add a
   // record"), shared by the build brief, the built-flow brief, and a deliverable's override.
-  const renderRecordTags = (ops: TagOps, heading?: string) => (
+  /**
+   * Raw record rows with a swap dropdown and a remove. The heading is REQUIRED: this used to default
+   * to "Linked records", which named the wrong unit on every card that showed it. The only caller
+   * left is the campaign's "linked directly" group, where a record genuinely has no card behind it.
+   */
+  const renderRecordTags = (ops: TagOps, heading: string) => (
     <>
       <div className="flow-inspect-label" style={{ marginTop: 16 }}>
-        {heading ?? `Linked records${ops.refs.length ? ` · ${ops.refs.length}` : ''}`}
+        {heading}
         <InfoTip term="linkedRecords" />
       </div>
       {ops.refs.map((ref) => {
@@ -1553,7 +1609,7 @@ export function FlowsView() {
       <div className="flow-tagrow flow-tagrow-add">
         <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
         <button className="flow-aud-btn flow-tagrow-addbtn" onClick={ops.openPicker}>
-          <span className="flow-aud-btn-txt flow-tagrow-add-txt">Add a record</span>
+          <span className="flow-aud-btn-txt flow-tagrow-add-txt">Pin a record directly</span>
         </button>
       </div>
     </>
@@ -1573,8 +1629,9 @@ export function FlowsView() {
    * the chat. Showing only connected cards would have left those invisible and unremovable while
    * they still steered every draft, so they keep the old swap-and-remove rows under their own head.
    */
-  const renderCampaignContext = () => {
-    const rows = connectors
+  /** The rows behind "Informing the messaging": one per card wired to the campaign. */
+  const campaignContextRows = () => {
+    return connectors
       .filter((e) => e.to === 'campaign')
       .map((e) => {
         const g = placements.find((p) => p.id === e.from)
@@ -1608,7 +1665,9 @@ export function FlowsView() {
         }
       })
       .filter((r): r is NonNullable<typeof r> => !!r)
-
+  }
+  const renderCampaignContext = () => {
+    const rows = campaignContextRows()
     const covered = new Set(rows.flatMap((r) => r.refs).map(refKey))
     const direct = activeRefs.filter((r) => !covered.has(refKey(r)))
 
@@ -3251,24 +3310,12 @@ export function FlowsView() {
   }
 
   // Assets is a brand-organized library browser: each brand is a folder of its campaign libraries.
-  const librariesForBrand = (b: string) =>
-    canvases
-      .filter((c) => c.client === b && c.name !== CONTENT_LIBRARY_CAMPAIGN)
-      .map((c) => ({ name: c.name, count: c.rows.filter((r) => !r.archivedAt).length }))
-      .sort((a, z) => a.name.localeCompare(z.name))
   const toggleBrandFolder = (b: string) =>
     setOpenBrandFolders((prev) => {
       const next = new Set(prev)
       next.has(b) ? next.delete(b) : next.add(b)
       return next
     })
-  // Open a library: switch scope to its brand (if different) and open the campaign, then close the
-  // panel so the board shows.
-  const openLibrary = (b: string, campaign: string) => {
-    if (b !== brand) setClientFilter(b)
-    openView(campaign)
-    setFlowAssetsOpen(false)
-  }
   // Clicking a brand opens it as a canvas tab: its brand page on the Data tab (the flexible data
   // sets), with the preset basics one tab over. Scoped to the clicked brand.
   const openBrand = (b: string) => {
@@ -4017,8 +4064,15 @@ export function FlowsView() {
                 )}
                 <div className="flow-lib-folders">
                   {brands.map((b) => {
-                    const libs = librariesForBrand(b.name).filter((l) => !q || l.name.toLowerCase().includes(q) || b.name.toLowerCase().includes(q))
-                    if (q && libs.length === 0 && !b.name.toLowerCase().includes(q)) return null
+                    // A brand folder holds SMART OBJECTS, nothing else. It used to also list the
+                    // brand's campaigns, which made the folder a second navigation tree to work the
+                    // canvas from — a duplicate of the Campaigns page and the tab strip, both of
+                    // which open a campaign already. Nothing was reachable only from here.
+                    const shelf = smartObjects
+                      .filter((o) => o.brand === b.name && scopeOf(o) === 'brand')
+                      .filter((o) => !q || o.name.toLowerCase().includes(q) || (o.folder ?? '').toLowerCase().includes(q))
+                      .sort((x, y) => x.name.localeCompare(y.name))
+                    if (q && shelf.length === 0 && !b.name.toLowerCase().includes(q)) return null
                     const open = openBrandFolders.has(b.name) || !!q
                     return (
                       <div className="flow-lib-folder" key={b.name}>
@@ -4032,43 +4086,19 @@ export function FlowsView() {
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
                             </span>
                             <span className="flow-lib-folder-name">{b.name}</span>
-                            <span className="flow-lib-folder-count">{b.count}</span>
+                            {/* Objects, not campaigns: the folder holds objects, so a campaign count
+                                here described something that is no longer in it. */}
+                            <span className="flow-lib-folder-count">{smartObjects.filter((o) => o.brand === b.name && scopeOf(o) === 'brand').length}</span>
                           </button>
                         </div>
                         {open && (
                           <div className="flow-lib-folder-body">
-                            {/* THE BRAND LIBRARY, visible from outside a canvas. Promotion says an
-                                object "goes in the brand folder", and until now the brand folder had
-                                no such shelf: the only place a promoted object appeared was a card
-                                picker on some other campaign. Local objects are deliberately absent —
-                                they belong to one board, and listing them here would say otherwise. */}
-                            {(() => {
-                              const shelf = smartObjects
-                                .filter((o) => o.brand === b.name && scopeOf(o) === 'brand')
-                                .filter((o) => !q || o.name.toLowerCase().includes(q))
-                                .sort((x, y) => x.name.localeCompare(y.name))
-                              if (!shelf.length) return null
-                              return (
-                                <div className="flow-lib-objects">
-                                  <div className="flow-lib-objects-h">Smart objects</div>
-                                  {renderObjectShelf(shelf)}
-                                </div>
-                              )
-                            })()}
-                            {libs.length === 0 ? (
-                              <div className="flow-lib-folder-empty">No campaigns yet</div>
+                            {shelf.length === 0 ? (
+                              <div className="flow-lib-folder-empty">
+                                No smart objects yet. Promote one from a campaign to share it here.
+                              </div>
                             ) : (
-                              libs.map((lib) => (
-                                <button key={lib.name} className="flow-library-item" onClick={() => openLibrary(b.name, lib.name)}>
-                                  <span className="flow-library-ic" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /></svg>
-                                  </span>
-                                  <span className="flow-library-txt">
-                                    <span className="flow-library-name">{lib.name.replace(`${b.name} — `, '')}</span>
-                                    <span className="flow-library-count">{lib.count} asset{lib.count === 1 ? '' : 's'}</span>
-                                  </span>
-                                </button>
-                              ))
+                              <div className="flow-lib-objects">{renderObjectShelf(shelf)}</div>
                             )}
                           </div>
                         )}
@@ -5076,28 +5106,139 @@ export function FlowsView() {
                     {selDeliv.channel} · {selDeliv.assetType}
                   </p>
                   <label className="flow-inspect-label">Assets</label>
+                  {/* The count is TYPEABLE, not just steppable. Getting from 4 to 16 was twelve
+                      clicks, and the number was the one thing on this panel you could see but not
+                      say. The steppers stay for a nudge of one. */}
                   <div className="flow-step">
                     <button onClick={() => void changeDelivCount(selDeliv, -1)} disabled={countBusy || selDeliv.count <= 1} aria-label="Remove one asset">−</button>
-                    <span>{countBusy ? '…' : `×${selDeliv.count}`}</span>
+                    {countBusy ? (
+                      <span>…</span>
+                    ) : (
+                      <input
+                        className="flow-step-input"
+                        // text + inputMode rather than type="number": the native spinners sat right
+                        // next to the − and + that already do that job, three ways to change one
+                        // number in 90px. inputMode still brings up a numeric keypad on a phone.
+                        type="text"
+                        inputMode="numeric"
+                        value={delivCountDraft ?? selDeliv.count}
+                        aria-label="Number of assets"
+                        onChange={(e) => setDelivCountDraft(e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onKeyDown={(e) => {
+                          e.stopPropagation()
+                          // Enter applies. No commit on blur: clicking away from a half-typed number
+                          // should abandon it, not act on it.
+                          if (e.key === 'Enter') { e.currentTarget.blur(); void applyDelivCount(selDeliv) }
+                          if (e.key === 'Escape') { setDelivCountDraft(null); e.currentTarget.blur() }
+                        }}
+                      />
+                    )}
                     <button onClick={() => void changeDelivCount(selDeliv, 1)} disabled={countBusy} aria-label="Add one asset">+</button>
                   </div>
-                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>{countBusy ? 'Updating…' : 'Add or remove assets under this deliverable. New ones draft fresh copy. Click a post to see its copy.'}</div>
-                  {renderRecordTags(delivTagOps(selDeliv))}
-                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>
-                    {selDeliv.rows.some((r) => r.references && r.references.length) ? (
+                  {/* APPLY appears only when the typed number differs from what is there, so it is
+                      never a button that does nothing. The steppers act immediately; a typed count
+                      waits, because it can be a large change and it rewrites the copy. */}
+                  {delivCountDraft !== null && Number(delivCountDraft) !== selDeliv.count && (
+                    <button
+                      className="flow-step-apply"
+                      disabled={countBusy || regenerating}
+                      onClick={() => void applyDelivCount(selDeliv)}
+                    >
+                      {countBusy || regenerating
+                        ? 'Applying…'
+                        : `Apply ${Number(delivCountDraft) > selDeliv.count ? `+${Number(delivCountDraft) - selDeliv.count}` : Number(delivCountDraft) - selDeliv.count} and rewrite the copy`}
+                    </button>
+                  )}
+                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>{countBusy ? 'Updating…' : 'The − and + add or remove one, drafting fresh copy for anything new. Type a number and Apply to change it in one go and rewrite every post from the current brief.'}</div>
+                  {/* WHAT INFORMS IT, as objects. This was "Linked records" with an "Add a record"
+                      row, which named the wrong unit for the same reason the campaign card did: a
+                      deliverable is informed by the cards wired to the campaign, and the record list
+                      showed the residue of that rather than the thing itself. Inherited by default;
+                      the override, when there is one, still shows exactly what it pins. */}
+                  {(() => {
+                    const overridden = selDeliv.rows.some((r) => r.references && r.references.length)
+                    const inherited = campaignContextRows()
+                    return (
                       <>
-                        Overriding the campaign for just this deliverable.{' '}
-                        <button
-                          className="flow-reset-link"
-                          onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
-                        >
-                          Reset to campaign
-                        </button>
+                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                          {overridden ? 'Pinned for this deliverable' : 'Informing this deliverable'}
+                          {!overridden && inherited.length > 0 ? ` · ${inherited.length}` : ''}
+                        </label>
+                        {overridden ? (
+                          <div className="flow-ctxlist">
+                            {delivEffRefs(selDeliv).map((ref) => (
+                              <div key={refKey(ref)} className="flow-ctxrow">
+                                <span className="flow-ctxrow-open" style={{ cursor: 'default' }}>
+                                  <span className="flow-ctxrow-ic" style={{ color: 'var(--text-muted)' }} aria-hidden="true">
+                                    <RecordTypeIcon type={ref.type} />
+                                  </span>
+                                  <span className="flow-ctxrow-txt">
+                                    <span className="flow-ctxrow-kind" style={{ color: 'var(--text-muted)' }}>{RECORD_TYPE_LABEL[ref.type]}</span>
+                                    <span className="flow-ctxrow-name">{ref.label}</span>
+                                  </span>
+                                </span>
+                                <button
+                                  className="flow-ctxrow-del"
+                                  title="Stop pinning this record on this deliverable"
+                                  aria-label={`Remove ${ref.label}`}
+                                  onClick={() => delivTagOps(selDeliv).remove(refKey(ref))}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : inherited.length === 0 ? (
+                          <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
+                            Nothing is wired to the campaign yet, so this deliverable has no context to
+                            write from.
+                          </div>
+                        ) : (
+                          <div className="flow-ctxlist">
+                            {inherited.map((r) => (
+                              <div key={r.id} className="flow-ctxrow">
+                                <button
+                                  className="flow-ctxrow-open"
+                                  title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+                                  onClick={() => { setSel(r.id); setSelected(new Set()) }}
+                                >
+                                  <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+                                  </span>
+                                  <span className="flow-ctxrow-txt">
+                                    <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
+                                    <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
+                                  </span>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flow-inspect-note" style={{ marginTop: 8 }}>
+                          {overridden ? (
+                            <>
+                              This deliverable ignores the campaign's context and uses only what is
+                              pinned above.{' '}
+                              <button
+                                className="flow-reset-link"
+                                onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
+                              >
+                                Go back to the campaign's
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              Inherited from the campaign.{' '}
+                              <button className="flow-reset-link" onClick={() => delivTagOps(selDeliv).openPicker()}>
+                                Pin different records for just this deliverable
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </>
-                    ) : (
-                      'Inherited from the campaign. Edit to target different records for just this deliverable, then Generate.'
-                    )}
-                  </div>
+                    )
+                  })()}
                   {(() => {
                     const bps = blueprintsFor(selDeliv.channel, selDeliv.assetType)
                     if (!bps.length) return null

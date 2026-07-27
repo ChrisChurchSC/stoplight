@@ -145,9 +145,9 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "The chat for the record type you are viewing. In Build it adds, edits, and cleans up your records (you approve each change); in Analyze it answers questions without changing anything.",
   },
   linkedRecords: {
-    term: 'Linked records',
+    term: 'Pinned directly',
     short:
-      "The Companies, People, Audiences, Channels, and Proof records this campaign draws on. Audiences and Proof shape the copy: linking them pins which audience each asset speaks to and which proof it leans on. Companies, People, and Channels are for targeting and structure, not for wording.",
+      "A record the campaign draws on with no card on the board behind it — added from the picker or by the assistant rather than by wiring a card to the campaign. It steers the copy exactly as a connected card would, which is why it is listed rather than hidden. Audiences and Proof shape the wording; Companies, People, and Channels are for targeting and structure.",
     seeAlso: ['canvasOutput', 'canvasInput'],
   },
   object: {
