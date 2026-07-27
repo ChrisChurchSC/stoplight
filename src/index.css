@@ -4764,6 +4764,38 @@ button {
    selecting that card on the canvas; the ✕ only disconnects. */
 /* "What this will be told": the resolved instructions, after the wires are walked and the cap
    applied. Reads as a quiet receipt rather than an editable field, because it is neither. */
+/* "Written offline": the model call failed and templates were used. Sits above the toolbar, amber
+   rather than red — the copy is real and usable, it just was not written by a model, and the user
+   needs to know that before they ship it. */
+.flow-offline-note {
+  position: absolute;
+  left: 50%;
+  bottom: 128px;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: 520px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #b8860b 45%, var(--border));
+  background: color-mix(in srgb, #f5a623 12%, var(--surface));
+  color: var(--text);
+  border-radius: 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-raise);
+}
+.flow-offline-dot {
+  flex: 0 0 auto; width: 8px; height: 8px; margin-top: 5px;
+  border-radius: 50%; background: #d98324;
+}
+.flow-offline-x {
+  flex: 0 0 auto; border: 0; background: none; cursor: pointer;
+  color: var(--text-faint); font-size: 12px; padding: 0 2px; line-height: 1;
+}
+.flow-offline-x:hover { color: var(--text); }
+
 .flow-told { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .flow-told-row {
   display: flex; flex-direction: column; gap: 1px;

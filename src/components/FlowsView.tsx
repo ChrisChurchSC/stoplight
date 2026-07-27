@@ -419,6 +419,8 @@ export function FlowsView() {
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
+  const lastCopySource = useTrafficStore((s) => s.lastCopySource)
+  const clearCopySource = useTrafficStore((s) => s.clearCopySource)
   const adoptBuilderBoard = useTrafficStore((s) => s.adoptBuilderBoard)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
   const addBrandProof = useTrafficStore((s) => s.addBrandProof)
@@ -6103,6 +6105,21 @@ export function FlowsView() {
         )
       })()}
 
+      {/* WRITTEN OFFLINE. The one thing a user must not be left to discover by reading the copy: a
+          model call that failed and fell back to deterministic templates. Every failure lands here —
+          a missing key, a function timeout on a large campaign, a rate limit mid-batch — because the
+          store records the source for every caller rather than each Generate button remembering to. */}
+      {lastCopySource === 'heuristic' && (
+        <div className="flow-offline-note" role="status">
+          <span className="flow-offline-dot" aria-hidden="true" />
+          <span>
+            <strong>Written offline.</strong> The AI could not be reached, so this copy came from
+            templates built out of your own brand and audience, not from a model. Generate again to
+            retry.
+          </span>
+          <button className="flow-offline-x" onClick={clearCopySource} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <div className="flow-toolbar">
         {/* PALETTE ROW — every kind of card you can add, as icons, grouped by role and split by
             dividers. The group LABELS are gone: the dividers carry the grouping, each button's

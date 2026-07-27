@@ -2334,6 +2334,15 @@ interface TrafficState {
    *  when nothing was drafted, so callers can show a source badge. 'heuristic' is
    *  sticky: if any campaign group fell back, the whole run reports 'heuristic'. */
   draftCopy: (rowIds?: string[]) => Promise<CopySource | null>
+  /**
+   * Who wrote the copy the last time anything generated: the model, or the offline fallback. Set by
+   * draftCopy for every caller, so a silent fall back to templates is visible without each call site
+   * having to remember to look.
+   */
+  lastCopySource: CopySource | null
+  lastCopyAt: number | null
+  /** Dismiss the "written offline" notice until the next generation. */
+  clearCopySource: () => void
   /** Live preview: draft copy for a set of not-yet-built deliverable slots WITHOUT
    *  seeding any rows or touching localStorage. Resolves one {headline, primary} per
    *  slot (in order) plus which writer produced it, so the Flows builder can show
@@ -2735,6 +2744,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   ingestingChannel: false,
   clientAudiences: loadClientAudiences(),
   regenIds: new Set<string>(),
+  lastCopySource: null,
+  lastCopyAt: null,
+  clearCopySource: () => set({ lastCopySource: null }),
   brandSystems: loadBrandSystems(),
   brandMeta: loadBrandMeta(),
   brandNotice: null,
@@ -6880,6 +6892,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     // Copy actually written by Claude is proof the connection works — complete that step.
     if (copySource === 'claude') get().markOnboardingDone('connect')
+    /**
+     * Record it centrally as well as returning it.
+     *
+     * The return value was already correct and every Generate-style caller threw it away, so a
+     * failed model call — a dead key, a 60s function timeout on a big campaign, a 429 from the
+     * dedupe pass — wrote deterministic template copy onto the assets with no badge, no toast and
+     * no console error. Patching the four call sites would leave the fifth to forget; a slice set
+     * here covers callers that do not exist yet.
+     */
+    set({ lastCopySource: copySource, lastCopyAt: copySource ? Date.now() : get().lastCopyAt })
     return copySource
   },
 
