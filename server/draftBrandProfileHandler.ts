@@ -118,7 +118,6 @@ Fill in the brand's strategy record from the work above. When a field is blank, 
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 2800,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

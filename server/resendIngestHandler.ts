@@ -156,7 +156,6 @@ export async function runResendIngest(body: unknown, onProgress?: Progress): Pro
 
   const client = makeModelClient('extract')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 8000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

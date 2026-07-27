@@ -30,10 +30,39 @@ export class NoKeyError extends Error {
  */
 export type ModelTier = 'extract' | 'copy' | 'agent'
 
+/**
+ * OpenRouter ids per tier. Copy and agent work sit on a stronger model than bulk extraction: all
+ * three were on haiku, so the tiering above described an intent the table did not implement and the
+ * product's actual output — marketing copy — was written by the cheapest model in the app.
+ */
 const TIER_DEFAULTS: Record<ModelTier, string> = {
   extract: 'anthropic/claude-haiku-4.5',
-  copy: 'anthropic/claude-haiku-4.5',
-  agent: 'anthropic/claude-haiku-4.5',
+  copy: 'anthropic/claude-sonnet-4.5',
+  agent: 'anthropic/claude-sonnet-4.5',
+}
+
+/**
+ * The same tiers for the Anthropic-direct branch, which speaks bare model ids rather than
+ * OpenRouter's `vendor/model` form.
+ */
+const ANTHROPIC_TIER_DEFAULTS: Record<ModelTier, string> = {
+  extract: 'claude-haiku-4-5',
+  copy: 'claude-sonnet-4-5',
+  agent: 'claude-sonnet-4-5',
+}
+
+/**
+ * An OpenRouter id as Anthropic wants it: drop the vendor prefix and turn the dots in a version into
+ * dashes ('anthropic/claude-sonnet-4.5' -> 'claude-sonnet-4-5').
+ *
+ * Returns null for a NON-Anthropic pick. A deploy running on ANTHROPIC_API_KEY cannot serve
+ * 'openai/gpt-4o-mini', and quietly serving Claude instead would make the picker lie, so the caller
+ * falls back to the tier default rather than pretending the choice was honoured.
+ */
+export function anthropicModelFor(openRouterId: string | undefined, tier: ModelTier): string {
+  if (!openRouterId || openRouterId === 'auto') return ANTHROPIC_TIER_DEFAULTS[tier]
+  if (!openRouterId.startsWith('anthropic/')) return ANTHROPIC_TIER_DEFAULTS[tier]
+  return openRouterId.slice('anthropic/'.length).replace(/\./g, '-')
 }
 
 /**
@@ -50,9 +79,25 @@ export function resolveOpenRouterModel(tier: ModelTier): string {
   )
 }
 
+/**
+ * A user's pick beats the operator's env vars, which is what makes a per-campaign model mean
+ * anything — unless OPENROUTER_MODEL_LOCK is set, the escape hatch for a workspace that needs a cost
+ * ceiling more than it needs the choice.
+ */
+export const modelPicksLocked = (): boolean => !!process.env.OPENROUTER_MODEL_LOCK
+
+/**
+ * An Anthropic-shaped client with ONE difference: a caller cannot pass `model`.
+ *
+ * That omission is the point, and it is enforced by the type rather than by a convention. Every
+ * handler used to pass `model: 'claude-opus-4-8'`, which the OpenRouter adapter silently discarded
+ * (so the tier default ran) while the Anthropic branch forwarded it verbatim (so the tier defaults
+ * and any user override were ignored). Two providers disagreeing about which model runs, with
+ * nothing in the type system to notice. The model is now chosen in exactly one place: makeModelClient.
+ */
 export interface ModelClient {
   messages: {
-    create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message>
+    create(params: Omit<Anthropic.MessageCreateParamsNonStreaming, 'model'>): Promise<Anthropic.Message>
   }
 }
 
@@ -80,7 +125,10 @@ export function makeModelClient(tier: ModelTier = 'extract', modelOverride?: str
   const anthKey = process.env.ANTHROPIC_API_KEY
   if (anthKey) {
     const anth = new Anthropic({ apiKey: anthKey })
-    return { messages: { create: (params) => anth.messages.create(params) } }
+    // Supplies the model, exactly as the OpenRouter branch does. It used to forward whatever the
+    // handler passed, which is why the tier defaults and the model picker did nothing on this path.
+    const model = anthropicModelFor(modelPicksLocked() ? undefined : modelOverride, tier)
+    return { messages: { create: (params) => anth.messages.create({ ...params, model }) } }
   }
 
   throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
@@ -184,7 +232,7 @@ function toOpenAITools(tools: Anthropic.MessageCreateParamsNonStreaming['tools']
 function openRouterClient(orKey: string, tier: ModelTier, modelOverride?: string): ModelClient {
   const create = async (params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> => {
     // An explicit per-request override (from the app's model selector) wins over the env/tier default.
-    const model = modelOverride || resolveOpenRouterModel(tier)
+    const model = (!modelPicksLocked() && modelOverride) || resolveOpenRouterModel(tier)
 
     // json_schema output has no OpenAI-portable equivalent, so hand the model the
     // schema in the prompt and ask for a bare JSON object (matches copyDraftHandler).

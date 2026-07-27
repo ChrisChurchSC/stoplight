@@ -99,7 +99,6 @@ Define ${n} distinct target audiences. When real copy is provided above, infer t
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1600,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

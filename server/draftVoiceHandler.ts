@@ -100,7 +100,6 @@ Define ${n} brand ${n === 1 ? 'voice' : 'voices'}. When real copy is provided ab
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1600,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

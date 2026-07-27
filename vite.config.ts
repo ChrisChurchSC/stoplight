@@ -575,6 +575,13 @@ const SERVER_SECRETS = [
   'ANTHROPIC_API_KEY',
   'OPENROUTER_API_KEY',
   'OPENROUTER_MODEL',
+  // The per-tier overrides modelClient documents. They were absent, so setting OPENROUTER_MODEL_COPY
+  // in .env silently did nothing in dev and looked like the tier default winning.
+  'OPENROUTER_MODEL_EXTRACT',
+  'OPENROUTER_MODEL_COPY',
+  'OPENROUTER_MODEL_AGENT',
+  // Lets an operator pin the models and ignore per-campaign picks (see resolveOpenRouterModel).
+  'OPENROUTER_MODEL_LOCK',
   'BUFFER_ACCESS_TOKEN',
   'BUFFER_PROFILE_IDS',
   'RESEND_API_KEY',

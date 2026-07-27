@@ -174,7 +174,6 @@ export async function runAgent(body: unknown): Promise<{ summary: string; action
   // Bounded agentic loop: Claude calls tools, we execute, feed results back.
   for (let step = 0; step < 8; step++) {
     const msg = await client.messages.create({
-      model: 'claude-opus-4-8',
       max_tokens: 4000,
       thinking: { type: 'adaptive' },
       system: SYSTEM,

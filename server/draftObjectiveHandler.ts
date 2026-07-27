@@ -95,7 +95,6 @@ Draft ${n} objectives, grounded in the description and (when present) the real b
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1400,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

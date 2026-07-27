@@ -99,7 +99,6 @@ Draft ${n} messages. When real copy is provided above, draw the angles from the 
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1600,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

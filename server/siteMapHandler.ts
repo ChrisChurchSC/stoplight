@@ -199,7 +199,6 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     `\nMap their current live messaging.`
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 8000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

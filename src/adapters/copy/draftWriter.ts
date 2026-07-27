@@ -79,6 +79,12 @@ export interface DraftRequest {
   hooks?: string[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
+  /**
+   * The model to write with, as an AI_MODELS id. Omitted (or 'auto') leaves the choice to the
+   * server's per-task defaults. Validated server-side against the catalog before it is honoured, so
+   * a stale or hand-edited value falls back rather than reaching the provider.
+   */
+  model?: string
   assets: DraftAsset[]
 }
 export interface DraftComponent {

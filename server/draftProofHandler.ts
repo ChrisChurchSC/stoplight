@@ -96,7 +96,6 @@ Draft ${n} proof points. When real published work is provided above, ground them
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1200,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

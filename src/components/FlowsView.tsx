@@ -9,6 +9,7 @@ import {
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
+import { AI_MODELS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { DIRECTION_FIELD, DIRECTION_KEYS, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
@@ -5405,6 +5406,30 @@ export function FlowsView() {
                       </>
                     )
                   })()}
+                  {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
+                      announcement and an always-on blog run do not deserve the same model, and the
+                      cost difference between them is the whole reason to choose. Auto keeps the
+                      workspace pick, then the server's per-task default. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
+                    Model
+                  </label>
+                  <select
+                    className="flow-inspect-input flow-inspect-select"
+                    value={viewCampaign?.aiModel ?? 'auto'}
+                    onChange={(e) => patchCampaign(viewName, { aiModel: e.target.value === 'auto' ? undefined : e.target.value })}
+                  >
+                    {AI_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label} · {m.note}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+                    {/* Says what it covers. It governs generation for this campaign, not the dozen
+                        other places the app calls a model, and claiming otherwise would be a lie the
+                        user could catch. */}
+                    Used when this campaign writes copy. Other AI work keeps the workspace default.
+                  </div>
                   <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                     Campaign length
                   </label>

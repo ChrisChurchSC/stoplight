@@ -124,7 +124,7 @@ import { buildOutcomeMap } from '../domain/outcomeMap'
 import { buildContributions } from '../domain/aggregateOutcome'
 import { contribute, contributorId } from '../adapters/aggregate/aggregateOutcomes'
 import { ingestSite } from '../adapters/ask/ingestSite'
-import { DEFAULT_AI_MODEL } from '../domain/aiModels'
+import { DEFAULT_AI_MODEL, isAutoModel } from '../domain/aiModels'
 import { DEFAULT_USER_PREFS, type UserPrefs } from '../domain/userPrefs'
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Objective, freshObjectiveId } from '../domain/objective'
@@ -206,6 +206,17 @@ const icpSource: IcpSource = new MockIcpSource()
 // Real Claude batch review when a backend + key are present; heuristic otherwise.
 const icpReviewer: IcpReviewer = new ClaudeIcpReviewer(new MockIcpReviewer())
 // Real Claude starter-copy drafting when a backend + key are present; heuristic otherwise.
+/**
+ * Which model a generation should use: the campaign's pick, then the workspace's, then undefined so
+ * the server applies its per-task defaults. 'auto' at either level means "not an answer, keep
+ * looking", which is what lets a campaign sit on Auto while the workspace names a model.
+ */
+export function pickGenerationModel(campaignPick?: string, workspacePick?: string): string | undefined {
+  if (!isAutoModel(campaignPick)) return campaignPick
+  if (!isAutoModel(workspacePick)) return workspacePick
+  return undefined
+}
+
 const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
 
 /**
@@ -6788,7 +6799,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             if (full) sentProof.push(full)
           }
         }
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean) }
+        // The model, resolved campaign-first: this campaign's pick, else the workspace pick, else
+        // nothing sent so the server keeps its per-task defaults. Resolved here rather than in the
+        // writer because this is the only place that knows which campaign a batch belongs to.
+        const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.

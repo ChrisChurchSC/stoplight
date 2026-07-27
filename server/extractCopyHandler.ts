@@ -55,7 +55,6 @@ export async function runExtractCopy(body: unknown): Promise<ExtractCopyResult> 
 
   const client = makeModelClient('extract')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1500,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

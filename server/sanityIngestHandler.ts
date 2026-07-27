@@ -168,7 +168,6 @@ export async function runSanityIngest(body: unknown, onProgress?: Progress): Pro
   const corpus = docs.map((d) => `[${d.type}] ${d.text}`).join('\n\n').slice(0, 24000)
   const client = makeModelClient('extract')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 8000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

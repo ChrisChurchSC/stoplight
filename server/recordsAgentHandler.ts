@@ -75,7 +75,6 @@ export async function runRecordsAgent(body: unknown): Promise<unknown> {
   const { context } = (body ?? {}) as { context?: unknown }
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 2000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

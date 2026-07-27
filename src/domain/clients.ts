@@ -272,6 +272,14 @@ export interface Campaign {
   /** Optional folder this campaign is filed under, within its brand's gallery.
    *  Undefined = unfiled. Folder names are brand-scoped (see campaignFolders). */
   folder?: string
+  /**
+   * The AI model this campaign generates with, as an AI_MODELS id. Undefined or 'auto' means the
+   * workspace pick, then the server's per-task default. Per campaign because a launch announcement
+   * and an always-on blog run do not deserve the same model, and the cost difference between them
+   * is the whole reason to choose.
+   */
+  aiModel?: string
+
 }
 
 // Campaigns created at runtime (the wizard) register here so clientForCampaign

@@ -100,7 +100,6 @@ Recommend the 4 to 6 best-fit channels for this brand. When the traffic mix abov
 
   const client = makeModelClient('copy')
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 1000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,
