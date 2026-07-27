@@ -25,6 +25,7 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
+          'You can zoom out far enough to see a whole campaign, and "Fit to board" works out the zoom for you. The floor was 25%, which was not far enough: ten deliverables with their posts run past 4,000px, so a real campaign needed about 17% and the only way around it was to pan and remember. It goes to 10% now.',
           'Type the asset count. Getting a deliverable from 4 assets to 16 was twelve clicks on a + and the number was the one thing on the panel you could see but not say. Type it and hit Apply and it changes in one go, rewriting every post from the current brief so the result reads as one deliberate run rather than four originals and twelve clones. The steppers stay for a nudge of one.',
           'Every card in the inspector says what OBJECTS inform it, not which records are linked. A deliverable shows the cards wired to the campaign it inherits from, or exactly what it pins when you override it.',
           'A smart object can be filed into folders in the Assets panel: right-click it, or drag it onto a folder. Drag it onto the canvas instead and it is placed there. Brand folders hold smart objects and nothing else now, rather than doubling as a second list of campaigns to open.',

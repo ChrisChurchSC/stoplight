@@ -6866,6 +6866,8 @@ button {
   border-radius: 7px;
   cursor: pointer;
 }
+/* Separates Fit from the fixed percentages: it answers a different question. */
+.flow-tb-zoom-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 .flow-tb-zoom-item:hover {
   background: var(--surface-2);
 }

@@ -48,6 +48,15 @@ import { FlowsHome } from './FlowsHome'
 
 // Per-tier tones — the card badge + tile match its tier tint: campaign (tomato), deliverable
 // (blue), post (purple).
+/**
+ * Zoom bounds. The floor was 25%, which was not far enough out to see a whole campaign: ten
+ * deliverables with their posts run past 4,000px, so 25% still left most of the board off-screen and
+ * the only way around it was to pan and remember. At 10% that board is 400px tall — too small to
+ * read, which is the point: you are navigating by shape and colour, then zooming into what you found.
+ */
+const MIN_ZOOM = 10
+const MAX_ZOOM = 200
+
 /** Drag payload for a smart object leaving the Assets panel for the canvas. */
 const SMART_OBJECT_DND = 'application/x-breadcrumbs-smart-object'
 const CAMPAIGN_TONE = '#ff6347'
@@ -705,7 +714,7 @@ export function FlowsView() {
   // smooth (it grows toward the cursor) instead of lurching away from it.
   const zoomAt = (target: number, screenX: number, screenY: number) => {
     const s0 = zoomRef.current / 100
-    const z1 = Math.min(200, Math.max(25, target))
+    const z1 = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, target))
     const s1 = z1 / 100
     const sRect = canvasRef.current?.querySelector('.flow-stack')?.getBoundingClientRect()
     const o0 = offsetRef.current
@@ -718,6 +727,57 @@ export function FlowsView() {
     zoomRef.current = z1
     offsetRef.current = no
     setZoom(z1)
+    setOffset(no)
+  }
+  /**
+   * Zoom and pan so the whole board fits. The thing you actually want when you reach for the zoom
+   * control: a campaign's height depends on how many assets its deliverables carry, so the right
+   * zoom is a different number on every board and picking a preset is guesswork.
+   *
+   * Measured from the live DOM rather than from `rects`, for the same reason freeSlot is: rects is
+   * written by a layout effect, so straight after adding a card it can still be a commit behind.
+   */
+  const fitToContent = () => {
+    const cv = canvasRef.current
+    const stack = cv?.querySelector('.flow-stack')
+    if (!cv || !stack) return
+    const sRect = stack.getBoundingClientRect()
+    const s0 = zoomRef.current / 100
+    const o0 = offsetRef.current
+    const nodes = [...cv.querySelectorAll('.flow-node[data-node-id]')]
+    if (!nodes.length) return
+    // Unscaled stack coordinates: the stack's own rect already carries the current offset and scale.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const el of nodes) {
+      const r = el.getBoundingClientRect()
+      const x = (r.left - sRect.left) / s0
+      const y = (r.top - sRect.top) / s0
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x + r.width / s0)
+      maxY = Math.max(maxY, y + r.height / s0)
+    }
+    const pad = 40
+    const cw = cv.clientWidth - pad * 2
+    const ch = cv.clientHeight - pad * 2
+    const w = Math.max(1, maxX - minX)
+    const h = Math.max(1, maxY - minY)
+    // Never zoom IN past 100% to fill the space: a two-card board blown up to 200% is not "fit".
+    const z = Math.min(100, Math.max(MIN_ZOOM, Math.floor(Math.min(cw / w, ch / h) * 100)))
+    const s1 = z / 100
+    zoomRef.current = z
+    // The translate is relative to the stack's STATIC position inside the canvas, which is not the
+    // canvas origin (the stack is inset). Centring without subtracting that inset put the board a
+    // sixth of the viewport off to one side.
+    const cRect = cv.getBoundingClientRect()
+    const originX = sRect.left - cRect.left - o0.x
+    const originY = sRect.top - cRect.top - o0.y
+    const no = {
+      x: pad + (cw - w * s1) / 2 - minX * s1 - originX,
+      y: pad + (ch - h * s1) / 2 - minY * s1 - originY,
+    }
+    offsetRef.current = no
+    setZoom(z)
     setOffset(no)
   }
   // Native, non-passive wheel handler (React's onWheel is passive, so it can't
@@ -5991,7 +6051,16 @@ export function FlowsView() {
             <>
               <div className="flow-tb-zoom-scrim" onClick={() => setZoomOpen(false)} />
               <div className="flow-tb-zoom-menu">
-                {[150, 125, 100, 75, 50].map((z) => (
+                {/* Fit first, because it is the answer most of the time: the zoom that shows a whole
+                    campaign is a different number on every board. */}
+                <button
+                  className="flow-tb-zoom-item"
+                  onClick={() => { fitToContent(); setZoomOpen(false) }}
+                >
+                  Fit to board
+                </button>
+                <div className="flow-tb-zoom-sep" />
+                {[150, 125, 100, 75, 50, 25, 10].map((z) => (
                   <button
                     key={z}
                     className={`flow-tb-zoom-item${Math.round(zoom) === z ? ' on' : ''}`}
