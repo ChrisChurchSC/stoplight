@@ -4410,39 +4410,11 @@ button {
   cursor: pointer;
 }
 .flow-audience-add:hover { border-color: var(--accent); }
-.flow-node-x {
-  flex: 0 0 auto;
-  border: 0;
-  background: none;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 5px 6px;
-  border-radius: 6px;
-  opacity: 0;
-}
-.flow-node:hover .flow-node-x {
-  opacity: 1;
-}
-.flow-node-x:hover {
-  color: var(--danger, #d3543f);
-  background: var(--surface-2);
-}
 /* The ✕ on a BUILT output (a deliverable or a post). The build-mode ✕ sits in a flex row of node
    buttons; these cards have no such row, so it pins to the card's top-right corner instead — the
    kind chip already holds the top-left. */
-.flow-node-x.is-corner {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 6;
-  line-height: 1;
-}
 .flow-node.sel .flow-node-x.is-corner,
 .flow-node.multi .flow-node-x.is-corner,
-.flow-node-x:focus-visible {
-  opacity: 1;
-}
 /* Redraft copy from the current briefs. Reveals on hover; spins while generating. */
 .flow-node-regen {
   flex: 0 0 auto;
@@ -7373,8 +7345,6 @@ button {
 .flow-note-note .flow-note-ic { color: #9a7b16; }
 .flow-note-note .flow-note-text { color: #5f4d12; }
 .flow-note-note .flow-note-text::placeholder { color: #b39a4e; }
-.flow-note-note .flow-note-del { background: rgba(154, 123, 22, 0.13); color: #8a6d12; }
-.flow-note-note .flow-note-del:hover { background: rgba(154, 123, 22, 0.26); color: #6d5610; }
 .flow-note-note.sel { border-color: #d9a520; box-shadow: 0 0 0 2px color-mix(in srgb, #d9a520 45%, transparent), 0 6px 16px -5px rgba(150, 120, 20, 0.34); }
 .flow-note.sel { border-color: var(--note-tone, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow); }
 .flow-note-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px; }
@@ -7385,21 +7355,8 @@ button {
   color: var(--note-tone, var(--text-muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Delete buttons stay visible so they're always easy to hit (not hover-only). */
-.flow-note-del {
-  flex: 0 0 auto; width: 20px; height: 20px; border: 0; border-radius: 6px; cursor: pointer;
-  background: var(--surface-2); color: var(--text-muted); font-size: 12px; line-height: 1;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.flow-note-del:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 /* Delete ✕ on the campaign brief card. */
 .flow-tier-campaign { position: relative; }
-.flow-brief-del {
-  position: absolute; top: 10px; right: 10px; z-index: 2;
-  width: 22px; height: 22px; border: 0; border-radius: 6px; cursor: pointer;
-  background: color-mix(in srgb, var(--surface) 75%, transparent); color: var(--text-muted); font-size: 12px; line-height: 1;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.flow-brief-del:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .flow-note-text {
   border: 0; background: none; resize: none; width: 100%;
   padding: 0 10px 10px; font: inherit; font-size: 12.5px; line-height: 1.4; color: var(--text);

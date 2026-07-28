@@ -4744,12 +4744,12 @@ export function FlowsView() {
             // still filling in, and a paragraph explaining that was the loudest thing on the panel.
             if (!targets.length) return null
             const named = targets.map((t) => {
-              if (t === 'campaign') return { id: t, label: 'The whole campaign', sub: 'every asset' }
+              if (t === 'campaign') return { id: t, label: 'The whole campaign', sub: 'every asset', tone: CAMPAIGN_TONE, channel: undefined as ChannelId | undefined }
               const d = viewDelivs.find((x) => x.key === t)
-              if (d) return { id: t, label: d.label, sub: `${d.count} asset${d.count === 1 ? '' : 's'}` }
+              if (d) return { id: t, label: d.label, sub: `${d.count} asset${d.count === 1 ? '' : 's'}`, tone: d.tone, channel: d.channel }
               const r = viewRows.find((x) => x.id === t)
-              if (r) return { id: t, label: r.assetName, sub: 'one post' }
-              return { id: t, label: t, sub: '' }
+              if (r) return { id: t, label: r.assetName, sub: 'one post', tone: POST_TONE, channel: r.channel as ChannelId }
+              return { id: t, label: t, sub: '', tone: POST_TONE, channel: undefined as ChannelId | undefined }
             })
             // Every asset this card reaches, for the rewrite below.
             const rowIds = targets.flatMap((t) =>
@@ -4763,12 +4763,21 @@ export function FlowsView() {
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
                   Applied to · {named.length}
                 </label>
-                <div className="flow-told">
+                {/* Same shape as the brief's Deliverables list, and clickable for the same reason:
+                    these name things that exist on the board, so reading one and wanting to open it
+                    is the obvious next move. It used to be an inert label/value pair that looked
+                    like a field, which is the one thing it is not. */}
+                <div className="flow-deliv-list">
                   {named.map((n) => (
-                    <div key={n.id} className="flow-told-row">
-                      <span className="flow-told-key">{n.sub}</span>
-                      <span className="flow-told-val">{n.label}</span>
-                    </div>
+                    <button key={n.id} className="flow-pitem" onClick={() => setSel(n.id)}>
+                      {/* PresetTile already falls back to a generic mark when there is no channel,
+                          which is the campaign case, so there is no second tile to keep in step. */}
+                      <PresetTile tone={n.tone} channel={n.channel} />
+                      <div className="flow-pitem-text">
+                        <div className="flow-pitem-label">{n.label}</div>
+                        <div className="flow-pitem-desc">{n.sub}</div>
+                      </div>
+                    </button>
                   ))}
                 </div>
                 {viewing && unique.length > 0 && (
@@ -5628,17 +5637,8 @@ export function FlowsView() {
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
                 Campaign brief
               </span>
-              {!viewing && (
-                <button
-                  className="flow-brief-del"
-                  title="Delete the brief"
-                  aria-label="Delete the brief"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); setBriefHidden(true); if (sel === 'campaign') setSel(null) }}
-                >
-                  ✕
-                </button>
-              )}
+              {/* No ✕. Delete is the Delete key, on every card the same way, and the corner it used
+                  to sit in is where an out-of-date card now shows its flag. */}
               <div className="flow-node-main">
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
@@ -5704,7 +5704,7 @@ export function FlowsView() {
                         {openCommentCount(cardComments, boardKey, nt.id)}
                       </span>
                     )}
-                    <button className="flow-note-del" title="Delete" aria-label="Delete object" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteObject(nt.id) }}>✕</button>
+
                   </div>
                   {nt.kind === 'data-source' ? (
                     // A Data source links one of the brand's data sets (the spreadsheets) or a live
@@ -5854,7 +5854,7 @@ export function FlowsView() {
                         </svg>
                       </span>
                     )}
-                    <button className="flow-note-del" title="Release" aria-label="Release" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); releasePlacement(g.id) }}>✕</button>
+
                   </div>
                   <input
                     className="flow-obj-name"
@@ -5932,18 +5932,7 @@ export function FlowsView() {
                                   two amber "Needs a..." prompts on every card on the board. */}
                             </div>
                           </div>
-                          {/* A built deliverable IS its posts, so removing it removes them. Says
-                              how many, because this is the one ✕ on the board that takes other
-                              cards with it. */}
-                          <button
-                            className="flow-node-x is-corner"
-                            title={`Delete this deliverable and its ${d.rows.length} post${d.rows.length === 1 ? '' : 's'}`}
-                            aria-label={`Delete ${d.label} and its ${d.rows.length} post${d.rows.length === 1 ? '' : 's'}`}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => { e.stopPropagation(); void removeRows(d.rows.map((r) => r.id)) }}
-                          >
-                            ✕
-                          </button>
+
                         </div>
                         <div className="flow-branch-list">
                           {posts.map((r) => {
@@ -5998,15 +5987,7 @@ export function FlowsView() {
                                       })()}
                                     </div>
                                   ) : null}
-                                  <button
-                                    className="flow-node-x is-corner"
-                                    title="Delete this post"
-                                    aria-label={`Delete post ${c.head}`}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); void removeRow(r.id) }}
-                                  >
-                                    ✕
-                                  </button>
+
                                   <button
                                     className="flow-branch-plus"
                                     title="Add a next step from this asset"
@@ -6079,9 +6060,7 @@ export function FlowsView() {
                                 ↻
                               </button>
                             )}
-                            <button className="flow-node-x" title="Remove" onClick={(e) => { e.stopPropagation(); removeNode(n.id) }}>
-                              ✕
-                            </button>
+
                           </div>
                           {slots === 0 && renderCopy(n.id, 0)}
                           <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, n.id)} />
