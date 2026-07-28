@@ -4938,6 +4938,62 @@ button {
 }
 .flow-zip-echo.unknown { color: var(--amber, #b07d18); }
 
+/* THE PICKER. One dropdown for every field on a card: click to open, type to filter once the list
+   earns it, and a value you type is offered in the same list rather than through a separate mode. */
+.pk { position: relative; display: block; }
+.pk-field {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  border: none; background: none; padding: 0; margin: 0;
+  font: inherit; font-size: 12.5px; color: var(--text);
+  text-align: left; cursor: pointer;
+}
+.pk-field.empty .pk-value { color: var(--text-faint); }
+.pk-value { flex: 1; overflow-wrap: anywhere; }
+.pk-caret { flex: none; color: var(--text-faint); }
+.pk-field:hover .pk-caret { color: var(--text); }
+/* Clear lives on the field, not in the list: a row meaning "none" reads as an option called "—". */
+.pk-clear {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  border: none; background: none; cursor: pointer;
+  color: var(--text-faint); font-size: 15px; line-height: 1; padding: 0 2px;
+  opacity: 0; transition: opacity .12s;
+}
+.pk:hover .pk-clear, .pk-clear:focus-visible { opacity: 1; }
+.pk-clear:hover { color: var(--text); }
+
+.pk-pop {
+  position: absolute; z-index: 40; left: -8px; right: -8px; top: calc(100% + 6px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.pk-pop.above { top: auto; bottom: calc(100% + 6px); }
+.pk-search {
+  width: 100%; border: none; border-bottom: 1px solid var(--border); outline: none;
+  background: none; font: inherit; font-size: 12.5px; color: var(--text);
+  padding: 9px 11px;
+}
+.pk-search::placeholder { color: var(--text-faint); }
+.pk-list { max-height: 232px; overflow-y: auto; padding: 4px; outline: none; }
+.pk-head {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-faint); padding: 7px 8px 3px;
+}
+.pk-opt {
+  display: block; width: 100%; text-align: left;
+  border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 12.5px; color: var(--text);
+  padding: 6px 8px; border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.pk-opt[data-active='true'] { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.pk-opt.on { font-weight: 600; }
+/* A value you typed that is not on the list. Set apart so picking it reads as a decision. */
+.pk-opt.create { color: var(--accent); font-weight: 600; }
+.pk-empty { padding: 10px 9px; font-size: 12px; color: var(--text-faint); }
+
 .flow-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 1px; }
 .flow-chip {
   display: inline-flex; align-items: center; gap: 3px;
@@ -4956,6 +5012,15 @@ button {
 }
 .flow-chip-x:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 18%, transparent); }
 /* The add-picker sits inline with the chips and reads as the next empty slot, not as a form field. */
+/* The add-picker sits inline with the chips, but its POPUP anchors to the whole field row — the
+   container is position:relative and the picker itself static, so a pill sitting far to the right
+   cannot throw its list off the edge of the panel. */
+.flow-chips { position: relative; }
+.flow-chips .pk { position: static; display: inline-block; width: auto; min-width: 120px; }
+.flow-chips .pk-field { font-size: 11.5px; color: var(--text-faint); border: 1px dashed var(--border); border-radius: 999px; padding: 2px 7px; }
+.flow-chips .pk-field:hover { color: var(--text); border-color: var(--accent); }
+.flow-chips .pk-pop { left: 0; right: 0; }
+
 .flow-chip-add,
 .flow-chip-input {
   font: inherit; font-size: 11.5px;

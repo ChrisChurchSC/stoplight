@@ -4097,11 +4097,12 @@ export function FlowsView() {
             )
             const pick = (label: string, key: keyof Person, options: readonly string[]) =>
               field(label, (
-                <select className="flow-recform-select as-written" value={String(per[key] ?? '')} onChange={(e) => set({ [key]: e.target.value })}>
-                  <option value="">—</option>
-                  {options.map((o) => (<option key={o} value={o}>{o}</option>))}
-                  {per[key] && !options.includes(String(per[key])) && <option value={String(per[key])}>{String(per[key])}</option>}
-                </select>
+                <RecordCombo
+                  value={String(per[key] ?? '')}
+                  groups={[{ label: 'Choose one', options: [...options] }]}
+                  placeholder={label}
+                  onCommit={(v) => set({ [key]: v })}
+                />
               ))
             return (
               <>
@@ -4210,13 +4211,14 @@ export function FlowsView() {
               field(label, <RecordMulti values={values} groups={g} addLabel={addLabel} onCommit={(v) => patchCardAudience(nt, { [key]: v })} />)
             const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) =>
               field(label, (
-                <select className="flow-recform-select as-written" value={value} onChange={(e) => patchCardAudience(nt, { [key]: e.target.value })}>
-                  <option value="">—</option>
-                  {/* Stored value, shown with a capital: funnelStage is held lowercase to match every
-                      other reader of it, and only the label should differ. */}
-                  {options.map((o) => (<option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>))}
-                  {value && !options.includes(value) && <option value={value}>{value}</option>}
-                </select>
+                <RecordCombo
+                  value={value ? value.charAt(0).toUpperCase() + value.slice(1) : ''}
+                  groups={[{ label: 'Choose one', options: options.map((o) => o.charAt(0).toUpperCase() + o.slice(1)) }]}
+                  placeholder={label}
+                  // funnelStage is stored lowercase to match every other reader of it; only the
+                  // label carries the capital, so the picker hands back the stored form.
+                  onCommit={(v) => patchCardAudience(nt, { [key]: options.find((o) => o.toLowerCase() === v.toLowerCase()) ?? v })}
+                />
               ))
             return (
               <>
@@ -4267,11 +4269,12 @@ export function FlowsView() {
             )
             const pick = (label: string, key: keyof Company, options: readonly string[]) =>
               field(label, (
-                <select className="flow-recform-select as-written" value={String(co[key] ?? '')} onChange={(e) => set({ [key]: e.target.value })}>
-                  <option value="">—</option>
-                  {options.map((o) => (<option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>))}
-                  {co[key] && !options.includes(String(co[key])) && <option value={String(co[key])}>{String(co[key])}</option>}
-                </select>
+                <RecordCombo
+                  value={String(co[key] ?? '')}
+                  groups={[{ label: 'Choose one', options: options.map((o) => o.charAt(0).toUpperCase() + o.slice(1)) }]}
+                  placeholder={label}
+                  onCommit={(v) => set({ [key]: v })}
+                />
               ))
             const typed = (label: string, key: keyof Company, placeholder: string) =>
               field(label, (
@@ -4295,13 +4298,12 @@ export function FlowsView() {
                   {/* The audience this account belongs to, picked from the brand's own segments —
                       the join that lets an account inherit an audience's pains and anti-message. */}
                   {field('Audience they belong to', (
-                    <select className="flow-recform-select as-written" value={co.audienceSegment ?? ''} onChange={(e) => set({ audienceSegment: e.target.value })}>
-                      <option value="">—</option>
-                      {brandSegments.map((a) => (<option key={a.id} value={a.name}>{a.name || 'Untitled audience'}</option>))}
-                      {co.audienceSegment && !brandSegments.some((a) => a.name === co.audienceSegment) && (
-                        <option value={co.audienceSegment}>{co.audienceSegment}</option>
-                      )}
-                    </select>
+                    <RecordCombo
+                      value={co.audienceSegment ?? ''}
+                      groups={[{ label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) }]}
+                      placeholder="Which audience"
+                      onCommit={(v) => set({ audienceSegment: v })}
+                    />
                   ))}
                   {field('What they do', (
                     <RecordCombo
