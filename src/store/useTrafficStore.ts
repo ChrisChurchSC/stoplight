@@ -139,6 +139,7 @@ import {
 } from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
 import { type Product, freshProductId } from '../domain/product'
+import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
 import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
 import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
@@ -842,6 +843,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.triggers.v1': 'triggers',
   'stoplight.brandRecords.v1': 'brands',
   'stoplight.products.v1': 'products',
+  'stoplight.brandObjects.v1': 'brand_objects',
   'stoplight.libraryFolders.v1': 'library_folders',
 }
 const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
@@ -862,6 +864,7 @@ const VOICES_KEY = 'stoplight.voices.v1'
 const PATTERNS_KEY = 'stoplight.patterns.v1'
 const TRIGGERS_KEY = 'stoplight.triggers.v1'
 const PRODUCTS_KEY = 'stoplight.products.v1'
+const BRAND_OBJECTS_KEY = 'stoplight.brandObjects.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
 const LIBRARY_FOLDERS_KEY = 'stoplight.libraryFolders.v1'
 const TASKS_KEY = 'stoplight.tasks.v1'
@@ -1725,6 +1728,11 @@ interface TrafficState {
   addProduct: (partial?: Partial<Product>) => string
   updateProduct: (id: string, patch: Partial<Product>) => void
   deleteProduct: (id: string) => void
+  /** Brands AS OBJECTS on a canvas. Distinct from the workspace client, which is a name string. */
+  brandObjects: BrandObject[]
+  addBrandObject: (partial?: Partial<BrandObject>) => string
+  updateBrandObject: (id: string, patch: Partial<BrandObject>) => void
+  deleteBrandObject: (id: string) => void
   /** Records › Message › Objectives — what campaigns move + how it's measured. */
   objectives: Objective[]
   addObjective: (partial?: Partial<Objective>) => string
@@ -2758,6 +2766,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   patterns: localDataMode ? loadRecordList<Pattern>(PATTERNS_KEY) : [],
   triggers: localDataMode ? loadRecordList<Trigger>(TRIGGERS_KEY) : [],
   products: localDataMode ? loadRecordList<Product>(PRODUCTS_KEY) : [],
+  brandObjects: localDataMode ? loadRecordList<BrandObject>(BRAND_OBJECTS_KEY) : [],
   objectives: localDataMode ? loadRecordList<Objective>(OBJECTIVES_KEY) : [],
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
@@ -3290,6 +3299,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const products = s.products.filter((p) => p.id !== id)
       saveRecordList(PRODUCTS_KEY, products)
       return { products }
+    }),
+
+  addBrandObject: (partial) => {
+    const id = freshBrandObjectId()
+    const row: BrandObject = { name: '', ...(partial ?? {}), id }
+    set((s) => {
+      const brandObjects = [row, ...s.brandObjects]
+      saveRecordList(BRAND_OBJECTS_KEY, brandObjects)
+      return { brandObjects }
+    })
+    return id
+  },
+  updateBrandObject: (id, patch) =>
+    set((s) => {
+      const brandObjects = s.brandObjects.map((b) => (b.id === id ? { ...b, ...patch } : b))
+      saveRecordList(BRAND_OBJECTS_KEY, brandObjects)
+      return { brandObjects }
+    }),
+  deleteBrandObject: (id) =>
+    set((s) => {
+      const brandObjects = s.brandObjects.filter((b) => b.id !== id)
+      saveRecordList(BRAND_OBJECTS_KEY, brandObjects)
+      return { brandObjects }
     }),
 
   addObjective: (partial) => {

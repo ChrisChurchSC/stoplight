@@ -16,6 +16,7 @@ import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_M
 import { COMPANY_STATUSES, type Company } from '../domain/companies'
 import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, PRODUCT_STATUSES, type Product } from '../domain/product'
+import { type BrandObject } from '../domain/brandObject'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -436,11 +437,13 @@ export function FlowsView() {
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const updateTrigger = useTrafficStore((s) => s.updateTrigger)
+  const brandObjects = useTrafficStore((s) => s.brandObjects)
+  const addBrandObject = useTrafficStore((s) => s.addBrandObject)
+  const updateBrandObject = useTrafficStore((s) => s.updateBrandObject)
   const products = useTrafficStore((s) => s.products)
   const addProduct = useTrafficStore((s) => s.addProduct)
   const updateProduct = useTrafficStore((s) => s.updateProduct)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
-  const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   /**
    * Every brief edit goes through here, so the Save bar cannot be missed by one call site. There are
    * several (theme, objective, budget, flight, model) and chasing them individually is how the
@@ -2255,7 +2258,7 @@ export function FlowsView() {
    * re-implementing it here and drifting.
    */
   /** Kinds whose record this card can create. Freeform kinds have no record; Data source has its own. */
-  const CREATABLE_KINDS = new Set<CanvasObjectKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger'])
+  const CREATABLE_KINDS = new Set<CanvasObjectKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger', 'brand', 'product'])
   const createRecordForKind = (kind: CanvasObjectKind, rawName: string): { id: string; label: string } | null => {
     const nm = rawName.trim()
     if (!nm) return null
@@ -2275,6 +2278,8 @@ export function FlowsView() {
       case 'message': return { id: addMessage({ name: nm, brand: brand || undefined }), label: nm }
       case 'voice': return { id: addVoice({ name: nm, brand: brand || undefined }), label: nm }
       case 'trigger': return { id: addTrigger({ name: nm, brand: brand || undefined }), label: nm }
+      case 'brand': return { id: addBrandObject({ name: nm, brand: brand || undefined }), label: nm }
+      case 'product': return { id: addProduct({ name: nm, brand: brand || undefined }), label: nm }
       default: return null
     }
   }
@@ -2775,6 +2780,15 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  const ensureBrandObjectFor = (nt: CanvasObject): string => {
+    if (nt.refId && brandObjects.some((b) => b.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addBrandObject({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
   const ensureProductFor = (nt: CanvasObject): string => {
     if (nt.refId && products.some((p) => p.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
@@ -2815,6 +2829,11 @@ export function FlowsView() {
       case 'trigger': return named(triggers)
       case 'message': return named(messages)
       case 'voice': return named(voices)
+      // Brand and Product are authored on the card, but they are still records, so the card names
+      // one the same way every other record card does — and picking an existing one is how you reuse
+      // a brand you already wrote without going through a smart object.
+      case 'brand': return named(brandObjects)
+      case 'product': return named(products)
       default: return null
     }
   }
@@ -4521,128 +4540,6 @@ export function FlowsView() {
               </>
             )
           })()}
-          {/* THE BRAND this canvas writes as.
-              Its record IS the brand profile the Brand page edits, so a change here is a change
-              there. The card exists because this is the context that shapes every other card on the
-              board, and it was a global you had to remember you had set: with several brands in one
-              account, the only way to know which one a canvas was writing as was to look at the rail.
-
-              It names THIS canvas's brand and cannot be pointed at another. Generation refuses to run
-              on a canvas with no brand bound precisely so one client's voice and proof can never
-              reach another's copy, and a card that could switch brands would be a way around that
-              rule rather than a feature. Work on another brand by opening its own canvas. */}
-          {nt.kind === 'brand' && (() => {
-            if (!brand) {
-              return (
-                <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                  This canvas is not bound to a brand yet, so there is no profile to show. Bind it and
-                  this card fills in.
-                </div>
-              )
-            }
-            const profile = clientProfiles[brand] ?? {}
-            const set = (patch: Partial<typeof profile>) => { markCardDirty(nt.id); setClientProfile(brand, { ...profile, ...patch }) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>{brand}</label>
-                <div className="flow-recform">
-                  {/* NAME IS READ-ONLY HERE, and that is a considered answer rather than a gap.
-                      A brand has no id in this app: the NAME is the identity, and it is load-bearing
-                      in five shapes across roughly seventy persisted slices — a dozen maps keyed by
-                      it, two dozen record types carrying it as a field, the "Brand — " prefix inside
-                      every campaign name, list values, and other brands' parent/share links pointing
-                      at it. It spans three storage backends, and metric_snapshots.brand is a real
-                      Supabase column no client write reaches.
-
-                      An earlier version of this field edited the brand RECORD's name, which looked
-                      like it worked and quietly detached that record from everything keyed by the old
-                      string — and could only ever be done once, since the lookup was by name.
-
-                      So: a real renameBrand belongs in the store, sweeping all of it in one action
-                      with one undo entry. Until that exists, this field says what it is instead of
-                      offering a rename that corrupts. */}
-                  {field('Name', (
-                    <>
-                      <span className="flow-recform-select" style={{ color: 'var(--text-faint)' }}>{brand}</span>
-                      <span className="flow-zip-echo">Renaming a brand is not available yet: the name is this brand&apos;s identity across the whole workspace.</span>
-                    </>
-                  ))}
-                  {field('What it does', (
-                    <RecordCombo
-                      value={profile.oneLiner ?? ''}
-                      groups={[]}
-                      placeholder="One line on what the company does"
-                      onSuggest={() => suggestFor('oneLiner', profile.oneLiner ? [profile.oneLiner] : [])}
-                      onCommit={(v) => set({ oneLiner: v })}
-                    />
-                  ))}
-                  {field('What it sells', (
-                    <RecordMulti
-                      values={profile.products ?? []}
-                      groups={[]}
-                      addLabel="Add a product or service"
-                      onSuggest={() => suggestFor('products', profile.products ?? [])}
-                      onCommit={(v) => set({ products: v })}
-                    />
-                  ))}
-                  {field('What makes it different', (
-                    <RecordMulti
-                      values={profile.differentiators ?? []}
-                      groups={[]}
-                      addLabel="Add a differentiator"
-                      onSuggest={() => suggestFor('differentiators', profile.differentiators ?? [])}
-                      onCommit={(v) => set({ differentiators: v })}
-                    />
-                  ))}
-                  {field('The position it owns', (
-                    <RecordCombo
-                      value={profile.wedge ?? ''}
-                      groups={[]}
-                      placeholder="The one sentence no competitor can say"
-                      onSuggest={() => suggestFor('wedge', profile.wedge ? [profile.wedge] : [])}
-                      onCommit={(v) => set({ wedge: v })}
-                    />
-                  ))}
-                  {field('Mission', (
-                    <RecordCombo
-                      value={profile.mission ?? ''}
-                      groups={[]}
-                      placeholder="In their words"
-                      onCommit={(v) => set({ mission: v })}
-                    />
-                  ))}
-                  {field('Industry', (
-                    <RecordCombo
-                      value={profile.industry ?? ''}
-                      groups={[{ label: 'Industries', options: [...INDUSTRIES] }]}
-                      placeholder="Choose"
-                      allowCreate={false}
-                      onCommit={(v) => set({ industry: v })}
-                    />
-                  ))}
-                  {field('Voice', (
-                    <RecordCombo
-                      value={profile.voice ?? ''}
-                      groups={[{ label: 'Common voices', options: [...BRAND_VOICES] }]}
-                      placeholder="How it sounds"
-                      onCommit={(v) => set({ voice: v })}
-                    />
-                  ))}
-                </div>
-                {/* Said plainly, because a card that edits a global is a card that can surprise you. */}
-                <div className="flow-inspect-note" style={{ marginTop: 10 }}>
-                  This is {brand}&apos;s profile, not a copy of it. Editing here changes it everywhere,
-                  and every card on this canvas is written from it.
-                </div>
-              </>
-            )
-          })()}
           {/* SAVE UPDATES. The fields themselves persist as you touch them, which is right: an edit
               you have to remember to commit is an edit you lose. What is NOT automatic is pushing the
               change into copy that was already written, so that is what this button does rather than
@@ -4670,6 +4567,76 @@ export function FlowsView() {
                   </button>
                 )}
               </div>
+            )
+          })()}
+          {/* A BRAND AS AN OBJECT, authored on this canvas like any other card.
+              NOT the workspace client: that is a name string threaded through the whole account and
+              binds a canvas to a voice, so a text field here must not touch it. This is the other
+              thing people mean by brand — something you describe in a campaign to shape what gets
+              written. Several can sit on one board (a co-brand, a partner, a sub-brand), and one
+              travels to another campaign the same way every card does: group it into a smart object
+              and file it under the brand's assets. */}
+          {nt.kind === 'brand' && (() => {
+            const bo = (nt.refId ? brandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
+            const others = brandObjects.filter((x) => x.id !== bo.id)
+            const own = (key: keyof BrandObject): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<BrandObject>) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const combo = (label: string, key: keyof BrandObject, placeholder: string, extra: OptionGroup[] = [], sug?: string) =>
+              field(label, (
+                <RecordCombo
+                  value={String(bo[key] ?? '')}
+                  groups={[{ label: 'From your other brands', options: own(key) }, ...extra]}
+                  placeholder={placeholder}
+                  onSuggest={sug ? () => suggestFor(sug, own(key)) : undefined}
+                  onCommit={(v) => set({ [key]: v })}
+                />
+              ))
+            const multi = (label: string, key: 'products' | 'differentiators', addLabel: string, sug?: string) =>
+              field(label, (
+                <RecordMulti
+                  values={bo[key] ?? []}
+                  groups={[{ label: 'From your other brands', options: others.flatMap((x) => x[key] ?? []) }]}
+                  addLabel={addLabel}
+                  onSuggest={sug ? () => suggestFor(sug, bo[key] ?? []) : undefined}
+                  onCommit={(v) => set({ [key]: v })}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Who this is</label>
+                <div className="flow-recform">
+                  {/* Freely editable, because this record's identity is its id. Renaming it renames
+                      one record and nothing else, which is exactly what the workspace client cannot
+                      do. */}
+                  {field('Name', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={bo.name}
+                      placeholder="Name this brand"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {combo('What it does', 'oneLiner', 'One line on what it does', [], 'oneLiner')}
+                  {multi('What it sells', 'products', 'Add a product or service', 'products')}
+                  {multi('What makes it different', 'differentiators', 'Add a differentiator', 'differentiators')}
+                  {combo('The position it owns', 'wedge', 'The one sentence no competitor can say', [], 'wedge')}
+                  {combo('Mission', 'mission', 'In their words')}
+                  {combo('Industry', 'industry', 'Choose', [{ label: 'Industries', options: [...INDUSTRIES] }])}
+                  {combo('Voice', 'voice', 'How it sounds', [{ label: 'Common voices', options: [...BRAND_VOICES] }])}
+                  {/* The inverse of voice, and the one people forget to write down. */}
+                  {combo('What it must not sound like', 'avoidVoice', 'The register that would be wrong')}
+                </div>
+                <div className="flow-inspect-note" style={{ marginTop: 10 }}>
+                  Authored on this campaign. To use it elsewhere, group it into a smart object and file
+                  it under the brand&apos;s assets.
+                </div>
+              </>
             )
           })()}
           {/* WHAT THE BRAND SELLS. The brand profile already lists product NAMES, which tells a writer
