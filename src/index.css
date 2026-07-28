@@ -3565,8 +3565,16 @@ button {
   min-width: 0;
   position: relative;
   overflow: hidden;
+  /* Tile, dot and origin all come from the canvas element (see FlowsView), so the grid zooms and
+     pans with the board instead of sitting still underneath it. The fallbacks are the old fixed
+     values, which is what any canvas that does not set them still gets. */
   background:
-    radial-gradient(circle, color-mix(in srgb, var(--text-faint) 45%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
+    radial-gradient(
+        circle,
+        color-mix(in srgb, var(--text-faint) var(--dot-mix, 45%), transparent) var(--dot-r, 1px),
+        transparent var(--dot-r, 1px)
+      )
+      var(--dot-x, 0) var(--dot-y, 0) / var(--dot-step, 22px) var(--dot-step, 22px),
     var(--surface);
 }
 .flow-stack {
@@ -6679,6 +6687,15 @@ button {
 .flow-tb-zoom-item.on {
   color: var(--accent);
 }
+/* The model picker reuses the zoom control's shape (same toolbar, same gesture) but its rows carry
+   a second line: the model name is the choice, the note is why you would pick it. */
+.flow-tb-model { max-width: 168px; }
+.flow-tb-model svg:first-child { color: var(--accent); }
+.flow-tb-model-menu { min-width: 208px; }
+.flow-tb-model-item { display: flex; flex-direction: column; gap: 1px; }
+.flow-tb-model-name { font-size: 13px; font-weight: 600; }
+.flow-tb-model-note { font-size: 11px; font-weight: 500; color: var(--text-faint); }
+.flow-tb-model-item.on .flow-tb-model-note { color: var(--accent); opacity: 0.75; }
 .flow-tb-tools {
   display: flex;
   gap: 2px;
