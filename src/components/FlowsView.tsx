@@ -13,6 +13,7 @@ import { commentAge, commentsFor, openCommentCount, type CardComment } from '../
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
+import { COMPANY_STATUSES, type Company } from '../domain/companies'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -24,7 +25,7 @@ import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
-import { BUYING_TRIGGERS, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_LIBRARY, HOBBIES, INDUSTRIES, OCCUPATIONS, PAIN_LIBRARY, SENIORITIES } from '../domain/taxonomy'
+import { BUYING_TRIGGERS, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_LIBRARY, HOBBIES, INDUSTRIES, OCCUPATIONS, PAIN_LIBRARY, REGIONS, SENIORITIES } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
 import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
@@ -427,6 +428,7 @@ export function FlowsView() {
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
+  const updateCompany = useTrafficStore((s) => s.updateCompany)
   /**
    * Patch one audience in the brand's list. The store takes the whole list, so the read-modify-write
    * lives here rather than at every call site — six fields editable on a card is six chances to drop
@@ -436,6 +438,11 @@ export function FlowsView() {
     const list = clientAudiences[brand] ?? []
     if (!list.some((a) => a.id === id)) return
     setClientAudiences(brand, list.map((a) => (a.id === id ? { ...a, ...patch } : a)))
+  }
+  /** Patch the audience a card names, creating it on the first edit if it names none yet. */
+  const patchCardAudience = (nt: CanvasObject, patch: Partial<AudienceType>) => {
+    const id = ensureAudienceFor(nt)
+    if (id) patchAudience(id, patch)
   }
   const cardComments = useTrafficStore((s) => s.cardComments)
   /**
@@ -880,6 +887,8 @@ export function FlowsView() {
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
   const placedRef = useRef<Set<string>>(new Set())
+  /** Records a card has minted this session, so a burst of edits before re-render makes only one. */
+  const mintedRecordRef = useRef<Map<string, string>>(new Map())
   /** Corrective passes per deliverable, so auto-placement can never chase a moving target forever. */
   const placePassRef = useRef<Map<string, number>>(new Map())
   // Undo / redo timeline for the canvas (Cmd+Z / Cmd+Shift+Z). Each entry snapshots the card
@@ -1617,6 +1626,8 @@ export function FlowsView() {
    */
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
+  /** Kinds that render a full record form, and so need no direction fields under it. */
+  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company'])
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
   const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
@@ -2632,6 +2643,50 @@ export function FlowsView() {
 
   const updateObjectText = (id: string, text: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
   const setObjectRef = (id: string, refId: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+  /**
+   * The record a card edits, CREATING it if the card has not named one yet.
+   *
+   * A card used to show its fields only once it pointed at an existing record, so a freshly dropped
+   * card was a blank panel and the only way forward was to already have the thing you were trying to
+   * describe. That is backwards for the field that matters most: typing a name IS how you create a
+   * person, and it cannot be the one thing you need a person to do.
+   *
+   * So the form always renders, and the first edit to any field mints the record and links it. An
+   * untouched card still creates nothing — dropping a card you then ignore should not leave a
+   * nameless person in Records.
+   */
+  const ensurePersonFor = (nt: CanvasObject): string => {
+    if (nt.refId && allPeople.some((p) => p.id === nt.refId)) return nt.refId
+    // `nt` is captured at render, so two edits landing before the next render both see refId
+    // undefined and would each mint a record — which they did: one typed name produced two people,
+    // because BufferedInput commits on its debounce AND on blur. The ref is the only thing that
+    // survives between those two calls.
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addPerson({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
+  const ensureCompanyFor = (nt: CanvasObject): string => {
+    if (nt.refId && allCompanies.some((c) => c.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addCompany({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
+  const ensureAudienceFor = (nt: CanvasObject): string | null => {
+    if (nt.refId && brandSegments.some((a) => a.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const made = ensureAudienceRef('')
+    if (!made) return null
+    mintedRecordRef.current.set(nt.id, made.ref.id)
+    setObjectRef(nt.id, made.ref.id)
+    return made.ref.id
+  }
   // Linked kinds pick from an established record; freeform kinds (note, concept, season) return null.
   const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
   const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
@@ -3983,7 +4038,6 @@ export function FlowsView() {
    */
   const renderObjectInspector = (nt: CanvasObject) => {
     const meta = OBJECT_META[nt.kind]
-    const noun = meta.label.toLowerCase()
     return (
       <>
         <div className="flow-panel-head">
@@ -4028,12 +4082,13 @@ export function FlowsView() {
               ZIP is five digits with the state echoed back, an occupation is a long list you should
               be able to type past, and hobbies are tags because a persona is compared to other
               personas and free text makes that impossible. */}
-          {nt.kind === 'person' && nt.refId && (() => {
-            const per = allPeople.find((x) => x.id === nt.refId)
-            if (!per) return null
+          {nt.kind === 'person' && (() => {
+            // Blank stand-in when the card has not named anyone yet, so the fields are all present
+            // and the first edit is what creates the record. See ensurePersonFor.
+            const per = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
             const others = allPeople.filter((o) => o.id !== per.id)
             const own = (key: keyof Person): string[] => others.map((o) => String(o[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Person>) => updatePerson(per.id, patch)
+            const set = (patch: Partial<Person>) => updatePerson(ensurePersonFor(nt), patch)
             const field = (label: string, node: ReactNode) => (
               <div key={label} className="flow-recform-field">
                 <span className="flow-recform-key">{label}</span>
@@ -4131,9 +4186,10 @@ export function FlowsView() {
               audiences, then the shared library. Nothing is generated: a suggestion is either
               something this user wrote or a hand-written library entry, because anything invented
               here would reach the copy writer as though they had asserted it. */}
-          {nt.kind === 'audience' && nt.refId && (() => {
-            const aud = brandSegments.find((a) => a.id === nt.refId)
-            if (!aud) return null
+          {nt.kind === 'audience' && (() => {
+            // Same as the person form: every field is present from the moment the card exists, and
+            // the first edit is what mints the audience record.
+            const aud = (nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined) ?? newAudience()
             // What this brand has already said, gathered off its OTHER audiences.
             const others = brandSegments.filter((a) => a.id !== aud.id)
             const own = (pick: (a: AudienceType) => unknown): string[] =>
@@ -4149,12 +4205,12 @@ export function FlowsView() {
               </div>
             )
             const combo = (label: string, value: string, g: OptionGroup[], placeholder: string, key: keyof AudienceType) =>
-              field(label, <RecordCombo value={value} groups={g} placeholder={placeholder} onCommit={(v) => patchAudience(aud.id, { [key]: v })} />)
+              field(label, <RecordCombo value={value} groups={g} placeholder={placeholder} onCommit={(v) => patchCardAudience(nt, { [key]: v })} />)
             const multi = (label: string, values: string[], g: OptionGroup[], addLabel: string, key: keyof AudienceType) =>
-              field(label, <RecordMulti values={values} groups={g} addLabel={addLabel} onCommit={(v) => patchAudience(aud.id, { [key]: v })} />)
+              field(label, <RecordMulti values={values} groups={g} addLabel={addLabel} onCommit={(v) => patchCardAudience(nt, { [key]: v })} />)
             const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) =>
               field(label, (
-                <select className="flow-recform-select as-written" value={value} onChange={(e) => patchAudience(aud.id, { [key]: e.target.value })}>
+                <select className="flow-recform-select as-written" value={value} onChange={(e) => patchCardAudience(nt, { [key]: e.target.value })}>
                   <option value="">—</option>
                   {/* Stored value, shown with a capital: funnelStage is held lowercase to match every
                       other reader of it, and only the label should differ. */}
@@ -4191,6 +4247,74 @@ export function FlowsView() {
               </>
             )
           })()}
+          {/* THE COMPANY a card names, on the same terms as Person and Audience: every field
+              present from the moment the card exists, the first edit mints the record, and each
+              field gets the control its content deserves.
+
+              An account is mostly categorical — size, country, industry, where it sits with you —
+              so it takes more pick-lists than either of the others. Name and website are typed
+              because they are the two things that are unique to this company by definition. */}
+          {nt.kind === 'company' && (() => {
+            const co = (nt.refId ? allCompanies.find((c) => c.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
+            const others = allCompanies.filter((c) => c.id !== co.id)
+            const own = (key: keyof Company): string[] => others.map((c) => String(c[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Company>) => updateCompany(ensureCompanyFor(nt), patch)
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const pick = (label: string, key: keyof Company, options: readonly string[]) =>
+              field(label, (
+                <select className="flow-recform-select as-written" value={String(co[key] ?? '')} onChange={(e) => set({ [key]: e.target.value })}>
+                  <option value="">—</option>
+                  {options.map((o) => (<option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>))}
+                  {co[key] && !options.includes(String(co[key])) && <option value={String(co[key])}>{String(co[key])}</option>}
+                </select>
+              ))
+            const typed = (label: string, key: keyof Company, placeholder: string) =>
+              field(label, (
+                <BufferedInput
+                  className="flow-recform-input"
+                  value={String(co[key] ?? '')}
+                  placeholder={placeholder}
+                  onCommit={(v) => set({ [key]: v })}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Who they are</label>
+                <div className="flow-recform">
+                  {typed('Name', 'name', 'Name this company')}
+                  {typed('Website', 'website', 'example.com')}
+                  {pick('Industry', 'segment', INDUSTRIES)}
+                  {pick('Employees', 'employees', TAXONOMY_COMPANY_SIZES)}
+                  {pick('Country / HQ', 'country', REGIONS)}
+                  {pick('Where they sit with you', 'status', COMPANY_STATUSES)}
+                  {/* The audience this account belongs to, picked from the brand's own segments —
+                      the join that lets an account inherit an audience's pains and anti-message. */}
+                  {field('Audience they belong to', (
+                    <select className="flow-recform-select as-written" value={co.audienceSegment ?? ''} onChange={(e) => set({ audienceSegment: e.target.value })}>
+                      <option value="">—</option>
+                      {brandSegments.map((a) => (<option key={a.id} value={a.name}>{a.name || 'Untitled audience'}</option>))}
+                      {co.audienceSegment && !brandSegments.some((a) => a.name === co.audienceSegment) && (
+                        <option value={co.audienceSegment}>{co.audienceSegment}</option>
+                      )}
+                    </select>
+                  ))}
+                  {field('What they do', (
+                    <RecordCombo
+                      value={co.description ?? ''}
+                      groups={[{ label: 'From your other companies', options: own('description') }]}
+                      placeholder="One line on the business"
+                      onCommit={(v) => set({ description: v })}
+                    />
+                  ))}
+                </div>
+              </>
+            )
+          })()}
           {/* APPLIED TO: what this card feeds, and the one action that follows from it.
               A readout, not a control: wires are drawn and cut on the canvas, and a second place to
               edit them would be a second thing to keep in step with the first. Naming the targets is
@@ -4199,14 +4323,9 @@ export function FlowsView() {
           {(() => {
             const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
             const targets = downstreamTargets(board, nt.id)
-            if (!targets.length) {
-              return (
-                <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                  Not applied to anything yet. Draw a line from this card to the campaign, a
-                  deliverable or a post, and what it says is used when they are written.
-                </div>
-              )
-            }
+            // Nothing when it feeds nothing. An unwired card is the normal state of a card you are
+            // still filling in, and a paragraph explaining that was the loudest thing on the panel.
+            if (!targets.length) return null
             const named = targets.map((t) => {
               if (t === 'campaign') return { id: t, label: 'The whole campaign', sub: 'every asset' }
               const d = viewDelivs.find((x) => x.key === t)
@@ -4256,20 +4375,10 @@ export function FlowsView() {
               Stated plainly at the top, because the two ways to make a card count — point it at a
               smart object, or fill this in — were both on the panel with nothing saying that is the
               choice, and a card left with neither reads exactly like one that is finished. */}
-          {(DIRECTION_KEYS[nt.kind] ?? []).length > 0 && (() => {
-            const filled = (DIRECTION_KEYS[nt.kind] ?? []).some((k) => directionValue(nt, k).trim())
-            if (filled || nt.smartObjectId) return null
-            return (
-              <div className="flow-inspect-note" style={{ marginTop: 14, marginBottom: -4 }}>
-                {/* Only offer the smart object as an alternative on the kinds that HAVE one: a
-                    trigger has no object picker, so telling you to use it was pointing at nothing. */}
-                {nt.refId || !REF_TYPE_FOR_KIND[nt.kind]
-                  ? 'Nothing here reaches the writer yet. Fill in one of these and it does.'
-                  : `Pick a smart object above, or fill this in: either makes this ${noun} count for the copy.`}
-              </div>
-            )
-          })()}
-          {(DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => {
+          {/* Direction is for kinds with no record of their own. Person and Audience carry a full
+              record form above, which asks the same questions with better controls, so showing
+              "They care about" underneath was a second, worse copy of "What they want". */}
+          {(HAS_RECORD_FORM.has(nt.kind) ? [] : DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => {
             /**
              * AN INSTRUCTION, PICKED. The suggestions used to be chips under the box, shown only
              * while it was empty — which made typing the default and offered nothing once you had
@@ -4317,27 +4426,22 @@ export function FlowsView() {
               </Fragment>
             )
           })}
-          {/* Why the fields above may have nothing to pick from. Record-linked kinds draw their
-              suggestions off the record they name, so an unlinked card is the usual reason a
-              dropdown is missing — and until now the panel just showed bare boxes and left you to
-              work that out. */}
-          {REF_TYPE_FOR_OBJECT_KIND[nt.kind] && !nt.refId && (
-            <div className="flow-inspect-note" style={{ marginTop: 10 }}>
-              Link {articleFor(OBJECT_META[nt.kind].label.toLowerCase())} {OBJECT_META[nt.kind].label.toLowerCase()} above and these fields offer its own
-              wording to pick from, instead of asking you to type it.
-            </div>
-          )}
           {renderCardComments(nt.id)}
-          <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-            {meta.role === 'markup' ? 'Note' : 'Team note'}
-          </label>
-          <textarea
-            className="flow-inspect-input"
-            rows={3}
-            value={nt.text}
-            placeholder={meta.role === 'markup' ? meta.placeholder : 'Not sent to the writer'}
-            onChange={(e) => updateObjectText(nt.id, e.target.value)}
-          />
+          {/* A markup card (a sticky) IS its text, so it keeps the box. Every other kind had a
+              "Team note" that reached nothing and sat below a Comments thread that does the same job
+              better, with an author and a time on it. */}
+          {meta.role === 'markup' && (
+            <>
+              <label className="flow-inspect-label" style={{ marginTop: 14 }}>Note</label>
+              <textarea
+                className="flow-inspect-input"
+                rows={3}
+                value={nt.text}
+                placeholder={meta.placeholder}
+                onChange={(e) => updateObjectText(nt.id, e.target.value)}
+              />
+            </>
+          )}
           {/* Say plainly what this object does. These two lines are the acceptance test for the
               direction wiring: the second used to end "does not change the drafts yet". */}
           <div className="flow-inspect-note">
@@ -5274,14 +5378,20 @@ export function FlowsView() {
                       </select>
                     )
                   })()}
-                  <textarea
-                    className="flow-note-text"
-                    value={nt.text}
-                    placeholder={objectOptions(nt.kind) ? 'Add a note…' : meta.placeholder}
-                    rows={2}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => updateObjectText(nt.id, e.target.value)}
-                  />
+                  {/* Only a markup card (a sticky) keeps a text box: the text IS the card. On every
+                      other kind this was a second place to write a remark, competing with the
+                      Comments thread in the inspector, which does the same job with an author and a
+                      timestamp on it. Two notes fields means neither is where anyone looks. */}
+                  {!objectOptions(nt.kind) && (
+                    <textarea
+                      className="flow-note-text"
+                      value={nt.text}
+                      placeholder={meta.placeholder}
+                      rows={2}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onChange={(e) => updateObjectText(nt.id, e.target.value)}
+                    />
+                  )}
                   <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, nt.id)}>
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                   </button>

@@ -26379,9 +26379,13 @@ table.aud-sheet td.stick .aud-cell {
 /* Gated on .has-hub: "unattached" only means something when there is a campaign card to attach TO.
    Without the gate, a canvas with no hub dimmed every card at once and read as "all of this is
    provisional" when the truth was that nothing could be attached in the first place. */
+/* Full strength either way. Dimming said "provisional", but an unwired card is the normal state of
+   one you are still filling in — and with the record form now living on the card, filling it in is
+   most of the work. Attachment still reads from the spine and the live label below, and from the
+   edge itself, without greying out the thing you are currently typing into. */
 .flow.has-hub .flow-note[data-role='input']:not(.attached),
 .flow.has-hub .flow-note-object:not(.attached) {
-  opacity: 0.72;
+  opacity: 1;
 }
 .flow-note[data-role='input'].attached { background: var(--surface); }
 .flow-note[data-role='input'].attached .flow-note-kind { color: var(--note-tone, var(--text-muted)); }
