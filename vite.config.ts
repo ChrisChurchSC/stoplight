@@ -474,6 +474,33 @@ function draftAngleApi(): PluginOption {
   }
 }
 
+/** Per-field option suggestions for a picker. Proposals only: nothing is persisted server-side. */
+function suggestOptionsApi(): PluginOption {
+  return {
+    name: 'suggest-options-api',
+    configureServer(server) {
+      server.middlewares.use('/api/suggest-options', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runSuggestOptions } = await import('./server/suggestOptionsHandler')
+            const result = await runSuggestOptions(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 /** Dev-server endpoint for "Ingest a brand's site content". Plain fetch, no key needed. */
 function ingestSiteApi(): PluginOption {
   return {
@@ -1126,6 +1153,7 @@ export default defineConfig(({ mode }) => {
       draftObjectivesApi(),
       draftChannelsApi(),
       draftAngleApi(),
+      suggestOptionsApi(),
       ingestSiteApi(),
       setupApi(),
       askApi(),

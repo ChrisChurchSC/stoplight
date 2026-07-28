@@ -23,6 +23,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 export interface PickerGroup {
   label: string
   options: string[]
+  /** Renders the group as proposals rather than as things the brand already holds. */
+  suggested?: boolean
 }
 
 interface Row {
@@ -30,6 +32,7 @@ interface Row {
   value: string
   /** Group heading to print above this row, when it starts a new group. */
   heading?: string
+  suggested?: boolean
 }
 
 /** Options flattened to rows, filtered, with headings attached to the row that starts each group. */
@@ -45,7 +48,7 @@ function buildRows(groups: PickerGroup[], query: string, exclude: string[], allo
       if (!v || seen.has(k)) continue
       if (q && !k.includes(q)) continue
       seen.add(k)
-      rows.push({ kind: 'option', value: v, heading: first ? g.label : undefined })
+      rows.push({ kind: 'option', value: v, heading: first ? g.label : undefined, suggested: g.suggested })
       first = false
     }
   }
@@ -100,6 +103,7 @@ export function Picker({
   keepOpen = false,
   allowCreate = true,
   maxLength,
+  onSuggest,
   onPick,
 }: {
   /** The current value. Empty string shows the placeholder. */
@@ -119,19 +123,37 @@ export function Picker({
    */
   allowCreate?: boolean
   maxLength?: number
+  /**
+   * Ask for candidates tailored to this brand. Optional: a field with nothing sensible to generate
+   * simply does not pass it, and no button appears.
+   *
+   * What comes back is held in local state and shown under its own heading. It is NEVER written
+   * anywhere: close the list and it is gone. Picking one is what asserts it, exactly as typing it
+   * would be. That is the whole reason this is safe to have at all, given the rest of the app
+   * guarantees the copy writer only sees strings the user chose.
+   */
+  onSuggest?: () => Promise<string[]>
   onPick: (v: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [above, setAbove] = useState(false)
+  const [suggested, setSuggested] = useState<string[]>([])
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestErr, setSuggestErr] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
-  const close = () => { setOpen(false); setQuery('') }
+  // Suggestions die with the popup. They are proposals, and an unclosed proposal is not a value.
+  const close = () => { setOpen(false); setQuery(''); setSuggested([]); setSuggestErr(null) }
   const wrapRef = useDismiss(open, close)
 
-  const total = useMemo(() => groups.reduce((n, g) => n + g.options.length, 0), [groups])
-  const rows = useMemo(() => buildRows(groups, query, exclude, allowCreate), [groups, query, exclude, allowCreate])
+  const withSuggested = useMemo(
+    () => (suggested.length ? [...groups, { label: 'Suggested for this brand', options: suggested, suggested: true }] : groups),
+    [groups, suggested],
+  )
+  const total = useMemo(() => withSuggested.reduce((n, g) => n + g.options.length, 0), [withSuggested])
+  const rows = useMemo(() => buildRows(withSuggested, query, exclude, allowCreate), [withSuggested, query, exclude, allowCreate])
   /**
    * The search box is also the ONLY way to write a value that is not listed, so a field that accepts
    * free values must always have one. Without this, a picker whose library happens to be empty had
@@ -221,7 +243,7 @@ export function Picker({
                   role="option"
                   aria-selected={r.value === value}
                   data-active={i === active}
-                  className={`pk-opt${r.kind === 'create' ? ' create' : ''}${r.value === value ? ' on' : ''}`}
+                  className={`pk-opt${r.kind === 'create' ? ' create' : ''}${r.suggested ? ' suggested' : ''}${r.value === value ? ' on' : ''}`}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(r.value)}
                 >
@@ -230,6 +252,32 @@ export function Picker({
               </div>
             ))}
           </div>
+          {onSuggest && (
+            <div className="pk-foot">
+              <button
+                type="button"
+                className="pk-suggest"
+                disabled={suggesting}
+                onClick={async () => {
+                  setSuggesting(true)
+                  setSuggestErr(null)
+                  try {
+                    setSuggested(await onSuggest())
+                  } catch (e) {
+                    setSuggestErr((e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not reach the model.')
+                  } finally {
+                    setSuggesting(false)
+                  }
+                }}
+              >
+                {suggesting ? 'Thinking…' : suggested.length ? 'Suggest more' : 'Suggest for this brand'}
+              </button>
+              {suggestErr && <span className="pk-foot-err">{suggestErr}</span>}
+              {/* Said plainly, because the rest of the app promises the writer only sees what you
+                  chose, and a generated row in this list looks exactly like one you wrote. */}
+              {!!suggested.length && !suggestErr && <span className="pk-foot-note">Nothing is saved until you pick one.</span>}
+            </div>
+          )}
         </div>
       )}
     </div>

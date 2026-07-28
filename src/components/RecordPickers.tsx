@@ -33,6 +33,7 @@ export function RecordCombo({
   placeholder,
   maxLength,
   allowCreate,
+  onSuggest,
   onCommit,
 }: {
   value: string
@@ -41,9 +42,11 @@ export function RecordCombo({
   maxLength?: number
   /** False for a closed enum, where a typed value is one nothing downstream can read. */
   allowCreate?: boolean
+  /** Ask for brand-specific candidates. Results are proposals, discarded when the list closes. */
+  onSuggest?: () => Promise<string[]>
   onCommit: (v: string) => void
 }) {
-  return <Picker value={value} groups={groups} placeholder={placeholder} maxLength={maxLength} allowCreate={allowCreate} onPick={onCommit} />
+  return <Picker value={value} groups={groups} placeholder={placeholder} maxLength={maxLength} allowCreate={allowCreate} onSuggest={onSuggest} onPick={onCommit} />
 }
 
 /**
@@ -57,11 +60,13 @@ export function RecordMulti({
   values,
   groups,
   addLabel,
+  onSuggest,
   onCommit,
 }: {
   values: string[]
   groups: OptionGroup[]
   addLabel: string
+  onSuggest?: () => Promise<string[]>
   onCommit: (v: string[]) => void
 }) {
   const add = (v: string) => {
@@ -79,7 +84,7 @@ export function RecordMulti({
       {/* Stays open after each pick: adding three interests should be three clicks, not three
           open-pick-reopen cycles. Already-chosen values drop out of the list rather than sitting
           there looking like a second slot. */}
-      <Picker value="" groups={groups} placeholder={addLabel} exclude={values} keepOpen onPick={add} />
+      <Picker value="" groups={groups} placeholder={addLabel} exclude={values} keepOpen onSuggest={onSuggest} onPick={add} />
     </div>
   )
 }

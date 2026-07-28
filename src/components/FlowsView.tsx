@@ -431,6 +431,35 @@ export function FlowsView() {
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const updateTrigger = useTrafficStore((s) => s.updateTrigger)
+  const renameCampaign = useTrafficStore((s) => s.renameCampaign)
+  /**
+   * Candidate values for ONE field, tailored to this brand. Proposals only: the picker holds them in
+   * local state, shows them under their own heading, and drops them when it closes. Choosing one is
+   * what asserts it, which keeps the app's guarantee that the copy writer only sees strings the user
+   * picked.
+   */
+  const suggestFor = async (field: string, already: string[], aud?: { name?: string; role?: string }): Promise<string[]> => {
+    const profile = brand ? clientProfiles[brand] : undefined
+    const res = await fetch('/api/suggest-options', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        field,
+        brand,
+        oneLiner: profile?.oneLiner,
+        positioning: profile?.positioning,
+        industry: profile?.industry,
+        differentiators: profile?.differentiators,
+        voice: profile?.voice,
+        audienceName: aud?.name,
+        audienceRole: aud?.role,
+        already,
+      }),
+    })
+    if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `suggest ${res.status}`)
+    const data = (await res.json()) as { options?: string[] }
+    return data.options ?? []
+  }
   /**
    * Patch one audience in the brand's list. The store takes the whole list, so the read-modify-write
    * lives here rather than at every call site — six fields editable on a card is six chances to drop
@@ -4202,10 +4231,27 @@ export function FlowsView() {
                 {node}
               </div>
             )
-            const combo = (label: string, value: string, g: OptionGroup[], placeholder: string, key: keyof AudienceType) =>
-              field(label, <RecordCombo value={value} groups={g} placeholder={placeholder} onCommit={(v) => patchCardAudience(nt, { [key]: v })} />)
-            const multi = (label: string, values: string[], g: OptionGroup[], addLabel: string, key: keyof AudienceType) =>
-              field(label, <RecordMulti values={values} groups={g} addLabel={addLabel} onCommit={(v) => patchCardAudience(nt, { [key]: v })} />)
+            const who = { name: aud.name, role: aud.role }
+            const combo = (label: string, value: string, g: OptionGroup[], placeholder: string, key: keyof AudienceType, sug?: string) =>
+              field(label, (
+                <RecordCombo
+                  value={value}
+                  groups={g}
+                  placeholder={placeholder}
+                  onSuggest={sug ? () => suggestFor(sug, g.flatMap((x) => x.options), who) : undefined}
+                  onCommit={(v) => patchCardAudience(nt, { [key]: v })}
+                />
+              ))
+            const multi = (label: string, values: string[], g: OptionGroup[], addLabel: string, key: keyof AudienceType, sug?: string) =>
+              field(label, (
+                <RecordMulti
+                  values={values}
+                  groups={g}
+                  addLabel={addLabel}
+                  onSuggest={sug ? () => suggestFor(sug, values, who) : undefined}
+                  onCommit={(v) => patchCardAudience(nt, { [key]: v })}
+                />
+              ))
             const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) =>
               field(label, (
                 <RecordCombo
@@ -4227,10 +4273,10 @@ export function FlowsView() {
                     { label: 'Their roles', options: others.map((a) => a.role).filter(Boolean) },
                     // Nothing generic can define a brand's own sub-segment, so this one legitimately
                     // starts empty. The picker still takes a typed value in the same box.
-                  ], 'Sharper than the role. One line.', 'definition')}
-                  {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_GROUPS), 'Add a pain', 'pains')}
-                  {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_GROUPS), 'Add a want', 'goalTags')}
-                  {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), TRIGGER_GROUPS), 'Add a trigger', 'triggers')}
+                  ], 'Sharper than the role. One line.', 'definition', 'definition')}
+                  {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_GROUPS), 'Add a pain', 'pains', 'pains')}
+                  {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_GROUPS), 'Add a want', 'goalTags', 'goals')}
+                  {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), TRIGGER_GROUPS), 'Add a trigger', 'triggers', 'triggers')}
                   {/* These drew ONLY from the brand's other audiences, so a brand's first audience
                       showed an empty dropdown — the same empty-box failure the starter libraries
                       exist to prevent. The libraries were wired into the direction field and never
@@ -4238,17 +4284,17 @@ export function FlowsView() {
                   {combo('What they believe against you', aud.objections ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.objections) },
                     ...OBJECTION_GROUPS,
-                  ], 'The copy has to answer this', 'objections')}
+                  ], 'The copy has to answer this', 'objections', 'objections')}
                   {combo('Never say', aud.antiMessage ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.antiMessage) },
                     // An anti-message is the inverse of an objection: the thing that confirms it.
                     ...OBJECTION_GROUPS.map((g) => ({ label: `Do not confirm: ${g.label.toLowerCase()}`, options: g.options })),
-                  ], 'The sentence that loses them', 'antiMessage')}
+                  ], 'The sentence that loses them', 'antiMessage', 'antiMessage')}
                   {combo('The angle', aud.messageAngle ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.messageAngle) },
                     { label: 'Your message records', options: messages.map((m) => m.angle ?? '').filter(Boolean) },
                     { label: "Your brand's differentiators", options: (brand ? clientProfiles[brand]?.differentiators ?? [] : []).filter(Boolean) },
-                  ], 'How the promise is framed for them', 'messageAngle')}
+                  ], 'How the promise is framed for them', 'messageAngle', 'messageAngle')}
                   {select('Seniority', aud.seniority ?? '', SENIORITIES, 'seniority')}
                   {select('Company size', aud.companySize ?? '', TAXONOMY_COMPANY_SIZES, 'companySize')}
                   {select('Industry', aud.industry ?? '', INDUSTRIES, 'industry')}
@@ -6160,7 +6206,21 @@ export function FlowsView() {
                 </div>
                 <div className="flow-inspect">
                   <label className="flow-inspect-label">Name</label>
-                  <input className="flow-inspect-input" value={viewShort} readOnly title="Renaming a built flow isn't available yet" />
+                  {/* The store has had renameCampaign all along; this field was simply never wired to
+                      it, and said so in a tooltip nobody hovers. Only the part after the brand is
+                      editable: the "Brand — " prefix is how every reader finds the campaign's brand,
+                      so it is rebuilt here rather than left to be typed correctly. */}
+                  <BufferedInput
+                    className="flow-inspect-input"
+                    value={viewShort}
+                    placeholder="Name this campaign"
+                    onCommit={(v) => {
+                      const next = v.trim()
+                      if (!next || !viewName || next === viewShort) return
+                      const full = brand ? `${brand} — ${next}` : next
+                      void renameCampaign(viewName, full).then(() => setViewName(full))
+                    }}
+                  />
                   {messages.length > 0 && (
                     <>
                       <label className="flow-inspect-label" style={{ marginTop: 14 }}>
