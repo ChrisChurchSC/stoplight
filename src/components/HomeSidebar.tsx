@@ -1,0 +1,458 @@
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useTrafficStore } from '../store/useTrafficStore'
+import { ROLE_PRESETS } from '../domain/roles'
+import { InfoTip } from './InfoTip'
+
+// Which glossary term defines each collapsible nav section (build -> reach -> measure).
+const SECTION_TERM: Record<string, string> = { Foundation: 'foundation', Prospects: 'prospects', 'Go-to-market': 'gtm' }
+
+/**
+ * The app's left sidebar for the files-browser shell — the same panel on the home
+ * AND on the Library / Connectors / Billing pages, so the layout never changes
+ * between them. A workspace header, a Quick-actions + search row over the Ask
+ * palette, the primary destinations, a recent-Chats list (saved reports), and the
+ * Connect / Billing foot. Self-contained: reads counts + brands from the shared
+ * hook and drives navigation via the store.
+ */
+
+// Thin line icons on a 24 grid; they inherit color via currentColor.
+const ICONS: Record<string, ReactNode> = {
+  home: (
+    <>
+      <path d="M4 11 12 4l8 7" />
+      <path d="M6 10v9h5v-5h2v5h5v-9" />
+    </>
+  ),
+  brand: <path d="M12 2 22 12 12 22 2 12Z" />,
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="16" rx="2" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3.5v3M16 3.5v3" />
+    </>
+  ),
+  library: (
+    <>
+      <rect x="4" y="4" width="7" height="7" rx="1.3" />
+      <rect x="13" y="4" width="7" height="7" rx="1.3" />
+      <rect x="4" y="13" width="7" height="7" rx="1.3" />
+      <rect x="13" y="13" width="7" height="7" rx="1.3" />
+    </>
+  ),
+  insights: (
+    <>
+      <path d="M4 20h16" />
+      <path d="M7 20v-5" />
+      <path d="M12 20V8" />
+      <path d="M17 20v-9" />
+    </>
+  ),
+  reports: (
+    <>
+      <path d="M7 3h7l5 5v13H7z" />
+      <path d="M14 3v5h5" />
+      <path d="M10 13h6M10 17h5" />
+    </>
+  ),
+  tasks: (
+    <>
+      <path d="m3 7 2 2 3-3" />
+      <path d="m3 16 2 2 3-3" />
+      <path d="M12 8h9M12 17h9" />
+    </>
+  ),
+  campaigns: (
+    <>
+      <rect x="4" y="4" width="6" height="16" rx="1.4" />
+      <rect x="14" y="4" width="6" height="10" rx="1.4" />
+    </>
+  ),
+  companies: (
+    <>
+      <rect x="4" y="3" width="9" height="18" rx="1.4" />
+      <path d="M13 8h7v13H4" />
+      <path d="M7 7h3M7 11h3M7 15h3M16 12h0M16 16h0" />
+    </>
+  ),
+  people: (
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M4 20a5 5 0 0 1 10 0" />
+      <path d="M16 5.2a3 3 0 0 1 0 5.6" />
+      <path d="M17 14.5a5 5 0 0 1 3 5.5" />
+    </>
+  ),
+  segments: (
+    <>
+      <path d="M12 3 2 8l10 5 10-5-10-5Z" />
+      <path d="m2 13 10 5 10-5" />
+    </>
+  ),
+  flows: (
+    <>
+      <circle cx="6" cy="6" r="2.4" />
+      <circle cx="18" cy="6" r="2.4" />
+      <circle cx="12" cy="18" r="2.4" />
+      <path d="M6 8.4v3a2 2 0 0 0 2 2h2.4M18 8.4v3a2 2 0 0 1-2 2h-2.4" />
+    </>
+  ),
+  media: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v9h9" />
+    </>
+  ),
+  connect: (
+    <>
+      <path d="M9.5 14.5 14.5 9.5" />
+      <path d="M11 6.5 12 5.5a3.5 3.5 0 0 1 5 5l-1 1" />
+      <path d="M13 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1" />
+    </>
+  ),
+  billing: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M3 10h18" />
+    </>
+  ),
+  chat: <path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4v3l4-3h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.6-3.6" />
+    </>
+  ),
+  spark: <path d="M12 4l1.7 4.8L18.5 12l-4.8 1.7L12 18.5l-1.7-4.8L5.5 12l4.8-1.7z" />,
+  caret: <path d="m6 9 6 6 6-6" />,
+  updown: <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />,
+  check: <path d="m5 12.5 4.5 4.5L19 6" />,
+  pattern: (
+    <>
+      <path d="M4 7h16M4 12h16M4 17h10" />
+      <circle cx="18.5" cy="17" r="2" />
+    </>
+  ),
+  trigger: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  voices: (
+    <>
+      <path d="M4 5h16v11H8l-4 3z" />
+      <path d="M9 10v2M12 8.5v5M15 10v2" />
+    </>
+  ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.4" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+    </>
+  ),
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 2.6v2.6M12 18.8v2.6M4 7.6l2.2 1.3M17.8 15.1l2.2 1.3M4 16.4l2.2-1.3M17.8 8.9 20 7.6" />
+    </>
+  ),
+  userplus: (
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20a5.5 5.5 0 0 1 11 0" />
+      <path d="M18 8.5v5M15.5 11h5" />
+    </>
+  ),
+  apps: (
+    <>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.8" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
+    </>
+  ),
+  signout: (
+    <>
+      <path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" />
+      <path d="m10 8-4 4 4 4" />
+      <path d="M16 12H6" />
+    </>
+  ),
+}
+
+// Open / overdue task counts for the sidebar badge. Tasks live in localStorage (see TasksView),
+// so read them straight from there; TasksView fires a 'stoplight:tasks' event on every change.
+function readTaskCounts(brand: string): { open: number; overdue: number } {
+  try {
+    const raw = JSON.parse(localStorage.getItem('stoplight.tasks.v1') ?? '[]')
+    if (!Array.isArray(raw)) return { open: 0, overdue: 0 }
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    // Scope to the active brand; legacy tasks without a brand still count so nothing silently drops.
+    const scoped = brand
+      ? raw.filter((t: { brand?: string }) => (t.brand ?? '') === brand || !t.brand)
+      : raw
+    const open = scoped.filter((t: { done?: boolean }) => !t.done)
+    return { open: open.length, overdue: open.filter((t: { due?: string }) => t.due && t.due < today).length }
+  } catch {
+    return { open: 0, overdue: 0 }
+  }
+}
+
+function Ico({ name }: { name: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  )
+}
+
+// Every top-level nav destination the sidebar can jump to, other than the special Library /
+// Insights (libraryMode) and the Brand group (which lists individual brands). Kept as a page key
+// so the section config below can drive both the click and the active state from one place.
+type NavPage =
+  | 'flows' | 'tasks' | 'reports'
+  | 'brands' | 'records' | 'people' | 'segments' | 'messages' | 'voices' | 'proofpoints' | 'objectives' | 'channelrecords'
+
+/**
+ * mode controls which parts render, so one nav definition powers two homes:
+ *  - 'full'         : the classic left sidebar (everything). Kept for safety / other callers.
+ *  - 'destinations' : left sidebar, primary destinations only (Campaigns + top items + footer).
+ *  - 'sections'     : the Chats list, styled to fill its parent — lives in the Gretel panel.
+ *  - 'records'      : the brand's data nav (Brand + Foundation / Prospects / Go-to-market), which
+ *                     lives in the Assets panel.
+ */
+export function HomeSidebar({ mode }: { mode: 'sections' | 'railitems' | 'records' }) {
+  const page = useTrafficStore((s) => s.page)
+  const setPage = useTrafficStore((s) => s.setPage)
+  const libraryMode = useTrafficStore((s) => s.libraryMode)
+  const setLibraryMode = useTrafficStore((s) => s.setLibraryMode)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const taskBrand = clientFilter && clientFilter !== 'all' ? clientFilter : ''
+  const homeChats = useTrafficStore((s) => s.homeChats)
+  const activeHomeChatId = useTrafficStore((s) => s.activeHomeChatId)
+  const homeChatOpen = useTrafficStore((s) => s.homeChatOpen)
+  const newHomeChat = useTrafficStore((s) => s.newHomeChat)
+  const openSavedHomeChat = useTrafficStore((s) => s.openSavedHomeChat)
+  const deleteHomeChat = useTrafficStore((s) => s.deleteHomeChat)
+
+  const [taskCounts, setTaskCounts] = useState(() => readTaskCounts(taskBrand))
+  const [chatsOpen, setChatsOpen] = useState(false)
+  // Workflow sections (Foundation / Prospects / Go-to-market) — collapsed by default so the nav starts
+  // compact; the user expands what they need. A picked role pre-expands the section it works in
+  // (emphasis only): brand→Foundation, product→Prospects, email→Go-to-market, growth→all.
+  const marketerRole = useTrafficStore((s) => s.userPrefs.marketerRole)
+  const [openSections, setOpenSections] = useState<Set<string>>(
+    () => new Set<string>(marketerRole ? ROLE_PRESETS[marketerRole].sections : []),
+  )
+  const toggleSection = (label: string) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev)
+      next.has(label) ? next.delete(label) : next.add(label)
+      return next
+    })
+  // If the role changes later, add (never force-remove) its emphasized sections.
+  useEffect(() => {
+    if (marketerRole) setOpenSections((prev) => new Set([...prev, ...ROLE_PRESETS[marketerRole].sections]))
+  }, [marketerRole])
+  // Simple detail level keeps the same four left-nav destinations; it only condenses the discipline
+  // sections, which now live in the Gretel panel (sections mode) rather than this rail.
+  const skillLevel = useTrafficStore((s) => s.userPrefs.skillLevel)
+  const simpleNav = skillLevel === 'simple'
+  // The nav, organized by the job stages: set a Foundation → Build → reach (Go-to-market) → Measure.
+  type NavItem = { key: string; label: string; ico: string; page: NavPage | null; active: boolean; onClick: () => void; badge?: number; overdue?: boolean }
+  const item = (key: string, label: string, ico: string, active: boolean, onClick: () => void, extra?: { badge?: number; overdue?: boolean }): NavItem =>
+    ({ key, label, ico, page: null, active, onClick, ...extra })
+  // The left rail's primary destinations, below the hardcoded Campaigns front door: Timeline, Tasks,
+  // Reports. Brand moved to the Gretel panel; Home / Library folded away; Insights folded into Reports.
+  const topItems: NavItem[] = [
+    item('calendar', 'Timeline', 'calendar', page === 'calendar', () => setPage('calendar')),
+    item('tasks', 'Tasks', 'tasks', page === 'tasks', () => setPage('tasks'), { badge: taskCounts.open || undefined, overdue: taskCounts.overdue > 0 }),
+    // Reports opens the saved reports / insights view (the former "Insights" destination).
+    item('reports', 'Reports', 'reports', page === 'reports' || (page === 'content' && libraryMode !== 'catalog'), () => setLibraryMode('data')),
+  ]
+  const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+    {
+      label: 'Foundation',
+      items: [
+        item('messages', 'Messages', 'reports', page === 'messages', () => setPage('messages')),
+        item('voices', 'Voices', 'voices', page === 'voices', () => setPage('voices')),
+        item('proofpoints', 'Proof points', 'check', page === 'proofpoints', () => setPage('proofpoints')),
+        item('patterns', 'Patterns', 'pattern', page === 'patterns', () => setPage('patterns')),
+      ],
+    },
+    {
+      label: 'Prospects',
+      items: [
+        item('segments', 'Audiences', 'segments', page === 'segments', () => setPage('segments')),
+        item('records', 'Companies', 'companies', page === 'records', () => setPage('records')),
+        item('people', 'People', 'people', page === 'people', () => setPage('people')),
+      ],
+    },
+    {
+      label: 'Go-to-market',
+      items: [
+        item('channelrecords', 'Channels', 'flows', page === 'channelrecords', () => setPage('channelrecords')),
+        item('triggers', 'Triggers', 'trigger', page === 'triggers', () => setPage('triggers')),
+        item('objectives', 'Objectives', 'insights', page === 'objectives', () => setPage('objectives')),
+      ],
+    },
+  ]
+  // The section that holds the page you're on — so Simple mode never hides where you currently are,
+  // and any mode auto-expands it so the active item is visible and highlighted.
+  const activeSection = NAV_SECTIONS.find((sec) => sec.items.some((it) => it.active))
+
+  // Home chat history (already newest-activity-first from the store), capped for the sidebar.
+  const recentChats = useMemo(() => homeChats.slice(0, 12), [homeChats])
+
+  // Keep the Tasks badge in sync: TasksView writes localStorage + fires 'stoplight:tasks'; also
+  // refresh when the tab regains focus (another tab may have edited) and when the page changes.
+  useEffect(() => {
+    const update = () => setTaskCounts(readTaskCounts(taskBrand))
+    update()
+    window.addEventListener('stoplight:tasks', update)
+    window.addEventListener('focus', update)
+    return () => {
+      window.removeEventListener('stoplight:tasks', update)
+      window.removeEventListener('focus', update)
+    }
+  }, [page, taskBrand])
+
+  // The record nav is the dedicated home for the discipline sections in the right sidebar, so
+  // always show all of them there; Simple-mode condensing only applies in the left rail ('full').
+  const sectionsToShow =
+    mode === 'sections'
+      ? NAV_SECTIONS
+      : simpleNav
+        ? NAV_SECTIONS.filter((sec) => sec === activeSection)
+        : NAV_SECTIONS
+
+  // Chats + the discipline sections, extracted so one definition serves both the left rail ('full')
+  // and the right sidebar ('sections') without re-implementing any of the nav logic.
+  const chatsBlock = (
+    <div className="hsb-chats hsb-chats-promoted">
+      <div className="hsb-sec-row">
+        <button className="hsb-sec" onClick={() => setChatsOpen((o) => !o)}>
+          <span className={`hsb-sec-chev${chatsOpen ? ' open' : ''}`}>
+            <Ico name="caret" />
+          </span>
+          Chats
+          {homeChats.length > 0 ? <span className="nav-count">{homeChats.length}</span> : null}
+        </button>
+        <button className="hsb-sec-add" title="New chat" aria-label="New chat" onClick={newHomeChat}>
+          <Ico name="plus" />
+        </button>
+      </div>
+      {chatsOpen && (
+        <div className="hsb-chat-list">
+          {recentChats.length === 0 ? (
+            <div className="hsb-chat-empty">No chats yet.</div>
+          ) : (
+            recentChats.map((c) => {
+              const active = homeChatOpen && activeHomeChatId === c.id
+              return (
+                <div key={c.id} className={`hsb-chat${active ? ' active' : ''}`} title={c.title}>
+                  <button className="hsb-chat-open" onClick={() => openSavedHomeChat(c.id)}>
+                    <span className="hsb-chat-ic">
+                      <Ico name="chat" />
+                    </span>
+                    <span className="hsb-chat-title">{c.title || 'Untitled chat'}</span>
+                  </button>
+                  <button
+                    className="hsb-chat-del"
+                    title="Delete chat"
+                    aria-label="Delete chat"
+                    onClick={(e) => { e.stopPropagation(); deleteHomeChat(c.id) }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const sectionsBlock = sectionsToShow.map((sec) => {
+    const open = openSections.has(sec.label) || sec === activeSection
+    return (
+      <div className="hsb-chats" key={sec.label}>
+        <div className="hsb-sec-row">
+          <button className="hsb-sec" onClick={() => toggleSection(sec.label)}>
+            <span className={`hsb-sec-chev${open ? ' open' : ''}`}>
+              <Ico name="caret" />
+            </span>
+            {sec.label}
+          </button>
+          <InfoTip term={SECTION_TERM[sec.label]} />
+        </div>
+        {open && (
+          <div className="hsb-chat-list">
+            {sec.items.map((it) => (
+              <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+                <span className="nav-ico">
+                  <Ico name={it.ico} />
+                </span>
+                <span className="nav-label">{it.label}</span>
+                {it.badge ? (
+                  <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  })
+
+  // Railitems mode: just the destination buttons (Campaigns + Timeline / Tasks / Reports), no shell
+  // or footer, to drop into the combined BrandRail. Styled by .railnav (same as the campaign nav).
+  if (mode === 'railitems') {
+    return (
+      <div className="railnav">
+        <button className={`nav-item${page === 'flows' ? ' active' : ''}`} onClick={() => setPage('flows')} title="Campaigns">
+          <span className="nav-ico"><Ico name="flows" /></span>
+          <span className="nav-label">Campaigns</span>
+        </button>
+        {topItems.map((it) => (
+          <button key={it.key} className={`nav-item${it.active ? ' active' : ''}`} onClick={it.onClick} title={it.label}>
+            <span className="nav-ico"><Ico name={it.ico} /></span>
+            <span className="nav-label">{it.label}</span>
+            {it.badge ? <span className={`nav-count task-badge${it.overdue ? ' overdue' : ''}`}>{it.badge}</span> : null}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  // The Brand strategy-record button — top of the brand's data nav (Assets panel).
+  const brandButton = (
+    <button
+      className={`nav-item${page === 'brands' ? ' active' : ''}`}
+      onClick={() => setPage('brands')}
+      title="Brand"
+    >
+      <span className="nav-ico">
+        <Ico name="brand" />
+      </span>
+      <span className="nav-label">Brand</span>
+    </button>
+  )
+
+  // Sections mode (Gretel): just the Chats list now. Brand and the Foundation / Prospects /
+  // Go-to-market record sections moved to the Assets panel (records mode).
+  if (mode === 'sections') {
+    return <div className="hsb-sections">{chatsBlock}</div>
+  }
+
+  // Records mode (Assets panel): the brand's data — Brand strategy record + the Foundation /
+  // Prospects / Go-to-market discipline sections.
+  if (mode === 'records') {
+    return (
+      <div className="hsb-sections">
+        {brandButton}
+        {sectionsBlock}
+      </div>
+    )
+  }
+
+  return null
+}

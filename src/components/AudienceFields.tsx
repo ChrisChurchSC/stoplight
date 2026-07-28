@@ -11,6 +11,7 @@ import {
   INCOME_RANGES,
   INDUSTRIES,
   JOB_FUNCTIONS,
+  MARITAL_STATUSES,
   PAIN_LIBRARY,
   REGIONS,
   SENIORITIES,
@@ -27,6 +28,9 @@ interface Props {
   businessModel?: string
   icpPains?: string[]
   rtbPool?: Rtb[]
+  /** Hide the free-text Message angle in the `needs` section (the audience wizard collects it on a
+   *  dedicated "recommended" step instead of asking the user to author it blank here). */
+  hideAngle?: boolean
 }
 
 /**
@@ -35,7 +39,7 @@ interface Props {
  * steps (the standalone audience flow). Demographics vs firmographics are ordered
  * by the client's business model — B2C leads with people, B2B with firms.
  */
-export function AudienceFields({ value, patch, section, businessModel, icpPains, rtbPool }: Props) {
+export function AudienceFields({ value, patch, section, businessModel, icpPains, rtbPool, hideAngle }: Props) {
   const model = businessModel ?? ''
   const isB2C = /B2C|D2C/i.test(model)
   const painOptions = [...new Set([...(icpPains ?? []), ...PAIN_LIBRARY])]
@@ -49,6 +53,8 @@ export function AudienceFields({ value, patch, section, businessModel, icpPains,
         <ChipMulti options={INCOME_RANGES} value={value.incomeRanges} onChange={(v) => patch({ incomeRanges: v })} />
         <label className="wiz-label">Gender</label>
         <Segmented options={GENDERS} value={value.gender} onChange={(v) => patch({ gender: v })} />
+        <label className="wiz-label">Marital status</label>
+        <Segmented options={MARITAL_STATUSES} value={value.maritalStatus} onChange={(v) => patch({ maritalStatus: v })} />
       </>
     )
     const firmographics = (
@@ -111,13 +117,17 @@ export function AudienceFields({ value, patch, section, businessModel, icpPains,
           placeholder="What makes them hesitate — objections to disarm in the messaging."
           onChange={(e) => patch({ objections: e.target.value })}
         />
-        <label className="wiz-label">Message angle</label>
-        <textarea
-          className="wiz-input wiz-textarea"
-          value={value.messageAngle}
-          placeholder="How the campaign promise is framed for this buyer's pains and language."
-          onChange={(e) => patch({ messageAngle: e.target.value })}
-        />
+        {!hideAngle && (
+          <>
+            <label className="wiz-label">Message angle</label>
+            <textarea
+              className="wiz-input wiz-textarea"
+              value={value.messageAngle}
+              placeholder="How the campaign promise is framed for this buyer's pains and language."
+              onChange={(e) => patch({ messageAngle: e.target.value })}
+            />
+          </>
+        )}
       </>
     )
   }

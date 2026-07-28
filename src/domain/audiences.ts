@@ -1,3 +1,5 @@
+import type { Descriptor } from './descriptors'
+import type { Rtb } from './rtb'
 import type { ChannelId } from './types'
 
 /**
@@ -15,12 +17,17 @@ import type { ChannelId } from './types'
 export interface AudienceType {
   id: string
   name: string
+  /** Other names this audience is known by — the freeform per-campaign tags on the
+   *  plan that mean this canonical audience. Lets its track record tie across messy
+   *  live data (see resolveAudienceId). */
+  aliases?: string[]
   /** The specific buyer/role inside the ICP (e.g. "VP of RevOps", "Founder"). */
   role: string
   // ---- Demographics (matter most for B2C) ----
   ageRanges: string[]
   incomeRanges: string[]
   gender: string
+  maritalStatus: string
   geos: string[]
   // ---- Firmographics (matter most for B2B) ----
   /** Job functions / titles this persona holds. */
@@ -43,11 +50,74 @@ export interface AudienceType {
   messageAngle: string
   /** Channels where this persona actually pays attention (where to reach them). */
   channels: ChannelId[]
-  /** RTB ids this audience leans on (emphasis) — a subset of the campaign RTBs. */
+  /** Proof points this audience OWNS (foundation). First-class objects that
+   *  travel with the audience into campaigns and accumulate their own track
+   *  record — proof belongs to the audience it persuades. */
+  rtbs: Rtb[]
+  /** Voice/tone descriptors for how to speak to this audience. */
+  descriptors: Descriptor[]
+  /** Ids of the audience's OWN rtbs to lead with (emphasis ordering). */
   rtbEmphasis: string[]
   /** GTM strategy key tied to this audience (its reach + convert playbook). */
   strategy: string
+  /** The outcome we want this audience to take — the conversion goal the
+   *  messaging and CTAs should drive toward (e.g. Donate, Subscribe, Invest). */
+  outcome?: string
+  /** A one-line definition of the specific sub-segment — sharper than role. */
+  definition?: string
+  /** Capacity / value tier for the segment, e.g. "$25M+ deployable". */
+  tier?: string
+  /** What NOT to say to this audience — the anti-messaging. */
+  antiMessage?: string
+  /** Proof points to lead with, ranked (plain labels). */
+  leadProof?: string[]
+  /** Example real accounts that sit in this segment. */
+  examples?: string[]
+  /** Funnel stage this segment sits at (awareness…retention). */
+  funnelStage?: string
+  /** Reference to the account list this segment maps to (e.g. a Neon segment). */
+  listRef?: string
+  /** Library governance: undefined/true = an approved master; explicit false = an
+   *  unvetted draft (authored, not yet blessed into the curated library). */
+  approved?: boolean
 }
+
+/** Stored lowercase, because that is what funnelStage already holds everywhere else. Capitalizing
+ *  these for the picker would fork the vocabulary and quietly stop matching the existing records. */
+export const FUNNEL_STAGE_OPTIONS = [
+  'awareness', 'consideration', 'conversion', 'retention',
+] as const
+
+/**
+ * Read a list field that is TYPED as an array but is not guaranteed to be one.
+ *
+ * pains, triggers and goalTags are `string[]` in the type and plain JSON on disk, written by imports,
+ * the agent tools and hand-edits as well as by this app. A string where an array was expected used to
+ * throw inside the draft loop, which killed the whole generation for every asset in the campaign and
+ * surfaced as Generate doing nothing at all: the throw happened in an un-awaited promise, so no error
+ * ever reached the user.
+ *
+ * Splitting a bare string rather than discarding it, because the content is right and only the shape
+ * is wrong.
+ */
+export const asList = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim())
+  : typeof v === 'string' ? splitLines(v)
+  : []
+
+/**
+ * A free-text field that holds several items into a list. `goals` is one textarea in the UI and
+ * several distinct wants in practice, and a writer handed one blob treats it as a single thought.
+ *
+ * Splits on newlines and semicolons only, NOT on sentence ends: a want is often a sentence, and
+ * splitting "Wants to stop losing Saturdays. Will not pay for another subscription." into two
+ * fragments loses that the second qualifies the first.
+ */
+export const splitLines = (v: string | undefined): string[] =>
+  (v ?? '')
+    .split(/[\n;]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 2)
 
 /** A blank audience with every field defaulted — the one place defaults live. */
 export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
@@ -58,6 +128,7 @@ export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
     ageRanges: [],
     incomeRanges: [],
     gender: '',
+    maritalStatus: '',
     geos: [],
     functions: [],
     seniority: '',
@@ -70,8 +141,18 @@ export function newAudience(patch: Partial<AudienceType> = {}): AudienceType {
     triggers: [],
     messageAngle: '',
     channels: [],
+    rtbs: [],
+    descriptors: [],
     rtbEmphasis: [],
     strategy: '',
+    outcome: '',
+    definition: '',
+    tier: '',
+    antiMessage: '',
+    leadProof: [],
+    examples: [],
+    funnelStage: '',
+    listRef: '',
     ...patch,
   }
 }
@@ -83,4 +164,47 @@ export function normalizeAudience(a: Partial<AudienceType> & { id: string; name:
 
 export function freshAudienceId(): string {
   return `aud_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
+}
+
+// ── Auto-tag: classify a piece of copy to the audience it best fits ───────────
+// Used to tag untagged library content to a canonical audience by matching the
+// copy against each audience's signature (its name, aliases, angle, and pains).
+const CLASSIFY_STOP = new Set(
+  'the a an and or of to in on is are be for with that this those these by from into as at we our us you your it its not no can will more most just audience audiences people viewers your who what community owned own'.split(
+    ' ',
+  ),
+)
+function audienceSignature(a: AudienceType): string[] {
+  const parts = [a.name, ...(a.aliases ?? []), a.role, a.messageAngle, ...(a.pains ?? [])].join(' ')
+  return [...new Set((parts.toLowerCase().match(/[a-z][a-z'-]+/g) ?? []).filter((w) => w.length >= 4 && !CLASSIFY_STOP.has(w)))]
+}
+/** Best-fit audience NAME for a piece of copy, or undefined below the confidence floor
+ *  (so weak matches stay untagged rather than mislabeled). */
+export function classifyRowAudience(copy: string, audiences: AudienceType[]): string | undefined {
+  const c = copy.toLowerCase()
+  let best: { name: string; score: number } | null = null
+  for (const a of audiences) {
+    const sig = audienceSignature(a)
+    if (!sig.length) continue
+    const score = sig.filter((w) => c.includes(w)).length
+    if (!best || score > best.score) best = { name: a.name, score }
+  }
+  return best && best.score >= 2 ? best.name : undefined
+}
+
+/**
+ * The brand's EFFECTIVE audience set. Audiences live in two places: the brand's system library and
+ * clientAudiences (what the audience selector and the canvas write to). Generation reads the merge,
+ * with clientAudiences winning a name collision because it is the actively-maintained source.
+ *
+ * ⚠️ This lives in the domain, not the store, because the COHERENCE GATE needs the same merge. It
+ * used to derive audiences from brandSystems alone, so it judged copy against a different audience
+ * set than the one generation wrote from, and a clientAudiences persona read as off-segment drift.
+ * The store imports coherenceChecks, so coherenceChecks cannot import the store.
+ */
+export function mergeAudiences(systemAuds: AudienceType[], clientAuds: AudienceType[]): AudienceType[] {
+  const byName = new Map<string, AudienceType>()
+  for (const a of systemAuds) byName.set(a.name, a)
+  for (const a of clientAuds) byName.set(a.name, a)
+  return [...byName.values()]
 }

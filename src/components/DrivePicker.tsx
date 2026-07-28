@@ -78,7 +78,7 @@ export function DrivePicker() {
     const picked = files.filter((f) => selected.has(f.id))
     if (picked.length) addAssets(driveFilesToAssets(picked))
     setOpen(false)
-    if (page !== 'clients') setPage('clients')
+    if (page !== 'portfolio') setPage('portfolio')
   }
 
   return (

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { makeModelClient } from './modelClient.js'
 
 /**
  * Server-side batch ICP review. Runs ONLY on the dev server / a serverless
@@ -58,13 +59,12 @@ export class NoKeyError extends Error {
 
 export async function runIcpReview(body: unknown): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('agent')
   const { icp, assets } = (body ?? {}) as { icp?: unknown; assets?: unknown }
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 8000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

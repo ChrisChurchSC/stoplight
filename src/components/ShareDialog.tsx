@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ROLE_META, SHAREABLE_ROLES, type Role } from '../domain/access'
 import { encodeShareToken, shareUrl } from '../lib/shareLink'
+import { publishShareSnapshot } from '../lib/shareSnapshot'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -12,6 +14,7 @@ export function ShareDialog() {
   const open = useTrafficStore((s) => s.shareDialogOpen)
   const close = useTrafficStore((s) => s.closeShareDialog)
   const client = useTrafficStore((s) => s.clientFilter)
+  const campaign = useTrafficStore((s) => s.shareDialogCampaign)
   const shares = useTrafficStore((s) => s.shares)
   const createShare = useTrafficStore((s) => s.createShare)
   const revokeShare = useTrafficStore((s) => s.revokeShare)
@@ -19,13 +22,19 @@ export function ShareDialog() {
   const [role, setRole] = useState<Role>('stakeholder')
   const [created, setCreated] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [refreshed, setRefreshed] = useState<string | null>(null)
 
   if (!open) return null
-  const clientShares = shares.filter((s) => s.client === client)
+  // A flow share shows just this flow's links; a brand share shows the brand-level (flow-less) ones.
+  const clientShares = shares.filter((s) => s.client === client && (campaign ? s.campaign === campaign : !s.campaign))
+  const short = (name: string) => name.replace(`${client} — `, '')
+  const subject = campaign ? short(campaign) : client
 
   const make = () => {
-    const grant = createShare(client, role)
-    setCreated(shareUrl(encodeShareToken({ client: grant.client, role: grant.role, id: grant.id })))
+    const grant = createShare(client, role, campaign ?? undefined)
+    setCreated(
+      shareUrl(encodeShareToken({ client: grant.client, role: grant.role, id: grant.id, campaign: grant.campaign })),
+    )
     setCopied(false)
   }
   const copy = async () => {
@@ -40,7 +49,13 @@ export function ShareDialog() {
   const dismiss = () => {
     setCreated(null)
     setCopied(false)
+    setRefreshed(null)
     close()
+  }
+  // Republish a link's snapshot so viewers see the current state (snapshots are point-in-time).
+  const refresh = async (id: string, c: string, r: Role, cmp?: string) => {
+    await publishShareSnapshot(useTrafficStore.getState(), c, r, id, cmp)
+    setRefreshed(id)
   }
 
   return (
@@ -48,14 +63,16 @@ export function ShareDialog() {
       <div className="share-scrim" onClick={dismiss} />
       <div className="share-dialog" role="dialog" aria-label="Share workspace">
         <div className="share-head">
-          <span className="share-title">Share {client}</span>
+          <span className="share-title">Share {subject}</span>
           <button className="share-x" onClick={dismiss}>
             ✕
           </button>
         </div>
         <p className="share-sub">
-          Generate a link that opens this client's workspace at a fixed role. Anyone with the link
-          gets that access, no account needed.
+          {campaign
+            ? 'Generate a link that opens just this flow (its flow, grid, and calendar) at a fixed role. Anyone with the link gets that access, no account needed.'
+            : "Generate a link that opens this client's workspace at a fixed role. Anyone with the link gets that access, no account needed."}{' '}
+          Viewers see a snapshot as of when you shared, hit Refresh on a link to bring it up to date.
         </p>
 
         <div className="share-roles">
@@ -100,6 +117,15 @@ export function ShareDialog() {
                 <span className={`share-badge r-${s.role}`}>{ROLE_META[s.role].label}</span>
                 <span className="share-item-id">{s.id.replace('shr_', '').slice(0, 14)}</span>
                 <span className="spacer" />
+                {isSupabaseConfigured && (
+                  <button
+                    className="share-revoke"
+                    title="Update the snapshot this link shows to the current state"
+                    onClick={() => void refresh(s.id, s.client, s.role, s.campaign)}
+                  >
+                    {refreshed === s.id ? 'Updated' : 'Refresh'}
+                  </button>
+                )}
                 <button className="share-revoke" onClick={() => revokeShare(s.id)}>
                   Revoke
                 </button>

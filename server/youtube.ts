@@ -11,9 +11,20 @@ const API = 'https://www.googleapis.com/youtube/v3'
 interface YtVideo {
   snippet?: { title?: string; description?: string }
 }
+interface YtThumb {
+  url?: string
+  width?: number
+}
 interface YtChannel {
-  snippet?: { title?: string }
+  snippet?: { title?: string; thumbnails?: Record<string, YtThumb> }
   contentDetails?: { relatedPlaylists?: { uploads?: string } }
+}
+
+/** Best channel avatar URL from the snippet's thumbnail set (prefer the medium 240px). */
+function avatarOf(ch: YtChannel | undefined): string | undefined {
+  const t = ch?.snippet?.thumbnails
+  if (!t) return undefined
+  return (t.medium ?? t.high ?? t.default ?? Object.values(t)[0])?.url
 }
 
 /** Resolve a channel URL to its channels.list query (id= or forHandle=). */
@@ -34,7 +45,9 @@ function channelQuery(channelUrl: string): string | null {
   return null
 }
 
-export async function readYouTube(channelUrl: string): Promise<{ text: string; title: string; count: number } | null> {
+export async function readYouTube(
+  channelUrl: string,
+): Promise<{ text: string; title: string; count: number; avatar?: string } | null> {
   const key = process.env.YOUTUBE_API_KEY
   if (!key || !channelUrl) return null
   const q = channelQuery(channelUrl)
@@ -47,12 +60,13 @@ export async function readYouTube(channelUrl: string): Promise<{ text: string; t
     const ch = ((await chRes.json()) as { items?: YtChannel[] }).items?.[0]
     const uploads = ch?.contentDetails?.relatedPlaylists?.uploads
     const title = ch?.snippet?.title ?? 'channel'
-    if (!uploads) return { text: '', title, count: 0 }
+    const avatar = avatarOf(ch)
+    if (!uploads) return { text: '', title, count: 0, avatar }
 
     const plRes = await fetch(`${API}/playlistItems?part=snippet&playlistId=${uploads}&maxResults=15&key=${key}`, {
       signal: AbortSignal.timeout(8000),
     })
-    if (!plRes.ok) return { text: '', title, count: 0 }
+    if (!plRes.ok) return { text: '', title, count: 0, avatar }
     const items = ((await plRes.json()) as { items?: YtVideo[] }).items ?? []
     const lines = items
       .map((it) => {
@@ -61,7 +75,7 @@ export async function readYouTube(channelUrl: string): Promise<{ text: string; t
         return t ? `- ${t}${d ? `: ${d}` : ''}` : ''
       })
       .filter(Boolean)
-    return { text: lines.join('\n').slice(0, 6000), title, count: lines.length }
+    return { text: lines.join('\n').slice(0, 6000), title, count: lines.length, avatar }
   } catch {
     return null
   }

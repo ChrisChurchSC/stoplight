@@ -1,7 +1,7 @@
 import type { Campaign } from './clients'
 import { applyBreakStatus, detectBreaks } from './breaks'
 import { rtbCoverage } from './rtb'
-import { funnelStageFor } from './funnel'
+import { FUNNEL_STAGES, funnelStageFor } from './funnel'
 import type { TrafficRow } from './types'
 
 /**
@@ -25,6 +25,11 @@ export interface DiagnosisFindings {
   offBrand: number
   /** Assets with no strategy behind their campaign ("no plan behind it"). */
   noStrategy: number
+  /** Audiences whose content covers fewer than 3 of the 4 journey stages — a
+   *  shallow path that stops short of conversion, not a branching journey. The
+   *  opposite of hyper-specific marketing, which routes each audience all the way
+   *  to its own next steps. */
+  shallowAudiences: number
   /** soft when findings are thin, sharp only when the data clearly supports it. */
   verdict: 'soft' | 'sharp'
 }
@@ -61,6 +66,19 @@ export function diagnose(
   const connected = [...assetNames].filter((n) => !broken.has(n)).length
   const audiences = new Set(rows.map((r) => (r.audience ?? '').trim() || 'Unsegmented')).size
 
+  // Personalization depth: which audiences are pushed to a single journey stage
+  // (a billboard, not a path). Marketing is routing — pushing different people to
+  // different next things — so an audience stuck at one stage is unbranched.
+  const stagesByAud = new Map<string, Set<string>>()
+  for (const r of rows) {
+    const aud = (r.audience ?? '').trim() || 'Unsegmented'
+    const set = stagesByAud.get(aud) ?? new Set<string>()
+    set.add(funnelStageFor(r.channel, r.assetType))
+    stagesByAud.set(aud, set)
+  }
+  let shallowAudiences = 0
+  for (const [, set] of stagesByAud) if (set.size < 3) shallowAudiences++
+
   const verdict: DiagnosisFindings['verdict'] = contradictions + unsupported >= 3 ? 'sharp' : 'soft'
 
   return {
@@ -71,8 +89,54 @@ export function diagnose(
     unsupported,
     offBrand,
     noStrategy,
+    shallowAudiences,
     verdict,
   }
+}
+
+/** One stage of a proposed branch journey for the preview. */
+export interface BranchStage {
+  key: string
+  label: string
+  /** The audience already has content at this stage. */
+  have: boolean
+  /** The existing asset name when `have`. */
+  asset?: string
+}
+export interface BranchPlanResult {
+  audience: string
+  stages: BranchStage[]
+}
+
+/**
+ * For the Analyze "branch the journeys" recommendation: pick the shallowest
+ * audience (real content, fewer than 3 journey stages) and lay out its full
+ * funnel — which stages it has, and which to add — so the overlay can preview
+ * how the assets would branch into a journey.
+ */
+export function branchPlan(rows: TrafficRow[]): BranchPlanResult | null {
+  const byAud = new Map<string, Map<string, string>>()
+  for (const r of rows) {
+    const aud = (r.audience ?? '').trim()
+    if (!aud) continue
+    const st = funnelStageFor(r.channel, r.assetType)
+    const m = byAud.get(aud) ?? new Map<string, string>()
+    if (!m.has(st)) m.set(st, r.assetName)
+    byAud.set(aud, m)
+  }
+  let best: { aud: string; m: Map<string, string> } | null = null
+  for (const [aud, m] of byAud) {
+    if (m.size === 0 || m.size >= 3) continue
+    if (!best || m.size < best.m.size) best = { aud, m }
+  }
+  if (!best) return null
+  const stages = FUNNEL_STAGES.map((s) => ({
+    key: s.stage,
+    label: s.label,
+    have: best!.m.has(s.stage),
+    asset: best!.m.get(s.stage),
+  }))
+  return { audience: best.aud, stages }
 }
 
 /** A tiny node placed in the before/after mini-map. */

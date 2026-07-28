@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { runPublish } from './publishHandler'
-import { runPublishEmail } from './resendHandler'
+import { makeModelClient } from './modelClient.js'
+import { runPublish } from './publishHandler.js'
+import { runPublishEmail } from './resendHandler.js'
 
 /**
  * The Claude engine — the center of the architecture. Hyperfocus (the cockpit)
@@ -141,7 +142,7 @@ async function execTool(name: string, input: Record<string, unknown>): Promise<u
   return { error: `unknown tool ${name}` }
 }
 
-const SYSTEM = `You are the engine inside Rushhour (the product is called Hyperfocus). The human steers from the cockpit and has already approved the work; you carry it out by CALLING TOOLS — you are the connector to every source and channel.
+const SYSTEM = `You are the engine inside Hyperfocus. The human steers from the cockpit and has already approved the work; you carry it out by CALLING TOOLS — you are the connector to every source and channel.
 
 - READ from the sources with read_cms (the client's CMS), enrich_lead (Clay), and ingest_comments (pull engagement back from a posted asset's channel, one call per asset).
 - PUBLISH to the channels with publish_email (Resend) and publish_social (Buffer), one call per asset.
@@ -160,9 +161,9 @@ export interface AgentAction {
 
 export async function runAgent(body: unknown): Promise<{ summary: string; actions: AgentAction[] }> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('agent')
   const { instruction, context } = (body ?? {}) as { instruction?: string; context?: unknown }
 
   const messages: Anthropic.MessageParam[] = [
@@ -173,7 +174,6 @@ export async function runAgent(body: unknown): Promise<{ summary: string; action
   // Bounded agentic loop: Claude calls tools, we execute, feed results back.
   for (let step = 0; step < 8; step++) {
     const msg = await client.messages.create({
-      model: 'claude-opus-4-8',
       max_tokens: 4000,
       thinking: { type: 'adaptive' },
       system: SYSTEM,

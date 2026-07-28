@@ -19,7 +19,7 @@ function summarizeOut(o: unknown): string {
 }
 
 /**
- * The Claude engine — the center of the architecture, made literal. Hyperfocus
+ * The Claude engine — the center of the architecture, made literal. HyperFocus
  * invokes it; Claude reads from the sources and publishes to the channels by
  * calling tools (the connectors). The panel shows the flow and logs the exact
  * tool calls Claude makes, with a direct-adapter fallback when there's no key.

@@ -65,4 +65,8 @@ export class MockSheetAdapter implements SheetAdapter {
   async clear(): Promise<void> {
     this.write({ rows: [] })
   }
+
+  async replaceAll(rows: TrafficRow[]): Promise<void> {
+    this.write({ rows })
+  }
 }

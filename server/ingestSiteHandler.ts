@@ -1,0 +1,202 @@
+/**
+ * Server-side "ingest a brand's site content" — fetches the brand's website (homepage + a handful of
+ * pages from its sitemap) with plain global fetch and extracts the real content (title, description,
+ * a snippet of copy) per page. Serverless-safe: NO Playwright, just fetch + regex, so it runs on
+ * Vercel functions (unlike the full crawler). Returns items shaped for normalizeImportItem; the
+ * client imports them into the Library via importAssets(brand, CONTENT_LIBRARY_CAMPAIGN, items, 'site').
+ */
+
+import { resolveGoogle } from './googleResolve.js'
+
+const UA = 'Mozilla/5.0 (compatible; BreadcrumbsBot/1.0; +https://breadcrumbs.app)'
+
+export interface Page {
+  url: string
+  title: string
+  description: string
+  text: string
+}
+
+function firstMatch(html: string, res: RegExp[]): string {
+  for (const re of res) {
+    const m = html.match(re)
+    if (m && m[1]) return m[1].trim()
+  }
+  return ''
+}
+
+function extract(html: string): { title: string; description: string; text: string } {
+  const title = firstMatch(html, [/<title[^>]*>([^<]*)<\/title>/i, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i])
+  const description = firstMatch(html, [
+    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i,
+    /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)["']/i,
+    /<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']*)["']/i,
+  ])
+  // Visible-ish text: drop scripts/styles/head, strip tags, collapse whitespace.
+  const body = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { title, description, text: body.slice(0, 600) }
+}
+
+export async function fetchPage(url: string): Promise<Page | null> {
+  try {
+    const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(8000), redirect: 'follow' })
+    if (!res.ok) return null
+    const ct = res.headers.get('content-type') || ''
+    if (!ct.includes('text/html') && ct !== '') return null
+    const html = await res.text()
+    const { title, description, text } = extract(html)
+    if (!title && !description && !text) return null
+    return { url, title, description, text }
+  } catch {
+    return null
+  }
+}
+
+async function fetchSitemap(url: string): Promise<string[]> {
+  try {
+    const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return []
+    const xml = await res.text()
+    return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1].trim())
+  } catch {
+    return []
+  }
+}
+
+export async function sitemapUrls(origin: string): Promise<string[]> {
+  const top = await fetchSitemap(new URL('/sitemap.xml', origin).href)
+  // A sitemap INDEX points at more sitemaps (.xml locs); follow one level and collect their pages so a
+  // site that splits its sitemap (pages, posts, products, ...) is fully discovered, not just its index.
+  const subs = top.filter((l) => /\.xml($|\?)/i.test(l)).slice(0, 25)
+  if (!subs.length) return top
+  const nested = await Promise.all(subs.map(fetchSitemap))
+  return [...new Set([...top.filter((l) => !/\.xml($|\?)/i.test(l)), ...nested.flat()])]
+}
+
+const SKIP = /\.(jpg|jpeg|png|gif|webp|svg|pdf|xml|css|js|ico|zip|mp4|woff2?)($|\?)/i
+
+const isoDaysAgo = (n: number): string => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
+
+/** Every ranking page of a Search Console property with its real search metrics, most impressions
+ *  first. This is the authoritative page list (better than a sitemap) AND carries measured reach. */
+async function gscPageMetrics(
+  site: string,
+  token: string,
+  limit = 1000,
+): Promise<{ url: string; impressions: number; clicks: number }[]> {
+  try {
+    const res = await fetch(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ startDate: isoDaysAgo(90), endDate: isoDaysAgo(0), dimensions: ['page'], rowLimit: limit }),
+      },
+    )
+    if (!res.ok) return []
+    const j = (await res.json()) as { rows?: { keys?: string[]; clicks?: number; impressions?: number }[] }
+    return (j.rows ?? [])
+      .map((r) => ({ url: r.keys?.[0] ?? '', impressions: Number(r.impressions) || 0, clicks: Number(r.clicks) || 0 }))
+      .filter((r) => r.url)
+      .sort((a, b) => b.impressions - a.impressions)
+  } catch {
+    return []
+  }
+}
+
+export async function runIngestSite(body: unknown): Promise<unknown> {
+  const { url, brand, workspace, website } = (body ?? {}) as {
+    url?: string
+    brand?: string
+    workspace?: string
+    website?: string
+  }
+  const raw = (url ?? website ?? '').trim()
+  if (!raw) return { items: [] }
+  const norm = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  let origin = ''
+  try {
+    origin = new URL(norm).origin
+  } catch {
+    return { items: [] }
+  }
+
+  // Preferred page list: Search Console's ranking pages (authoritative + real per-page metrics),
+  // available when the workspace has a Google connection. Falls back to the sitemap when it doesn't.
+  let gscMetrics: Map<string, { impressions: number; clicks: number }> | null = null
+  let gscUrls: string[] = []
+  if (brand && workspace) {
+    try {
+      const g = await resolveGoogle(workspace, brand, norm)
+      if (g?.token && g.gsc) {
+        const pages = await gscPageMetrics(g.gsc, g.token)
+        gscMetrics = new Map(pages.map((p) => [p.url, { impressions: p.impressions, clicks: p.clicks }]))
+        gscUrls = pages.map((p) => p.url).filter((u) => {
+          try {
+            return new URL(u).origin === origin && !SKIP.test(u)
+          } catch {
+            return false
+          }
+        })
+      }
+    } catch {
+      /* no GSC connection, fall back to the sitemap below */
+    }
+  }
+
+  const home = await fetchPage(norm)
+
+  // Discover EVERY page: Search Console's ranking pages (with metrics) UNION the full sitemap (all
+  // declared pages, including ones that get no search traffic). Same-origin, page-like, deduped.
+  const sitemap = await sitemapUrls(origin)
+  const gscSet = new Set(gscUrls)
+  const discovered = [...new Set([...gscUrls, ...sitemap])]
+    .filter((l) => {
+      try {
+        return new URL(l).origin === origin
+      } catch {
+        return false
+      }
+    })
+    .filter((l) => l !== norm && l !== `${norm}/` && !SKIP.test(l))
+  // Ranking pages first (they carry metrics), then the rest, up to a generous cap so even a large site
+  // is covered without an unbounded serverless run.
+  const ordered = [...discovered.filter((u) => gscSet.has(u)), ...discovered.filter((u) => !gscSet.has(u))]
+  const MAX_PAGES = 300
+  const toFetch = ordered.slice(0, MAX_PAGES)
+
+  // Fetch copy with bounded concurrency: comprehensive, but never hundreds of requests at once.
+  const CONCURRENCY = 12
+  const fetched: Page[] = []
+  for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+    const batch = await Promise.all(toFetch.slice(i, i + CONCURRENCY).map((l) => fetchPage(l)))
+    for (const p of batch) if (p && (p.title || p.description || p.text)) fetched.push(p)
+  }
+  const pages: Page[] = [...(home ? [home] : []), ...fetched]
+
+  // Shape each page for normalizeImportItem, attaching its real GSC metrics (matched with a trailing
+  // slash fallback) so the ingested page carries measured reach.
+  const metricFor = (u: string) => gscMetrics?.get(u) ?? gscMetrics?.get(u.endsWith('/') ? u.slice(0, -1) : `${u}/`)
+  const items = pages
+    .filter((p) => p.title || p.description || p.text)
+    .map((p) => {
+      const m = metricFor(p.url)
+      return {
+        title: p.title || new URL(p.url).pathname.replace(/\//g, ' ').trim() || 'Page',
+        primaryText: p.description || p.text,
+        description: p.description || undefined,
+        url: p.url,
+        channel: 'website',
+        ...(m && (m.impressions || m.clicks) ? { metrics: { impressions: m.impressions, clicks: m.clicks } } : {}),
+      }
+    })
+
+  return { items }
+}

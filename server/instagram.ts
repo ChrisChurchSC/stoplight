@@ -12,7 +12,7 @@
 
 const GRAPH = 'https://graph.facebook.com/v21.0'
 
-export async function readInstagram(): Promise<{ text: string; count: number } | null> {
+export async function readInstagram(): Promise<{ text: string; count: number; avatar?: string } | null> {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN
   if (!token) return null
   const t = encodeURIComponent(token)
@@ -28,15 +28,30 @@ export async function readInstagram(): Promise<{ text: string; count: number } |
     }
     if (!igId) return null
 
+    // The account's avatar — one small extra field on the IG account node.
+    let avatar: string | undefined
+    try {
+      const pRes = await fetch(`${GRAPH}/${igId}?fields=profile_picture_url&access_token=${t}`, {
+        signal: AbortSignal.timeout(8000),
+      })
+      if (pRes.ok) avatar = ((await pRes.json()) as { profile_picture_url?: string }).profile_picture_url
+    } catch {
+      // avatar is best-effort; ignore
+    }
+
     const mRes = await fetch(`${GRAPH}/${igId}/media?fields=caption,media_type,permalink,timestamp&limit=15&access_token=${t}`, {
       signal: AbortSignal.timeout(8000),
     })
-    if (!mRes.ok) return null
+    if (!mRes.ok) return { text: '', count: 0, avatar }
     const media = (await mRes.json()) as { data?: { caption?: string }[] }
     const caps = (media.data ?? [])
       .map((d) => d.caption?.trim())
       .filter((x): x is string => !!x)
-    return { text: caps.slice(0, 15).map((c) => `- ${c.slice(0, 300)}`).join('\n').slice(0, 6000), count: caps.length }
+    return {
+      text: caps.slice(0, 15).map((c) => `- ${c.slice(0, 300)}`).join('\n').slice(0, 6000),
+      count: caps.length,
+      avatar,
+    }
   } catch {
     return null
   }

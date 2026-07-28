@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { readLiveAds } from './adScraper'
-import { crawlSite } from './siteCrawler'
-import { readYouTube } from './youtube'
-import { readInstagram } from './instagram'
-import { readLinkedIn } from './linkedin'
-import { gatherWithSession, platformOf } from './connectChannel'
-import { hasSession } from './sessionStore'
+import { makeModelClient } from './modelClient.js'
+import { readLiveAds } from './adScraper.js'
+import { crawlSite } from './siteCrawler.js'
+import { readYouTube } from './youtube.js'
+import { readInstagram } from './instagram.js'
+import { readLinkedIn } from './linkedin.js'
+import { gatherWithSession, platformOf } from './connectChannel.js'
+import { hasSession } from './sessionStore.js'
 
 /**
  * Current-state messaging map. Given a brand's public site (rendered) + their
@@ -29,7 +30,30 @@ const SCHEMA = {
     brand: {
       type: 'object',
       additionalProperties: false,
-      properties: { name: { type: 'string' }, website: { type: 'string' }, industry: { type: 'string' }, voice: { type: 'string' } },
+      properties: {
+        name: { type: 'string' },
+        website: { type: 'string' },
+        industry: { type: 'string' },
+        voice: { type: 'string' },
+        oneLiner: { type: 'string' },
+        mission: { type: 'string' },
+        founded: { type: 'string' },
+        headquarters: { type: 'string' },
+        team: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { name: { type: 'string' }, role: { type: 'string' } },
+            required: ['name'],
+          },
+        },
+        products: { type: 'array', items: { type: 'string' } },
+        differentiators: { type: 'array', items: { type: 'string' } },
+        notableClients: { type: 'array', items: { type: 'string' } },
+        values: { type: 'array', items: { type: 'string' } },
+        traction: { type: 'string' },
+      },
       required: ['name', 'website', 'industry', 'voice'],
     },
     audiences: {
@@ -75,7 +99,7 @@ const SCHEMA = {
 const SYSTEM = `You are mapping a brand's CURRENT live messaging for an agency onboarding them. You are given their rendered website copy and (when available) their currently-running ads. Capture what is LIVE NOW, do not invent a future campaign.
 
 Extract:
-- brand: name, website domain, industry, and a one-to-two sentence read on their actual brand voice (how their copy reads).
+- brand: name, website domain, industry, and a one-to-two sentence read on their actual brand voice (how their copy reads). Also build a detailed company overview from their about/team/home pages: oneLiner (one line on what they do), mission (their mission in their words), founded (year/date if stated), headquarters (primary location if stated), team (named founders/leadership/people with their roles), products (what they make or offer: products, services, programs), differentiators (what sets them apart), notableClients (named clients, partners, or backers), values (stated principles), and traction (a key stat or milestone in their words, e.g. "2M downloads"). Only include overview fields you can ground in the copy; omit ones the site does not state.
 - audiences: the distinct audiences their live messaging speaks to (name + one-line description). Infer from how the copy segments.
 - proofPoints: their real proof / reasons-to-believe (label + one-line detail), quoted or closely paraphrased from the copy (e.g. "Millions sold", "Lifetime guarantee", "37 case studies").
 - messages: every distinct live message, value prop, claim, offer, or CTA worth mapping. For each: a short label, the headline (the actual line, verbatim or lightly tightened), optional body and cta, its type, the audience it speaks to (use one of the audience names above), the channel it lives on (pick from the allowed channel ids: a homepage hero is "website", a campaign page is "landing-page", a Meta ad is "meta-ads", etc.), and the source (page URL or "Meta ad").
@@ -99,15 +123,15 @@ export type ProgressFn = (e: { stage: string; detail: string }) => void
 
 export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('extract')
   const { url, notes, accounts } = (body ?? {}) as { url?: string; notes?: string; accounts?: string[] }
 
   // Show the work: emit a stage as the crawl and the ad scrape each resolve.
   onProgress?.({ stage: 'reading', detail: `Reading ${url || 'the site'}` })
-  const crawlP = (url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[], socials: {} as Record<string, string> })).then((c) => {
-    onProgress?.({ stage: 'pages', detail: c.pages.length ? `Read ${c.pages.length} page${c.pages.length === 1 ? '' : 's'}` : 'Site could not be read' })
+  const crawlP = (url ? crawlSite(url) : Promise.resolve({ text: '', pages: [] as string[], socials: {} as Record<string, string>, discovered: 0 })).then((c) => {
+    onProgress?.({ stage: 'pages', detail: c.pages.length ? `Read ${c.pages.length} of ${c.discovered} public page${c.discovered === 1 ? '' : 's'}` : 'Site could not be read' })
     return c
   })
   const adsP = (url ? readLiveAds(brandFromUrl(url)) : Promise.resolve({ text: '', sources: [] as string[] })).then((a) => {
@@ -175,7 +199,6 @@ export async function runSiteMap(body: unknown, onProgress?: ProgressFn): Promis
     `\nMap their current live messaging.`
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 8000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

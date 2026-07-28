@@ -23,6 +23,7 @@ const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
   'snapchat-ads': 'awareness',
   'reddit-ads': 'awareness',
   'youtube-ads': 'awareness',
+  'spotify-ads': 'awareness',
   instagram: 'awareness',
   facebook: 'awareness',
   x: 'awareness',
@@ -36,6 +37,7 @@ const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
   blog: 'consideration',
   website: 'consideration',
   'lead-magnet': 'consideration',
+  events: 'consideration',
   // Bottom funnel — high intent, conversion.
   'google-search': 'conversion',
   pmax: 'conversion',

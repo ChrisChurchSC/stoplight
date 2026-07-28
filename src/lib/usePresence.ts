@@ -32,7 +32,7 @@ interface Opts {
   onRemoteMove: (id: string, x: number, y: number) => void
 }
 
-const CHANNEL = 'rushhour-presence-v1'
+const CHANNEL = 'hyperfocus-presence-v1'
 const HEARTBEAT_MS = 2000
 const STALE_MS = 5000
 const CURSOR_THROTTLE_MS = 45
@@ -177,51 +177,8 @@ export function usePresence(opts: Opts): {
   }, [enabled, client])
 
   // ---- ambient teammate when alone ----
-  const [ambient, setAmbient] = useState<Peer | null>(null)
-  const ambientTarget = useRef<{ x: number; y: number }>({ x: 200, y: 200 })
-  useEffect(() => {
-    if (!enabled) {
-      setAmbient(null)
-      return
-    }
-    const ghostId = 'ambient_dana'
-    const ghost: Peer = {
-      id: ghostId,
-      name: 'Dana Reyes',
-      color: '#7048e8',
-      role: 'editor',
-      client,
-      cursor: { x: 240, y: 220 },
-      nodeId: null,
-      ambient: true,
-      ts: Date.now(),
-    }
-    let cur = { ...ghost.cursor! }
-    let tick = 0
-    const iv = setInterval(() => {
-      // Only haunt the canvas while the tab is genuinely alone — keyed off the
-      // pruned, client-scoped live count, not the raw (possibly stale) map.
-      if (liveCountRef.current > 0) {
-        setAmbient(null)
-        return
-      }
-      tick++
-      const t = ambientTarget.current
-      cur = { x: cur.x + (t.x - cur.x) * 0.08, y: cur.y + (t.y - cur.y) * 0.08 }
-      if (Math.abs(cur.x - t.x) + Math.abs(cur.y - t.y) < 12 || tick % 40 === 0) {
-        const b = boundsRef.current
-        ambientTarget.current = { x: 40 + Math.random() * Math.max(b.w - 80, 200), y: 120 + Math.random() * Math.max(b.h - 200, 200) }
-      }
-      // Occasionally rest on a node.
-      let nodeId: string | null = null
-      if (tick % 60 < 14) {
-        const ids = nodeIdsRef.current
-        if (ids.length) nodeId = ids[tick % ids.length]
-      }
-      setAmbient({ ...ghost, cursor: { x: cur.x, y: cur.y }, nodeId, ts: Date.now() })
-    }, 90)
-    return () => clearInterval(iv)
-  }, [enabled, client])
+  // The ambient "Dana Reyes" teammate is turned off for now — no ghost cursor.
+  const [ambient] = useState<Peer | null>(null)
 
   const publishCursor = (x: number, y: number) => {
     const self = selfRef.current

@@ -11,11 +11,34 @@ import { supabase } from './supabase'
  */
 
 let workspaceId: string | null = null
+const ACTIVE_WS_KEY = 'stoplight.activeWorkspace.v1'
+
+/** Pin the active workspace (used after claiming an invite so the shared workspace sticks). */
+export function setActiveWorkspaceId(id: string): void {
+  workspaceId = id
+  try {
+    localStorage.setItem(ACTIVE_WS_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}
 
 export async function getSession(): Promise<Session | null> {
   if (!supabase) return null
   const { data } = await supabase.auth.getSession()
   return data.session
+}
+
+/**
+ * The signed-in user's first name for greetings: a metadata full name if set, else the email's
+ * local part, tidied ("chris.church@…" → "Chris"). Empty when signed out / no backend configured.
+ */
+export function firstNameOf(user: User | null): string {
+  const meta = (user?.user_metadata ?? {}) as { full_name?: string; name?: string }
+  const full = (meta.full_name || meta.name || '').trim()
+  if (full) return full.split(/\s+/)[0]
+  const local = (user?.email || '').split('@')[0].split(/[.+_-]/)[0]
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : ''
 }
 
 export function onAuthChange(cb: (user: User | null) => void): () => void {
@@ -44,8 +67,24 @@ export async function signOut(): Promise<void> {
   await supabase?.auth.signOut()
 }
 
+// Concurrent first-call resolution is deduped: refresh(), hydrateRecords() and migration all call
+// getActiveWorkspaceId() at once on sign-in, and without this each would create its own workspace.
+let resolving: Promise<string | null> | null = null
+
 /** The signed-in user's workspace, created on first use. Cached for the session. */
 export async function getActiveWorkspaceId(): Promise<string | null> {
+  if (!supabase) return null
+  if (workspaceId) return workspaceId
+  if (resolving) return resolving
+  resolving = resolveWorkspaceId()
+  try {
+    return await resolving
+  } finally {
+    resolving = null
+  }
+}
+
+async function resolveWorkspaceId(): Promise<string | null> {
   if (!supabase) return null
   if (workspaceId) return workspaceId
 
@@ -53,14 +92,21 @@ export async function getActiveWorkspaceId(): Promise<string | null> {
   const user = userData.user
   if (!user) return null
 
-  // Already a member of a workspace?
+  // Already a member of one or more workspaces? Prefer the pinned active one (e.g. a workspace the
+  // user was invited into), else the first membership.
   const { data: memberships } = await supabase
     .from('workspace_members')
     .select('workspace_id')
     .eq('user_id', user.id)
-    .limit(1)
-  if (memberships && memberships.length > 0) {
-    workspaceId = memberships[0].workspace_id as string
+  const ids = (memberships ?? []).map((m) => m.workspace_id as string)
+  if (ids.length > 0) {
+    let pinned: string | null = null
+    try {
+      pinned = localStorage.getItem(ACTIVE_WS_KEY)
+    } catch {
+      /* ignore */
+    }
+    workspaceId = pinned && ids.includes(pinned) ? pinned : ids[0]
     return workspaceId
   }
 
@@ -75,4 +121,26 @@ export async function getActiveWorkspaceId(): Promise<string | null> {
   await supabase.from('workspace_members').insert({ workspace_id: ws.id, user_id: user.id, role: 'owner' })
   workspaceId = ws.id as string
   return workspaceId
+}
+
+/** Create a shareable invite to the active workspace; returns the token (embed in a ?invite= link). */
+export async function createInvite(role: 'owner' | 'editor' | 'stakeholder' = 'editor'): Promise<string | null> {
+  if (!supabase) return null
+  const ws = await getActiveWorkspaceId()
+  if (!ws) return null
+  const { data: u } = await supabase.auth.getUser()
+  const token = (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)) + Math.random().toString(36).slice(2)
+  const { error } = await supabase
+    .from('workspace_invites')
+    .insert({ token, workspace_id: ws, role, created_by: u.user?.id ?? null })
+  return error ? null : token
+}
+
+/** Redeem an invite token: join the workspace and pin it as active. */
+export async function claimInvite(token: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Backend not configured' }
+  const { data, error } = await supabase.rpc('claim_invite', { invite_token: token })
+  if (error) return { ok: false, error: error.message }
+  if (typeof data === 'string') setActiveWorkspaceId(data)
+  return { ok: true }
 }

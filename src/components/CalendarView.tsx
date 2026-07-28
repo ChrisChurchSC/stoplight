@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CHANNELS } from '../domain/channels'
 import type { RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
+import { journeyPerformance, formatReach } from '../domain/journeyPerf'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 
@@ -14,8 +15,10 @@ const MONTHS = [
 
 const STATUS_COLOR: Record<RowStatus, string> = {
   draft: '#9aa0aa',
+  in_review: '#c8881f',
   scheduled: 'var(--blue)',
   approved: 'var(--blue)',
+  rejected: '#b42318',
   posted: 'var(--green)',
   failed: '#b42318',
 }
@@ -36,12 +39,25 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'quarter', label: 'Quarter' },
 ]
 
-export function CalendarView({ allClients = false }: { allClients?: boolean }) {
+export function CalendarView({ allClients = false, liveScope = false, scopeClient, scopeCampaign, onAddOnDay }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string; scopeCampaign?: string; onAddOnDay?: (iso: string) => void }) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
+  const proofFilter = useTrafficStore((s) => s.proofFilter)
+  const ctaFilter = useTrafficStore((s) => s.ctaFilter)
+  const audienceFilter = useTrafficStore((s) => s.audienceFilter)
+  const cardFilter = useTrafficStore((s) => s.cardFilter)
   const query = useTrafficStore((s) => s.query)
-  const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const campaignFilter = useTrafficStore((s) => s.campaignFilter)
+  const clientFilterStore = useTrafficStore((s) => s.clientFilter)
+  const campaignFilterStore = useTrafficStore((s) => s.campaignFilter)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  // Names of always-on campaigns, so their assets read as an evergreen baseline stream (distinct
+  // dot) intersecting the dated campaign events on the same grid.
+  const alwaysOnCampaigns = new Set(campaignList.filter((c) => c.timing === 'always-on').map((c) => c.name))
+  // `scopeClient` (from the brand folder's combined Calendar) pins the view to one
+  // brand across ALL its campaigns, overriding the global client/campaign filters.
+  const clientFilter = scopeClient ?? clientFilterStore
+  // scopeCampaign pins the view to a single campaign (the Flows calendar).
+  const campaignFilter = scopeCampaign ?? (scopeClient ? 'all' : campaignFilterStore)
   const openReview = useTrafficStore((s) => s.openReview)
 
   const now = new Date()
@@ -49,9 +65,32 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
   const [cursor, setCursor] = useState(() => new Date(now.getFullYear(), now.getMonth(), now.getDate()))
   const [dayKey, setDayKey] = useState<string | null>(null)
 
+  // The brand-folder combined calendar shows the whole brand — it must not inherit
+  // the per-canvas sidebar filters, which would otherwise hide assets outside a
+  // stale filter from a previous canvas session.
+  const scoped = !!scopeClient
   const view = allClients
     ? rows
-    : rows.filter((r) => rowInScope(r, { filter, query, clientFilter, campaignFilter }))
+    : rows.filter((r) =>
+        rowInScope(r, {
+          filter: scoped ? 'all' : filter,
+          proofFilter: scoped ? 'all' : proofFilter,
+          ctaFilter: scoped ? 'all' : ctaFilter,
+          audienceFilter: scoped ? 'all' : audienceFilter,
+          cardFilter: scoped ? 'all' : cardFilter,
+          query: scoped ? '' : query,
+          clientFilter,
+          campaignFilter,
+          liveOnly: liveScope,
+        }),
+      )
+
+  // Journey performance (reach) on the campaign — the same numbers as the canvas +
+  // grid, so an asset's reach reads the same wherever you look at it.
+  const journeyPerf = journeyPerformance(
+    allClients ? rows : rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter })),
+  )
+  const reachOf = (r: TrafficRow) => journeyPerf.perAsset.get(r.id)?.reach ?? 0
 
   // Point-in-time content (a post, a send) vs. assets that run over a period
   // (always-on ads, landing pages, nurture flows) — the latter render as spans.
@@ -95,20 +134,25 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
     title = `${f(start)} – ${f(end)}, ${end.getFullYear()}`
   }
 
-  const Event = ({ r }: { r: TrafficRow }) => (
-    <button
-      className="cal-event"
-      onClick={() => openReview(r.id)}
-      title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
-        undefined,
-        { hour: 'numeric', minute: '2-digit' },
-      )} · ${r.status}`}
-    >
-      <span className="cal-event-dot" style={{ background: STATUS_COLOR[r.status] }} />
-      <ChannelIcon channel={r.channel} size={12} />
-      <span className="cal-event-name">{r.assetName}</span>
-    </button>
-  )
+  const Event = ({ r }: { r: TrafficRow }) => {
+    const reach = reachOf(r)
+    const alwaysOn = alwaysOnCampaigns.has(r.campaign ?? '')
+    return (
+      <button
+        className={`cal-event${alwaysOn ? ' cal-event-alwayson' : ''}`}
+        onClick={() => openReview(r.id)}
+        title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
+          undefined,
+          { hour: 'numeric', minute: '2-digit' },
+        )} · ${r.status}${reach ? ` · reach ${reach.toLocaleString()}` : ''}`}
+      >
+        <span className="cal-event-dot" style={{ background: STATUS_COLOR[r.status] }} />
+        <ChannelIcon channel={r.channel} size={12} />
+        <span className="cal-event-name">{r.assetName}</span>
+        {reach > 0 && <span className="cal-event-reach">{formatReach(reach)}</span>}
+      </button>
+    )
+  }
 
   // ---- Month grid: weeks of day cells + multi-day span bars overlaid ----
   function MonthBody({ anchor }: { anchor: Date }) {
@@ -163,6 +207,9 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
                     <div
                       key={key}
                       className={`cal-day cal-day--wk${inMonth ? '' : ' out'}${key === todayKey ? ' today' : ''}`}
+                      style={onAddOnDay ? { cursor: 'pointer' } : undefined}
+                      title={onAddOnDay ? 'Click to add an asset on this day' : undefined}
+                      onClick={onAddOnDay ? () => setDayKey(key) : undefined}
                     >
                       <div className="cal-daynum">{d.getDate()}</div>
                       {evs.length > 0 && (
@@ -194,7 +241,7 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
                     {placed.map((h) => (
                       <button
                         key={h.r.id}
-                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}`}
+                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}${alwaysOnCampaigns.has(h.r.campaign ?? '') ? ' cal-span-alwayson' : ''}`}
                         style={{ gridColumn: `${h.startCol + 1} / ${h.endCol + 2}`, gridRow: h.lane + 1 }}
                         onClick={() => openReview(h.r.id)}
                         title={`${CHANNELS[h.r.channel].label} · ${h.r.assetName} · runs to ${new Date(
@@ -320,7 +367,23 @@ export function CalendarView({ allClients = false }: { allClients?: boolean }) {
                 </span>
               </button>
             ))}
+            {evs.length === 0 && <div className="cal-col-empty">No posts yet</div>}
           </div>
+          {onAddOnDay && (
+            <div className="cal-pop-foot">
+              <button
+                className="btn primary sm"
+                onClick={() => {
+                  const at = new Date(date)
+                  at.setHours(10, 0, 0, 0)
+                  onAddOnDay(at.toISOString())
+                  setDayKey(null)
+                }}
+              >
+                ＋ Add asset on this day
+              </button>
+            </div>
+          )}
         </div>
       </>
     )

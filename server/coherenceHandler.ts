@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { makeModelClient } from './modelClient.js'
 
 /**
  * Server-side, Claude-powered coherence detection — the connection check itself,
@@ -66,7 +67,7 @@ const SCHEMA = {
   required: ['breaks'],
 } as const
 
-const SYSTEM = `You are the coherence checker inside Rushhour. Its whole promise is that a campaign's assets tell ONE story to one buyer. You find where that thread snaps.
+const SYSTEM = `You are the coherence checker inside Breadcrumbs. Its whole promise is that a campaign's assets tell ONE story to one buyer. You find where that thread snaps.
 
 You are given a campaign's assets — each with its audience, channel, journey stage, and messaging components (headline, body, cta, etc.) — plus the ICP and, if present, the brand guide.
 
@@ -87,9 +88,9 @@ export class NoKeyError extends Error {
 
 export async function runCoherenceCheck(body: unknown): Promise<unknown> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new NoKeyError('ANTHROPIC_API_KEY not set')
+  if (!apiKey && !process.env.OPENROUTER_API_KEY) throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const client = new Anthropic({ apiKey })
+  const client = makeModelClient('extract')
   const { campaign, client: clientName, icp, brandGuide, assets } = (body ?? {}) as {
     campaign?: unknown
     client?: unknown
@@ -99,7 +100,6 @@ export async function runCoherenceCheck(body: unknown): Promise<unknown> {
   }
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
     max_tokens: 8000,
     thinking: { type: 'adaptive' },
     system: SYSTEM,

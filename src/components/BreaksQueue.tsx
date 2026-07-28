@@ -20,12 +20,11 @@ export function BreaksQueue() {
   const breakStatus = useTrafficStore((s) => s.breakStatus)
   const claudeBreaks = useTrafficStore((s) => s.claudeBreaks)
   const claudeBreaksScope = useTrafficStore((s) => s.claudeBreaksScope)
-  const coherenceChecking = useTrafficStore((s) => s.coherenceChecking)
   const coherenceLive = useTrafficStore((s) => s.coherenceLive)
-  const runCoherenceCheck = useTrafficStore((s) => s.runCoherenceCheck)
   const auditLog = useTrafficStore((s) => s.auditLog)
   const brandGuides = useTrafficStore((s) => s.brandGuides)
   const openReadiness = useTrafficStore((s) => s.openReadiness)
+  const coherenceBaseline = useTrafficStore((s) => s.coherenceBaseline)
 
   if (!open) return null
 
@@ -69,42 +68,25 @@ export function BreaksQueue() {
         </div>
 
         <div className="drawer-body">
-          <div className="breaks-recheck-row">
-            <button
-              className="conn-recheck"
-              onClick={() => runCoherenceCheck()}
-              disabled={coherenceChecking || clientFilter === 'all'}
-              title="Run the coherence check with Claude over this campaign's real copy"
-            >
-              {coherenceChecking ? 'Checking…' : '✦ Recheck with Claude'}
+          {client && !brandReady && (
+            <button className="breaks-brand warn" onClick={() => { close(); openReadiness() }}>
+              ⚠ No confirmed brand guide — the check has no standard to measure against. Confirm one →
             </button>
-            {checkedByClaude && <span className="conn-checked">✦ found by Claude</span>}
-          </div>
-          {client && (
-            brandReady ? (
-              <div className="breaks-brand ok" title={brand!.guide.voice}>
-                ⊘ Checked against {client}'s brand guide
-              </div>
-            ) : (
-              <button className="breaks-brand warn" onClick={() => { close(); openReadiness() }}>
-                ⚠ No confirmed brand guide — the check has no standard to measure against. Confirm one →
-              </button>
-            )
+          )}
+          {checkedByClaude && coherenceBaseline && coherenceBaseline.brand === client && coherenceBaseline.sources.length > 1 && (
+            <div className="breaks-baseline" title="The brand frame this check measured against">
+              Baseline: {coherenceBaseline.sources.map((s) => s.brand).join(' + ')}
+              {' '}({coherenceBaseline.sources.filter((s) => s.relation === 'ancestor').length > 0 ? 'inheriting up the brand tree' : 'with shared libraries'})
+            </div>
           )}
           {ordered.length === 0 ? (
             <div className="breaks-empty">
               ✓ Every asset in scope tells one story. No breaks in the thread.
             </div>
           ) : (
-            <>
-              <p className="breaks-intro">
-                Generation is the commodity. This is the contract: every place the thread breaks,
-                why it breaks, and the one click that repairs it.
-              </p>
-              {ordered.map((brk) => (
-                <BreakCard key={brk.id} brk={brk} active={brk.id === activeBreakId} />
-              ))}
-            </>
+            ordered.map((brk) => (
+              <BreakCard key={brk.id} brk={brk} active={brk.id === activeBreakId} />
+            ))
           )}
 
           {recentAudit.length > 0 && (

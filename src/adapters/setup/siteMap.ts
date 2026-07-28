@@ -1,7 +1,7 @@
 /**
  * Current-state messaging map: the client's EXISTING live messaging, extracted
  * from their rendered site + live ads by Claude (server-side, /api/map-site) and
- * stored by Hyperfocus as the connected map. The onboarding front door, map what
+ * stored by HyperFocus as the connected map. The onboarding front door, map what
  * they have, then show where it does not connect.
  */
 export interface SiteMapMessage {
@@ -16,7 +16,23 @@ export interface SiteMapMessage {
 }
 
 export interface SiteMap {
-  brand: { name: string; website: string; industry: string; voice: string }
+  brand: {
+    name: string
+    website: string
+    industry: string
+    voice: string
+    /** A detailed company overview, extracted from their site (about/team pages). */
+    oneLiner?: string
+    mission?: string
+    founded?: string
+    headquarters?: string
+    team?: { name: string; role?: string }[]
+    products?: string[]
+    differentiators?: string[]
+    notableClients?: string[]
+    values?: string[]
+    traction?: string
+  }
   audiences: { name: string; description: string }[]
   proofPoints: { label: string; detail: string }[]
   messages: SiteMapMessage[]

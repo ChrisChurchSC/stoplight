@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /**
  * Agent bridge: lets an external MCP server (and so Claude Desktop) drive the
- * running Rushhour browser tab. The browser is the executor: it holds the real
+ * running Hyperfocus browser tab. The browser is the executor: it holds the real
  * Zustand store, so a command runs the ACTUAL app action (add a client, set one
  * up with Claude, run a coherence check) and the UI updates live. No backend,
  * single-user, local-only, dev server only.
@@ -11,8 +11,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
  * Transport: SSE for server -> browser (commands), plain POST for browser ->
  * server (results) and for the MCP server -> us (commands to dispatch). One
  * command in flight at a time per id, correlated across the three endpoints.
- * See src/lib/agentBridge.ts (the browser side) and mcp/rushhour-server.mjs.
+ * See src/lib/agentBridge.ts (the browser side) and mcp/hyperfocus-server.mjs.
  */
+
+// A unique id per dev-server start. Sent to the browser on connect; if a tab sees
+// a NEW boot id (the server restarted under it), it reloads so it can't keep running
+// stale modules (the cause of "unknown action" on freshly added tools).
+const BOOT_ID = String(Date.now())
 
 interface Pending {
   resolve: (v: unknown) => void
@@ -57,7 +62,7 @@ export function agentBridgeApi(): PluginOption {
           connection: 'keep-alive',
         })
         streams.push(res)
-        send(res, 'ready', { ok: true })
+        send(res, 'ready', { ok: true, bootId: BOOT_ID })
         const hb = setInterval(() => res.write(': hb\n\n'), 25000)
         req.on('close', () => {
           clearInterval(hb)
@@ -80,7 +85,7 @@ export function agentBridgeApi(): PluginOption {
           return res.end(
             JSON.stringify({
               error: 'no-tab',
-              message: 'No Rushhour tab is open. Open http://localhost:5173 in a browser and try again.',
+              message: 'No Hyperfocus tab is open. Open http://localhost:5173 in a browser and try again.',
             }),
           )
         }
@@ -88,7 +93,7 @@ export function agentBridgeApi(): PluginOption {
         const out = await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             pending.delete(id)
-            reject(new Error('timeout waiting for the Rushhour tab'))
+            reject(new Error('timeout waiting for the Hyperfocus tab'))
           }, 180000)
           pending.set(id, { resolve, reject, timer })
           send(stream, 'command', { id, action, args })

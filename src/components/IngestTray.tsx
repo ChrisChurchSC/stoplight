@@ -44,7 +44,7 @@ function dimsLabel(a: Asset): string | null {
   return ar
 }
 
-function PendingCard({ asset }: { asset: Asset }) {
+function PendingCard({ asset, audienceNames }: { asset: Asset; audienceNames: string[] }) {
   const { updateAsset, toggleChannel, removeAsset } = useTrafficStore()
   const b = band(asset)
   // Local so picking the first channel doesn't snap the panel shut mid-interaction.
@@ -89,6 +89,24 @@ function PendingCard({ asset }: { asset: Asset }) {
           value={asset.caption}
           onChange={(e) => updateAsset(asset.id, { caption: e.target.value })}
         />
+
+        {/* Audience = the lane this asset lands in on the canvas. Pre-filled when
+            the folder name matched a defined audience; type to override, with the
+            brand's audiences as suggestions. */}
+        <input
+          className={`cpf-aud${(asset.audience ?? '').trim() ? '' : ' cpf-aud--empty'}`}
+          list={`aud-${asset.id}`}
+          placeholder="Audience (canvas lane)…"
+          value={asset.audience ?? ''}
+          onChange={(e) => updateAsset(asset.id, { audience: e.target.value })}
+        />
+        {audienceNames.length > 0 && (
+          <datalist id={`aud-${asset.id}`}>
+            {audienceNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        )}
 
         {/* Confirm channel + type for everything already chosen. */}
         {asset.channels.length > 0 && (
@@ -168,7 +186,7 @@ function PendingCard({ asset }: { asset: Asset }) {
 
 /** Bulk "treat this whole folder as channel X" — the highest-leverage fix when a
  *  Drive folder maps cleanly to one channel. Ephemeral (no saved routing table). */
-function FolderBar({ folder, ids }: { folder: string; ids: string[] }) {
+function FolderBar({ folder, ids, audienceNames }: { folder: string; ids: string[]; audienceNames: string[] }) {
   const updateAsset = useTrafficStore((s) => s.updateAsset)
   return (
     <div className="cpf-folder">
@@ -184,13 +202,30 @@ function FolderBar({ folder, ids }: { folder: string; ids: string[] }) {
           if (ch) for (const id of ids) updateAsset(id, { channels: [ch] })
         }}
       >
-        <option value="">Set all to…</option>
+        <option value="">Set channel for all…</option>
         {CHANNEL_LIST.map((c) => (
           <option key={c.id} value={c.id}>
             {c.label}
           </option>
         ))}
       </select>
+      {audienceNames.length > 0 && (
+        <select
+          className="cpf-cascade"
+          value=""
+          onChange={(e) => {
+            const aud = e.target.value
+            if (aud) for (const id of ids) updateAsset(id, { audience: aud })
+          }}
+        >
+          <option value="">Audience for all…</option>
+          {audienceNames.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   )
 }
@@ -198,6 +233,9 @@ function FolderBar({ folder, ids }: { folder: string; ids: string[] }) {
 export function IngestTray() {
   const assets = useTrafficStore((s) => s.assets)
   const addToSheet = useTrafficStore((s) => s.addToSheet)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const audienceNames = (clientAudiences[clientFilter] ?? []).map((a) => a.name)
 
   if (assets.length === 0) return null
 
@@ -231,10 +269,10 @@ export function IngestTray() {
 
       {groups.map(({ folder, list }) => (
         <div className="cpf-group" key={folder || '_local'}>
-          {folder && <FolderBar folder={folder} ids={list.map((a) => a.id)} />}
+          {folder && <FolderBar folder={folder} ids={list.map((a) => a.id)} audienceNames={audienceNames} />}
           <div className="asset-grid">
             {list.map((a) => (
-              <PendingCard key={a.id} asset={a} />
+              <PendingCard key={a.id} asset={a} audienceNames={audienceNames} />
             ))}
           </div>
         </div>

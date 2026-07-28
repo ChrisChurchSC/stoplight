@@ -45,7 +45,10 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   'pinterest-ads': [title(40, 100), description(500), cta(20)],
   'snapchat-ads': [f('brand', 'Brand name', undefined, 25), headline(34), cta(20)],
   'reddit-ads': [title(80, 300), body(), cta(20)],
-  'youtube-ads': [headline(15), description(35), cta(15)],
+  // The hook lives in the video and the companion is a 300x60 image, neither is text —
+  // the only copy YouTube takes is the headline (15), description (90), and CTA (10).
+  'youtube-ads': [headline(15), description(90), cta(10)],
+  'spotify-ads': [f('script', 'Audio script', undefined, 600, true), f('tagline', 'Companion tagline', undefined, 60), cta(25)],
   // paid — search / shopping
   'google-search': [f('headline', 'Headline', undefined, 30), description(90), f('path', 'Display path', undefined, 15)],
   'google-demand': [headline(40), f('long-headline', 'Long headline', undefined, 90), description(90), f('business', 'Business name', undefined, 25), cta(15)],
@@ -56,16 +59,37 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   linkedin: [body(3000)],
   x: [f('post', 'Post', undefined, 280, true)],
   tiktok: [caption(2200)],
-  youtube: [title(60, 100), description(5000)],
+  // The hook is in the video — the copy you actually enter to post is the title,
+  // description, and (optionally) a pinned comment.
+  youtube: [title(60, 100), description(5000), f('pinned', 'Pinned comment', undefined, 200, true)],
   pinterest: [title(40, 100), description(500)],
   // owned / lifecycle
   email: [subject(), preview(), headline(60), body(), cta(30)],
   sms: [f('message', 'Message', 160, 160, true), f('link', 'Link / CTA', undefined, 60)],
   push: [f('title', 'Title', 50, 65), f('body', 'Body', 150, 240, true), cta(25)],
-  website: [f('headline', 'Headline', undefined, 60), subhead(), body(), cta(30)],
-  blog: [f('title', 'SEO title', 60, 70), f('meta-description', 'Meta description', 155, 160, true), body()],
-  'landing-page': [f('headline', 'Headline', undefined, 60), subhead(), body(), cta(30)],
+  website: [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    body(),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('cta-mid', 'Mid-page CTA', undefined, 30),
+    f('faq', 'FAQ / objection', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
+  blog: [f('title', 'SEO title', 60, 70), f('meta-description', 'Meta description', 155, 160, true), body(), f('key-takeaway', 'Key takeaway', undefined, 200, true), f('cta', 'In-article CTA', undefined, 30)],
+  'landing-page': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    body(),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
   'lead-magnet': [title(80), f('description', 'Description', 300, undefined, true), cta(30)],
+  events: [f('name', 'Event name', undefined, 80), f('details', 'Details / RSVP copy', undefined, 300, true), cta(30)],
 }
 
 // Per-type overrides where a type's components differ from its channel base.
@@ -85,8 +109,62 @@ const OVERRIDES: Record<string, MessagingField[]> = {
   'google-search:call': [f('business', 'Business name', undefined, 25), f('h1', 'Headline 1', undefined, 30), f('h2', 'Headline 2', undefined, 30), f('d1', 'Description 1', undefined, 90, true)],
   'google-search:dsa': [f('d1', 'Description 1', undefined, 90, true), f('d2', 'Description 2', undefined, 90, true)],
   // Landing pages
-  'landing-page:sales': [f('headline', 'Headline', undefined, 60), subhead(), body(), f('proof', 'Social proof', undefined, 200, true), cta(30)],
+  'landing-page:sales': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    body(),
+    f('proof', 'Social proof', undefined, 200, true),
+    f('proof-logos', 'Customer logos / count', undefined, 80),
+    f('proof-stat', 'Headline stat', undefined, 120, true),
+    f('cta-mid', 'Mid-page CTA', undefined, 30),
+    f('faq', 'FAQ / objection handling', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
   'landing-page:webinar-reg': [f('headline', 'Headline', undefined, 60), f('when', 'Date / time', undefined, 60), body(), cta(30)],
+  // Website pages (persistent site pages, like the homepage)
+  'website:product': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('body', 'Feature / how-it-works copy', undefined, undefined, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('cta-mid', 'Mid-page CTA', undefined, 30),
+    f('faq', 'FAQ / objection', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
+  'website:pricing': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('body', 'Tiers / what’s included / comparison', undefined, undefined, true),
+    f('proof-stat', 'Guarantee / stat', undefined, 120, true),
+    f('faq', 'Billing FAQ', undefined, 400, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
+  'website:solutions': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('body', 'Problem / solution / use-case copy', undefined, undefined, true),
+    f('proof-stat', 'Outcome / stat', undefined, 120, true),
+    f('cta-mid', 'Mid-page CTA', undefined, 30),
+    f('faq', 'FAQ / objection', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
+  'website:comparison': [
+    f('headline', 'Hero headline', undefined, 60),
+    subhead(),
+    f('cta', 'Hero CTA', undefined, 30),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('body', 'Comparison narrative / table intro', undefined, undefined, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('faq', 'FAQ', undefined, 300, true),
+    f('cta-footer', 'Footer CTA', undefined, 30),
+  ],
   // Email
   'email:newsletter': [subject(), preview(), body(), cta(30)],
   'email:promotional': [subject(), preview(), f('headline', 'Hero headline', undefined, 60), body(), cta(30)],
@@ -111,6 +189,22 @@ export function messagingFields(channel: ChannelId, assetType?: string): Messagi
   return BASE[channel] ?? FALLBACK
 }
 
+/**
+ * Trim a component's copy to its field's hard limit, at a word boundary when one is
+ * reasonably close to the cap (else a clean hard cut), dropping any trailing
+ * punctuation. A safety net so a model overrun never yields an over-length field —
+ * headlines and SEO titles especially, where "really long" reads as broken. No-op when
+ * the field has no hard limit or the value already fits.
+ */
+export function clampToLimit(value: string, field?: MessagingField): string {
+  const max = field?.hardLimit
+  if (!max || value.length <= max) return value
+  const cut = value.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  const trimmed = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut
+  return trimmed.replace(/[\s,;:.!?-]+$/, '').trim()
+}
+
 export const messagingMap = (row: TrafficRow): Record<string, string> => row.messaging ?? {}
 
 /** All messaging text joined — for search and ICP evaluation. */
@@ -129,3 +223,20 @@ export function messagingSummary(row: TrafficRow): string {
 
 export const primaryFieldKey = (channel: ChannelId, assetType?: string): string =>
   messagingFields(channel, assetType)[0]?.key ?? 'body'
+
+/** An asset's CTA value, if it carries one as its own field (organic posts fold
+ *  the CTA into the body, so they return ''). Used by the sidebar CTA filter. */
+/** True for any component that reads as a CTA — covers multi-CTA pages
+ *  (cta, cta-hero, cta-mid, cta-footer, cta1/cta2) and the SMS link. */
+export const isCtaField = (key: string): boolean => /cta/i.test(key) || key === 'link'
+
+export function assetCta(row: TrafficRow): string {
+  const m = messagingMap(row)
+  // First CTA-ish component in schema order — the asset's primary CTA.
+  for (const fld of messagingFields(row.channel, row.assetType)) {
+    if (isCtaField(fld.key) && m[fld.key]?.trim()) return m[fld.key].trim()
+  }
+  // Channels with no dedicated CTA slot (organic posts fold it into the caption)
+  // store a hand-added CTA on a generic `cta` key.
+  return m.cta?.trim() ?? ''
+}
