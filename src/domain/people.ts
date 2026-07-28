@@ -1,4 +1,5 @@
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
+import { AGE_RANGES, INCOME_RANGES } from './taxonomy'
 
 /**
  * A Person record — the "Records › People" table, the contacts side of the lightweight
@@ -86,11 +87,14 @@ export const PEOPLE_COLUMNS: RecordColumn[] = [
  * the persona into the same handful of people for every brand, which is the failure mode personas
  * are supposed to prevent.
  */
-export const AGE_BANDS = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'] as const
+/**
+ * ONE vocabulary per fact. These were a second set of bands with different edges AND different dash
+ * characters from the AGE_RANGES / INCOME_RANGES the audience records already used, so a persona and
+ * a segment describing the same people could never match, and no report could join them.
+ */
+export const AGE_BANDS = AGE_RANGES
 
-export const INCOME_BANDS = [
-  'Under $50k', '$50-75k', '$75-100k', '$100-150k', '$150-250k', '$250k+',
-] as const
+export const INCOME_BANDS = INCOME_RANGES
 
 export const EXPERTISE_LEVELS = [
   'New to this', 'Knows the basics', 'Does this a lot', 'Expert',
