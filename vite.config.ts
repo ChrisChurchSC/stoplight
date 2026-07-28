@@ -474,6 +474,33 @@ function draftAngleApi(): PluginOption {
   }
 }
 
+/** Read a website and propose the fields on a brand or product card. Fills empty fields only. */
+function scanSiteApi(): PluginOption {
+  return {
+    name: 'scan-site-api',
+    configureServer(server) {
+      server.middlewares.use('/api/scan-site', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runScanSite } = await import('./server/scanSiteHandler')
+            const result = await runScanSite(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 /** Per-field option suggestions for a picker. Proposals only: nothing is persisted server-side. */
 function suggestOptionsApi(): PluginOption {
   return {
@@ -1154,6 +1181,7 @@ export default defineConfig(({ mode }) => {
       draftChannelsApi(),
       draftAngleApi(),
       suggestOptionsApi(),
+      scanSiteApi(),
       ingestSiteApi(),
       setupApi(),
       askApi(),

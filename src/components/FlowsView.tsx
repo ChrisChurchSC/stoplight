@@ -513,6 +513,55 @@ export function FlowsView() {
    * what asserts it, which keeps the app's guarantee that the copy writer only sees strings the user
    * picked.
    */
+  const [scanning, setScanning] = useState<string | null>(null)
+  const [scanNote, setScanNote] = useState<string | null>(null)
+  /**
+   * Read a site and fill in the card from it.
+   *
+   * Fills only EMPTY fields. A scan must never overwrite something somebody wrote: the site is one
+   * source and the person at the keyboard is a better one, and silently replacing their sentence
+   * with the homepage's is the kind of thing you notice three campaigns later.
+   */
+  const scanSiteInto = async (
+    nodeId: string,
+    url: string,
+    kind: 'brand' | 'product',
+    current: Record<string, unknown>,
+    apply: (patch: Record<string, unknown>) => void,
+  ) => {
+    if (!url.trim()) return
+    setScanning(nodeId)
+    setScanNote(null)
+    try {
+      const res = await fetch('/api/scan-site', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url, kind }),
+      })
+      if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `scan ${res.status}`)
+      const data = (await res.json()) as Record<string, unknown> & { confidence?: string; pagesRead?: number; readFrom?: string[] }
+      const patch: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(data)) {
+        if (['confidence', 'pagesRead', 'readFrom'].includes(k)) continue
+        const has = Array.isArray(current[k]) ? (current[k] as unknown[]).length > 0 : String(current[k] ?? '').trim()
+        if (has) continue
+        if (Array.isArray(v) ? v.length : String(v ?? '').trim()) patch[k] = v
+      }
+      const filled = Object.keys(patch).length
+      if (filled) apply(patch)
+      // Says what it did and how sure it is, because a form that fills itself silently is a form you
+      // stop reading.
+      setScanNote(
+        filled
+          ? `Filled ${filled} empty field${filled === 1 ? '' : 's'} from ${data.pagesRead ?? 1} page${data.pagesRead === 1 ? '' : 's'}. Confidence ${data.confidence ?? 'unknown'}. Check them.`
+          : 'Nothing new to fill: every field it could support is already written.',
+      )
+    } catch (e) {
+      setScanNote((e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not read that site.')
+    } finally {
+      setScanning(null)
+    }
+  }
   const suggestFor = async (field: string, already: string[], aud?: { name?: string; role?: string }): Promise<string[]> => {
     const profile = brand ? clientProfiles[brand] : undefined
     const res = await fetch('/api/suggest-options', {
@@ -4622,6 +4671,29 @@ export function FlowsView() {
                       onCommit={(v) => set({ name: v })}
                     />
                   ))}
+                  {/* THE SITE, and the button that reads it. Directly under the name, because it is
+                      the fastest way to fill the rest of this card in and it should be the second
+                      thing you reach. */}
+                  {field('Website', (
+                    <>
+                      <BufferedInput
+                        className="flow-recform-input"
+                        value={bo.website ?? ''}
+                        placeholder="example.com"
+                        onCommit={(v) => set({ website: v })}
+                      />
+                      {bo.website?.trim() && (
+                        <button
+                          className="flow-scan-btn"
+                          disabled={scanning === nt.id}
+                          onClick={() => void scanSiteInto(nt.id, bo.website ?? '', 'brand', bo as unknown as Record<string, unknown>, (patch) => set(patch as Partial<BrandObject>))}
+                        >
+                          {scanning === nt.id ? 'Reading the site…' : 'Fill this in from the site'}
+                        </button>
+                      )}
+                      {scanNote && scanning !== nt.id && <span className="flow-zip-echo">{scanNote}</span>}
+                    </>
+                  ))}
                   {combo('What it does', 'oneLiner', 'One line on what it does', [], 'oneLiner')}
                   {multi('What it sells', 'products', 'Add a product or service', 'products')}
                   {multi('What makes it different', 'differentiators', 'Add a differentiator', 'differentiators')}
@@ -4684,6 +4756,29 @@ export function FlowsView() {
                       placeholder="Name this product"
                       onCommit={(v) => set({ name: v })}
                     />
+                  ))}
+                  {/* A product page is usually the clearest statement of what a product is and who
+                      it is for, so the same scan works here, pointed at that page rather than the
+                      homepage. */}
+                  {field('Product page', (
+                    <>
+                      <BufferedInput
+                        className="flow-recform-input"
+                        value={prd.website ?? ''}
+                        placeholder="example.com/product"
+                        onCommit={(v) => set({ website: v })}
+                      />
+                      {prd.website?.trim() && (
+                        <button
+                          className="flow-scan-btn"
+                          disabled={scanning === nt.id}
+                          onClick={() => void scanSiteInto(nt.id, prd.website ?? '', 'product', prd as unknown as Record<string, unknown>, (patch) => set(patch as Partial<Product>))}
+                        >
+                          {scanning === nt.id ? 'Reading the page…' : 'Fill this in from the page'}
+                        </button>
+                      )}
+                      {scanNote && scanning !== nt.id && <span className="flow-zip-echo">{scanNote}</span>}
+                    </>
                   ))}
                   {combo('What it is', 'summary', 'One line, for someone who has not heard of it')}
                   {pick('Kind', 'kind', PRODUCT_KINDS)}

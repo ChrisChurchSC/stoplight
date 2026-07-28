@@ -27,6 +27,8 @@ export interface Product {
   jobToBeDone?: string
   /** What people use instead today. Displacement is most of what copy has to argue. */
   replaces?: string
+  /** The page that sells it. Also the input for filling this card in from it. */
+  website?: string
   /** How it is paid for, as a band rather than a figure: a price in a record goes stale silently. */
   pricing?: string
   /** Where it is in its life, which sets how much explaining the copy has to do. */

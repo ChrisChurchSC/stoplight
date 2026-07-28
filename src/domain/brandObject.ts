@@ -31,6 +31,8 @@ export interface BrandObject {
   wedge?: string
   /** The mission, in their words. */
   mission?: string
+  /** The brand's own site. Also the input for filling this card in from it. */
+  website?: string
   industry?: string
   /** How it sounds. Sets register for everything written under it. */
   voice?: string

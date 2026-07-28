@@ -10,7 +10,7 @@ import { resolveGoogle } from './googleResolve.js'
 
 const UA = 'Mozilla/5.0 (compatible; BreadcrumbsBot/1.0; +https://breadcrumbs.app)'
 
-interface Page {
+export interface Page {
   url: string
   title: string
   description: string
@@ -44,7 +44,7 @@ function extract(html: string): { title: string; description: string; text: stri
   return { title, description, text: body.slice(0, 600) }
 }
 
-async function fetchPage(url: string): Promise<Page | null> {
+export async function fetchPage(url: string): Promise<Page | null> {
   try {
     const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(8000), redirect: 'follow' })
     if (!res.ok) return null
@@ -70,7 +70,7 @@ async function fetchSitemap(url: string): Promise<string[]> {
   }
 }
 
-async function sitemapUrls(origin: string): Promise<string[]> {
+export async function sitemapUrls(origin: string): Promise<string[]> {
   const top = await fetchSitemap(new URL('/sitemap.xml', origin).href)
   // A sitemap INDEX points at more sitemaps (.xml locs); follow one level and collect their pages so a
   // site that splits its sitemap (pages, posts, products, ...) is fully discovered, not just its index.

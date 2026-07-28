@@ -4896,6 +4896,21 @@ button {
 }
 .flow-zip-echo.unknown { color: var(--amber, #b07d18); }
 
+/* FILL THIS IN FROM THE SITE. Sits under the URL it acts on, quiet until there is a URL to act on. */
+.flow-scan-btn {
+  display: block;
+  margin-top: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 7px;
+}
+.flow-scan-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.flow-scan-btn:disabled { color: var(--text-faint); border-color: var(--border); background: none; cursor: default; }
+
 /* OUT OF DATE: a folded corner on the card whose copy predates a change to what informs it.
    A corner rather than a badge, because it has to sit on a card that is already carrying a kind
    chip, a title, a copy preview and sometimes a spend line, and one more pill in that stack reads as
