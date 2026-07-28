@@ -2062,8 +2062,8 @@ export function FlowsView() {
     const rows = rowsForTarget(target)
     if (!refs.length || !rows.length) return
     // Start from whatever those assets already write to: their own override if they have one, else
-    // the campaign's, so wiring an object ADDS context rather than replacing the campaign's.
-    const base = rows.find((r) => r.references && r.references.length)?.references ?? flowRefs
+    // what the campaign is wired to, so wiring an object ADDS context rather than replacing it.
+    const base = rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
     const next = [...base]
     for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
     void updateRows(rows.map((r) => ({ id: r.id, patch: { references: next } })))
@@ -2079,7 +2079,7 @@ export function FlowsView() {
       .flatMap((e) => refsBehind(e.from))
     const drop = mine.filter((r) => !stillWired.some((x) => x.type === r.type && x.id === r.id))
     if (!drop.length) return
-    const base = (rows.find((r) => r.references && r.references.length)?.references ?? flowRefs).filter(
+    const base = (rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()).filter(
       (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
     )
     void updateRows(rows.map((r) => ({ id: r.id, patch: { references: base } })))
@@ -2117,11 +2117,15 @@ export function FlowsView() {
     replace: replaceActiveRef,
     openPicker: () => { setPickerDeliv(null); setPickerQuery(''); setPickerOpen(true) },
   }
-  // A deliverable's effective records: its per-asset OVERRIDE if any row carries one, else the
-  // campaign's (inherited). Editing writes the full resulting set onto every asset of the
-  // deliverable (materializing the override) and flags a regenerate.
+  // A deliverable's effective records: its per-asset OVERRIDE if any row carries one, else what the
+  // campaign is WIRED to. Editing writes the full resulting set onto every asset of the deliverable
+  // (materializing the override) and flags a regenerate.
+  //
+  // Inherits campaignWiredRefs(), not the stored set: a brand object is a library you pull onto a
+  // campaign, and it only counts once a card on the canvas connects it. Inheriting the stored refs
+  // was the last path where one still reached the assets with no card behind it.
   const delivEffRefs = (deliv: ViewDeliverable): FlowReference[] =>
-    deliv.rows.find((r) => r.references && r.references.length)?.references ?? flowRefs
+    deliv.rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
   const writeDelivRefs = (deliv: ViewDeliverable, next: FlowReference[]) => {
     void updateRows(deliv.rows.map((r) => ({ id: r.id, patch: { references: next } })))
     setRefsDirty(true)
@@ -3061,8 +3065,11 @@ export function FlowsView() {
     setConnectFrom(null)
     setAddingDeliv(true)
     try {
-      // Segment refs only (proof/company/etc. refs must not leak into row.audience).
-      const segAuds = flowRefs.filter((r) => r.type === 'segment').map((r) => r.label)
+      // Segment refs only (proof/company/etc. refs must not leak into row.audience), and only the
+      // ones a card on the canvas actually wires in — a stored ref with no card behind it should not
+      // decide who a new deliverable is written to. Falls through to the brand's audiences below
+      // when nothing is wired, which is the same answer it gave before for an untagged campaign.
+      const segAuds = campaignWiredRefs().filter((r) => r.type === 'segment').map((r) => r.label)
       const auds = segAuds.length ? segAuds : viewAudiences.length ? viewAudiences : audSelection
       const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: startCount(p), runtime: p.runtime, brand: p.brand }
       const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === viewName).map((r) => r.id))
