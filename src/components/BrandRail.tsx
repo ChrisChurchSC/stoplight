@@ -15,10 +15,15 @@ const RailIco = ({ children, size = 18 }: { children: React.ReactNode; size?: nu
   </svg>
 )
 
-export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
-  // When the rail hosts a nav (Files / Assets / Gretel inside a campaign) it widens to fit the
-  // labels; otherwise it stays a thin strip.
-  const railW = children ? 76 : 44
+export function BrandRail({ children, iconsOnly = false }: { children?: React.ReactNode; iconsOnly?: boolean } = {}) {
+  /**
+   * Three widths, and the labels are what decide between them.
+   *
+   * 68 for the labelled nav, because "Campaigns" is the longest label and has to stay on one line
+   * at the .railnav font size. 52 inside a campaign, where the nav is icons only and the width has
+   * nothing to size around but the icon and its hit area. 44 with no nav at all.
+   */
+  const railW = children ? (iconsOnly ? 52 : 68) : 44
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
   const setPage = useTrafficStore((s) => s.setPage)
@@ -66,7 +71,7 @@ export function BrandRail({ children }: { children?: React.ReactNode } = {}) {
   }
   return (
     <>
-    <div style={{ width: railW, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '9px 8px', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
+    <div style={{ width: railW, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 4px', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #f7f4f8)', minHeight: 0, overflowY: 'auto' }}>
       {children}
 
       <div style={{ flex: 1 }} />

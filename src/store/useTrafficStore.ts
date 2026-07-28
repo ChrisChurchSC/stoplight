@@ -1926,6 +1926,14 @@ interface TrafficState {
   /** True while a flow canvas (build or view) is open — collapses the sidebar to a rail. */
   flowCanvasOpen: boolean
   setFlowCanvasOpen: (open: boolean) => void
+  /**
+   * Bumped to ask the open campaign canvas to go back to the campaigns list.
+   *
+   * A counter rather than a boolean because FlowsView owns which screen it is on: this is a
+   * request, not a state, and reading its companion flag instead races the effect that writes it.
+   */
+  flowHomeNonce: number
+  goFlowHome: () => void
   /** Which view of the open campaign is showing (the Flow / Grid / Calendar top tabs). Lifted here
    *  so the campaign icon rail (Files / Assets / Gretel in HomeShell) can drive and reflect it. */
   flowView: 'flow' | 'grid' | 'calendar'
@@ -2764,6 +2772,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   flowOpen: initialShare?.campaign ?? null,
   flowOpenView: 'flow',
   flowCanvasOpen: false,
+  flowHomeNonce: 0,
   flowView: 'flow',
   flowChatCollapsed: true,
   flowAssetsOpen: false,
@@ -3918,6 +3927,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   newCampaignParent: null,
   setNewCampaignParent: (newCampaignParent) => set({ newCampaignParent }),
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
+  goFlowHome: () => set((s) => ({ flowHomeNonce: s.flowHomeNonce + 1 })),
   setFlowView: (v) => set((s) => (s.flowView === v ? {} : { flowView: v })),
   setFlowChatCollapsed: (v) => set((s) => (s.flowChatCollapsed === v ? {} : { flowChatCollapsed: v })),
   setFlowAssetsOpen: (v) => set((s) => (s.flowAssetsOpen === v ? {} : { flowAssetsOpen: v })),

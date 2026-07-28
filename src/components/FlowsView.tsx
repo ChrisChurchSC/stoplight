@@ -945,6 +945,25 @@ export function FlowsView() {
     setFlowCanvasOpen(flowScreen === 'canvas')
     return () => setFlowCanvasOpen(false)
   }, [flowScreen, setFlowCanvasOpen])
+  /**
+   * ...and back the other way, so anything outside this component can leave the canvas.
+   *
+   * flowScreen is local, which meant the only way out of a campaign was the breadcrumb rendered
+   * inside this file. The rail replaces the app's destinations with Files / Assets / Gretel while a
+   * campaign is open, so it needs its own way home and cannot reach this state directly.
+   *
+   * A COUNTER, not the flowCanvasOpen flag. Reading that flag here races the effect above: on the
+   * render where flowScreen becomes 'canvas' the store is still false, so this would fire with the
+   * stale value and bounce straight back to 'home' the moment you opened a campaign. A nonce only
+   * ever means "somebody asked to leave", which is unambiguous in either order.
+   */
+  const flowHomeNonce = useTrafficStore((s) => s.flowHomeNonce)
+  const seenHomeNonce = useRef(flowHomeNonce)
+  useEffect(() => {
+    if (flowHomeNonce === seenHomeNonce.current) return
+    seenHomeNonce.current = flowHomeNonce
+    setFlowScreen('home')
+  }, [flowHomeNonce])
   // Flow-canvas AI chat (agentic: it edits the flow from chat).
   const [chatMsgs, setChatMsgs] = useState<FlowChatMsg[]>([])
   const [chatBusy, setChatBusy] = useState(false)
@@ -1017,6 +1036,8 @@ export function FlowsView() {
   // Canvas controls (the bottom toolbar).
   const [zoom, setZoom] = useState(100)
   const [zoomOpen, setZoomOpen] = useState(false)
+  // The model picker sits next to Generate, because that is the button it governs.
+  const [modelOpen, setModelOpen] = useState(false)
   // The Add dropdown and its click-outside handler are gone: the palette is a row of icons in
   // the toolbar now, so there is no menu to open or dismiss.
   const [tool, setTool] = useState<'select' | 'pan' | 'connect'>('select')
@@ -5619,6 +5640,30 @@ export function FlowsView() {
         <div
           ref={canvasRef}
           className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}${dragObjectId ? ' obj-drop' : ''}`}
+          /**
+           * The dot grid belongs to the BOARD, not the viewport. It is painted here rather than
+           * inside .flow-stack (a tiled background on a scaled element resamples badly and the
+           * stack is only as big as its content), so the zoom and pan have to be applied to it by
+           * hand: the tile and the dot scale with zoom, and the origin follows the same offset the
+           * stack is translated by. Without that the dots sat still while the cards moved over
+           * them, which read as the cards sliding on glass.
+           *
+           * The dot is floored so it never disappears at 10%, where 1px x 0.1 rounds to nothing.
+           */
+          style={(() => {
+            const step = (22 * zoom) / 100
+            // ...and fade out as the tile collapses. Below roughly 8px the dots stop reading as a
+            // grid and start reading as noise competing with the cards, which at 10% are small
+            // enough to lose against it. Full strength by 8px, gone by 2px.
+            const fade = Math.max(0, Math.min(1, (step - 2) / 6))
+            return {
+              '--dot-step': `${step}px`,
+              '--dot-r': `${Math.max(0.5, (1 * zoom) / 100)}px`,
+              '--dot-x': `${offset.x}px`,
+              '--dot-y': `${offset.y}px`,
+              '--dot-mix': `${(45 * fade).toFixed(1)}%`,
+            } as React.CSSProperties
+          })()}
           // Drop target for a smart object dragged out of the Assets panel. dropEffect must be set
           // on EVERY dragover or the browser refuses the drop, and preventDefault on both is what
           // stops the page navigating to the drag payload instead.
@@ -7653,6 +7698,51 @@ export function FlowsView() {
         {viewing && (
           <>
             <span className="flow-tb-divider" />
+            {/* WHICH MODEL GENERATE USES, next to the button that uses it. It was only on the
+                campaign brief, which meant choosing it was a trip to another panel and the choice
+                was invisible at the moment you pressed Generate. Same store field either way, so
+                the brief and this stay in step. */}
+            {(() => {
+              const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? 'auto')) ?? AI_MODELS[0]
+              return (
+                <div className="flow-tb-zoom-wrap">
+                  <button
+                    className="flow-tb-zoom flow-tb-model"
+                    onClick={() => setModelOpen((o) => !o)}
+                    title={`Generating with ${cur.label} · ${cur.note}`}
+                    aria-label={`Model: ${cur.label}`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
+                    </svg>
+                    {cur.label}
+                    <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                  {modelOpen && (
+                    <>
+                      <div className="flow-tb-zoom-scrim" onClick={() => setModelOpen(false)} />
+                      <div className="flow-tb-zoom-menu flow-tb-model-menu">
+                        {AI_MODELS.map((m) => (
+                          <button
+                            key={m.id}
+                            className={`flow-tb-zoom-item flow-tb-model-item${m.id === cur.id ? ' on' : ''}`}
+                            onClick={() => {
+                              if (viewName) patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
+                              setModelOpen(false)
+                            }}
+                          >
+                            <span className="flow-tb-model-name">{m.label}</span>
+                            <span className="flow-tb-model-note">{m.note}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
             <button
               className="flow-tb-regen"
               // A flow with assets regenerates their copy (from the current selection, as before).
