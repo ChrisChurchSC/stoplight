@@ -442,6 +442,12 @@ export function FlowsView() {
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   /**
+   * Every brief edit goes through here, so the Save bar cannot be missed by one call site. There are
+   * several (theme, objective, budget, flight, model) and chasing them individually is how the
+   * object cards ended up with three write paths and one of them marking anything.
+   */
+  const patchCampaign: typeof patchCampaignRaw = (name, patch) => { markBriefDirty(); patchCampaignRaw(name, patch) }
+  /**
    * Cards edited since the assets they feed were last written.
    *
    * Every field on a card saves as you touch it, which is right: an edit you have to remember to
@@ -450,6 +456,23 @@ export function FlowsView() {
    */
   const [dirtyCards, setDirtyCards] = useState<Record<string, number>>({})
   const markCardDirty = (id: string) => setDirtyCards((d) => (d[id] ? d : { ...d, [id]: Date.now() }))
+  /**
+   * The brief is not an object card, so it has no card id; it gets a reserved key. It needs the bar
+   * for the same reason the cards do, and more so: the theme and the objective are the frame every
+   * asset in the campaign was written to, so changing one dates the whole set at once.
+   */
+  const BRIEF_DIRTY_KEY = '__brief__'
+  const markBriefDirty = () => markCardDirty(BRIEF_DIRTY_KEY)
+  const applyBriefChanges = async (regenerate: boolean) => {
+    const ids = viewRows.map((r) => r.id)
+    setDirtyCards((d) => { const { [BRIEF_DIRTY_KEY]: _drop, ...rest } = d; return rest })
+    if (!ids.length) return
+    if (regenerate) { await regenerateFlow(ids); return }
+    await updateRows(ids.map((id) => ({
+      id,
+      patch: { recheckFlag: { reason: 'The brief changed after this was written', frame: 'Brief', at: Date.now() } },
+    })))
+  }
   /**
    * Flag every asset a card feeds as out of date, and optionally rewrite them now.
    *
@@ -563,7 +586,7 @@ export function FlowsView() {
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
-  const patchCampaign = useTrafficStore((s) => s.patchCampaign)
+  const patchCampaignRaw = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
@@ -6489,6 +6512,30 @@ export function FlowsView() {
                   <span className="flow-panel-title">Campaign brief</span>
                 </div>
                 <div className="flow-inspect">
+                  {/* SAVE UPDATES for the brief. The theme and the objective are the frame every asset
+                      in the campaign was written to, so changing one dates the whole set at once —
+                      which makes this the panel that needed the bar most, and the one that did not
+                      have it. */}
+                  {dirtyCards[BRIEF_DIRTY_KEY] && (() => {
+                    const n = viewRows.length
+                    return (
+                      <div className="flow-applybar" style={{ marginTop: 0 }}>
+                        <span className="flow-applybar-txt">
+                          {n
+                            ? `Saved. ${n} ${n === 1 ? 'asset was' : 'assets were'} written to the old brief.`
+                            : 'Saved. Nothing is written from this brief yet.'}
+                        </span>
+                        <button className="flow-applybar-go" disabled={regenerating} onClick={() => void applyBriefChanges(n > 0)}>
+                          {regenerating ? 'Rewriting…' : n ? 'Save updates and rewrite' : 'Save updates'}
+                        </button>
+                        {n > 0 && (
+                          <button className="flow-applybar-flag" onClick={() => void applyBriefChanges(false)}>
+                            Just flag them
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })()}
                   <label className="flow-inspect-label">Name</label>
                   {/* The store has had renameCampaign all along; this field was simply never wired to
                       it, and said so in a tooltip nobody hovers. Only the part after the brand is
