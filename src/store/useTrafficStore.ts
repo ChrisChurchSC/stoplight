@@ -6750,6 +6750,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             !messagingAllText(r).trim(),
         )
     if (targets.length === 0) return null
+    /**
+     * MARK THEM GENERATING. regenIds already existed and was documented as driving the on-canvas
+     * animation, but only the heuristic recompose ever set it, so the AI path — the slow one, the
+     * one that actually needs a progress signal — left every card looking idle for the twelve
+     * seconds it was working.
+     */
+    set({ regenIds: new Set(targets.map((r) => r.id)) })
     // Which writer produced the copy. 'heuristic' is sticky (a single fallback means
     // the run isn't fully Claude-written), so the badge never over-claims.
     let copySource: CopySource | null = null
@@ -7081,11 +7088,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap, recheckFlag: undefined }
           if (d.format && !row.format) patch.format = d.format
           await sheet.update(row.id, patch)
+          // Cleared per row, not in one go at the end: a set of twelve finishing together tells you
+          // nothing while it runs, where one card settling at a time shows the work arriving.
+          set((s2) => {
+            if (!s2.regenIds.has(row.id)) return {}
+            const next = new Set(s2.regenIds)
+            next.delete(row.id)
+            return { regenIds: next }
+          })
         }
       }
       saveCampaignRtbs(rtbStore)
     } finally {
-      set({ drafting: false })
+      // Whatever happened, nothing is still generating. A card left spinning after a failed run is
+      // worse than one that never span: it says work is happening that is not.
+      set({ drafting: false, regenIds: new Set<string>() })
       await get().refresh()
     }
     // Copy actually written by Claude is proof the connection works — complete that step.

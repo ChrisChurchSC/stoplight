@@ -4932,6 +4932,44 @@ button {
 .flow-scan-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .flow-scan-btn:disabled { color: var(--text-faint); border-color: var(--border); background: none; cursor: default; }
 
+/* GENERATING. A card whose copy is being written right now.
+   Shown as skeleton lines rather than a spinner because what is arriving IS lines of copy, so the
+   placeholder can have the shape of the thing you are waiting for. The card also dims its border
+   rather than pulsing the whole tile: several of these run at once and a canvas of throbbing cards
+   is harder to read than one that simply looks busy. */
+.flow-node.generating { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.flow-copy-skel { display: flex; flex-direction: column; gap: 5px; padding: 1px 0 2px; }
+.flow-copy-skel span {
+  display: block; height: 7px; border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-faint) 16%, transparent) 0%,
+    color-mix(in srgb, var(--text-faint) 30%, transparent) 50%,
+    color-mix(in srgb, var(--text-faint) 16%, transparent) 100%
+  );
+  background-size: 220% 100%;
+  animation: copy-skel 1.15s ease-in-out infinite;
+}
+.flow-copy-skel span:nth-child(2) { width: 88%; animation-delay: 0.1s; }
+.flow-copy-skel span:nth-child(3) { width: 62%; animation-delay: 0.2s; }
+@keyframes copy-skel {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+/* Still legible without motion: the bars stay, they just do not travel. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-copy-skel span { animation: none; }
+}
+/* On a deliverable the count is the signal, since one card stands for several assets. */
+.flow-deliv-busy {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 /* OUT OF DATE: a folded corner on the card whose copy predates a change to what informs it.
    A corner rather than a badge, because it has to sit on a card that is already carrying a kind
    chip, a title, a copy preview and sometimes a spend line, and one more pill in that stack reads as

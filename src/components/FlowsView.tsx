@@ -1016,6 +1016,8 @@ export function FlowsView() {
   // References changed since the last generation → offer a Regenerate button.
   const [refsDirty, setRefsDirty] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  /** Rows the store is writing copy for right now. Drives the per-card generating state. */
+  const regenIds = useTrafficStore((s) => s.regenIds)
   // Canvas controls (the bottom toolbar).
   const [zoom, setZoom] = useState(100)
   const [zoomOpen, setZoomOpen] = useState(false)
@@ -6169,6 +6171,12 @@ export function FlowsView() {
                               <div className="flow-node-label">{d.label}</div>
                               <div className="flow-node-desc">
                                 ×{d.count}
+                                {(() => {
+                                  // A deliverable stands for several assets, so the count is the
+                                  // useful signal rather than a spinner on the group.
+                                  const busy = d.rows.filter((r) => regenIds.has(r.id)).length
+                                  return busy ? <span className="flow-deliv-busy">Writing {busy}…</span> : null
+                                })()}
                                 {/* The deliverable summarises its assets, so it summarises their
                                     flags too: a collapsed group must not hide that the copy under
                                     it is stale. */}
@@ -6199,7 +6207,7 @@ export function FlowsView() {
                               <div className="flow-branch-row" key={r.id}>
                                 <span className="flow-branch-port" style={{ borderColor: d.tone }} />
                                 <div
-                                  className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}`}
+                                  className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
@@ -6225,11 +6233,20 @@ export function FlowsView() {
                                       <div className="flow-node-label">{c.head}</div>
                                     </div>
                                   </div>
-                                  {c.body && (
+                                  {regenIds.has(r.id) ? (
+                                    /* Not the old copy while the new copy is being written: reading a
+                                       sentence that is about to be replaced is worse than reading
+                                       nothing, because you cannot tell which version you are looking at. */
+                                    <div className="flow-copy">
+                                      <div className="flow-copy-skel" aria-label="Writing copy">
+                                        <span /><span /><span />
+                                      </div>
+                                    </div>
+                                  ) : c.body ? (
                                     <div className="flow-copy">
                                       <div className="flow-copy-body">{c.body}</div>
                                     </div>
-                                  )}
+                                  ) : null}
                                   {isIngestedPost(r) ? (
                                     <div className="flow-spend-foot" title="Live post metrics">
                                       <span className="flow-spend-dot" aria-hidden="true" />
