@@ -474,6 +474,33 @@ function draftAngleApi(): PluginOption {
   }
 }
 
+/** Fill a card's fields from a typed description. Enum fields are constrained to the real options. */
+function fillCardApi(): PluginOption {
+  return {
+    name: 'fill-card-api',
+    configureServer(server) {
+      server.middlewares.use('/api/fill-card', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runFillCard } = await import('./server/fillCardHandler')
+            const result = await runFillCard(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 /** Read a website and propose the fields on a brand or product card. Fills empty fields only. */
 function scanSiteApi(): PluginOption {
   return {
@@ -1182,6 +1209,7 @@ export default defineConfig(({ mode }) => {
       draftAngleApi(),
       suggestOptionsApi(),
       scanSiteApi(),
+      fillCardApi(),
       ingestSiteApi(),
       setupApi(),
       askApi(),

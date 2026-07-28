@@ -513,8 +513,125 @@ export function FlowsView() {
    * what asserts it, which keeps the app's guarantee that the copy writer only sees strings the user
    * picked.
    */
+  /**
+   * WHAT EACH CARD KIND CAN HAVE FILLED IN, and the exact values its closed fields accept.
+   *
+   * Sent with the prompt so the model's answer can only contain values the dropdowns actually hold.
+   * A near miss ("35-44" against a list holding "35–44") leaves a field looking filled while matching
+   * no option, and the next person to open the card cannot tell why.
+   */
+  const FILLABLE: Partial<Record<CanvasObjectKind, { key: string; brief: string; kind?: 'text' | 'list'; options?: string[] }[]>> = {
+    brand: [
+      { key: 'name', brief: 'the brand name' },
+      { key: 'oneLiner', brief: 'one line on what it does, for someone who has not heard of it' },
+      { key: 'products', brief: 'what it sells, names only', kind: 'list' },
+      { key: 'differentiators', brief: 'what sets it apart, as claims it could make', kind: 'list' },
+      { key: 'wedge', brief: 'the position it owns that a competitor could not claim' },
+      { key: 'mission', brief: 'the mission, in their words' },
+      { key: 'industry', brief: 'the industry it operates in', options: [...INDUSTRIES] },
+      { key: 'voice', brief: 'how it sounds', options: [...BRAND_VOICES] },
+      { key: 'avoidVoice', brief: 'the register that would be wrong for it' },
+    ],
+    product: [
+      { key: 'name', brief: 'the product name' },
+      { key: 'summary', brief: 'one line on what it is' },
+      { key: 'kind', brief: 'what kind of thing is being sold', options: [...PRODUCT_KINDS] },
+      { key: 'forWho', brief: 'who it is for' },
+      { key: 'jobToBeDone', brief: 'the one job it does better than the alternative' },
+      { key: 'replaces', brief: 'what people use instead today' },
+      { key: 'pricing', brief: 'how it is paid for', options: [...PRODUCT_PRICING] },
+      { key: 'stage', brief: 'where it is in its life', options: [...PRODUCT_STAGES] },
+    ],
+    audience: [
+      { key: 'name', brief: 'a short name for this audience' },
+      { key: 'definition', brief: 'a one line definition of this sub-segment, sharper than a job title' },
+      { key: 'pains', brief: "what is wrong in their life today, in their own words", kind: 'list' },
+      { key: 'goalTags', brief: 'what good looks like to them', kind: 'list' },
+      { key: 'triggers', brief: 'why now rather than eventually', kind: 'list' },
+      { key: 'objections', brief: 'what they already believe against you, as their own thought' },
+      { key: 'antiMessage', brief: 'the sentence that would lose them' },
+      { key: 'messageAngle', brief: 'how the promise is framed for them' },
+      { key: 'seniority', brief: 'their seniority, if this is a business audience', options: [...SENIORITIES] },
+      { key: 'companySize', brief: 'the size of company they work at', options: [...TAXONOMY_COMPANY_SIZES] },
+      { key: 'industry', brief: 'the industry they are in', options: [...INDUSTRIES] },
+      { key: 'funnelStage', brief: 'where they are in the funnel', options: [...FUNNEL_STAGE_OPTIONS] },
+    ],
+    person: [
+      { key: 'name', brief: 'a short name for this composite person' },
+      { key: 'age', brief: 'their age band', options: [...AGE_BANDS] },
+      { key: 'householdIncome', brief: 'their household income band', options: [...INCOME_BANDS] },
+      { key: 'occupation', brief: 'what they do for a living' },
+      { key: 'hobbies', brief: 'what they do outside work, newline separated' },
+      { key: 'expertise', brief: 'how much they know about this', options: [...EXPERTISE_LEVELS] },
+      { key: 'optimizingFor', brief: 'what they are optimising for', options: [...MOTIVES] },
+      { key: 'readsWhen', brief: 'when they would read this', options: [...READING_MOMENTS] },
+      { key: 'decidesWith', brief: 'who else is in the decision', options: [...DECIDERS] },
+      { key: 'usesNow', brief: 'what they reach for instead today' },
+      { key: 'saysLike', brief: 'their own words and turns of phrase' },
+    ],
+    trigger: [
+      { key: 'name', brief: 'a short name for this trigger' },
+      { key: 'type', brief: 'what kind of trigger it is', options: [...TRIGGER_TYPE_OPTIONS] },
+      { key: 'signal', brief: 'the event or condition that fires it' },
+      { key: 'response', brief: 'the one action it drives' },
+    ],
+  }
+  /** Written per kind, because "describe it" is useless without an example of what to say. */
+  const FILL_PLACEHOLDER: Partial<Record<CanvasObjectKind, string>> = {
+    brand: 'A family dental practice that only does emergencies, open Saturdays',
+    product: 'A £9 a month app that tells you if tonight is worth fishing',
+    audience: 'Parents booking a first orthodontic appointment, nervous about cost',
+    person: 'A 40 year old electrician who fishes most weekends and coaches his kid',
+    trigger: 'Their old kit broke a week before the season opens',
+  }
+  const [prompting, setPrompting] = useState<Record<string, string>>({})
+  const [filling, setFilling] = useState<string | null>(null)
+  /** Keyed by card: a note left over from the last card you filled would read as this card's. */
+  const [fillNote, setFillNote] = useState<Record<string, string>>({})
+  /**
+   * Fill a card from a typed description. Empty fields only, same rule as the site scan: the person
+   * who typed a value is a better source than a sentence typed thirty seconds later.
+   */
+  const fillCardFromPrompt = async (
+    nt: CanvasObject,
+    current: Record<string, unknown>,
+    apply: (patch: Record<string, unknown>) => void,
+  ) => {
+    const said = (prompting[nt.id] ?? '').trim()
+    const fields = FILLABLE[nt.kind]
+    if (!said || !fields) return
+    setFilling(nt.id)
+    setFillNote((m) => { const { [nt.id]: _drop, ...rest } = m; return rest })
+    try {
+      const profile = brand ? clientProfiles[brand] : undefined
+      const res = await fetch('/api/fill-card', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: nt.kind,
+          prompt: said,
+          fields,
+          brandContext: { name: brand, oneLiner: profile?.oneLiner, differentiators: profile?.differentiators },
+        }),
+      })
+      if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `fill ${res.status}`)
+      const data = (await res.json()) as { fields?: Record<string, unknown> }
+      const patch: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(data.fields ?? {})) {
+        const has = Array.isArray(current[k]) ? (current[k] as unknown[]).length > 0 : String(current[k] ?? '').trim()
+        if (!has) patch[k] = v
+      }
+      const n = Object.keys(patch).length
+      if (n) apply(patch)
+      setFillNote((m) => ({ ...m, [nt.id]: n ? `Filled ${n} empty field${n === 1 ? '' : 's'}. Check them.` : 'Nothing new to fill.' }))
+    } catch (e) {
+      setFillNote((m) => ({ ...m, [nt.id]: (e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not fill this in.' }))
+    } finally {
+      setFilling(null)
+    }
+  }
   const [scanning, setScanning] = useState<string | null>(null)
-  const [scanNote, setScanNote] = useState<string | null>(null)
+  const [scanNote, setScanNote] = useState<Record<string, string>>({})
   /**
    * Read a site and fill in the card from it.
    *
@@ -531,7 +648,7 @@ export function FlowsView() {
   ) => {
     if (!url.trim()) return
     setScanning(nodeId)
-    setScanNote(null)
+    setScanNote((m) => { const { [nodeId]: _drop, ...rest } = m; return rest })
     try {
       const res = await fetch('/api/scan-site', {
         method: 'POST',
@@ -551,13 +668,14 @@ export function FlowsView() {
       if (filled) apply(patch)
       // Says what it did and how sure it is, because a form that fills itself silently is a form you
       // stop reading.
-      setScanNote(
-        filled
+      setScanNote((m) => ({
+        ...m,
+        [nodeId]: filled
           ? `Filled ${filled} empty field${filled === 1 ? '' : 's'} from ${data.pagesRead ?? 1} page${data.pagesRead === 1 ? '' : 's'}. Confidence ${data.confidence ?? 'unknown'}. Check them.`
           : 'Nothing new to fill: every field it could support is already written.',
-      )
+      }))
     } catch (e) {
-      setScanNote((e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not read that site.')
+      setScanNote((m) => ({ ...m, [nodeId]: (e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not read that site.' }))
     } finally {
       setScanning(null)
     }
@@ -4599,6 +4717,66 @@ export function FlowsView() {
               </>
             )
           })()}
+          {/* DESCRIBE IT AND HAVE IT FILLED IN. First thing on the panel, because it is the fastest
+              way past a dozen empty dropdowns and a blank card is the state this is for.
+
+              The record it writes to is whichever the card names, so the same box works whether the
+              card is brand new or half filled: it only ever fills fields that are still empty. */}
+          {FILLABLE[nt.kind] && (() => {
+            const recordFor = (): { current: Record<string, unknown>; apply: (p: Record<string, unknown>) => void } | null => {
+              switch (nt.kind) {
+                case 'brand': {
+                  const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
+                  return { current: bo as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), p as Partial<BrandObject>) } }
+                }
+                case 'product': {
+                  const pr = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
+                  return { current: pr as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), p as Partial<Product>) } }
+                }
+                case 'person': {
+                  const pe = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
+                  return { current: pe as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), p as Partial<Person>) } }
+                }
+                case 'trigger': {
+                  const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
+                  return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
+                }
+                case 'audience': {
+                  const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
+                  return { current: au as unknown as Record<string, unknown>, apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
+                }
+                default: return null
+              }
+            }
+            const target = recordFor()
+            if (!target) return null
+            const busy = filling === nt.id
+            return (
+              <div className="flow-fillbox">
+                <textarea
+                  className="flow-fill-input"
+                  rows={2}
+                  value={prompting[nt.id] ?? ''}
+                  placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and the fields fill in'}
+                  onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    // Enter fills; shift-Enter is a newline, since a description can run to two lines.
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
+                  }}
+                />
+                <div className="flow-fill-foot">
+                  <button
+                    className="flow-fill-go"
+                    disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                    onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
+                  >
+                    {busy ? 'Filling…' : 'Fill this in'}
+                  </button>
+                  {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
+                </div>
+              </div>
+            )
+          })()}
           {/* SAVE UPDATES. The fields themselves persist as you touch them, which is right: an edit
               you have to remember to commit is an edit you lose. What is NOT automatic is pushing the
               change into copy that was already written, so that is what this button does rather than
@@ -4701,7 +4879,7 @@ export function FlowsView() {
                           {scanning === nt.id ? 'Reading the site…' : 'Fill this in from the site'}
                         </button>
                       )}
-                      {scanNote && scanning !== nt.id && <span className="flow-zip-echo">{scanNote}</span>}
+                      {scanNote[nt.id] && scanning !== nt.id && <span className="flow-zip-echo">{scanNote[nt.id]}</span>}
                     </>
                   ))}
                   {combo('What it does', 'oneLiner', 'One line on what it does', [], 'oneLiner')}
@@ -4787,7 +4965,7 @@ export function FlowsView() {
                           {scanning === nt.id ? 'Reading the page…' : 'Fill this in from the page'}
                         </button>
                       )}
-                      {scanNote && scanning !== nt.id && <span className="flow-zip-echo">{scanNote}</span>}
+                      {scanNote[nt.id] && scanning !== nt.id && <span className="flow-zip-echo">{scanNote[nt.id]}</span>}
                     </>
                   ))}
                   {combo('What it is', 'summary', 'One line, for someone who has not heard of it')}
