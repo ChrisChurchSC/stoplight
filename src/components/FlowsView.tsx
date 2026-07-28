@@ -1769,7 +1769,6 @@ export function FlowsView() {
   // The records this flow references, drawn from the Records pages (Companies / People /
   // Segments / Media mix). These references drive asset generation.
   const viewCampaign = useMemo(() => campaignList.find((c) => c.name === viewName), [campaignList, viewName])
-  const flowRefs = viewCampaign?.references ?? []
   // Estimated media spend PER paid placement: the campaign's paid-media budget (explicit
   // mediaBudget, else the strategy's media share of the overall budget) split evenly across
   // its paid assets. Lets a paid card show a spend figure even when none was logged per-asset.
@@ -1858,6 +1857,29 @@ export function FlowsView() {
     ],
     [companies, people, brandSegments, channelRecords, brandProof],
   )
+  /**
+   * The campaign's stored references, minus any whose record no longer exists.
+   *
+   * A reference carries a snapshot of the record's label, so a deleted record leaves a ref that
+   * still renders its old name and still reads as real. One campaign carried 51 of them, 21 pointing
+   * at audiences that had been deleted; deleting a record sweeps the record slices and has never
+   * swept campaign.references. Nothing prunes them on write, so they are pruned on read, which also
+   * covers the ones already saved.
+   *
+   * Filtered here rather than at each use because flowRefs still feeds deliverable inheritance
+   * (delivEffRefs and the two override readers): a dangling ref reached the assets, not just the
+   * panel. A type with no record group of its own — media-mix — is left alone rather than assumed
+   * dead. Defined after recordGroups because it needs it; nothing above this line reads flowRefs.
+   */
+  const flowRefs = useMemo(() => {
+    const stored = viewCampaign?.references ?? []
+    if (!stored.length) return stored
+    const known = new Map(recordGroups.map((g) => [g.type, new Set(g.items.map((i) => i.id))]))
+    return stored.filter((r) => {
+      const ids = known.get(r.type)
+      return ids ? ids.has(r.id) : true
+    })
+  }, [viewCampaign, recordGroups])
   const hasRef = (type: FlowRefType, id: string) => flowRefs.some((r) => r.type === type && r.id === id)
   // Record Tags edit in BOTH modes through one set of ops, so the same tag-row + picker UI
   // works whether you're building a new flow or clicking the campaign card of a built one.
