@@ -6519,7 +6519,7 @@ export function FlowsView() {
                   {dirtyCards[BRIEF_DIRTY_KEY] && (() => {
                     const n = viewRows.length
                     return (
-                      <div className="flow-applybar" style={{ marginTop: 0 }}>
+                      <div className="flow-applybar">
                         <span className="flow-applybar-txt">
                           {n
                             ? `Saved. ${n} ${n === 1 ? 'asset was' : 'assets were'} written to the old brief.`
