@@ -13,7 +13,7 @@
 export type CanvasObjectKind =
   | 'audience' | 'data-source' | 'note'
   | 'proof-point' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
-  | 'brand'
+  | 'brand' | 'product'
 
 /** What an object DOES, and the value of its data-role attribute. */
 export type ObjectRole = 'output' | 'input' | 'markup' | 'brief'

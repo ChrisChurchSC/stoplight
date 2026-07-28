@@ -138,6 +138,7 @@ import {
   titleFromUrl,
 } from '../domain/libraryFolders'
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
+import { type Product, freshProductId } from '../domain/product'
 import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
 import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
@@ -840,6 +841,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.patterns.v1': 'patterns',
   'stoplight.triggers.v1': 'triggers',
   'stoplight.brandRecords.v1': 'brands',
+  'stoplight.products.v1': 'products',
   'stoplight.libraryFolders.v1': 'library_folders',
 }
 const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
@@ -859,6 +861,7 @@ const MESSAGES_KEY = 'stoplight.messages.v1'
 const VOICES_KEY = 'stoplight.voices.v1'
 const PATTERNS_KEY = 'stoplight.patterns.v1'
 const TRIGGERS_KEY = 'stoplight.triggers.v1'
+const PRODUCTS_KEY = 'stoplight.products.v1'
 const OBJECTIVES_KEY = 'stoplight.objectives.v1'
 const LIBRARY_FOLDERS_KEY = 'stoplight.libraryFolders.v1'
 const TASKS_KEY = 'stoplight.tasks.v1'
@@ -1717,6 +1720,11 @@ interface TrafficState {
   addTrigger: (partial?: Partial<Trigger>) => string
   updateTrigger: (id: string, patch: Partial<Trigger>) => void
   deleteTrigger: (id: string) => void
+  /** Records › what the brand sells. Distinct from Companies, which are accounts. */
+  products: Product[]
+  addProduct: (partial?: Partial<Product>) => string
+  updateProduct: (id: string, patch: Partial<Product>) => void
+  deleteProduct: (id: string) => void
   /** Records › Message › Objectives — what campaigns move + how it's measured. */
   objectives: Objective[]
   addObjective: (partial?: Partial<Objective>) => string
@@ -2749,6 +2757,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   voices: localDataMode ? loadRecordList<Voice>(VOICES_KEY) : [],
   patterns: localDataMode ? loadRecordList<Pattern>(PATTERNS_KEY) : [],
   triggers: localDataMode ? loadRecordList<Trigger>(TRIGGERS_KEY) : [],
+  products: localDataMode ? loadRecordList<Product>(PRODUCTS_KEY) : [],
   objectives: localDataMode ? loadRecordList<Objective>(OBJECTIVES_KEY) : [],
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
@@ -3258,6 +3267,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const triggers = s.triggers.filter((t) => t.id !== id)
       saveRecordList(TRIGGERS_KEY, triggers)
       return { triggers }
+    }),
+
+  addProduct: (partial) => {
+    const id = freshProductId()
+    const row: Product = { name: '', status: 'active', ...(partial ?? {}), id }
+    set((s) => {
+      const products = [row, ...s.products]
+      saveRecordList(PRODUCTS_KEY, products)
+      return { products }
+    })
+    return id
+  },
+  updateProduct: (id, patch) =>
+    set((s) => {
+      const products = s.products.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      saveRecordList(PRODUCTS_KEY, products)
+      return { products }
+    }),
+  deleteProduct: (id) =>
+    set((s) => {
+      const products = s.products.filter((p) => p.id !== id)
+      saveRecordList(PRODUCTS_KEY, products)
+      return { products }
     }),
 
   addObjective: (partial) => {

@@ -15,6 +15,7 @@ import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { COMPANY_STATUSES, type Company } from '../domain/companies'
 import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
+import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, PRODUCT_STATUSES, type Product } from '../domain/product'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -269,7 +270,7 @@ const INPUT_FAMILIES: { family: ObjectFamily; label: string }[] = [
   { family: 'draws', label: 'What it draws on' },
 ]
 /** Brand has its own button on the bar, so it must not also appear inside a family caret. */
-const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand'])
+const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand', 'product'])
 const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
   (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter(
     (k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family && !STANDALONE_KINDS.has(k),
@@ -435,6 +436,9 @@ export function FlowsView() {
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const updateTrigger = useTrafficStore((s) => s.updateTrigger)
+  const products = useTrafficStore((s) => s.products)
+  const addProduct = useTrafficStore((s) => s.addProduct)
+  const updateProduct = useTrafficStore((s) => s.updateProduct)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
   const setClientProfile = useTrafficStore((s) => s.setClientProfile)
   /**
@@ -1693,7 +1697,7 @@ export function FlowsView() {
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
   /** Kinds that render a full record form, and so need no direction fields under it. */
-  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger', 'brand'])
+  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger', 'brand', 'product'])
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
   const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
@@ -2739,6 +2743,15 @@ export function FlowsView() {
     const already = mintedRecordRef.current.get(nt.id)
     if (already) return already
     const id = addCompany({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
+  const ensureProductFor = (nt: CanvasObject): string => {
+    if (nt.refId && products.some((p) => p.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addProduct({ name: '', brand: brand || undefined })
     mintedRecordRef.current.set(nt.id, id)
     setObjectRef(nt.id, id)
     return id
@@ -4506,6 +4519,24 @@ export function FlowsView() {
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>{brand}</label>
                 <div className="flow-recform">
+                  {/* THE DISPLAY NAME, off the brand RECORD. Not the workspace key: that string tags
+                      every campaign, asset and record in the account, so renaming it from a card
+                      would be a rename of the whole account's data behind a text field. The record's
+                      name is what surfaces read, which is the thing you actually want to change. */}
+                  {field('Name', (() => {
+                    const rec = brandRecords.find((r) => r.name === brand)
+                    if (!rec) {
+                      return <span className="flow-recform-select" style={{ color: 'var(--text-faint)' }}>{brand}</span>
+                    }
+                    return (
+                      <BufferedInput
+                        className="flow-recform-input"
+                        value={rec.name}
+                        placeholder="Name this brand"
+                        onCommit={(v) => { const t = v.trim(); if (t && t !== rec.name) { markCardDirty(nt.id); updateBrandRecord(rec.id, { name: t }) } }}
+                      />
+                    )
+                  })())}
                   {field('What it does', (
                     <RecordCombo
                       value={profile.oneLiner ?? ''}
@@ -4576,26 +4607,96 @@ export function FlowsView() {
               </>
             )
           })()}
-          {/* CHANGED, BUT NOT YET IN THE COPY. Editing a record saves it instantly; it does not
-              rewrite the assets that were written from the old version. Without this the card and
-              its copy could disagree indefinitely and nothing said so. */}
+          {/* SAVE UPDATES. The fields themselves persist as you touch them, which is right: an edit
+              you have to remember to commit is an edit you lose. What is NOT automatic is pushing the
+              change into copy that was already written, so that is what this button does rather than
+              pretending to be the thing that saved it.
+
+              It appears on any change, even when nothing is wired yet, because "did that take?" is a
+              fair question and an inspector that never acknowledges an edit invites asking it. */}
           {dirtyCards[nt.id] && (() => {
             const n = affectedRowIds(nt).length
-            if (!n) return null
             return (
               <div className="flow-applybar">
                 <span className="flow-applybar-txt">
-                  {n} {n === 1 ? 'asset was' : 'assets were'} written before this change.
+                  {n
+                    ? `Saved. ${n} ${n === 1 ? 'asset was' : 'assets were'} written before this change.`
+                    : 'Saved. Nothing is written from this card yet.'}
                 </span>
-                <button className="flow-applybar-go" disabled={regenerating} onClick={() => void applyCardChanges(nt, true)}>
-                  {regenerating ? 'Rewriting…' : 'Rewrite them'}
+                <button className="flow-applybar-go" disabled={regenerating} onClick={() => void applyCardChanges(nt, n > 0)}>
+                  {regenerating ? 'Rewriting…' : n ? 'Save updates and rewrite' : 'Save updates'}
                 </button>
-                {/* Flagging rather than rewriting is the honest default for a big set: it marks them
-                    without spending the tokens or throwing away copy someone may have edited. */}
-                <button className="flow-applybar-flag" onClick={() => void applyCardChanges(nt, false)}>
-                  Just flag them
-                </button>
+                {/* Flagging rather than rewriting is the honest option for a large set: it marks them
+                    without spending the tokens or discarding copy someone may have hand-edited. */}
+                {n > 0 && (
+                  <button className="flow-applybar-flag" onClick={() => void applyCardChanges(nt, false)}>
+                    Just flag them
+                  </button>
+                )}
               </div>
+            )
+          })()}
+          {/* WHAT THE BRAND SELLS. The brand profile already lists product NAMES, which tells a writer
+              what the company offers and nothing more. What decides how copy about a product reads is
+              who it is for, what it displaces, and how much explaining it still needs, and none of
+              that had anywhere to live. */}
+          {nt.kind === 'product' && (() => {
+            const prd = (nt.refId ? products.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
+            const others = products.filter((x) => x.id !== prd.id)
+            const own = (key: keyof Product): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Product>) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const pick = (label: string, key: keyof Product, options: readonly string[]) =>
+              field(label, (
+                <RecordCombo
+                  value={String(prd[key] ?? '')}
+                  groups={[{ label: 'Choose one', options: [...options] }]}
+                  placeholder="Choose"
+                  allowCreate={false}
+                  onCommit={(v) => set({ [key]: v })}
+                />
+              ))
+            const combo = (label: string, key: keyof Product, placeholder: string, extra: OptionGroup[] = []) =>
+              field(label, (
+                <RecordCombo
+                  value={String(prd[key] ?? '')}
+                  groups={[{ label: 'From your other products', options: own(key) }, ...extra]}
+                  placeholder={placeholder}
+                  onCommit={(v) => set({ [key]: v })}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What this is</label>
+                <div className="flow-recform">
+                  {field('Name', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={prd.name}
+                      placeholder="Name this product"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {combo('What it is', 'summary', 'One line, for someone who has not heard of it')}
+                  {pick('Kind', 'kind', PRODUCT_KINDS)}
+                  {/* Loosely joined to the brand's audiences by name, so a product and an audience card
+                      can agree without a second reference to keep in step. */}
+                  {combo('Who it is for', 'forWho', 'Which audience', [
+                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
+                  ])}
+                  {combo('The job it does', 'jobToBeDone', 'The one thing it does better than the alternative')}
+                  {/* Displacement is most of what copy about a product has to argue. */}
+                  {combo('What it replaces', 'replaces', 'What they use instead today')}
+                  {pick('Pricing', 'pricing', PRODUCT_PRICING)}
+                  {pick('Stage', 'stage', PRODUCT_STAGES)}
+                  {pick('Status', 'status', PRODUCT_STATUSES)}
+                </div>
+              </>
             )
           })()}
           {/* APPLIED TO: what this card feeds, and the one action that follows from it.
@@ -4928,7 +5029,7 @@ export function FlowsView() {
             <CampaignTile />
             <span className="flow-layer-txt">
               <span className="flow-layer-name">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
-              <span className="flow-layer-sub">Brief</span>
+              <span className="flow-layer-sub">Campaign brief</span>
             </span>
           </button>
           {([
@@ -5492,7 +5593,7 @@ export function FlowsView() {
               onClick={(e) => clickSelect(e, 'campaign')}
             >
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
-                Brief
+                Campaign brief
               </span>
               {!viewing && (
                 <button
@@ -6375,7 +6476,7 @@ export function FlowsView() {
               <>
                 <div className="flow-panel-head">
                   <CampaignTile />
-                  <span className="flow-panel-title">Brief</span>
+                  <span className="flow-panel-title">Campaign brief</span>
                 </div>
                 <div className="flow-inspect">
                   <label className="flow-inspect-label">Name</label>
@@ -6612,7 +6713,7 @@ export function FlowsView() {
             <>
               <div className="flow-panel-head">
                 <CampaignTile />
-                <span className="flow-panel-title">Brief</span>
+                <span className="flow-panel-title">Campaign brief</span>
               </div>
               <div className="flow-inspect">
                 <label className="flow-inspect-label">Name</label>
@@ -7156,7 +7257,25 @@ export function FlowsView() {
           {/* BRAND sits where the glossary tip was. The tip explained what an input card is, which is
               a thing you learn once; the brand is the context every card on the board is written
               from, and it had no way onto the canvas at all. */}
-          {palBtn('brand')}
+          {/* BRAND, with Product behind its caret. A product belongs to the brand that sells it, so it
+              nests under Brand rather than sitting beside it: the bar says what the hierarchy is
+              without a label explaining it. Clicking Brand drops a brand; the caret offers both. */}
+          {palGroup(
+            'brand',
+            {
+              title: `${OBJECT_META.brand.label}. ${OBJECT_META.brand.menuDesc}.`,
+              tone: OBJECT_META.brand.tone,
+              icon: OBJECT_META.brand.icon,
+              onClick: () => addObject('brand'),
+            },
+            (['brand', 'product'] as CanvasObjectKind[]).map((k) => ({
+              label: OBJECT_META[k].label,
+              hint: OBJECT_META[k].menuDesc,
+              tone: OBJECT_META[k].tone,
+              icon: OBJECT_META[k].icon,
+              onClick: () => addObject(k),
+            })),
+          )}
           {/* One entry per family: the button drops that family's most common card, the caret
               offers the rest. Eleven kinds inline was most of why the bar had outgrown the canvas. */}
           {INPUT_FAMILIES.map((f) => {

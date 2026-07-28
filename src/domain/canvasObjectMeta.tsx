@@ -32,6 +32,16 @@ export const OBJECT_META: Record<CanvasObjectKind, ObjectMeta> = {
     menuDesc: 'Who this canvas writes as',
     icon: <><path d="M12 2.5 3.5 6v6c0 5 3.6 8.7 8.5 9.6 4.9-.9 8.5-4.6 8.5-9.6V6z" /></>,
   },
+  /**
+   * WHAT THE BRAND SELLS. Its own kind rather than a Company: a Company record is an ACCOUNT, someone
+   * you sell to or compete with, and folding the catalogue in with the customers is how both end up
+   * behind a type filter.
+   */
+  product: {
+    label: 'Product', tone: '#0f8c6c', placeholder: 'Which product or offer?', role: 'input', family: 'says',
+    menuDesc: 'A thing the brand sells',
+    icon: <><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z" /><path d="M3 8.5 12 13l9-4.5M12 13v7" /></>,
+  },
   audience: {
     label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?', role: 'input', family: 'who',
     menuDesc: 'The people it is written for',
