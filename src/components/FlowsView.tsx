@@ -18,7 +18,7 @@ import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, PRODUCT_STATUSES, type Product } from '../domain/product'
 import { type BrandObject } from '../domain/brandObject'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
-import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
+import { AI_MODELS, AI_MODEL_IDS, type AiModelOption } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
@@ -755,7 +755,6 @@ export function FlowsView() {
   const clientProfiles = useTrafficStore((s) => s.clientProfiles)
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const userPrefs = useTrafficStore((s) => s.userPrefs)
-  const setCampaignSubject = useTrafficStore((s) => s.setCampaignSubject)
   const patchCampaignRaw = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
@@ -865,7 +864,6 @@ export function FlowsView() {
   // Records that seed the brief: an Objective sets the flow's measurable goal; a Message fills the
   // theme every asset is written to (its angle). Both are optional pulls from the Records pages.
   const [objectiveId, setObjectiveId] = useState('')
-  const [messageId, setMessageId] = useState('')
   const linkedObjective = objectives.find((o) => o.id === objectiveId)
   /**
    * A standard objective, when the builder picked one instead of a brand record. Carried in the same
@@ -986,10 +984,8 @@ export function FlowsView() {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   // View-mode brief drafts: subject + budget buffered so a built flow's brief edits commit on
   // blur (reseeded whenever you open a different flow).
-  const [viewSubjectDraft, setViewSubjectDraft] = useState('')
   const [viewBudgetDraft, setViewBudgetDraft] = useState('')
   // Build-brief: which record-tag row's dropdown is open ("<type>:<id>" or "add").
-  const [openTagKey, setOpenTagKey] = useState<string | null>(null)
   // The "Add a record" slide-out drawer (search + all record groups).
   const [pickerOpen, setPickerOpen] = useState(false)
   // Which target the picker edits: null = the campaign brief, else a deliverable key (its
@@ -1395,9 +1391,17 @@ export function FlowsView() {
     }
   }, [nodes.length, viewName])
 
-  // Default the new flow to all of the brand's segments; the record labels feed generation.
-  const defaultBriefRefs: FlowReference[] = brandSegments.map((a) => ({ type: 'segment', id: a.id, label: a.name }))
-  const briefRefsEffective = briefRefs ?? defaultBriefRefs
+  /**
+   * NO IMPLICIT DEFAULT. This used to seed every brand segment, which is why an untouched campaign
+   * opened already claiming a dozen linked audiences no card on the board accounted for — and why
+   * hasBriefRef matched anything you then tried to attach (the "default-set trap" attachToCampaign
+   * had to work around).
+   *
+   * Generation is unaffected: audSelection already falls back to the brand's audiences when no
+   * segment is tagged, and an empty proof list already means the whole library. The only thing that
+   * changes is that the panel stops asserting a link nobody made.
+   */
+  const briefRefsEffective = briefRefs ?? []
   // The audiences a build/preview writes to are the checked SEGMENT tags only (segments ARE
   // the brand's audiences). Proof / company / person / channel tags aren't audiences — folding
   // their labels in here used to pollute the audience rotation with proof-point strings.
@@ -1498,12 +1502,6 @@ export function FlowsView() {
     redraftTimer.current = window.setTimeout(() => {
       for (const n of nodesRef.current) void genPreview(n)
     }, 500)
-  }
-  // Subject is a text field: redraft when you leave it, and only if it actually changed.
-  const onSubjectCommit = () => {
-    if (subject.trim() === lastSubjectRef.current.trim()) return
-    lastSubjectRef.current = subject
-    scheduleRedraftAll()
   }
   // The draft-copy block shown under a deliverable / post card. Shimmer while the first
   // draft generates, then the copy for that slot. A page shows every field as a labeled
@@ -2045,7 +2043,7 @@ export function FlowsView() {
     add: addActiveRef,
     remove: removeActiveRef,
     replace: replaceActiveRef,
-    openPicker: () => { setPickerDeliv(null); setPickerQuery(''); setOpenTagKey(null); setPickerOpen(true) },
+    openPicker: () => { setPickerDeliv(null); setPickerQuery(''); setPickerOpen(true) },
   }
   // A deliverable's effective records: its per-asset OVERRIDE if any row carries one, else the
   // campaign's (inherited). Editing writes the full resulting set onto every asset of the
@@ -2066,69 +2064,10 @@ export function FlowsView() {
     },
     remove: (key) => writeDelivRefs(deliv, delivEffRefs(deliv).filter((r) => refKey(r) !== key)),
     replace: (key, type, id, label) => writeDelivRefs(deliv, delivEffRefs(deliv).map((r) => (refKey(r) === key ? { type, id, label } : r))),
-    openPicker: () => { setPickerDeliv(deliv.key); setPickerQuery(''); setOpenTagKey(null); setPickerOpen(true) },
+    openPicker: () => { setPickerDeliv(deliv.key); setPickerQuery(''); setPickerOpen(true) },
   })
   // The Record Tags block (label + one row per tag with a swap dropdown + remove, then "Add a
   // record"), shared by the build brief, the built-flow brief, and a deliverable's override.
-  /**
-   * Raw record rows with a swap dropdown and a remove. The heading is REQUIRED: this used to default
-   * to "Linked records", which named the wrong unit on every card that showed it. The only caller
-   * left is the campaign's "linked directly" group, where a record genuinely has no card behind it.
-   */
-  const renderRecordTags = (ops: TagOps, heading: string) => (
-    <>
-      <div className="flow-inspect-label" style={{ marginTop: 16 }}>
-        {heading}
-        <InfoTip term="linkedRecords" />
-      </div>
-      {ops.refs.map((ref) => {
-        const key = refKey(ref)
-        const open = openTagKey === key
-        return (
-          <div key={key} className="flow-tagrow">
-            <span className="flow-tagrow-ic" title={RECORD_TYPE_LABEL[ref.type]} aria-hidden="true">
-              <RecordTypeIcon type={ref.type} />
-            </span>
-            <div className="flow-aud flow-tagrow-dd">
-              <button className="flow-aud-btn" onClick={() => setOpenTagKey(open ? null : key)}>
-                <span className="flow-aud-btn-txt">{ref.label}</span>
-                <span className="flow-aud-caret" aria-hidden="true">▾</span>
-              </button>
-              {open && (
-                <>
-                  <div className="flow-aud-scrim" onClick={() => setOpenTagKey(null)} />
-                  <div className="flow-aud-menu">
-                    {recordGroups.map((g) => (
-                      <div key={g.type} className="flow-aud-group">
-                        <div className="flow-aud-grouphead">{g.label}</div>
-                        {g.items.length === 0 && <div className="flow-aud-groupempty">None yet</div>}
-                        {g.items.map((it) => {
-                          const on = ops.has(g.type, it.id)
-                          return (
-                            <button key={it.id} className={`flow-aud-item${refKey({ type: g.type, id: it.id }) === key ? ' on' : ''}`} disabled={on && refKey({ type: g.type, id: it.id }) !== key} onClick={() => { ops.replace(key, g.type, it.id, it.label); setOpenTagKey(null) }}>
-                              <span className="flow-aud-check" aria-hidden="true">{refKey({ type: g.type, id: it.id }) === key ? '✓' : ''}</span>
-                              <span>{it.label}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-            <button className="flow-tagrow-del" title="Remove tag" aria-label="Remove tag" onClick={() => ops.remove(key)}>✕</button>
-          </div>
-        )
-      })}
-      <div className="flow-tagrow flow-tagrow-add">
-        <span className="flow-tagrow-ic flow-tagrow-ic-add" aria-hidden="true">＋</span>
-        <button className="flow-aud-btn flow-tagrow-addbtn" onClick={ops.openPicker}>
-          <span className="flow-aud-btn-txt flow-tagrow-add-txt">Pin one directly</span>
-        </button>
-      </div>
-    </>
-  )
   /**
    * WHAT INFORMS THE MESSAGING: the cards wired to the campaign card, in place of a flat list of
    * records.
@@ -2151,6 +2090,22 @@ export function FlowsView() {
    * straight to a deliverable was already drawable and already stored — the edge simply did nothing,
    * because only edges to 'campaign' were acted on.
    */
+  /**
+   * THE CAMPAIGN'S LINKED RECORDS: what the cards wired to the campaign card carry, and nothing else.
+   *
+   * A campaign's stored `references` are a consequence of wiring (attachToCampaign writes them), not
+   * a second place to declare a link. Reading them back as though they were authoritative is what let
+   * a campaign accumulate dozens of records no card on the board accounted for — including refs whose
+   * records had since been deleted, which still rendered from their stored label. Derived here so the
+   * panel and the writer agree on one answer.
+   */
+  const campaignWiredRefs = (): FlowReference[] => {
+    const out: FlowReference[] = []
+    for (const r of contextRowsFor('campaign')) {
+      for (const ref of r.refs) if (!out.some((x) => refKey(x) === refKey(ref))) out.push(ref)
+    }
+    return out
+  }
   const contextRowsFor = (target: string) => {
     return connectors
       .filter((e) => e.to === target)
@@ -2189,8 +2144,6 @@ export function FlowsView() {
   }
   const renderCampaignContext = () => {
     const rows = contextRowsFor('campaign')
-    const covered = new Set(rows.flatMap((r) => r.refs).map(refKey))
-    const direct = activeRefs.filter((r) => !covered.has(refKey(r)))
 
     return (
       <>
@@ -2250,7 +2203,11 @@ export function FlowsView() {
             ))}
           </div>
         )}
-        {direct.length > 0 && renderRecordTags({ ...campaignTagOps, refs: direct }, 'Linked directly, with no card on the board')}
+        {/* NO SECOND GROUP. A record used to be able to reach the campaign with no card behind it —
+            the every-brand-segment default, the picker, the chat — and those refs were listed here
+            under "Linked directly" because they still steered every draft. That is the thing being
+            removed, not the list: a record is linked when a card carrying it is wired to the
+            campaign on the board, and at no other time. See campaignWiredRefs. */}
         {renderResolvedDirection('campaign')}
       </>
     )
@@ -2297,22 +2254,15 @@ export function FlowsView() {
     if (typeof sel === 'string') return collect(sel)
     return []
   }, [viewName, sel, selected, viewRows, viewDelivs])
-  // Reseed the view-mode brief drafts when you open a different built flow.
+  // Reseed the view-mode budget draft when you open a different built flow. (The subject draft went
+  // with the Theme / angle row.)
   useEffect(() => {
     const c = useTrafficStore.getState().campaignList.find((x) => x.name === viewName)
-    setViewSubjectDraft(c?.subject ?? '')
     setViewBudgetDraft(c?.overallBudget != null ? String(c.overallBudget) : '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewName])
-  // Commit a built flow's subject/budget edits on blur; a subject change flags a regenerate
-  // (the copy is written to the theme, so it needs a rewrite to reflect the new one).
-  const commitViewSubject = () => {
-    if (!viewName) return
-    const next = viewSubjectDraft.trim()
-    if (next === (viewCampaign?.subject ?? '').trim()) return
-    setCampaignSubject(viewName, next)
-    setRefsDirty(true)
-  }
+  // Commit a built flow's budget edits on blur. The subject has no editor here any more (the
+  // Theme / angle row is gone), so there is nothing to commit for it.
   const commitViewBudget = () => {
     if (!viewName) return
     const n = viewBudgetDraft.trim() === '' ? undefined : Math.max(0, Number(viewBudgetDraft) || 0)
@@ -3190,7 +3140,6 @@ export function FlowsView() {
     setBudget('')
     setStrategyKey(undefined)
     setObjectiveId('')
-    setMessageId('')
     setBriefRefs(null)
     lastSubjectRef.current = ''
     setSel(null)
@@ -3952,7 +3901,7 @@ export function FlowsView() {
               const p = DELIVERABLE_PRESETS.find((x) => x.channel === d.channel && x.assetType === d.assetType)
               return { preset: p?.key ?? d.key, label: d.label, perMonth: d.count }
             }),
-            recordTags: flowRefs.map((r) => r.label),
+            recordTags: campaignWiredRefs().map((r) => r.label),
             strategy: viewCampaign?.strategy ?? null,
           }
         : {
@@ -3962,7 +3911,7 @@ export function FlowsView() {
             budget: budget ? +budget : null,
             flightWeeks,
             deliverables: nodesRef.current.map((n) => ({ preset: n.presetKey, label: presetByKey(n.presetKey)?.label ?? n.presetKey, perMonth: n.perMonth })),
-            recordTags: briefRefsEffective.map((r) => r.label),
+            recordTags: campaignWiredRefs().map((r) => r.label),
             strategy: strategyKey ?? null,
           }
       // Strategy-first discovery: the motions to choose from, and what the app already knows about
@@ -6811,113 +6760,82 @@ export function FlowsView() {
                       </div>
                     )
                   })()}
-                  <label className="flow-inspect-label">Name</label>
-                  {/* The store has had renameCampaign all along; this field was simply never wired to
-                      it, and said so in a tooltip nobody hovers. Only the part after the brand is
-                      editable: the "Brand — " prefix is how every reader finds the campaign's brand,
-                      so it is rebuilt here rather than left to be typed correctly. */}
-                  <BufferedInput
-                    className="flow-inspect-input"
-                    value={viewShort}
-                    placeholder="Name this campaign"
-                    onCommit={(v) => {
-                      const next = v.trim()
-                      if (!next || !viewName || next === viewShort) return
-                      const full = brand ? `${brand} — ${next}` : next
-                      void renameCampaign(viewName, full).then(() => setViewName(full))
-                    }}
-                  />
-                  {messages.length > 0 && (
-                    <>
-                      <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                        Message angle
-                      </label>
-                      <select
-                        className="flow-inspect-input flow-inspect-select"
-                        value={messages.find((m) => (m.angle ?? '').trim() === viewSubjectDraft.trim())?.id ?? ''}
-                        onChange={(e) => {
-                          const m = messages.find((x) => x.id === e.target.value)
-                          if (!m?.angle || !viewName) return
-                          setViewSubjectDraft(m.angle)
-                          if (m.angle.trim() !== (viewCampaign?.subject ?? '').trim()) {
-                            setCampaignSubject(viewName, m.angle.trim())
-                            setRefsDirty(true)
-                          }
+                  {/* THE BRIEF READS AS A RECORD, because it is one. Same left-ruled rows, same
+                      uppercase keys and same one dropdown as the Brand and Product cards, so the
+                      campaign and the things it is built from are edited the same way instead of each
+                      panel inventing its own controls. The native selects are gone with it: they were
+                      the last unsearchable pickers in the inspector. */}
+                  <label className="flow-inspect-label">What this campaign is</label>
+                  <div className="flow-recform">
+                    <div className="flow-recform-field">
+                      <span className="flow-recform-key">Name</span>
+                      {/* The store has had renameCampaign all along; this field was simply never wired to
+                          it, and said so in a tooltip nobody hovers. Only the part after the brand is
+                          editable: the "Brand — " prefix is how every reader finds the campaign's brand,
+                          so it is rebuilt here rather than left to be typed correctly. */}
+                      <BufferedInput
+                        className="flow-recform-input"
+                        value={viewShort}
+                        placeholder="Name this campaign"
+                        onCommit={(v) => {
+                          const next = v.trim()
+                          if (!next || !viewName || next === viewShort) return
+                          const full = brand ? `${brand} — ${next}` : next
+                          void renameCampaign(viewName, full).then(() => setViewName(full))
                         }}
-                      >
-                        <option value="">Start from a message…</option>
-                        {messages.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    Theme / angle
-                  </label>
-                  <textarea
-                    className="flow-inspect-input"
-                    rows={2}
-                    value={viewSubjectDraft}
-                    placeholder="What is this campaign for?"
-                    onChange={(e) => setViewSubjectDraft(e.target.value)}
-                    onBlur={commitViewSubject}
-                  />
-                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>The angle every asset's copy is written to; change it, then Generate to redraft them all.</div>
+                      />
+                    </div>
+                    {/* NO MESSAGE ANGLE AND NO THEME ROW. Both asked the same question the campaign
+                        name and the objective already answer, and the theme box invited a second
+                        summary of the campaign that then had to be kept in step with them. The
+                        campaign still HAS a subject — generation reads it, and Gretel writes it —
+                        it is simply no longer re-typed here. */}
                   {(() => {
                     const linked = objectives.find((o) => o.name === (viewCampaign?.objective ?? ''))
                     // A campaign stores its objective as a NAME, so a preset is recognised by matching
                     // that name back. No id to store and nothing to migrate.
                     const presetObjective = linked ? undefined : objectivePresetByName(viewCampaign?.objective)
                     return (
-                      <>
-                        <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                          Objective
-                        </label>
-                        <select
-                          className="flow-inspect-input flow-inspect-select"
-                          value={linked?.id ?? (presetObjective ? `preset:${presetObjective.id}` : '')}
-                          onChange={(e) => {
+                      <div className="flow-recform-field">
+                        <span className="flow-recform-key">Objective</span>
+                        {/* Driven by the objective's NAME, which is what a campaign stores anyway, so
+                            the id round-trip the select needed disappears with it. Presets first,
+                            because they are the answer most of the time; a brand's own objective
+                            records sit under their own group, since a preset is a starting point and
+                            not a replacement for one somebody has defined precisely. */}
+                        <RecordCombo
+                          value={viewCampaign?.objective ?? ''}
+                          groups={[
+                            { label: 'Standard objectives', options: OBJECTIVE_PRESETS.map((p) => p.name) },
+                            ...(objectives.length
+                              ? [{ label: `${brand || 'This brand'}'s objectives`, options: objectives.map((o) => o.name).filter(Boolean) }]
+                              : []),
+                          ]}
+                          placeholder="What is this campaign for?"
+                          allowCreate={false}
+                          onCommit={(v) => {
                             if (!viewName) return
-                            const v = e.target.value
-                            const preset = v.startsWith('preset:') ? OBJECTIVE_PRESETS.find((p) => p.id === v.slice(7)) : undefined
+                            // A brand's own objective wins over a preset of the same name: it is the
+                            // one carrying a real metric and target.
+                            const o = objectives.find((x) => x.name === v)
+                            if (o) {
+                              patchCampaign(viewName, {
+                                objective: o.name || undefined,
+                                goalKpi: o.metric?.trim() || undefined,
+                                goalTarget: o.target ? Number(String(o.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
+                              })
+                              return
+                            }
+                            // A preset brings its metric with it, so choosing an objective fills the
+                            // KPI too. The target stays for you to set: nobody can guess your number.
+                            const preset = objectivePresetByName(v)
                             if (preset) {
-                              // A preset brings its metric with it, so choosing an objective fills the
-                              // KPI too. The target stays for you to set: nobody can guess your number.
                               patchCampaign(viewName, { objective: preset.name, goalKpi: preset.kpi })
                               return
                             }
-                            const o = objectives.find((x) => x.id === v)
-                            patchCampaign(viewName, {
-                              objective: o?.name || undefined,
-                              goalKpi: o?.metric?.trim() || undefined,
-                              goalTarget: o?.target ? Number(String(o.target).replace(/[^0-9.]/g, '')) || undefined : undefined,
-                            })
+                            patchCampaign(viewName, { objective: undefined, goalKpi: undefined, goalTarget: undefined })
                           }}
-                        >
-                          <option value="">What is this campaign for?</option>
-                          {/* Presets first, because they are the answer most of the time. A brand's
-                              own objective records sit under their own group: a preset is a starting
-                              point, not a replacement for one somebody has defined precisely. */}
-                          <optgroup label="Standard objectives">
-                            {OBJECTIVE_PRESETS.map((p) => (
-                              <option key={p.id} value={`preset:${p.id}`}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                          {objectives.length > 0 && (
-                            <optgroup label={`${brand || 'This brand'}'s objectives`}>
-                              {objectives.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
+                        />
                         {presetObjective && (
                           <div className="flow-inspect-note" style={{ marginTop: 4 }}>
                             {presetObjective.hint} Measured on {presetObjective.kpi.toLowerCase()}.
@@ -6929,74 +6847,88 @@ export function FlowsView() {
                             {linked.timeframe ? ` · ${linked.timeframe}` : ''}
                           </div>
                         )}
-                      </>
+                      </div>
                     )
                   })()}
                   {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
                       announcement and an always-on blog run do not deserve the same model, and the
                       cost difference between them is the whole reason to choose. Auto keeps the
                       workspace pick, then the server's per-task default. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    AI model
-                  </label>
-                  <select
-                    className="flow-inspect-input flow-inspect-select"
-                    value={viewCampaign?.aiModel ?? 'auto'}
-                    onChange={(e) => patchCampaign(viewName, { aiModel: e.target.value === 'auto' ? undefined : e.target.value })}
-                  >
-                    {AI_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label} · {m.note}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flow-inspect-note" style={{ marginTop: 4 }}>
-                    {/* Says what it covers. It governs generation for this campaign, not the dozen
-                        other places the app calls a model, and claiming otherwise would be a lie the
-                        user could catch. */}
-                    Used when this campaign writes copy. Other AI work keeps the workspace default.
-                  </div>
-                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    Campaign length
-                  </label>
-                  <div className="flow-step">
-                    <button onClick={() => patchCampaign(viewName, { durationWeeks: Math.max(1, (viewFlight ?? 1) - 1) })}>−</button>
-                    <span>{viewFlight ?? 1} weeks</span>
-                    <button onClick={() => patchCampaign(viewName, { durationWeeks: (viewFlight ?? 1) + 1 })}>+</button>
-                  </div>
-                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    Budget
-                  </label>
-                  <div className="flow-budget">
-                    <span className="flow-budget-cur">$</span>
-                    <input
-                      className="flow-budget-input"
-                      type="number"
-                      min={0}
-                      step={1000}
-                      value={viewBudgetDraft}
-                      placeholder="Total campaign budget"
-                      onChange={(e) => setViewBudgetDraft(e.target.value)}
-                      onBlur={commitViewBudget}
-                    />
-                  </div>
-                  {campaignBudget > 0 && (viewPaidRows.length === 0 ? (
-                    <div className="flow-budget-warn">
-                      No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                    {(() => {
+                      const labelOf = (m: AiModelOption) => `${m.label} · ${m.note}`
+                      const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? 'auto'))
+                      return (
+                        <div className="flow-recform-field">
+                          <span className="flow-recform-key">AI model</span>
+                          {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
+                              announcement and an always-on blog run do not deserve the same model, and
+                              the cost difference between them is the whole reason to choose. Auto keeps
+                              the workspace pick, then the server's per-task default. */}
+                          <RecordCombo
+                            value={cur ? labelOf(cur) : ''}
+                            groups={[{ label: 'Models', options: AI_MODELS.map(labelOf) }]}
+                            placeholder="Choose"
+                            allowCreate={false}
+                            onCommit={(v) => {
+                              const m = AI_MODELS.find((x) => labelOf(x) === v)
+                              if (!m || !viewName) return
+                              patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
+                            }}
+                          />
+                          <div className="flow-inspect-note" style={{ marginTop: 4 }}>
+                            {/* Says what it covers. It governs generation for this campaign, not the dozen
+                                other places the app calls a model, and claiming otherwise would be a lie the
+                                user could catch. */}
+                            Used when this campaign writes copy. Other AI work keeps the workspace default.
+                          </div>
+                        </div>
+                      )
+                    })()}
+                    {/* Length and budget keep their own controls inside the row: a stepper and a
+                        currency field are what those two answers deserve, and the row only ever
+                        promised a consistent key and rule, not one control for everything. */}
+                    <div className="flow-recform-field">
+                      <span className="flow-recform-key">Campaign length</span>
+                      <div className="flow-step">
+                        <button onClick={() => patchCampaign(viewName, { durationWeeks: Math.max(1, (viewFlight ?? 1) - 1) })}>−</button>
+                        <span>{viewFlight ?? 1} weeks</span>
+                        <button onClick={() => patchCampaign(viewName, { durationWeeks: (viewFlight ?? 1) + 1 })}>+</button>
+                      </div>
                     </div>
-                  ) : assignedBudget < campaignBudget ? (
-                    <div className="flow-budget-warn">
-                      <div>${assignedBudget.toLocaleString()} of ${campaignBudget.toLocaleString()} assigned to paid assets{assignedBudget > 0 ? ` — $${(campaignBudget - assignedBudget).toLocaleString()} left` : ''}.</div>
-                      <button className="flow-budget-assign" onClick={assignEvenly}>Assign evenly across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}</button>
+                    <div className="flow-recform-field">
+                      <span className="flow-recform-key">Budget</span>
+                      <div className="flow-budget">
+                        <span className="flow-budget-cur">$</span>
+                        <input
+                          className="flow-budget-input"
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={viewBudgetDraft}
+                          placeholder="Total campaign budget"
+                          onChange={(e) => setViewBudgetDraft(e.target.value)}
+                          onBlur={commitViewBudget}
+                        />
+                      </div>
+                      {campaignBudget > 0 && (viewPaidRows.length === 0 ? (
+                        <div className="flow-budget-warn">
+                          No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                        </div>
+                      ) : assignedBudget < campaignBudget ? (
+                        <div className="flow-budget-warn">
+                          <div>${assignedBudget.toLocaleString()} of ${campaignBudget.toLocaleString()} assigned to paid assets{assignedBudget > 0 ? ` — $${(campaignBudget - assignedBudget).toLocaleString()} left` : ''}.</div>
+                          <button className="flow-budget-assign" onClick={assignEvenly}>Assign evenly across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}</button>
+                        </div>
+                      ) : assignedBudget > campaignBudget ? (
+                        <div className="flow-budget-warn">
+                          <div>${assignedBudget.toLocaleString()} assigned — ${(assignedBudget - campaignBudget).toLocaleString()} over the ${campaignBudget.toLocaleString()} budget.</div>
+                          <button className="flow-budget-assign" onClick={assignEvenly}>Rebalance evenly</button>
+                        </div>
+                      ) : (
+                        <div className="flow-budget-ok">✓ ${campaignBudget.toLocaleString()} fully assigned across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}.</div>
+                      ))}
                     </div>
-                  ) : assignedBudget > campaignBudget ? (
-                    <div className="flow-budget-warn">
-                      <div>${assignedBudget.toLocaleString()} assigned — ${(assignedBudget - campaignBudget).toLocaleString()} over the ${campaignBudget.toLocaleString()} budget.</div>
-                      <button className="flow-budget-assign" onClick={assignEvenly}>Rebalance evenly</button>
-                    </div>
-                  ) : (
-                    <div className="flow-budget-ok">✓ ${campaignBudget.toLocaleString()} fully assigned across {viewPaidRows.length} paid asset{viewPaidRows.length === 1 ? '' : 's'}.</div>
-                  ))}
+                  </div>
                   {renderCampaignContext()}
                   <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
                   <div className="flow-deliv-list">
@@ -7048,65 +6980,44 @@ export function FlowsView() {
                 <span className="flow-panel-title">Campaign brief</span>
               </div>
               <div className="flow-inspect">
-                <label className="flow-inspect-label">Name</label>
-                <input className="flow-inspect-input" value={name} placeholder="e.g. Q3 Always-On" onChange={(e) => setName(e.target.value)} />
-                {messages.length > 0 && (
-                  <>
-                    <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                      Message angle
-                    </label>
-                    <select
-                      className="flow-inspect-input flow-inspect-select"
-                      value={messageId}
-                      onChange={(e) => {
-                        const id = e.target.value
-                        setMessageId(id)
-                        const m = messages.find((x) => x.id === id)
-                        if (m?.angle) {
-                          setSubject(m.angle)
-                          lastSubjectRef.current = m.angle
-                          scheduleRedraftAll()
-                        }
+                {/* Same record form as the saved brief above, and as the Brand and Product cards.
+                    A campaign should not change shape the moment it is saved. */}
+                <label className="flow-inspect-label">What this campaign is</label>
+                <div className="flow-recform">
+                  <div className="flow-recform-field">
+                    <span className="flow-recform-key">Name</span>
+                    <input className="flow-recform-input" value={name} placeholder="e.g. Q3 Always-On" onChange={(e) => setName(e.target.value)} />
+                  </div>
+                  {/* Cut here too, for the same reason as the saved brief: a campaign should not ask
+                      for its angle twice, once as a name and once as a paragraph. */}
+                  <div className="flow-recform-field">
+                    <span className="flow-recform-key">Objective</span>
+                    {/* objectiveId keeps its `preset:`-prefixed id, because builderPreset and
+                        objectiveCfg read it; the picker resolves that id to a name to show and back
+                        again on commit, so nothing downstream has to learn a second encoding. */}
+                    <RecordCombo
+                      value={
+                        objectives.find((o) => o.id === objectiveId)?.name ??
+                        (objectiveId.startsWith('preset:')
+                          ? OBJECTIVE_PRESETS.find((p) => p.id === objectiveId.slice('preset:'.length))?.name ?? ''
+                          : '')
+                      }
+                      groups={[
+                        { label: 'Standard objectives', options: OBJECTIVE_PRESETS.map((p) => p.name) },
+                        ...(objectives.length
+                          ? [{ label: `${brand || 'This brand'}'s objectives`, options: objectives.map((o) => o.name).filter(Boolean) }]
+                          : []),
+                      ]}
+                      placeholder="What is this campaign for?"
+                      allowCreate={false}
+                      onCommit={(v) => {
+                        // A brand's own objective wins over a preset of the same name.
+                        const o = objectives.find((x) => x.name === v)
+                        if (o) { setObjectiveId(o.id); return }
+                        const p = OBJECTIVE_PRESETS.find((x) => x.name === v)
+                        setObjectiveId(p ? `preset:${p.id}` : '')
                       }}
-                    >
-                      <option value="">Start from a message…</option>
-                      {messages.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                )}
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Theme / angle
-                </label>
-                <textarea className="flow-inspect-input" rows={2} value={subject} placeholder="What is this campaign for?" onChange={(e) => setSubject(e.target.value)} onBlur={onSubjectCommit} />
-                <div className="flow-inspect-note" style={{ marginTop: 4 }}>The angle every asset's copy is written to; changing it redrafts them all.</div>
-                {(
-                  <>
-                    <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                      Objective
-                    </label>
-                    <select className="flow-inspect-input flow-inspect-select" value={objectiveId} onChange={(e) => setObjectiveId(e.target.value)}>
-                      <option value="">What is this campaign for?</option>
-                      <optgroup label="Standard objectives">
-                        {OBJECTIVE_PRESETS.map((p) => (
-                          <option key={p.id} value={`preset:${p.id}`}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      {objectives.length > 0 && (
-                        <optgroup label={`${brand || 'This brand'}'s objectives`}>
-                          {objectives.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                    />
                     {builderPreset && (
                       <div className="flow-inspect-note" style={{ marginTop: 4 }}>
                         {builderPreset.hint} Measured on {builderPreset.kpi.toLowerCase()}.
@@ -7118,40 +7029,40 @@ export function FlowsView() {
                         {linkedObjective.timeframe ? ` · ${linkedObjective.timeframe}` : ''}
                       </div>
                     )}
-                  </>
-                )}
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Campaign length
-                </label>
-                <div className="flow-step">
-                  <button onClick={() => { setFlightWeeks((w) => Math.max(1, w - 1)); scheduleRedraftAll() }}>−</button>
-                  <span>{flightWeeks} weeks</span>
-                  <button onClick={() => { setFlightWeeks((w) => w + 1); scheduleRedraftAll() }}>+</button>
-                </div>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Budget
-                </label>
-                <div className="flow-budget">
-                  <span className="flow-budget-cur">$</span>
-                  <input
-                    className="flow-budget-input"
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={budget}
-                    placeholder="Total campaign budget"
-                    onChange={(e) => setBudget(e.target.value)}
-                    onBlur={() => {
-                      const n = Math.max(0, +budget || 0)
-                      if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
-                    }}
-                  />
-                </div>
-                {(+budget || 0) > 0 && !hasPaidBuild && (
-                  <div className="flow-budget-warn">
-                    No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
                   </div>
-                )}
+                  <div className="flow-recform-field">
+                    <span className="flow-recform-key">Campaign length</span>
+                    <div className="flow-step">
+                      <button onClick={() => { setFlightWeeks((w) => Math.max(1, w - 1)); scheduleRedraftAll() }}>−</button>
+                      <span>{flightWeeks} weeks</span>
+                      <button onClick={() => { setFlightWeeks((w) => w + 1); scheduleRedraftAll() }}>+</button>
+                    </div>
+                  </div>
+                  <div className="flow-recform-field">
+                    <span className="flow-recform-key">Budget</span>
+                    <div className="flow-budget">
+                      <span className="flow-budget-cur">$</span>
+                      <input
+                        className="flow-budget-input"
+                        type="number"
+                        min={0}
+                        step={1000}
+                        value={budget}
+                        placeholder="Total campaign budget"
+                        onChange={(e) => setBudget(e.target.value)}
+                        onBlur={() => {
+                          const n = Math.max(0, +budget || 0)
+                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+                        }}
+                      />
+                    </div>
+                    {(+budget || 0) > 0 && !hasPaidBuild && (
+                      <div className="flow-budget-warn">
+                        No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {renderCampaignContext()}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length

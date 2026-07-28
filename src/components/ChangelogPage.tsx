@@ -19,6 +19,25 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.10',
+    dateLabel: 'July 28, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A record is linked when a card carrying it is wired to the campaign, and at no other time. An untouched campaign used to link every one of the brand’s audiences by default, the picker and the assistant could pin records with no card behind them, and all of it showed on the brief under "Linked directly" while steering every draft. One campaign had 51 records listed this way. Twenty-one of them pointed at audiences that had already been deleted and survived only as the label frozen into the link. What the writer is told now comes from the board, so the panel and the copy agree on one answer.',
+        ],
+      },
+      {
+        tag: 'Improved',
+        items: [
+          'The campaign brief is edited the same way as everything else. It reads as a record, with the same rows and the same one searchable dropdown as the Brand and Product cards, in place of the four native menus it used to carry. A campaign and the things it is built from no longer ask for their answers in two different shapes.',
+          'The brief stops asking for its angle twice. The Message angle picker and the Theme box are gone: between them they restated what the campaign name and the objective already say, and the theme box invited a second summary that then had to be kept in step with the other two. The campaign still has a theme, generation still reads it, and Gretel still writes it.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.9',
     dateLabel: 'July 26, 2026',
     groups: [
