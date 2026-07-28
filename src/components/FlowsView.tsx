@@ -1892,6 +1892,35 @@ export function FlowsView() {
    * panel. A type with no record group of its own — media-mix — is left alone rather than assumed
    * dead. Defined after recordGroups because it needs it; nothing above this line reads flowRefs.
    */
+  /**
+   * Clean the stored references once per session, now that the record groups above are resolved.
+   *
+   * flowRefs below already ignores dangling refs on read, so this changes nothing you can see. It is
+   * here so the saved data stops carrying them: they survive in localStorage and on the server until
+   * something rewrites that campaign, and every reader after this one would have to remember to
+   * filter.
+   *
+   * On the data we have this is a NO-OP, and that is the honest state of it. An earlier reading of
+   * "21 dangling audiences" was a measuring error: audience ids (`aud_*`) live in clientAudiences,
+   * keyed by brand, and were being checked against stoplight.segments.v1, which holds unrelated
+   * `seg_*` industry segments. Checked properly, all 165 segment references resolve. This is a guard
+   * against a state the app can still reach by deleting a record, verified by handing it a known set
+   * with one live id withheld and watching it drop exactly the eight references that used it.
+   *
+   * Deliberately NOT on hydrate. At load time an empty record slice means "not arrived yet" as often
+   * as it means "empty", and pruning against a slice that has not landed would delete live
+   * references. Running it from here, off the same groups the panel renders from, is what makes the
+   * emptiness trustworthy — and pruneCampaignRefs skips any type that is still empty anyway.
+   */
+  const pruneCampaignRefs = useTrafficStore((s) => s.pruneCampaignRefs)
+  const prunedOnce = useRef(false)
+  useEffect(() => {
+    if (prunedOnce.current) return
+    const known = Object.fromEntries(recordGroups.map((g) => [g.type, g.items.map((i) => i.id)]))
+    if (!Object.values(known).some((ids) => ids.length)) return
+    prunedOnce.current = true
+    pruneCampaignRefs(known)
+  }, [recordGroups, pruneCampaignRefs])
   const flowRefs = useMemo(() => {
     const stored = viewCampaign?.references ?? []
     if (!stored.length) return stored

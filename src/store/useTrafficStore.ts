@@ -1979,6 +1979,25 @@ interface TrafficState {
   /** Swap a campaign's subject (what it's about) — the Subject card picker. */
   /** Set the records a flow references (Companies / People / Segments / Media mix). Read when generating assets. */
   setCampaignReferences: (name: string, references: FlowReference[]) => void
+  /**
+   * Drop stored references whose record no longer exists, across every campaign. Returns how many
+   * went, so a caller can say so.
+   *
+   * A reference carries a snapshot of its record's label, so a deleted record leaves one that still
+   * renders the old name and still reads as real. Deleting a record sweeps the record slices and has
+   * never swept campaign.references. Preventive rather than corrective: no dangling reference has
+   * actually been observed in the data, only a state the app can reach.
+   *
+   * THE CALLER SUPPLIES THE KNOWN IDS. The store does not reach for the record slices itself,
+   * because the hazard here is ordering: pruning before a slice has loaded would delete live
+   * references, which is far worse than leaving dead ones lying about. The caller is expected to
+   * already be rendering from those records, which is what makes "loaded" true at that point.
+   *
+   * A type whose id list is EMPTY is skipped for the same reason: an empty list cannot be told apart
+   * from a slice that has not arrived. That leaves the pathological case (a brand whose every
+   * audience really was deleted) uncleaned, which is the right way to be wrong.
+   */
+  pruneCampaignRefs: (known: Partial<Record<FlowReference['type'], string[]>>) => number
   /** The campaign's object direction: what its objects instruct the copy writer to do. */
   /** RETIRED: direction lives on the card now (CanvasObject.direction). Kept while
    *  Campaign.direction is still READ as an inherited fallback; nothing writes it. */
@@ -4008,6 +4027,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
+
+  pruneCampaignRefs: (known) => {
+    const sets = new Map<string, Set<string>>()
+    for (const [type, ids] of Object.entries(known)) {
+      // Empty means "cannot tell loaded from gone" — skip the type rather than guess.
+      if (ids && ids.length) sets.set(type, new Set(ids))
+    }
+    if (!sets.size) return 0
+    let dropped = 0
+    const campaignList = get().campaignList.map((c) => {
+      if (!c.references?.length) return c
+      const next = c.references.filter((r) => {
+        const ids = sets.get(r.type)
+        if (!ids) return true
+        if (ids.has(r.id)) return true
+        dropped++
+        return false
+      })
+      return next.length === c.references.length ? c : { ...c, references: next }
+    })
+    if (!dropped) return 0
+    set({ campaignList })
+    saveCampaigns(campaignList)
+    return dropped
+  },
 
   saveFlowBoard: (board) =>
     set((s) => {
