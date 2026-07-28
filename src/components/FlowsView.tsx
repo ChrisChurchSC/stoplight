@@ -695,7 +695,6 @@ export function FlowsView() {
   chatCollapsedRef.current = chatCollapsed
   const briefCollapsedRef = useRef(briefCollapsed)
   briefCollapsedRef.current = briefCollapsed
-  const [blueprintBusy, setBlueprintBusy] = useState(false)
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
   // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
@@ -1355,22 +1354,6 @@ export function FlowsView() {
     if (target === deliv.count) return
     const ids = await changeDelivCount(deliv, target - deliv.count, { draftNew: false })
     if (ids.length) await regenerateFlow(ids)
-  }
-  const applyBlueprintView = async (rows: TrafficRow[], bp: EmailBlueprint) => {
-    if (blueprintBusy || !rows.length) return
-    setBlueprintBusy(true)
-    try {
-      const ordered = [...rows].sort((a, b) => Date.parse(a.scheduledAt || '') - Date.parse(b.scheduledAt || ''))
-      const fieldKeys = ordered[0] ? messagingFields(ordered[0].channel, ordered[0].assetType).map((f) => f.key) : undefined
-      const briefs = blueprintBriefs(bp, fieldKeys)
-      for (let i = 0; i < ordered.length; i++) {
-        const lineage: Record<string, string> = { ...(ordered[i].lineage ?? {}), brief: briefs[i % briefs.length], ...stepLineage(bp, i) }
-        await updateRow(ordered[i].id, { messaging: {}, lineage })
-      }
-      await draftCopy(ordered.map((r) => r.id))
-    } finally {
-      setBlueprintBusy(false)
-    }
   }
   const viewDelivs: ViewDeliverable[] = useMemo(() => {
     const map = new Map<string, ViewDeliverable>()
@@ -6150,25 +6133,6 @@ export function FlowsView() {
                           </div>
                         )}
                       </>
-                    )
-                  })()}
-                  {(() => {
-                    const bps = blueprintsFor(selDeliv.channel, selDeliv.assetType)
-                    if (!bps.length) return null
-                    return (
-                      <div className="flow-bp" style={{ marginTop: 4 }}>
-                        <div className="flow-cfg-h">Blueprint</div>
-                        <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>
-                          Apply a proven structure to {selDeliv.count === 1 ? 'this' : `these ${selDeliv.count}`} {blueprintNoun(selDeliv.channel)}{selDeliv.count === 1 ? '' : 's'}. This rewrites their copy to the arc.
-                        </div>
-                        {bps.map((bp) => (
-                          <button key={bp.key} className="flow-bp-pick" disabled={blueprintBusy} onClick={() => void applyBlueprintView(selDeliv.rows, bp)}>
-                            <span className="flow-bp-pick-name">{bp.name}</span>
-                            <span className="flow-bp-pick-cadence">{blueprintBusy ? 'Applying…' : bp.cadence}</span>
-                            <span className="flow-bp-pick-sum">{bp.summary}</span>
-                          </button>
-                        ))}
-                      </div>
                     )
                   })()}
                 </div>
