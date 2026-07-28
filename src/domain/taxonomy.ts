@@ -154,8 +154,8 @@ export const PAIN_GROUPS: VocabGroup[] = [
     label: 'Selling to people',
     options: [
       'wasting a day off',
-      'not knowing if it is worth the trip',
-      'juggling three apps to get one answer',
+      'not knowing whether it is worth doing',
+      'having to check several places to get one answer',
       'paying for something they barely use',
       'buying the wrong thing and having to redo it',
       'getting advice from someone who is selling to them',
@@ -200,7 +200,7 @@ export const GOAL_GROUPS: VocabGroup[] = [
   {
     label: 'Selling to people',
     options: [
-      'not waste a weekend',
+      'not waste their own time',
       'get it right the first time',
       'stop having to think about it',
       'feel confident deciding',
@@ -338,16 +338,18 @@ export const TRIGGER_GROUPS: VocabGroup[] = [
   {
     label: 'Selling to people',
     options: [
-      'the season is opening',
-      'their gear broke or wore out',
-      'a trip is already booked',
-      'the weather or conditions turned',
+      'what they own broke or wore out',
+      'a date they are preparing for',
+      'the season changed',
       'a birthday, anniversary or holiday',
-      'they just moved house',
-      'a subscription is about to lapse',
-      'something new in their life — a baby, a pet, a hobby',
-      'a friend recommended it',
-      'a refund or a bonus landed',
+      'they just moved',
+      'a subscription or contract is about to lapse',
+      'a change at home: a baby, a pet, a new hobby',
+      'someone they trust recommended it',
+      'money landed: a refund, a bonus, a payday',
+      'the price of what they use went up',
+      'a bad experience with what they use now',
+      'they have started looking around',
     ],
   },
   {
