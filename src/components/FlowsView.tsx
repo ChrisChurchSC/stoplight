@@ -2712,7 +2712,12 @@ export function FlowsView() {
     setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
 
   const updateObjectText = (id: string, text: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
-  const setObjectRef = (id: string, refId: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+  const setObjectRef = (id: string, refId: string) => {
+    // Pointing a card at a different record changes every asset it feeds as completely as editing a
+    // field does, so it raises the Save bar too.
+    markCardDirty(id)
+    setObjects((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+  }
   /**
    * The record a card edits, CREATING it if the card has not named one yet.
    *
@@ -3856,6 +3861,11 @@ export function FlowsView() {
         return { ...o, direction: value.trim() ? [...rest, { key, value }] : rest }
       }),
     )
+    // The instruction IS what reaches the writer, so a change to it is exactly the case the Save bar
+    // exists for. This was the biggest hole in it: direction is the ONLY editable content on the
+    // seven kinds with no record form (message, voice, proof point, note, concept, season, data
+    // source), so none of them could raise the bar at all.
+    markCardDirty(nt.id)
     // The board autosave (debounced 600ms) persists it; no new plumbing.
     //
     // Redraft the previews so typing an instruction visibly rewrites the copy on every deliverable
