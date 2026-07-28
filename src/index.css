@@ -2239,6 +2239,11 @@ button {
 .railnav--icons .nav-item { padding: 9px 0; gap: 0; border-radius: 10px; }
 .railnav--icons .nav-ico { width: 20px; height: 20px; }
 .railnav--icons .nav-ico svg { width: 19px; height: 19px; }
+/* The way out, set apart from the three panel switches under it: those change what is on this
+   campaign, this one leaves it. Quieter than a destination until you reach for it. */
+.railnav-back { color: var(--text-faint); }
+.railnav-back:hover { color: var(--text); }
+.railnav-sep { height: 1px; width: 22px; margin: 3px auto 4px; background: var(--border); flex: none; }
 .railnav .nav-label { flex: none; white-space: normal; }
 .railnav .nav-count {
   position: absolute; top: 4px; right: 10px;

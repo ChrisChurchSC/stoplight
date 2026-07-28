@@ -945,6 +945,25 @@ export function FlowsView() {
     setFlowCanvasOpen(flowScreen === 'canvas')
     return () => setFlowCanvasOpen(false)
   }, [flowScreen, setFlowCanvasOpen])
+  /**
+   * ...and back the other way, so anything outside this component can leave the canvas.
+   *
+   * flowScreen is local, which meant the only way out of a campaign was the breadcrumb rendered
+   * inside this file. The rail replaces the app's destinations with Files / Assets / Gretel while a
+   * campaign is open, so it needs its own way home and cannot reach this state directly.
+   *
+   * A COUNTER, not the flowCanvasOpen flag. Reading that flag here races the effect above: on the
+   * render where flowScreen becomes 'canvas' the store is still false, so this would fire with the
+   * stale value and bounce straight back to 'home' the moment you opened a campaign. A nonce only
+   * ever means "somebody asked to leave", which is unambiguous in either order.
+   */
+  const flowHomeNonce = useTrafficStore((s) => s.flowHomeNonce)
+  const seenHomeNonce = useRef(flowHomeNonce)
+  useEffect(() => {
+    if (flowHomeNonce === seenHomeNonce.current) return
+    seenHomeNonce.current = flowHomeNonce
+    setFlowScreen('home')
+  }, [flowHomeNonce])
   // Flow-canvas AI chat (agentic: it edits the flow from chat).
   const [chatMsgs, setChatMsgs] = useState<FlowChatMsg[]>([])
   const [chatBusy, setChatBusy] = useState(false)
