@@ -26,7 +26,7 @@ import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
-import { COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
+import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
 import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
@@ -268,8 +268,12 @@ const INPUT_FAMILIES: { family: ObjectFamily; label: string }[] = [
   { family: 'when', label: 'When' },
   { family: 'draws', label: 'What it draws on' },
 ]
+/** Brand has its own button on the bar, so it must not also appear inside a family caret. */
+const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand'])
 const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
-  (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter((k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family)
+  (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter(
+    (k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family && !STANDALONE_KINDS.has(k),
+  )
 // A card's record picker builds its own placeholder from the kind's label, which used to read
 // "Link a audience…" and "No companys established yet". Covers every current label (audience,
 // company, person, message, proof point, voice, channel, data source, trigger).
@@ -432,6 +436,47 @@ export function FlowsView() {
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const updateTrigger = useTrafficStore((s) => s.updateTrigger)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
+  const setClientProfile = useTrafficStore((s) => s.setClientProfile)
+  /**
+   * Cards edited since the assets they feed were last written.
+   *
+   * Every field on a card saves as you touch it, which is right: an edit you have to remember to
+   * commit is an edit you lose. But saving the RECORD does not rewrite the COPY, so a card could
+   * quietly disagree with every asset it fed and nothing said so. This is what the Apply bar reads.
+   */
+  const [dirtyCards, setDirtyCards] = useState<Record<string, number>>({})
+  const markCardDirty = (id: string) => setDirtyCards((d) => (d[id] ? d : { ...d, [id]: Date.now() }))
+  /**
+   * Flag every asset a card feeds as out of date, and optionally rewrite them now.
+   *
+   * Uses the recheckFlag rows already carry rather than a second staleness concept: the queue, the
+   * lifecycle read and the card badges all understand it, so a flag raised here shows up everywhere
+   * one raised by a frame change does.
+   */
+  /**
+   * The assets a card's change affects.
+   *
+   * rowsForTarget returns nothing for 'campaign' on purpose — records reach the brief by a different
+   * path — but a card wired to the brief informs EVERY asset in the campaign, so resolving it to
+   * zero made the Apply bar invisible for exactly the wiring most people use.
+   */
+  const affectedRowIds = (nt: CanvasObject): string[] => {
+    const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+    const targets = downstreamTargets(board, nt.id)
+    const rows = targets.flatMap((t) => (t === 'campaign' ? viewRows : rowsForTarget(t)))
+    return [...new Set(rows.map((r) => r.id))]
+  }
+  const applyCardChanges = async (nt: CanvasObject, regenerate: boolean) => {
+    const ids = affectedRowIds(nt)
+    setDirtyCards((d) => { const { [nt.id]: _drop, ...rest } = d; return rest })
+    if (!ids.length) return
+    const label = OBJECT_META[nt.kind].label
+    if (regenerate) { await regenerateFlow(ids); return }
+    await updateRows(ids.map((id) => ({
+      id,
+      patch: { recheckFlag: { reason: `${label} changed after this was written`, frame: label, at: Date.now() } },
+    })))
+  }
   /**
    * Candidate values for ONE field, tailored to this brand. Proposals only: the picker holds them in
    * local state, shows them under their own heading, and drops them when it closes. Choosing one is
@@ -478,7 +523,7 @@ export function FlowsView() {
   /** Patch the audience a card names, creating it on the first edit if it names none yet. */
   const patchCardAudience = (nt: CanvasObject, patch: Partial<AudienceType>) => {
     const id = ensureAudienceFor(nt)
-    if (id) patchAudience(id, patch)
+    if (id) { markCardDirty(nt.id); patchAudience(id, patch) }
   }
   const cardComments = useTrafficStore((s) => s.cardComments)
   /**
@@ -1648,7 +1693,7 @@ export function FlowsView() {
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
   /** Kinds that render a full record form, and so need no direction fields under it. */
-  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger'])
+  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger', 'brand'])
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
   const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
@@ -4118,7 +4163,7 @@ export function FlowsView() {
             const per = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
             const others = allPeople.filter((o) => o.id !== per.id)
             const own = (key: keyof Person): string[] => others.map((o) => String(o[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Person>) => updatePerson(ensurePersonFor(nt), patch)
+            const set = (patch: Partial<Person>) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), patch) }
             const field = (label: string, node: ReactNode) => (
               <div key={label} className="flow-recform-field">
                 <span className="flow-recform-key">{label}</span>
@@ -4319,7 +4364,7 @@ export function FlowsView() {
             const co = (nt.refId ? allCompanies.find((c) => c.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
             const others = allCompanies.filter((c) => c.id !== co.id)
             const own = (key: keyof Company): string[] => others.map((c) => String(c[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Company>) => updateCompany(ensureCompanyFor(nt), patch)
+            const set = (patch: Partial<Company>) => { markCardDirty(nt.id); updateCompany(ensureCompanyFor(nt), patch) }
             const field = (label: string, node: ReactNode) => (
               <div key={label} className="flow-recform-field">
                 <span className="flow-recform-key">{label}</span>
@@ -4383,7 +4428,7 @@ export function FlowsView() {
           {nt.kind === 'trigger' && (() => {
             const trg = (nt.refId ? triggers.find((t) => t.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
             const others = triggers.filter((t) => t.id !== trg.id)
-            const set = (patch: Partial<Trigger>) => updateTrigger(ensureTriggerFor(nt), patch)
+            const set = (patch: Partial<Trigger>) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), patch) }
             const field = (label: string, node: ReactNode) => (
               <div key={label} className="flow-recform-field">
                 <span className="flow-recform-key">{label}</span>
@@ -4428,6 +4473,129 @@ export function FlowsView() {
                   {combo('Status', trg.status ?? '', [{ label: 'Choose one', options: [...TRIGGER_STATUSES] }], 'Active, paused or draft', 'status')}
                 </div>
               </>
+            )
+          })()}
+          {/* THE BRAND this canvas writes as.
+              Its record IS the brand profile the Brand page edits, so a change here is a change
+              there. The card exists because this is the context that shapes every other card on the
+              board, and it was a global you had to remember you had set: with several brands in one
+              account, the only way to know which one a canvas was writing as was to look at the rail.
+
+              It names THIS canvas's brand and cannot be pointed at another. Generation refuses to run
+              on a canvas with no brand bound precisely so one client's voice and proof can never
+              reach another's copy, and a card that could switch brands would be a way around that
+              rule rather than a feature. Work on another brand by opening its own canvas. */}
+          {nt.kind === 'brand' && (() => {
+            if (!brand) {
+              return (
+                <div className="flow-inspect-note" style={{ marginTop: 14 }}>
+                  This canvas is not bound to a brand yet, so there is no profile to show. Bind it and
+                  this card fills in.
+                </div>
+              )
+            }
+            const profile = clientProfiles[brand] ?? {}
+            const set = (patch: Partial<typeof profile>) => { markCardDirty(nt.id); setClientProfile(brand, { ...profile, ...patch }) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>{brand}</label>
+                <div className="flow-recform">
+                  {field('What it does', (
+                    <RecordCombo
+                      value={profile.oneLiner ?? ''}
+                      groups={[]}
+                      placeholder="One line on what the company does"
+                      onSuggest={() => suggestFor('oneLiner', profile.oneLiner ? [profile.oneLiner] : [])}
+                      onCommit={(v) => set({ oneLiner: v })}
+                    />
+                  ))}
+                  {field('What it sells', (
+                    <RecordMulti
+                      values={profile.products ?? []}
+                      groups={[]}
+                      addLabel="Add a product or service"
+                      onSuggest={() => suggestFor('products', profile.products ?? [])}
+                      onCommit={(v) => set({ products: v })}
+                    />
+                  ))}
+                  {field('What makes it different', (
+                    <RecordMulti
+                      values={profile.differentiators ?? []}
+                      groups={[]}
+                      addLabel="Add a differentiator"
+                      onSuggest={() => suggestFor('differentiators', profile.differentiators ?? [])}
+                      onCommit={(v) => set({ differentiators: v })}
+                    />
+                  ))}
+                  {field('The position it owns', (
+                    <RecordCombo
+                      value={profile.wedge ?? ''}
+                      groups={[]}
+                      placeholder="The one sentence no competitor can say"
+                      onSuggest={() => suggestFor('wedge', profile.wedge ? [profile.wedge] : [])}
+                      onCommit={(v) => set({ wedge: v })}
+                    />
+                  ))}
+                  {field('Mission', (
+                    <RecordCombo
+                      value={profile.mission ?? ''}
+                      groups={[]}
+                      placeholder="In their words"
+                      onCommit={(v) => set({ mission: v })}
+                    />
+                  ))}
+                  {field('Industry', (
+                    <RecordCombo
+                      value={profile.industry ?? ''}
+                      groups={[{ label: 'Industries', options: [...INDUSTRIES] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ industry: v })}
+                    />
+                  ))}
+                  {field('Voice', (
+                    <RecordCombo
+                      value={profile.voice ?? ''}
+                      groups={[{ label: 'Common voices', options: [...BRAND_VOICES] }]}
+                      placeholder="How it sounds"
+                      onCommit={(v) => set({ voice: v })}
+                    />
+                  ))}
+                </div>
+                {/* Said plainly, because a card that edits a global is a card that can surprise you. */}
+                <div className="flow-inspect-note" style={{ marginTop: 10 }}>
+                  This is {brand}&apos;s profile, not a copy of it. Editing here changes it everywhere,
+                  and every card on this canvas is written from it.
+                </div>
+              </>
+            )
+          })()}
+          {/* CHANGED, BUT NOT YET IN THE COPY. Editing a record saves it instantly; it does not
+              rewrite the assets that were written from the old version. Without this the card and
+              its copy could disagree indefinitely and nothing said so. */}
+          {dirtyCards[nt.id] && (() => {
+            const n = affectedRowIds(nt).length
+            if (!n) return null
+            return (
+              <div className="flow-applybar">
+                <span className="flow-applybar-txt">
+                  {n} {n === 1 ? 'asset was' : 'assets were'} written before this change.
+                </span>
+                <button className="flow-applybar-go" disabled={regenerating} onClick={() => void applyCardChanges(nt, true)}>
+                  {regenerating ? 'Rewriting…' : 'Rewrite them'}
+                </button>
+                {/* Flagging rather than rewriting is the honest default for a big set: it marks them
+                    without spending the tokens or throwing away copy someone may have edited. */}
+                <button className="flow-applybar-flag" onClick={() => void applyCardChanges(nt, false)}>
+                  Just flag them
+                </button>
+              </div>
             )
           })()}
           {/* APPLIED TO: what this card feeds, and the one action that follows from it.
@@ -4760,7 +4928,7 @@ export function FlowsView() {
             <CampaignTile />
             <span className="flow-layer-txt">
               <span className="flow-layer-name">{name.trim() || (viewing ? viewShort : 'Campaign')}</span>
-              <span className="flow-layer-sub">Campaign brief</span>
+              <span className="flow-layer-sub">Brief</span>
             </span>
           </button>
           {([
@@ -5324,7 +5492,7 @@ export function FlowsView() {
               onClick={(e) => clickSelect(e, 'campaign')}
             >
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
-                Campaign
+                Brief
               </span>
               {!viewing && (
                 <button
@@ -6207,7 +6375,7 @@ export function FlowsView() {
               <>
                 <div className="flow-panel-head">
                   <CampaignTile />
-                  <span className="flow-panel-title">Campaign brief</span>
+                  <span className="flow-panel-title">Brief</span>
                 </div>
                 <div className="flow-inspect">
                   <label className="flow-inspect-label">Name</label>
@@ -6336,7 +6504,7 @@ export function FlowsView() {
                       cost difference between them is the whole reason to choose. Auto keeps the
                       workspace pick, then the server's per-task default. */}
                   <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                    Model
+                    AI model
                   </label>
                   <select
                     className="flow-inspect-input flow-inspect-select"
@@ -6444,7 +6612,7 @@ export function FlowsView() {
             <>
               <div className="flow-panel-head">
                 <CampaignTile />
-                <span className="flow-panel-title">Campaign brief</span>
+                <span className="flow-panel-title">Brief</span>
               </div>
               <div className="flow-inspect">
                 <label className="flow-inspect-label">Name</label>
@@ -6985,9 +7153,10 @@ export function FlowsView() {
             })),
           )}
           <span className="flow-tb-divider" />
-          {/* The honest caveat the dropdown used to carry as a caption now lives in the glossary
-              entry behind this tip, so it is still one hover away. */}
-          <InfoTip term="canvasInput" />
+          {/* BRAND sits where the glossary tip was. The tip explained what an input card is, which is
+              a thing you learn once; the brand is the context every card on the board is written
+              from, and it had no way onto the canvas at all. */}
+          {palBtn('brand')}
           {/* One entry per family: the button drops that family's most common card, the caret
               offers the rest. Eleven kinds inline was most of why the bar had outgrown the canvas. */}
           {INPUT_FAMILIES.map((f) => {

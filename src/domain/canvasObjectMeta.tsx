@@ -22,6 +22,16 @@ export interface ObjectMeta {
 }
 
 export const OBJECT_META: Record<CanvasObjectKind, ObjectMeta> = {
+  /**
+   * THE BRAND this canvas writes as. Its record is the same brand profile the Brand page edits, so a
+   * change here is a change there; the card exists so the context that shapes every other card on the
+   * board is visible where the work happens, rather than a global you have to remember you set.
+   */
+  brand: {
+    label: 'Brand', tone: '#e2564a', placeholder: 'Which brand?', role: 'input', family: 'says',
+    menuDesc: 'Who this canvas writes as',
+    icon: <><path d="M12 2.5 3.5 6v6c0 5 3.6 8.7 8.5 9.6 4.9-.9 8.5-4.6 8.5-9.6V6z" /></>,
+  },
   audience: {
     label: 'Audience', tone: '#4c86f0', placeholder: 'Which audience or segment?', role: 'input', family: 'who',
     menuDesc: 'The people it is written for',
