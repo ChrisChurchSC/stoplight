@@ -26,7 +26,7 @@ import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
-import { COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
+import { COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
 import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
@@ -4096,7 +4096,8 @@ export function FlowsView() {
                 <RecordCombo
                   value={String(per[key] ?? '')}
                   groups={[{ label: 'Choose one', options: [...options] }]}
-                  placeholder={label}
+                  placeholder="Choose"
+                  allowCreate={false}
                   onCommit={(v) => set({ [key]: v })}
                 />
               ))
@@ -4210,7 +4211,8 @@ export function FlowsView() {
                 <RecordCombo
                   value={value ? value.charAt(0).toUpperCase() + value.slice(1) : ''}
                   groups={[{ label: 'Choose one', options: options.map((o) => o.charAt(0).toUpperCase() + o.slice(1)) }]}
-                  placeholder={label}
+                  placeholder="Choose"
+                  allowCreate={false}
                   // funnelStage is stored lowercase to match every other reader of it; only the
                   // label carries the capital, so the picker hands back the stored form.
                   onCommit={(v) => patchCardAudience(nt, { [key]: options.find((o) => o.toLowerCase() === v.toLowerCase()) ?? v })}
@@ -4223,19 +4225,29 @@ export function FlowsView() {
                   {combo('Who exactly', aud.definition ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.definition) },
                     { label: 'Their roles', options: others.map((a) => a.role).filter(Boolean) },
+                    // Nothing generic can define a brand's own sub-segment, so this one legitimately
+                    // starts empty. The picker still takes a typed value in the same box.
                   ], 'Sharper than the role. One line.', 'definition')}
                   {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_GROUPS), 'Add a pain', 'pains')}
                   {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_GROUPS), 'Add a want', 'goalTags')}
                   {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), TRIGGER_GROUPS), 'Add a trigger', 'triggers')}
+                  {/* These drew ONLY from the brand's other audiences, so a brand's first audience
+                      showed an empty dropdown — the same empty-box failure the starter libraries
+                      exist to prevent. The libraries were wired into the direction field and never
+                      into the record form that replaced it. */}
                   {combo('What they believe against you', aud.objections ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.objections) },
+                    ...OBJECTION_GROUPS,
                   ], 'The copy has to answer this', 'objections')}
                   {combo('Never say', aud.antiMessage ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.antiMessage) },
+                    // An anti-message is the inverse of an objection: the thing that confirms it.
+                    ...OBJECTION_GROUPS.map((g) => ({ label: `Do not confirm: ${g.label.toLowerCase()}`, options: g.options })),
                   ], 'The sentence that loses them', 'antiMessage')}
                   {combo('The angle', aud.messageAngle ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.messageAngle) },
                     { label: 'Your message records', options: messages.map((m) => m.angle ?? '').filter(Boolean) },
+                    { label: "Your brand's differentiators", options: (brand ? clientProfiles[brand]?.differentiators ?? [] : []).filter(Boolean) },
                   ], 'How the promise is framed for them', 'messageAngle')}
                   {select('Seniority', aud.seniority ?? '', SENIORITIES, 'seniority')}
                   {select('Company size', aud.companySize ?? '', TAXONOMY_COMPANY_SIZES, 'companySize')}
@@ -4268,7 +4280,8 @@ export function FlowsView() {
                 <RecordCombo
                   value={String(co[key] ?? '')}
                   groups={[{ label: 'Choose one', options: options.map((o) => o.charAt(0).toUpperCase() + o.slice(1)) }]}
-                  placeholder={label}
+                  placeholder="Choose"
+                  allowCreate={false}
                   onCommit={(v) => set({ [key]: v })}
                 />
               ))

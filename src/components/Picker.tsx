@@ -33,7 +33,7 @@ interface Row {
 }
 
 /** Options flattened to rows, filtered, with headings attached to the row that starts each group. */
-function buildRows(groups: PickerGroup[], query: string, exclude: string[]): Row[] {
+function buildRows(groups: PickerGroup[], query: string, exclude: string[], allowCreate = true): Row[] {
   const q = query.trim().toLowerCase()
   const seen = new Set(exclude.map((v) => v.toLowerCase()))
   const rows: Row[] = []
@@ -52,7 +52,7 @@ function buildRows(groups: PickerGroup[], query: string, exclude: string[]): Row
   // Offer what was typed when nothing matches it exactly. First, because if you have typed a whole
   // value that is not in the list, using it is almost certainly what you meant.
   const typed = query.trim()
-  if (typed && !rows.some((r) => r.value.toLowerCase() === typed.toLowerCase())) {
+  if (allowCreate && typed && !rows.some((r) => r.value.toLowerCase() === typed.toLowerCase())) {
     rows.unshift({ kind: 'create', value: typed })
   }
   return rows
@@ -98,6 +98,7 @@ export function Picker({
   placeholder,
   exclude = [],
   keepOpen = false,
+  allowCreate = true,
   maxLength,
   onPick,
 }: {
@@ -109,6 +110,14 @@ export function Picker({
   exclude?: string[]
   /** Stay open after picking, for a field that takes several values. */
   keepOpen?: boolean
+  /**
+   * Can the user write a value that is not on the list?
+   *
+   * True for anything backed by a starter library, where the list is a starting point. FALSE for a
+   * closed enum (age band, funnel stage, status), where a typed value is not a shortcut, it is a
+   * value nothing downstream knows how to read.
+   */
+  allowCreate?: boolean
   maxLength?: number
   onPick: (v: string) => void
 }) {
@@ -122,8 +131,13 @@ export function Picker({
   const wrapRef = useDismiss(open, close)
 
   const total = useMemo(() => groups.reduce((n, g) => n + g.options.length, 0), [groups])
-  const rows = useMemo(() => buildRows(groups, query, exclude), [groups, query, exclude])
-  const searchable = total >= SEARCH_AT
+  const rows = useMemo(() => buildRows(groups, query, exclude, allowCreate), [groups, query, exclude, allowCreate])
+  /**
+   * The search box is also the ONLY way to write a value that is not listed, so a field that accepts
+   * free values must always have one. Without this, a picker whose library happens to be empty had
+   * no options AND no input: a control you could open and not use.
+   */
+  const searchable = allowCreate || total >= SEARCH_AT
 
   // Clamp the highlight whenever filtering changes the list under it.
   useEffect(() => { setActive(0) }, [query, open])
@@ -190,13 +204,15 @@ export function Picker({
               autoFocus
               value={query}
               maxLength={maxLength}
-              placeholder="Type to filter, or write your own"
+              placeholder={allowCreate ? 'Type to filter, or write your own' : 'Type to filter'}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKey}
             />
           )}
           <div className="pk-list" role="listbox" ref={listRef} onKeyDown={onKey} tabIndex={searchable ? -1 : 0}>
-            {rows.length === 0 && <div className="pk-empty">Nothing here yet. Type to add one.</div>}
+            {rows.length === 0 && (
+              <div className="pk-empty">{allowCreate ? 'Nothing saved yet. Type to add the first one.' : 'No matches'}</div>
+            )}
             {rows.map((r, i) => (
               <div key={`${r.kind}:${r.value}`}>
                 {r.heading && <div className="pk-head">{r.heading}</div>}

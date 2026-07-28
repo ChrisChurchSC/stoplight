@@ -32,15 +32,18 @@ export function RecordCombo({
   groups,
   placeholder,
   maxLength,
+  allowCreate,
   onCommit,
 }: {
   value: string
   groups: OptionGroup[]
   placeholder: string
   maxLength?: number
+  /** False for a closed enum, where a typed value is one nothing downstream can read. */
+  allowCreate?: boolean
   onCommit: (v: string) => void
 }) {
-  return <Picker value={value} groups={groups} placeholder={placeholder} maxLength={maxLength} onPick={onCommit} />
+  return <Picker value={value} groups={groups} placeholder={placeholder} maxLength={maxLength} allowCreate={allowCreate} onPick={onCommit} />
 }
 
 /**
