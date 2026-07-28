@@ -4924,6 +4924,35 @@ button {
 }
 .flow-zip-echo.unknown { color: var(--amber, #b07d18); }
 
+/* OUT OF DATE: a folded corner on the card whose copy predates a change to what informs it.
+   A corner rather than a badge, because it has to sit on a card that is already carrying a kind
+   chip, a title, a copy preview and sometimes a spend line, and one more pill in that stack reads as
+   another piece of content. A corner is not in the reading order at all until you look for it.
+   Amber, not red: the copy is not wrong, it was written to an older brief, and red on every asset
+   after one brief edit reads as breakage and gets ignored by the third time. */
+.flow-node-stale {
+  position: absolute;
+  top: 0; right: 0;
+  width: 15px; height: 15px;
+  border-top-right-radius: 10px;
+  background: linear-gradient(225deg, #e8a317 0%, #e8a317 52%, transparent 52%);
+  pointer-events: auto;
+  cursor: help;
+}
+/* On a deliverable the count matters, since the card stands for several assets. */
+.flow-deliv-stale {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+  color: #8a6100; background: #fdf2d4; border: 1px solid #f0dfa8;
+}
+@media (prefers-color-scheme: dark) {
+  .flow-deliv-stale { color: #f0c661; background: rgba(240, 198, 97, 0.13); border-color: rgba(240, 198, 97, 0.3); }
+}
+:root[data-theme='dark'] .flow-deliv-stale { color: #f0c661; background: rgba(240, 198, 97, 0.13); border-color: rgba(240, 198, 97, 0.3); }
+:root[data-theme='light'] .flow-deliv-stale { color: #8a6100; background: #fdf2d4; border-color: #f0dfa8; }
+
 /* SAVE UPDATES. Pinned to the bottom of the inspector and floating over it, rather than sitting in
    the flow where it scrolls out of sight — the whole point is that it is reachable the moment you
    have changed something, and on a twelve-field record the change that raised it is often three

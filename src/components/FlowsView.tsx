@@ -5909,7 +5909,21 @@ export function FlowsView() {
                           <div className="flow-node-main">
                             <div className="flow-node-text">
                               <div className="flow-node-label">{d.label}</div>
-                              <div className="flow-node-desc">×{d.count}</div>
+                              <div className="flow-node-desc">
+                                ×{d.count}
+                                {/* The deliverable summarises its assets, so it summarises their
+                                    flags too: a collapsed group must not hide that the copy under
+                                    it is stale. */}
+                                {(() => {
+                                  const stale = d.rows.filter((r) => r.recheckFlag).length
+                                  if (!stale) return null
+                                  return (
+                                    <span className="flow-deliv-stale" title={`${stale} of these ${stale === 1 ? 'is' : 'are'} out of date. Generate to bring ${stale === 1 ? 'it' : 'them'} up to date.`}>
+                                      {stale} out of date
+                                    </span>
+                                  )
+                                })()}
+                              </div>
                               {/* No record tags here, for the same reason the campaign card lost
                                   its own: audience and proof are context you attach by connecting
                                   a card to the campaign. A deliverable inherits the campaign's
@@ -5950,6 +5964,13 @@ export function FlowsView() {
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
                                     Post
                                   </span>
+                                  {/* OUT OF DATE. Flagging an asset from the Save bar wrote a
+                                      recheckFlag and nothing on the canvas showed it, so the flag
+                                      existed only in a queue you had to go and look at. The card is
+                                      where you see the copy, so it is where the warning belongs. */}
+                                  {r.recheckFlag && (
+                                    <span className="flow-node-stale" title={`Out of date. ${r.recheckFlag.reason}. Generate to bring it up to date.`} aria-label="Out of date" />
+                                  )}
                                   <div className="flow-node-main">
                                     <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
                                     <div className="flow-node-text">

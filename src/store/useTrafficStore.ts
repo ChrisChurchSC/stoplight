@@ -7030,7 +7030,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           }
           // Persist the chosen execution format (set only by generation, so a human
           // edit isn't overwritten on re-draft).
-          const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap }
+          // Fresh copy clears any out-of-date flag: the asset has just been written to the current
+          // brief, so whatever raised the flag no longer applies. Without this a flag raised by the
+          // Save bar survived the regeneration it was asking for, and the badge on the card became
+          // permanent — a warning that cannot be cleared is one people learn to ignore.
+          const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap, recheckFlag: undefined }
           if (d.format && !row.format) patch.format = d.format
           await sheet.update(row.id, patch)
         }
