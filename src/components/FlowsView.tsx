@@ -3758,6 +3758,19 @@ export function FlowsView() {
           patchCampaign(viewName, { subject: c.value })
           setRefsDirty(true)
           applied.push(`Set the campaign theme to "${c.value}"`)
+        } else if (c.op === 'setFlight') {
+          // Length is a campaign field like the budget below it, and the inspector's own stepper
+          // already writes it with exactly this call. It was missing from this branch rather than
+          // withheld, so asking Gretel to change the length on a saved campaign was refused as
+          // "not available on a campaign that is already built" while the stepper two panels away
+          // did it happily.
+          const w = Math.max(1, Math.round(Number(c.weeks) || 0))
+          if (w > 0) {
+            patchCampaign(viewName, { durationWeeks: w })
+            applied.push(`Set the campaign length to ${w} week${w === 1 ? '' : 's'}`)
+          } else {
+            skipped.push(`${describeCommand(c)} (needs a length of at least one week)`)
+          }
         } else if (c.op === 'setBudget') {
           const n = Math.max(0, Number(String(c.value).replace(/[^0-9.]/g, '')) || 0)
           if (n > 0) {
