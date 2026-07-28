@@ -446,8 +446,13 @@ export function FlowsView() {
       body: JSON.stringify({
         field,
         brand,
+        // `positioning` on a profile is the positioning-MAP object (axes and a coordinate), not prose.
+        // Passing it as a string rendered "[object Object]" into the prompt. The wedge is the
+        // sentence that field is actually the picture of.
         oneLiner: profile?.oneLiner,
-        positioning: profile?.positioning,
+        positioning: profile?.wedge,
+        mission: profile?.mission,
+        products: profile?.products,
         industry: profile?.industry,
         differentiators: profile?.differentiators,
         voice: profile?.voice,
@@ -6956,7 +6961,7 @@ export function FlowsView() {
         <div className="flow-tb-palette">
           <button
             className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
-            title="Brief. The campaign's spec sheet." aria-label="Add the campaign brief"
+            aria-label="Add the campaign brief"
             onClick={() => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
@@ -7012,7 +7017,7 @@ export function FlowsView() {
         </div>
         <div className="flow-tb-row">
         <div className="flow-tb-zoom-wrap">
-          <button className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)} title="Zoom">
+          <button aria-label="Zoom" className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.5-3.5" />
@@ -7055,22 +7060,22 @@ export function FlowsView() {
           )}
         </div>
         <div className="flow-tb-tools">
-          <button className={`flow-tb-tool${tool === 'pan' ? ' on' : ''}`} onClick={() => setTool('pan')} title="Pan" aria-label="Pan">
+          <button className={`flow-tb-tool${tool === 'pan' ? ' on' : ''}`} onClick={() => setTool('pan')} aria-label="Pan">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V12M11 11V5.5a1.5 1.5 0 0 1 3 0V12M14 12V8a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6 5 5 0 0 1-4-2l-3-4a1.5 1.5 0 0 1 2.3-1.9L8 14" />
             </svg>
           </button>
-          <button className={`flow-tb-tool${tool === 'select' ? ' on' : ''}`} onClick={() => setTool('select')} title="Select" aria-label="Select">
+          <button className={`flow-tb-tool${tool === 'select' ? ' on' : ''}`} onClick={() => setTool('select')} aria-label="Select">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M5 3.5 19 10l-6.3 1.9L10 19z" />
             </svg>
           </button>
-          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} title="Link. Drag from one object to another to link them." aria-label="Link">
+          <button className={`flow-tb-tool${tool === 'connect' ? ' on' : ''}`} onClick={() => setTool(tool === 'connect' ? 'select' : 'connect')} aria-label="Link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="6" r="2.6" /><circle cx="18" cy="18" r="2.6" /><path d="M8 8l8 8" />
             </svg>
           </button>
-          <button className="flow-tb-tool" onClick={organizeCards} title="Tidy layout. Arrange the objects cleanly." aria-label="Tidy layout">
+          <button className="flow-tb-tool" onClick={organizeCards} aria-label="Tidy layout">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1.5" />
               <rect x="14" y="3" width="7" height="7" rx="1.5" />
@@ -7090,11 +7095,11 @@ export function FlowsView() {
               // flows behaving identically instead of hiding the control on empty flows.
               onClick={() => (viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds))}
               disabled={regenerating || (viewRows.length > 0 && genIds.length === 0)}
-              title={
+              aria-label={
                 viewRows.length === 0
                   ? 'Pick a deliverable to generate its first copy'
                   : genIds.length
-                    ? 'Generate copy for the selected card(s)'
+                    ? 'Generate copy for the selected cards'
                     : 'Select a card to generate its copy'
               }
             >

@@ -232,6 +232,37 @@ export function Picker({
             />
           )}
           <div className="pk-list" role="listbox" ref={listRef} onKeyDown={onKey} tabIndex={searchable ? -1 : 0}>
+            {/* THE FIRST ROW, not a footer button. It is a thing you pick, exactly like every other
+                row here, so it should sit where your eye already is and look like the rest of them.
+                Marked with the same dot the results carry, so the action and its output read as one
+                idea rather than two unrelated bits of chrome. */}
+            {onSuggest && (
+              <>
+                <button
+                  type="button"
+                  className="pk-opt pk-ask"
+                  disabled={suggesting}
+                  onClick={async () => {
+                    setSuggesting(true)
+                    setSuggestErr(null)
+                    try {
+                      setSuggested(await onSuggest())
+                    } catch (e) {
+                      setSuggestErr((e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not reach the model.')
+                    } finally {
+                      setSuggesting(false)
+                    }
+                  }}
+                >
+                  {suggesting ? 'Thinking…' : suggested.length ? 'Suggest more for this brand' : 'Suggest for this brand'}
+                </button>
+                {suggestErr && <div className="pk-ask-err">{suggestErr}</div>}
+                {!!suggested.length && !suggestErr && (
+                  <div className="pk-ask-note">Nothing is saved until you pick one.</div>
+                )}
+                <div className="pk-ask-rule" />
+              </>
+            )}
             {rows.length === 0 && (
               <div className="pk-empty">{allowCreate ? 'Nothing saved yet. Type to add the first one.' : 'No matches'}</div>
             )}
@@ -252,32 +283,6 @@ export function Picker({
               </div>
             ))}
           </div>
-          {onSuggest && (
-            <div className="pk-foot">
-              <button
-                type="button"
-                className="pk-suggest"
-                disabled={suggesting}
-                onClick={async () => {
-                  setSuggesting(true)
-                  setSuggestErr(null)
-                  try {
-                    setSuggested(await onSuggest())
-                  } catch (e) {
-                    setSuggestErr((e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not reach the model.')
-                  } finally {
-                    setSuggesting(false)
-                  }
-                }}
-              >
-                {suggesting ? 'Thinking…' : suggested.length ? 'Suggest more' : 'Suggest for this brand'}
-              </button>
-              {suggestErr && <span className="pk-foot-err">{suggestErr}</span>}
-              {/* Said plainly, because the rest of the app promises the writer only sees what you
-                  chose, and a generated row in this list looks exactly like one you wrote. */}
-              {!!suggested.length && !suggestErr && <span className="pk-foot-note">Nothing is saved until you pick one.</span>}
-            </div>
-          )}
         </div>
       )}
     </div>

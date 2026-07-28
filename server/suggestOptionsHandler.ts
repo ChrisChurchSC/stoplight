@@ -73,12 +73,14 @@ export async function runSuggestOptions(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { field, brand, oneLiner, positioning, industry, differentiators, voice, audienceName, audienceRole, already, note } =
+  const { field, brand, oneLiner, positioning, mission, products, industry, differentiators, voice, audienceName, audienceRole, already, note } =
     (body ?? {}) as {
       field?: string
       brand?: string
       oneLiner?: string
       positioning?: string
+      mission?: string
+      products?: string[]
       industry?: string
       differentiators?: string[]
       voice?: string
@@ -93,6 +95,7 @@ export async function runSuggestOptions(body: unknown): Promise<unknown> {
   if (!brief) throw new Error(`Unknown field: ${key}`)
 
   // Sanitized rather than trusted: user-authored free text going into a prompt.
+
   const list = (v: unknown, cap: number): string[] =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim()).slice(0, cap) : []
 
@@ -102,7 +105,9 @@ ${brief}
 THE BRAND (do not infer the product from the name)
 Name: ${brand || '(none)'}
 One-liner: ${oneLiner || '(none)'}
-Positioning: ${positioning || '(none)'}
+What it sells: ${list(products, 8).join('; ') || '(none)'}
+The position it owns: ${positioning || '(none)'}
+Mission: ${mission || '(none)'}
 Industry: ${industry || '(none)'}
 What makes it different: ${list(differentiators, 8).join('; ') || '(none)'}
 Voice: ${voice || '(none)'}
