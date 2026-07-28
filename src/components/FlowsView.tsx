@@ -4363,6 +4363,67 @@ export function FlowsView() {
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">{meta.menuDesc}</p>
+          {/* DESCRIBE IT AND HAVE IT FILLED IN. First thing on the panel, because it is the fastest
+              way past a dozen empty dropdowns and a blank card is the state this is for.
+
+              The record it writes to is whichever the card names, so the same box works whether the
+              card is brand new or half filled: it only ever fills fields that are still empty. */}
+          {FILLABLE[nt.kind] && (() => {
+            const recordFor = (): { current: Record<string, unknown>; apply: (p: Record<string, unknown>) => void } | null => {
+              switch (nt.kind) {
+                case 'brand': {
+                  const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
+                  return { current: bo as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), p as Partial<BrandObject>) } }
+                }
+                case 'product': {
+                  const pr = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
+                  return { current: pr as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), p as Partial<Product>) } }
+                }
+                case 'person': {
+                  const pe = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
+                  return { current: pe as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), p as Partial<Person>) } }
+                }
+                case 'trigger': {
+                  const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
+                  return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
+                }
+                case 'audience': {
+                  const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
+                  return { current: au as unknown as Record<string, unknown>, apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
+                }
+                default: return null
+              }
+            }
+            const target = recordFor()
+            if (!target) return null
+            const busy = filling === nt.id
+            return (
+              <div className="flow-fillbox">
+                <textarea
+                  className="flow-fill-input"
+                  rows={4}
+                  value={prompting[nt.id] ?? ''}
+                  placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and the fields fill in'}
+                  onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    // Enter fills; shift-Enter is a newline, since a description can run to two lines.
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
+                  }}
+                />
+                <div className="flow-fill-foot">
+                  <button
+                    className="flow-fill-go"
+                    disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                    onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
+                  >
+                    {busy ? 'Filling…' : 'Fill this in'}
+                  </button>
+                  {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* OBJECTS, not raw records. A Person card offers person objects: this campaign's own
               first, then the brand library. The object is the reusable unit ("the RevOps buyer",
               carrying the contact plus the proof and message that go with them); the record is
@@ -4424,10 +4485,8 @@ export function FlowsView() {
               ))
             return (
               <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                  Who this is
-                  <span className="flow-persona-tag" title="A representative person, not a real customer. The writer may not quote them or cite them as a customer.">composite</span>
-                </label>
+                {/* No heading. The panel already says Person at the top and the fields say what they
+                    are; a section label above the first of them was naming the panel twice. */}
                 <div className="flow-recform">
                   {/* NAME is an input, never a pick-list: it is the one field whose whole job is to be
                       new. Everything else on this card is chosen; this is what you are choosing it for. */}
@@ -4715,66 +4774,6 @@ export function FlowsView() {
                   {combo('Status', trg.status ?? '', [{ label: 'Choose one', options: [...TRIGGER_STATUSES] }], 'Active, paused or draft', 'status')}
                 </div>
               </>
-            )
-          })()}
-          {/* DESCRIBE IT AND HAVE IT FILLED IN. First thing on the panel, because it is the fastest
-              way past a dozen empty dropdowns and a blank card is the state this is for.
-
-              The record it writes to is whichever the card names, so the same box works whether the
-              card is brand new or half filled: it only ever fills fields that are still empty. */}
-          {FILLABLE[nt.kind] && (() => {
-            const recordFor = (): { current: Record<string, unknown>; apply: (p: Record<string, unknown>) => void } | null => {
-              switch (nt.kind) {
-                case 'brand': {
-                  const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
-                  return { current: bo as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), p as Partial<BrandObject>) } }
-                }
-                case 'product': {
-                  const pr = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
-                  return { current: pr as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), p as Partial<Product>) } }
-                }
-                case 'person': {
-                  const pe = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
-                  return { current: pe as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), p as Partial<Person>) } }
-                }
-                case 'trigger': {
-                  const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
-                  return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
-                }
-                case 'audience': {
-                  const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
-                  return { current: au as unknown as Record<string, unknown>, apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
-                }
-                default: return null
-              }
-            }
-            const target = recordFor()
-            if (!target) return null
-            const busy = filling === nt.id
-            return (
-              <div className="flow-fillbox">
-                <textarea
-                  className="flow-fill-input"
-                  rows={2}
-                  value={prompting[nt.id] ?? ''}
-                  placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and the fields fill in'}
-                  onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    // Enter fills; shift-Enter is a newline, since a description can run to two lines.
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
-                  }}
-                />
-                <div className="flow-fill-foot">
-                  <button
-                    className="flow-fill-go"
-                    disabled={busy || !(prompting[nt.id] ?? '').trim()}
-                    onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
-                  >
-                    {busy ? 'Filling…' : 'Fill this in'}
-                  </button>
-                  {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
-                </div>
-              </div>
             )
           })()}
           {/* SAVE UPDATES. The fields themselves persist as you touch them, which is right: an edit
@@ -5121,18 +5120,10 @@ export function FlowsView() {
               />
             </>
           )}
-          {/* Say plainly what this object does. These two lines are the acceptance test for the
-              direction wiring: the second used to end "does not change the drafts yet". */}
-          <div className="flow-inspect-note">
-            {meta.role === 'markup'
-              ? 'A note for your team. Nothing downstream reads it.'
-              : (DIRECTION_KEYS[nt.kind] ?? []).length
-                ? 'What you write above is sent to the writer for every deliverable this object is wired to. The free-text note is not.'
-                : 'Board context. It names what this campaign is made from.'}
-          </div>
-          <button className="flow-insp-del" onClick={() => deleteObject(nt.id)}>
-            Delete this object
-          </button>
+          {/* No footer explainer and no Delete button. The explainer described a card that no longer
+              exists — it talked about a free-text note these kinds stopped having — and Applied to
+              already says, by name, what this card feeds. Delete is the Delete key and the
+              right-click menu, the same as every other card on the board. */}
         </div>
       </>
     )

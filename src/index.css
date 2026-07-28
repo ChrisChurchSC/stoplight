@@ -4806,16 +4806,6 @@ button {
 }
 .flow-note-cmt svg { width: 12px; height: 12px; }
 
-/* "composite" on a persona: says out loud that this is a representative person, because the writer
-   is bound by it and the user should know the bound exists. */
-.flow-persona-tag {
-  margin-left: 7px;
-  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--text-faint);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 6px;
-}
 
 .flow-preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .flow-preset-chip {
@@ -4909,8 +4899,11 @@ button {
 .flow-fill-input {
   width: 100%;
   border: none; background: none; outline: none; resize: vertical;
-  font: inherit; font-size: 12.5px; line-height: 1.45; color: var(--text);
+  font: inherit; font-size: 12.5px; line-height: 1.5; color: var(--text);
   padding: 0;
+  /* Tall enough to hold the kind of sentence that actually fills a card. At two rows it looked like
+     a search box, and people write search-box-length things into search boxes. */
+  min-height: 76px;
 }
 .flow-fill-input::placeholder { color: var(--text-faint); }
 .flow-fill-foot { display: flex; align-items: center; gap: 9px; margin-top: 6px; }
@@ -7621,41 +7614,27 @@ button {
    step) that branches from this asset instead of the campaign. Absolutely positioned inside the
    card so it tracks the card's drag transform. Hidden until the card is hovered/selected so cards
    stay clean; purple to match the asset (post) tier. */
+/* The connector on a post card, matched to the one on an object card.
+   It was a dashed purple circle 30px out while an object's was a solid neutral port at the card's
+   edge, so two controls that both mean "start something from here" looked like different features.
+   Same size, same offset, same hover, same appear-on-hover: one affordance to learn. */
 .flow-branch-plus {
-  position: absolute;
-  right: -30px;
-  top: 50%;
-  transform: translateY(-50%) scale(0.82);
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1.5px dashed color-mix(in srgb, #8a34d6 55%, var(--border));
+  position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--border-strong);
   background: var(--surface);
-  color: #8a34d6;
-  display: grid;
-  place-items: center;
+  color: var(--text-muted);
+  display: grid; place-items: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  transition: opacity 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   z-index: 5;
 }
-.flow-branch-plus svg {
-  width: 12px;
-  height: 12px;
-  display: block;
-}
+.flow-branch-plus svg { width: 12px; height: 12px; display: block; }
 .flow-brief-node:hover .flow-branch-plus,
 .flow-brief-node.sel .flow-branch-plus,
-.flow-brief-node.multi .flow-branch-plus {
-  opacity: 1;
-  transform: translateY(-50%) scale(1);
-}
-.flow-branch-plus:hover {
-  background: color-mix(in srgb, #8a34d6 14%, var(--surface));
-  border-color: #8a34d6;
-  border-style: solid;
-}
+.flow-brief-node.multi .flow-branch-plus { opacity: 1; }
+.flow-branch-plus:hover { border-color: var(--accent); color: var(--accent); }
 /* SVG connector layer (sits behind the nodes via DOM order). */
 .flow-edges {
   position: absolute;
