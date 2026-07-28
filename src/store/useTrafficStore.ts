@@ -20,7 +20,7 @@ import { actualsProvider } from '../adapters/actuals'
 import { getActiveWorkspaceId } from '../lib/session'
 import { contentProvider } from '../adapters/content'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
-import { asList, classifyRowAudience, newAudience, normalizeAudience, freshAudienceId, splitLines, type AudienceType, mergeAudiences } from '../domain/audiences'
+import { asList, newAudience, normalizeAudience, splitLines, type AudienceType, mergeAudiences } from '../domain/audiences'
 import { emptyLibrary, type MessagingLibrary, type LibraryKind, type LibraryCta, type LibrarySubject, type LibraryHook } from '../domain/library'
 import type { GtmStrategy } from '../domain/strategies'
 import type { Deliverable } from '../domain/strategyAssets'
@@ -28,9 +28,6 @@ import { CHANNELS, resolveChannelId } from '../domain/channels'
 import { driveFilesToAssets } from '../lib/driveImport'
 import { filesToAssets } from '../lib/files'
 import {
-  pickFromGoogleDrive,
-  pickFolderFromGoogleDrive,
-  connectGoogleDrive,
   listFolderByUrl,
   isGoogleDriveConfigured,
   mockDriveSource,
@@ -67,7 +64,7 @@ import {
   type SetupInput,
   type WorkspaceSetup,
 } from '../adapters/setup/setupGenerator'
-import { mapSite, type SiteMap } from '../adapters/setup/siteMap'
+import { type SiteMap } from '../adapters/setup/siteMap'
 import { GTM_STRATEGIES, mediaSharePct } from '../domain/strategies'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
 import { messagingFields, messagingAllText, messagingMap, clampToLimit } from '../domain/messaging'
@@ -90,7 +87,6 @@ import {
 } from '../domain/brand'
 import {
   type Account,
-  type AccountStatus,
   type TargetList,
   accountContext,
   newAccount,
@@ -113,12 +109,12 @@ import type { SavedFlowChat } from '../domain/flowAgent'
 import type { SavedHomeChat } from '../domain/homeChat'
 import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, hasPersona, seedPeople } from '../domain/people'
-import { type Segment, freshSegmentId, seedSegments } from '../domain/segments'
+import { type Segment, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Voice, freshVoiceId } from '../domain/voice'
 import { type Pattern, freshPatternId } from '../domain/pattern'
 import { type Trigger, freshTriggerId } from '../domain/trigger'
-import { snapshotsFromActuals, snapshotsFromAssets } from '../domain/metricSnapshot'
+import { snapshotsFromActuals } from '../domain/metricSnapshot'
 import { appendSnapshots } from '../adapters/metrics/metricSnapshots'
 import { buildOutcomeMap } from '../domain/outcomeMap'
 import { buildContributions } from '../domain/aggregateOutcome'
@@ -143,7 +139,6 @@ import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
 import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
 import { type BrandDataset, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
-import { rowCopyKey, isPlannedCard } from '../domain/contentSignals'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
@@ -155,10 +150,7 @@ import {
   AUDIT_LABEL,
   type AuditAction,
   type AuditEntry,
-  type BreakAxis,
-  type BreakSeverity,
   type BreakStatus,
-  type ClaudeCoherenceFlag,
   type CoherenceBreak,
   applyBreakStatus,
   breakScopeKey,
@@ -897,13 +889,6 @@ function loadSegments(): Segment[] {
     return []
   }
 }
-function saveSegments(list: Segment[]): void {
-  try {
-    saveRecordList(SEGMENTS_KEY, list)
-  } catch {
-    /* ignore */
-  }
-}
 
 // Saved media mixes (channel-split scenarios), persisted per brand.
 const MEDIA_MIXES_KEY = 'stoplight.mediaMixes.v1'
@@ -1546,13 +1531,9 @@ interface TrafficState {
   /** "Getting started" checklist UI state (collapsed / dismissed / hand-checked steps). */
   onboarding: OnboardingState
   /** Collapse the checklist to the compact pill, or expand it. */
-  setOnboardingCollapsed: (collapsed: boolean) => void
   /** Hide the checklist entirely (until reset). */
-  dismissOnboarding: () => void
   /** Bring the checklist back (and expand it). */
-  resetOnboarding: () => void
   /** Toggle a step's hand-checked state (an override on top of auto-detection). */
-  toggleOnboardingStep: (id: OnboardingStepId) => void
   /** Mark a step done (idempotent) — used to record teaching actions like opening the calendar. */
   markOnboardingDone: (id: OnboardingStepId) => void
   /** The files-browser home filter (all / drafts / flagged / live / `brand:<name>`),
@@ -1626,7 +1607,6 @@ interface TrafficState {
   updateLibraryItem: (kind: LibraryKind, id: string, patch: Record<string, unknown>) => void
   /** Set the alias lists on a brand's canonical audiences (keyed by audience id), so
    *  freeform plan tags tie back to them for performance rollups. */
-  setAudienceAliases: (brand: string, aliasesById: Record<string, string[]>) => void
   /** Append a proof point (RTB) to a specific brand's library (brand-explicit, unlike the
    *  active-library addLibraryItem). Used by the flow chat's createProof command. */
   addBrandProof: (brand: string, rtb: Rtb) => void
@@ -1639,9 +1619,7 @@ interface TrafficState {
   /** Edit a library Hook master in place (no canvas instances to propagate yet). */
   editLibraryHook: (id: string, text: string) => void
   /** Pull a library audience (with its proof + voice) onto a client. */
-  useLibraryAudience: (client: string, audienceId: string) => void
   /** Save a project's audience into the library for reuse elsewhere. */
-  saveAudienceToLibrary: (audience: AudienceType) => void
   /** ICP & proof side drawer. */
   icpOpen: boolean
   /** Personalization fan-out card drawer. */
@@ -1669,7 +1647,6 @@ interface TrafficState {
   /** Save (merge) a client's profile. */
   setClientProfile: (name: string, profile: ClientProfile) => void
   /** Remove a brand's profile record (used by the Brand records page). */
-  removeClientProfile: (name: string) => void
   /** Measured actuals per brand, pulled from a connected analytics source (read-only,
    *  refreshed out of band). Read by the Metrics tab beside the projected plan. */
   brandActuals: Record<string, BrandActuals>
@@ -1678,7 +1655,6 @@ interface TrafficState {
   /** Saved Claude-generated reports over each brand's library (newest surfaced first). */
   reports: BrandReport[]
   /** Save a new report; returns its id. */
-  addReport: (input: { client: string; title: string; kind: BrandReport['kind']; summary?: string; html: string }) => string
   /** Delete a saved report by id. */
   deleteReport: (id: string) => void
   /** Records › Companies — the lightweight CRM table. */
@@ -1727,12 +1703,10 @@ interface TrafficState {
   products: Product[]
   addProduct: (partial?: Partial<Product>) => string
   updateProduct: (id: string, patch: Partial<Product>) => void
-  deleteProduct: (id: string) => void
   /** Brands AS OBJECTS on a canvas. Distinct from the workspace client, which is a name string. */
   brandObjects: BrandObject[]
   addBrandObject: (partial?: Partial<BrandObject>) => string
   updateBrandObject: (id: string, patch: Partial<BrandObject>) => void
-  deleteBrandObject: (id: string) => void
   /** Records › Message › Objectives — what campaigns move + how it's measured. */
   objectives: Objective[]
   addObjective: (partial?: Partial<Objective>) => string
@@ -1813,30 +1787,21 @@ interface TrafficState {
   /** Records › Segments — the account-segments table. */
   segments: Segment[]
   /** Add a segment row (blank defaults unless overridden); returns its id. */
-  addSegment: (partial?: Partial<Segment>) => string
   /** Patch a segment row by id. */
-  updateSegment: (id: string, patch: Partial<Segment>) => void
   /** Delete a segment row by id. */
-  deleteSegment: (id: string) => void
   /** Records › Media mix — saved channel-split scenarios, selectable per brand. */
   mediaMixes: MediaMix[]
   /** Create a new named mix for a brand; returns its id. */
-  addMediaMix: (brand: string) => string
   /** Patch a saved mix by id. */
-  updateMediaMix: (id: string, patch: Partial<MediaMix>) => void
   /** Delete a saved mix by id. */
-  deleteMediaMix: (id: string) => void
   /** Insights pinned out of a report, kept in view on the Overview (newest first). */
   pinnedInsights: PinnedInsight[]
   /** Pin a finding lifted from a report; returns its id. */
   addPinnedInsight: (input: { client: string; text: string; note?: string; sourceReportId?: string; sourceTitle?: string }) => string
   /** Remove a pinned insight by id. */
-  removePinnedInsight: (id: string) => void
   /** Auto-tag a brand's untagged library content to its best-fit audience; returns count tagged. */
-  autoTagAudiences: (brand: string) => Promise<number>
   /** Reconcile planned cards to their published post (by sourceUrl/copy), inheriting the
    *  measured metrics so the projection becomes the actual. Returns count reconciled. */
-  reconcileActuals: (brand: string) => Promise<number>
   /** Brand whose measured actuals are being pulled right now, or null. */
   actualsRefreshing: string | null
   /** Re-pull a brand's measured actuals from the connected source (mock or live proxy). */
@@ -1853,16 +1818,12 @@ interface TrafficState {
   /** Who wrote each brand field, per brand: 'user' fields are never overwritten by a drafting pass. */
   brandFieldSources: Record<string, Record<string, FieldSource>>
   /** Record authorship for a set of brand fields. Call it right after writing them. */
-  markBrandFields: (brand: string, fields: string[], source: FieldSource) => void
   /** The fields this brand's owner supplied themselves, as a set for cheap lookup. */
-  userOwnedBrandFields: (brand: string) => Set<string>
   /** Carry a brand's authorship map across a rename. Provenance is keyed by NAME, records by id. */
-  renameBrandFieldSources: (from: string, to: string) => void
   readinessOpen: boolean
   openReadiness: () => void
   /** Onboarding-as-diagnosis: the before→after reveal on the brand's own data. */
   diagnosisOpen: boolean
-  openDiagnosis: () => void
   closeDiagnosis: () => void
   /** Ask Claude: the conversational connection / what-worked palette. */
   askOpen: boolean
@@ -1880,7 +1841,6 @@ interface TrafficState {
   /** Bumped on every open/new so the chat remounts with the right thread. */
   homeChatSession: number
   openHomeChat: (q: string) => void
-  closeHomeChat: () => void
   /** Start a fresh, empty Home chat. */
   newHomeChat: () => void
   /** Reopen a saved Home chat by id. */
@@ -1888,7 +1848,6 @@ interface TrafficState {
   /** Past Home chat conversations, newest activity first. */
   homeChats: SavedHomeChat[]
   /** Upsert a saved Home chat by id. */
-  saveHomeChat: (chat: SavedHomeChat) => void
   /** Delete a saved Home chat by id. */
   deleteHomeChat: (id: string) => void
   /** Sharing & access: the current session role and the owner's share links. */
@@ -1925,17 +1884,10 @@ interface TrafficState {
   canvases: CanvasBoard[]
   /** Active canvas id per scope key (`client|campaign`); defaults to 'all'. */
   activeCanvas: Record<string, string>
-  addCanvas: (client: string, campaign: string, name: string, audiences?: string[]) => string
-  renameCanvas: (id: string, name: string) => void
   deleteCanvas: (id: string) => void
   /** Artboards: named frames drawn on the canvas to group a region of cards.
    *  Persisted per client + campaign in world coordinates. */
   artboards: Artboard[]
-  addArtboard: (client: string, campaign: string, rect: { x: number; y: number; w: number; h: number }) => void
-  renameArtboard: (id: string, name: string) => void
-  deleteArtboard: (id: string) => void
-  setActiveCanvas: (scopeKey: string, id: string) => void
-  setCanvasAudiences: (id: string, audiences: string[]) => void
   /** Open project tabs (campaign names) in the canvas folder drawer, in tab order. */
   openProjects: string[]
   openProject: (campaign: string) => void
@@ -1988,7 +1940,6 @@ interface TrafficState {
   setFlowAssetsOpen: (v: boolean) => void
   /** User-toggled sidebar collapse (persists; works on every page). */
   sidebarCollapsed: boolean
-  toggleSidebar: () => void
   /** Whether the Records-page AI assistant panel is collapsed to its rail (remembered). */
   recordsChatCollapsed: boolean
   setRecordsChatCollapsed: (v: boolean) => void
@@ -2015,36 +1966,25 @@ interface TrafficState {
    *  Brand card. Seeds one default audience lane so the blank canvas is addable. */
   createCanvas: () => void
   /** Link a campaign to a GTM playbook (ABM, Demand Gen, etc.) — the strategy selector. */
-  setCampaignStrategy: (name: string, strategy: string) => void
   /** Apply a GTM strategy to every campaign of a brand at once — the brand-level playbook. */
   setBrandStrategy: (brand: string, strategy: string) => void
   /** Swap a campaign's subject (what it's about) — the Subject card picker. */
-  setCampaignSubject: (name: string, subject: string) => void
   /** Set the records a flow references (Companies / People / Segments / Media mix). Read when generating assets. */
   setCampaignReferences: (name: string, references: FlowReference[]) => void
   /** The campaign's object direction: what its objects instruct the copy writer to do. */
   /** RETIRED: direction lives on the card now (CanvasObject.direction). Kept while
    *  Campaign.direction is still READ as an inherited fallback; nothing writes it. */
-  setCampaignDirection: (name: string, direction: { kind: string; key: string; value: string }[]) => void
   /** Patch arbitrary campaign metadata (flight length, budget, …) on an existing campaign.
    *  A no-op if the campaign isn't found (only meaningful for built flows). */
   patchCampaign: (name: string, patch: Partial<Campaign>) => void
   /** Shift every scheduled asset in a campaign by N days — drag-to-move a campaign on the calendar. */
-  moveCampaignSchedule: (campaign: string, deltaDays: number) => Promise<void>
   /** Rescale a campaign's assets into a new [startMs, endMs] window and update its duration —
    *  drag-to-resize a campaign on the calendar. */
-  rescaleCampaignSchedule: (campaign: string, newStartMs: number, newEndMs: number) => Promise<void>
   /** Shift a single asset's launch date (scheduledAt) by N days — drag an asset on the calendar. */
   moveAssetSchedule: (rowId: string, deltaDays: number) => Promise<void>
   /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
-  setCampaignGoal: (name: string, goal: string) => void
   /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
-  setCampaignGoalParts: (
-    name: string,
-    patch: { message?: string; kpi?: string; target?: number | null },
-  ) => void
   /** Swap a campaign's brand/client — the Brand card picker. Re-homes the campaign. */
-  setCampaignClient: (name: string, client: string) => void
   /** Campaign folders per brand: the ordered folder names each brand's gallery files under. */
   campaignFolders: Record<string, string[]>
   /** Campaign Flights — each a scheduled run of a campaign (Umbrella → Campaign → Flight → Asset). */
@@ -2055,7 +1995,6 @@ interface TrafficState {
   /** Give every campaign that has assets a default flight (idempotent; gated on flightsHydrated). */
   ensureFlights: () => Promise<void>
   /** Add a flight to a campaign; returns the new flight's id. */
-  addFlight: (campaign: string, patch?: Partial<Flight>) => string
   /** Edit a flight (name / startAt / durationWeeks). */
   patchFlight: (id: string, patch: Partial<Flight>) => void
   /** Remove a flight; its assets keep their dates but lose the flight tag. */
@@ -2073,7 +2012,6 @@ interface TrafficState {
   /** Delete a flight and archive every asset that resolves to it (stamped OR the primary flight's
    *  fallback), with the same verify+retry hardening as removeFlightRun. This is the explicit,
    *  user-initiated per-flight delete used by the folder view. */
-  removeFlight: (flightId: string) => Promise<void>
   /** Which folder the campaigns gallery is scoped to — nested under Campaigns in the
    *  sidebar. null = all folders grouped; '' = Unfiled; else a folder name. */
   campaignFolderView: string | null
@@ -2131,7 +2069,6 @@ interface TrafficState {
   /** Store an extracted current-state messaging map as the client's connected map. */
   provisionCurrentState: (map: SiteMap) => Promise<void>
   /** Re-gather a client's channels and replace their live-messaging map. */
-  refreshClient: (client: string) => Promise<void>
   /** The client currently being refreshed (re-gathered), or null. */
   refreshingClient: string | null
   // ---- Per-channel link + ingest (Foundation › Channels) ----
@@ -2191,19 +2128,13 @@ interface TrafficState {
   setPersonalizeOpen: (open: boolean) => void
   setDrivePickerOpen: (open: boolean) => void
   /** Connect the Drive account (real sign-in, or demo). */
-  connectDrive: () => Promise<void>
   /** Entry point for "Import from Drive": opens the real Google Picker when
    *  configured, else the Demo Drive modal. */
-  importFromDrive: () => Promise<void>
   /** Pick a whole Drive folder and import its files. */
-  importFolderFromDrive: () => Promise<void>
   /** Ingest the assets in a Google Drive folder from its link. */
   ingestDriveFolderUrl: (url: string) => Promise<void>
   /** Save a Google Drive folder link for a client. */
-  setDriveLink: (client: string, url: string) => void
   /** Ingest the assets from a client's saved Drive folder link. */
-  ingestDriveLink: (client: string) => Promise<void>
-
   refresh: () => Promise<void>
   /** Pull the record lists (companies, people, brands, …) from the workspace backend into the store
    *  after sign-in. No-op on localStorage (the slices already loaded synchronously at init). */
@@ -2322,14 +2253,12 @@ interface TrafficState {
   /** The connected Claude app pushes coherence flags it ran itself (so the check
    *  comes from the live Claude, not Hyperfocus's own API credits). Injects them
    *  for the current scope and marks the result live. */
-  applyClaudeCoherence: (flags: ClaudeCoherenceFlag[]) => void
   /** The Claude engine: reads from sources + publishes to channels via tools. */
   engineOpen: boolean
   engineRunning: boolean
   engineActions: AgentAction[]
   engineSummary: string
   engineLive: boolean
-  openEngine: () => void
   closeEngine: () => void
   runEngine: (mode: 'read' | 'publish') => Promise<void>
   /** The disclosure trail: every check result and every action. */
@@ -2339,7 +2268,6 @@ interface TrafficState {
   applyBreakFix: (breakId: string) => Promise<void>
   reassignBreakProof: (breakId: string) => Promise<void>
   markBreakIntended: (breakId: string) => void
-  sendBreakToReview: (breakId: string) => void
   /** Human accept/override calls on the coherence check — the proprietary dataset. */
   coherenceDecisions: CoherenceDecision[]
   /** Account-wide opt-out of the anonymized aggregate learning layer (default-on). */
@@ -2457,11 +2385,9 @@ interface TrafficState {
   // ---- ABM: target accounts ----
   addAccount: (brand: string, patch: Partial<Account>) => Account
   updateAccount: (brand: string, id: string, patch: Partial<Account>) => void
-  setAccountStatus: (brand: string, id: string, status: AccountStatus) => void
   removeAccount: (brand: string, id: string) => void
   /** Create a target list under a brand, optionally seeded with account ids. */
   createTargetList: (brand: string, name: string, accountIds?: string[]) => TargetList
-  setTargetListAccounts: (listId: string, accountIds: string[]) => void
   /** Delete a target list and detach it from any campaign that targeted it. */
   removeTargetList: (listId: string) => void
   /** Attach (or clear) the target list a campaign targets. */
@@ -2515,7 +2441,6 @@ interface TrafficState {
   /** Extract the in-creative copy for a row (text body real; vision stubbed). */
   extractCopy: (id: string) => Promise<void>
   /** Toggle the "copy reviewed" sign-off for a row. */
-  toggleReviewed: (id: string, value: boolean) => Promise<void>
 }
 
 /** Append one entry to the audit trail (newest first) and persist it. */
@@ -2897,32 +2822,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setCtaFilter: (ctaFilter) => set({ ctaFilter }),
   setAudienceFilter: (audienceFilter) => set({ audienceFilter }),
   setCardFilter: (cardFilter) => set({ cardFilter }),
-  setOnboardingCollapsed: (collapsed) =>
-    set((s) => {
-      const onboarding = { ...s.onboarding, collapsed }
-      saveOnboarding(onboarding)
-      return { onboarding }
-    }),
-  dismissOnboarding: () =>
-    set((s) => {
-      const onboarding = { ...s.onboarding, dismissed: true }
-      saveOnboarding(onboarding)
-      return { onboarding }
-    }),
-  resetOnboarding: () =>
-    set(() => {
-      const onboarding = { ...DEFAULT_ONBOARDING }
-      saveOnboarding(onboarding)
-      return { onboarding }
-    }),
-  toggleOnboardingStep: (id) =>
-    set((s) => {
-      const has = s.onboarding.done.includes(id)
-      const done = has ? s.onboarding.done.filter((x) => x !== id) : [...s.onboarding.done, id]
-      const onboarding = { ...s.onboarding, done }
-      saveOnboarding(onboarding)
-      return { onboarding }
-    }),
   markOnboardingDone: (id) =>
     set((s) => {
       if (s.onboarding.done.includes(id)) return {}
@@ -2967,57 +2866,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openTracking: (channel) => set({ trackingChannel: channel }),
   closeTracking: () => set({ trackingChannel: null }),
   setDrivePickerOpen: (drivePickerOpen) => set({ drivePickerOpen }),
-  connectDrive: async () => {
-    // Demo (no creds): simulate a connected account so the flow is visible.
-    if (!isGoogleDriveConfigured) {
-      set({ driveConnected: true })
-      return
-    }
-    try {
-      await connectGoogleDrive()
-      set({ driveConnected: true })
-    } catch {
-      set({ driveConnected: false })
-    }
-  },
-  importFromDrive: async () => {
-    // Demo Drive (no creds) → in-app fixture modal.
-    if (!isGoogleDriveConfigured) {
-      set({ drivePickerOpen: true })
-      return
-    }
-    // Real Drive → native Google Picker, same pipeline as the demo. A configured
-    // user must NOT be shown the demo fixture on cancel/error (cancel now no-ops
-    // via an empty result); surface real failures to the console instead.
-    try {
-      const files = await pickFromGoogleDrive()
-      if (files.length) {
-        get().addAssets(driveFilesToAssets(files))
-        set({ driveConnected: true })
-        if (get().page !== 'clients') set({ page: 'clients' })
-      }
-    } catch (e) {
-      console.error('[drive] file import failed', e)
-    }
-  },
-  importFolderFromDrive: async () => {
-    // Demo Drive (no creds) → the fixture modal (its folder checkboxes stand in
-    // for folder selection).
-    if (!isGoogleDriveConfigured) {
-      set({ drivePickerOpen: true })
-      return
-    }
-    try {
-      const files = await pickFolderFromGoogleDrive()
-      if (files.length) {
-        get().addAssets(driveFilesToAssets(files))
-        set({ driveConnected: true })
-        if (get().page !== 'clients') set({ page: 'clients' })
-      }
-    } catch (e) {
-      console.error('[drive] folder import failed', e)
-    }
-  },
   ingestDriveFolderUrl: async (url) => {
     if (!url.trim()) return
     try {
@@ -3031,21 +2879,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     } catch (e) {
       console.error('[drive] folder ingest failed', e)
     }
-  },
-  setDriveLink: (client, url) =>
-    set((s) => {
-      const driveLinks = { ...s.driveLinks }
-      if (url.trim()) driveLinks[client] = url.trim()
-      else delete driveLinks[client]
-      saveDriveLinks(driveLinks)
-      return { driveLinks }
-    }),
-  ingestDriveLink: async (client) => {
-    const url = get().driveLinks[client]
-    if (!url) return
-    await get().ingestDriveFolderUrl(url)
-    // Scope to the client so the freshly-ingested assets show in its workspace.
-    set({ clientFilter: client })
   },
   addClient: (name) =>
     set((s) => {
@@ -3064,15 +2897,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { clientProfiles }
     }),
 
-  removeClientProfile: (name) =>
-    set((s) => {
-      if (!(name in s.clientProfiles)) return {}
-      const clientProfiles = { ...s.clientProfiles }
-      delete clientProfiles[name]
-      saveClientProfiles(clientProfiles)
-      return { clientProfiles }
-    }),
-
   setBrandActuals: (brand, data) =>
     set((s) => {
       const n = brand.trim()
@@ -3084,25 +2908,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       if (snapshotOncePerDay(n)) void appendSnapshots(snapshotsFromActuals(n, data, new Date().toISOString()))
       return { brandActuals }
     }),
-
-  addReport: (input) => {
-    const id = `report_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
-    const report: BrandReport = {
-      id,
-      client: input.client.trim(),
-      title: input.title.trim() || 'Untitled report',
-      kind: input.kind,
-      summary: input.summary?.trim() || undefined,
-      html: input.html,
-      createdAt: Date.now(),
-    }
-    set((s) => {
-      const reports = [report, ...s.reports]
-      saveReports(reports)
-      return { reports }
-    })
-    return id
-  },
 
   deleteReport: (id) =>
     set((s) => {
@@ -3294,13 +3099,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveRecordList(PRODUCTS_KEY, products)
       return { products }
     }),
-  deleteProduct: (id) =>
-    set((s) => {
-      const products = s.products.filter((p) => p.id !== id)
-      saveRecordList(PRODUCTS_KEY, products)
-      return { products }
-    }),
-
   addBrandObject: (partial) => {
     const id = freshBrandObjectId()
     const row: BrandObject = { name: '', ...(partial ?? {}), id }
@@ -3317,13 +3115,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveRecordList(BRAND_OBJECTS_KEY, brandObjects)
       return { brandObjects }
     }),
-  deleteBrandObject: (id) =>
-    set((s) => {
-      const brandObjects = s.brandObjects.filter((b) => b.id !== id)
-      saveRecordList(BRAND_OBJECTS_KEY, brandObjects)
-      return { brandObjects }
-    }),
-
   addObjective: (partial) => {
     const id = freshObjectiveId()
     const row: Objective = { name: 'New objective', ...(partial ?? {}), id }
@@ -3663,53 +3454,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { brandDatasets }
     }),
 
-  addSegment: (partial) => {
-    const id = freshSegmentId()
-    const segment: Segment = { name: 'New segment', ...(partial ?? {}), id }
-    set((s) => {
-      const segments = [segment, ...s.segments]
-      saveSegments(segments)
-      return { segments }
-    })
-    return id
-  },
-
-  updateSegment: (id, patch) =>
-    set((s) => {
-      const segments = s.segments.map((x) => (x.id === id ? { ...x, ...patch } : x))
-      saveSegments(segments)
-      return { segments }
-    }),
-
-  deleteSegment: (id) =>
-    set((s) => {
-      const segments = s.segments.filter((x) => x.id !== id)
-      saveSegments(segments)
-      return { segments }
-    }),
-
-  addMediaMix: (brand) => {
-    const id = `mix_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
-    const n = get().mediaMixes.filter((m) => m.brand === brand).length + 1
-    const mix: MediaMix = { id, brand, name: `Plan ${n}`, goal: 'reach', budget: 50000, risk: 'balanced', overrides: {} }
-    const mediaMixes = [...get().mediaMixes, mix]
-    saveMediaMixes(mediaMixes)
-    set({ mediaMixes })
-    return id
-  },
-  updateMediaMix: (id, patch) =>
-    set((s) => {
-      const mediaMixes = s.mediaMixes.map((m) => (m.id === id ? { ...m, ...patch } : m))
-      saveMediaMixes(mediaMixes)
-      return { mediaMixes }
-    }),
-  deleteMediaMix: (id) =>
-    set((s) => {
-      const mediaMixes = s.mediaMixes.filter((m) => m.id !== id)
-      saveMediaMixes(mediaMixes)
-      return { mediaMixes }
-    }),
-
   addPinnedInsight: (input) => {
     const id = `pin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
     const pin: PinnedInsight = {
@@ -3727,71 +3471,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { pinnedInsights }
     })
     return id
-  },
-
-  removePinnedInsight: (id) =>
-    set((s) => {
-      const pinnedInsights = s.pinnedInsights.filter((p) => p.id !== id)
-      savePinned(pinnedInsights)
-      return { pinnedInsights }
-    }),
-
-  autoTagAudiences: async (brand) => {
-    const sys = get().brandSystems[brand]
-    if (!sys || !sys.audiences.length) return 0
-    const auds = sys.audiences
-    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
-    for (const r of get().rows) {
-      if (clientForCampaign(r.campaign) !== brand) continue
-      if ((r.audience ?? '').trim()) continue // never overwrite an existing tag
-      const copy = Object.values(r.messaging ?? {})
-        .filter((v): v is string => typeof v === 'string')
-        .join(' ')
-      if (!copy.trim()) continue
-      const name = classifyRowAudience(copy, auds)
-      if (name) updates.push({ id: r.id, patch: { audience: name } })
-    }
-    if (updates.length) await get().updateRows(updates)
-    return updates.length
-  },
-
-  reconcileActuals: async (brand) => {
-    const rows = get().rows
-    const posted = rows.filter((r) => r.status === 'posted' && r.socialMetrics)
-    const byUrl = new Map<string, TrafficRow>()
-    const byCopy = new Map<string, TrafficRow>()
-    for (const p of posted) {
-      if (p.sourceUrl) byUrl.set(p.sourceUrl, p)
-      const k = rowCopyKey(p)
-      if (k) byCopy.set(k, p)
-    }
-    const updates: { id: string; patch: Partial<TrafficRow> }[] = []
-    for (const r of rows) {
-      if (clientForCampaign(r.campaign) !== brand) continue
-      if (!isPlannedCard(r) || typeof r.reconciledAt === 'number') continue
-      const match = (r.sourceUrl && byUrl.get(r.sourceUrl)) || byCopy.get(rowCopyKey(r))
-      if (!match || !match.socialMetrics) continue
-      updates.push({
-        id: r.id,
-        patch: {
-          socialMetrics: match.socialMetrics,
-          engagement: match.engagement,
-          postedAt: match.postedAt,
-          metricsUpdatedAt: match.metricsUpdatedAt ?? Date.now(),
-          reconciledAt: Date.now(),
-          sourceUrl: r.sourceUrl ?? match.sourceUrl,
-        },
-      })
-    }
-    if (updates.length) await get().updateRows(updates)
-    // Append the freshly-measured assets to the metrics time-series (the per-persona signal).
-    if (updates.length) {
-      const byId = new Map(get().rows.map((r) => [r.id, r]))
-      const reconciled = updates.map((u) => byId.get(u.id)).filter((r): r is TrafficRow => !!r?.socialMetrics)
-      void appendSnapshots(snapshotsFromAssets(brand, reconciled, new Date().toISOString()))
-      void get().contributeAggregate() // refresh the cross-customer pool (self-gates on opt-in)
-    }
-    return updates.length
   },
 
   refreshActuals: async (brand) => {
@@ -3889,7 +3568,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   openReadiness: () => set({ readinessOpen: true }),
   closeReadiness: () => set({ readinessOpen: false }),
-  openDiagnosis: () => set({ diagnosisOpen: true }),
   closeDiagnosis: () => set({ diagnosisOpen: false }),
   openAsk: (seed) => set({ askOpen: true, askSeed: seed }),
   closeAsk: () => set({ askOpen: false, askSeed: undefined }),
@@ -3899,18 +3577,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // navigates. (It used to force page:'portfolio', so summoning the chat teleported you to Home.)
   openHomeChat: (q) =>
     set((s) => ({ homeChatOpen: true, homeChatSeed: q, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1 })),
-  closeHomeChat: () => set({ homeChatOpen: false, homeChatSeed: null }),
   newHomeChat: () =>
     set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: null, homeChatSession: s.homeChatSession + 1 })),
   openSavedHomeChat: (id) =>
     set((s) => ({ homeChatOpen: true, homeChatSeed: null, activeHomeChatId: id, homeChatSession: s.homeChatSession + 1 })),
-  saveHomeChat: (chat) =>
-    set((s) => {
-      const rest = s.homeChats.filter((c) => c.id !== chat.id)
-      const homeChats = [chat, ...rest].sort((a, b) => b.updatedAt - a.updatedAt)
-      saveHomeChats(homeChats)
-      return { homeChats }
-    }),
   deleteHomeChat: (id) =>
     set((s) => {
       const homeChats = s.homeChats.filter((c) => c.id !== id)
@@ -3986,32 +3656,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     for (const r of v.rows) await sheet.update(r.id, { messaging: { ...r.messaging } })
     await get().refresh()
   },
-  markBrandFields: (brand, fields, source) =>
-    set((s) => {
-      const b = brand.trim()
-      if (!b || !fields.length) return {}
-      const forBrand = { ...(s.brandFieldSources[b] ?? {}) }
-      // A field the user has claimed stays theirs. A later draft cannot quietly take it back by
-      // writing over it, which is the whole point of tracking this.
-      for (const f of fields) if (source === 'user' || forBrand[f] !== 'user') forBrand[f] = source
-      const brandFieldSources = { ...s.brandFieldSources, [b]: forBrand }
-      saveBrandFieldSources(brandFieldSources)
-      return { brandFieldSources }
-    }),
-  userOwnedBrandFields: (brand) => {
-    const map = get().brandFieldSources[brand.trim()] ?? {}
-    return new Set(Object.keys(map).filter((k) => map[k] === 'user'))
-  },
-  renameBrandFieldSources: (from, to) =>
-    set((s) => {
-      const a = from.trim()
-      const b = to.trim()
-      if (!a || !b || a === b || !s.brandFieldSources[a]) return {}
-      const brandFieldSources = { ...s.brandFieldSources, [b]: { ...(s.brandFieldSources[b] ?? {}), ...s.brandFieldSources[a] } }
-      delete brandFieldSources[a]
-      saveBrandFieldSources(brandFieldSources)
-      return { brandFieldSources }
-    }),
   generateBrandGuide: (client) =>
     set((s) => {
       const n = client.trim()
@@ -4050,17 +3694,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => ({ messagingBrand: brand, library: libFor(s.brandSystems, brand) })),
   addLibraryItem: (kind, item) =>
     set((s) => activeLibPatch(s, (lib) => ({ ...lib, [kind]: [...(lib[kind] as unknown[]), item] }) as MessagingLibrary)),
-  setAudienceAliases: (brand, aliasesById) =>
-    set((s) => {
-      const b = brand.trim()
-      if (!b) return {}
-      const lib = libFor(s.brandSystems, b)
-      const audiences = lib.audiences.map((a) => (aliasesById[a.id] ? { ...a, aliases: aliasesById[a.id] } : a))
-      const nextLib = { ...lib, audiences }
-      const brandSystems = { ...s.brandSystems, [b]: nextLib }
-      saveBrandSystems(brandSystems)
-      return { brandSystems, ...(s.messagingBrand === b ? { library: nextLib } : {}) }
-    }),
   addBrandProof: (brand, rtb) =>
     set((s) => {
       const b = brand.trim()
@@ -4136,25 +3769,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       if (!next) return {}
       return activeLibPatch(s, (lib) => ({ ...lib, hooks: lib.hooks.map((x) => (x.id === id ? { ...x, text: next } : x)) }))
     }),
-  useLibraryAudience: (client, audienceId) =>
-    set((s) => {
-      const c = client.trim()
-      const src = s.library.audiences.find((a) => a.id === audienceId)
-      if (!c || !src) return {}
-      // Clone with a fresh id so foundation edits don't mutate the library copy.
-      const clone = normalizeAudience({ ...src, id: freshAudienceId() })
-      const clientAudiences = { ...s.clientAudiences, [c]: [...(s.clientAudiences[c] ?? []), clone] }
-      saveClientAudiences(clientAudiences)
-      return { clientAudiences }
-    }),
-  saveAudienceToLibrary: (audience) =>
-    set((s) => {
-      const clone = normalizeAudience({
-        ...audience,
-        id: `laud_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`,
-      })
-      return activeLibPatch(s, (lib) => ({ ...lib, audiences: [...lib.audiences, clone] }))
-    }),
   deleteClient: async (name) => {
     // Remove the client's rows from the sheet.
     const ids = get()
@@ -4189,20 +3803,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { campaignList }
     }),
 
-  addCanvas: (client, campaign, name, audiences = []) => {
-    const id = `canvas_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
-    const canvases = [...get().canvases, { id, client, campaign, name, audiences }]
-    saveCanvases(canvases)
-    const activeCanvas = { ...get().activeCanvas, [`${client}|${campaign}`]: id }
-    saveActiveCanvas(activeCanvas)
-    set({ canvases, activeCanvas })
-    return id
-  },
-  renameCanvas: (id, name) => {
-    const canvases = get().canvases.map((c) => (c.id === id ? { ...c, name } : c))
-    saveCanvases(canvases)
-    set({ canvases })
-  },
   deleteCanvas: (id) => {
     const board = get().canvases.find((c) => c.id === id)
     const canvases = get().canvases.filter((c) => c.id !== id)
@@ -4214,35 +3814,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     set({ canvases, activeCanvas })
   },
-  setActiveCanvas: (scopeKey, id) => {
-    const activeCanvas = { ...get().activeCanvas, [scopeKey]: id }
-    saveActiveCanvas(activeCanvas)
-    set({ activeCanvas })
-  },
-
-  addArtboard: (client, campaign, rect) => {
-    const existing = get().artboards.filter((a) => a.client === client && a.campaign === campaign)
-    const id = `art_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
-    const artboards = [...get().artboards, { id, client, campaign, name: `Artboard ${existing.length + 1}`, ...rect }]
-    saveArtboards(artboards)
-    set({ artboards })
-  },
-  renameArtboard: (id, name) => {
-    const artboards = get().artboards.map((a) => (a.id === id ? { ...a, name } : a))
-    saveArtboards(artboards)
-    set({ artboards })
-  },
-  deleteArtboard: (id) => {
-    const artboards = get().artboards.filter((a) => a.id !== id)
-    saveArtboards(artboards)
-    set({ artboards })
-  },
-  setCanvasAudiences: (id, audiences) => {
-    const canvases = get().canvases.map((c) => (c.id === id ? { ...c, audiences } : c))
-    saveCanvases(canvases)
-    set({ canvases })
-  },
-
   openProject: (campaign) => {
     const c = campaign.trim()
     if (!c) return
@@ -4354,12 +3925,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     try { localStorage.setItem('stoplight.recordsChatCollapsed', v ? '1' : '0') } catch { /* ignore */ }
     set({ recordsChatCollapsed: v })
   },
-  toggleSidebar: () =>
-    set((s) => {
-      const sidebarCollapsed = !s.sidebarCollapsed
-      try { localStorage.setItem('stoplight.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch { /* ignore */ }
-      return { sidebarCollapsed }
-    }),
   saveFlowChat: (chat) =>
     set((s) => {
       const rest = s.flowChats.filter((c) => c.id !== chat.id)
@@ -4393,26 +3958,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().openCampaign(name)
   },
 
-  setCampaignStrategy: (name, strategy) => {
-    set((s) => {
-      const idx = s.campaignList.findIndex((c) => c.name === name)
-      let campaignList: Campaign[]
-      if (idx >= 0) {
-        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, strategy } : c))
-      } else {
-        // Row-only campaign with no wizard record yet: create a minimal entry so the
-        // chosen playbook persists and resolves to its client.
-        const client = clientForCampaign(name)
-        registerCampaign(name, client)
-        campaignList = [...s.campaignList, { name, client, strategy }]
-      }
-      saveCampaigns(campaignList)
-      return { campaignList }
-    })
-    // Ripple the new playbook across every asset in the campaign.
-    void get().redraftAssets({ campaign: name })
-  },
-
   setBrandStrategy: (brand, strategy) => {
     set((s) => {
       // Every campaign of this brand: its campaignList records + any row-only campaigns
@@ -4438,21 +3983,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // assets are welded and skipped by redraftAssets).
     void get().redraftAssets({ client: brand })
   },
-
-  setCampaignSubject: (name, subject) =>
-    set((s) => {
-      const idx = s.campaignList.findIndex((c) => c.name === name)
-      let campaignList: Campaign[]
-      if (idx >= 0) {
-        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, subject } : c))
-      } else {
-        const client = clientForCampaign(name)
-        registerCampaign(name, client)
-        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', subject }]
-      }
-      saveCampaigns(campaignList)
-      return { campaignList }
-    }),
 
   setCampaignReferences: (name, references) =>
     set((s) => {
@@ -4490,21 +4020,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const flowBoards = empty ? rest : [...rest, board2]
       saveFlowBoards(flowBoards)
       return { flowBoards }
-    }),
-
-  setCampaignDirection: (name, direction) =>
-    set((s) => {
-      const idx = s.campaignList.findIndex((c) => c.name === name)
-      let campaignList: Campaign[]
-      if (idx >= 0) {
-        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, direction } : c))
-      } else {
-        const client = clientForCampaign(name)
-        registerCampaign(name, client)
-        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', direction }]
-      }
-      saveCampaigns(campaignList)
-      return { campaignList }
     }),
 
   patchCampaign: (name, patch) =>
@@ -4630,14 +4145,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveFlights(flights)
       set({ flights })
     }
-  },
-
-  addFlight: (campaign, patch) => {
-    const flight = newFlight({ campaign, ...patch })
-    const flights = [...get().flights, flight]
-    saveFlights(flights)
-    set({ flights })
-    return flight.id
   },
 
   patchFlight: (id, patch) =>
@@ -4771,50 +4278,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await get().refresh()
   },
 
-  removeFlight: async (flightId) => {
-    const f = get().flights.find((x) => x.id === flightId)
-    if (!f) return
-    const flight = { ...f } // snapshot for undo
-    const archived = new Set<string>()
-    // Archive every asset that resolves to this flight — stamped clones AND, for the primary flight,
-    // its unstamped fallback assets. Resolve via flightForRow while the flight still exists in state,
-    // then verify + retry (same hardening as removeFlightRun) so a failed write can't orphan assets.
-    const remaining = () => {
-      const flights = get().flights
-      return get().rows.filter((r) => !r.archivedAt && flightForRow(r, flights)?.id === flightId)
-    }
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const rows = remaining()
-      if (!rows.length) break
-      for (const r of rows) {
-        await sheet.update(r.id, { archivedAt: Date.now() })
-        archived.add(r.id)
-      }
-      await get().refresh()
-    }
-    const stuck = remaining()
-    if (stuck.length) {
-      get().showToast(
-        `Couldn't archive ${stuck.length} asset${stuck.length === 1 ? '' : 's'} on that flight, so it was kept. Try deleting it again.`,
-      )
-      return
-    }
-    get().deleteFlight(flightId)
-    await get().refresh()
-    // Soft delete → offer an undo: re-add the flight and un-archive exactly the assets we archived.
-    const ids = [...archived]
-    get().showToastAction(`Deleted ${flight.name}`, 'Undo', async () => {
-      set((s) => {
-        if (s.flights.some((x) => x.id === flight.id)) return {}
-        const flights = [...s.flights, flight]
-        saveFlights(flights)
-        return { flights }
-      })
-      if (ids.length) await get().updateRows(ids.map((id) => ({ id, patch: { archivedAt: undefined } })))
-      await get().refresh()
-    })
-  },
-
   renameCampaign: async (oldName, newName) => {
     const from = oldName.trim()
     const to = newName.trim()
@@ -4851,69 +4314,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
     })
     await get().refresh()
-  },
-
-  setCampaignGoal: (name, goal) =>
-    set((s) => {
-      const objective = goal.trim() || undefined
-      const idx = s.campaignList.findIndex((c) => c.name === name)
-      let campaignList: Campaign[]
-      if (idx >= 0) {
-        campaignList = s.campaignList.map((c, i) => (i === idx ? { ...c, objective } : c))
-      } else {
-        const client = clientForCampaign(name)
-        registerCampaign(name, client)
-        campaignList = [...s.campaignList, { name, client, strategy: 'Current state', objective }]
-      }
-      saveCampaigns(campaignList)
-      return { campaignList }
-    }),
-
-  setCampaignGoalParts: (name, patch) =>
-    set((s) => {
-      // Normalize: empty strings clear the field; a message equal to the derived line is
-      // stored as empty so the message stays live-derived until deliberately overridden.
-      const apply = (c: Campaign): Campaign => {
-        const next = { ...c }
-        if ('message' in patch) next.goalMessage = (patch.message ?? '').trim() || undefined
-        if ('kpi' in patch) next.goalKpi = (patch.kpi ?? '').trim() || undefined
-        if ('target' in patch) next.goalTarget = typeof patch.target === 'number' && patch.target >= 0 ? patch.target : undefined
-        return next
-      }
-      const idx = s.campaignList.findIndex((c) => c.name === name)
-      let campaignList: Campaign[]
-      if (idx >= 0) {
-        campaignList = s.campaignList.map((c, i) => (i === idx ? apply(c) : c))
-      } else {
-        const client = clientForCampaign(name)
-        registerCampaign(name, client)
-        campaignList = [...s.campaignList, apply({ name, client, strategy: 'Current state' })]
-      }
-      saveCampaigns(campaignList)
-      return { campaignList }
-    }),
-
-  setCampaignClient: (name, client) => {
-    const c = client.trim()
-    if (!c) return
-    set((s) => {
-      registerCampaign(name, c)
-      const idx = s.campaignList.findIndex((x) => x.name === name)
-      const campaignList =
-        idx >= 0
-          ? s.campaignList.map((x, i) => (i === idx ? { ...x, client: c } : x))
-          : [...s.campaignList, { name, client: c, strategy: 'Current state' }]
-      saveCampaigns(campaignList)
-      // Follow the campaign to its new brand so the canvas stays coherent.
-      return { campaignList, clientFilter: c }
-    })
-    // The widest-blast frame change: re-home re-checks every asset against the new
-    // brand's proof set. Produced assets that fall off their proof get flagged for
-    // external rework (editable copy is recomposed lane-by-lane as audiences swap).
-    const newProofIds = new Set(
-      (get().clientAudiences[c] ?? []).flatMap((au) => [...(au.rtbEmphasis ?? []), ...(au.rtbs ?? []).map((x) => x.id)]),
-    )
-    void flagRecheckMisfits(get, name, newProofIds, `Brand → ${c}`)
   },
 
   duplicateCampaign: async (name) => {
@@ -5036,48 +4436,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         copyReviewed: false,
       })
     }
-    await get().refresh()
-  },
-
-  moveCampaignSchedule: async (campaign, deltaDays) => {
-    if (!deltaDays) return
-    const ms = deltaDays * 86_400_000
-    const shift = (iso?: string) => {
-      if (!iso) return undefined
-      const t = Date.parse(iso)
-      return Number.isNaN(t) ? undefined : new Date(t + ms).toISOString()
-    }
-    const rows = get().rows.filter((r) => r.campaign === campaign && !r.archivedAt && r.scheduledAt)
-    for (const r of rows) {
-      const next = shift(r.scheduledAt)
-      if (next) await sheet.update(r.id, { scheduledAt: next, ...(r.endsAt ? { endsAt: shift(r.endsAt) } : {}) })
-    }
-    await get().refresh()
-  },
-
-  rescaleCampaignSchedule: async (campaign, newStartMs, newEndMs) => {
-    const rows = get().rows.filter((r) => r.campaign === campaign && !r.archivedAt && r.scheduledAt)
-    const parsed = rows.map((r) => ({ r, t: Date.parse(r.scheduledAt) })).filter((x) => !Number.isNaN(x.t))
-    if (!parsed.length) return
-    const oldStart = Math.min(...parsed.map((x) => x.t))
-    const oldEnd = Math.max(...parsed.map((x) => x.t))
-    const oldSpan = oldEnd - oldStart
-    const newSpan = Math.max(86_400_000, newEndMs - newStartMs)
-    // Map each asset's position within the old window onto the new window (proportional rescale),
-    // so a longer bar spreads the assets out and a shorter one packs them in.
-    for (const { r, t } of parsed) {
-      const frac = oldSpan > 0 ? (t - oldStart) / oldSpan : 0
-      const patch: Partial<TrafficRow> = { scheduledAt: new Date(newStartMs + frac * newSpan).toISOString() }
-      if (r.endsAt) {
-        const et = Date.parse(r.endsAt)
-        if (!Number.isNaN(et)) {
-          const efrac = oldSpan > 0 ? (et - oldStart) / oldSpan : frac
-          patch.endsAt = new Date(newStartMs + efrac * newSpan).toISOString()
-        }
-      }
-      await sheet.update(r.id, patch)
-    }
-    get().patchCampaign(campaign, { durationWeeks: Math.max(1, Math.round(newSpan / (7 * 86_400_000))) })
     await get().refresh()
   },
 
@@ -5228,35 +4586,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await sheet.append(currentStateRows(campaign, map))
     await get().refresh()
     set({ clientFilter: client, campaignFilter: campaign, filter: 'all', proofFilter: 'all', ctaFilter: 'all' })
-  },
-
-  refreshClient: async (client) => {
-    const profile = get().clientProfiles[client]
-    if (!profile?.website) return
-    set({ refreshingClient: client })
-    try {
-      const map = await mapSite({ url: profile.website, accounts: profile.channels ?? [] })
-      const campaign = `${client} — Live messaging`
-      if (!get().campaignList.some((c) => c.name === campaign)) {
-        get().addCampaign({ name: campaign, client, strategy: 'Current state' })
-      }
-      // Replace the live-messaging rows with the fresh pull (the re-gather).
-      const stale = get().rows.filter((r) => r.campaign === campaign)
-      for (const r of stale) await sheet.remove(r.id)
-      await sheet.append(currentStateRows(campaign, map))
-      await get().refresh()
-      currentStateProof(campaign, map)
-      get().setClientProfile(client, {
-        voice: map.brand.voice?.trim() || profile.voice,
-        channels: map.channels ?? profile.channels,
-        ...brandOverview(map.brand),
-      })
-      set({ clientFilter: client, campaignFilter: campaign })
-    } catch {
-      // Leave the existing map untouched on failure.
-    } finally {
-      set({ refreshingClient: null })
-    }
   },
 
   openChannelIngest: (client, channel) =>
@@ -6655,8 +5984,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { accountsByBrand }
     }),
 
-  setAccountStatus: (brand, id, status) => get().updateAccount(brand, id, { status }),
-
   removeAccount: (brand, id) =>
     set((s) => {
       const b = brand.trim()
@@ -6677,13 +6004,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set({ targetLists })
     return list
   },
-
-  setTargetListAccounts: (listId, accountIds) =>
-    set((s) => {
-      const targetLists = s.targetLists.map((t) => (t.id === listId ? { ...t, accountIds: [...new Set(accountIds)] } : t))
-      saveJson(TARGET_LISTS_KEY, targetLists)
-      return { targetLists }
-    }),
 
   removeTargetList: (listId) =>
     set((s) => {
@@ -7212,11 +6532,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     return { source: result.source ?? null, posts }
   },
 
-  toggleReviewed: async (id, value) => {
-    await sheet.update(id, { copyReviewed: value })
-    await get().refresh()
-  },
-
   loadIcp: async () => {
     const icp = await icpSource.fetch()
     set({ icp, icpFromClosedWon: false })
@@ -7400,56 +6715,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
   },
 
-  applyClaudeCoherence: (flags) => {
-    const { rows, clientFilter, campaignFilter } = get()
-    if (clientFilter === 'all' || campaignFilter === 'all') return
-    const scoped = rows.filter((r) => rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }))
-    if (scoped.length === 0) return
-    const byName = new Map(scoped.map((r) => [r.assetName, r]))
-    const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40)
-    // Clamp to a real axis / severity so a stray value from the pusher can never crash
-    // the break UI (which looks up AXIS_META[axis].label).
-    const VALID_AXES = new Set<BreakAxis>(['journey', 'audience', 'proof', 'cta', 'voice', 'contamination', 'leak', 'casing', 'duplicate'])
-    const VALID_SEV = new Set<BreakSeverity>(['high', 'medium', 'low'])
-    const breaks: CoherenceBreak[] = flags
-      .filter((f) => byName.has(f.assetName))
-      .map((f) => {
-        const r = byName.get(f.assetName)!
-        const field = f.field && r.messaging?.[f.field] != null ? f.field : Object.keys(r.messaging ?? {})[0] ?? 'body'
-        const text = String(r.messaging?.[field] ?? '')
-        const axis: BreakAxis = f.axis && VALID_AXES.has(f.axis) ? f.axis : 'voice'
-        const severity: BreakSeverity = f.severity && VALID_SEV.has(f.severity) ? f.severity : 'medium'
-        return {
-          id: `cl-${axis}-${slug(f.assetName)}-${slug(field)}`,
-          axis,
-          severity,
-          headline: f.headline,
-          campaign: campaignFilter,
-          client: clientFilter,
-          from: { role: `${r.channel} · ${field}`, assetName: f.assetName, channel: r.channel, field, text, highlight: f.highlight ?? '' },
-          why: f.why ?? '',
-          brandRule: 'Checked by Claude.',
-          suggestedFix: { assetName: f.assetName, channel: r.channel, field, before: text, after: f.suggestion },
-          status: 'open',
-        }
-      })
-    const scope = breakScopeKey(clientFilter, campaignFilter)
-    const hash = coherenceContentHash(scoped)
-    const baseline = get().brandBaselineFor(clientFilter)
-    set({
-      claudeBreaks: breaks,
-      claudeBreaksScope: scope,
-      coherenceBaseline: baseline,
-      coherenceCheckedHash: hash,
-      coherenceLive: true,
-      coherenceUnavailable: false,
-      coherenceChecking: false,
-    })
-    // Persist so the Claude-run check survives a reload (never persist the heuristic).
-    saveCoherenceCheck({ claudeBreaks: breaks, claudeBreaksScope: scope, coherenceCheckedHash: hash, coherenceLive: true, coherenceBaseline: baseline })
-  },
-
-  openEngine: () => set({ engineOpen: true }),
   closeEngine: () => set({ engineOpen: false }),
   runEngine: async (mode) => {
     const { rows, clientFilter, campaignFilter, filter, query } = get()
@@ -7586,18 +6851,6 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       breakId,
       action: 'mark-intended',
       summary: `${AUDIT_LABEL['mark-intended']}${brk ? ` — ${brk.headline}` : ''}`,
-    })
-  },
-
-  sendBreakToReview: (breakId) => {
-    const brk = detectBreaks(get().rows).find((b) => b.id === breakId)
-    const breakStatus = { ...get().breakStatus, [breakId]: 'in-review' as BreakStatus }
-    saveBreakStatus(breakStatus)
-    set({ breakStatus })
-    pushAudit(get, set, {
-      breakId,
-      action: 'send-to-review',
-      summary: `${AUDIT_LABEL['send-to-review']}${brk ? ` — ${brk.headline}` : ''}`,
     })
   },
 
