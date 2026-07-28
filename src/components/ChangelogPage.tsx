@@ -25,6 +25,8 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'Gretel no longer says it did something it has only suggested. It was told to lead with what it did and to tick each item off with a check mark, while nothing it returns is applied until you press Apply, and some of it is refused even then. So a proposal arrived reading "✓ Set campaign length to 6 weeks" above the Apply button that had not been pressed yet. It now says what it will do, and the check marks appear only in the app’s own report of what actually landed.',
+          'Gretel can change the length of a campaign that is already built. Asking for it was refused as "not available on a campaign that is already built" while the stepper in the brief two panels away did exactly that. The command was missing from the saved-campaign path rather than withheld from it, the same way the budget was already handled.',
           'A record is linked when a card carrying it is wired to the campaign, and at no other time. An untouched campaign used to link every one of the brand’s audiences by default, the picker and the assistant could pin records with no card behind them, and all of it showed on the brief under "Linked directly" while steering every draft. One campaign had 51 records listed this way. Twenty-one of them pointed at audiences that had already been deleted and survived only as the label frozen into the link. What the writer is told now comes from the board, so the panel and the copy agree on one answer.',
         ],
       },
