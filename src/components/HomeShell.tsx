@@ -37,31 +37,37 @@ function CampaignNav() {
   // Gretel are panels docked onto its left (mutually exclusive — they share the slot). None of
   // them swaps the canvas out, so switching between them never feels like a different screen.
   const onBoard = flowView === 'flow'
+  /**
+   * ICONS ONLY inside a campaign. These three never change and never grow, and the labels repeated
+   * what the icon already says on the one screen you spend the most time on. The name is not lost:
+   * `title` still shows it on hover and `aria-label` is what a screen reader announces, which is why
+   * the label span can go rather than being hidden with CSS.
+   */
   return (
-    <div className="railnav">
+    <div className="railnav railnav--icons">
       <button
         className={`nav-item${onBoard && !assetsOpen && chatCollapsed ? ' active' : ''}`}
         onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(true) }}
         title="Files: the campaign board"
+        aria-label="Files"
       >
         <span className="nav-ico"><FilesIco /></span>
-        <span className="nav-label">Files</span>
       </button>
       <button
         className={`nav-item${onBoard && assetsOpen ? ' active' : ''}`}
         onClick={() => { setFlowView('flow'); setAssetsOpen(!assetsOpen); setChatCollapsed(true) }}
         title="Assets: the brand's asset libraries"
+        aria-label="Assets"
       >
         <span className="nav-ico"><AssetsIco /></span>
-        <span className="nav-label">Assets</span>
       </button>
       <button
         className={`nav-item${onBoard && !assetsOpen && !chatCollapsed ? ' active' : ''}`}
         onClick={() => { setFlowView('flow'); setAssetsOpen(false); setChatCollapsed(onBoard ? !chatCollapsed : false) }}
         title="Gretel: the campaign assistant"
+        aria-label="Gretel"
       >
         <span className="nav-ico"><SparkIco /></span>
-        <span className="nav-label">Gretel</span>
       </button>
     </div>
   )
@@ -88,7 +94,7 @@ export function HomeShell({ children }: { children: ReactNode }) {
   }
   return (
     <div className="home-shell">
-      <BrandRail>{flowCanvasOpen ? <CampaignNav /> : <HomeSidebar mode="railitems" />}</BrandRail>
+      <BrandRail iconsOnly={flowCanvasOpen}>{flowCanvasOpen ? <CampaignNav /> : <HomeSidebar mode="railitems" />}</BrandRail>
       <div className="home-main">
         <CanvasProjectTabs />
         {children}

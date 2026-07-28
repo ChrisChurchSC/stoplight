@@ -2213,26 +2213,32 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
   width: 100%;
-  padding: 9px 4px;
+  padding: 6px 2px;
   border: none;
   cursor: pointer;
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 550;
   line-height: 1.2;
   text-align: center;
   text-decoration: none;
-  border-radius: 11px;
+  border-radius: 9px;
   position: relative;
 }
 .railnav .nav-item:hover { background: var(--surface-2); }
 .railnav .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
-.railnav .nav-ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
-.railnav .nav-ico svg { width: 20px; height: 20px; }
+.railnav .nav-ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+.railnav .nav-ico svg { width: 17px; height: 17px; }
+/* The campaign rail carries no labels (see CampaignNav), so the icon is the whole control: it gets
+   a square hit area and a couple of extra pixels, because it is now the only thing naming the
+   destination on screen. */
+.railnav--icons .nav-item { padding: 9px 0; gap: 0; border-radius: 10px; }
+.railnav--icons .nav-ico { width: 20px; height: 20px; }
+.railnav--icons .nav-ico svg { width: 19px; height: 19px; }
 .railnav .nav-label { flex: none; white-space: normal; }
 .railnav .nav-count {
   position: absolute; top: 4px; right: 10px;

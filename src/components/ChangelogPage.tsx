@@ -31,6 +31,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
+          'The left rail is smaller, and inside a campaign it is icons only. Files, Assets and Gretel never change and never grow, so their labels were repeating what the icon already said on the screen you spend the most time on: that rail is now 52px instead of 76px, and the canvas keeps the difference. Hovering still names each one. Everywhere else the rail keeps its labels and just gets tighter, 76px down to 68px with shorter rows.',
           'The campaign brief is edited the same way as everything else. It reads as a record, with the same rows and the same one searchable dropdown as the Brand and Product cards, in place of the four native menus it used to carry. A campaign and the things it is built from no longer ask for their answers in two different shapes.',
           'The brief stops asking for its angle twice. The Message angle picker and the Theme box are gone: between them they restated what the campaign name and the objective already say, and the theme box invited a second summary that then had to be kept in step with the other two. The campaign still has a theme, generation still reads it, and Gretel still writes it.',
         ],
