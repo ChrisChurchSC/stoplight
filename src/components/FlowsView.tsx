@@ -4552,24 +4552,27 @@ export function FlowsView() {
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>{brand}</label>
                 <div className="flow-recform">
-                  {/* THE DISPLAY NAME, off the brand RECORD. Not the workspace key: that string tags
-                      every campaign, asset and record in the account, so renaming it from a card
-                      would be a rename of the whole account's data behind a text field. The record's
-                      name is what surfaces read, which is the thing you actually want to change. */}
-                  {field('Name', (() => {
-                    const rec = brandRecords.find((r) => r.name === brand)
-                    if (!rec) {
-                      return <span className="flow-recform-select" style={{ color: 'var(--text-faint)' }}>{brand}</span>
-                    }
-                    return (
-                      <BufferedInput
-                        className="flow-recform-input"
-                        value={rec.name}
-                        placeholder="Name this brand"
-                        onCommit={(v) => { const t = v.trim(); if (t && t !== rec.name) { markCardDirty(nt.id); updateBrandRecord(rec.id, { name: t }) } }}
-                      />
-                    )
-                  })())}
+                  {/* NAME IS READ-ONLY HERE, and that is a considered answer rather than a gap.
+                      A brand has no id in this app: the NAME is the identity, and it is load-bearing
+                      in five shapes across roughly seventy persisted slices — a dozen maps keyed by
+                      it, two dozen record types carrying it as a field, the "Brand — " prefix inside
+                      every campaign name, list values, and other brands' parent/share links pointing
+                      at it. It spans three storage backends, and metric_snapshots.brand is a real
+                      Supabase column no client write reaches.
+
+                      An earlier version of this field edited the brand RECORD's name, which looked
+                      like it worked and quietly detached that record from everything keyed by the old
+                      string — and could only ever be done once, since the lookup was by name.
+
+                      So: a real renameBrand belongs in the store, sweeping all of it in one action
+                      with one undo entry. Until that exists, this field says what it is instead of
+                      offering a rename that corrupts. */}
+                  {field('Name', (
+                    <>
+                      <span className="flow-recform-select" style={{ color: 'var(--text-faint)' }}>{brand}</span>
+                      <span className="flow-zip-echo">Renaming a brand is not available yet: the name is this brand&apos;s identity across the whole workspace.</span>
+                    </>
+                  ))}
                   {field('What it does', (
                     <RecordCombo
                       value={profile.oneLiner ?? ''}
