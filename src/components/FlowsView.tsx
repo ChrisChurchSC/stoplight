@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import { CHANNELS } from '../domain/channels'
+import { CHANNELS, CHANNEL_LIST } from '../domain/channels'
 // The board's types live in the domain because a persisted slice must be typed outside the
 // component that renders it. OBJECT_META stays here: it carries JSX icons.
 import {
@@ -14,6 +14,7 @@ import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { COMPANY_STATUSES, type Company } from '../domain/companies'
+import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
@@ -25,7 +26,7 @@ import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import type { FlowRefType, FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
-import { BUYING_TRIGGERS, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_LIBRARY, HOBBIES, INDUSTRIES, OCCUPATIONS, PAIN_LIBRARY, REGIONS, SENIORITIES } from '../domain/taxonomy'
+import { COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
 import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
@@ -429,6 +430,7 @@ export function FlowsView() {
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
+  const updateTrigger = useTrafficStore((s) => s.updateTrigger)
   /**
    * Patch one audience in the brand's list. The store takes the whole list, so the read-modify-write
    * lives here rather than at every call site — six fields editable on a card is six chances to drop
@@ -1528,6 +1530,8 @@ export function FlowsView() {
   const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
   // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
   const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
+  /** The brand's own CTAs, resolved up the brand tree exactly as generation reads them. */
+  const brandCtas = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.ctas : []), [brand, brandSystems, brandMeta])
   /**
    * The brand material a card's instruction suggestions are drawn from: the audience it names (when
    * it names one), the brand's differentiators and voice, its hooks, its proof pool and its message
@@ -1627,7 +1631,7 @@ export function FlowsView() {
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
   /** Kinds that render a full record form, and so need no direction fields under it. */
-  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company'])
+  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger'])
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
   const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
@@ -2673,6 +2677,15 @@ export function FlowsView() {
     const already = mintedRecordRef.current.get(nt.id)
     if (already) return already
     const id = addCompany({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
+  const ensureTriggerFor = (nt: CanvasObject): string => {
+    if (nt.refId && triggers.some((t) => t.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addTrigger({ name: '', brand: brand || undefined })
     mintedRecordRef.current.set(nt.id, id)
     setObjectRef(nt.id, id)
     return id
@@ -4195,9 +4208,9 @@ export function FlowsView() {
             const others = brandSegments.filter((a) => a.id !== aud.id)
             const own = (pick: (a: AudienceType) => unknown): string[] =>
               others.flatMap((a) => { const v = pick(a); return Array.isArray(v) ? asList(v) : splitLines(String(v ?? '')) })
-            const groups = (mine: string[], lib: readonly string[]): OptionGroup[] => [
+            const groups = (mine: string[], lib: { label: string; options: string[] }[]): OptionGroup[] => [
               { label: 'From your other audiences', options: mine },
-              { label: 'Common ones', options: [...lib] },
+              ...lib,
             ]
             const field = (label: string, node: ReactNode) => (
               <div key={label} className="flow-recform-field">
@@ -4228,9 +4241,9 @@ export function FlowsView() {
                     { label: 'From your other audiences', options: own((a) => a.definition) },
                     { label: 'Their roles', options: others.map((a) => a.role).filter(Boolean) },
                   ], 'Sharper than the role. One line.', 'definition')}
-                  {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_LIBRARY), 'Add a pain', 'pains')}
-                  {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_LIBRARY), 'Add a want', 'goalTags')}
-                  {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), BUYING_TRIGGERS), 'Add a trigger', 'triggers')}
+                  {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_GROUPS), 'Add a pain', 'pains')}
+                  {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_GROUPS), 'Add a want', 'goalTags')}
+                  {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), TRIGGER_GROUPS), 'Add a trigger', 'triggers')}
                   {combo('What they believe against you', aud.objections ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.objections) },
                   ], 'The copy has to answer this', 'objections')}
@@ -4313,6 +4326,59 @@ export function FlowsView() {
                       onCommit={(v) => set({ description: v })}
                     />
                   ))}
+                </div>
+              </>
+            )
+          })()}
+          {/* THE TRIGGER a card names: why NOW, and what to do about it.
+              The two direction fields this replaces were already the record said twice — "They just
+              did" IS the signal, and "The ask" IS the action the response implies. */}
+          {nt.kind === 'trigger' && (() => {
+            const trg = (nt.refId ? triggers.find((t) => t.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
+            const others = triggers.filter((t) => t.id !== trg.id)
+            const set = (patch: Partial<Trigger>) => updateTrigger(ensureTriggerFor(nt), patch)
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const combo = (label: string, value: string, groups: OptionGroup[], placeholder: string, key: keyof Trigger) =>
+              field(label, <RecordCombo value={value} groups={groups} placeholder={placeholder} onCommit={(v) => set({ [key]: v })} />)
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Why now</label>
+                <div className="flow-recform">
+                  {field('Name', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={trg.name}
+                      placeholder="Name this trigger"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {combo('Type', trg.type ?? '', [{ label: 'Choose one', options: [...TRIGGER_TYPE_OPTIONS] }], 'What kind of trigger', 'type')}
+                  {/* The highest-value field: the writer must not re-explain something the reader has
+                      already done. Sourced from this brand's own triggers and its audiences' before
+                      the starter lists. */}
+                  {combo('What fires it', trg.signal ?? '', [
+                    { label: 'From your other triggers', options: others.map((t) => t.signal ?? '').filter(Boolean) },
+                    { label: "From your audiences", options: brandSegments.flatMap((a) => asList(a.triggers)) },
+                    ...TRIGGER_GROUPS,
+                  ], 'The event or condition', 'signal')}
+                  {/* The ask comes from the brand's OWN CTA list, verbatim, rather than being invented
+                      here — same rule the copy writer works under. */}
+                  {combo('The ask', trg.response ?? '', [
+                    { label: 'Your brand CTAs', options: brandCtas.map((c) => c.label).filter(Boolean) },
+                    { label: 'From your other triggers', options: others.map((t) => t.response ?? '').filter(Boolean) },
+                  ], 'The one action it drives', 'response')}
+                  {combo('Channel', trg.channel ?? '', [
+                    { label: 'Channels', options: CHANNEL_LIST.map((c) => c.label) },
+                  ], 'Where it acts', 'channel')}
+                  {combo('Audience', trg.audience ?? '', [
+                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
+                  ], 'Who it targets', 'audience')}
+                  {combo('Status', trg.status ?? '', [{ label: 'Choose one', options: [...TRIGGER_STATUSES] }], 'Active, paused or draft', 'status')}
                 </div>
               </>
             )

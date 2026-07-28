@@ -131,37 +131,113 @@ export const JOB_FUNCTIONS = [
   'Data / Analytics',
 ]
 
-export const PAIN_LIBRARY = [
-  'manual workflows',
-  'slow tools',
-  'fragmented stack',
-  'busywork',
-  'lack of visibility',
-  'high costs',
-  'compliance risk',
-  'scaling pains',
-  'slow time-to-value',
-  'integration gaps',
-  'data silos',
-  'customer churn',
-  'wasted ad spend',
-  'team burnout',
-  'manual reporting',
+/**
+ * STARTER VOCABULARIES, GROUPED BY WHO THE BRAND SELLS TO.
+ *
+ * These were one flat list each, and every entry assumed a company buying software — "compliance
+ * risk", "data silos", "new funding round". For a brand selling to anglers, or donors, or homeowners,
+ * the whole list was noise, and the picker's promise ("here is a starting point") became a lie the
+ * moment you were not B2B.
+ *
+ * Grouped rather than filtered, because a brand is not reliably one or the other: an agency sells to
+ * businesses about their consumers, and a nonprofit has both donors and corporate partners. The
+ * picker shows the headings and lets the reader choose, which costs nothing and never hides the right
+ * answer. The brand's OWN recorded values still sort above all of these.
+ */
+export interface VocabGroup {
+  label: string
+  options: string[]
+}
+
+export const PAIN_GROUPS: VocabGroup[] = [
+  {
+    label: 'Selling to people',
+    options: [
+      'wasting a day off',
+      'not knowing if it is worth the trip',
+      'juggling three apps to get one answer',
+      'paying for something they barely use',
+      'buying the wrong thing and having to redo it',
+      'getting advice from someone who is selling to them',
+      'waiting too long for an appointment',
+      'not being able to reach a human',
+      'losing track of what they have spent',
+      'feeling like it is meant for professionals, not them',
+    ],
+  },
+  {
+    label: 'Selling to businesses',
+    options: [
+      'high costs',
+      'compliance risk',
+      'scaling pains',
+      'slow time-to-value',
+      'integration gaps',
+      'data silos',
+      'customer churn',
+      'wasted ad spend',
+      'team burnout',
+      'manual reporting',
+    ],
+  },
+  {
+    label: 'Nonprofit and mission',
+    options: [
+      'donor fatigue',
+      'unrestricted funding is shrinking',
+      'volunteers burn out',
+      'grant reporting eats the team',
+      'the mission is hard to explain quickly',
+      'demand outpaces capacity',
+    ],
+  },
 ]
 
-export const GOAL_LIBRARY = [
-  'save time',
-  'cut costs',
-  'grow revenue',
-  'improve efficiency',
-  'scale the team',
-  'reduce risk',
-  'faster time-to-value',
-  'better visibility',
-  'consolidate tools',
-  'improve retention',
-  'win enterprise deals',
+/** Flat, for callers that show one ungrouped list (the audience wizard). */
+export const PAIN_LIBRARY = PAIN_GROUPS.flatMap((g) => g.options)
+
+export const GOAL_GROUPS: VocabGroup[] = [
+  {
+    label: 'Selling to people',
+    options: [
+      'not waste a weekend',
+      'get it right the first time',
+      'stop having to think about it',
+      'feel confident deciding',
+      'spend less without settling',
+      'do more of what they enjoy',
+      'keep the household happy',
+    ],
+  },
+  {
+    label: 'Selling to businesses',
+    options: [
+      'save time',
+      'cut costs',
+      'grow revenue',
+      'improve efficiency',
+      'scale the team',
+      'reduce risk',
+      'faster time-to-value',
+      'better visibility',
+      'consolidate tools',
+      'improve retention',
+      'win enterprise deals',
+    ],
+  },
+  {
+    label: 'Nonprofit and mission',
+    options: [
+      'reach more of the people they serve',
+      'grow recurring giving',
+      'prove the impact',
+      'diversify funding',
+      'keep good staff',
+    ],
+  },
 ]
+
+export const GOAL_LIBRARY = GOAL_GROUPS.flatMap((g) => g.options)
 
 /**
  * OCCUPATIONS for a persona, as a starting vocabulary.
@@ -221,28 +297,84 @@ export const HOBBIES = [
  * about the words to use. Deliberately generic: a brand's real objections belong on its audience
  * records, and these exist to be replaced by them.
  */
-export const OBJECTION_LIBRARY = [
-  'it costs too much',
-  'we already use something else',
-  'switching would take too long',
-  'not convinced it would actually work',
-  'not a priority right now',
-  'it looks complicated to set up',
-  'the free option is good enough',
-  'we tried something like this before',
-  'someone else has to approve it',
-  'we can do this ourselves',
+export const OBJECTION_GROUPS: VocabGroup[] = [
+  {
+    label: 'Selling to people',
+    options: [
+      'it costs too much',
+      'I can do this myself',
+      'I have not got time to learn it',
+      'I have been burned by one of these before',
+      'what I use now is good enough',
+      'I do not want another subscription',
+      'it looks like it is built for professionals',
+    ],
+  },
+  {
+    label: 'Selling to businesses',
+    options: [
+      'we already use something else',
+      'switching would take too long',
+      'not convinced it would actually work',
+      'not a priority right now',
+      'it looks complicated to set up',
+      'someone else has to approve it',
+      'we can build this ourselves',
+    ],
+  },
+  {
+    label: 'Nonprofit and mission',
+    options: [
+      'we cannot justify the overhead',
+      'our donors would not understand the spend',
+      'we bought a tool like this and nobody used it',
+    ],
+  },
 ]
 
-export const BUYING_TRIGGERS = [
-  'new funding round',
-  'leadership change',
-  'rapid headcount growth',
-  'new regulation',
-  'tool consolidation',
-  'researching alternatives',
-  'budget cycle / new fiscal year',
-  'recent outage or failure',
-  'M&A activity',
-  'expanding to new markets',
+export const OBJECTION_LIBRARY = OBJECTION_GROUPS.flatMap((g) => g.options)
+
+export const TRIGGER_GROUPS: VocabGroup[] = [
+  {
+    label: 'Selling to people',
+    options: [
+      'the season is opening',
+      'their gear broke or wore out',
+      'a trip is already booked',
+      'the weather or conditions turned',
+      'a birthday, anniversary or holiday',
+      'they just moved house',
+      'a subscription is about to lapse',
+      'something new in their life — a baby, a pet, a hobby',
+      'a friend recommended it',
+      'a refund or a bonus landed',
+    ],
+  },
+  {
+    label: 'Selling to businesses',
+    options: [
+      'new funding round',
+      'leadership change',
+      'rapid headcount growth',
+      'new regulation',
+      'tool consolidation',
+      'researching alternatives',
+      'budget cycle / new fiscal year',
+      'recent outage or failure',
+      'M&A activity',
+      'expanding to new markets',
+    ],
+  },
+  {
+    label: 'Nonprofit and mission',
+    options: [
+      'giving season',
+      'a campaign deadline',
+      'a matching gift is on the table',
+      'a grant cycle opening',
+      'the annual report or a board meeting',
+    ],
+  },
 ]
+
+export const BUYING_TRIGGERS = TRIGGER_GROUPS.flatMap((g) => g.options)

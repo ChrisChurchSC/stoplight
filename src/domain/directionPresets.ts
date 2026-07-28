@@ -1,5 +1,5 @@
 import type { DirectionKey } from './direction'
-import { GOAL_LIBRARY, OBJECTION_LIBRARY, PAIN_LIBRARY } from './taxonomy'
+import { GOAL_GROUPS, OBJECTION_GROUPS, PAIN_GROUPS, type VocabGroup } from './taxonomy'
 
 /**
  * SUGGESTED VALUES for an instruction field, drawn from what the brand already has.
@@ -49,11 +49,17 @@ export interface DirectionPresetSources {
   audienceFrom?: string
 }
 
-/** The starter vocabularies, offered under their own heading after the brand's own writing. */
-const LIBRARY_FOR: Partial<Record<DirectionKey, readonly string[]>> = {
-  pain: PAIN_LIBRARY,
-  objection: OBJECTION_LIBRARY,
-  caresAbout: GOAL_LIBRARY,
+/**
+ * The starter vocabularies, offered under their own headings after the brand's own writing.
+ *
+ * Grouped by who the brand sells to, because one flat list assumed B2B and was noise for a consumer
+ * or mission brand. The group name travels as the suggestion's source, so the picker says
+ * "Selling to people" rather than a bare "the common list".
+ */
+const LIBRARY_FOR: Partial<Record<DirectionKey, VocabGroup[]>> = {
+  pain: PAIN_GROUPS,
+  objection: OBJECTION_GROUPS,
+  caresAbout: GOAL_GROUPS,
 }
 
 const clean = (v: string | undefined): string => (v ?? '').trim()
@@ -115,8 +121,9 @@ export function directionPresets(key: DirectionKey, src: DirectionPresetSources)
       // inventing one would put words the user never wrote in front of the copy writer.
       break
   }
-  // The starter list goes last, so a brand's own wording is always what you see first. push() dedupes
+  // The starter lists go last, so a brand's own wording is always what you see first. push() dedupes
   // case-insensitively, so a library entry the brand has already written does not appear twice.
-  for (const v of LIBRARY_FOR[key] ?? []) push(v, 'the common list')
-  return out.slice(0, 14)
+  for (const g of LIBRARY_FOR[key] ?? []) for (const v of g.options) push(v, g.label.toLowerCase())
+  // Room for the brand's own plus a useful slice of each of the three groups.
+  return out.slice(0, 24)
 }
