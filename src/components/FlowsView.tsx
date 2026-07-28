@@ -1297,7 +1297,10 @@ export function FlowsView() {
       // also fired the canvas 'b' shortcut: preventDefault swallowed the type-ahead, the inspector
       // closed and the deliverable picker opened. Backspace in the same dropdown deleted the
       // selected card. `closest` rather than a tagName test, so a control's inner element counts too.
-      const t = e.target as HTMLElement | null
+      // Not every event target is an Element: a synthetic event, or one retargeted to `document`,
+      // has no closest() and threw here, which swallowed the keystroke entirely.
+      const raw = e.target
+      const t = raw instanceof Element ? raw : null
       if (t?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return
       // A dialog or drawer renders OUTSIDE the page router, layered over a still-mounted canvas, so
       // its keystrokes reach this listener: Backspace with a card selected silently deleted that
@@ -2986,7 +2989,15 @@ export function FlowsView() {
     if (nt.refId && brandSegments.some((a) => a.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
     if (already) return already
-    const made = ensureAudienceRef('')
+    /**
+     * A NAME, because ensureAudienceRef refuses an empty one and returns null.
+     *
+     * That guard is right for the chat path it was written for, where a nameless audience means a
+     * malformed command. It is wrong for a card, which is how you AUTHOR an audience: every field
+     * you filled in went nowhere, silently, until you happened to type a name. The placeholder is
+     * visible and renameable, which is the honest version of "not named yet".
+     */
+    const made = ensureAudienceRef('Untitled audience')
     if (!made) return null
     mintedRecordRef.current.set(nt.id, made.ref.id)
     setObjectRef(nt.id, made.ref.id)
@@ -5215,7 +5226,10 @@ export function FlowsView() {
           {(() => {
             const so = smartObjectFor(g)
             if (!so) return null
-            const usedOn = flowBoards.filter((b) => b.placements.some((p) => p.smartObjectId === so.id)).length
+            // Guarded: a board persisted without `placements` (an older shape, or one written by a
+            // partial save) made this throw and took the whole inspector with it, which is what
+            // "grouping a card breaks" looked like from the outside.
+            const usedOn = flowBoards.filter((b) => (b.placements ?? []).some((p) => p.smartObjectId === so.id)).length
             const armed = confirmDeleteObject === so.id
             return (
               <button

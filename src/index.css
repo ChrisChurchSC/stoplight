@@ -26762,7 +26762,11 @@ table.aud-sheet td.stick .aud-cell {
    the caret opens the rest. This is what lets the bar offer eight motions and eleven card kinds
    without being nineteen icons wide. */
 .flow-tb-palwrap { position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; }
-.flow-tb-palwrap .flow-tb-pal { padding-right: 0; }
+/* Zero ALL of it, not just the right. This zeroed padding-right and left the browser's default
+   padding-left in place, so the icon sat 9px from the left edge and 3px from the right inside its
+   own tinted box: visibly off-centre on the one element in the bar that gets a coloured background
+   on hover. */
+.flow-tb-palwrap .flow-tb-pal { padding: 0; }
 .flow-tb-palcaret {
   width: 13px; height: 28px; border: 0; background: none; padding: 0; cursor: pointer;
   color: var(--text-faint); display: inline-flex; align-items: center; justify-content: center;

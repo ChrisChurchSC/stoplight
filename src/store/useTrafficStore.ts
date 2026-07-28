@@ -4474,8 +4474,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // An empty board is a REMOVAL, not a blank row: otherwise every campaign you ever opened
       // leaves a row behind, and the slice grows with visits rather than with work.
       const empty = !board.objects.length && !board.placements.length && !board.connectors.length
-      const rest = s.flowBoards.filter((b) => b.key !== board.key)
-      const flowBoards = empty ? rest : [...rest, board]
+      // Never persist a partial board. One saved without `placements` crashed every reader that
+      // walks all boards (the smart-object inspector counts how many boards use an object), and a
+      // board with no key is unreachable but still iterated. Normalise here so a bad shape cannot
+      // enter the list rather than guarding at each of the readers.
+      if (!board?.key) return {}
+      const board2: FlowBoard = {
+        key: board.key,
+        objects: board.objects ?? [],
+        placements: board.placements ?? [],
+        pos: board.pos ?? {},
+        connectors: board.connectors ?? [],
+      }
+      const rest = s.flowBoards.filter((b) => b.key !== board2.key)
+      const flowBoards = empty ? rest : [...rest, board2]
       saveFlowBoards(flowBoards)
       return { flowBoards }
     }),
