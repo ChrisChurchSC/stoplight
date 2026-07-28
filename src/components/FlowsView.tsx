@@ -437,10 +437,10 @@ export function FlowsView() {
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
   const updateTrigger = useTrafficStore((s) => s.updateTrigger)
-  const brandObjects = useTrafficStore((s) => s.brandObjects)
+  const allBrandObjects = useTrafficStore((s) => s.brandObjects)
   const addBrandObject = useTrafficStore((s) => s.addBrandObject)
   const updateBrandObject = useTrafficStore((s) => s.updateBrandObject)
-  const products = useTrafficStore((s) => s.products)
+  const allProducts = useTrafficStore((s) => s.products)
   const addProduct = useTrafficStore((s) => s.addProduct)
   const updateProduct = useTrafficStore((s) => s.updateProduct)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
@@ -725,6 +725,14 @@ export function FlowsView() {
   const people = useMemo(() => allPeople.filter((p) => !p.brand || p.brand === brand), [allPeople, brand])
   const triggers = useMemo(() => allTriggers.filter((t) => !t.brand || t.brand === brand), [allTriggers, brand])
   const voices = useMemo(() => allVoices.filter((v) => !v.brand || v.brand === brand), [allVoices, brand])
+  /**
+   * BRAND SCOPE ON THE NEW LISTS TOO. Every record list in here is filtered to the brand in view,
+   * and a picker that suggests "from your other products" must mean this brand's, not the
+   * portfolio's. An agency's dropdown offering one client's positioning while writing another's is
+   * the leak this app is otherwise careful about everywhere.
+   */
+  const products = useMemo(() => allProducts.filter((p) => !p.brand || p.brand === brand), [allProducts, brand])
+  const brandObjects = useMemo(() => allBrandObjects.filter((b) => !b.brand || b.brand === brand), [allBrandObjects, brand])
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
@@ -4274,8 +4282,10 @@ export function FlowsView() {
           {nt.kind === 'person' && (() => {
             // Blank stand-in when the card has not named anyone yet, so the fields are all present
             // and the first edit is what creates the record. See ensurePersonFor.
+            // Resolve by id against the FULL list so a linked record always renders; suggest only
+            // from this brand's, so a picker never shows another client's wording.
             const per = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
-            const others = allPeople.filter((o) => o.id !== per.id)
+            const others = people.filter((o) => o.id !== per.id)
             const own = (key: keyof Person): string[] => others.map((o) => String(o[key] ?? '')).filter(Boolean)
             const set = (patch: Partial<Person>) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), patch) }
             const field = (label: string, node: ReactNode) => (
@@ -4476,7 +4486,7 @@ export function FlowsView() {
               because they are the two things that are unique to this company by definition. */}
           {nt.kind === 'company' && (() => {
             const co = (nt.refId ? allCompanies.find((c) => c.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
-            const others = allCompanies.filter((c) => c.id !== co.id)
+            const others = companies.filter((c) => c.id !== co.id)
             const own = (key: keyof Company): string[] => others.map((c) => String(c[key] ?? '')).filter(Boolean)
             const set = (patch: Partial<Company>) => { markCardDirty(nt.id); updateCompany(ensureCompanyFor(nt), patch) }
             const field = (label: string, node: ReactNode) => (
@@ -4626,7 +4636,7 @@ export function FlowsView() {
               travels to another campaign the same way every card does: group it into a smart object
               and file it under the brand's assets. */}
           {nt.kind === 'brand' && (() => {
-            const bo = (nt.refId ? brandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
+            const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
             const others = brandObjects.filter((x) => x.id !== bo.id)
             const own = (key: keyof BrandObject): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
             const set = (patch: Partial<BrandObject>) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), patch) }
@@ -4716,7 +4726,7 @@ export function FlowsView() {
               who it is for, what it displaces, and how much explaining it still needs, and none of
               that had anywhere to live. */}
           {nt.kind === 'product' && (() => {
-            const prd = (nt.refId ? products.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
+            const prd = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
             const others = products.filter((x) => x.id !== prd.id)
             const own = (key: keyof Product): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
             const set = (patch: Partial<Product>) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), patch) }
