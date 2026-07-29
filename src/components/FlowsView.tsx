@@ -36,6 +36,7 @@ import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
 import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
+import { type Concept } from '../domain/concept'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -95,6 +96,8 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   // Same speech bubble the Message card carries on the canvas, so a message tag reads as the
   // thing it came from rather than as a new concept.
   message: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
+  // The lightbulb the Concept card carries on the canvas.
+  concept: <><path d="M9.5 18h5M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2v.2h5v-.2c0-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" /></>,
   company: (
     <>
       <rect x="4" y="3" width="9" height="18" rx="1.4" />
@@ -132,7 +135,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept' }
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -573,6 +576,13 @@ export function FlowsView() {
       { key: 'usesNow', brief: 'what they reach for instead today' },
       { key: 'saysLike', brief: 'their own words and turns of phrase' },
     ],
+    concept: [
+      { key: 'name', brief: 'a short name for this concept, how it would be filed' },
+      { key: 'idea', brief: 'the big idea in one line' },
+      { key: 'insight', brief: 'the truth underneath it, why anyone should care that it is true' },
+      { key: 'likeThis', brief: 'the reference it should feel like: a piece of work, a register, a feeling' },
+      { key: 'audience', brief: 'who it is for' },
+    ],
     message: [
       { key: 'name', brief: 'a short name for this message, how it would be filed' },
       { key: 'angle', brief: 'the line this message makes, as the sentence the copy would argue' },
@@ -596,6 +606,7 @@ export function FlowsView() {
     person: 'A 40 year old electrician who fishes most weekends and coaches his kid',
     trigger: 'Their old kit broke a week before the season opens',
     message: 'One system instead of five, so a small team ships like a big one',
+    concept: 'Your marketing stack is five tools doing one job badly',
   }
   const [prompting, setPrompting] = useState<Record<string, string>>({})
   const [filling, setFilling] = useState<string | null>(null)
@@ -831,6 +842,9 @@ export function FlowsView() {
   const addPerson = useTrafficStore((s) => s.addPerson)
   const addMessage = useTrafficStore((s) => s.addMessage)
   const updateMessage = useTrafficStore((s) => s.updateMessage)
+  const allConcepts = useTrafficStore((s) => s.concepts)
+  const addConcept = useTrafficStore((s) => s.addConcept)
+  const updateConcept = useTrafficStore((s) => s.updateConcept)
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
@@ -851,6 +865,7 @@ export function FlowsView() {
   // Untagged records (no brand) stay shared across brands, matching each Records page's own scoping.
   // Channels have no brand tag (a shared taxonomy) so they are not scoped here.
   const messages = useMemo(() => allMessages.filter((m) => !m.brand || m.brand === brand), [allMessages, brand])
+  const concepts = useMemo(() => allConcepts.filter((c) => !c.brand || c.brand === brand), [allConcepts, brand])
   const objectives = useMemo(() => allObjectives.filter((o) => !o.brand || o.brand === brand), [allObjectives, brand])
   const companies = useMemo(() => allCompanies.filter((c) => !c.brand || c.brand === brand), [allCompanies, brand])
   const people = useMemo(() => allPeople.filter((p) => !p.brand || p.brand === brand), [allPeople, brand])
@@ -1902,8 +1917,9 @@ export function FlowsView() {
       { type: 'channel' as FlowRefType, label: 'Channels', items: channelRecords.map((c) => ({ id: c.id, label: c.name })) },
       { type: 'proof' as FlowRefType, label: 'Proof points', items: brandProof.map((r) => ({ id: r.id, label: r.label })) },
       { type: 'message' as FlowRefType, label: 'Messages', items: messages.map((m) => ({ id: m.id, label: m.name })) },
+      { type: 'concept' as FlowRefType, label: 'Concepts', items: concepts.map((c) => ({ id: c.id, label: c.name })) },
     ],
-    [companies, people, brandSegments, channelRecords, brandProof, messages],
+    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts],
   )
   /**
    * The campaign's stored references, minus any whose record no longer exists.
@@ -3031,6 +3047,15 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  const ensureConceptFor = (nt: CanvasObject): string => {
+    if (nt.refId && concepts.some((c) => c.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addConcept({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
   const ensureMessageFor = (nt: CanvasObject): string => {
     if (nt.refId && messages.some((m) => m.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
@@ -3078,6 +3103,7 @@ export function FlowsView() {
       case 'person': return named(people)
       case 'trigger': return named(triggers)
       case 'message': return named(messages)
+      case 'concept': return named(concepts)
       case 'voice': return named(voices)
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
@@ -4477,6 +4503,10 @@ export function FlowsView() {
                   const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
                   return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
                 }
+                case 'concept': {
+                  const cp = (nt.refId ? allConcepts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Concept)
+                  return { current: cp as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateConcept(ensureConceptFor(nt), p as Partial<Concept>) } }
+                }
                 case 'message': {
                   const mg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
                   return {
@@ -5009,6 +5039,80 @@ export function FlowsView() {
               but it was the one record-linked kind with no form: you picked a message, then went to
               Records to say what it actually was. Audience, Person, Company, Trigger, Brand and
               Product all edit in place, and this was the gap in that set. */}
+          {/* THE BIG IDEA the work is built from. A Concept is not a Message: a message is the CLAIM
+              you make to an audience, a concept is the idea the claim comes out of, which usually
+              outlives any one claim and carries the tone. That is why a Concept card's direction was
+              always claim + likeThis while a Message card's was claim + notThis. */}
+          {nt.kind === 'concept' && (() => {
+            const cpt = (nt.refId ? allConcepts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Concept)
+            const others = concepts.filter((x) => x.id !== cpt.id)
+            const own = (key: keyof Concept): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Concept>) => { markCardDirty(nt.id); updateConcept(ensureConceptFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const combo = (label: string, key: keyof Concept, placeholder: string, extra: OptionGroup[] = []) =>
+              field(label, (
+                <RecordCombo
+                  value={String(cpt[key] ?? '')}
+                  groups={[{ label: 'From your other concepts', options: own(key) }, ...extra]}
+                  placeholder={placeholder}
+                  onCommit={(v) => set({ [key]: v } as Partial<Concept>)}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>The idea</label>
+                <div className="flow-recform">
+                  {field('Concept', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={cpt.name}
+                      placeholder="Name this concept"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {/* Two textareas, and they are the whole card: the idea is what it IS and the
+                      insight is why anyone should care that it is true. Both are written, not
+                      chosen, so neither is a picker. */}
+                  {field('The idea', (
+                    <textarea
+                      className="flow-recform-area"
+                      rows={2}
+                      value={cpt.idea ?? ''}
+                      placeholder="The big idea, in one line"
+                      onChange={(e) => set({ idea: e.target.value })}
+                    />
+                  ))}
+                  {field('The insight under it', (
+                    <textarea
+                      className="flow-recform-area"
+                      rows={2}
+                      value={cpt.insight ?? ''}
+                      placeholder="Why anyone should care that it is true"
+                      onChange={(e) => set({ insight: e.target.value })}
+                    />
+                  ))}
+                  {combo('Like this', 'likeThis', 'The reference to write toward')}
+                  {combo('Who it is for', 'audience', 'Which audience', [
+                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
+                  ])}
+                  {field('Status', (
+                    <RecordCombo
+                      value={cpt.status ? cpt.status.charAt(0).toUpperCase() + cpt.status.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ status: v.toLowerCase() as Concept['status'] })}
+                    />
+                  ))}
+                </div>
+              </>
+            )
+          })()}
           {nt.kind === 'message' && (() => {
             const msg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
             const others = messages.filter((x) => x.id !== msg.id)

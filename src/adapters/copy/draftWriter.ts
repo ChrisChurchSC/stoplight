@@ -129,6 +129,13 @@ export interface DraftRequest {
     audience?: string
     stage?: string
   }[]
+  /** The concepts the campaign is built on: the idea behind the claims, and the register to hit. */
+  concepts?: {
+    name?: string
+    idea: string
+    insight?: string
+    likeThis?: string
+  }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**
