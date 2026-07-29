@@ -28,7 +28,7 @@ export type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
  * across campaigns has to know what a plain card contributes, and comparing contributions needs
  * only a type and an id, never a label.
  */
-export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice'>> = {
+export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season'>> = {
   audience: 'segment',
   'proof-point': 'proof',
   company: 'company',
@@ -38,6 +38,7 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
   message: 'message',
   concept: 'concept',
   voice: 'voice',
+  season: 'season',
 }
 
 export interface CanvasObject {
