@@ -6696,6 +6696,19 @@ button {
 .flow-tb-model-name { font-size: 13px; font-weight: 600; }
 .flow-tb-model-note { font-size: 11px; font-weight: 500; color: var(--text-faint); }
 .flow-tb-model-item.on .flow-tb-model-note { color: var(--accent); opacity: 0.75; }
+/* The model-account balance, beside Generate. Quiet by default: it is a thing to glance at, not a
+   thing to read, right up until it is nearly gone. */
+.flow-tb-credits {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.flow-tb-credits.low { color: var(--amber); }
 .flow-tb-tools {
   display: flex;
   gap: 2px;

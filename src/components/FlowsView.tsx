@@ -1038,6 +1038,18 @@ export function FlowsView() {
   const [zoomOpen, setZoomOpen] = useState(false)
   // The model picker sits next to Generate, because that is the button it governs.
   const [modelOpen, setModelOpen] = useState(false)
+  /**
+   * The model account's balance, beside the button that spends it.
+   *
+   * Refreshed on arrival and after every generation, because those are the only two moments the
+   * number can have changed from the app's point of view. Null while unknown, and the readout
+   * renders nothing then: no key, an unreachable provider and an Anthropic-only deployment all
+   * genuinely cannot say, and "$0.00 left" would be a lie in all three.
+   */
+  const aiCredits = useTrafficStore((s) => s.aiCredits)
+  const refreshAiCredits = useTrafficStore((s) => s.refreshAiCredits)
+  useEffect(() => { void refreshAiCredits() }, [refreshAiCredits])
+  useEffect(() => { if (!regenerating) void refreshAiCredits() }, [regenerating, refreshAiCredits])
   // The Add dropdown and its click-outside handler are gone: the palette is a row of icons in
   // the toolbar now, so there is no menu to open or dismiss.
   const [tool, setTool] = useState<'select' | 'pan' | 'connect'>('select')
@@ -7779,6 +7791,18 @@ export function FlowsView() {
                 </div>
               )
             })()}
+            {/* WHAT IS LEFT TO SPEND. Reads the provider account, not an app ledger, because there
+                is no app ledger — so it is shown in dollars rather than dressed up as a credit
+                count. Hidden entirely while unknown: a balance nobody can read is not zero. Turns
+                warning-toned under $1, which is roughly a couple of full campaign generations. */}
+            {aiCredits && (
+              <span
+                className={`flow-tb-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
+                title={`$${aiCredits.totalUsage.toFixed(2)} of $${aiCredits.totalCredits.toFixed(2)} used on the model account`}
+              >
+                ${aiCredits.remaining.toFixed(2)} left
+              </span>
+            )}
             <button
               className="flow-tb-regen"
               // A flow with assets regenerates their copy (from the current selection, as before).

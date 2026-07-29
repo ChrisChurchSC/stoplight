@@ -2390,6 +2390,15 @@ interface TrafficState {
    *  (the brand-less / contamination failure mode). Cleared on the next bound action. */
   brandNotice: string | null
   setBrandNotice: (msg: string | null) => void
+  /**
+   * The model account's remaining balance, in dollars, or null while unknown.
+   *
+   * There is no app-level credit ledger; this is the provider account the keys belong to, read from
+   * /api/ai-credits. Null means "cannot say" — no key, unreachable, an Anthropic-only deployment —
+   * and every reader must render nothing in that case rather than a zero or a guess.
+   */
+  aiCredits: { remaining: number; totalCredits: number; totalUsage: number } | null
+  refreshAiCredits: () => Promise<void>
   /** A transient bottom toast for lightweight recommendations (e.g. an unallocated budget). */
   toast: string | null
   showToast: (msg: string | null) => void
@@ -2769,6 +2778,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   brandSystems: loadBrandSystems(),
   brandMeta: loadBrandMeta(),
   brandNotice: null,
+  aiCredits: null,
   toast: null,
   toastAction: null,
   accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
@@ -5916,6 +5926,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   // ---- Brand boundary actions ----
   setBrandNotice: (msg) => set({ brandNotice: msg }),
+
+  refreshAiCredits: async () => {
+    try {
+      const r = await fetch('/api/ai-credits')
+      if (!r.ok) return set({ aiCredits: null })
+      const d = (await r.json()) as { available?: boolean; remaining?: number; totalCredits?: number; totalUsage?: number }
+      if (!d?.available || typeof d.remaining !== 'number') return set({ aiCredits: null })
+      set({ aiCredits: { remaining: d.remaining, totalCredits: d.totalCredits ?? 0, totalUsage: d.totalUsage ?? 0 } })
+    } catch {
+      // Unreachable is not zero. Keep it unknown so the readout hides rather than reads "$0 left".
+      set({ aiCredits: null })
+    }
+  },
   showToast: (msg) => set({ toast: msg, toastAction: null }),
   showToastAction: (msg, label, run) => set({ toast: msg, toastAction: { label, run } }),
 
