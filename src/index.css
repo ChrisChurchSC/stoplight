@@ -21518,3 +21518,14 @@ table.aud-sheet td.stick .aud-cell {
   font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--text-faint);
 }
 .flow-agg-err { color: var(--amber); }
+/* Source marks: aligned with the text they label, never stretched by the flex row. */
+.flow-agg-mark,
+.flow-note-mini-mark { display: inline-flex; align-items: center; flex: none; }
+.flow-note-mini-mark { margin-right: 4px; vertical-align: -3px; }
+.flow-agg-row { grid-template-columns: auto 1fr; }
+.flow-agg-mark { grid-row: span 2; align-self: center; }
+.flow-agg-name { display: inline-flex; align-items: center; gap: 5px; }
+/* The one-source rule, stated where the swap would otherwise be silent. */
+.flow-agg-replace {
+  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--amber);
+}

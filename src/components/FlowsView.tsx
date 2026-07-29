@@ -42,6 +42,7 @@ import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec } from '../domain/aggregator'
+import { SourceMark } from './SourceMark'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -6729,6 +6730,15 @@ export function FlowsView() {
                       <option value="__compose__">✦ Describe one instead…</option>
                       <option value="__new__">+ New data set…</option>
                     </select>
+                    {/* ONE CARD, ONE SOURCE. Every route here (upload, describe, connect, pick) points
+                        the card at a different data set rather than adding to it, so with something
+                        already linked each of them is a replacement. Stated once, next to the picker
+                        that does it, rather than per route. */}
+                    {nt.refId && allBrandDatasets.some((d) => d.id === nt.refId) && (
+                      <span className="flow-note-mini-note">
+                        One source per card. Picking another replaces this one.
+                      </span>
+                    )}
                     {(() => {
                       const linkedDs = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
                       return (
@@ -6737,7 +6747,14 @@ export function FlowsView() {
                           title={linkedDs ? `${linkedDs.name || 'Untitled data set'} · double-click to open` : 'Link or create a data set, then double-click to open it'}
                         >
                           <MiniSheet columns={linkedDs?.columns ?? ['', '', '', '']} rows={linkedDs?.rows ?? []} bodyRows={3} />
-                          <span className="flow-note-mini-label">{linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}</span>
+                          <span className="flow-note-mini-label">
+                            {/* The platform's mark sits with the NAME, so a card read at a glance
+                                says what the data is before the provenance line is read at all. */}
+                            {linkedDs?.source?.kind === 'aggregator' && linkedDs.source.service && (
+                              <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.service} /></span>
+                            )}
+                            {linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}
+                          </span>
                           {/* WHERE IT CAME FROM. A figure with no provenance is not evidence, so the
                               card says the origin and the date rather than leaving a sheet of numbers
                               looking equally authoritative however it got here. */}
@@ -6754,6 +6771,7 @@ export function FlowsView() {
                               number goes stale without ever looking any different. */}
                           {linkedDs?.source?.kind === 'aggregator' && (
                             <span className="flow-note-mini-src">
+                              <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.provider} /></span>
                               {aggregatorSpec(linkedDs.source.provider)?.label ?? linkedDs.source.provider}
                               {linkedDs.source.syncedAt ? ` · ${new Date(linkedDs.source.syncedAt).toLocaleDateString()}` : ''}
                             </span>
@@ -6768,10 +6786,12 @@ export function FlowsView() {
                     })()}
                     {connectFor === nt.id && (
                       <AggregatorConnect
-                        onLand={(name, columns, rows, provider, query) =>
+                        linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
+                        onLand={(name, columns, rows, provider, service, query) =>
                           importBrandDataset(brand, name, columns, rows, {
                             kind: 'aggregator',
                             provider,
+                            service,
                             query,
                             syncedAt: Date.now(),
                           })

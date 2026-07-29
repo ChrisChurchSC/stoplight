@@ -22,7 +22,13 @@ export type DatasetSource =
   // The routes below are planned, not built. Declared here so the shape is settled before three
   // separate features each invent their own.
   | { kind: 'channel'; channel: string; account?: string; syncedAt?: number }
-  | { kind: 'aggregator'; provider: 'supermetrics' | 'databox' | 'summer'; query?: string; syncedAt?: number }
+  /**
+   * `service` is the PLATFORM the rows came from (google_search_console, youtube_analytics, …),
+   * as opposed to `provider`, which is the warehouse they came through. Both are worth keeping: the
+   * card shows the platform's mark, because "is this search data or LinkedIn data" is the question
+   * you have at a glance, while provenance is the aggregator's name and the date.
+   */
+  | { kind: 'aggregator'; provider: 'supermetrics' | 'databox' | 'summer'; service?: string; query?: string; syncedAt?: number }
   | { kind: 'composite'; prompt: string; generatedAt: number }
 
 export interface BrandDataset {

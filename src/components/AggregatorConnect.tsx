@@ -4,11 +4,13 @@ import {
   aggregatorSpec,
   pullsForServices,
   type AggregatorProvider,
+  type AggregatorPull,
   type AggregatorPullResult,
   type AggregatorSource,
   type AggregatorStatus,
   type PullWindow,
 } from '../domain/aggregator'
+import { SourceMark } from './SourceMark'
 
 /**
  * The aggregator panel on a Data source card: pick a provider, a source, a question, pull it.
@@ -25,15 +27,31 @@ import {
  */
 
 interface Props {
+  /**
+   * What the card is linked to now, if anything.
+   *
+   * A Data source card holds ONE source, so a pull does not add to the card, it takes the card over.
+   * That is the right rule and the wrong silence: without this the swap happened with no warning, and
+   * the table you had been reading from was replaced by one with different columns while the card
+   * looked the same. Naming it is the difference between choosing a replacement and discovering one.
+   */
+  linkedName?: string
   /** Lands the pulled grid as a brand data set and returns its id. */
-  onLand: (name: string, columns: string[], rows: string[][], provider: AggregatorProvider, query: string) => string
+  onLand: (
+    name: string,
+    columns: string[],
+    rows: string[][],
+    provider: AggregatorProvider,
+    service: string,
+    query: string,
+  ) => string
   onDone: (datasetId: string, note: string) => void
   onCancel: () => void
 }
 
 type Step = 'provider' | 'source' | 'pull'
 
-export function AggregatorConnect({ onLand, onDone, onCancel }: Props) {
+export function AggregatorConnect({ linkedName, onLand, onDone, onCancel }: Props) {
   const [status, setStatus] = useState<AggregatorStatus | null>(null)
   const [step, setStep] = useState<Step>('provider')
   const [provider, setProvider] = useState<AggregatorProvider | null>(null)
@@ -88,12 +106,12 @@ export function AggregatorConnect({ onLand, onDone, onCancel }: Props) {
     }
   }
 
-  const runPull = async (pullId: string, label: string) => {
+  const runPull = async (pull: AggregatorPull) => {
     if (!provider || !source) return
     setBusy(true)
     setError('')
     try {
-      const r = (await post({ op: 'pull', provider, source: source.id, pull: pullId, days })) as AggregatorPullResult
+      const r = (await post({ op: 'pull', provider, source: source.id, pull: pull.id, days })) as AggregatorPullResult
       if (!r.columns.length) {
         setError('That came back with no columns.')
         return
@@ -103,8 +121,8 @@ export function AggregatorConnect({ onLand, onDone, onCancel }: Props) {
         setError(`No rows in the last ${days} days. Try a longer window.`)
         return
       }
-      const name = `${label} · ${source.label.split(' · ')[0]}`
-      const id = onLand(name, r.columns, r.rows, provider, `${pullId}:${days}d`)
+      const name = `${pull.label} · ${source.label.split(' · ')[0]}`
+      const id = onLand(name, r.columns, r.rows, provider, pull.service, `${pull.id}:${days}d`)
       const cap = r.truncated ? `, capped at ${r.rows.length}` : ''
       onDone(id, `${r.rows.length} row${r.rows.length === 1 ? '' : 's'} from ${aggregatorSpec(provider)?.label}, last ${days} days${cap}.`)
     } catch (e) {
@@ -118,6 +136,13 @@ export function AggregatorConnect({ onLand, onDone, onCancel }: Props) {
 
   return (
     <div className="flow-agg" onMouseDown={(e) => e.stopPropagation()}>
+      {/* Shown on every step, not just the last one: by the time you are choosing a question you have
+          stopped thinking about what the card was already holding. */}
+      {linkedName && (
+        <span className="flow-agg-replace">
+          This card holds one source. Pulling replaces “{linkedName}”, which stays in your data sets.
+        </span>
+      )}
       {step === 'provider' && (
         <>
           <span className="flow-agg-head">Connect an aggregator</span>
@@ -133,8 +158,13 @@ export function AggregatorConnect({ onLand, onDone, onCancel }: Props) {
                 disabled={!ready || busy}
                 onClick={() => void chooseProvider(p.id)}
               >
-                <span className={`flow-agg-dot${ready ? ' on' : ''}`} />
-                <span className="flow-agg-name">{spec.label}</span>
+                <span className="flow-agg-mark"><SourceMark id={p.id} /></span>
+                <span className="flow-agg-name">
+                  {spec.label}
+                  {/* The dot follows the NAME rather than leading the row, now that the logo holds
+                      the left column: connected is a fact about the provider, not a bullet. */}
+                  <span className={`flow-agg-dot${ready ? ' on' : ''}`} />
+                </span>
                 {/* The two reasons a provider is unavailable are different problems with different
                     fixes, so they get different sentences rather than one greyed-out row. */}
                 <span className="flow-agg-why">
@@ -177,7 +207,10 @@ export function AggregatorConnect({ onLand, onDone, onCancel }: Props) {
             ))}
           </div>
           {pulls.map((p) => (
-            <button key={p.id} className="flow-agg-row" disabled={busy} onClick={() => void runPull(p.id, p.label)}>
+            <button key={p.id} className="flow-agg-row" disabled={busy} onClick={() => void runPull(p)}>
+              {/* The platform's mark, not the aggregator's: six questions from four services read as
+                  one undifferentiated list otherwise. */}
+              <span className="flow-agg-mark"><SourceMark id={p.service} /></span>
               <span className="flow-agg-name">{p.label}</span>
               <span className="flow-agg-why">{p.detail}</span>
             </button>
