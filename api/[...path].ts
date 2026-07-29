@@ -34,6 +34,7 @@ const HANDLERS: Record<string, () => Promise<(body: unknown) => Promise<unknown>
   'scan-site': () => import('../server/scanSiteHandler.js').then((m) => m.runScanSite),
   'suggest-options': () => import('../server/suggestOptionsHandler.js').then((m) => m.runSuggestOptions),
   'compose-dataset': () => import('../server/composeDatasetHandler.js').then((m) => m.runComposeDataset),
+  aggregator: () => import('../server/aggregatorHandler.js').then((m) => m.runAggregator),
   'records-agent': () => import('../server/recordsAgentHandler.js').then((m) => m.runRecordsAgent),
   'claude-ask': () => import('../server/askHandler.js').then((m) => m.runAsk),
   'claude-agent': () => import('../server/agentHandler.js').then((m) => m.runAgent),

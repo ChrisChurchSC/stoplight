@@ -40,6 +40,8 @@ import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
+import { AggregatorConnect } from './AggregatorConnect'
+import { aggregatorSpec } from '../domain/aggregator'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -313,13 +315,6 @@ export type BoardObject = CanvasObject | FlowDeliverable
  * campaign's refs at once.
  */
 // Data-source cards link to an established connector (mirrors the ConnectorsPage list).
-const CONNECTOR_SOURCES: { id: string; label: string }[] = [
-  { id: 'google-analytics', label: 'Google Analytics' },
-  { id: 'search-console', label: 'Search Console' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'resend', label: 'Resend' },
-]
-
 const CampaignTile = () => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${CAMPAIGN_TONE} 20%, transparent)`, color: CAMPAIGN_TONE }}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -888,6 +883,8 @@ export function FlowsView() {
   const [composeFor, setComposeFor] = useState<string | null>(null)
   const [composePrompt, setComposePrompt] = useState('')
   const [composing, setComposing] = useState(false)
+  /** Which card has the aggregator panel open. */
+  const [connectFor, setConnectFor] = useState<string | null>(null)
   const importTargetRef = useRef<string | null>(null)
   /**
    * Read a delimited file into a new data set and link the card to it.
@@ -3252,7 +3249,10 @@ export function FlowsView() {
   const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
     switch (kind) {
       case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
-      case 'data-source': return CONNECTOR_SOURCES
+      // A Data source card's refId is a DATA SET id, whatever route filled it. This used to return
+      // the four hardcoded connector names, so Layers and smart-object naming looked up a dataset id
+      // in a list of connectors, found nothing, and fell back to the bare kind ("Data source").
+      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set' }))
       case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
       case 'company': return named(companies)
       case 'person': return named(people)
@@ -6703,6 +6703,8 @@ export function FlowsView() {
                         } else if (e.target.value === '__compose__') {
                           setComposeFor(nt.id)
                           setComposePrompt('')
+                        } else if (e.target.value === '__connect__') {
+                          setConnectFor(nt.id)
                         } else if (e.target.value === '__upload__') {
                           // Remember which card asked, since one hidden input serves them all.
                           importTargetRef.current = nt.id
@@ -6718,11 +6720,11 @@ export function FlowsView() {
                           ))}
                         </optgroup>
                       )}
-                      <optgroup label="Connectors">
-                        {CONNECTOR_SOURCES.map((o) => (
-                          <option key={o.id} value={o.id}>{o.label}</option>
-                        ))}
-                      </optgroup>
+                      {/* The "Connectors" group that used to sit here listed four platform names and
+                          set the card's refId to a string like "google-analytics" — no dataset, no
+                          fetch, nothing downstream. It is now one option that opens a real connect
+                          flow and reports what is actually reachable. */}
+                      <option value="__connect__">⚡ Connect an aggregator…</option>
                       <option value="__upload__">↑ Upload a CSV…</option>
                       <option value="__compose__">✦ Describe one instead…</option>
                       <option value="__new__">+ New data set…</option>
@@ -6747,6 +6749,15 @@ export function FlowsView() {
                           {/* Louder than the upload line on purpose. An uploaded figure was measured
                               by someone; a sketched one was not, and that is the single most useful
                               thing to know about this table. */}
+                          {/* A pulled figure WAS measured, so this reads like the upload line rather
+                              than the sketched one, and names the day it was fetched: a warehouse
+                              number goes stale without ever looking any different. */}
+                          {linkedDs?.source?.kind === 'aggregator' && (
+                            <span className="flow-note-mini-src">
+                              {aggregatorSpec(linkedDs.source.provider)?.label ?? linkedDs.source.provider}
+                              {linkedDs.source.syncedAt ? ` · ${new Date(linkedDs.source.syncedAt).toLocaleDateString()}` : ''}
+                            </span>
+                          )}
                           {linkedDs?.source?.kind === 'composite' && (
                             <span className="flow-note-mini-src sketched">
                               Sketched, not measured · {new Date(linkedDs.source.generatedAt).toLocaleDateString()}
@@ -6755,6 +6766,25 @@ export function FlowsView() {
                         </div>
                       )
                     })()}
+                    {connectFor === nt.id && (
+                      <AggregatorConnect
+                        onLand={(name, columns, rows, provider, query) =>
+                          importBrandDataset(brand, name, columns, rows, {
+                            kind: 'aggregator',
+                            provider,
+                            query,
+                            syncedAt: Date.now(),
+                          })
+                        }
+                        onDone={(id, note) => {
+                          setObjectRef(nt.id, id)
+                          markCardDirty(nt.id)
+                          setConnectFor(null)
+                          setImportNote((m) => ({ ...m, [nt.id]: note }))
+                        }}
+                        onCancel={() => setConnectFor(null)}
+                      />
+                    )}
                     {composeFor === nt.id && (
                       <div className="flow-compose" onMouseDown={(e) => e.stopPropagation()}>
                         <textarea
