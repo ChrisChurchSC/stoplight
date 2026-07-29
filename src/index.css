@@ -21432,3 +21432,17 @@ table.aud-sheet td.stick .aud-cell {
 }
 .theme-seg-btn:hover { color: var(--text); }
 .theme-seg-btn.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+/* Where a data set came from, under the mini sheet on a Data source card, and what an import did.
+   Both are quiet: they are there to be checked, not read every time. */
+.flow-note-mini-src,
+.flow-note-mini-note {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.flow-note-mini-note { color: var(--text-muted); }
