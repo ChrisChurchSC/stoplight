@@ -30,6 +30,8 @@ const TONE: Record<string, string> = {
   google: '#4285F4',
   linkedin: '#0A66C2',
   instagram: '#E1306C',
+  // Not a platform: the app's own generated-content tone, matching Gretel's sparkle elsewhere.
+  describe: '#A78BFA',
 }
 
 const box = { width: 14, height: 14, viewBox: '0 0 24 24' } as const
@@ -123,6 +125,35 @@ export function SourceMark({ id }: { id: string }) {
       return <Monogram text="SM" tone={tone} />
     case 'databox':
       return <Monogram text="DB" tone={tone} />
+    /**
+     * THE THREE ROUTES THAT ARE NOT A PLATFORM. They sit in the same list as the channels and were
+     * the only rows with no mark, which read as "not loaded yet" rather than "different in kind".
+     *
+     * Describe gets the sparkle the app uses for generated things everywhere else, and it is the one
+     * that most needs saying: the other routes move data that exists, this one invents its figures.
+     */
+    case 'describe':
+      return (
+        <svg {...box} aria-hidden="true" fill={TONE.describe}>
+          <path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" />
+          <path d="M18.5 15l.85 2.4 2.4.85-2.4.85-.85 2.4-.85-2.4-2.4-.85 2.4-.85z" opacity="0.65" />
+        </svg>
+      )
+    case 'upload':
+      return (
+        <svg {...box} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 16V4" />
+          <path d="M7.5 8.5L12 4l4.5 4.5" />
+          <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+        </svg>
+      )
+    case 'blank':
+      return (
+        <svg {...box} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
+          <path d="M12 8.5v7M8.5 12h7" />
+        </svg>
+      )
     // Unknown source: a neutral tile, so layout does not shift when something new appears.
     default:
       return (

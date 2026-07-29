@@ -12,6 +12,7 @@ import {
   type PullWindow,
 } from '../domain/aggregator'
 import { SourceMark } from './SourceMark'
+import { sourceLabel } from '../domain/analyticsSources'
 
 /**
  * The aggregator panel on a Data source card: pick a provider, a source, a question, pull it.
@@ -51,6 +52,12 @@ interface Props {
    * re-asking. The provider step only exists now for the case where one was not chosen up front.
    */
   initialProvider?: AggregatorProvider
+  /**
+   * The channel that was picked, so only its questions are shown. Without it a Search Console pick
+   * would open a list that also offers GA4 and YouTube, which is a second choice for something the
+   * user just chose.
+   */
+  initialService?: string
   /** Lands the pulled grid as a brand data set and returns its id. */
   onLand: (
     name: string,
@@ -66,7 +73,7 @@ interface Props {
 
 type Step = 'provider' | 'source' | 'pull'
 
-export function AggregatorConnect({ linkedName, brand, website, initialProvider, onLand, onDone, onCancel }: Props) {
+export function AggregatorConnect({ linkedName, brand, website, initialProvider, initialService, onLand, onDone, onCancel }: Props) {
   const [status, setStatus] = useState<AggregatorStatus | null>(null)
   const [step, setStep] = useState<Step>('provider')
   const [provider, setProvider] = useState<AggregatorProvider | null>(null)
@@ -153,7 +160,10 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
     }
   }
 
-  const pulls = source ? pullsForServices(source.services) : []
+  // Narrowed to the channel that was picked, when one was.
+  const pulls = source
+    ? pullsForServices(initialService ? source.services.filter((x) => x === initialService) : source.services)
+    : []
 
   return (
     <div className="flow-agg" onMouseDown={(e) => e.stopPropagation()}>
@@ -233,7 +243,7 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
 
       {step === 'pull' && source && (
         <>
-          <span className="flow-agg-head">{source.label}</span>
+          <span className="flow-agg-head">{initialService ? sourceLabel(initialService) : source.label}</span>
           <div className="flow-agg-win">
             {PULL_WINDOWS.map((w) => (
               <button key={w} className={`flow-agg-chip${days === w ? ' on' : ''}`} disabled={busy} onClick={() => setDays(w)}>

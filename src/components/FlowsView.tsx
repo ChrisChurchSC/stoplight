@@ -41,7 +41,8 @@ import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
-import { aggregatorSpec, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
+import { aggregatorSpec, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
+import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
@@ -887,6 +888,8 @@ export function FlowsView() {
   /** Which card has the aggregator panel open, and which provider it was opened on. */
   const [connectFor, setConnectFor] = useState<string | null>(null)
   const [connectProvider, setConnectProvider] = useState<AggregatorProvider | undefined>(undefined)
+  /** Which channel was picked, so the panel opens on that channel's questions and no others. */
+  const [connectService, setConnectService] = useState<string | undefined>(undefined)
   /**
    * The providers that are actually usable right now, listed in the card's own picker.
    *
@@ -894,25 +897,7 @@ export function FlowsView() {
    * for every Data source card on the board. Anything not implemented AND configured never appears,
    * so the picker offers only things that will work.
    */
-  const [readyProviders, setReadyProviders] = useState<AggregatorProvider[]>([])
-  useEffect(() => {
-    let live = true
-    void (async () => {
-      try {
-        const res = await fetch('/api/aggregator', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ op: 'status' }),
-        })
-        if (!res.ok) return
-        const s = (await res.json()) as AggregatorStatus
-        if (live) setReadyProviders(s.providers.filter((p) => p.implemented && p.configured).map((p) => p.id))
-      } catch {
-        // No status, no connect options. Upload and describe still work, so the card is not stuck.
-      }
-    })()
-    return () => { live = false }
-  }, [])
+
   const importTargetRef = useRef<string | null>(null)
   /**
    * Read a delimited file into a new data set and link the card to it.
@@ -998,6 +983,65 @@ export function FlowsView() {
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
   const brandDatasets = useMemo(() => allBrandDatasets.filter((d) => d.brand === brand), [allBrandDatasets, brand])
+  /**
+   * The ANALYTICS CHANNELS you can pull from, which is what the picker names.
+   *
+   * A warehouse is plumbing. Nobody sits down wanting to "pull from Summer"; they want Search
+   * Console. So the options are channels, each carrying the provider that serves it, and the routing
+   * is the app's problem rather than the user's.
+   *
+   * Built by asking each ready provider what it can answer. Deduped by channel, preferring a DIRECT
+   * connection over a warehouse when both offer the same one: same question, fewer hops, fresher
+   * answer. The sub-line says which route it took, so the choice is visible without being a decision.
+   */
+  const [channelOptions, setChannelOptions] = useState<
+    { service: string; provider: AggregatorProvider; sourceId: string; sourceLabel: string; direct: boolean }[]
+  >([])
+  useEffect(() => {
+    let live = true
+    const call = async (body: unknown): Promise<unknown> => {
+      const res = await fetch('/api/aggregator', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      return res.json()
+    }
+    void (async () => {
+      try {
+        const s = (await call({ op: 'status' })) as AggregatorStatus
+        const ready = s.providers.filter((p) => p.implemented && p.configured).map((p) => p.id)
+        if (!live) return
+        const found: { service: string; provider: AggregatorProvider; sourceId: string; sourceLabel: string; direct: boolean }[] = []
+        for (const id of ready) {
+          try {
+            const r = (await call({ op: 'sources', provider: id, brand, website: clientProfiles[brand]?.website })) as {
+              sources: { id: string; label: string; services: string[] }[]
+            }
+            const direct = specKind(aggregatorSpec(id) ?? { id, label: '', blurb: '', envVar: '', implemented: true }) === 'channel'
+            for (const src of r.sources) {
+              for (const service of src.services) {
+                found.push({ service, provider: id, sourceId: src.id, sourceLabel: src.label, direct })
+              }
+            }
+          } catch {
+            // One provider being unreachable must not cost the others their entries.
+          }
+        }
+        if (!live) return
+        const byService = new Map<string, (typeof found)[number]>()
+        for (const f of found) {
+          const seen = byService.get(f.service)
+          if (!seen || (f.direct && !seen.direct)) byService.set(f.service, f)
+        }
+        setChannelOptions([...byService.values()])
+      } catch {
+        // No status, no connect options. Upload and describe still work, so the card is not stuck.
+      }
+    })()
+    return () => { live = false }
+  }, [brand])
   // The brand's Segments records (the Segments page IS the brand's audiences).
   const brandSegments = clientAudiences[brand] ?? []
   const audienceNames = useMemo(() => brandSegments.map((a) => a.name), [brandSegments])
@@ -2931,7 +2975,7 @@ export function FlowsView() {
     const linked = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
     // The check follows the LINKED DATA SET, and a provider row wears it when that set came from
     // there: "connected" for this card means one table, not an account-level state.
-    const linkedProvider = linked?.source?.kind === 'aggregator' ? linked.source.provider : undefined
+    const linkedService = linked?.source?.kind === 'aggregator' ? linked.source.service : undefined
     const Row = ({
       id,
       mark,
@@ -2977,19 +3021,26 @@ export function FlowsView() {
               onClick: () => setObjectRef(nt.id, d.id),
             }),
           )}
-          {/* Only providers that are implemented AND configured: a row you cannot use is not a choice. */}
-          {readyProviders.map((id) =>
+          {/* THE CHANNEL IS THE OPTION, not the warehouse it arrives through. Only channels a
+              connected account can actually answer for this brand appear, so every row here is a
+              pull that will work. */}
+          {channelOptions.map((c) =>
             Row({
-              id: `p_${id}`,
-              mark: id,
-              label: `Pull from ${aggregatorSpec(id)?.label ?? id}`,
-              sub: aggregatorSpec(id)?.blurb,
-              on: linkedProvider === id,
-              onClick: () => { setConnectProvider(id); setConnectFor(nt.id) },
+              id: `c_${c.service}`,
+              mark: c.service,
+              label: sourceLabel(c.service),
+              sub: c.direct ? `Straight from ${aggregatorSpec(c.provider)?.label ?? c.provider}` : `via ${aggregatorSpec(c.provider)?.label ?? c.provider}`,
+              on: linkedService === c.service,
+              onClick: () => {
+                setConnectProvider(c.provider)
+                setConnectService(c.service)
+                setConnectFor(nt.id)
+              },
             }),
           )}
           {Row({
             id: 'upload',
+            mark: 'upload',
             label: 'Upload a CSV',
             sub: 'A file you already have',
             on: linked?.source?.kind === 'upload',
@@ -2997,13 +3048,15 @@ export function FlowsView() {
           })}
           {Row({
             id: 'compose',
+            mark: 'describe',
             label: 'Describe one instead',
-            sub: 'Sketch the shape when you have no data',
+            sub: 'Sketch the shape when you have no data. Figures are invented',
             on: linked?.source?.kind === 'composite',
             onClick: () => { setComposeFor(nt.id); setComposePrompt('') },
           })}
           {Row({
             id: 'new',
+            mark: 'blank',
             label: 'New data set',
             sub: 'A blank sheet to fill in',
             on: !!linked && !linked.source,
@@ -3013,6 +3066,7 @@ export function FlowsView() {
       {connectFor === nt.id && (
         <AggregatorConnect
           initialProvider={connectProvider}
+          initialService={connectService}
           linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
           brand={brand}
           website={clientProfiles[brand]?.website}
@@ -3030,9 +3084,10 @@ export function FlowsView() {
             markCardDirty(nt.id)
             setConnectFor(null)
             setConnectProvider(undefined)
+            setConnectService(undefined)
             setImportNote((m) => ({ ...m, [nt.id]: note }))
           }}
-          onCancel={() => { setConnectFor(null); setConnectProvider(undefined) }}
+          onCancel={() => { setConnectFor(null); setConnectProvider(undefined); setConnectService(undefined) }}
         />
       )}
       {composeFor === nt.id && (
