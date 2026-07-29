@@ -3245,7 +3245,10 @@ export function FlowsView() {
             mark: 'upload',
             label: 'Upload a CSV',
             sub: 'A file you already have',
-            on: linked?.source?.kind === 'upload',
+            // A pasted table is stored as an upload named "Pasted", so a bare kind check lit up BOTH
+            // rows for one data set. The two routes have to be mutually exclusive or the check stops
+            // meaning "this is where it came from".
+            on: linked?.source?.kind === 'upload' && linked.source.filename !== 'Pasted',
             onClick: () => { importTargetRef.current = nt.id; importFileRef.current?.click() },
           })}
           {Row({
