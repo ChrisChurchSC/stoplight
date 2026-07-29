@@ -111,6 +111,7 @@ import { BLUEPRINT_META_KEYS } from '../domain/emailPatterns'
 import { type Person, freshPersonId, hasPersona, seedPeople } from '../domain/people'
 import { type Segment, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
+import { type Concept, freshConceptId } from '../domain/concept'
 import { type Voice, freshVoiceId } from '../domain/voice'
 import { type Pattern, freshPatternId } from '../domain/pattern'
 import { type Trigger, freshTriggerId } from '../domain/trigger'
@@ -837,6 +838,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.products.v1': 'products',
   'stoplight.brandObjects.v1': 'brand_objects',
   'stoplight.libraryFolders.v1': 'library_folders',
+  'stoplight.concepts.v1': 'concept_records',
 }
 const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
 function saveRecordList<T extends { id: string }>(key: string, list: T[]): void {
@@ -852,6 +854,14 @@ function saveRecordList<T extends { id: string }>(key: string, list: T[]): void 
   }
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
+/**
+ * Synced to concept_records, added in supabase/migrations/0008.
+ *
+ * That migration has to be RUN against an existing database. Until it is, this sync is a silent
+ * no-op: saveRecordList fires it and never reads the result, and the Supabase client returns an
+ * error object rather than throwing, so a missing table looks exactly like a successful save.
+ */
+const CONCEPTS_KEY = 'stoplight.concepts.v1'
 const VOICES_KEY = 'stoplight.voices.v1'
 const PATTERNS_KEY = 'stoplight.patterns.v1'
 const TRIGGERS_KEY = 'stoplight.triggers.v1'
@@ -1686,6 +1696,11 @@ interface TrafficState {
   addMessage: (partial?: Partial<Message>) => string
   updateMessage: (id: string, patch: Partial<Message>) => void
   deleteMessage: (id: string) => void
+  /** Records › Message › Concepts — the big idea a campaign is built on. */
+  concepts: Concept[]
+  addConcept: (partial?: Partial<Concept>) => string
+  updateConcept: (id: string, patch: Partial<Concept>) => void
+  deleteConcept: (id: string) => void
   /** Records › Foundation › Voices — brand voice / tone-of-voice profiles copy is written in. */
   voices: Voice[]
   addVoice: (partial?: Partial<Voice>) => string
@@ -2723,6 +2738,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   onboarding: loadOnboarding(),
   people: localDataMode ? loadPeople() : [],
   messages: localDataMode ? loadRecordList<Message>(MESSAGES_KEY) : [],
+  concepts: localDataMode ? loadRecordList<Concept>(CONCEPTS_KEY) : [],
   voices: localDataMode ? loadRecordList<Voice>(VOICES_KEY) : [],
   patterns: localDataMode ? loadRecordList<Pattern>(PATTERNS_KEY) : [],
   triggers: localDataMode ? loadRecordList<Trigger>(TRIGGERS_KEY) : [],
@@ -3027,6 +3043,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const people = s.people.filter((p) => p.id !== id)
       savePeople(people)
       return { people }
+    }),
+
+  addConcept: (partial) => {
+    const id = freshConceptId()
+    const row: Concept = { name: 'New concept', ...(partial ?? {}), id }
+    set((s) => {
+      const concepts = [row, ...s.concepts]
+      saveRecordList(CONCEPTS_KEY, concepts)
+      return { concepts }
+    })
+    return id
+  },
+  updateConcept: (id, patch) =>
+    set((s) => {
+      const concepts = s.concepts.map((c) => (c.id === id ? { ...c, ...patch } : c))
+      saveRecordList(CONCEPTS_KEY, concepts)
+      return { concepts }
+    }),
+  deleteConcept: (id) =>
+    set((s) => {
+      const concepts = s.concepts.filter((c) => c.id !== id)
+      saveRecordList(CONCEPTS_KEY, concepts)
+      return { concepts }
     }),
 
   addMessage: (partial) => {
@@ -6262,10 +6301,28 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const perIds = new Set(refList.filter((x) => x.type === 'person').map((x) => x.id))
           const perNames = new Set(refList.filter((x) => x.type === 'person').map((x) => x.label))
           const people = get().people.filter((pp) => perIds.has(pp.id) || perNames.has(pp.name))
+          /**
+           * MESSAGES. Same shape as personas, and the same reason for it: a wired Message card
+           * names the angle this campaign argues, and until now that record reached nothing — only
+           * the card's own `claim` direction travelled, so the message you picked was decoration.
+           *
+           * No fallback to the brand's whole message library. An audience pool can sensibly rotate
+           * everything when nothing is pinned, but a set of competing angles cannot: arguing all of
+           * them at once is how copy ends up arguing none.
+           */
+          const msgIds = new Set(refList.filter((x) => x.type === 'message').map((x) => x.id))
+          const msgNames = new Set(refList.filter((x) => x.type === 'message').map((x) => x.label))
+          const msgs = get().messages.filter((m) => msgIds.has(m.id) || msgNames.has(m.name))
+          // Concepts, on the same terms as messages: what the work is built from, no library fallback.
+          const cptIds = new Set(refList.filter((x) => x.type === 'concept').map((x) => x.id))
+          const cptNames = new Set(refList.filter((x) => x.type === 'concept').map((x) => x.label))
+          const cpts = get().concepts.filter((c) => cptIds.has(c.id) || cptNames.has(c.name))
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
             personas: people.filter(hasPersona),
+            messages: msgs,
+            concepts: cpts,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -6465,8 +6522,38 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           readsWhen: pp.readsWhen?.trim() || undefined,
           decidesWith: pp.decidesWith?.trim() || undefined,
         }))
+        /**
+         * The messages this campaign is arguing, campaign-level for the same reason personas are: a
+         * message is what the campaign SAYS, and a deliverable that argues something else says so by
+         * wiring its own Message card, which lands in its own references.
+         *
+         * Only messages with an angle are sent. A named message with nothing written on it is a
+         * label, and passing it would tell the writer to argue a title.
+         */
+        const messages = campaignPools.messages
+          .filter((m) => (m.angle ?? '').trim())
+          .map((m) => ({
+            name: m.name,
+            angle: (m.angle ?? '').trim(),
+            proof: m.proof?.trim() || undefined,
+            audience: m.audience?.trim() || undefined,
+            stage: m.stage || undefined,
+          }))
+        /**
+         * The concepts this campaign is built on. Sent alongside messages rather than folded into
+         * them because they answer different questions: a message is the claim, a concept is the
+         * idea the claim comes out of and the register it should be written in.
+         */
+        const concepts = campaignPools.concepts
+          .filter((c) => (c.idea ?? '').trim())
+          .map((c) => ({
+            name: c.name,
+            idea: (c.idea ?? '').trim(),
+            insight: c.insight?.trim() || undefined,
+            likeThis: c.likeThis?.trim() || undefined,
+          }))
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.

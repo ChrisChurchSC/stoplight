@@ -196,7 +196,7 @@ export interface ClientProfile {
 }
 
 /** A record from one of the Records pages that a flow references (and generation reads). */
-export type FlowRefType = 'company' | 'person' | 'segment' | 'channel' | 'proof' | 'media-mix'
+export type FlowRefType = 'company' | 'person' | 'segment' | 'channel' | 'proof' | 'media-mix' | 'message' | 'concept'
 export interface FlowReference {
   type: FlowRefType
   id: string

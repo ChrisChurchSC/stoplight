@@ -98,7 +98,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas } = (body ?? {}) as {
+  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas, messages, concepts } = (body ?? {}) as {
     icp?: unknown
     campaign?: unknown
     theme?: unknown
@@ -111,6 +111,8 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
     assets?: unknown
     model?: unknown
     personas?: unknown
+    messages?: unknown
+    concepts?: unknown
   }
   // The campaign's model pick. Validated against the catalog rather than forwarded: this is a
   // client-supplied string heading for a provider, and an id the app does not offer is a stale
@@ -123,6 +125,42 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
     ? (personas as Record<string, unknown>[])
         .filter((p) => p && typeof p === 'object' && typeof p.name === 'string' && p.name.trim())
         .slice(0, 6)
+    : []
+  /**
+   * The concepts the campaign is built on. Keyed on IDEA for the same reason messages are keyed on
+   * angle: a named concept with nothing written under it is a filing label, not something to write
+   * from.
+   */
+  const conceptList = Array.isArray(concepts)
+    ? (concepts as Record<string, unknown>[])
+        .filter((c) => c && typeof c === 'object' && typeof c.idea === 'string' && c.idea.trim())
+        .slice(0, 4)
+        .map((c) => ({
+          name: typeof c.name === 'string' ? c.name.slice(0, 120) : undefined,
+          idea: (c.idea as string).trim().slice(0, 400),
+          insight: typeof c.insight === 'string' && c.insight.trim() ? c.insight.trim().slice(0, 400) : undefined,
+          likeThis: typeof c.likeThis === 'string' && c.likeThis.trim() ? c.likeThis.trim().slice(0, 200) : undefined,
+        }))
+    : []
+  /**
+   * The messages this campaign argues, from the Message cards wired to it.
+   *
+   * Keyed on ANGLE, not name: the angle is the sentence to argue and the name is just what the
+   * record is filed under, so a message with no angle is dropped rather than sent as a title for
+   * the model to interpret. Sanitized like everything else here, being user-authored free text
+   * heading into a prompt.
+   */
+  const messageList = Array.isArray(messages)
+    ? (messages as Record<string, unknown>[])
+        .filter((m) => m && typeof m === 'object' && typeof m.angle === 'string' && m.angle.trim())
+        .slice(0, 8)
+        .map((m) => ({
+          name: typeof m.name === 'string' ? m.name.slice(0, 120) : undefined,
+          angle: (m.angle as string).trim().slice(0, 400),
+          proof: typeof m.proof === 'string' && m.proof.trim() ? m.proof.trim().slice(0, 300) : undefined,
+          audience: typeof m.audience === 'string' && m.audience.trim() ? m.audience.trim().slice(0, 160) : undefined,
+          stage: typeof m.stage === 'string' && m.stage.trim() ? m.stage.trim().slice(0, 40) : undefined,
+        }))
     : []
   // The brand's hook library. Every request has carried it since the field was added and this
   // handler silently dropped it: only the offline heuristic writer ever read it, so on the live
@@ -139,7 +177,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   // floored at 8k, capped at Opus's ceiling.
   const assetCount = Array.isArray(assets) ? assets.length : 1
   const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
-  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience — its pains and wants, its triggers, its tone, its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
+  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}${conceptList.length ? `\n\nThe concept this campaign is built on. The idea is what the work is ABOUT and the insight is why it lands; "likeThis" is the register to write in, not a thing to name. Every asset should feel like it came from this, without any of them restating it:\n${JSON.stringify(conceptList, null, 2)}` : ''}${messageList.length ? `\n\nThe messages this campaign argues (from the Message cards wired to it). Each asset should advance ONE of these rather than restating all of them; the angle is the line to make, the proof is what backs it. Where a message names an audience or a stage, prefer it for assets that match:\n${JSON.stringify(messageList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience — its pains and wants, its triggers, its tone, its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
 
   const client = makeModelClient('copy', pick)
   const message = await client.messages.create({
