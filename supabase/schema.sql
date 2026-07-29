@@ -184,7 +184,7 @@ begin
   foreach t in array array[
     'brands', 'companies', 'people', 'segments', 'channels',
     'objectives', 'message_records', 'voice_records', 'patterns', 'triggers', 'tasks', 'proof_points',
-    'concept_records'
+    'concept_records', 'season_records'
   ] loop
     execute format($f$
       create table if not exists public.%1$I (

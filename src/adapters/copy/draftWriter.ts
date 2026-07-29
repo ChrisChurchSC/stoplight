@@ -144,6 +144,14 @@ export interface DraftRequest {
     donts?: string
     sample?: string
   }[]
+  /** The moment the campaign is written into, and what it gives the brand permission to say. */
+  seasons?: {
+    name?: string
+    moment?: string
+    window?: string
+    permission?: string
+    mindset?: string
+  }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**

@@ -38,6 +38,7 @@ import { messagingFields } from '../domain/messaging'
 import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
+import { type Season } from '../domain/season'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -98,6 +99,8 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   // thing it came from rather than as a new concept.
   message: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
   // The lightbulb the Concept card carries on the canvas.
+  // The leaf the Season card carries on the canvas.
+  season: <><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z" /><path d="M5 19c4-2 7-5 9.5-9.5" /></>,
   // The speech-waveform the Voice card carries on the canvas.
   voice: <><path d="M12 4v16M8 8v8M16 8v8M4 11v2M20 11v2" /></>,
   concept: <><path d="M9.5 18h5M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2v.2h5v-.2c0-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" /></>,
@@ -138,7 +141,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season' }
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -577,6 +580,14 @@ export function FlowsView() {
       { key: 'usesNow', brief: 'what they reach for instead today' },
       { key: 'saysLike', brief: 'their own words and turns of phrase' },
     ],
+    season: [
+      { key: 'name', brief: 'a short name for this moment' },
+      { key: 'moment', brief: 'what is happening, in one line' },
+      { key: 'window', brief: 'when it runs, in words rather than dates' },
+      { key: 'permission', brief: 'why this moment lets the brand say something it otherwise could not' },
+      { key: 'mindset', brief: 'what the audience is already doing or feeling then' },
+      { key: 'audience', brief: 'who it is for' },
+    ],
     'proof-point': [
       { key: 'label', brief: 'the claim this proves, in a few words' },
       { key: 'metric', brief: 'the figure that backs it, if there is one' },
@@ -624,6 +635,7 @@ export function FlowsView() {
     concept: 'Your marketing stack is five tools doing one job badly',
     voice: 'Dry and technical, like an engineer explaining it to another engineer',
     'proof-point': 'Teams using it ship about twice the content with the same headcount',
+    season: 'The fortnight before the new tax year, when finance teams are already rebuilding budgets',
   }
   const [prompting, setPrompting] = useState<Record<string, string>>({})
   const [filling, setFilling] = useState<string | null>(null)
@@ -864,6 +876,9 @@ export function FlowsView() {
   const updateConcept = useTrafficStore((s) => s.updateConcept)
   const updateVoice = useTrafficStore((s) => s.updateVoice)
   const updateBrandProof = useTrafficStore((s) => s.updateBrandProof)
+  const allSeasons = useTrafficStore((s) => s.seasons)
+  const addSeason = useTrafficStore((s) => s.addSeason)
+  const updateSeason = useTrafficStore((s) => s.updateSeason)
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
@@ -885,6 +900,7 @@ export function FlowsView() {
   // Channels have no brand tag (a shared taxonomy) so they are not scoped here.
   const messages = useMemo(() => allMessages.filter((m) => !m.brand || m.brand === brand), [allMessages, brand])
   const concepts = useMemo(() => allConcepts.filter((c) => !c.brand || c.brand === brand), [allConcepts, brand])
+  const seasons = useMemo(() => allSeasons.filter((x) => !x.brand || x.brand === brand), [allSeasons, brand])
   const objectives = useMemo(() => allObjectives.filter((o) => !o.brand || o.brand === brand), [allObjectives, brand])
   const companies = useMemo(() => allCompanies.filter((c) => !c.brand || c.brand === brand), [allCompanies, brand])
   const people = useMemo(() => allPeople.filter((p) => !p.brand || p.brand === brand), [allPeople, brand])
@@ -1938,8 +1954,9 @@ export function FlowsView() {
       { type: 'message' as FlowRefType, label: 'Messages', items: messages.map((m) => ({ id: m.id, label: m.name })) },
       { type: 'concept' as FlowRefType, label: 'Concepts', items: concepts.map((c) => ({ id: c.id, label: c.name })) },
       { type: 'voice' as FlowRefType, label: 'Voices', items: voices.map((v) => ({ id: v.id, label: v.name })) },
+      { type: 'season' as FlowRefType, label: 'Seasons', items: seasons.map((x) => ({ id: x.id, label: x.name })) },
     ],
-    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts, voices],
+    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts, voices, seasons],
   )
   /**
    * The campaign's stored references, minus any whose record no longer exists.
@@ -3093,6 +3110,15 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  const ensureSeasonFor = (nt: CanvasObject): string => {
+    if (nt.refId && seasons.some((x) => x.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addSeason({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
   const ensureConceptFor = (nt: CanvasObject): string => {
     if (nt.refId && concepts.some((c) => c.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
@@ -3150,6 +3176,7 @@ export function FlowsView() {
       case 'trigger': return named(triggers)
       case 'message': return named(messages)
       case 'concept': return named(concepts)
+      case 'season': return named(seasons)
       case 'voice': return named(voices)
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
@@ -4549,6 +4576,10 @@ export function FlowsView() {
                   const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
                   return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
                 }
+                case 'season': {
+                  const se = (nt.refId ? allSeasons.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Season)
+                  return { current: se as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateSeason(ensureSeasonFor(nt), p as Partial<Season>) } }
+                }
                 case 'proof-point': {
                   const pp = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)
                   return {
@@ -5101,6 +5132,84 @@ export function FlowsView() {
               but it was the one record-linked kind with no form: you picked a message, then went to
               Records to say what it actually was. Audience, Person, Company, Trigger, Brand and
               Product all edit in place, and this was the gap in that set. */}
+          {/* A MOMENT WORTH WRITING TO. A season is not a trigger: a trigger fires per person from a
+              signal about THEM, so it starts a journey; a season is on the calendar and the same for
+              everyone, so it opens a window and gives you permission to say something you would
+              otherwise be interrupting with. The card's direction always said as much — moment +
+              permission, against the trigger's justDid + ask. */}
+          {nt.kind === 'season' && (() => {
+            const sn = (nt.refId ? allSeasons.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Season)
+            const others = seasons.filter((x) => x.id !== sn.id)
+            const own = (key: keyof Season): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Season>) => { markCardDirty(nt.id); updateSeason(ensureSeasonFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const area = (label: string, key: keyof Season, placeholder: string) =>
+              field(label, (
+                <textarea
+                  className="flow-recform-area"
+                  rows={2}
+                  value={String(sn[key] ?? '')}
+                  placeholder={placeholder}
+                  onChange={(e) => set({ [key]: e.target.value } as Partial<Season>)}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>The moment</label>
+                <div className="flow-recform">
+                  {field('Season', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={sn.name}
+                      placeholder="Name this moment"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {area('The moment', 'moment', 'What is happening, in one line')}
+                  {/* Prose, not dates. A season is "the fortnight before the season opens" far more
+                      often than it is a pair of timestamps, and a real date range belongs on the
+                      flight, which already has one. */}
+                  {field('When it runs', (
+                    <RecordCombo
+                      value={sn.window ?? ''}
+                      groups={[{ label: 'From your other seasons', options: own('window') }]}
+                      placeholder="The fortnight before it opens"
+                      onCommit={(v) => set({ window: v })}
+                    />
+                  ))}
+                  {/* The field that earns the card. A moment you cannot say anything new because of
+                      is just a date. */}
+                  {area('What it lets you say', 'permission', 'Why this moment gives you permission')}
+                  {area('Where their head is', 'mindset', 'What they are already doing or feeling then')}
+                  {field('Who it is for', (
+                    <RecordCombo
+                      value={sn.audience ?? ''}
+                      groups={[
+                        { label: 'From your other seasons', options: own('audience') },
+                        { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
+                      ]}
+                      placeholder="Which audience"
+                      onCommit={(v) => set({ audience: v })}
+                    />
+                  ))}
+                  {field('Status', (
+                    <RecordCombo
+                      value={sn.status ? sn.status.charAt(0).toUpperCase() + sn.status.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ status: v.toLowerCase() as Season['status'] })}
+                    />
+                  ))}
+                </div>
+              </>
+            )
+          })()}
           {/* WHAT MAKES IT BELIEVABLE. A proof point was already a reference and already reached the
               writer through the proof pool, but it was the one record-linked kind you could create
               from a card and then not edit there: the metric and the source, which are the whole

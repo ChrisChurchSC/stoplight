@@ -112,6 +112,7 @@ import { type Person, freshPersonId, hasPersona, seedPeople } from '../domain/pe
 import { type Segment, seedSegments } from '../domain/segments'
 import { type Message, freshMessageId } from '../domain/message'
 import { type Concept, freshConceptId } from '../domain/concept'
+import { type Season, freshSeasonId } from '../domain/season'
 import { type Voice, freshVoiceId } from '../domain/voice'
 import { type Pattern, freshPatternId } from '../domain/pattern'
 import { type Trigger, freshTriggerId } from '../domain/trigger'
@@ -839,6 +840,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.brandObjects.v1': 'brand_objects',
   'stoplight.libraryFolders.v1': 'library_folders',
   'stoplight.concepts.v1': 'concept_records',
+  'stoplight.seasons.v1': 'season_records',
 }
 const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
 function saveRecordList<T extends { id: string }>(key: string, list: T[]): void {
@@ -862,6 +864,8 @@ const MESSAGES_KEY = 'stoplight.messages.v1'
  * error object rather than throwing, so a missing table looks exactly like a successful save.
  */
 const CONCEPTS_KEY = 'stoplight.concepts.v1'
+/** Synced to season_records, added in supabase/migrations/0009. Same run-it-by-hand caveat. */
+const SEASONS_KEY = 'stoplight.seasons.v1'
 const VOICES_KEY = 'stoplight.voices.v1'
 const PATTERNS_KEY = 'stoplight.patterns.v1'
 const TRIGGERS_KEY = 'stoplight.triggers.v1'
@@ -1710,6 +1714,11 @@ interface TrafficState {
   addConcept: (partial?: Partial<Concept>) => string
   updateConcept: (id: string, patch: Partial<Concept>) => void
   deleteConcept: (id: string) => void
+  /** Records › Message › Seasons — a moment worth writing to. */
+  seasons: Season[]
+  addSeason: (partial?: Partial<Season>) => string
+  updateSeason: (id: string, patch: Partial<Season>) => void
+  deleteSeason: (id: string) => void
   /** Records › Foundation › Voices — brand voice / tone-of-voice profiles copy is written in. */
   voices: Voice[]
   addVoice: (partial?: Partial<Voice>) => string
@@ -2748,6 +2757,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   people: localDataMode ? loadPeople() : [],
   messages: localDataMode ? loadRecordList<Message>(MESSAGES_KEY) : [],
   concepts: localDataMode ? loadRecordList<Concept>(CONCEPTS_KEY) : [],
+  seasons: localDataMode ? loadRecordList<Season>(SEASONS_KEY) : [],
   voices: localDataMode ? loadRecordList<Voice>(VOICES_KEY) : [],
   patterns: localDataMode ? loadRecordList<Pattern>(PATTERNS_KEY) : [],
   triggers: localDataMode ? loadRecordList<Trigger>(TRIGGERS_KEY) : [],
@@ -3052,6 +3062,29 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const people = s.people.filter((p) => p.id !== id)
       savePeople(people)
       return { people }
+    }),
+
+  addSeason: (partial) => {
+    const id = freshSeasonId()
+    const row: Season = { name: 'New season', ...(partial ?? {}), id }
+    set((s) => {
+      const seasons = [row, ...s.seasons]
+      saveRecordList(SEASONS_KEY, seasons)
+      return { seasons }
+    })
+    return id
+  },
+  updateSeason: (id, patch) =>
+    set((s) => {
+      const seasons = s.seasons.map((x) => (x.id === id ? { ...x, ...patch } : x))
+      saveRecordList(SEASONS_KEY, seasons)
+      return { seasons }
+    }),
+  deleteSeason: (id) =>
+    set((s) => {
+      const seasons = s.seasons.filter((x) => x.id !== id)
+      saveRecordList(SEASONS_KEY, seasons)
+      return { seasons }
     }),
 
   addConcept: (partial) => {
@@ -6342,6 +6375,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const vcIds = new Set(refList.filter((x) => x.type === 'voice').map((x) => x.id))
           const vcNames = new Set(refList.filter((x) => x.type === 'voice').map((x) => x.label))
           const vcs = get().voices.filter((v) => vcIds.has(v.id) || vcNames.has(v.name))
+          // Seasons, same terms. No fallback: most campaigns are not tied to a moment, and inventing
+          // one would have the writer reaching for an occasion that is not happening.
+          const snIds = new Set(refList.filter((x) => x.type === 'season').map((x) => x.id))
+          const snNames = new Set(refList.filter((x) => x.type === 'season').map((x) => x.label))
+          const sns = get().seasons.filter((x) => snIds.has(x.id) || snNames.has(x.name))
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
@@ -6349,6 +6387,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             messages: msgs,
             concepts: cpts,
             voices: vcs,
+            seasons: sns,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -6595,8 +6634,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             donts: v.donts?.trim() || undefined,
             sample: v.sample?.trim() || undefined,
           }))
+        /**
+         * The moment this campaign is written into, from a wired Season card.
+         *
+         * Keyed on PERMISSION rather than the moment: a date with nothing it lets you say is just a
+         * date, and telling the model "it is spring" earns nothing. The permission is the part that
+         * changes what the copy is allowed to open with.
+         */
+        const seasons = campaignPools.seasons
+          .filter((x) => (x.permission ?? '').trim() || (x.moment ?? '').trim())
+          .map((x) => ({
+            name: x.name,
+            moment: x.moment?.trim() || undefined,
+            window: x.window?.trim() || undefined,
+            permission: x.permission?.trim() || undefined,
+            mindset: x.mindset?.trim() || undefined,
+          }))
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
