@@ -6787,6 +6787,8 @@ export function FlowsView() {
                     {connectFor === nt.id && (
                       <AggregatorConnect
                         linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
+                        brand={brand}
+                        website={clientProfiles[brand]?.website}
                         onLand={(name, columns, rows, provider, service, query) =>
                           importBrandDataset(brand, name, columns, rows, {
                             kind: 'aggregator',

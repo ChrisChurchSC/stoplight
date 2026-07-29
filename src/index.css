@@ -21518,6 +21518,9 @@ table.aud-sheet td.stick .aud-cell {
   font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--text-faint);
 }
 .flow-agg-err { color: var(--amber); }
+/* Warehouses and direct channels, as two labelled groups in one panel. */
+.flow-agg-group { display: flex; flex-direction: column; gap: 4px; }
+.flow-agg-group + .flow-agg-group { margin-top: 7px; }
 /* Source marks: aligned with the text they label, never stretched by the flex row. */
 .flow-agg-mark,
 .flow-note-mini-mark { display: inline-flex; align-items: center; flex: none; }

@@ -25,6 +25,11 @@ const TONE: Record<string, string> = {
   summer: '#F5A524',
   supermetrics: '#00B2A9',
   databox: '#6C5CE7',
+  // Channel providers, as opposed to the per-service ids above. `google` covers three services on one
+  // consent, so it gets Google's own blue rather than any one product's colour.
+  google: '#4285F4',
+  linkedin: '#0A66C2',
+  instagram: '#E1306C',
 }
 
 const box = { width: 14, height: 14, viewBox: '0 0 24 24' } as const
@@ -79,6 +84,7 @@ export function SourceMark({ id }: { id: string }) {
         </svg>
       )
     case 'linkedin_company_pages':
+    case 'linkedin':
       return <Monogram text="in" tone={tone} />
     case 'facebook_pages':
       return <Monogram text="f" tone={tone} />
@@ -97,6 +103,17 @@ export function SourceMark({ id }: { id: string }) {
         <svg {...box} aria-hidden="true" fill="none" stroke={tone} strokeWidth="2.2" strokeLinecap="round">
           <circle cx="12" cy="8" r="3.4" />
           <path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" />
+        </svg>
+      )
+    case 'google':
+      return <Monogram text="G" tone={tone} />
+    // A rounded aperture: the one shape of Instagram's mark that is pure geometry.
+    case 'instagram':
+      return (
+        <svg {...box} aria-hidden="true" fill="none" stroke={tone} strokeWidth="2.2">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+          <circle cx="12" cy="12" r="3.8" />
+          <circle cx="17" cy="7" r="1.1" fill={tone} stroke="none" />
         </svg>
       )
     // Aggregators: a monogram rather than an invented logo.

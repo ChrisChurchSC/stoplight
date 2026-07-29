@@ -6,6 +6,7 @@ import {
   type AggregatorStatus,
   type PullWindow,
 } from '../src/domain/aggregator.js'
+import { googleConfigured, googleServices, runGooglePull } from './channelPull.js'
 
 /**
  * Pull a real table out of an aggregator's warehouse.
@@ -233,12 +234,16 @@ const PULL_SERVICE: Record<string, string> = {
 }
 
 export async function runAggregator(body: unknown): Promise<unknown> {
-  const { op, provider, source, pull, days } = (body ?? {}) as {
+  const { op, provider, source, pull, days, brand, workspace, website } = (body ?? {}) as {
     op?: unknown
     provider?: unknown
     source?: unknown
     pull?: unknown
     days?: unknown
+    /** Channel pulls resolve their property/site/channel from the brand, the way actuals already do. */
+    brand?: unknown
+    workspace?: unknown
+    website?: unknown
   }
 
   // STATUS is deliberately not an error when nothing is connected: "no key" is the answer, not a
@@ -248,10 +253,41 @@ export async function runAggregator(body: unknown): Promise<unknown> {
       providers: AGGREGATORS.map((a) => ({
         id: a.id,
         implemented: a.implemented,
-        configured: a.implemented && !!process.env[a.envVar],
+        // Google has three token paths (OAuth refresh, service account, per-workspace connection), so
+        // "is the env var set" is the wrong question for it and it answers for itself.
+        configured: a.implemented && (a.id === 'google' ? googleConfigured() : !!process.env[a.envVar]),
       })),
     }
     return status
+  }
+
+  /**
+   * DIRECT CHANNELS. Same ops, same question ids, different transport: no SQL and no project, so a
+   * "source" here is the brand whose property/site/channel the pull resolves to.
+   */
+  if (provider === 'google') {
+    const brandName = typeof brand === 'string' ? brand : ''
+    const ctx = { workspaceId: typeof workspace === 'string' ? workspace : undefined, website: typeof website === 'string' ? website : undefined }
+
+    if (op === 'sources') {
+      if (!brandName) throw new Error('BAD_REQUEST')
+      const services = await googleServices(brandName, ctx)
+      // One source, the connected account, described by what it can answer for THIS brand. An empty
+      // services list is a real answer: connected, but nothing of this brand's resolves.
+      return { sources: [{ id: brandName, label: `${brandName} · Google`, services }] }
+    }
+
+    if (op === 'pull') {
+      const pullId = typeof pull === 'string' ? pull : ''
+      const src = typeof source === 'string' ? source : brandName
+      if (!pullId || !src) throw new Error('BAD_REQUEST')
+      const window: PullWindow = isPullWindow(days) ? days : 90
+      const grid = await runGooglePull(pullId, src, window, ctx)
+      const result: AggregatorPullResult = { columns: grid.columns, rows: grid.rows, truncated: grid.truncated }
+      return result
+    }
+
+    throw new Error('BAD_REQUEST')
   }
 
   if (provider !== 'summer') throw new Error('UNKNOWN_PROVIDER')

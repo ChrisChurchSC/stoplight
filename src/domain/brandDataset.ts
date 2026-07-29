@@ -1,4 +1,5 @@
 import { freshRecordId } from './records'
+import type { AggregatorProvider } from './aggregator'
 
 /**
  * A brand "data set" — the flexible half of the hybrid brand model. Where the preset brand basics
@@ -28,7 +29,7 @@ export type DatasetSource =
    * card shows the platform's mark, because "is this search data or LinkedIn data" is the question
    * you have at a glance, while provenance is the aggregator's name and the date.
    */
-  | { kind: 'aggregator'; provider: 'supermetrics' | 'databox' | 'summer'; service?: string; query?: string; syncedAt?: number }
+  | { kind: 'aggregator'; provider: AggregatorProvider; service?: string; query?: string; syncedAt?: number }
   | { kind: 'composite'; prompt: string; generatedAt: number }
 
 export interface BrandDataset {

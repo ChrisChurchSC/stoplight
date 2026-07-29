@@ -78,8 +78,12 @@ async function oauthAccessToken(): Promise<string | null> {
 }
 
 /** Mint a short-lived read-only access token (GA4 + Search Console scopes). Prefers the keyless OAuth
- * refresh token; falls back to a service-account JWT when that's configured instead. */
-async function accessToken(): Promise<string | null> {
+ * refresh token; falls back to a service-account JWT when that's configured instead.
+ *
+ * Exported so the Data source card's channel pulls mint a token the same way rather than growing a
+ * fourth copy of this logic (googleResolve has its own for the per-workspace stored connection,
+ * which uses different client credentials by design). */
+export async function accessToken(): Promise<string | null> {
   const oauth = await oauthAccessToken()
   if (oauth) return oauth
   const email = process.env.GA4_CLIENT_EMAIL

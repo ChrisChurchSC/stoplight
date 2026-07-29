@@ -21,11 +21,21 @@
  * `site_report_by_page`, and that table has no `page` column. `page_report` does.
  */
 
-/** Providers the user might name. Summer is built; the other two are declared, not implemented. */
-export type AggregatorProvider = 'summer' | 'supermetrics' | 'databox'
+/**
+ * Providers the user might name, of two sorts.
+ *
+ * A WAREHOUSE holds several channels behind one connection and is queried with SQL. A CHANNEL is the
+ * platform itself, asked directly through its own API. The distinction is real (different auth,
+ * different transport, different freshness) but it is not the user's problem, so the questions on
+ * offer are the same vocabulary either way: "top search queries" means the same thing whether it
+ * comes through Summer or straight from Search Console.
+ */
+export type AggregatorProvider = 'summer' | 'supermetrics' | 'databox' | 'google' | 'linkedin' | 'instagram'
 
 export interface AggregatorSpec {
   id: AggregatorProvider
+  /** Warehouse by default; channels say so, which is how the panel groups them. */
+  kind?: 'warehouse' | 'channel'
   label: string
   /** One line, shown under the name when the provider is not connected. */
   blurb: string
@@ -48,8 +58,11 @@ export const AGGREGATORS: AggregatorSpec[] = [
   },
   {
     id: 'supermetrics',
+    // Precise on purpose. The app CAN already use a Supermetrics key: actualsHandler reads one to
+    // fill the brand metrics panel. What is missing is pulling an arbitrary table onto a card, and a
+    // flat "not built" would contradict a key the user may already have set.
     label: 'Supermetrics',
-    blurb: 'Not built yet. Export a CSV from Supermetrics and upload it instead.',
+    blurb: 'Brand metrics can use a Supermetrics key already. Pulling a table onto a card is not built yet.',
     envVar: 'SUPERMETRICS_API_KEY',
     implemented: false,
   },
@@ -60,10 +73,44 @@ export const AGGREGATORS: AggregatorSpec[] = [
     envVar: 'DATABOX_API_KEY',
     implemented: false,
   },
+  /**
+   * DIRECT CHANNELS: the same questions, without a warehouse in between.
+   *
+   * Google is one entry rather than three because it is one consent: the stored connection carries
+   * analytics.readonly, webmasters.readonly and yt-analytics.readonly together, so a workspace that
+   * has connected Google can answer GA4, Search Console and YouTube questions from it. Which of the
+   * three actually appear is decided by what that account can see, not by this list.
+   */
+  {
+    id: 'google',
+    kind: 'channel',
+    label: 'Google',
+    blurb: 'Analytics, Search Console and YouTube, straight from the account.',
+    envVar: 'GA4_REFRESH_TOKEN',
+    implemented: true,
+  },
+  {
+    id: 'linkedin',
+    kind: 'channel',
+    label: 'LinkedIn',
+    blurb: 'Not built yet. Needs a LinkedIn app with Community Management access.',
+    envVar: 'LINKEDIN_ACCESS_TOKEN',
+    implemented: false,
+  },
+  {
+    id: 'instagram',
+    kind: 'channel',
+    label: 'Instagram',
+    blurb: 'Not built yet. Needs a Meta app and a connected business account.',
+    envVar: 'INSTAGRAM_ACCESS_TOKEN',
+    implemented: false,
+  },
 ]
 
 export const aggregatorSpec = (id: string): AggregatorSpec | undefined =>
   AGGREGATORS.find((a) => a.id === id)
+
+export const specKind = (a: AggregatorSpec): 'warehouse' | 'channel' => a.kind ?? 'warehouse'
 
 /**
  * A named question, tied to one connected service.

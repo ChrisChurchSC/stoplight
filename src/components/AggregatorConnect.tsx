@@ -3,6 +3,7 @@ import {
   PULL_WINDOWS,
   aggregatorSpec,
   pullsForServices,
+  specKind,
   type AggregatorProvider,
   type AggregatorPull,
   type AggregatorPullResult,
@@ -36,6 +37,15 @@ interface Props {
    * looked the same. Naming it is the difference between choosing a replacement and discovering one.
    */
   linkedName?: string
+  /**
+   * The brand this canvas writes as, and its site.
+   *
+   * Warehouse pulls do not need it (a project holds whatever it holds), but a direct channel does:
+   * one Google account can see many properties, and the brand plus its domain is what picks the
+   * right one, exactly as the brand metrics panel already resolves them.
+   */
+  brand: string
+  website?: string
   /** Lands the pulled grid as a brand data set and returns its id. */
   onLand: (
     name: string,
@@ -51,7 +61,7 @@ interface Props {
 
 type Step = 'provider' | 'source' | 'pull'
 
-export function AggregatorConnect({ linkedName, onLand, onDone, onCancel }: Props) {
+export function AggregatorConnect({ linkedName, brand, website, onLand, onDone, onCancel }: Props) {
   const [status, setStatus] = useState<AggregatorStatus | null>(null)
   const [step, setStep] = useState<Step>('provider')
   const [provider, setProvider] = useState<AggregatorProvider | null>(null)
@@ -65,7 +75,7 @@ export function AggregatorConnect({ linkedName, onLand, onDone, onCancel }: Prop
     const res = await fetch('/api/aggregator', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ brand, website, ...(body as object) }),
     })
     if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `aggregator ${res.status}`)
     return res.json()
@@ -145,13 +155,21 @@ export function AggregatorConnect({ linkedName, onLand, onDone, onCancel }: Prop
       )}
       {step === 'provider' && (
         <>
-          <span className="flow-agg-head">Connect an aggregator</span>
           {!status && !error && <span className="flow-agg-muted">Checking…</span>}
-          {status?.providers.map((p) => {
-            const spec = aggregatorSpec(p.id)
-            if (!spec) return null
-            const ready = p.implemented && p.configured
+          {(['warehouse', 'channel'] as const).map((group) => {
+            const inGroup = (status?.providers ?? []).filter((p) => {
+              const spec = aggregatorSpec(p.id)
+              return spec && specKind(spec) === group
+            })
+            if (!inGroup.length) return null
             return (
+              <div key={group} className="flow-agg-group">
+                <span className="flow-agg-head">{group === 'warehouse' ? 'From a warehouse' : 'Straight from the channel'}</span>
+                {inGroup.map((p) => {
+          const spec = aggregatorSpec(p.id)
+          if (!spec) return null
+          const ready = p.implemented && p.configured
+          return (
               <button
                 key={p.id}
                 className={`flow-agg-row${ready ? '' : ' off'}`}
@@ -171,6 +189,9 @@ export function AggregatorConnect({ linkedName, onLand, onDone, onCancel }: Prop
                   {!p.implemented ? spec.blurb : p.configured ? spec.blurb : `Set ${spec.envVar} to connect`}
                 </span>
               </button>
+                  )
+                })}
+              </div>
             )
           })}
           {/* Named even when every provider is dark, so the panel explains itself rather than
