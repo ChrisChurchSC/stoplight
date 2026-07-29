@@ -13,6 +13,17 @@
     <meta name="twitter:title" content="Breadcrumbs" />
     <meta name="twitter:description" content="Leave a trail worth following. Breadcrumbs turns one brand strategy into personalized campaigns for every audience and channel." />
     <title>Breadcrumbs</title>
+    <!-- Switzer is self-hosted (public/fonts, one variable file for every weight) and declared in
+         index.css. Space Mono is the label face and comes from Google; a <link> rather than an
+         @import in CSS, because an @import is discovered only after the stylesheet has parsed and
+         serializes the two requests. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
+    />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/Switzer-Variable.woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

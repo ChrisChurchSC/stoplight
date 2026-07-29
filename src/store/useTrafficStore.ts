@@ -2397,7 +2397,7 @@ interface TrafficState {
    * /api/ai-credits. Null means "cannot say" — no key, unreachable, an Anthropic-only deployment —
    * and every reader must render nothing in that case rather than a zero or a guess.
    */
-  aiCredits: { remaining: number; totalCredits: number; totalUsage: number } | null
+  aiCredits: { remaining: number; remainingCredits: number; totalCredits: number; totalUsage: number } | null
   refreshAiCredits: () => Promise<void>
   /** A transient bottom toast for lightweight recommendations (e.g. an unallocated budget). */
   toast: string | null
@@ -5931,9 +5931,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     try {
       const r = await fetch('/api/ai-credits')
       if (!r.ok) return set({ aiCredits: null })
-      const d = (await r.json()) as { available?: boolean; remaining?: number; totalCredits?: number; totalUsage?: number }
+      const d = (await r.json()) as { available?: boolean; remaining?: number; remainingCredits?: number; totalCredits?: number; totalUsage?: number }
       if (!d?.available || typeof d.remaining !== 'number') return set({ aiCredits: null })
-      set({ aiCredits: { remaining: d.remaining, totalCredits: d.totalCredits ?? 0, totalUsage: d.totalUsage ?? 0 } })
+      set({
+        aiCredits: {
+          remaining: d.remaining,
+          remainingCredits: d.remainingCredits ?? Math.max(0, Math.floor(d.remaining / 0.01)),
+          totalCredits: d.totalCredits ?? 0,
+          totalUsage: d.totalUsage ?? 0,
+        },
+      })
     } catch {
       // Unreachable is not zero. Keep it unknown so the readout hides rather than reads "$0 left".
       set({ aiCredits: null })

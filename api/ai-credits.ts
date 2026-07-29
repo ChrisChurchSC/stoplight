@@ -15,10 +15,25 @@
 interface ApiReq { method?: string }
 interface ApiRes { statusCode: number; setHeader(name: string, value: string): void; end(chunk?: string): void }
 
+/**
+ * What one credit is worth, in dollars.
+ *
+ * A credit is a UNIT, not a second quantity: the balance is still the provider account's real
+ * money, shown at a fixed, stated rate so it reads as a round number a person can hold in their
+ * head. A cent per credit keeps the arithmetic checkable — $4.76 is 476 credits, and the tooltip
+ * still shows the dollars, so nobody has to take the conversion on faith.
+ */
+export const CREDIT_RATE_USD = 0.01
+
+/** Dollars to whole credits, floored: never round a balance UP into a credit that is not there. */
+export const creditsFromUsd = (usd: number): number => Math.max(0, Math.floor(usd / CREDIT_RATE_USD))
+
 export interface AiCredits {
   available: boolean
   /** Dollars still spendable, i.e. purchased minus used. Absent when unavailable. */
   remaining?: number
+  /** The same balance in credits, at CREDIT_RATE_USD. */
+  remainingCredits?: number
   totalCredits?: number
   totalUsage?: number
   reason?: string
@@ -38,11 +53,13 @@ export async function readAiCredits(): Promise<AiCredits> {
     if (!Number.isFinite(totalCredits) || !Number.isFinite(totalUsage)) {
       return { available: false, reason: 'unreadable' }
     }
+    const remaining = Math.max(0, totalCredits - totalUsage)
     return {
       available: true,
       totalCredits,
       totalUsage,
-      remaining: Math.max(0, totalCredits - totalUsage),
+      remaining,
+      remainingCredits: creditsFromUsd(remaining),
     }
   } catch {
     // Offline, DNS, a blocked egress: all the same answer, which is "cannot say".

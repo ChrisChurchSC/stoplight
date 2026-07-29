@@ -18,7 +18,7 @@ import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, PRODUCT_STATUSES, type Product } from '../domain/product'
 import { type BrandObject } from '../domain/brandObject'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
-import { AI_MODELS, AI_MODEL_IDS, type AiModelOption } from '../domain/aiModels'
+import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
@@ -6978,40 +6978,9 @@ export function FlowsView() {
                       </div>
                     )
                   })()}
-                  {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
-                      announcement and an always-on blog run do not deserve the same model, and the
-                      cost difference between them is the whole reason to choose. Auto keeps the
-                      workspace pick, then the server's per-task default. */}
-                    {(() => {
-                      const labelOf = (m: AiModelOption) => `${m.label} · ${m.note}`
-                      const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? 'auto'))
-                      return (
-                        <div className="flow-recform-field">
-                          <span className="flow-recform-key">AI model</span>
-                          {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
-                              announcement and an always-on blog run do not deserve the same model, and
-                              the cost difference between them is the whole reason to choose. Auto keeps
-                              the workspace pick, then the server's per-task default. */}
-                          <RecordCombo
-                            value={cur ? labelOf(cur) : ''}
-                            groups={[{ label: 'Models', options: AI_MODELS.map(labelOf) }]}
-                            placeholder="Choose"
-                            allowCreate={false}
-                            onCommit={(v) => {
-                              const m = AI_MODELS.find((x) => labelOf(x) === v)
-                              if (!m || !viewName) return
-                              patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
-                            }}
-                          />
-                          <div className="flow-inspect-note" style={{ marginTop: 4 }}>
-                            {/* Says what it covers. It governs generation for this campaign, not the dozen
-                                other places the app calls a model, and claiming otherwise would be a lie the
-                                user could catch. */}
-                            Used when this campaign writes copy. Other AI work keeps the workspace default.
-                          </div>
-                        </div>
-                      )
-                    })()}
+                  {/* The model this campaign writes with now lives on the canvas toolbar, beside
+                      the Generate button it governs, so the choice is visible at the moment you
+                      spend it rather than a panel away. Same campaign field either way. */}
                     {/* Length and budget keep their own controls inside the row: a stepper and a
                         currency field are what those two answers deserve, and the row only ever
                         promised a consistent key and rule, not one control for everything. */}
@@ -7798,9 +7767,9 @@ export function FlowsView() {
             {aiCredits && (
               <span
                 className={`flow-tb-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
-                title={`$${aiCredits.totalUsage.toFixed(2)} of $${aiCredits.totalCredits.toFixed(2)} used on the model account`}
+                title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
               >
-                ${aiCredits.remaining.toFixed(2)} left
+                {aiCredits.remainingCredits.toLocaleString()} credits
               </span>
             )}
             <button

@@ -1,3 +1,27 @@
+/**
+ * SWITZER for everything you read, SPACE MONO for everything that labels it.
+ *
+ * One variable file covers 100-900, so the whole weight range costs 42KB rather than nine separate
+ * static faces. Italic is a second file and is only pulled when something actually slants.
+ *
+ * font-display: swap on purpose. This is an app behind a sign-in, not a landing page: showing the
+ * fallback for a moment beats holding the canvas blank while a face loads.
+ */
+@font-face {
+  font-family: 'Switzer';
+  src: url('/fonts/Switzer-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Switzer';
+  src: url('/fonts/Switzer-VariableItalic.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -29,9 +53,12 @@
      canvas: outputs and the Brief are raised, context cards sit flat on the board. */
   --shadow-raise: 0 2px 4px rgba(16, 24, 40, 0.05), 0 8px 20px -6px rgba(16, 24, 40, 0.12);
 
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+  --font: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
-  --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+  --mono: 'Space Mono', ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+  /* The label voice: every uppercase key, eyebrow and chip on the canvas. Kept separate from --mono
+     so a future change to code/number rendering does not silently restyle every label with it. */
+  --font-label: 'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 * {
@@ -21238,3 +21265,60 @@ table.aud-sheet td.stick .aud-cell {
 /* HomeSidebar in 'sections' mode fills its parent column instead of being a fixed-width left rail.
    It now lives inside the flow-canvas Gretel panel (see .flow-body .fchat-sections). */
 .hsb-sections { width: 100%; background: transparent; display: flex; flex-direction: column; }
+
+/* ============================================================================
+   CANVAS TYPE: Switzer reads, Space Mono labels.
+   ============================================================================
+   The canvas has two kinds of text on it and they were set in one face, so a
+   card's KIND and its NAME had the same voice and you read them in the order
+   they happened to sit rather than by importance.
+
+   Space Mono takes the label layer only: the uppercase keys, the eyebrows, the
+   chips, the counters. It is doing a job here, not decoration — a monospace
+   with real letterspacing reads as machine-set metadata, which is exactly what
+   these are, and it stops a two-word card kind competing with the card's name.
+
+   Everything a person actually reads or writes stays Switzer.
+
+   Kept to the canvas and its inspector on purpose. The rest of the app has not
+   had this pass yet, and half-applying a type system across every screen is
+   worse than applying it to one screen properly.
+   ============================================================================ */
+
+/* The uppercase keys: NAME, OBJECTIVE, CAMPAIGN LENGTH, BUDGET. */
+.flow-recform-key,
+/* Section heads in the right panel: LAYERS, GETS MADE, MADE FROM. */
+.flow-outline-head,
+/* A layer row's type, under its name: CAMPAIGN BRIEF, BRAND, META-ADS. */
+.flow-layer-sub,
+/* The canvas tab's brand line. */
+.cv-project-tab-client {
+  font-family: var(--font-label);
+  letter-spacing: 0.08em;
+}
+
+/* A card's kind chip: "Campaign brief", "Deliverable", "Post", "BRAND". */
+.flow-node-kind {
+  font-family: var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+}
+
+/* Numbers you compare rather than read: zoom, the credit balance, counts. */
+.flow-tb-zoom,
+.flow-tb-credits,
+.flow-outline-row .flow-tile,
+.flow-home-card-meta {
+  font-family: var(--font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Switzer is a touch wider than the stack it replaces, so the panel title and
+   the card name get their tracking pulled back in rather than left to drift. */
+.flow-panel-title,
+.flow-node-label,
+.flow-home-card-name {
+  font-family: var(--font);
+  letter-spacing: -0.011em;
+}
