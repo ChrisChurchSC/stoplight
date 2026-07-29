@@ -21592,3 +21592,21 @@ table.aud-sheet td.stick .aud-cell {
   border: 0; background: none; cursor: pointer; text-align: left; padding: 3px 2px;
   font-family: var(--font-label); font-size: 9.5px; font-weight: 600; color: var(--accent);
 }
+
+/* What the table says. Sits above the source picker: the answer belongs above the question. */
+.flow-read { display: block; margin-bottom: 16px; }
+.flow-read-head { display: block; margin-bottom: 10px; }
+.flow-read-headline {
+  display: block; font-family: var(--font-label); font-size: 19px; font-weight: 700;
+  color: var(--text); line-height: 1.15;
+}
+.flow-read-clause { display: block; font-size: 12px; line-height: 1.4; color: var(--text-muted); margin-top: 3px; }
+.flow-read-find { display: block; padding: 6px 0; border-top: 1px solid var(--border); }
+.flow-read-claim { display: block; font-size: 12px; line-height: 1.4; color: var(--text); }
+.flow-read-detail,
+.flow-read-caveat,
+.flow-read-none {
+  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4;
+  color: var(--text-faint); margin-top: 3px;
+}
+.flow-read-caveat { color: var(--amber); }

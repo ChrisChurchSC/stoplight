@@ -46,6 +46,7 @@ import { citableFigures, datasetProvenance } from '../domain/datasetRead'
 import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
+import { DatasetRead } from './DatasetRead'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -2140,6 +2141,14 @@ export function FlowsView() {
    * invents nothing.
    */
   const presetSourcesFor = (nt: CanvasObject): DirectionPresetSources => {
+    // A Data source card's own figures, so "The figure" offers what the table actually says.
+    const cardFigures =
+      nt.kind === 'data-source' && nt.refId
+        ? (() => {
+            const ds = allBrandDatasets.find((d) => d.id === nt.refId)
+            return ds ? citableFigures(ds).map((f) => ({ value: f.value, label: f.label })) : undefined
+          })()
+        : undefined
     const aud = nt.kind === 'audience' && nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined
     const per = nt.kind === 'person' && nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined
     const profile = brand ? clientProfiles[brand] : undefined
@@ -2171,6 +2180,7 @@ export function FlowsView() {
       voice: profile?.voice,
       hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean),
       proof: brandProof.map((p) => ({ label: p.label, metric: p.metric })),
+      figures: cardFigures,
       messages: messages.map((m) => ({ angle: m.angle })),
       persona: per
         ? { optimizingFor: per.optimizingFor, saysLike: per.saysLike, usesNow: per.usesNow, hobbies: per.hobbies }
@@ -6198,7 +6208,12 @@ export function FlowsView() {
               </>
             )
           })()}
-          {nt.kind === 'data-source' && renderDataSourcePicker(nt)}
+          {nt.kind === 'data-source' &&
+          (() => {
+            const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
+            return ds ? <DatasetRead ds={ds} /> : null
+          })()}
+        {nt.kind === 'data-source' && renderDataSourcePicker(nt)}
         {nt.kind === 'data-source' && renderDatasetContribution(nt)}
           {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
               fields per kind, each landing in a named slot in every wired asset's payload. This is

@@ -37,6 +37,14 @@ export interface DirectionPresetSources {
   hooks?: string[]
   /** The proof pool, for the figure fields. */
   proof?: { label: string; metric?: string }[]
+  /**
+   * Figures the card's own data set can back, for the figure field.
+   *
+   * The whole point of a Data source card is the number on it, and "The figure" was a blank box
+   * beside a table holding the answer. These are the same computed values that travel to the writer,
+   * so picking one here and having it travel are the same fact rather than two.
+   */
+  figures?: { value: string; label: string }[]
   /** Message records, for a message card's claim. */
   messages?: { angle?: string }[]
   /** The persona a Person card names, for the one instruction a person carries. */
@@ -99,6 +107,8 @@ export function directionPresets(key: DirectionKey, src: DirectionPresetSources)
       for (const a of split(src.audience?.antiMessage)) push(a, `${audFrom}'s anti-message`)
       break
     case 'figure':
+      // The card's own table first: it is the thing the card is holding, and it is measured.
+      for (const f of src.figures ?? []) push(`${f.value} ${f.label.toLowerCase()}`, 'this table')
       for (const p of src.proof ?? []) push(p.metric?.trim() ? `${p.metric} (${p.label})` : p.label, 'the proof pool')
       break
     case 'likeThis':

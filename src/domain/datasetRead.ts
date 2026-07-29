@@ -316,3 +316,250 @@ export function citableFigures(ds: BrandDataset, now: number = Date.now()): Cita
   }
   return out
 }
+
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * WHAT THE TABLE SAYS.
+ *
+ * A grid of 500 rows is not a decision, and the gap between "here are your search queries" and "so
+ * write about this" is the whole point of the card. Everything below is plain arithmetic: no model
+ * reads the table, so this works with no API key, costs nothing, and returns the same answer twice.
+ *
+ * WHAT IT WILL NOT SAY, enforced here rather than asked for in a prompt:
+ *   - No trend, ever, from a single pull. One pull is one snapshot. "Up" and "down" need two.
+ *   - No share of a truncated table. The denominator is missing, so every percentage would be too
+ *     high, and a share that is too high is worse than no share.
+ *   - No rate from a tiny denominator. One impression and one click is a 100% clickthrough rate and
+ *     means nothing, which is how a table of noise becomes a confident sentence.
+ *   - Nothing at all from a sketched table, including its headline.
+ *   - No comparison to the benchmark constants in this repo: they are PAID CPM, CTR and CVR, and
+ *     holding organic search up against a paid benchmark is a category error that reads as insight.
+ */
+
+export interface Finding {
+  id: string
+  /** The sentence a person reads. Every number in it is also one of `figures`. */
+  claim: string
+  /** Which columns and how many rows it rests on, so the claim can be checked. */
+  detail: string
+  figures: CitableFigure[]
+}
+
+export interface DatasetRead {
+  ok: boolean
+  headline?: string
+  /** The clause after the headline: "The top 10 pages are 58% of them." */
+  read?: string
+  period?: string
+  findings: Finding[]
+  caveats: string[]
+}
+
+/**
+ * Floors, each naming what it protects against. One object so they can be found and argued with,
+ * rather than scattered as magic numbers down the file.
+ */
+export const FLOORS = {
+  /**
+   * The top ten needs a tail to be a share OF something. A table of exactly ten rows returns "the
+   * top 10 are 100% of them", which is true, vacuous, and reads as a finding. Twice the top N is the
+   * floor, so the sentence always describes a genuine concentration.
+   */
+  concentrationRows: 10,
+  /** Below this a percentage is noise: 1 click on 1 impression is not a 100% rate. */
+  rateDenominator: 50,
+  /** Below this, subscribers per 1000 views swings wildly on one subscriber. */
+  perThousandViews: 500,
+  /** Never claim more than this many outliers in either direction; a list is not a finding. */
+  maxOutliers: 3,
+} as const
+
+/** Which column carries the count everything else is weighed against, and the rate to test. */
+const READ_SHAPE: Record<
+  string,
+  { dim: number; primary: { col: number; noun: string }; rate?: { col: number; noun: string; denom: number; denomNoun: string } }
+> = {
+  'gsc-queries': { dim: 0, primary: { col: 1, noun: 'clicks' }, rate: { col: 3, noun: 'clickthrough rate', denom: 2, denomNoun: 'impressions' } },
+  'gsc-pages': { dim: 0, primary: { col: 1, noun: 'clicks' }, rate: { col: 3, noun: 'clickthrough rate', denom: 2, denomNoun: 'impressions' } },
+  'ga4-channels': { dim: 0, primary: { col: 1, noun: 'sessions' } },
+  'ga4-pages': { dim: 0, primary: { col: 1, noun: 'views' } },
+  'yt-videos': { dim: 0, primary: { col: 1, noun: 'views' } },
+  'li-posts': { dim: 1, primary: { col: 2, noun: 'impressions' }, rate: { col: 5, noun: 'engagement rate', denom: 2, denomNoun: 'impressions' } },
+}
+
+const numOf = (v: string): number | null => {
+  const t = (v ?? '').trim().replace(/,/g, '').replace(/%$/, '')
+  if (!t || !/^-?\d+(\.\d+)?$/.test(t)) return null
+  return Number(t)
+}
+const group = (n: number): string => n.toLocaleString('en-US')
+/** English plural, enough for the column names these tables actually carry. */
+const plural = (w: string): string => {
+  const t = w.trim()
+  if (/[^aeiou]y$/i.test(t)) return `${t.slice(0, -1)}ies`
+  if (/(s|x|z|ch|sh)$/i.test(t)) return `${t}es`
+  return `${t}s`
+}
+
+const median = (xs: number[]): number => {
+  if (!xs.length) return 0
+  const s = [...xs].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+}
+
+/** Read a table. Pure, and fast enough to run inside a card render. */
+export function readDataset(ds: BrandDataset, now: number = Date.now()): DatasetRead {
+  const prov = datasetProvenance(ds, now)
+
+  // A sketch has nothing to read. Not a headline with a warning under it: a headline IS a reading,
+  // and putting a number nobody measured at the top of a card is the thing to avoid.
+  if (prov.tier === 'sketched') {
+    return { ok: false, findings: [], caveats: ['Every figure in this table was invented to show the shape. Nothing here can be read as a result.'] }
+  }
+
+  const rows = ds.rows.filter((r) => r.some((c) => (c ?? '').trim() !== ''))
+  if (!rows.length) return { ok: false, findings: [], caveats: ['Nothing to read yet. There are no numbers in this sheet.'] }
+
+  const pid = pullId(ds.source?.kind === 'aggregator' ? ds.source.query : undefined) ?? ''
+  const shape = READ_SHAPE[pid]
+  const caveats: string[] = []
+  const figures: CitableFigure[] = []
+  const mk = (id: string, value: string, label: string, basis: CitableFigure['basis']): CitableFigure => ({
+    id: `${ds.id}:${id}`,
+    value,
+    label,
+    basis,
+    period: prov.periodLabel,
+    source: prov.badge,
+    partial: prov.partial,
+    datasetId: ds.id,
+  })
+
+  /**
+   * NOT A PULL WE KNOW THE SHAPE OF: an upload, a paste, or a sheet somebody typed. We can add up a
+   * numeric column and we genuinely cannot say what population or what stretch of time it covers, so
+   * it gets a headline and no findings at all rather than a confident sentence about somebody's CSV.
+   */
+  if (!shape) {
+    const dim = ds.columns.findIndex((_, i) => rows.every((r) => numOf(r[i] ?? '') === null))
+    const firstNum = ds.columns.findIndex((_, i) => i !== dim && rows.filter((r) => numOf(r[i] ?? '') !== null).length >= Math.ceil(rows.length / 2))
+    if (firstNum < 0) return { ok: false, findings: [], caveats: ['Nothing to read yet. There are no numbers in this sheet.'] }
+    const total = rows.reduce((n, r) => n + (numOf(r[firstNum] ?? '') ?? 0), 0)
+    const col = ds.columns[firstNum] || 'the first number column'
+    return {
+      ok: true,
+      headline: `${group(total)} ${col.toLowerCase()}`,
+      read: `Across ${rows.length} rows.`,
+      findings: [],
+      caveats: [
+        prov.tier === 'uploaded'
+          ? 'We can add this up, but we do not know what period it covers, so nothing here is dated.'
+          : 'This is a sheet you typed, so it is added up as given.',
+      ],
+    }
+  }
+
+  const dimName = (ds.columns[shape.dim] ?? 'row').toLowerCase()
+  const dimPlural = plural(dimName)
+  const primaryName = (ds.columns[shape.primary.col] ?? shape.primary.noun).toLowerCase()
+  const vals = rows
+    .map((r) => ({ key: (r[shape.dim] ?? '').trim(), n: numOf(r[shape.primary.col] ?? '') }))
+    .filter((x): x is { key: string; n: number } => x.key !== '' && x.n !== null)
+  if (!vals.length) return { ok: false, findings: [], caveats: ['Nothing to read yet. There are no numbers in this sheet.'] }
+
+  const total = vals.reduce((n, x) => n + x.n, 0)
+  const findings: Finding[] = []
+
+  // The headline is the total, unless the table is capped, in which case a total is a lie and the
+  // headline says what it actually is.
+  const headline = prov.partial ? `${group(total)} ${primaryName} in the top ${vals.length}` : `${group(total)} ${primaryName}`
+  let read: string | undefined
+
+  if (prov.partial) {
+    caveats.push('This is the top 500 rows, so anything about the long tail is not in here.')
+  }
+  caveats.push('One pull is one snapshot. Nothing here says whether this is going up or down.')
+
+  /**
+   * CONCENTRATION. Suppressed on a truncated table because the denominator is missing: the top ten
+   * of a capped table is a share of what we fetched, not of what exists, and stating it as a share
+   * overstates it every time.
+   */
+  if (!prov.partial && vals.length >= FLOORS.concentrationRows * 2 && total > 0) {
+    const sorted = [...vals].sort((a, b) => b.n - a.n)
+    const topN = Math.min(10, sorted.length)
+    const topSum = sorted.slice(0, topN).reduce((n, x) => n + x.n, 0)
+    const pct = Math.round((topSum / total) * 1000) / 10
+    const f = [
+      mk('conc:pct', `${pct}%`, `Share of ${primaryName} from the top ${topN}`, 'share'),
+      mk('conc:n', String(topN), `How many ${dimPlural} that is`, 'rank'),
+    ]
+    read = `The top ${topN} ${dimPlural} are ${pct}% of them.`
+    findings.push({
+      id: `${ds.id}:concentration`,
+      claim: `The top ${topN} ${dimPlural} are ${pct}% of all ${primaryName}.`,
+      detail: `From ${ds.columns[shape.primary.col]}, across ${vals.length} rows.`,
+      figures: f,
+    })
+    figures.push(...f)
+  }
+
+  /**
+   * RATE OUTLIERS. Weighted by the denominator, and every row below the floor is excluded before the
+   * average is taken, not after: a table full of one-impression rows would otherwise drag the average
+   * to nonsense and then every real row would look like an outlier against it.
+   */
+  if (shape.rate) {
+    const rate = shape.rate
+    const withRate = rows
+      .map((r) => ({ key: (r[shape.dim] ?? '').trim(), rate: numOf(r[rate.col] ?? ''), denom: numOf(r[rate.denom] ?? '') }))
+      .filter((x): x is { key: string; rate: number; denom: number } => x.key !== '' && x.rate !== null && x.denom !== null)
+    const floor = Math.max(FLOORS.rateDenominator, median(withRate.map((x) => x.denom)))
+    const eligible = withRate.filter((x) => x.denom >= floor)
+    if (eligible.length >= 3) {
+      const wSum = eligible.reduce((n, x) => n + x.rate * x.denom, 0)
+      const dSum = eligible.reduce((n, x) => n + x.denom, 0)
+      const avg = dSum > 0 ? wSum / dSum : 0
+      const below = eligible.filter((x) => x.rate < avg / 2).sort((a, b) => b.denom - a.denom).slice(0, FLOORS.maxOutliers)
+      if (below.length && avg > 0) {
+        const avgStr = `${Math.round(avg * 10) / 10}%`
+        const f = [
+          mk('rate:avg', avgStr, `Average ${rate.noun} across the table`, 'share'),
+          mk('rate:n', String(below.length), `How many ${dimPlural} are well under it`, 'rank'),
+        ]
+        findings.push({
+          id: `${ds.id}:rate-low`,
+          claim: `${below.length} ${below.length === 1 ? dimName : dimPlural} get plenty of ${rate.denomNoun} and a ${rate.noun} under half the table average of ${avgStr}.`,
+          detail: `From ${ds.columns[rate.col]} against ${ds.columns[rate.denom]}, across ${eligible.length} rows above ${group(Math.round(floor))} ${rate.denomNoun}.`,
+          figures: f,
+        })
+        figures.push(...f)
+      }
+      caveats.push(`Rates are only read for rows above ${group(Math.round(floor))} ${rate.denomNoun}. Below that a percentage is noise.`)
+    }
+  }
+
+  /** SUBSCRIBERS PER 1000 VIEWS, the one YouTube claim worth making from a single pull. */
+  if (pid === 'yt-videos' && ds.columns.length >= 5) {
+    const subsCol = 4
+    const eligible = rows
+      .map((r) => ({ key: (r[0] ?? '').trim(), views: numOf(r[1] ?? ''), subs: numOf(r[subsCol] ?? '') }))
+      .filter((x): x is { key: string; views: number; subs: number } => x.key !== '' && x.views !== null && x.subs !== null && x.views >= FLOORS.perThousandViews)
+    if (eligible.length >= 3) {
+      const best = [...eligible].sort((a, b) => b.subs / b.views - a.subs / a.views)[0]
+      const per = Math.round((best.subs / best.views) * 1000 * 10) / 10
+      const f = [mk('yt:per1k', String(per), `Subscribers per 1000 views on ${best.key}`, 'share')]
+      findings.push({
+        id: `${ds.id}:yt-per1k`,
+        claim: `The best video for turning views into subscribers gets ${per} per 1000 views.`,
+        detail: `From ${ds.columns[subsCol]} against ${ds.columns[1]}, across ${eligible.length} videos above ${group(FLOORS.perThousandViews)} views.`,
+        figures: f,
+      })
+      figures.push(...f)
+    }
+  }
+
+  return { ok: true, headline, read, period: prov.periodLabel, findings, caveats }
+}
