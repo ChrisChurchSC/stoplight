@@ -161,7 +161,7 @@ import {
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
-import { resolveBoardDirection } from '../domain/boardResolve'
+import { resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
@@ -6154,6 +6154,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           get().setBrandNotice(`Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`)
           continue
         }
+        /**
+         * SECOND HARD BOUNDARY: a board that connects nothing cannot generate.
+         *
+         * The pools below fall back to the brand's whole library when nothing pins them, which used
+         * to make an unwired campaign generate happily by rotating everything the brand owns. That
+         * is the failure this rule exists to stop: copy written from no stated context at all, which
+         * reads plausible and is accountable to nothing. Refuse instead, and say what to do.
+         */
+        if (!hasWiredContext(boardFor(get().flowBoards, campaign))) {
+          get().setBrandNotice(`Nothing is wired up on "${campaign || 'this campaign'}" yet. Draw a line from a card to the campaign brief, or to one deliverable, so there is something to write from.`)
+          continue
+        }
         const brand = get().clientProfiles[client]
         const bg = get().brandGuides[client]
         const brandGuide = bg?.confirmed ? bg.guide : undefined
@@ -6170,13 +6182,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const libAudiences = mergeAudiences(sys.audiences, get().clientAudiences[client] ?? [])
         const libCtas = sys.ctas
         const proofPool: Rtb[] = sys.rtbs
-        // Record Tags checked on the campaign brief PIN the messaging inputs so every card
-        // the campaign is connected to reflects them: each asset speaks to the referenced
-        // segment(s) and leans on the referenced proof point(s), instead of rotating the
-        // brand's whole library. With none checked, both pools fall back to the full library
-        // (unchanged behavior). Company / person / channel tags are structural references
-        // (who/where, not copy content), so they don't constrain the pools here.
-        const campaignRefs = get().campaignList.find((c) => c.name === campaign)?.references ?? []
+        // The records WIRED into the campaign pin the messaging inputs, so each asset speaks to the
+        // wired segment(s) and leans on the wired proof point(s) instead of rotating the brand's
+        // whole library. Company / person / channel refs are structural (who/where, not copy
+        // content), so they do not constrain the pools here.
+        //
+        // The full-library fallback still exists below for a campaign wired only to cards that name
+        // no record — wired but empty. It is no longer reachable from an EMPTY board, which the
+        // boundary above now refuses outright.
+        // What the BOARD wires into the campaign, not what the campaign has stored. A brand object
+        // is a library you pull onto a campaign, so one only counts once a card connects it, and
+        // that has to hold here most of all: this is where a reference stops being a label on a
+        // panel and starts deciding who an asset speaks to and which proof it cites. The stored set
+        // was still answering that question long after the panel had stopped asking it.
+        const campaignRefs = wiredRefsFor(boardFor(get().flowBoards, campaign), get().smartObjects, 'campaign')
         // What the campaign's objects instruct, persisted on the campaign so a regeneration months
         // later still writes to the direction that produced the original draft.
         /**
