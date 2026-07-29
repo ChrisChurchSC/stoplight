@@ -6,12 +6,33 @@ import { freshRecordId } from './records'
  * (competitor research, campaign learnings, whatever). Free-form on purpose: columns and rows are
  * just labelled strings, so nothing here is assumed to be AI-legible. Stored per brand.
  */
+/**
+ * WHERE A DATA SET CAME FROM.
+ *
+ * Every acquisition route lands in the same BrandDataset, and this records which one. That is what
+ * lets a Data source card point at ONE thing: before this, the card's refId held either a connector
+ * id or a dataset id depending on how you had touched it, and the two overwrote each other.
+ *
+ * It is also the provenance a figure needs. A number with no source and no date is not evidence, and
+ * a writer quoting one cannot be defended.
+ */
+export type DatasetSource =
+  | { kind: 'manual' }
+  | { kind: 'upload'; filename: string; importedAt: number; rowCount: number }
+  // The routes below are planned, not built. Declared here so the shape is settled before three
+  // separate features each invent their own.
+  | { kind: 'channel'; channel: string; account?: string; syncedAt?: number }
+  | { kind: 'aggregator'; provider: 'supermetrics' | 'databox' | 'summer'; query?: string; syncedAt?: number }
+  | { kind: 'composite'; prompt: string; generatedAt: number }
+
 export interface BrandDataset {
   id: string
   brand: string
   name: string
   columns: string[]
   rows: string[][]
+  /** Absent on data sets written before provenance existed; those are manual by definition. */
+  source?: DatasetSource
 }
 
 const DEFAULT_COLS = 4

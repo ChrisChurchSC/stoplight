@@ -39,6 +39,7 @@ import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
+import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -879,6 +880,44 @@ export function FlowsView() {
   const allSeasons = useTrafficStore((s) => s.seasons)
   const addSeason = useTrafficStore((s) => s.addSeason)
   const updateSeason = useTrafficStore((s) => s.updateSeason)
+  const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
+  /** Per-card import feedback: what landed, or why nothing did. */
+  const [importNote, setImportNote] = useState<Record<string, string>>({})
+  const importFileRef = useRef<HTMLInputElement | null>(null)
+  const importTargetRef = useRef<string | null>(null)
+  /**
+   * Read a delimited file into a new data set and link the card to it.
+   *
+   * Everything about the file is reported rather than assumed: the delimiter it settled on, blank
+   * rows dropped, and the row count. A silent import is how you end up writing copy from the wrong
+   * column of somebody's export.
+   */
+  const importTableFile = async (cardId: string, file: File) => {
+    if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Bind this canvas to a brand first.' })); return }
+    if (!isParsableTableFile(file.name)) {
+      setImportNote((m) => ({ ...m, [cardId]: `${file.name.split('.').pop()?.toUpperCase() ?? 'That'} is not readable yet. Export it as CSV and try again.` }))
+      return
+    }
+    try {
+      const text = await file.text()
+      const t = parseTable(text)
+      if (!t.columns.length) { setImportNote((m) => ({ ...m, [cardId]: 'That file had no rows in it.' })); return }
+      const name = file.name.replace(/\.[^.]+$/, '')
+      const id = importBrandDataset(brand, name, t.columns, t.rows, {
+        kind: 'upload',
+        filename: file.name,
+        importedAt: Date.now(),
+        rowCount: t.rows.length,
+      })
+      setObjectRef(cardId, id)
+      markCardDirty(cardId)
+      const delim = t.delimiter === '\t' ? 'tab' : t.delimiter === ';' ? 'semicolon' : 'comma'
+      const skipped = t.skippedBlankRows ? `, ${t.skippedBlankRows} blank row${t.skippedBlankRows === 1 ? '' : 's'} skipped` : ''
+      setImportNote((m) => ({ ...m, [cardId]: `${t.rows.length} row${t.rows.length === 1 ? '' : 's'} and ${t.columns.length} columns, ${delim}-separated${skipped}.` }))
+    } catch {
+      setImportNote((m) => ({ ...m, [cardId]: 'Could not read that file.' }))
+    }
+  }
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
@@ -4434,6 +4473,13 @@ export function FlowsView() {
       openDatasetTab(linked)
       return
     }
+    /**
+     * A refId that is NOT a data set is a connector the user picked, and it used to be destroyed
+     * here: this fell through, minted a blank sheet and overwrote the choice, so picking "Google
+     * Analytics" and then double-clicking silently threw the connector away. Connectors have no
+     * sheet to open yet, so double-click does nothing for them rather than something wrong.
+     */
+    if (nt.refId) return
     const id = addBrandDataset(brand)
     setObjectRef(nt.id, id)
     openDatasetTab(id)
@@ -6223,6 +6269,22 @@ export function FlowsView() {
           onDeleteHistory={deleteFlowChat}
         />
         )}
+        {/* ONE hidden picker for every Data source card: the card that asked is held in a ref, since
+            mounting an input per card would put dozens in the tree for a control used once. */}
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            const target = importTargetRef.current
+            // Reset first: picking the same file twice in a row fires no change event otherwise.
+            e.target.value = ''
+            importTargetRef.current = null
+            if (f && target) void importTableFile(target, f)
+          }}
+        />
         <div
           ref={canvasRef}
           className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}${dragObjectId ? ' obj-drop' : ''}`}
@@ -6594,6 +6656,10 @@ export function FlowsView() {
                         if (e.target.value === '__new__') {
                           const id = addBrandDataset(brand)
                           setObjectRef(nt.id, id)
+                        } else if (e.target.value === '__upload__') {
+                          // Remember which card asked, since one hidden input serves them all.
+                          importTargetRef.current = nt.id
+                          importFileRef.current?.click()
                         } else setObjectRef(nt.id, e.target.value)
                       }}
                     >
@@ -6610,6 +6676,7 @@ export function FlowsView() {
                           <option key={o.id} value={o.id}>{o.label}</option>
                         ))}
                       </optgroup>
+                      <option value="__upload__">↑ Upload a CSV…</option>
                       <option value="__new__">+ New data set…</option>
                     </select>
                     {(() => {
@@ -6621,9 +6688,18 @@ export function FlowsView() {
                         >
                           <MiniSheet columns={linkedDs?.columns ?? ['', '', '', '']} rows={linkedDs?.rows ?? []} bodyRows={3} />
                           <span className="flow-note-mini-label">{linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}</span>
+                          {/* WHERE IT CAME FROM. A figure with no provenance is not evidence, so the
+                              card says the origin and the date rather than leaving a sheet of numbers
+                              looking equally authoritative however it got here. */}
+                          {linkedDs?.source?.kind === 'upload' && (
+                            <span className="flow-note-mini-src">
+                              {linkedDs.source.filename} · {new Date(linkedDs.source.importedAt).toLocaleDateString()}
+                            </span>
+                          )}
                         </div>
                       )
                     })()}
+                    {importNote[nt.id] && <span className="flow-note-mini-note">{importNote[nt.id]}</span>}
                     </>
                   ) : (() => {
                     const opts = objectOptions(nt.kind)

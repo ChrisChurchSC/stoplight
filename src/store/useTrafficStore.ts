@@ -139,7 +139,7 @@ import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domai
 import { type Product, freshProductId } from '../domain/product'
 import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
 import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
-import { type BrandDataset, blankDataset } from '../domain/brandDataset'
+import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
 import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
@@ -1811,6 +1811,14 @@ interface TrafficState {
   setSmartObjectFolder: (id: string, folder: string | undefined) => void
   deleteSmartObject: (id: string) => void
   addBrandDataset: (brand: string, name?: string) => string
+  /**
+   * Create a data set from parsed content, with its provenance.
+   *
+   * Separate from addBrandDataset rather than an option on it: that one makes a blank sheet to type
+   * into, this one lands data that came from somewhere, and the difference is the source field the
+   * caller must supply. Returns the id so the caller can open it.
+   */
+  importBrandDataset: (brand: string, name: string, columns: string[], rows: string[][], source: DatasetSource) => string
   renameBrandDataset: (id: string, name: string) => void
   deleteBrandDataset: (id: string) => void
   setDatasetCell: (id: string, row: number, col: number, value: string) => void
@@ -3515,6 +3523,15 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   addBrandDataset: (brand, name) => {
     const ds = blankDataset(brand, name ?? 'Untitled data set')
+    set((s) => {
+      const brandDatasets = [...s.brandDatasets, ds]
+      saveBrandDatasets(brandDatasets)
+      return { brandDatasets }
+    })
+    return ds.id
+  },
+  importBrandDataset: (brand, name, columns, rows, source) => {
+    const ds: BrandDataset = { ...blankDataset(brand, name), columns, rows, source }
     set((s) => {
       const brandDatasets = [...s.brandDatasets, ds]
       saveBrandDatasets(brandDatasets)
