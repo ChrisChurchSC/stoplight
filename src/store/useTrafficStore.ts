@@ -1620,6 +1620,15 @@ interface TrafficState {
   /** Append a proof point (RTB) to a specific brand's library (brand-explicit, unlike the
    *  active-library addLibraryItem). Used by the flow chat's createProof command. */
   addBrandProof: (brand: string, rtb: Rtb) => void
+  /**
+   * Edit a proof point in the brand's library, in place.
+   *
+   * Proof was the one record-linked card kind you could CREATE from the canvas and then not change
+   * there: addBrandProof existed, nothing to match it. So a proof authored on a card kept whatever
+   * label it was born with, and its metric and source — the two fields that make it proof rather
+   * than a claim — could only be filled in the Library.
+   */
+  updateBrandProof: (brand: string, id: string, patch: Partial<Rtb>) => void
   /** Bless a draft library asset into an approved master (governance). */
   approveLibraryItem: (kind: LibraryKind, id: string) => void
   /** Edit a library Subject master and PROPAGATE the new text to every campaign
@@ -3777,6 +3786,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       if (!b) return {}
       const lib = libFor(s.brandSystems, b)
       const nextLib = { ...lib, rtbs: [...lib.rtbs, rtb] }
+      const brandSystems = { ...s.brandSystems, [b]: nextLib }
+      saveBrandSystems(brandSystems)
+      return { brandSystems, ...(s.messagingBrand === b ? { library: nextLib } : {}) }
+    }),
+  updateBrandProof: (brand, id, patch) =>
+    set((s) => {
+      const b = brand.trim()
+      if (!b) return {}
+      const lib = libFor(s.brandSystems, b)
+      if (!lib.rtbs.some((r) => r.id === id)) return {}
+      const nextLib = { ...lib, rtbs: lib.rtbs.map((r) => (r.id === id ? { ...r, ...patch } : r)) }
       const brandSystems = { ...s.brandSystems, [b]: nextLib }
       saveBrandSystems(brandSystems)
       return { brandSystems, ...(s.messagingBrand === b ? { library: nextLib } : {}) }
@@ -6317,12 +6337,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const cptIds = new Set(refList.filter((x) => x.type === 'concept').map((x) => x.id))
           const cptNames = new Set(refList.filter((x) => x.type === 'concept').map((x) => x.label))
           const cpts = get().concepts.filter((c) => cptIds.has(c.id) || cptNames.has(c.name))
+          // Voices, same terms again. No fallback: the brand guide already sets a default register,
+          // so an unpinned campaign is not voiceless, it is simply written in the brand's voice.
+          const vcIds = new Set(refList.filter((x) => x.type === 'voice').map((x) => x.id))
+          const vcNames = new Set(refList.filter((x) => x.type === 'voice').map((x) => x.label))
+          const vcs = get().voices.filter((v) => vcIds.has(v.id) || vcNames.has(v.name))
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
             personas: people.filter(hasPersona),
             messages: msgs,
             concepts: cpts,
+            voices: vcs,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -6552,8 +6578,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             insight: c.insight?.trim() || undefined,
             likeThis: c.likeThis?.trim() || undefined,
           }))
+        /**
+         * The voice this campaign is written in, from a wired Voice card.
+         *
+         * NARROWS the brand guide rather than replacing it. The guide is already sent as the
+         * contract ("never break a don't") and stays binding; this picks the register within it,
+         * which is what a Voice card is for. Sending it as an override would let a campaign quietly
+         * escape the brand's don'ts, and those are the half that matters.
+         */
+        const voices = campaignPools.voices
+          .filter((v) => (v.tone ?? '').trim() || (v.sample ?? '').trim() || (v.donts ?? '').trim())
+          .map((v) => ({
+            name: v.name,
+            tone: v.tone?.trim() || undefined,
+            dos: v.dos?.trim() || undefined,
+            donts: v.donts?.trim() || undefined,
+            sample: v.sample?.trim() || undefined,
+          }))
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
