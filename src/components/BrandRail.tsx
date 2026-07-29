@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { can } from '../domain/access'
 import { createInvite, signOut } from '../lib/session'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { readTheme, setTheme, type ThemeChoice } from '../lib/theme'
 
 /**
  * BrandRail — the far-left vertical rail. Brands no longer live here as tiles: they open as tabs in
@@ -39,6 +40,8 @@ export function BrandRail({ children, iconsOnly = false }: { children?: React.Re
 
   // The account/settings dropdown anchored to the "C" avatar at the foot.
   const [acctOpen, setAcctOpen] = useState(false)
+  // Mirrors what main.tsx already applied, so the segmented control opens on the real state.
+  const [themeChoice, setThemeChoice] = useState<ThemeChoice>(() => readTheme())
   // The invite popover anchored to the "add teammate" button — same anchored-card pattern as the C menu.
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false)
   const [inviteRole, setInviteRole] = useState<'editor' | 'stakeholder'>('editor')
@@ -111,6 +114,26 @@ export function BrandRail({ children, iconsOnly = false }: { children?: React.Re
               Billing
             </button>
           )}
+          {/* Appearance. Three states rather than a two-way switch, because "follow the system" is a
+              real answer and a plain toggle cannot express it: it would silently pin whichever way
+              the OS happened to be on the day you first used it. */}
+          <div className="hsb-ws-sep" />
+          <div className="theme-row" role="group" aria-label="Appearance">
+            <span className="theme-row-label">Appearance</span>
+            <div className="theme-seg">
+              {(['light', 'dark', 'system'] as const).map((c) => (
+                <button
+                  key={c}
+                  className={`theme-seg-btn${themeChoice === c ? ' on' : ''}`}
+                  aria-pressed={themeChoice === c}
+                  onClick={() => { setTheme(c); setThemeChoice(c) }}
+                >
+                  {c === 'system' ? 'Auto' : c === 'light' ? 'Light' : 'Dark'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="hsb-ws-sep" />
           <button className="hsb-ws-mi" role="menuitem" onClick={() => { window.open('/changelog', '_blank', 'noopener'); setAcctOpen(false) }}>
             <span className="hsb-ws-mi-ic"><RailIco><path d="M12 3l2.2 5.4L20 9.3l-4 3.9 1 5.6L12 16.9 7 18.8l1-5.6-4-3.9 5.8-.9z" /></RailIco></span>
             What&rsquo;s new

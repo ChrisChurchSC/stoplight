@@ -1,3 +1,27 @@
+/**
+ * SWITZER for everything you read, SPACE MONO for everything that labels it.
+ *
+ * One variable file covers 100-900, so the whole weight range costs 42KB rather than nine separate
+ * static faces. Italic is a second file and is only pulled when something actually slants.
+ *
+ * font-display: swap on purpose. This is an app behind a sign-in, not a landing page: showing the
+ * fallback for a moment beats holding the canvas blank while a face loads.
+ */
+@font-face {
+  font-family: 'Switzer';
+  src: url('/fonts/Switzer-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Switzer';
+  src: url('/fonts/Switzer-VariableItalic.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -22,6 +46,11 @@
   --green: #30a46c;
   --blue: #6fb3ff;
 
+  /* Translucent chrome that sits over blurred content (the canvas tab strip). Needs a real value
+     per theme: a white veil on a dark page is a light patch, not a subtle one. */
+  --veil: rgba(244, 246, 250, 0.78);
+  --veil-strong: rgba(255, 255, 255, 0.95);
+
   --radius: 10px;
   --radius-sm: 7px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.06);
@@ -29,9 +58,97 @@
      canvas: outputs and the Brief are raised, context cards sit flat on the board. */
   --shadow-raise: 0 2px 4px rgba(16, 24, 40, 0.05), 0 8px 20px -6px rgba(16, 24, 40, 0.12);
 
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+  --font: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
-  --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+  --mono: 'Space Mono', ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+  /* The label voice: every uppercase key, eyebrow and chip on the canvas. Kept separate from --mono
+     so a future change to code/number rendering does not silently restyle every label with it. */
+  --font-label: 'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+/**
+ * DARK MODE, as a token swap.
+ *
+ * Roughly 78% of the colour in this stylesheet already flows through the variables above (3,271
+ * var(--…) references against 932 literals), so the theme is mostly a matter of giving those
+ * variables different values rather than restyling components. What is left is accent and status
+ * colour, which is meant to hold its hue across themes anyway.
+ *
+ * Two selectors, one palette, following the convention .flow-deliv-stale already established:
+ * the media query so the app respects the OS without being asked, and [data-theme='dark'] so an
+ * explicit choice beats it. [data-theme='light'] exists for the same reason in reverse — someone on
+ * a dark OS who wants this app light.
+ *
+ * WHAT CHANGES AND WHAT DOES NOT. Surfaces, text and borders invert. The brand coral does not: it
+ * is the same colour in both themes because it is the brand, and only its soft tint is rebuilt (a
+ * pale wash is invisible on dark, so the tints become low-alpha versions of the hue itself). The
+ * status colours lift slightly, because saturated mid-tones that read well on white go muddy on
+ * near-black.
+ *
+ * Shadows stop being grey-on-white and become real black at higher alpha: a shadow tuned for a
+ * white page is invisible on a dark one, and the elevation it carries is load-bearing on the canvas
+ * (see --shadow-raise).
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e1014;
+    --surface: #16191f;
+    --surface-2: #1d2129;
+    --border: #272c35;
+    --border-strong: #39404d;
+    --text: #e9ecf1;
+    --text-muted: #98a1b0;
+    --text-faint: #6b7482;
+
+    --accent-soft: rgba(255, 99, 71, 0.16);
+    --accent-2: #b366ff;
+    --accent-2-soft: rgba(179, 102, 255, 0.16);
+    --accent-3: #7cbcff;
+    --accent-3-soft: rgba(124, 188, 255, 0.16);
+
+    --red: #f2555a;
+    --amber: #f5b544;
+    --green: #3fb883;
+    --blue: #7cbcff;
+
+    --veil: rgba(28, 32, 40, 0.74);
+    --veil-strong: rgba(34, 39, 48, 0.93);
+    --veil: rgba(28, 32, 40, 0.74);
+  --veil-strong: rgba(34, 39, 48, 0.93);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.34);
+    --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.44), 0 8px 20px -6px rgba(0, 0, 0, 0.56);
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0e1014;
+  --surface: #16191f;
+  --surface-2: #1d2129;
+  --border: #272c35;
+  --border-strong: #39404d;
+  --text: #e9ecf1;
+  --text-muted: #98a1b0;
+  --text-faint: #6b7482;
+
+  --accent-soft: rgba(255, 99, 71, 0.16);
+  --accent-2: #b366ff;
+  --accent-2-soft: rgba(179, 102, 255, 0.16);
+  --accent-3: #7cbcff;
+  --accent-3-soft: rgba(124, 188, 255, 0.16);
+
+  --red: #f2555a;
+  --amber: #f5b544;
+  --green: #3fb883;
+  --blue: #7cbcff;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.34);
+  --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.44), 0 8px 20px -6px rgba(0, 0, 0, 0.56);
+}
+
+/* Tell the browser which way the page leans, so form controls, scrollbars and the caret follow. */
+:root[data-theme='dark'] { color-scheme: dark; }
+:root[data-theme='light'] { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) { color-scheme: dark; }
 }
 
 * {
@@ -6696,6 +6813,19 @@ button {
 .flow-tb-model-name { font-size: 13px; font-weight: 600; }
 .flow-tb-model-note { font-size: 11px; font-weight: 500; color: var(--text-faint); }
 .flow-tb-model-item.on .flow-tb-model-note { color: var(--accent); opacity: 0.75; }
+/* The model-account balance, beside Generate. Quiet by default: it is a thing to glance at, not a
+   thing to read, right up until it is nearly gone. */
+.flow-tb-credits {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.flow-tb-credits.low { color: var(--amber); }
 .flow-tb-tools {
   display: flex;
   gap: 2px;
@@ -9723,7 +9853,7 @@ button {
   border: 1px solid var(--border-strong);
   border-bottom: none;
   border-radius: 9px 9px 0 0;
-  background: rgba(244, 246, 250, 0.78);
+  background: var(--veil);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   padding: 5px 9px 7px 13px;
@@ -9755,7 +9885,7 @@ button {
   color: var(--red);
 }
 .cv-project-tab:hover {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--veil-strong);
 }
 .cv-project-tab.active {
   background: var(--surface);
@@ -9897,7 +10027,7 @@ button {
   top: 104px;
   z-index: 22;
   width: 290px;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--veil-strong);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border-strong);
@@ -21225,3 +21355,80 @@ table.aud-sheet td.stick .aud-cell {
 /* HomeSidebar in 'sections' mode fills its parent column instead of being a fixed-width left rail.
    It now lives inside the flow-canvas Gretel panel (see .flow-body .fchat-sections). */
 .hsb-sections { width: 100%; background: transparent; display: flex; flex-direction: column; }
+
+/* ============================================================================
+   CANVAS TYPE: Switzer reads, Space Mono labels.
+   ============================================================================
+   The canvas has two kinds of text on it and they were set in one face, so a
+   card's KIND and its NAME had the same voice and you read them in the order
+   they happened to sit rather than by importance.
+
+   Space Mono takes the label layer only: the uppercase keys, the eyebrows, the
+   chips, the counters. It is doing a job here, not decoration — a monospace
+   with real letterspacing reads as machine-set metadata, which is exactly what
+   these are, and it stops a two-word card kind competing with the card's name.
+
+   Everything a person actually reads or writes stays Switzer.
+
+   Kept to the canvas and its inspector on purpose. The rest of the app has not
+   had this pass yet, and half-applying a type system across every screen is
+   worse than applying it to one screen properly.
+   ============================================================================ */
+
+/* The uppercase keys: NAME, OBJECTIVE, CAMPAIGN LENGTH, BUDGET. */
+.flow-recform-key,
+/* Section heads in the right panel: LAYERS, GETS MADE, MADE FROM. */
+.flow-outline-head,
+/* A layer row's type, under its name: CAMPAIGN BRIEF, BRAND, META-ADS. */
+.flow-layer-sub,
+/* The canvas tab's brand line. */
+.cv-project-tab-client {
+  font-family: var(--font-label);
+  letter-spacing: 0.08em;
+}
+
+/* A card's kind chip: "Campaign brief", "Deliverable", "Post", "BRAND". */
+.flow-node-kind {
+  font-family: var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+}
+
+/* Numbers you compare rather than read: zoom, the credit balance, counts. */
+.flow-tb-zoom,
+.flow-tb-credits,
+.flow-outline-row .flow-tile,
+.flow-home-card-meta {
+  font-family: var(--font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Switzer is a touch wider than the stack it replaces, so the panel title and
+   the card name get their tracking pulled back in rather than left to drift. */
+.flow-panel-title,
+.flow-node-label,
+.flow-home-card-name {
+  font-family: var(--font);
+  letter-spacing: -0.011em;
+}
+
+/* Appearance control in the account menu. A three-way segment rather than a switch: "Auto" is a
+   real answer, and a two-way toggle would silently pin whichever way the OS happened to be. */
+.theme-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 8px;
+}
+.theme-row-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.theme-seg {
+  display: inline-flex; gap: 2px; padding: 2px;
+  background: var(--surface-2); border-radius: 8px;
+}
+.theme-seg-btn {
+  border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 8px; border-radius: 6px;
+}
+.theme-seg-btn:hover { color: var(--text); }
+.theme-seg-btn.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }

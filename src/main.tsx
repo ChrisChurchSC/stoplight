@@ -2,6 +2,11 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { maybeHydrateShare } from './lib/shareSnapshot'
+import { applyTheme, readTheme } from './lib/theme'
+
+// Before anything renders, including the public changelog: reading the stored choice after first
+// paint is how you get a flash of the wrong theme.
+applyTheme(readTheme())
 
 // A ?share= link for an anonymous viewer seeds localStorage from the published brand snapshot
 // BEFORE the store module loads (the store reads localStorage at import). App is dynamically

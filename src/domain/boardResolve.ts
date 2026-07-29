@@ -1,5 +1,6 @@
-import { MAX_OBJECT_DEPTH } from './smartObject'
-import type { CanvasObject, FlowBoard } from './flowBoard'
+import { MAX_OBJECT_DEPTH, type SmartObject } from './smartObject'
+import { REF_TYPE_FOR_OBJECT_KIND, type CanvasObject, type FlowBoard } from './flowBoard'
+import type { FlowReference } from './clients'
 
 /**
  * WHAT A WIRE CARRIES: resolving the board's graph into per-target instructions.
@@ -122,6 +123,63 @@ function forwardEdges(board: FlowBoard): Map<string, string[]> {
  * deliverable key, a post row id), never other cards: a card in the middle of a chain applies to
  * what the chain ends at, not to its neighbour.
  */
+/**
+ * The records wired DIRECTLY into `target` on this board, and nothing else.
+ *
+ * SINGLE HOP, for the reason in the header above: direction chains through the graph, records do
+ * not. This is the one definition of "what is wired in", shared by the panel, deliverable
+ * inheritance and the copy writer, so those three cannot drift apart again — they each used to
+ * answer it differently, and the writer was still answering it from the campaign's stored
+ * references long after the panel had stopped.
+ *
+ * Returns ids without labels. Labels live on the record slices, which this module deliberately does
+ * not know about; every reader matches on id first and treats a label as a legacy fallback. A card
+ * that names no record contributes nothing, which is what makes "wired but empty" distinguishable
+ * from "wired and carrying something".
+ */
+export function wiredRefsFor(board: FlowBoard, smartObjects: SmartObject[], target: string): FlowReference[] {
+  const byId = new Map(smartObjects.map((o) => [o.id, o]))
+  const out: FlowReference[] = []
+  const push = (r: FlowReference) => {
+    if (!out.some((x) => x.type === r.type && x.id === r.id)) out.push(r)
+  }
+  for (const e of board.connectors) {
+    if (e.to !== target) continue
+    // A placed smart object contributes every record inside it; the library object is the truth.
+    const placed = board.placements.find((p) => p.id === e.from)
+    if (placed) {
+      for (const r of byId.get(placed.smartObjectId)?.refs ?? []) push(r)
+      continue
+    }
+    const obj = board.objects.find((o) => o.id === e.from)
+    if (!obj) continue
+    if (obj.smartObjectId) {
+      for (const r of byId.get(obj.smartObjectId)?.refs ?? []) push(r)
+      continue
+    }
+    const type = REF_TYPE_FOR_OBJECT_KIND[obj.kind]
+    if (type && obj.refId) push({ type, id: obj.refId, label: '' })
+  }
+  return out
+}
+
+/**
+ * Does this board connect anything to an OUTPUT? The gate on generating from nothing.
+ *
+ * An output is the brief, a deliverable or a post — anything that is not another card. So a
+ * connector whose target is not itself a node on the board is one that reaches something you ship,
+ * and a cluster of cards wired only to each other does not count, because it reaches nothing.
+ *
+ * Board-wide rather than per-target on purpose: a card wired to a single deliverable and nothing
+ * else is still a campaign with stated context, and refusing to generate it would be wrong. Scoping
+ * this to connectors into 'campaign' was the first thing I wrote here and it would have blocked a
+ * campaign whose only wire ran card → deliverable, which is the common shape.
+ */
+export function hasWiredContext(board: FlowBoard): boolean {
+  const nodeIds = new Set<string>([...board.objects.map((o) => o.id), ...board.placements.map((p) => p.id)])
+  return board.connectors.some((e) => !nodeIds.has(e.to))
+}
+
 export function downstreamTargets(board: FlowBoard, nodeId: string, maxDepth = MAX_OBJECT_DEPTH): string[] {
   const outgoing = forwardEdges(board)
   const boardIds = new Set<string>([...board.objects.map((o) => o.id), ...board.placements.map((p) => p.id)])

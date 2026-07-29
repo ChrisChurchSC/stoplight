@@ -1142,6 +1142,31 @@ function agentApi(): PluginOption {
  * (OpenRouter preferred, else Anthropic), so the client can tell if Claude is connected
  * without exposing the key. The "Connect Claude" onboarding step reads this. GET only.
  */
+/** Mirrors api/ai-credits.ts for the dev server, so the readout is the real balance locally too. */
+function aiCreditsApi(): PluginOption {
+  return {
+    name: 'ai-credits-api',
+    configureServer(server) {
+      server.middlewares.use('/api/ai-credits', (req, res) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405
+          return res.end()
+        }
+        void import('./api/ai-credits')
+          .then((m) => m.readAiCredits())
+          .then((out) => {
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(out))
+          })
+          .catch(() => {
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ available: false, reason: 'unreachable' }))
+          })
+      })
+    },
+  }
+}
+
 function aiStatusApi(): PluginOption {
   return {
     name: 'ai-status-api',
@@ -1229,6 +1254,7 @@ export default defineConfig(({ mode }) => {
       extractCopyApi(),
       agentBridgeApi(),
       aiStatusApi(),
+      aiCreditsApi(),
     ],
   }
 })

@@ -18,7 +18,7 @@ import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, PRODUCT_STATUSES, type Product } from '../domain/product'
 import { type BrandObject } from '../domain/brandObject'
 import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
-import { AI_MODELS, AI_MODEL_IDS, type AiModelOption } from '../domain/aiModels'
+import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
@@ -35,6 +35,7 @@ import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
+import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -817,6 +818,7 @@ export function FlowsView() {
   const addCompany = useTrafficStore((s) => s.addCompany)
   const addPerson = useTrafficStore((s) => s.addPerson)
   const addMessage = useTrafficStore((s) => s.addMessage)
+  const updateMessage = useTrafficStore((s) => s.updateMessage)
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
@@ -1038,6 +1040,18 @@ export function FlowsView() {
   const [zoomOpen, setZoomOpen] = useState(false)
   // The model picker sits next to Generate, because that is the button it governs.
   const [modelOpen, setModelOpen] = useState(false)
+  /**
+   * The model account's balance, beside the button that spends it.
+   *
+   * Refreshed on arrival and after every generation, because those are the only two moments the
+   * number can have changed from the app's point of view. Null while unknown, and the readout
+   * renders nothing then: no key, an unreachable provider and an Anthropic-only deployment all
+   * genuinely cannot say, and "$0.00 left" would be a lie in all three.
+   */
+  const aiCredits = useTrafficStore((s) => s.aiCredits)
+  const refreshAiCredits = useTrafficStore((s) => s.refreshAiCredits)
+  useEffect(() => { void refreshAiCredits() }, [refreshAiCredits])
+  useEffect(() => { if (!regenerating) void refreshAiCredits() }, [regenerating, refreshAiCredits])
   // The Add dropdown and its click-outside handler are gone: the palette is a row of icons in
   // the toolbar now, so there is no menu to open or dismiss.
   const [tool, setTool] = useState<'select' | 'pan' | 'connect'>('select')
@@ -3004,6 +3018,15 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  const ensureMessageFor = (nt: CanvasObject): string => {
+    if (nt.refId && messages.some((m) => m.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addMessage({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
   const ensureTriggerFor = (nt: CanvasObject): string => {
     if (nt.refId && triggers.some((t) => t.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
@@ -4948,6 +4971,86 @@ export function FlowsView() {
                 <div className="flow-inspect-note" style={{ marginTop: 10 }}>
                   Authored on this campaign. To use it elsewhere, group it into a smart object and file
                   it under the brand&apos;s assets.
+                </div>
+              </>
+            )
+          })()}
+          {/* THE MESSAGE A CARD ARGUES, edited on the card like every other record-linked kind.
+              A Message card could already NAME a message and could carry direction (claim, notThis),
+              but it was the one record-linked kind with no form: you picked a message, then went to
+              Records to say what it actually was. Audience, Person, Company, Trigger, Brand and
+              Product all edit in place, and this was the gap in that set. */}
+          {nt.kind === 'message' && (() => {
+            const msg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
+            const others = messages.filter((x) => x.id !== msg.id)
+            const own = (key: keyof Message): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Message>) => { markCardDirty(nt.id); updateMessage(ensureMessageFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const combo = (label: string, key: keyof Message, placeholder: string, extra: OptionGroup[] = []) =>
+              field(label, (
+                <RecordCombo
+                  value={String(msg[key] ?? '')}
+                  groups={[{ label: 'From your other messages', options: own(key) }, ...extra]}
+                  placeholder={placeholder}
+                  onCommit={(v) => set({ [key]: v } as Partial<Message>)}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What this says</label>
+                <div className="flow-recform">
+                  {field('Message', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={msg.name}
+                      placeholder="Name this message"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {/* The angle is the sentence the copy argues, so it is the one field here worth a
+                      textarea: it is written, not chosen. */}
+                  {field('Angle', (
+                    <textarea
+                      className="flow-recform-area"
+                      rows={2}
+                      value={msg.angle ?? ''}
+                      placeholder="The line this message makes"
+                      onChange={(e) => set({ angle: e.target.value })}
+                    />
+                  ))}
+                  {combo('Proof behind it', 'proof', 'What makes it believable', [
+                    { label: "This brand's proof points", options: brandProof.map((r) => r.label).filter(Boolean) },
+                  ])}
+                  {/* Loosely joined to the brand's audiences by name, the same way a Product card's
+                      "Who it is for" is, so a message and an audience card can agree without a second
+                      reference to keep in step. */}
+                  {combo('Who it lands with', 'audience', 'Which audience', [
+                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
+                  ])}
+                  {combo('Pillar', 'pillar', 'The theme it belongs to')}
+                  {field('Funnel stage', (
+                    <RecordCombo
+                      value={msg.stage ? msg.stage.charAt(0).toUpperCase() + msg.stage.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: [...MESSAGE_STAGE_OPTIONS] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ stage: v.toLowerCase() as Message['stage'] })}
+                    />
+                  ))}
+                  {field('Status', (
+                    <RecordCombo
+                      value={msg.status ? msg.status.charAt(0).toUpperCase() + msg.status.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ status: v.toLowerCase() as Message['status'] })}
+                    />
+                  ))}
                 </div>
               </>
             )
@@ -6966,40 +7069,9 @@ export function FlowsView() {
                       </div>
                     )
                   })()}
-                  {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
-                      announcement and an always-on blog run do not deserve the same model, and the
-                      cost difference between them is the whole reason to choose. Auto keeps the
-                      workspace pick, then the server's per-task default. */}
-                    {(() => {
-                      const labelOf = (m: AiModelOption) => `${m.label} · ${m.note}`
-                      const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? 'auto'))
-                      return (
-                        <div className="flow-recform-field">
-                          <span className="flow-recform-key">AI model</span>
-                          {/* THE MODEL THIS CAMPAIGN WRITES WITH. Per campaign because a launch
-                              announcement and an always-on blog run do not deserve the same model, and
-                              the cost difference between them is the whole reason to choose. Auto keeps
-                              the workspace pick, then the server's per-task default. */}
-                          <RecordCombo
-                            value={cur ? labelOf(cur) : ''}
-                            groups={[{ label: 'Models', options: AI_MODELS.map(labelOf) }]}
-                            placeholder="Choose"
-                            allowCreate={false}
-                            onCommit={(v) => {
-                              const m = AI_MODELS.find((x) => labelOf(x) === v)
-                              if (!m || !viewName) return
-                              patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
-                            }}
-                          />
-                          <div className="flow-inspect-note" style={{ marginTop: 4 }}>
-                            {/* Says what it covers. It governs generation for this campaign, not the dozen
-                                other places the app calls a model, and claiming otherwise would be a lie the
-                                user could catch. */}
-                            Used when this campaign writes copy. Other AI work keeps the workspace default.
-                          </div>
-                        </div>
-                      )
-                    })()}
+                  {/* The model this campaign writes with now lives on the canvas toolbar, beside
+                      the Generate button it governs, so the choice is visible at the moment you
+                      spend it rather than a panel away. Same campaign field either way. */}
                     {/* Length and budget keep their own controls inside the row: a stepper and a
                         currency field are what those two answers deserve, and the row only ever
                         promised a consistent key and rule, not one control for everything. */}
@@ -7779,6 +7851,18 @@ export function FlowsView() {
                 </div>
               )
             })()}
+            {/* WHAT IS LEFT TO SPEND. Reads the provider account, not an app ledger, because there
+                is no app ledger — so it is shown in dollars rather than dressed up as a credit
+                count. Hidden entirely while unknown: a balance nobody can read is not zero. Turns
+                warning-toned under $1, which is roughly a couple of full campaign generations. */}
+            {aiCredits && (
+              <span
+                className={`flow-tb-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
+                title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
+              >
+                {aiCredits.remainingCredits.toLocaleString()} credits
+              </span>
+            )}
             <button
               className="flow-tb-regen"
               // A flow with assets regenerates their copy (from the current selection, as before).
