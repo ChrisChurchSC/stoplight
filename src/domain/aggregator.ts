@@ -121,10 +121,26 @@ export const specKind = (a: AggregatorSpec): 'warehouse' | 'channel' => a.kind ?
  */
 export interface AggregatorPull {
   id: string
+  /**
+   * The report's name, kept for the data set title and for anything that already reads it.
+   * NOT the headline any more: see `question`.
+   */
   label: string
   service: string
-  /** What the resulting table holds, in one line, shown before the pull runs. */
+  /** The columns, recoverable on hover. It was the headline, and a column list is the worst one. */
   detail: string
+  /**
+   * THE HEADLINE, as the marketer would ask it.
+   *
+   * "Top search queries" is a report name. Nobody sits down wanting a report; they sit down with a
+   * question, and the button should be that question. What sat under it before was a list of column
+   * headings, which is the least useful thing to lead with.
+   */
+  question: string
+  /** What having the answer lets you decide. One line, under the question. */
+  decides: string
+  /** Used to name the data set, so two windows of one question do not collide. */
+  shortName: string
 }
 
 /** How far back a pull reaches. A fixed set, because it is interpolated into SQL server-side. */
@@ -136,36 +152,54 @@ export const isPullWindow = (n: unknown): n is PullWindow =>
 export const AGGREGATOR_PULLS: AggregatorPull[] = [
   {
     id: 'gsc-queries',
+    question: 'What do people search for before they find you?',
+    decides: 'The words to write with, and the pages to write next.',
+    shortName: 'Search queries',
     label: 'Top search queries',
     service: 'google_search_console',
     detail: 'Query, clicks, impressions, CTR and average position.',
   },
   {
     id: 'gsc-pages',
+    question: 'Which pages bring people in from search?',
+    decides: 'Which pages deserve more work, and which ones nobody sees.',
+    shortName: 'Landing pages from search',
     label: 'Top landing pages',
     service: 'google_search_console',
     detail: 'Page, clicks, impressions, CTR and average position.',
   },
   {
     id: 'ga4-channels',
+    question: 'Where is your traffic coming from?',
+    decides: 'Which channel is getting you the visits.',
+    shortName: 'Traffic by channel',
     label: 'Traffic by channel',
     service: 'google_analytics_4',
     detail: 'Channel, sessions, users, engaged rate and conversions.',
   },
   {
     id: 'ga4-pages',
+    question: 'Which pages do people actually read?',
+    decides: 'What to make more of, and what to retire.',
+    shortName: 'Top pages',
     label: 'Top pages by views',
     service: 'google_analytics_4',
     detail: 'Page path, views, users and average engagement.',
   },
   {
     id: 'yt-videos',
+    question: 'Which videos are working?',
+    decides: 'The topic and the length to make more of.',
+    shortName: 'Video performance',
     label: 'Video performance',
     service: 'youtube_analytics',
     detail: 'Video, views, watch time, average view length and subscribers gained.',
   },
   {
     id: 'li-posts',
+    question: 'Which posts got a reaction?',
+    decides: 'What to say again, and in what format.',
+    shortName: 'Post performance',
     label: 'Post performance',
     service: 'linkedin_company_pages',
     detail: 'Post, impressions, clicks, reactions and engagement rate.',

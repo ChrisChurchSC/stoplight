@@ -72,6 +72,20 @@ interface Props {
   onCancel: () => void
 }
 
+/**
+ * Server codes we have a sentence for. Anything else falls through to the generic line, so an
+ * internal message never reaches a marketer, and the ones we DO know name the fix.
+ */
+const ERROR_SENTENCE: Record<string, string> = {
+  NO_KEY: 'That one is not connected on the server. Ask whoever set up this workspace to connect it.',
+  NOT_CONNECTED: 'That account cannot see this channel for this brand. Check it is connected to the right property.',
+  NO_PROJECT: 'That project is gone, or this account can no longer see it.',
+  UNKNOWN_PULL: 'That question is not available any more. Pick another one.',
+  UNKNOWN_PROVIDER: 'That source is not built yet.',
+  BAD_REQUEST: 'Something was missing from that request. Try picking the channel again.',
+}
+const sentenceFor = (code: string): string => ERROR_SENTENCE[code] ?? 'Could not pull that. Try again, or pick a different window.'
+
 type Step = 'provider' | 'source' | 'pull'
 
 export function AggregatorConnect({ linkedName, brand, website, initialProvider, initialService, onLand, onDone, onCancel }: Props) {
@@ -90,7 +104,14 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ brand, website, ...(body as object) }),
     })
-    if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `aggregator ${res.status}`)
+    if (!res.ok) {
+      // apiRoute already writes {error: code} into every failure body and this threw it away, so a
+      // pull that failed for a nameable reason reported the same shrug as one that failed for any
+      // other. Read it, and map only codes we have a sentence for: an internal string like
+      // "summer query 403" must never reach a marketer.
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new Error(res.status === 501 ? 'NO_KEY' : body.error || `aggregator ${res.status}`)
+    }
     return res.json()
   }
 
@@ -128,7 +149,7 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
         setStep('pull')
       } else setStep('source')
     } catch (e) {
-      setError((e as Error).message === 'NO_KEY' ? 'That one is not connected on the server.' : 'Could not reach it.')
+      setError(sentenceFor((e as Error).message))
       setProvider(null)
     } finally {
       setBusy(false)
@@ -150,14 +171,14 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
         setError(`No rows in the last ${days} days. Try a longer window.`)
         return
       }
-      const name = `${pull.label} · ${source.label.split(' · ')[0]}`
+      const name = `${pull.shortName} · ${source.label.split(' · ')[0]} · ${days}d`
       // r.truncated was already in hand here and thrown away. A table that stopped at the cap must
       // say so, or a sum over it later reads as a total.
       const id = onLand(name, r.columns, r.rows, provider, pull.service, `${pull.id}:${days}d`, r.truncated)
       const cap = r.truncated ? `, capped at ${r.rows.length}` : ''
       onDone(id, `${r.rows.length} row${r.rows.length === 1 ? '' : 's'} from ${aggregatorSpec(provider)?.label}, last ${days} days${cap}.`)
     } catch (e) {
-      setError((e as Error).message === 'NO_KEY' ? 'That one is not connected on the server.' : 'Could not pull that.')
+      setError(sentenceFor((e as Error).message))
     } finally {
       setBusy(false)
     }
@@ -259,8 +280,10 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
               {/* The platform's mark, not the aggregator's: six questions from four services read as
                   one undifferentiated list otherwise. */}
               <span className="flow-agg-mark"><SourceMark id={p.service} /></span>
-              <span className="flow-agg-name">{p.label}</span>
-              <span className="flow-agg-why">{p.detail}</span>
+              {/* The question leads, what it decides sits under it, and the column list survives on
+                  hover: it is worth having, and it is the worst possible headline. */}
+              <span className="flow-agg-name">{p.question}</span>
+              <span className="flow-agg-why" title={p.detail}>{p.decides}</span>
             </button>
           ))}
           {/* A warehouse with no matching marts is a real state: the account is connected, this

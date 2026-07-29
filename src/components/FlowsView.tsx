@@ -43,6 +43,7 @@ import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
+import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
@@ -900,6 +901,10 @@ export function FlowsView() {
   const [connectProvider, setConnectProvider] = useState<AggregatorProvider | undefined>(undefined)
   /** Which channel was picked, so the panel opens on that channel's questions and no others. */
   const [connectService, setConnectService] = useState<string | undefined>(undefined)
+  /** Which card is waiting for a paste. */
+  const [pasteFor, setPasteFor] = useState<string | null>(null)
+  /** Whether the picker is showing every data set or the three most recent. */
+  const [showAllSets, setShowAllSets] = useState(false)
   /**
    * The providers that are actually usable right now, listed in the card's own picker.
    *
@@ -926,7 +931,10 @@ export function FlowsView() {
    */
   const composeDataset = async (cardId: string) => {
     const said = composePrompt.trim()
-    if (!said || !brand) return
+    if (!said) return
+    // Was `!said || !brand`, so pressing Sketch it with no brand bound did nothing whatsoever: no
+    // spinner, no sentence, no change. The upload path already handled the identical case out loud.
+    if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Pick a brand for this canvas first. Then I can sketch a table for it.' })); return }
     setComposing(true)
     setImportNote((m) => { const { [cardId]: _d, ...rest } = m; return rest })
     try {
@@ -957,10 +965,49 @@ export function FlowsView() {
       setComposing(false)
     }
   }
+  /**
+   * PASTE A TABLE.
+   *
+   * The likeliest first move of somebody with a spreadsheet open in another tab is to select cells
+   * and hit paste, and until now the card answered that with a message telling them to go to Excel's
+   * File menu. The parser was already written and already sniffs tabs, which is exactly what a
+   * clipboard range is: this is a route to it, not new machinery.
+   */
+  const pasteTable = (cardId: string, text: string) => {
+    if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Pick a brand for this canvas first. A data set belongs to a brand.' })); return }
+    const t = parseTable(text)
+    // One cell is somebody copying a value, not a table. Landing a one by one grid would be worse
+    // than saying so.
+    if (!t.columns.length || (t.columns.length === 1 && t.rows.length === 0)) {
+      setImportNote((m) => ({ ...m, [cardId]: 'That is one cell. Copy the whole range, headers included, and paste again.' }))
+      return
+    }
+    const id = importBrandDataset(brand, 'Pasted table', t.columns, t.rows, {
+      kind: 'upload',
+      filename: 'Pasted',
+      importedAt: Date.now(),
+      rowCount: t.rows.length,
+    })
+    setObjectRef(cardId, id)
+    if (isAttached(cardId)) attachToCampaign(cardId)
+    markCardDirty(cardId)
+    const delim = t.delimiter === '\t' ? 'tab' : t.delimiter === ';' ? 'semicolon' : 'comma'
+    const skipped = t.skippedBlankRows ? `, ${t.skippedBlankRows} blank row${t.skippedBlankRows === 1 ? '' : 's'} skipped` : ''
+    setImportNote((m) => ({
+      ...m,
+      [cardId]: `${t.rows.length} row${t.rows.length === 1 ? '' : 's'} and ${t.columns.length} columns, ${delim} separated${skipped}.`,
+    }))
+  }
+
   const importTableFile = async (cardId: string, file: File) => {
     if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Bind this canvas to a brand first.' })); return }
     if (!isParsableTableFile(file.name)) {
-      setImportNote((m) => ({ ...m, [cardId]: `${file.name.split('.').pop()?.toUpperCase() ?? 'That'} is not readable yet. Export it as CSV and try again.` }))
+      // Points at the route that works right now rather than sending somebody to another
+      // application and back. Paste runs the same parser.
+      setImportNote((m) => ({
+        ...m,
+        [cardId]: `${file.name.split('.').pop()?.toUpperCase() ?? 'That'} files are not readable yet. Open it, select the cells you want, copy, and paste them here instead.`,
+      }))
       return
     }
     try {
@@ -994,7 +1041,19 @@ export function FlowsView() {
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
-  const brandDatasets = useMemo(() => allBrandDatasets.filter((d) => d.brand === brand), [allBrandDatasets, brand])
+  const brandDatasets = useMemo(() => {
+    // NEWEST FIRST. A brand accumulates data sets and the useful one is almost always the last one
+    // you made, which was at the bottom of an unsorted list.
+    const when = (d: BrandDataset): number => {
+      const src = d.source
+      if (!src) return 0
+      if (src.kind === 'aggregator') return src.syncedAt ?? 0
+      if (src.kind === 'upload') return src.importedAt
+      if (src.kind === 'composite') return src.generatedAt
+      return 0
+    }
+    return allBrandDatasets.filter((d) => d.brand === brand).sort((a, b) => when(b) - when(a))
+  }, [allBrandDatasets, brand])
   /**
    * The ANALYTICS CHANNELS you can pull from, which is what the picker names.
    *
@@ -1009,6 +1068,13 @@ export function FlowsView() {
   const [channelOptions, setChannelOptions] = useState<
     { service: string; provider: AggregatorProvider; sourceId: string; sourceLabel: string; direct: boolean }[]
   >([])
+  /**
+   * WHY there are no channels, which is a different sentence in each case and was silence in all of
+   * them. Swallowing every failure into an empty list makes a broken status endpoint, an unbound
+   * brand and a genuinely unconnected account look identical, and all three look like the feature
+   * was never built.
+   */
+  const [channelState, setChannelState] = useState<'checking' | 'ready' | 'none' | 'no-brand' | 'error'>('checking')
   useEffect(() => {
     let live = true
     const call = async (body: unknown): Promise<unknown> => {
@@ -1021,6 +1087,8 @@ export function FlowsView() {
       return res.json()
     }
     void (async () => {
+      if (!brand) { setChannelState('no-brand'); setChannelOptions([]); return }
+      setChannelState('checking')
       try {
         const s = (await call({ op: 'status' })) as AggregatorStatus
         const ready = s.providers.filter((p) => p.implemented && p.configured).map((p) => p.id)
@@ -1047,9 +1115,12 @@ export function FlowsView() {
           const seen = byService.get(f.service)
           if (!seen || (f.direct && !seen.direct)) byService.set(f.service, f)
         }
-        setChannelOptions([...byService.values()])
+        const opts = [...byService.values()]
+        setChannelOptions(opts)
+        setChannelState(opts.length ? 'ready' : 'none')
       } catch {
-        // No status, no connect options. Upload and describe still work, so the card is not stuck.
+        // Upload, paste and describe still work, so the card is not stuck. It just has to say so.
+        if (live) { setChannelOptions([]); setChannelState('error') }
       }
     })()
     return () => { live = false }
@@ -3073,13 +3144,32 @@ export function FlowsView() {
       <div className="flow-insp-src">
         <label className="flow-inspect-label">Source</label>
         <div className="flow-src-list">
-          {/* Data sets this brand already has, newest first so a fresh pull is at the top. */}
-          {brandDatasets.map((d) =>
+          {/* THE CARD'S OWN SET FIRST, even when it belongs to another brand.
+              The card resolves from every data set while this list renders only this brand's, so a
+              card holding another brand's table read as nothing selected on a plainly linked card. */}
+          {linked && !brandDatasets.some((d) => d.id === linked.id) &&
+            Row({
+              id: linked.id,
+              mark: linked.source?.kind === 'aggregator' ? linked.source.service : undefined,
+              label: linked.name || 'Untitled data set',
+              sub: `Belongs to ${linked.brand}`,
+              on: true,
+              onClick: () => {},
+            })}
+          {/* A REF THAT RESOLVES TO NOTHING. Deleting a set used to leave the card wearing a linked
+              spine over a mini sheet reading "No data set linked yet", with nothing to do about it. */}
+          {nt.refId && !linked && (
+            <span className="flow-src-why">The data set this card pointed at is gone. Pick another one below.</span>
+          )}
+          {/* Data sets this brand already has, newest first so a fresh pull is at the top. Capped,
+              because a brand accumulates these and the four ways to make one have to stay on screen. */}
+          {(showAllSets ? brandDatasets : brandDatasets.slice(0, 3)).map((d) =>
             Row({
               id: d.id,
               mark: d.source?.kind === 'aggregator' ? d.source.service : undefined,
               label: d.name || 'Untitled data set',
-              // One source of truth, so a row cannot read "Search Console" here and "Edited" on the card.
+              // One source of truth, so a row cannot read "Search Console" here and "Edited" on the
+              // card. The date distinguishes two pulls of one question made a week apart.
               sub: `${datasetProvenance(d).badge} · ${d.rows.length} rows`,
               on: nt.refId === d.id,
               onClick: () => {
@@ -3090,6 +3180,23 @@ export function FlowsView() {
                 if (isAttached(nt.id)) attachToCampaign(nt.id)
               },
             }),
+          )}
+          {brandDatasets.length > 3 && (
+            <button className="flow-src-more" onClick={() => setShowAllSets((v) => !v)}>
+              {showAllSets ? 'Show fewer' : `Show all ${brandDatasets.length} data sets`}
+            </button>
+          )}
+          {/* WHY THERE IS NOTHING TO PULL FROM, said in the case's own words. Every one of these was
+              silence before, which reads as the feature being broken rather than unconnected. */}
+          {channelState !== 'ready' && (
+            <span className="flow-src-why">
+              {channelState === 'checking' && 'Checking what is connected'}
+              {channelState === 'no-brand' && 'Pick a brand for this canvas first. A data set belongs to a brand.'}
+              {channelState === 'none' &&
+                'Nothing is connected yet, so there is nothing to pull. You can still paste a table, upload a CSV, or start a blank sheet.'}
+              {channelState === 'error' &&
+                'Could not check what is connected. Paste a table or start a blank sheet in the meantime.'}
+            </span>
           )}
           {/* THE CHANNEL IS THE OPTION, not the warehouse it arrives through. Only channels a
               connected account can actually answer for this brand appear, so every row here is a
@@ -3108,6 +3215,31 @@ export function FlowsView() {
               },
             }),
           )}
+          {/* Paste sits above upload: it is the faster route and the one people reach for first. */}
+          {Row({
+            id: 'paste',
+            mark: 'paste',
+            label: 'Paste a table',
+            sub: 'Copy some cells and press paste',
+            on: linked?.source?.kind === 'upload' && linked.source.filename === 'Pasted',
+            onClick: () => setPasteFor(nt.id),
+          })}
+          {pasteFor === nt.id && (
+            <textarea
+              className="flow-paste"
+              autoFocus
+              placeholder="Paste here"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData('text/plain')
+                if (!text.trim()) return
+                e.preventDefault()
+                pasteTable(nt.id, text)
+                setPasteFor(null)
+              }}
+              onBlur={() => setPasteFor(null)}
+            />
+          )}
           {Row({
             id: 'upload',
             mark: 'upload',
@@ -3124,6 +3256,16 @@ export function FlowsView() {
             on: linked?.source?.kind === 'composite',
             onClick: () => { setComposeFor(nt.id); setComposePrompt('') },
           })}
+          {linked &&
+            Row({
+              id: 'unlink',
+              label: 'Unlink',
+              sub: 'The data set stays in your data sets. The card goes empty.',
+              onClick: () => {
+                setObjectRef(nt.id, '')
+                if (isAttached(nt.id)) attachToCampaign(nt.id)
+              },
+            })}
           {Row({
             id: 'new',
             mark: 'blank',
@@ -7011,7 +7153,13 @@ export function FlowsView() {
                       return (
                         <div
                           className={`flow-note-mini${linkedDs ? ' linked' : ''}`}
-                          title={linkedDs ? `${linkedDs.name || 'Untitled data set'} · double-click to open` : 'Link or create a data set, then double-click to open it'}
+                          title={
+                            linkedDs
+                              ? `${linkedDs.name || 'Untitled data set'} · double-click to open`
+                              : nt.refId
+                                ? 'That data set was deleted. Pick another one in the inspector.'
+                                : 'Link or create a data set, then double-click to open it'
+                          }
                         >
                           <MiniSheet columns={linkedDs?.columns ?? ['', '', '', '']} rows={linkedDs?.rows ?? []} bodyRows={3} />
                           <span className="flow-note-mini-label">
@@ -7020,7 +7168,11 @@ export function FlowsView() {
                             {linkedDs?.source?.kind === 'aggregator' && linkedDs.source.service && (
                               <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.service} /></span>
                             )}
-                            {linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}
+                            {linkedDs
+                              ? linkedDs.name || 'Untitled data set'
+                              : nt.refId
+                                ? 'That data set was deleted'
+                                : 'No data set linked yet'}
                           </span>
                           {/* WHERE IT CAME FROM, from the one function that decides it.
                               These were four inline branches reading source.kind directly, which is

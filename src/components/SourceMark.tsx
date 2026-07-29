@@ -147,6 +147,14 @@ export function SourceMark({ id }: { id: string }) {
           <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
         </svg>
       )
+    // Clipboard: the paste route.
+    case 'paste':
+      return (
+        <svg {...box} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinejoin="round">
+          <rect x="5" y="4" width="14" height="17" rx="2.5" />
+          <path d="M9 4.5V3.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3.5v1" />
+        </svg>
+      )
     case 'blank':
       return (
         <svg {...box} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
