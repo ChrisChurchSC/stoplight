@@ -66,6 +66,7 @@ interface Props {
     provider: AggregatorProvider,
     service: string,
     query: string,
+    truncated: boolean,
   ) => string
   onDone: (datasetId: string, note: string) => void
   onCancel: () => void
@@ -150,7 +151,9 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
         return
       }
       const name = `${pull.label} · ${source.label.split(' · ')[0]}`
-      const id = onLand(name, r.columns, r.rows, provider, pull.service, `${pull.id}:${days}d`)
+      // r.truncated was already in hand here and thrown away. A table that stopped at the cap must
+      // say so, or a sum over it later reads as a total.
+      const id = onLand(name, r.columns, r.rows, provider, pull.service, `${pull.id}:${days}d`, r.truncated)
       const cap = r.truncated ? `, capped at ${r.rows.length}` : ''
       onDone(id, `${r.rows.length} row${r.rows.length === 1 ? '' : 's'} from ${aggregatorSpec(provider)?.label}, last ${days} days${cap}.`)
     } catch (e) {

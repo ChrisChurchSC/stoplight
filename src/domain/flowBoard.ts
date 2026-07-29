@@ -28,7 +28,7 @@ export type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
  * across campaigns has to know what a plain card contributes, and comparing contributions needs
  * only a type and an id, never a label.
  */
-export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season'>> = {
+export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset'>> = {
   audience: 'segment',
   'proof-point': 'proof',
   company: 'company',
@@ -39,6 +39,13 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
   concept: 'concept',
   voice: 'voice',
   season: 'season',
+  /**
+   * A Data source card names a data set, and until this entry existed it contributed nothing at all:
+   * refForObject returned null, so the canvas drew the wire, flipped the attached styling and listed
+   * the card under "Applied to" while the copy writer never heard about the table. Four ways to fetch
+   * a table, and the table reached nothing.
+   */
+  'data-source': 'dataset',
 }
 
 export interface CanvasObject {

@@ -153,6 +153,23 @@ export interface DraftRequest {
     mindset?: string
   }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
+  /**
+   * FIGURES the app computed from the data sets wired to this campaign, each traceable to a cell.
+   *
+   * Not rows, and never a table: the writer quotes these and does no arithmetic. Anything sketched,
+   * edited by hand or merely typed contributes nothing, so an empty array here is the normal state
+   * for a campaign whose data sets have not earned citation.
+   */
+  datasets?: {
+    id: string
+    value: string
+    label: string
+    basis: 'cell' | 'sum' | 'share' | 'rank'
+    period?: string
+    source: string
+    partial: boolean
+    datasetId: string
+  }[]
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**
    * The model to write with, as an AI_MODELS id. Omitted (or 'auto') leaves the choice to the

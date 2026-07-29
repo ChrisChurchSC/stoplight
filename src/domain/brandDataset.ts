@@ -29,7 +29,20 @@ export type DatasetSource =
    * card shows the platform's mark, because "is this search data or LinkedIn data" is the question
    * you have at a glance, while provenance is the aggregator's name and the date.
    */
-  | { kind: 'aggregator'; provider: AggregatorProvider; service?: string; query?: string; syncedAt?: number }
+  | {
+      kind: 'aggregator'
+      provider: AggregatorProvider
+      service?: string
+      query?: string
+      syncedAt?: number
+      /**
+       * The pull hit its row cap, so this table is the top of something rather than all of it.
+       * Recorded because a SUM over a truncated table is not a total, and nothing downstream can tell
+       * the difference by looking at the rows.
+       */
+      truncated?: boolean
+      rowCount?: number
+    }
   | { kind: 'composite'; prompt: string; generatedAt: number }
 
 export interface BrandDataset {
@@ -40,6 +53,24 @@ export interface BrandDataset {
   rows: string[][]
   /** Absent on data sets written before provenance existed; those are manual by definition. */
   source?: DatasetSource
+  /**
+   * WHEN SOMEBODY TYPED OVER IT, and how many cells they changed.
+   *
+   * Every cell of every data set is editable, including a pulled one, and until these existed that
+   * edit was invisible: you could type 99% into a Search Console CTR cell and the card would go on
+   * reading "Search Console, 14 Mar 2026" as though Google had said so. Harmless while nothing read
+   * the table, and a false claim in published copy the moment figures started travelling.
+   *
+   * A touched table is no longer what the source returned, so it stops being citable. It is still
+   * useful and still wireable; a number from it just has to be typed into "The figure" by a person
+   * who is willing to own it.
+   *
+   * GUARANTEE HOLDS GOING FORWARD ONLY. Sets edited before this shipped carry no stamp and still
+   * read as measured. There is no way to recover that history, and pretending otherwise by marking
+   * every existing set as suspect would be its own false claim.
+   */
+  editedAt?: number
+  editedCells?: number
 }
 
 const DEFAULT_COLS = 4

@@ -80,6 +80,12 @@ THE AUDIENCE CARRIES TWO NEGATIVES and both are binding. Its antiMessage is the 
 
 PROOF CARRIES ITS NUMBERS. When a proof point has a metric, state it: a quantified claim is the reason that proof was chosen. When it has a source, do not contradict it, and never invent a figure or an attribution that is not in the proof you were given.
 
+A FIGURE IS QUOTED, NEVER CALCULATED. When you are given FIGURES, each one is a number this app computed from a real cell of a table the planner wired to this campaign. Use a figure only by reproducing its value exactly as given, character for character. Do not add figures together, take a percentage of one, convert a unit, round one, annualise one, or derive any new number from one. If the number you want is not in the list, you do not have it, and you write the line without a number rather than working one out.
+
+A FIGURE CARRIES ITS PERIOD AND ITS SOURCE. Where a figure has a period, any sentence using it must say what stretch of time it covers, in the figure's own terms, and must never imply it describes now unless the period says so. Attribute it to the source given and to nothing else: never dress an internal figure as an industry benchmark, a market statistic, a study, a survey or somebody else's research, and never name a platform, a research house, an analyst or a customer that the source line does not name. A figure marked partial was drawn from part of a table rather than all of it, so it may not be described as a total, an overall share, or the highest of anything beyond what its own label says.
+
+HOLDING DATA IS NOT A CLAIM. Do not write that the brand tracks, monitors, measures, tests, has studied or has proven anything on the strength of a table existing. Do not describe a trend, a rise, a fall, a pattern or a leader unless a figure you were given says exactly that. Do not write "the data shows", "our research found", "analysis reveals" or their equivalents. A row label is a label: a search query, a page title or a video name inside a figure is not a customer, not a quote and not an endorsement.
+
 UNIQUENESS is a hard requirement. Across the whole campaign: no two assets may share the same headline, no two may share the same primary text, and CTAs must not repeat. Vary the opening, structure, and angle, not just the noun that names the audience. If an AVOID list is provided, do not reuse any string in it.
 
 Proof handling: a shared proof pool is provided. Reuse its ids; do NOT invent new proof ids when the pool is non-empty. For each asset set rtbIds to the 1 to 2 pool ids it leans on (a landing page may carry all), chosen so an asset and the page it drives to share at least one. Echo the provided pool back in rtbs (same ids and labels). Only if the pool is empty, author 3 to 4 RTBs grounded in the ICP.
@@ -98,8 +104,9 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas, messages, concepts, voices, seasons } = (body ?? {}) as {
+  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas, messages, concepts, voices, seasons, datasets } = (body ?? {}) as {
     icp?: unknown
+    datasets?: unknown
     campaign?: unknown
     theme?: unknown
     flightWeeks?: unknown
@@ -132,6 +139,34 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
    * The moment the campaign is written into. Dropped unless it says something: a season with a name
    * and no moment or permission is a date, and a date changes no copy.
    */
+  /**
+   * FIGURES. Every one was computed by the app from a real cell; nothing here was authored by a
+   * model and nothing here is a table. A figure missing its value, its label or its source is
+   * dropped rather than sent half-formed, because a number with no source is not evidence.
+   */
+  const figureList = Array.isArray(datasets)
+    ? (datasets as Record<string, unknown>[])
+        .filter(
+          (x) =>
+            x &&
+            typeof x === 'object' &&
+            typeof x.value === 'string' &&
+            x.value.trim() !== '' &&
+            typeof x.label === 'string' &&
+            x.label.trim() !== '' &&
+            typeof x.source === 'string' &&
+            x.source.trim() !== '',
+        )
+        .slice(0, 12)
+        .map((x) => ({
+          value: (x.value as string).trim().slice(0, 40),
+          label: (x.label as string).trim().slice(0, 200),
+          period: typeof x.period === 'string' && x.period.trim() ? x.period.trim().slice(0, 80) : undefined,
+          source: (x.source as string).trim().slice(0, 120),
+          partial: x.partial === true,
+        }))
+    : []
+
   const seasonList = Array.isArray(seasons)
     ? (seasons as Record<string, unknown>[])
         .filter((x) => x && typeof x === 'object' && ['moment', 'permission'].some((k) => typeof x[k] === 'string' && (x[k] as string).trim()))
@@ -214,7 +249,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   // floored at 8k, capped at Opus's ceiling.
   const assetCount = Array.isArray(assets) ? assets.length : 1
   const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
-  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}${seasonList.length ? `\n\nThe moment this campaign runs into. "permission" is what it lets the brand say that it could not say otherwise, and it is the only reason to mention the moment at all: write to the permission, not to the calendar, and never open an asset with the date itself:\n${JSON.stringify(seasonList, null, 2)}` : ''}${voiceList.length ? `\n\nThe voice THIS campaign is written in. It narrows the brand guide above, it does not replace it: the guide's don'ts still bind, and where the two disagree the guide wins. Match the sample's register rather than quoting it:\n${JSON.stringify(voiceList, null, 2)}` : ''}${conceptList.length ? `\n\nThe concept this campaign is built on. The idea is what the work is ABOUT and the insight is why it lands; "likeThis" is the register to write in, not a thing to name. Every asset should feel like it came from this, without any of them restating it:\n${JSON.stringify(conceptList, null, 2)}` : ''}${messageList.length ? `\n\nThe messages this campaign argues (from the Message cards wired to it). Each asset should advance ONE of these rather than restating all of them; the angle is the line to make, the proof is what backs it. Where a message names an audience or a stage, prefer it for assets that match:\n${JSON.stringify(messageList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience — its pains and wants, its triggers, its tone, its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
+  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}${seasonList.length ? `\n\nThe moment this campaign runs into. "permission" is what it lets the brand say that it could not say otherwise, and it is the only reason to mention the moment at all: write to the permission, not to the calendar, and never open an asset with the date itself:\n${JSON.stringify(seasonList, null, 2)}` : ''}${voiceList.length ? `\n\nThe voice THIS campaign is written in. It narrows the brand guide above, it does not replace it: the guide's don'ts still bind, and where the two disagree the guide wins. Match the sample's register rather than quoting it:\n${JSON.stringify(voiceList, null, 2)}` : ''}${conceptList.length ? `\n\nThe concept this campaign is built on. The idea is what the work is ABOUT and the insight is why it lands; "likeThis" is the register to write in, not a thing to name. Every asset should feel like it came from this, without any of them restating it:\n${JSON.stringify(conceptList, null, 2)}` : ''}${messageList.length ? `\n\nThe messages this campaign argues (from the Message cards wired to it). Each asset should advance ONE of these rather than restating all of them; the angle is the line to make, the proof is what backs it. Where a message names an audience or a stage, prefer it for assets that match:\n${JSON.stringify(messageList, null, 2)}` : ''}${figureList.length ? `\n\nFIGURES from the data sets wired to this campaign. The app computed every one of these from real cells, you did not, and you may not compute another. Use each value verbatim, honour its period and its source, and treat any figure marked partial as drawn from part of the table rather than all of it:\n${JSON.stringify(figureList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience — its pains and wants, its triggers, its tone, its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
 
   const client = makeModelClient('copy', pick)
   const message = await client.messages.create({

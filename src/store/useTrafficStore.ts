@@ -164,6 +164,7 @@ import {
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { citableFigures, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
@@ -3545,28 +3546,61 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveBrandDatasets(brandDatasets)
       return { brandDatasets }
     }),
+  /**
+   * Delete the set AND clear every card pointing at it.
+   *
+   * Now that a data set is a wired record, a dangling refId is not a cosmetic problem: the card keeps
+   * its attached spine and its "Applied to" row while resolving to nothing, which is a board asserting
+   * a link that no longer exists. The same sweep the record deletions already do.
+   */
   deleteBrandDataset: (id) =>
     set((s) => {
       const brandDatasets = s.brandDatasets.filter((d) => d.id !== id)
       saveBrandDatasets(brandDatasets)
-      return { brandDatasets }
+      let touched = false
+      const flowBoards = s.flowBoards.map((board) => {
+        if (!board.objects.some((o) => o.refId === id)) return board
+        touched = true
+        return { ...board, objects: board.objects.map((o) => (o.refId === id ? { ...o, refId: undefined } : o)) }
+      })
+      if (!touched) return { brandDatasets }
+      saveFlowBoards(flowBoards)
+      return { brandDatasets, flowBoards }
     }),
+  /**
+   * STAMP THE EDIT. Every cell of every set is editable, including a pulled one, and until this
+   * stamp existed that edit left no trace: typing 99% into a Search Console CTR cell changed the
+   * number and the card went on reading "Search Console, 14 Mar 2026" as though Google had said so.
+   * The stamp is what makes datasetProvenance able to demote a touched table out of citable.
+   *
+   * editedCells counts REAL changes only, so clicking into a cell and clicking out does not brand a
+   * table as edited.
+   */
   setDatasetCell: (id, row, col, value) =>
     set((s) => {
+      let changed = false
       const brandDatasets = s.brandDatasets.map((d) => {
         if (d.id !== id) return d
+        const before = d.rows[row]?.[col] ?? ''
+        if (before === value) return d
+        changed = true
         const rows = d.rows.map((r, ri) =>
           ri === row ? Array.from({ length: d.columns.length }, (_, ci) => (ci === col ? value : r[ci] ?? '')) : r,
         )
-        return { ...d, rows }
+        return { ...d, rows, editedAt: Date.now(), editedCells: (d.editedCells ?? 0) + 1 }
       })
+      if (!changed) return {}
       saveBrandDatasets(brandDatasets)
       return { brandDatasets }
     }),
   setDatasetColumn: (id, col, label) =>
     set((s) => {
       const brandDatasets = s.brandDatasets.map((d) =>
-        d.id === id ? { ...d, columns: d.columns.map((c, ci) => (ci === col ? label : c)) } : d,
+        d.id === id && (d.columns[col] ?? '') !== label
+          ? // A renamed column changes what the numbers under it CLAIM to be, which is as much an
+            // edit as changing a number. Stamped for the same reason.
+            { ...d, columns: d.columns.map((c, ci) => (ci === col ? label : c)), editedAt: Date.now(), editedCells: (d.editedCells ?? 0) + 1 }
+          : d,
       )
       saveBrandDatasets(brandDatasets)
       return { brandDatasets }
@@ -6397,6 +6431,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const snIds = new Set(refList.filter((x) => x.type === 'season').map((x) => x.id))
           const snNames = new Set(refList.filter((x) => x.type === 'season').map((x) => x.label))
           const sns = get().seasons.filter((x) => snIds.has(x.id) || snNames.has(x.name))
+          /**
+           * DATA SETS. Same terms as the rest, and one extra rule that applies to no other pool: a
+           * BrandDataset carries a required `brand`, so a stale refId pointing at another brand's
+           * table would cross exactly the boundary this file defends everywhere else. Filtered here
+           * rather than trusted from the ref.
+           *
+           * No library fallback, and it matters more here than anywhere: falling back to every table
+           * the brand owns would hand the writer numbers nobody chose.
+           */
+          const dsIds = new Set(refList.filter((x) => x.type === 'dataset').map((x) => x.id))
+          const dsNames = new Set(refList.filter((x) => x.type === 'dataset').map((x) => x.label))
+          const dss = get().brandDatasets.filter(
+            (d) => d.brand === client && (dsIds.has(d.id) || dsNames.has(d.name)),
+          )
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
@@ -6405,6 +6453,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             concepts: cpts,
             voices: vcs,
             seasons: sns,
+            datasets: dss,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -6667,8 +6716,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             permission: x.permission?.trim() || undefined,
             mindset: x.mindset?.trim() || undefined,
           }))
+        /**
+         * THE FIGURES. Computed here, in plain code, from real cells: the writer receives numbers to
+         * quote and never a table to do arithmetic over. citableFigures returns [] for anything
+         * sketched, edited or hand typed, so those tables reach this line and contribute nothing,
+         * which is the intended outcome rather than a gap.
+         */
+        const datasets = campaignPools.datasets
+          .flatMap((d) => citableFigures(d))
+          .slice(0, MAX_FIGURES_PER_CAMPAIGN)
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, datasets, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.

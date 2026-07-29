@@ -42,6 +42,7 @@ import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
+import { citableFigures, datasetProvenance } from '../domain/datasetRead'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
@@ -100,6 +101,15 @@ type TagOps = {
 // Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
 // Segments / Media mix), so a tag reads the same as the page it comes from.
 const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
+  // The same cylinder the Data source card wears on the canvas, so a data set tag reads as the card
+  // it came from.
+  dataset: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="6" rx="7.5" ry="3" />
+      <path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6" />
+      <path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" />
+    </svg>
+  ),
   // Same speech bubble the Message card carries on the canvas, so a message tag reads as the
   // thing it came from rather than as a new concept.
   message: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
@@ -146,7 +156,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season', dataset: 'Data set' }
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -935,6 +945,7 @@ export function FlowsView() {
         generatedAt: Date.now(),
       })
       setObjectRef(cardId, id)
+      if (isAttached(cardId)) attachToCampaign(cardId)
       markCardDirty(cardId)
       setComposeFor(null)
       setComposePrompt('')
@@ -964,6 +975,7 @@ export function FlowsView() {
         rowCount: t.rows.length,
       })
       setObjectRef(cardId, id)
+      if (isAttached(cardId)) attachToCampaign(cardId)
       markCardDirty(cardId)
       const delim = t.delimiter === '\t' ? 'tab' : t.delimiter === ';' ? 'semicolon' : 'comma'
       const skipped = t.skippedBlankRows ? `, ${t.skippedBlankRows} blank row${t.skippedBlankRows === 1 ? '' : 's'} skipped` : ''
@@ -2971,6 +2983,64 @@ export function FlowsView() {
    * action: link one you have, pull from a source, upload, describe, start blank. As buttons they are
    * all visible, and the one this card is actually on carries a check.
    */
+  /**
+   * WHAT THIS TABLE WILL SEND, listed exactly as the writer will receive it.
+   *
+   * Modelled on renderResolvedDirection, which already does this job for direction under "What this
+   * will be told". The point is that every refusal in datasetRead is invisible otherwise, and a
+   * refusal the user cannot see is indistinguishable from the feature being broken: a sketched table
+   * wired to a campaign contributes nothing, and without this panel that reads as a bug.
+   */
+  const renderDatasetContribution = (nt: CanvasObject) => {
+    const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
+    if (!ds) return null
+    const prov = datasetProvenance(ds)
+    const figures = citableFigures(ds)
+    // Same board assembly the "Applied to" readout uses, so the two cannot disagree about whether
+    // this card reaches anything.
+    const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+    const wired = isAttached(nt.id) || downstreamTargets(liveBoard, nt.id).length > 0
+
+    return (
+      <div className="flow-insp-send">
+        <label className="flow-inspect-label">
+          {/* The count belongs to what is ACTUALLY sent. Counting figures on an unwired card put
+              "will send, 6" directly above "Nothing yet". */}
+          {wired && figures.length ? `What this table will send, ${figures.length}` : 'What this table will send'}
+        </label>
+        {!wired && (
+          // The card can be perfect and still reach nothing. Said here because the "Applied to"
+          // block renders null when a card points at nothing, so today the panel is silent.
+          <span className="flow-send-none">
+            Nothing yet. Draw a line from this card to the campaign brief, or to one deliverable, and
+            its figures go to the writer.
+          </span>
+        )}
+        {wired && figures.length === 0 && <span className="flow-send-none">Nothing. {prov.why}</span>}
+        {wired &&
+          figures.map((f) => (
+            <div key={f.id} className="flow-send-row">
+              <span className="flow-send-val">{f.value}</span>
+              <span className="flow-send-lab">
+                {f.label}
+                {f.period ? `, in the ${f.period}` : ''}
+              </span>
+            </div>
+          ))}
+        {wired && figures.length > 0 && <span className="flow-send-foot">{prov.badge}</span>}
+        {wired && figures.length > 0 && prov.partial && (
+          <span className="flow-send-held">
+            Totals and shares are held back. The pull stopped at the row cap, so adding these up would
+            not give you a total.
+          </span>
+        )}
+        {/* The heuristic writer reads neither direction nor figures, so a fallback run silently
+            ignores everything on this panel. Better said once here than discovered in the output. */}
+        <span className="flow-send-foot">If the model is unreachable, the fallback writer uses none of this.</span>
+      </div>
+    )
+  }
+
   const renderDataSourcePicker = (nt: CanvasObject) => {
     const linked = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
     // The check follows the LINKED DATA SET, and a provider row wears it when that set came from
@@ -3009,16 +3079,16 @@ export function FlowsView() {
               id: d.id,
               mark: d.source?.kind === 'aggregator' ? d.source.service : undefined,
               label: d.name || 'Untitled data set',
-              sub:
-                d.source?.kind === 'aggregator'
-                  ? `${aggregatorSpec(d.source.provider)?.label ?? d.source.provider} · ${d.rows.length} rows`
-                  : d.source?.kind === 'upload'
-                    ? `${d.source.filename} · ${d.rows.length} rows`
-                    : d.source?.kind === 'composite'
-                      ? 'Sketched, not measured'
-                      : `${d.rows.length} rows`,
+              // One source of truth, so a row cannot read "Search Console" here and "Edited" on the card.
+              sub: `${datasetProvenance(d).badge} · ${d.rows.length} rows`,
               on: nt.refId === d.id,
-              onClick: () => setObjectRef(nt.id, d.id),
+              onClick: () => {
+                // A card already wired to the campaign must materialize the NEW data set onto it,
+                // the same way creating a record from an attached card does. Without this the wire
+                // stays drawn while the campaign's references still name the old table.
+                setObjectRef(nt.id, d.id)
+                if (isAttached(nt.id)) attachToCampaign(nt.id)
+              },
             }),
           )}
           {/* THE CHANNEL IS THE OPTION, not the warehouse it arrives through. Only channels a
@@ -3060,7 +3130,11 @@ export function FlowsView() {
             label: 'New data set',
             sub: 'A blank sheet to fill in',
             on: !!linked && !linked.source,
-            onClick: () => { const id = addBrandDataset(brand); setObjectRef(nt.id, id) },
+            onClick: () => {
+              const id = addBrandDataset(brand)
+              setObjectRef(nt.id, id)
+              if (isAttached(nt.id)) attachToCampaign(nt.id)
+            },
           })}
         </div>
       {connectFor === nt.id && (
@@ -3070,17 +3144,20 @@ export function FlowsView() {
           linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
           brand={brand}
           website={clientProfiles[brand]?.website}
-          onLand={(name, columns, rows, provider, service, query) =>
+          onLand={(name, columns, rows, provider, service, query, truncated) =>
             importBrandDataset(brand, name, columns, rows, {
               kind: 'aggregator',
               provider,
               service,
               query,
               syncedAt: Date.now(),
+              truncated,
+              rowCount: rows.length,
             })
           }
           onDone={(id, note) => {
             setObjectRef(nt.id, id)
+            if (isAttached(nt.id)) attachToCampaign(nt.id)
             markCardDirty(nt.id)
             setConnectFor(null)
             setConnectProvider(undefined)
@@ -5977,6 +6054,7 @@ export function FlowsView() {
             )
           })()}
           {nt.kind === 'data-source' && renderDataSourcePicker(nt)}
+        {nt.kind === 'data-source' && renderDatasetContribution(nt)}
           {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
               fields per kind, each landing in a named slot in every wired asset's payload. This is
               the whole point of an object: not which record it names, but what it says about it.
@@ -6944,32 +7022,23 @@ export function FlowsView() {
                             )}
                             {linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}
                           </span>
-                          {/* WHERE IT CAME FROM. A figure with no provenance is not evidence, so the
-                              card says the origin and the date rather than leaving a sheet of numbers
-                              looking equally authoritative however it got here. */}
-                          {linkedDs?.source?.kind === 'upload' && (
-                            <span className="flow-note-mini-src">
-                              {linkedDs.source.filename} · {new Date(linkedDs.source.importedAt).toLocaleDateString()}
-                            </span>
-                          )}
-                          {/* Louder than the upload line on purpose. An uploaded figure was measured
-                              by someone; a sketched one was not, and that is the single most useful
-                              thing to know about this table. */}
-                          {/* A pulled figure WAS measured, so this reads like the upload line rather
-                              than the sketched one, and names the day it was fetched: a warehouse
-                              number goes stale without ever looking any different. */}
-                          {linkedDs?.source?.kind === 'aggregator' && (
-                            <span className="flow-note-mini-src">
-                              <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.provider} /></span>
-                              {aggregatorSpec(linkedDs.source.provider)?.label ?? linkedDs.source.provider}
-                              {linkedDs.source.syncedAt ? ` · ${new Date(linkedDs.source.syncedAt).toLocaleDateString()}` : ''}
-                            </span>
-                          )}
-                          {linkedDs?.source?.kind === 'composite' && (
-                            <span className="flow-note-mini-src sketched">
-                              Sketched, not measured · {new Date(linkedDs.source.generatedAt).toLocaleDateString()}
-                            </span>
-                          )}
+                          {/* WHERE IT CAME FROM, from the one function that decides it.
+                              These were four inline branches reading source.kind directly, which is
+                              how a table typed over by hand went on presenting itself as measured:
+                              the edit was invisible to every one of them. datasetProvenance holds
+                              the precedence (sketched, then edited, then how it arrived) and six
+                              surfaces now read it, so they cannot disagree. */}
+                          {linkedDs && (() => {
+                            const prov = datasetProvenance(linkedDs)
+                            return (
+                              <span className={`flow-note-mini-src${prov.tone === 'amber' ? ' sketched' : ''}`} title={prov.detail}>
+                                {linkedDs.source?.kind === 'aggregator' && (
+                                  <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.provider} /></span>
+                                )}
+                                {prov.badge}
+                              </span>
+                            )
+                          })()}
                         </div>
                       )
                     })()

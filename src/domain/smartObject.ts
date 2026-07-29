@@ -223,6 +223,7 @@ export function describeSmartObject(o: SmartObject): string {
   const byType = new Map<FlowRefType, number>()
   for (const r of rest) byType.set(r.type, (byType.get(r.type) ?? 0) + 1)
   const LABEL: Record<FlowRefType, string> = {
+    dataset: 'data set',
     segment: 'audience',
     company: 'company',
     person: 'contact',
