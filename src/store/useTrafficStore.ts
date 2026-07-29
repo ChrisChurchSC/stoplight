@@ -838,6 +838,7 @@ const RECORD_TABLES: Record<string, string> = {
   'stoplight.products.v1': 'products',
   'stoplight.brandObjects.v1': 'brand_objects',
   'stoplight.libraryFolders.v1': 'library_folders',
+  'stoplight.concepts.v1': 'concept_records',
 }
 const recordAdapterCache: Record<string, SupabaseRecordAdapter<{ id: string; name?: string }>> = {}
 function saveRecordList<T extends { id: string }>(key: string, list: T[]): void {
@@ -854,9 +855,11 @@ function saveRecordList<T extends { id: string }>(key: string, list: T[]): void 
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
 /**
- * Deliberately absent from RECORD_TABLES: that map is opt-in, and an entry without a matching
- * Supabase table would try to sync into nothing. Concepts are localStorage-backed until a migration
- * adds concept_records, which is a smaller problem than a slice that half-syncs.
+ * Synced to concept_records, added in supabase/migrations/0008.
+ *
+ * That migration has to be RUN against an existing database. Until it is, this sync is a silent
+ * no-op: saveRecordList fires it and never reads the result, and the Supabase client returns an
+ * error object rather than throwing, so a missing table looks exactly like a successful save.
  */
 const CONCEPTS_KEY = 'stoplight.concepts.v1'
 const VOICES_KEY = 'stoplight.voices.v1'
