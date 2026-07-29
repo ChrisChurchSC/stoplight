@@ -37,6 +37,7 @@ import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintB
 import { messagingFields } from '../domain/messaging'
 import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
+import { type Voice } from '../domain/voice'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -97,6 +98,8 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   // thing it came from rather than as a new concept.
   message: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
   // The lightbulb the Concept card carries on the canvas.
+  // The speech-waveform the Voice card carries on the canvas.
+  voice: <><path d="M12 4v16M8 8v8M16 8v8M4 11v2M20 11v2" /></>,
   concept: <><path d="M9.5 18h5M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2v.2h5v-.2c0-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" /></>,
   company: (
     <>
@@ -135,7 +138,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice' }
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -536,8 +539,6 @@ export function FlowsView() {
       { key: 'wedge', brief: 'the position it owns that a competitor could not claim' },
       { key: 'mission', brief: 'the mission, in their words' },
       { key: 'industry', brief: 'the industry it operates in', options: [...INDUSTRIES] },
-      { key: 'voice', brief: 'how it sounds', options: [...BRAND_VOICES] },
-      { key: 'avoidVoice', brief: 'the register that would be wrong for it' },
     ],
     product: [
       { key: 'name', brief: 'the product name' },
@@ -576,6 +577,20 @@ export function FlowsView() {
       { key: 'usesNow', brief: 'what they reach for instead today' },
       { key: 'saysLike', brief: 'their own words and turns of phrase' },
     ],
+    'proof-point': [
+      { key: 'label', brief: 'the claim this proves, in a few words' },
+      { key: 'metric', brief: 'the figure that backs it, if there is one' },
+      { key: 'source', brief: 'where it comes from: a case study, a benchmark, a survey' },
+      { key: 'detail', brief: 'the proof stated properly, for someone who has to defend it' },
+    ],
+    voice: [
+      { key: 'name', brief: 'a short name for this voice' },
+      { key: 'tone', brief: 'how it sounds, in a few words', options: [...BRAND_VOICES] },
+      { key: 'dos', brief: 'what this voice always does, newline separated' },
+      { key: 'donts', brief: 'what it never does, newline separated' },
+      { key: 'sample', brief: 'one line that sounds exactly right in this voice' },
+      { key: 'useFor', brief: 'where this voice belongs' },
+    ],
     concept: [
       { key: 'name', brief: 'a short name for this concept, how it would be filed' },
       { key: 'idea', brief: 'the big idea in one line' },
@@ -607,6 +622,8 @@ export function FlowsView() {
     trigger: 'Their old kit broke a week before the season opens',
     message: 'One system instead of five, so a small team ships like a big one',
     concept: 'Your marketing stack is five tools doing one job badly',
+    voice: 'Dry and technical, like an engineer explaining it to another engineer',
+    'proof-point': 'Teams using it ship about twice the content with the same headcount',
   }
   const [prompting, setPrompting] = useState<Record<string, string>>({})
   const [filling, setFilling] = useState<string | null>(null)
@@ -845,6 +862,8 @@ export function FlowsView() {
   const allConcepts = useTrafficStore((s) => s.concepts)
   const addConcept = useTrafficStore((s) => s.addConcept)
   const updateConcept = useTrafficStore((s) => s.updateConcept)
+  const updateVoice = useTrafficStore((s) => s.updateVoice)
+  const updateBrandProof = useTrafficStore((s) => s.updateBrandProof)
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
@@ -1918,8 +1937,9 @@ export function FlowsView() {
       { type: 'proof' as FlowRefType, label: 'Proof points', items: brandProof.map((r) => ({ id: r.id, label: r.label })) },
       { type: 'message' as FlowRefType, label: 'Messages', items: messages.map((m) => ({ id: m.id, label: m.name })) },
       { type: 'concept' as FlowRefType, label: 'Concepts', items: concepts.map((c) => ({ id: c.id, label: c.name })) },
+      { type: 'voice' as FlowRefType, label: 'Voices', items: voices.map((v) => ({ id: v.id, label: v.name })) },
     ],
-    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts],
+    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts, voices],
   )
   /**
    * The campaign's stored references, minus any whose record no longer exists.
@@ -3043,6 +3063,32 @@ export function FlowsView() {
     const already = mintedRecordRef.current.get(nt.id)
     if (already) return already
     const id = addProduct({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
+  /**
+   * The proof this card names, minting one if it has none.
+   *
+   * Goes through ensureProofRef rather than writing its own, so a proof authored here dedupes
+   * against the brand's library by label exactly like the chat's createProof does, and lands as an
+   * unapproved draft rather than a blessed master.
+   */
+  const ensureProofFor = (nt: CanvasObject): string | null => {
+    if (nt.refId && brandProof.some((r) => r.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const made = ensureProofRef('New proof point')
+    if (!made) return null
+    mintedRecordRef.current.set(nt.id, made.ref.id)
+    setObjectRef(nt.id, made.ref.id)
+    return made.ref.id
+  }
+  const ensureVoiceFor = (nt: CanvasObject): string => {
+    if (nt.refId && voices.some((v) => v.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addVoice({ name: '', brand: brand || undefined })
     mintedRecordRef.current.set(nt.id, id)
     setObjectRef(nt.id, id)
     return id
@@ -4503,6 +4549,21 @@ export function FlowsView() {
                   const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
                   return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
                 }
+                case 'proof-point': {
+                  const pp = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)
+                  return {
+                    current: pp as unknown as Record<string, unknown>,
+                    apply: (p) => {
+                      markCardDirty(nt.id)
+                      const id = ensureProofFor(nt)
+                      if (id && brand) updateBrandProof(brand, id, p as Partial<Rtb>)
+                    },
+                  }
+                }
+                case 'voice': {
+                  const vo = (nt.refId ? allVoices.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Voice)
+                  return { current: vo as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateVoice(ensureVoiceFor(nt), p as Partial<Voice>) } }
+                }
                 case 'concept': {
                   const cp = (nt.refId ? allConcepts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Concept)
                   return { current: cp as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateConcept(ensureConceptFor(nt), p as Partial<Concept>) } }
@@ -5023,9 +5084,10 @@ export function FlowsView() {
                   {combo('The position it owns', 'wedge', 'The one sentence no competitor can say', [], 'wedge')}
                   {combo('Mission', 'mission', 'In their words')}
                   {combo('Industry', 'industry', 'Choose', [{ label: 'Industries', options: [...INDUSTRIES] }])}
-                  {combo('Voice', 'voice', 'How it sounds', [{ label: 'Common voices', options: [...BRAND_VOICES] }])}
-                  {/* The inverse of voice, and the one people forget to write down. */}
-                  {combo('What it must not sound like', 'avoidVoice', 'The register that would be wrong')}
+                  {/* NO VOICE HERE. Voice is its own record and its own card, carrying a tone, do's,
+                      don'ts and a sample — far more than the one line this row held. Two places to
+                      say how a brand sounds is one place too many, and the card is the one the
+                      writer actually reads. */}
                 </div>
                 <div className="flow-inspect-note" style={{ marginTop: 10 }}>
                   Authored on this campaign. To use it elsewhere, group it into a smart object and file
@@ -5039,6 +5101,149 @@ export function FlowsView() {
               but it was the one record-linked kind with no form: you picked a message, then went to
               Records to say what it actually was. Audience, Person, Company, Trigger, Brand and
               Product all edit in place, and this was the gap in that set. */}
+          {/* WHAT MAKES IT BELIEVABLE. A proof point was already a reference and already reached the
+              writer through the proof pool, but it was the one record-linked kind you could create
+              from a card and then not edit there: the metric and the source, which are the whole
+              difference between proof and a claim, could only be filled in the Library. */}
+          {nt.kind === 'proof-point' && (() => {
+            const pf = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)
+            const set = (patch: Partial<Rtb>) => {
+              markCardDirty(nt.id)
+              const id = ensureProofFor(nt)
+              if (id && brand) updateBrandProof(brand, id, patch)
+            }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What makes it believable</label>
+                <div className="flow-recform">
+                  {field('Proof point', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={pf.label}
+                      placeholder="The claim this proves"
+                      onCommit={(v) => set({ label: v })}
+                    />
+                  ))}
+                  {/* The two that turn a claim into proof. A figure with no source is an assertion,
+                      and a source with no figure is a citation for nothing. */}
+                  {field('The figure', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={pf.metric ?? ''}
+                      placeholder="40% faster onboarding"
+                      onCommit={(v) => set({ metric: v })}
+                    />
+                  ))}
+                  {field('Where it comes from', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={pf.source ?? ''}
+                      placeholder="The case study, benchmark or survey behind it"
+                      onCommit={(v) => set({ source: v })}
+                    />
+                  ))}
+                  {field('In full', (
+                    <textarea
+                      className="flow-recform-area"
+                      rows={2}
+                      value={pf.detail ?? ''}
+                      placeholder="The proof stated properly, for someone who has to defend it"
+                      onChange={(e) => set({ detail: e.target.value })}
+                    />
+                  ))}
+                </div>
+                {/* Governance, stated rather than hidden: proof authored on a canvas is a draft
+                    until someone blesses it in the Library, and the writer is told which it is. */}
+                {pf.id && pf.approved === false && (
+                  <div className="flow-inspect-note" style={{ marginTop: 10 }}>
+                    An unvetted draft. Approve it in the brand&apos;s library to make it a master
+                    other campaigns can pull with confidence.
+                  </div>
+                )}
+              </>
+            )
+          })()}
+          {/* HOW IT SHOULD SOUND. A Voice card names one of the brand's voices, and until now that
+              record reached nothing: the brand guide set the register for every campaign and a Voice
+              card could only nudge it through its own likeThis / avoidSay direction. The record
+              carries the tone, the do's and don'ts and a sample, which is what the writer actually
+              needs to hold a register. */}
+          {nt.kind === 'voice' && (() => {
+            const vc = (nt.refId ? allVoices.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Voice)
+            const others = voices.filter((x) => x.id !== vc.id)
+            const own = (key: keyof Voice): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Voice>) => { markCardDirty(nt.id); updateVoice(ensureVoiceFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const area = (label: string, key: keyof Voice, placeholder: string) =>
+              field(label, (
+                <textarea
+                  className="flow-recform-area"
+                  rows={2}
+                  value={String(vc[key] ?? '')}
+                  placeholder={placeholder}
+                  onChange={(e) => set({ [key]: e.target.value } as Partial<Voice>)}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>How this sounds</label>
+                <div className="flow-recform">
+                  {field('Voice', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={vc.name}
+                      placeholder="Name this voice"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {field('Tone', (
+                    <RecordCombo
+                      value={vc.tone ?? ''}
+                      groups={[
+                        { label: 'From your other voices', options: own('tone') },
+                        { label: 'Common voices', options: [...BRAND_VOICES] },
+                      ]}
+                      placeholder="How it sounds"
+                      onCommit={(v) => set({ tone: v })}
+                    />
+                  ))}
+                  {/* Do's, don'ts and a sample are what a register actually IS to a writer. The
+                      don'ts matter most, being the half a model will otherwise drift out of. */}
+                  {area("Do's", 'dos', 'What it always does, one per line')}
+                  {area("Don'ts", 'donts', 'What it never does, one per line')}
+                  {area('Sample', 'sample', 'A line that sounds exactly right')}
+                  {field('Use for', (
+                    <RecordCombo
+                      value={vc.useFor ?? ''}
+                      groups={[{ label: 'From your other voices', options: own('useFor') }]}
+                      placeholder="Where this voice belongs"
+                      onCommit={(v) => set({ useFor: v })}
+                    />
+                  ))}
+                  {field('Status', (
+                    <RecordCombo
+                      value={vc.status ? vc.status.charAt(0).toUpperCase() + vc.status.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: ['Active', 'Draft', 'Archived'] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ status: v.toLowerCase() as Voice['status'] })}
+                    />
+                  ))}
+                </div>
+              </>
+            )
+          })()}
           {/* THE BIG IDEA the work is built from. A Concept is not a Message: a message is the CLAIM
               you make to an audience, a concept is the idea the claim comes out of, which usually
               outlives any one claim and carries the tone. That is why a Concept card's direction was

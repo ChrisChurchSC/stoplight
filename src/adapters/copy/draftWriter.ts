@@ -136,6 +136,14 @@ export interface DraftRequest {
     insight?: string
     likeThis?: string
   }[]
+  /** The register this campaign is written in. Narrows the brand guide; never overrides its don'ts. */
+  voices?: {
+    name?: string
+    tone?: string
+    dos?: string
+    donts?: string
+    sample?: string
+  }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**
