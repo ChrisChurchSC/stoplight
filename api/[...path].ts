@@ -24,6 +24,16 @@ interface ApiRes {
 // endpoint name → loader for its POST handler (parsed body in, object out).
 const HANDLERS: Record<string, () => Promise<(body: unknown) => Promise<unknown>>> = {
   'flow-agent': () => import('../server/flowAgentHandler.js').then((m) => m.runFlowAgent),
+  /**
+   * These three shipped with a dev middleware in vite.config and no entry here, so they worked on
+   * localhost and 404'd in production: "describe this card and fill it in", "fill this in from the
+   * site", and the per-field suggestions. Every card kind grew a prompt field on the assumption
+   * fill-card was reachable, and on the pilot none of them did anything.
+   */
+  'fill-card': () => import('../server/fillCardHandler.js').then((m) => m.runFillCard),
+  'scan-site': () => import('../server/scanSiteHandler.js').then((m) => m.runScanSite),
+  'suggest-options': () => import('../server/suggestOptionsHandler.js').then((m) => m.runSuggestOptions),
+  'compose-dataset': () => import('../server/composeDatasetHandler.js').then((m) => m.runComposeDataset),
   'records-agent': () => import('../server/recordsAgentHandler.js').then((m) => m.runRecordsAgent),
   'claude-ask': () => import('../server/askHandler.js').then((m) => m.runAsk),
   'claude-agent': () => import('../server/agentHandler.js').then((m) => m.runAgent),

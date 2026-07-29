@@ -884,6 +884,10 @@ export function FlowsView() {
   /** Per-card import feedback: what landed, or why nothing did. */
   const [importNote, setImportNote] = useState<Record<string, string>>({})
   const importFileRef = useRef<HTMLInputElement | null>(null)
+  /** Which card is being sketched, and what was typed into it. */
+  const [composeFor, setComposeFor] = useState<string | null>(null)
+  const [composePrompt, setComposePrompt] = useState('')
+  const [composing, setComposing] = useState(false)
   const importTargetRef = useRef<string | null>(null)
   /**
    * Read a delimited file into a new data set and link the card to it.
@@ -892,6 +896,46 @@ export function FlowsView() {
    * rows dropped, and the row count. A silent import is how you end up writing copy from the wrong
    * column of somebody's export.
    */
+  /**
+   * Sketch a data set from a description, when there is no file and nothing connected.
+   *
+   * The result is marked composite in the data set itself, not just in this component's state, so
+   * every later reader can tell invented figures from measured ones. That marking is the whole
+   * reason this is allowed to exist: a table of numbers looks equally authoritative however it got
+   * there, and this is the one route where none of them were counted.
+   */
+  const composeDataset = async (cardId: string) => {
+    const said = composePrompt.trim()
+    if (!said || !brand) return
+    setComposing(true)
+    setImportNote((m) => { const { [cardId]: _d, ...rest } = m; return rest })
+    try {
+      const profile = clientProfiles[brand]
+      const res = await fetch('/api/compose-dataset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: said, brand: { name: brand, oneLiner: profile?.oneLiner } }),
+      })
+      if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `compose ${res.status}`)
+      const d = (await res.json()) as { name?: string; columns?: string[]; rows?: string[][]; caveat?: string }
+      if (!d.columns?.length) { setImportNote((m) => ({ ...m, [cardId]: 'Could not sketch that one. Try describing the columns you want.' })); return }
+      const id = importBrandDataset(brand, d.name || 'Sketched data set', d.columns, d.rows ?? [], {
+        kind: 'composite',
+        prompt: said,
+        generatedAt: Date.now(),
+      })
+      setObjectRef(cardId, id)
+      markCardDirty(cardId)
+      setComposeFor(null)
+      setComposePrompt('')
+      setImportNote((m) => ({ ...m, [cardId]: d.caveat || 'Sketched. Every figure here is invented.' }))
+    } catch (e) {
+      const noKey = (e as Error)?.message === 'NO_KEY'
+      setImportNote((m) => ({ ...m, [cardId]: noKey ? 'No model key set, so nothing can be sketched.' : 'Could not sketch that one.' }))
+    } finally {
+      setComposing(false)
+    }
+  }
   const importTableFile = async (cardId: string, file: File) => {
     if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Bind this canvas to a brand first.' })); return }
     if (!isParsableTableFile(file.name)) {
@@ -6656,6 +6700,9 @@ export function FlowsView() {
                         if (e.target.value === '__new__') {
                           const id = addBrandDataset(brand)
                           setObjectRef(nt.id, id)
+                        } else if (e.target.value === '__compose__') {
+                          setComposeFor(nt.id)
+                          setComposePrompt('')
                         } else if (e.target.value === '__upload__') {
                           // Remember which card asked, since one hidden input serves them all.
                           importTargetRef.current = nt.id
@@ -6677,6 +6724,7 @@ export function FlowsView() {
                         ))}
                       </optgroup>
                       <option value="__upload__">↑ Upload a CSV…</option>
+                      <option value="__compose__">✦ Describe one instead…</option>
                       <option value="__new__">+ New data set…</option>
                     </select>
                     {(() => {
@@ -6696,9 +6744,37 @@ export function FlowsView() {
                               {linkedDs.source.filename} · {new Date(linkedDs.source.importedAt).toLocaleDateString()}
                             </span>
                           )}
+                          {/* Louder than the upload line on purpose. An uploaded figure was measured
+                              by someone; a sketched one was not, and that is the single most useful
+                              thing to know about this table. */}
+                          {linkedDs?.source?.kind === 'composite' && (
+                            <span className="flow-note-mini-src sketched">
+                              Sketched, not measured · {new Date(linkedDs.source.generatedAt).toLocaleDateString()}
+                            </span>
+                          )}
                         </div>
                       )
                     })()}
+                    {composeFor === nt.id && (
+                      <div className="flow-compose" onMouseDown={(e) => e.stopPropagation()}>
+                        <textarea
+                          className="flow-compose-input"
+                          rows={2}
+                          autoFocus
+                          value={composePrompt}
+                          placeholder="Open rate by segment, monthly, for the last six months"
+                          onChange={(e) => setComposePrompt(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void composeDataset(nt.id) } }}
+                        />
+                        <div className="flow-compose-row">
+                          <button className="flow-compose-go" disabled={composing || !composePrompt.trim()} onClick={() => void composeDataset(nt.id)}>
+                            {composing ? 'Sketching…' : 'Sketch it'}
+                          </button>
+                          <button className="flow-compose-x" onClick={() => { setComposeFor(null); setComposePrompt('') }}>Cancel</button>
+                        </div>
+                        <span className="flow-compose-warn">Figures will be invented, to show the shape. Replace them with real data before anyone cites them.</span>
+                      </div>
+                    )}
                     {importNote[nt.id] && <span className="flow-note-mini-note">{importNote[nt.id]}</span>}
                     </>
                   ) : (() => {

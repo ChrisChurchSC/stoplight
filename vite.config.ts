@@ -475,6 +475,33 @@ function draftAngleApi(): PluginOption {
 }
 
 /** Fill a card's fields from a typed description. Enum fields are constrained to the real options. */
+/** Mirrors api/[...path].ts for the dev server; sibling of fill-card. */
+function composeDatasetApi(): PluginOption {
+  return {
+    name: 'compose-dataset-api',
+    configureServer(server) {
+      server.middlewares.use('/api/compose-dataset', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end() }
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const { runComposeDataset } = await import('./server/composeDatasetHandler')
+            const result = await runComposeDataset(JSON.parse(body || '{}'))
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify(result))
+          } catch (err) {
+            const code = (err as { code?: string })?.code
+            res.statusCode = code === 'NO_KEY' ? 501 : 500
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
+          }
+        })
+      })
+    },
+  }
+}
+
 function fillCardApi(): PluginOption {
   return {
     name: 'fill-card-api',
@@ -1235,6 +1262,7 @@ export default defineConfig(({ mode }) => {
       suggestOptionsApi(),
       scanSiteApi(),
       fillCardApi(),
+      composeDatasetApi(),
       ingestSiteApi(),
       setupApi(),
       askApi(),
