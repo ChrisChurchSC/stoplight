@@ -35,6 +35,7 @@ import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
 import { messagingFields } from '../domain/messaging'
+import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -817,6 +818,7 @@ export function FlowsView() {
   const addCompany = useTrafficStore((s) => s.addCompany)
   const addPerson = useTrafficStore((s) => s.addPerson)
   const addMessage = useTrafficStore((s) => s.addMessage)
+  const updateMessage = useTrafficStore((s) => s.updateMessage)
   const addVoice = useTrafficStore((s) => s.addVoice)
   const addTrigger = useTrafficStore((s) => s.addTrigger)
   const openBrandTab = useTrafficStore((s) => s.openBrandTab)
@@ -3016,6 +3018,15 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  const ensureMessageFor = (nt: CanvasObject): string => {
+    if (nt.refId && messages.some((m) => m.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addMessage({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
   const ensureTriggerFor = (nt: CanvasObject): string => {
     if (nt.refId && triggers.some((t) => t.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
@@ -4960,6 +4971,86 @@ export function FlowsView() {
                 <div className="flow-inspect-note" style={{ marginTop: 10 }}>
                   Authored on this campaign. To use it elsewhere, group it into a smart object and file
                   it under the brand&apos;s assets.
+                </div>
+              </>
+            )
+          })()}
+          {/* THE MESSAGE A CARD ARGUES, edited on the card like every other record-linked kind.
+              A Message card could already NAME a message and could carry direction (claim, notThis),
+              but it was the one record-linked kind with no form: you picked a message, then went to
+              Records to say what it actually was. Audience, Person, Company, Trigger, Brand and
+              Product all edit in place, and this was the gap in that set. */}
+          {nt.kind === 'message' && (() => {
+            const msg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
+            const others = messages.filter((x) => x.id !== msg.id)
+            const own = (key: keyof Message): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
+            const set = (patch: Partial<Message>) => { markCardDirty(nt.id); updateMessage(ensureMessageFor(nt), patch) }
+            const field = (label: string, node: ReactNode) => (
+              <div key={label} className="flow-recform-field">
+                <span className="flow-recform-key">{label}</span>
+                {node}
+              </div>
+            )
+            const combo = (label: string, key: keyof Message, placeholder: string, extra: OptionGroup[] = []) =>
+              field(label, (
+                <RecordCombo
+                  value={String(msg[key] ?? '')}
+                  groups={[{ label: 'From your other messages', options: own(key) }, ...extra]}
+                  placeholder={placeholder}
+                  onCommit={(v) => set({ [key]: v } as Partial<Message>)}
+                />
+              ))
+            return (
+              <>
+                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What this says</label>
+                <div className="flow-recform">
+                  {field('Message', (
+                    <BufferedInput
+                      className="flow-recform-input"
+                      value={msg.name}
+                      placeholder="Name this message"
+                      onCommit={(v) => set({ name: v })}
+                    />
+                  ))}
+                  {/* The angle is the sentence the copy argues, so it is the one field here worth a
+                      textarea: it is written, not chosen. */}
+                  {field('Angle', (
+                    <textarea
+                      className="flow-recform-area"
+                      rows={2}
+                      value={msg.angle ?? ''}
+                      placeholder="The line this message makes"
+                      onChange={(e) => set({ angle: e.target.value })}
+                    />
+                  ))}
+                  {combo('Proof behind it', 'proof', 'What makes it believable', [
+                    { label: "This brand's proof points", options: brandProof.map((r) => r.label).filter(Boolean) },
+                  ])}
+                  {/* Loosely joined to the brand's audiences by name, the same way a Product card's
+                      "Who it is for" is, so a message and an audience card can agree without a second
+                      reference to keep in step. */}
+                  {combo('Who it lands with', 'audience', 'Which audience', [
+                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
+                  ])}
+                  {combo('Pillar', 'pillar', 'The theme it belongs to')}
+                  {field('Funnel stage', (
+                    <RecordCombo
+                      value={msg.stage ? msg.stage.charAt(0).toUpperCase() + msg.stage.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: [...MESSAGE_STAGE_OPTIONS] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ stage: v.toLowerCase() as Message['stage'] })}
+                    />
+                  ))}
+                  {field('Status', (
+                    <RecordCombo
+                      value={msg.status ? msg.status.charAt(0).toUpperCase() + msg.status.slice(1) : ''}
+                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
+                      placeholder="Choose"
+                      allowCreate={false}
+                      onCommit={(v) => set({ status: v.toLowerCase() as Message['status'] })}
+                    />
+                  ))}
                 </div>
               </>
             )
