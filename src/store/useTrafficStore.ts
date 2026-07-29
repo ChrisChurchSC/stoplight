@@ -6262,10 +6262,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const perIds = new Set(refList.filter((x) => x.type === 'person').map((x) => x.id))
           const perNames = new Set(refList.filter((x) => x.type === 'person').map((x) => x.label))
           const people = get().people.filter((pp) => perIds.has(pp.id) || perNames.has(pp.name))
+          /**
+           * MESSAGES. Same shape as personas, and the same reason for it: a wired Message card
+           * names the angle this campaign argues, and until now that record reached nothing — only
+           * the card's own `claim` direction travelled, so the message you picked was decoration.
+           *
+           * No fallback to the brand's whole message library. An audience pool can sensibly rotate
+           * everything when nothing is pinned, but a set of competing angles cannot: arguing all of
+           * them at once is how copy ends up arguing none.
+           */
+          const msgIds = new Set(refList.filter((x) => x.type === 'message').map((x) => x.id))
+          const msgNames = new Set(refList.filter((x) => x.type === 'message').map((x) => x.label))
+          const msgs = get().messages.filter((m) => msgIds.has(m.id) || msgNames.has(m.name))
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
             personas: people.filter(hasPersona),
+            messages: msgs,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -6465,8 +6478,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           readsWhen: pp.readsWhen?.trim() || undefined,
           decidesWith: pp.decidesWith?.trim() || undefined,
         }))
+        /**
+         * The messages this campaign is arguing, campaign-level for the same reason personas are: a
+         * message is what the campaign SAYS, and a deliverable that argues something else says so by
+         * wiring its own Message card, which lands in its own references.
+         *
+         * Only messages with an angle are sent. A named message with nothing written on it is a
+         * label, and passing it would tell the writer to argue a title.
+         */
+        const messages = campaignPools.messages
+          .filter((m) => (m.angle ?? '').trim())
+          .map((m) => ({
+            name: m.name,
+            angle: (m.angle ?? '').trim(),
+            proof: m.proof?.trim() || undefined,
+            audience: m.audience?.trim() || undefined,
+            stage: m.stage || undefined,
+          }))
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.

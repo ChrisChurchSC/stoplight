@@ -92,6 +92,9 @@ type TagOps = {
 // Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
 // Segments / Media mix), so a tag reads the same as the page it comes from.
 const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
+  // Same speech bubble the Message card carries on the canvas, so a message tag reads as the
+  // thing it came from rather than as a new concept.
+  message: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
   company: (
     <>
       <rect x="4" y="3" width="9" height="18" rx="1.4" />
@@ -129,7 +132,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message' }
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -570,6 +573,14 @@ export function FlowsView() {
       { key: 'usesNow', brief: 'what they reach for instead today' },
       { key: 'saysLike', brief: 'their own words and turns of phrase' },
     ],
+    message: [
+      { key: 'name', brief: 'a short name for this message, how it would be filed' },
+      { key: 'angle', brief: 'the line this message makes, as the sentence the copy would argue' },
+      { key: 'proof', brief: 'what makes it believable' },
+      { key: 'audience', brief: 'who it lands with' },
+      { key: 'pillar', brief: 'the theme it belongs to' },
+      { key: 'stage', brief: 'where in the funnel it works', options: [...MESSAGE_STAGE_OPTIONS] },
+    ],
     trigger: [
       { key: 'name', brief: 'a short name for this trigger' },
       { key: 'type', brief: 'what kind of trigger it is', options: [...TRIGGER_TYPE_OPTIONS] },
@@ -584,6 +595,7 @@ export function FlowsView() {
     audience: 'Parents booking a first orthodontic appointment, nervous about cost',
     person: 'A 40 year old electrician who fishes most weekends and coaches his kid',
     trigger: 'Their old kit broke a week before the season opens',
+    message: 'One system instead of five, so a small team ships like a big one',
   }
   const [prompting, setPrompting] = useState<Record<string, string>>({})
   const [filling, setFilling] = useState<string | null>(null)
@@ -1889,8 +1901,9 @@ export function FlowsView() {
       { type: 'segment' as FlowRefType, label: 'Audiences', items: brandSegments.map((a) => ({ id: a.id, label: a.name })) },
       { type: 'channel' as FlowRefType, label: 'Channels', items: channelRecords.map((c) => ({ id: c.id, label: c.name })) },
       { type: 'proof' as FlowRefType, label: 'Proof points', items: brandProof.map((r) => ({ id: r.id, label: r.label })) },
+      { type: 'message' as FlowRefType, label: 'Messages', items: messages.map((m) => ({ id: m.id, label: m.name })) },
     ],
-    [companies, people, brandSegments, channelRecords, brandProof],
+    [companies, people, brandSegments, channelRecords, brandProof, messages],
   )
   /**
    * The campaign's stored references, minus any whose record no longer exists.
@@ -4463,6 +4476,22 @@ export function FlowsView() {
                 case 'trigger': {
                   const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
                   return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
+                }
+                case 'message': {
+                  const mg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
+                  return {
+                    current: mg as unknown as Record<string, unknown>,
+                    apply: (p) => {
+                      markCardDirty(nt.id)
+                      // MESSAGE_STAGE_OPTIONS are Title Case because they are shown in a picker, but
+                      // the record stores stage lowercase. Left alone, a filled card would hold
+                      // "Awareness" against a type that only admits "awareness", and every later
+                      // comparison would quietly miss.
+                      const patch = { ...p } as Partial<Message> & { stage?: string }
+                      if (typeof patch.stage === 'string') patch.stage = patch.stage.toLowerCase() as Message['stage']
+                      updateMessage(ensureMessageFor(nt), patch as Partial<Message>)
+                    },
+                  }
                 }
                 case 'audience': {
                   const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()

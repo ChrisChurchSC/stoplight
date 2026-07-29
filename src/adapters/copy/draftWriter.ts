@@ -118,6 +118,17 @@ export interface DraftRequest {
     readsWhen?: string
     decidesWith?: string
   }[]
+  /**
+   * The messages this campaign argues, from the Message cards wired to it. Angle-keyed: a message
+   * with no angle is a filing label, not something to argue, and is dropped before it is sent.
+   */
+  messages?: {
+    name?: string
+    angle: string
+    proof?: string
+    audience?: string
+    stage?: string
+  }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**
