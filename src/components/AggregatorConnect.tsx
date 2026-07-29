@@ -46,6 +46,11 @@ interface Props {
    */
   brand: string
   website?: string
+  /**
+   * Which provider was picked in the card's own list, so this panel opens on its sources rather than
+   * re-asking. The provider step only exists now for the case where one was not chosen up front.
+   */
+  initialProvider?: AggregatorProvider
   /** Lands the pulled grid as a brand data set and returns its id. */
   onLand: (
     name: string,
@@ -61,7 +66,7 @@ interface Props {
 
 type Step = 'provider' | 'source' | 'pull'
 
-export function AggregatorConnect({ linkedName, brand, website, onLand, onDone, onCancel }: Props) {
+export function AggregatorConnect({ linkedName, brand, website, initialProvider, onLand, onDone, onCancel }: Props) {
   const [status, setStatus] = useState<AggregatorStatus | null>(null)
   const [step, setStep] = useState<Step>('provider')
   const [provider, setProvider] = useState<AggregatorProvider | null>(null)
@@ -84,6 +89,12 @@ export function AggregatorConnect({ linkedName, brand, website, onLand, onDone, 
   useEffect(() => {
     let live = true
     void (async () => {
+      // Picked in the card's list already: go straight to its sources. Asking again, with a list of
+      // one, would be a step that offers no choice.
+      if (initialProvider) {
+        if (live) await chooseProvider(initialProvider)
+        return
+      }
       try {
         const s = (await post({ op: 'status' })) as AggregatorStatus
         if (live) setStatus(s)
@@ -157,9 +168,12 @@ export function AggregatorConnect({ linkedName, brand, website, onLand, onDone, 
         <>
           {!status && !error && <span className="flow-agg-muted">Checking…</span>}
           {(['warehouse', 'channel'] as const).map((group) => {
+            // READY ONLY. A row you cannot click is clutter: it explains a setup step to someone who
+            // is trying to pick a data source, and it made the list twice as long as the part of it
+            // that works. What is missing is a deployment concern, not a thing to choose between.
             const inGroup = (status?.providers ?? []).filter((p) => {
               const spec = aggregatorSpec(p.id)
-              return spec && specKind(spec) === group
+              return spec && specKind(spec) === group && p.implemented && p.configured
             })
             if (!inGroup.length) return null
             return (
@@ -249,7 +263,7 @@ export function AggregatorConnect({ linkedName, brand, website, onLand, onDone, 
       {busy && <span className="flow-agg-muted">Working…</span>}
       {error && <span className="flow-agg-err">{error}</span>}
       <div className="flow-agg-foot">
-        {step !== 'provider' && (
+        {step !== 'provider' && !initialProvider && (
           <button
             className="flow-compose-x"
             disabled={busy}

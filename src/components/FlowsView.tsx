@@ -41,7 +41,7 @@ import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
-import { aggregatorSpec } from '../domain/aggregator'
+import { aggregatorSpec, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { SourceMark } from './SourceMark'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
@@ -884,8 +884,35 @@ export function FlowsView() {
   const [composeFor, setComposeFor] = useState<string | null>(null)
   const [composePrompt, setComposePrompt] = useState('')
   const [composing, setComposing] = useState(false)
-  /** Which card has the aggregator panel open. */
+  /** Which card has the aggregator panel open, and which provider it was opened on. */
   const [connectFor, setConnectFor] = useState<string | null>(null)
+  const [connectProvider, setConnectProvider] = useState<AggregatorProvider | undefined>(undefined)
+  /**
+   * The providers that are actually usable right now, listed in the card's own picker.
+   *
+   * Fetched once for the view rather than per card: it is one small POST and the answer is the same
+   * for every Data source card on the board. Anything not implemented AND configured never appears,
+   * so the picker offers only things that will work.
+   */
+  const [readyProviders, setReadyProviders] = useState<AggregatorProvider[]>([])
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      try {
+        const res = await fetch('/api/aggregator', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ op: 'status' }),
+        })
+        if (!res.ok) return
+        const s = (await res.json()) as AggregatorStatus
+        if (live) setReadyProviders(s.providers.filter((p) => p.implemented && p.configured).map((p) => p.id))
+      } catch {
+        // No status, no connect options. Upload and describe still work, so the card is not stuck.
+      }
+    })()
+    return () => { live = false }
+  }, [])
   const importTargetRef = useRef<string | null>(null)
   /**
    * Read a delimited file into a new data set and link the card to it.
@@ -2880,6 +2907,159 @@ export function FlowsView() {
    * the layered glyph, the name, then what is inside. Draggable onto the canvas, and a double-click
    * opens it in its own tab.
    */
+  /**
+   * The Data source picker, in the INSPECTOR.
+   *
+   * It used to sit on the card, which made the card the only kind you authored on the canvas itself:
+   * a select, a connect flow, a prompt box and a file dialog stacked under a node that is meant to be
+   * read at a glance. Every other kind puts its authoring here and leaves the card as the view of
+   * what was chosen, and this now matches.
+   */
+  /**
+   * The Data source picker, in the INSPECTOR.
+   *
+   * It used to sit on the card, which made this the only kind you authored on the canvas itself: a
+   * select, a connect flow, a prompt box and a file dialog stacked under a node meant to be read at a
+   * glance. Every other kind authors here and leaves the card as the view of what was chosen.
+   *
+   * BUTTONS, NOT A DROPDOWN. A select hides every option until you open it and shows no state beyond
+   * the current value, which is the wrong shape for a list where each entry is a different KIND of
+   * action: link one you have, pull from a source, upload, describe, start blank. As buttons they are
+   * all visible, and the one this card is actually on carries a check.
+   */
+  const renderDataSourcePicker = (nt: CanvasObject) => {
+    const linked = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
+    // The check follows the LINKED DATA SET, and a provider row wears it when that set came from
+    // there: "connected" for this card means one table, not an account-level state.
+    const linkedProvider = linked?.source?.kind === 'aggregator' ? linked.source.provider : undefined
+    const Row = ({
+      id,
+      mark,
+      label,
+      sub,
+      on,
+      onClick,
+    }: { id: string; mark?: string; label: string; sub?: string; on?: boolean; onClick: () => void }) => (
+      <button key={id} className={`flow-src-opt${on ? ' on' : ''}`} onClick={onClick}>
+        <span className="flow-src-mark">{mark ? <SourceMark id={mark} /> : <span className="flow-src-dot" />}</span>
+        <span className="flow-src-txt">
+          <span className="flow-src-name">{label}</span>
+          {sub && <span className="flow-src-sub">{sub}</span>}
+        </span>
+        {on && (
+          <span className="flow-src-tick" aria-label="linked">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </span>
+        )}
+      </button>
+    )
+    return (
+      <div className="flow-insp-src">
+        <label className="flow-inspect-label">Source</label>
+        <div className="flow-src-list">
+          {/* Data sets this brand already has, newest first so a fresh pull is at the top. */}
+          {brandDatasets.map((d) =>
+            Row({
+              id: d.id,
+              mark: d.source?.kind === 'aggregator' ? d.source.service : undefined,
+              label: d.name || 'Untitled data set',
+              sub:
+                d.source?.kind === 'aggregator'
+                  ? `${aggregatorSpec(d.source.provider)?.label ?? d.source.provider} · ${d.rows.length} rows`
+                  : d.source?.kind === 'upload'
+                    ? `${d.source.filename} · ${d.rows.length} rows`
+                    : d.source?.kind === 'composite'
+                      ? 'Sketched, not measured'
+                      : `${d.rows.length} rows`,
+              on: nt.refId === d.id,
+              onClick: () => setObjectRef(nt.id, d.id),
+            }),
+          )}
+          {/* Only providers that are implemented AND configured: a row you cannot use is not a choice. */}
+          {readyProviders.map((id) =>
+            Row({
+              id: `p_${id}`,
+              mark: id,
+              label: `Pull from ${aggregatorSpec(id)?.label ?? id}`,
+              sub: aggregatorSpec(id)?.blurb,
+              on: linkedProvider === id,
+              onClick: () => { setConnectProvider(id); setConnectFor(nt.id) },
+            }),
+          )}
+          {Row({
+            id: 'upload',
+            label: 'Upload a CSV',
+            sub: 'A file you already have',
+            on: linked?.source?.kind === 'upload',
+            onClick: () => { importTargetRef.current = nt.id; importFileRef.current?.click() },
+          })}
+          {Row({
+            id: 'compose',
+            label: 'Describe one instead',
+            sub: 'Sketch the shape when you have no data',
+            on: linked?.source?.kind === 'composite',
+            onClick: () => { setComposeFor(nt.id); setComposePrompt('') },
+          })}
+          {Row({
+            id: 'new',
+            label: 'New data set',
+            sub: 'A blank sheet to fill in',
+            on: !!linked && !linked.source,
+            onClick: () => { const id = addBrandDataset(brand); setObjectRef(nt.id, id) },
+          })}
+        </div>
+      {connectFor === nt.id && (
+        <AggregatorConnect
+          initialProvider={connectProvider}
+          linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
+          brand={brand}
+          website={clientProfiles[brand]?.website}
+          onLand={(name, columns, rows, provider, service, query) =>
+            importBrandDataset(brand, name, columns, rows, {
+              kind: 'aggregator',
+              provider,
+              service,
+              query,
+              syncedAt: Date.now(),
+            })
+          }
+          onDone={(id, note) => {
+            setObjectRef(nt.id, id)
+            markCardDirty(nt.id)
+            setConnectFor(null)
+            setConnectProvider(undefined)
+            setImportNote((m) => ({ ...m, [nt.id]: note }))
+          }}
+          onCancel={() => { setConnectFor(null); setConnectProvider(undefined) }}
+        />
+      )}
+      {composeFor === nt.id && (
+        <div className="flow-compose" onMouseDown={(e) => e.stopPropagation()}>
+          <textarea
+            className="flow-compose-input"
+            rows={2}
+            autoFocus
+            value={composePrompt}
+            placeholder="Open rate by segment, monthly, for the last six months"
+            onChange={(e) => setComposePrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void composeDataset(nt.id) } }}
+          />
+          <div className="flow-compose-row">
+            <button className="flow-compose-go" disabled={composing || !composePrompt.trim()} onClick={() => void composeDataset(nt.id)}>
+              {composing ? 'Sketching…' : 'Sketch it'}
+            </button>
+            <button className="flow-compose-x" onClick={() => { setComposeFor(null); setComposePrompt('') }}>Cancel</button>
+          </div>
+          <span className="flow-compose-warn">Figures will be invented, to show the shape. Replace them with real data before anyone cites them.</span>
+        </div>
+      )}
+      {importNote[nt.id] && <span className="flow-note-mini-note">{importNote[nt.id]}</span>}
+      </div>
+    )
+  }
+
   const renderShelfObject = (o: SmartObject) => {
     const cards = objectCards(o)
     return (
@@ -5741,6 +5921,7 @@ export function FlowsView() {
               </>
             )
           })()}
+          {nt.kind === 'data-source' && renderDataSourcePicker(nt)}
           {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
               fields per kind, each landing in a named slot in every wired asset's payload. This is
               the whole point of an object: not which record it names, but what it says about it.
@@ -6689,57 +6870,10 @@ export function FlowsView() {
 
                   </div>
                   {nt.kind === 'data-source' ? (
-                    // A Data source links one of the brand's data sets (the spreadsheets) or a live
-                    // connector; "New data set" spins up a fresh spreadsheet and links it in one step.
-                    // The card previews the linked set as a mini spreadsheet; double-click opens it.
-                    <>
-                    <select
-                      className="flow-note-sel"
-                      value={nt.refId ?? ''}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        if (e.target.value === '__new__') {
-                          const id = addBrandDataset(brand)
-                          setObjectRef(nt.id, id)
-                        } else if (e.target.value === '__compose__') {
-                          setComposeFor(nt.id)
-                          setComposePrompt('')
-                        } else if (e.target.value === '__connect__') {
-                          setConnectFor(nt.id)
-                        } else if (e.target.value === '__upload__') {
-                          // Remember which card asked, since one hidden input serves them all.
-                          importTargetRef.current = nt.id
-                          importFileRef.current?.click()
-                        } else setObjectRef(nt.id, e.target.value)
-                      }}
-                    >
-                      <option value="">Link a data source…</option>
-                      {brandDatasets.length > 0 && (
-                        <optgroup label="Your data sets">
-                          {brandDatasets.map((d) => (
-                            <option key={d.id} value={d.id}>{d.name || 'Untitled data set'}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {/* The "Connectors" group that used to sit here listed four platform names and
-                          set the card's refId to a string like "google-analytics" — no dataset, no
-                          fetch, nothing downstream. It is now one option that opens a real connect
-                          flow and reports what is actually reachable. */}
-                      <option value="__connect__">⚡ Connect an aggregator…</option>
-                      <option value="__upload__">↑ Upload a CSV…</option>
-                      <option value="__compose__">✦ Describe one instead…</option>
-                      <option value="__new__">+ New data set…</option>
-                    </select>
-                    {/* ONE CARD, ONE SOURCE. Every route here (upload, describe, connect, pick) points
-                        the card at a different data set rather than adding to it, so with something
-                        already linked each of them is a replacement. Stated once, next to the picker
-                        that does it, rather than per route. */}
-                    {nt.refId && allBrandDatasets.some((d) => d.id === nt.refId) && (
-                      <span className="flow-note-mini-note">
-                        One source per card. Picking another replaces this one.
-                      </span>
-                    )}
-                    {(() => {
+                    // DISPLAY ONLY. Choosing a source is authoring, and authoring happens in the
+                    // inspector like it does for every other kind; the card shows what was chosen.
+                    // It previews the linked set as a mini spreadsheet; double-click opens it.
+                    (() => {
                       const linkedDs = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
                       return (
                         <div
@@ -6783,52 +6917,7 @@ export function FlowsView() {
                           )}
                         </div>
                       )
-                    })()}
-                    {connectFor === nt.id && (
-                      <AggregatorConnect
-                        linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
-                        brand={brand}
-                        website={clientProfiles[brand]?.website}
-                        onLand={(name, columns, rows, provider, service, query) =>
-                          importBrandDataset(brand, name, columns, rows, {
-                            kind: 'aggregator',
-                            provider,
-                            service,
-                            query,
-                            syncedAt: Date.now(),
-                          })
-                        }
-                        onDone={(id, note) => {
-                          setObjectRef(nt.id, id)
-                          markCardDirty(nt.id)
-                          setConnectFor(null)
-                          setImportNote((m) => ({ ...m, [nt.id]: note }))
-                        }}
-                        onCancel={() => setConnectFor(null)}
-                      />
-                    )}
-                    {composeFor === nt.id && (
-                      <div className="flow-compose" onMouseDown={(e) => e.stopPropagation()}>
-                        <textarea
-                          className="flow-compose-input"
-                          rows={2}
-                          autoFocus
-                          value={composePrompt}
-                          placeholder="Open rate by segment, monthly, for the last six months"
-                          onChange={(e) => setComposePrompt(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void composeDataset(nt.id) } }}
-                        />
-                        <div className="flow-compose-row">
-                          <button className="flow-compose-go" disabled={composing || !composePrompt.trim()} onClick={() => void composeDataset(nt.id)}>
-                            {composing ? 'Sketching…' : 'Sketch it'}
-                          </button>
-                          <button className="flow-compose-x" onClick={() => { setComposeFor(null); setComposePrompt('') }}>Cancel</button>
-                        </div>
-                        <span className="flow-compose-warn">Figures will be invented, to show the shape. Replace them with real data before anyone cites them.</span>
-                      </div>
-                    )}
-                    {importNote[nt.id] && <span className="flow-note-mini-note">{importNote[nt.id]}</span>}
-                    </>
+                    })()
                   ) : (() => {
                     const opts = objectOptions(nt.kind)
                     if (!opts) return null
