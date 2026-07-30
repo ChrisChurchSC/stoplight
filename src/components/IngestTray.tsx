@@ -45,7 +45,11 @@ function dimsLabel(a: Asset): string | null {
 }
 
 function PendingCard({ asset, audienceNames }: { asset: Asset; audienceNames: string[] }) {
-  const { updateAsset, toggleChannel, removeAsset } = useTrafficStore()
+  // One selector per action. Subscribing to the whole store re-rendered every pending card on any
+  // state change anywhere in the app, and an ingest tray can be showing a hundred of them.
+  const updateAsset = useTrafficStore((s) => s.updateAsset)
+  const toggleChannel = useTrafficStore((s) => s.toggleChannel)
+  const removeAsset = useTrafficStore((s) => s.removeAsset)
   const b = band(asset)
   // Local so picking the first channel doesn't snap the panel shut mid-interaction.
   const [addOpen, setAddOpen] = useState(asset.channels.length === 0)

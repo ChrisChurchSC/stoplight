@@ -24,9 +24,71 @@
       href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
     />
     <link rel="preload" as="font" type="font/woff2" href="/fonts/Switzer-Variable.woff2" crossorigin />
+    <!-- BOOT STATE. #root used to be empty, so everything between navigation and React mounting was
+         a white page: on a slow connection that is seconds of nothing, which reads as broken rather
+         than as slow. The markup below sits inside #root and createRoot() clears it on mount, so
+         there is nothing to tear down.
+
+         Styled here rather than in index.css, and with literal hex rather than var(--bg), so the
+         boot state stands up even if the app stylesheet never arrives. The three selectors mirror
+         index.css exactly (system preference, plus data-theme as the explicit override applied by
+         lib/theme before React mounts) so booting cannot flash the opposite palette on its way to
+         the app. Deliberately static: a spinner that is still spinning after a failed load is a lie
+         about what is happening. -->
+    <style>
+      #boot {
+        /* min-height on the viewport, not height:100%, because a percentage height needs every
+           ancestor to have one and those come from index.css. This way the boot state is centred
+           even in the worst case where the stylesheet never loads. */
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: #f6f7f9;
+        color: #1a1d23;
+        font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+          Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #boot-name {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      #boot-note {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #6b7280;
+        font-family: 'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      :root[data-theme='dark'] #boot {
+        background: #0e1014;
+        color: #e9ecf1;
+      }
+      :root[data-theme='dark'] #boot-note {
+        color: #98a1b0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) #boot {
+          background: #0e1014;
+          color: #e9ecf1;
+        }
+        :root:not([data-theme='light']) #boot-note {
+          color: #98a1b0;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <div id="boot-name">Breadcrumbs</div>
+        <div id="boot-note">Loading your workspace</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

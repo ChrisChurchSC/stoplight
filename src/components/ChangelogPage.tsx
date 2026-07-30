@@ -19,6 +19,28 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.11',
+    dateLabel: 'July 30, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The app no longer arrives as one big download. Every screen used to ship on first load whether you opened it or not, which was 1.3 MB before anything appeared, measured at 3.3 seconds of blank white on a phone. Screens are now fetched when you open them, cutting the first download by 29 percent, and the page shows the Breadcrumbs name while it loads instead of nothing at all.',
+          'Typing is no longer a save per character. The copy boxes in review, the brand guide fields, and data set cells each wrote to the server on every keystroke, and every one of those writes re-read your whole workspace back. They now save half a second after you stop, and immediately when you click away.',
+          'Approving or rescheduling a batch of cards is one request instead of one per card. Editing twenty selected cards took forty-one round trips in sequence and looked frozen while it worked.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'A shipped update no longer blanks the page in an open tab. Now that screens load on demand, a tab left open across a release was asking for files that no longer existed, and the whole workspace disappeared with no message. It now keeps everything on screen and offers to reload just the part that could not load.',
+          'Typing a word and deleting it again no longer overwrites what happens next. The half-second save could still be waiting when you clicked away, so if you pressed Generate in that moment the old text landed on top of the new copy and the draft was silently lost.',
+          'A failed bulk approve now says so instead of quietly undoing itself. Approving a few hundred cards at once sent one oversized request, and if the server rejected it the error was discarded, the app carried on as though it had worked, and every card snapped back to draft with nothing shown.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.10',
     dateLabel: 'July 28, 2026',
     groups: [
