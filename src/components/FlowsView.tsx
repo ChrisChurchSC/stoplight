@@ -8,7 +8,7 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
-import { downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
+import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -7987,6 +7987,60 @@ export function FlowsView() {
                     Duplicate this post
                   </button>
 
+                  {/* CONNECTED TO. The instructions this post is actually written under, assembled by
+                      the same function the writer uses, in the same precedence order. */}
+                  {(() => {
+                    const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+                    const resolved = resolveBoardDirection(liveBoard)
+                    const mine = directionForRow(resolved, deliverableKeyFor(selPost), selPost.id, [])
+                    const kept = buildDirection(mine)
+                    const dropped = mine.length - kept.length
+                    return (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                          Connected to{kept.length ? ` · ${kept.length}` : ''}
+                        </label>
+                        {kept.length === 0 ? (
+                          <p className="flow-inspect-note">
+                            Nothing is wired to this post or to its deliverable, so it is written from the campaign brief alone.
+                          </p>
+                        ) : (
+                          <div className="flow-insp-send">
+                            {kept.map((d) => (
+                              <div key={`${d.key}:${d.value}`} className="flow-send-row">
+                                <span className="flow-send-val">{DIRECTION_FIELD[d.key as DirectionKey]?.label ?? d.key}</span>
+                                <span className="flow-send-lab">{d.value}</span>
+                              </div>
+                            ))}
+                            {/* An asset carries one instruction per kind, so a second card naming the
+                                same thing loses. Saying how many were dropped is the difference
+                                between a rule and a surprise. */}
+                            {dropped > 0 && (
+                              <span className="flow-send-foot">
+                                {`${dropped} more instruction${dropped === 1 ? '' : 's'} reached here and ${dropped === 1 ? 'was' : 'were'} dropped: a post carries one instruction per kind.`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Wiring a card straight to a post materialises references onto the row,
+                            which silently stops it using the campaign's. */}
+                        {selPost.references && selPost.references.length > 0 && (
+                          <>
+                            <p className="flow-inspect-note">
+                              Wiring a card straight to this post pins it to those records only. It stops using the campaign's.
+                            </p>
+                            <button
+                              className="flow-reset-link"
+                              onClick={() => { void updateRow(selPost.id, { references: undefined }); setRefsDirty(true) }}
+                            >
+                              Go back to the campaign's
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
+
                   {/* THE TEAM THREAD. Named Discussion, not Comments: the store already has a
                       comments slice on the same row id holding ingested platform comments, and one
                       word for two features on one card is how somebody replies in the wrong place. */}
@@ -8389,9 +8443,36 @@ export function FlowsView() {
                     </div>
                   )}
 
+                  {/* FORMAT: named, and refused in words rather than by a disabled control nobody
+                      can interpret. deliverableKeyFor IS this deliverable's identity: it keys every
+                      connector endpoint, the discussion thread, and the writer's direction lookup.
+                      Re-keying it is a three-slice write with no transaction anywhere in this app,
+                      where a partial failure leaves wires pointing at a key no asset answers to. So
+                      the honest move is to say so and make the stated alternative one click away. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Format</label>
+                  <div className="flow-src-list">
+                    <div className="flow-src-opt on" style={{ cursor: 'default' }}>
+                      <span className="flow-src-mark"><span className="flow-src-dot" /></span>
+                      <span className="flow-src-txt">
+                        <span className="flow-src-name">{typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}</span>
+                        <span className="flow-src-sub">
+                          {`${messagingFields(selDeliv.channel, selDeliv.assetType).length} component${messagingFields(selDeliv.channel, selDeliv.assetType).length === 1 ? '' : 's'}`}
+                        </span>
+                      </span>
+                      <span className="flow-src-tick" aria-label="current">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
+                  <p className="flow-inspect-note">
+                    {`You cannot change what this deliverable makes. Its format decides the components, the schedule and the tracking on all ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}. Add the deliverable you want and delete this one.`}
+                  </p>
+
                   {/* The thread is keyed by the deliverable's DERIVED key (channel|assetType), so
                       changing either in the Grid orphans it. The same fragility its connectors
-                      already have, and phase 5 answers it with a refusal rather than a migration. */}
+                      already have, answered above with a refusal rather than a migration. */}
                   {renderCardComments(selDeliv.key)}
                 </div>
               </>

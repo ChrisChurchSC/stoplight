@@ -163,7 +163,7 @@ import {
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
-import { resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { directionForRow, resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
 import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { normalizeFigure } from '../domain/coherenceChecks'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
@@ -6721,12 +6721,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             // buildDirection stays the ONLY producer: it caps, prioritises and drops unknown keys,
             // so a stale persisted key can never reach the prompt.
             direction: (() => {
-              const mine = [
-                ...(resolved.byTarget.get(deliverableKeyFor(r)) ?? []),
-                ...(resolved.byTarget.get(r.id) ?? []),
-                ...resolved.campaign,
-                ...campaignDirection,
-              ]
+              // Shared with the panel, so a readout of "what this will be told" cannot disagree with
+              // what is actually sent.
+              const mine = directionForRow(resolved, deliverableKeyFor(r), r.id, campaignDirection)
               return mine.length ? buildDirection(mine) : undefined
             })(),
             index: i,
