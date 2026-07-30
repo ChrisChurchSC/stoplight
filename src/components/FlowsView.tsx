@@ -34,7 +34,7 @@ import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPi
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
-import { messagingFields } from '../domain/messaging'
+import { messagingAllText, messagingFields } from '../domain/messaging'
 import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
@@ -8304,6 +8304,95 @@ export function FlowsView() {
                       </>
                     )
                   })()}
+
+                  {/* GENERATE, SCOPED. Three buttons, only the ones that apply, because "write the
+                      two that are empty" never touches a sentence anybody wrote and "rewrite all
+                      four" always does, and those are different enough acts to need different
+                      buttons rather than one with a warning. */}
+                  {(() => {
+                    const rows = selDeliv.rows
+                    const empty = rows.filter((r) => !messagingAllText(r).trim())
+                    const stale = rows.filter((r) => r.recheckFlag)
+                    const busy = regenerating || rows.some((r) => regenIds.has(r.id))
+                    return (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
+                        {empty.length > 0 && (
+                          <button className="flow-insp-open" disabled={busy} onClick={() => void regenerateFlow(empty.map((r) => r.id))}>
+                            {busy ? 'Writing…' : `Write the ${empty.length} that ${empty.length === 1 ? 'is' : 'are'} empty`}
+                          </button>
+                        )}
+                        {stale.length > 0 && (
+                          <button className="flow-insp-open subtle" disabled={busy} onClick={() => void regenerateFlow(stale.map((r) => r.id))}>
+                            {`Write the ${stale.length} that ${stale.length === 1 ? 'is' : 'are'} out of date`}
+                          </button>
+                        )}
+                        <button className="flow-insp-open subtle" disabled={busy || !rows.length} onClick={() => void regenerateFlow(rows.map((r) => r.id))}>
+                          {rows.length === 1 ? 'Rewrite this post' : `Rewrite all ${rows.length} posts`}
+                        </button>
+                        <p className="flow-inspect-note">
+                          {rows.length === 1
+                            ? 'Rewriting clears the copy here, including anything you typed by hand, and writes it again. Undo puts it back until you reload.'
+                            : `Rewriting clears the copy on all ${rows.length} and writes them again, including anything you typed by hand. Undo puts it back until you reload.`}
+                        </p>
+                        {/* Which writer produced this deliverable's copy, as a count rather than a
+                            badge, since a deliverable can hold both. */}
+                        {(() => {
+                          const off = rows.filter((r) => r.copySource === 'heuristic').length
+                          return off > 0 ? (
+                            <p className="flow-inspect-note">
+                              {`${off} of these came from the offline writer, built from your own brand and audience.`}
+                            </p>
+                          ) : null
+                        })()}
+                      </>
+                    )
+                  })()}
+
+                  {/* WHAT EACH POST CONTAINS. The same shape as the Data source card's "What this
+                      table will send", deliberately: both answer "what does this thing actually
+                      hold", and reading as one object is the point. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>What each post contains</label>
+                  <div className="flow-insp-send">
+                    {messagingFields(selDeliv.channel, selDeliv.assetType).map((f) => (
+                      <div key={f.key} className="flow-send-row">
+                        <span className="flow-send-val">{f.label}</span>
+                        <span className="flow-send-lab">
+                          {f.hardLimit ? `up to ${f.hardLimit.toLocaleString('en-US')} characters` : 'no limit'}
+                        </span>
+                      </div>
+                    ))}
+                    <span className="flow-send-foot">Every post under this deliverable has these, and only these.</span>
+                  </div>
+
+                  {/* FEEDS THESE POSTS: the outbound half of Connected to, which needs no graph walk
+                      because the rows are already in scope. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                    {selDeliv.rows.length ? `Feeds ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}` : 'Feeds no posts yet'}
+                  </label>
+                  {selDeliv.rows.length === 0 ? (
+                    <p className="flow-inspect-note">No posts yet.</p>
+                  ) : (
+                    <div className="flow-deliv-list">
+                      {selDeliv.rows.map((r) => (
+                        <button key={r.id} className="flow-pitem" onClick={() => setSel(r.id)}>
+                          <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
+                          <div className="flow-pitem-text">
+                            <div className="flow-pitem-label">{r.assetName}</div>
+                            <div className="flow-pitem-desc">
+                              {r.scheduledAt ? new Date(r.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No date'}
+                              {` · ${r.status === 'in_review' ? 'In review' : r.status === 'approved' ? 'Approved' : 'Draft'}`}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* The thread is keyed by the deliverable's DERIVED key (channel|assetType), so
+                      changing either in the Grid orphans it. The same fragility its connectors
+                      already have, and phase 5 answers it with a refusal rather than a migration. */}
+                  {renderCardComments(selDeliv.key)}
                 </div>
               </>
             ) : sel !== 'campaign' ? (
