@@ -142,7 +142,7 @@ import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRef
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
-import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
+import { assetRtbIds, isApprovedProof, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
 import { MockIcpSource, MockIcpReviewer, flagResolved } from '../adapters/icp/mockIcp'
 import { type CoherenceDecision, freshDecisionId } from '../domain/coherence'
@@ -165,6 +165,7 @@ import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
 import { citableFigures, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
+import { normalizeFigure } from '../domain/coherenceChecks'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
@@ -6668,8 +6669,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             ctaSeed: cond.cta ?? nextStepCta.get(r.assetName) ?? pickCta(stage),
             // metric and source were dropped, so "lean on this proof" reached the model without the
             // number that makes it proof or the citation that makes it safe to state.
+            // Same withholding as the pool above, or the strip is bypassed by the per-asset copy: an
+            // unvetted draft reaches the writer with its claim and without its number.
             proof: proof
-              ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+              ? isApprovedProof(proof)
+                ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+                : { id: proof.id, label: proof.label, detail: proof.detail, draft: true }
               : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
@@ -6716,13 +6721,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const assignedProof = assets
           .map((a) => a.proof)
           .filter((pr): pr is { id: string; label: string; detail?: string } => !!pr)
-        const sentProof = [...activeProof]
+        const gathered = [...activeProof]
         for (const pr of assignedProof) {
-          if (!sentProof.some((x) => x.id === pr.id)) {
+          if (!gathered.some((x) => x.id === pr.id)) {
             const full = proofPool.find((x) => x.id === pr.id)
-            if (full) sentProof.push(full)
+            if (full) gathered.push(full)
           }
         }
+        /**
+         * AN UNAPPROVED PROOF POINT DOES NOT CARRY ITS NUMBER.
+         *
+         * `approved: false` means an unvetted draft, and the app says so wherever it lists one: proof
+         * authored on a canvas card, in the Library or on the Proof points page is all created that
+         * way. Generation ignored the flag entirely and the writer is told "when a proof point has a
+         * metric, state it", so a figure nobody reviewed came out of the model as a stated claim with
+         * a source attached. That is the same failure as citing a sketched table, by a different door.
+         *
+         * The CLAIM still travels, because somebody typed it and wired it deliberately and it is the
+         * reason the card is on the board. The METRIC and the SOURCE do not, and the writer is told
+         * which ones are drafts. Dropping unapproved proof outright would have been the other option,
+         * and it would silently empty the proof pool of every campaign whose proof was authored on a
+         * card, which is most of them.
+         */
+        const sentProof = gathered.map((p) =>
+          isApprovedProof(p) ? p : { ...p, metric: undefined, source: undefined, draft: true },
+        )
         // The model, resolved campaign-first: this campaign's pick, else the workspace pick, else
         // nothing sent so the server keeps its per-task defaults. Resolved here rather than in the
         // writer because this is the only place that knows which campaign a batch belongs to.
@@ -6910,7 +6933,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Pin proof to the checked proof tags so preview cards lean on the same reasons-to-believe
     // a build would write; empty = the brand's whole proof library (unchanged behavior).
     const pinnedProof = proofRefLabels?.length ? sys.rtbs.filter((p) => proofRefLabels.includes(p.label)) : []
-    const proofPool: Rtb[] = pinnedProof.length ? pinnedProof : sys.rtbs
+    // Same rule as the build: an unvetted draft contributes its claim and not its number. Applied
+    // here too, or the preview shows copy citing a figure the build would refuse to write.
+    const proofPool: Rtb[] = (pinnedProof.length ? pinnedProof : sys.rtbs).map((p) =>
+      isApprovedProof(p) ? p : { ...p, metric: undefined, source: undefined, draft: true },
+    )
     const fields = messagingFields(channel, assetType)
     const stage = funnelStageFor(channel, assetType)
     // Which audiences to write to (selected names, else the brand's own), rotated per slot.
@@ -6945,7 +6972,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // A blueprint step's CTA wins over the rotated library CTA when present.
         ctaSeed: steps?.[i]?.cta || (sys.ctas.length ? sys.ctas[i % sys.ctas.length].label : undefined),
         proof: proof
-          ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+          ? isApprovedProof(proof)
+            ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+            : { id: proof.id, label: proof.label, detail: proof.detail, draft: true }
           : undefined,
         // The mini brief drives this slot's copy (mirrors lineage.brief on a real build),
         // plus any blueprint guidance (framework / subject formula / allowed levers).
@@ -7146,7 +7175,35 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         ? (get().accountsByBrand[clientFilter] ?? []).map((acc) => acc.name)
         : get().accountsForCampaign(campaignFilter).map((acc) => acc.name)
     const partners = clientProfiles[clientFilter]?.notableClients ?? []
-    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta, { targetAccounts, partners }, get().clientAudiences)
+    /**
+     * EVERY NUMBER THIS CAMPAIGN CAN POINT AT: the figures from its wired data sets, plus the metric
+     * on any proof point available to it. The check is not "did you attach proof", it is "does this
+     * number exist anywhere we can show somebody", so both sources count and neither excuses the
+     * other.
+     */
+    const wiredSets = campaign
+      ? (() => {
+          const board = boardFor(get().flowBoards, campaign)
+          const refs = wiredRefsFor(board, get().smartObjects, 'campaign')
+          const ids = new Set(refs.filter((r) => r.type === 'dataset').map((r) => r.id))
+          return get().brandDatasets.filter((d) => d.brand === clientFilter && ids.has(d.id))
+        })()
+      : []
+    const citableValues = new Set<string>()
+    for (const d of wiredSets) for (const f of citableFigures(d)) citableValues.add(normalizeFigure(f.value))
+    for (const r of resolveBrandScope(clientFilter, brandSystems, brandMeta).library.rtbs) {
+      if (r.metric) citableValues.add(normalizeFigure(r.metric))
+    }
+    const vocab = buildCoherenceVocab(
+      clientFilter,
+      campaign,
+      brandSystems,
+      clientProfiles,
+      brandMeta,
+      { targetAccounts, partners },
+      { values: citableValues, datasetsWired: wiredSets.length > 0 },
+      get().clientAudiences,
+    )
     const baseline = get().brandBaselineFor(clientFilter)
     try {
       const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })

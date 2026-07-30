@@ -21,6 +21,10 @@ export interface DraftProof {
   id: string
   label: string
   detail?: string
+  metric?: string
+  source?: string
+  /** An unvetted proof point: its claim travels, its number does not. */
+  draft?: boolean
 }
 /** Who an asset speaks to — enough context to write to this segment, not a generic buyer. */
 /**

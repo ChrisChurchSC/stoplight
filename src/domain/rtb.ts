@@ -38,6 +38,11 @@ export interface Rtb {
    *  on the canvas, not yet reviewed). Undefined = approved (legacy masters);
    *  only an explicit `false` marks a draft, so existing data reads as approved. */
   approved?: boolean
+  /**
+   * Set on the way to the copy writer for an unvetted proof point, whose metric and source are
+   * withheld. Not persisted: it is a statement about what was sent, not about the record.
+   */
+  draft?: boolean
   /** This proof's track record — what it converted, where it fell flat. Starts
    *  empty; the rank/reuse intelligence reads this once outcomes accrue. */
   outcomes?: RtbOutcome[]
