@@ -409,6 +409,91 @@ const median = (xs: number[]): number => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 
+/**
+ * A column header, said out loud. "CTR %" is a header; "clickthrough rate" is what a person calls it,
+ * and this string ends up mid-sentence in a finding.
+ */
+function rateNoun(header: string): string {
+  const bare = header.replace(/\s*%\s*$/, '').trim().toLowerCase()
+  if (!bare || bare === 'ctr') return 'clickthrough rate'
+  if (/^engagement$/.test(bare)) return 'engagement rate'
+  return /rate$/.test(bare) ? bare : `${bare} rate`
+}
+
+/**
+ * WORK OUT THE SHAPE OF A TABLE NOBODY DECLARED.
+ *
+ * A pasted or uploaded export is the only route available until a connector is configured, and it was
+ * getting the thinnest possible reading: a headline and nothing else. The original refusal said the
+ * app cannot know "what population or period somebody's CSV covers", which is true and was too broad.
+ * Concentration and rate outliers are comparisons INSIDE the table: "the top 10 of these rows hold
+ * 74% of the clicks in this table" is self-contained and stays true whatever period the export spans.
+ * What genuinely needs the period is anything dated or any claim about now, and those are still
+ * refused, and the period caveat still rides along.
+ *
+ * Deliberately conservative: no shape unless a text-ish dimension and a real count column are both
+ * found, and no rate unless a column looks like a percentage AND a bigger count column exists to be
+ * its denominator.
+ */
+function sniffShape(ds: BrandDataset, rows: string[][]): {
+  dim: number
+  primary: { col: number; noun: string }
+  rate?: { col: number; noun: string; denom: number; denomNoun: string }
+} | null {
+  const cols = ds.columns
+  if (cols.length < 2 || rows.length < 3) return null
+  const numericShare = (i: number): number => rows.filter((r) => numOf(r[i] ?? '') !== null).length / rows.length
+  // The dimension is the first column that is mostly NOT numbers: a label, a query, a page.
+  const dim = cols.findIndex((_, i) => numericShare(i) < 0.2)
+  if (dim < 0) return null
+
+  const numericCols = cols.map((_, i) => i).filter((i) => i !== dim && numericShare(i) > 0.8)
+  if (!numericCols.length) return null
+
+  const looksRate = (i: number): boolean => /%|rate|ctr/i.test(cols[i] ?? '')
+  const magnitude = (i: number): number => rows.reduce((n, r) => n + (numOf(r[i] ?? '') ?? 0), 0)
+
+  /**
+   * A COUNT IS A WHOLE NUMBER OF THINGS, and that is the test.
+   *
+   * Header words are unreliable across exports, but integrality is not: clicks, impressions,
+   * sessions and views are counts, while a clickthrough rate of 13.4 and an average position of 3.1
+   * are not, and neither can be summed. Without this the sniffer added up "Avg position" across 28
+   * rows and headlined a Search Console export with "582.6 avg position", which is arithmetic
+   * performed on something that was never a quantity.
+   */
+  const isCount = (i: number): boolean => {
+    const nums = rows.map((r) => numOf(r[i] ?? '')).filter((n): n is number => n !== null)
+    if (!nums.length) return false
+    const whole = nums.filter((n) => Number.isInteger(n)).length / nums.length
+    return whole > 0.8 && !/avg|average|position|rank|per\b/i.test(cols[i] ?? '')
+  }
+
+  const counts = numericCols.filter((i) => !looksRate(i) && isCount(i))
+  if (!counts.length) return null
+  const rateCol = numericCols.find((i) => looksRate(i))
+  const bySize = [...counts].sort((a, b) => magnitude(a) - magnitude(b))
+
+  /**
+   * WHICH COUNT IS THE HEADLINE.
+   *
+   * With a percentage column present, the two counts either side of it are its numerator and its
+   * denominator, and the NUMERATOR is the outcome somebody cares about: clicks, not impressions;
+   * conversions, not sessions. Picking the biggest column instead headlines a Search Console export
+   * with "50,210 impressions", which is the least interesting true thing in the table.
+   *
+   * With no rate column there is nothing to be a numerator of, so the biggest count is the subject.
+   */
+  const primary = rateCol !== undefined && counts.length >= 2 ? bySize[0] : bySize[bySize.length - 1]
+  const denom = rateCol !== undefined && counts.length >= 2 ? bySize[bySize.length - 1] : null
+  const rate =
+    rateCol !== undefined && denom !== null && denom !== primary && magnitude(denom) > magnitude(primary)
+      ? { col: rateCol, noun: rateNoun(cols[rateCol] ?? ''), denom, denomNoun: (cols[denom] ?? 'the denominator').toLowerCase() }
+      : undefined
+
+  return { dim, primary: { col: primary, noun: (cols[primary] ?? 'count').toLowerCase() }, rate }
+}
+
 /** Read a table. Pure, and fast enough to run inside a card render. */
 export function readDataset(ds: BrandDataset, now: number = Date.now()): DatasetRead {
   const prov = datasetProvenance(ds, now)
@@ -423,7 +508,13 @@ export function readDataset(ds: BrandDataset, now: number = Date.now()): Dataset
   if (!rows.length) return { ok: false, findings: [], caveats: ['Nothing to read yet. There are no numbers in this sheet.'] }
 
   const pid = pullId(ds.source?.kind === 'aggregator' ? ds.source.query : undefined) ?? ''
-  const shape = READ_SHAPE[pid]
+  /**
+   * A declared pull wins, because its columns are a contract. Failing that, work the shape out from
+   * the table: a pasted export deserves the same reading as the same data pulled through a connector.
+   */
+  const declared = READ_SHAPE[pid]
+  const shape = declared ?? sniffShape(ds, ds.rows.filter((r) => r.some((c) => (c ?? '').trim() !== '')))
+  const sniffed = !declared && !!shape
   const caveats: string[] = []
   const figures: CitableFigure[] = []
   const mk = (id: string, value: string, label: string, basis: CitableFigure['basis']): CitableFigure => ({
@@ -481,6 +572,15 @@ export function readDataset(ds: BrandDataset, now: number = Date.now()): Dataset
     caveats.push('This is the top 500 rows, so anything about the long tail is not in here.')
   }
   caveats.push('One pull is one snapshot. Nothing here says whether this is going up or down.')
+  if (sniffed) {
+    // The one thing a worked-out shape genuinely cannot know. Said plainly, and it does not stop the
+    // internal comparisons above from being true.
+    caveats.push(
+      prov.tier === 'uploaded'
+        ? 'These columns were worked out from the table itself, and we do not know what period the file covers, so nothing here is dated.'
+        : 'These columns were worked out from the table itself, and nothing here is dated.',
+    )
+  }
 
   /**
    * CONCENTRATION. Suppressed on a truncated table because the denominator is missing: the top ten
