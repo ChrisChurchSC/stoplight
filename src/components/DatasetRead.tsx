@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { readDataset } from '../domain/datasetRead'
+import { datasetProvenance, readDataset } from '../domain/datasetRead'
 import type { BrandDataset } from '../domain/brandDataset'
 
 /**
@@ -18,10 +18,18 @@ import type { BrandDataset } from '../domain/brandDataset'
 
 const MAX_FINDINGS = 4
 
-export function DatasetRead({ ds }: { ds: BrandDataset }) {
+export function DatasetRead({
+  ds,
+  onMakeProof,
+}: {
+  ds: BrandDataset
+  /** Turn a finding into a proof point. Absent when this reading is not on a card. */
+  onMakeProof?: (finding: { claim: string; value: string; period?: string; source: string }) => void
+}) {
   const [showAll, setShowAll] = useState(false)
   const [openCaveats, setOpenCaveats] = useState(false)
   // Keyed on what can change the reading, so dragging a card does not re-read 500 rows every frame.
+  const prov = datasetProvenance(ds)
   const read = useMemo(
     () => readDataset(ds),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,6 +62,19 @@ export function DatasetRead({ ds }: { ds: BrandDataset }) {
               {/* Naming the columns and the row count is what makes the claim checkable rather than
                   a thing the tool asserts. */}
               <span className="flow-read-detail">{f.detail}</span>
+              {/* Only offered on a table whose figures are citable in the first place. A sketched,
+                  edited or stale set cannot become proof: that would launder the exact number the
+                  rest of this file is holding back. */}
+              {onMakeProof && prov.citable && f.figures[0] && (
+                <button
+                  className="flow-src-more"
+                  onClick={() =>
+                    onMakeProof({ claim: f.claim, value: f.figures[0].value, period: f.figures[0].period, source: f.figures[0].source })
+                  }
+                >
+                  Make this a proof point
+                </button>
+              )}
             </div>
           ))}
           {read.findings.length > MAX_FINDINGS && (

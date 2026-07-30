@@ -2772,6 +2772,9 @@ export function FlowsView() {
     // carry others with it, and the card also picked up the group's .multi styling.
     setSelected(new Set())
     setBriefCollapsed(false)
+    // Returned so a caller that needs to link or wire the new card can do it without hunting for
+    // the last object added, which is a race as soon as anything else touches the board.
+    return id
   }
   const deleteObject = (id: string) => {
     // If it was attached to the campaign, its records go with it (unless another attached card
@@ -3083,6 +3086,51 @@ export function FlowsView() {
    * refusal the user cannot see is indistinguishable from the feature being broken: a sketched table
    * wired to a campaign contributes nothing, and without this panel that reads as a bug.
    */
+  /**
+   * TURN A FINDING INTO A PROOF POINT, on a card wired the way this one is.
+   *
+   * The number, the period and the source travel together onto the Rtb, because a figure that
+   * survives the trip without its provenance is a bare claim two edits later. It lands APPROVED
+   * FALSE, which now means something: an unvetted proof point contributes its claim to the writer
+   * and not its number, so this is a route from a measured table to a reviewable draft rather than
+   * a one click path from arithmetic to a stated claim in published copy.
+   *
+   * The new card is wired to whatever this Data source card is wired to, so the rule that a record
+   * counts only when a card carries it holds without the user having to redraw the line.
+   */
+  const makeProofFromFinding = (
+    nt: CanvasObject,
+    ds: BrandDataset,
+    f: { claim: string; value: string; period?: string; source: string },
+  ) => {
+    if (!brand) { setImportNote((m) => ({ ...m, [nt.id]: 'Pick a brand for this canvas first.' })); return }
+    const made = ensureProofRef(f.claim)
+    if (!made) { setImportNote((m) => ({ ...m, [nt.id]: 'Could not add that proof point.' })); return }
+    updateBrandProof(brand, made.ref.id, {
+      metric: f.value,
+      // The platform and the window, which is what makes the figure defensible when somebody asks
+      // where it came from a month later. The badge usually carries the period already, so it is
+      // only appended when it is missing: "Search Console, 90 days to Jul 25, 90 days to Jul 25"
+      // is what happens otherwise.
+      source: f.period && !f.source.includes(f.period) ? `${f.source}, ${f.period}` : f.source,
+      detail: f.claim,
+      approved: false,
+      fromDatasetId: ds.id,
+      figurePeriod: f.period,
+    })
+    // A card for it, wired to the same targets as the Data source card it came from. addObject
+    // places it itself, so the new card lands in the next free slot rather than on top of this one.
+    const cardId = addObject('proof-point')
+    setObjectRef(cardId, made.ref.id)
+    if (isAttached(nt.id)) attachToCampaign(cardId)
+    setImportNote((m) => ({
+      ...m,
+      [nt.id]: isAttached(nt.id)
+        ? 'Added a proof point with the number and where it came from, wired the same way this card is. Approve it before anyone quotes it.'
+        : 'Added a proof point. It is not wired to anything yet, so nothing reads it.',
+    }))
+  }
+
   const renderDatasetContribution = (nt: CanvasObject) => {
     const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
     if (!ds) return null
@@ -6282,7 +6330,7 @@ export function FlowsView() {
           {nt.kind === 'data-source' &&
           (() => {
             const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
-            return ds ? <DatasetRead ds={ds} /> : null
+            return ds ? <DatasetRead ds={ds} onMakeProof={(f) => makeProofFromFinding(nt, ds, f)} /> : null
           })()}
         {nt.kind === 'data-source' && renderDataSourcePicker(nt)}
         {nt.kind === 'data-source' && renderDatasetContribution(nt)}

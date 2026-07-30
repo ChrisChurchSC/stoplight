@@ -43,6 +43,16 @@ export interface Rtb {
    * withheld. Not persisted: it is a statement about what was sent, not about the record.
    */
   draft?: boolean
+  /**
+   * The data set this proof was made from, and the period its figure covers.
+   *
+   * Kept so a proof born from a table stays traceable to it: without them the number survives the
+   * trip and its provenance does not, which is how a measured figure turns into a bare claim two
+   * edits later. `figurePeriod` is also what stops it being quoted as current once the table it came
+   * from has gone stale.
+   */
+  fromDatasetId?: string
+  figurePeriod?: string
   /** This proof's track record — what it converted, where it fell flat. Starts
    *  empty; the rank/reuse intelligence reads this once outcomes accrue. */
   outcomes?: RtbOutcome[]
