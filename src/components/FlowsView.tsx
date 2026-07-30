@@ -48,6 +48,7 @@ import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
+import { CopyFields } from './CopyFields'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -7858,6 +7859,46 @@ export function FlowsView() {
                     {selPost.audience ? ` · ${selPost.audience}` : ''}
                     {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
                   </p>
+                  {/* THE COPY, EDITABLE, AND EVERY COMPONENT OF IT.
+                      This was read-only text at the bottom of the panel with empty components
+                      filtered out, so a post with no copy showed nothing at all and changing one
+                      word meant leaving the canvas for the review page. Same editor as the review
+                      page now, rather than a second one that drifts. */}
+                  {(() => {
+                    const flds = messagingFields(selPost.channel, selPost.assetType)
+                    const m = (selPost.messaging ?? {}) as Record<string, string>
+                    const known = new Set(flds.map((f) => f.key))
+                    const strays = Object.entries(m).filter(([k, v]) => !known.has(k) && v?.trim())
+                    return (
+                      <>
+                        <label className="flow-inspect-label">Copy</label>
+                        <p className="flow-inspect-note">This is the copy that ships. It saves as you type.</p>
+                        <CopyFields
+                          fields={flds}
+                          values={m}
+                          stopKeys
+                          setField={(key, value) => void updateRow(selPost.id, { messaging: { ...m, [key]: value } })}
+                        />
+                        {/* Copy on the row under a key this format does not have. clampToLimit is a
+                            no-op on these (fieldByKey.get returns undefined), so nothing has checked
+                            their length, and saying so is more useful than rendering them as peers. */}
+                        {strays.length > 0 && (
+                          <>
+                            <label className="flow-inspect-label" style={{ marginTop: 14 }}>Not part of this format</label>
+                            <p className="flow-inspect-note">
+                              This copy is on the asset but it is not one of this format's components. Nothing checked its length.
+                            </p>
+                            {strays.map(([k, v]) => (
+                              <div key={k} className="flow-post-field">
+                                <label className="flow-inspect-label">{k}</label>
+                                <div className="flow-post-value">{v}</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
                   {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
                       Same list, same rules: what it holds reaches the writer for this one asset. */}
                   {/* WHICH FIGURES ACTUALLY LANDED, matched against the copy rather than reported by
@@ -8026,21 +8067,7 @@ export function FlowsView() {
                       </div>
                     )}
                   </div>
-                  {(() => {
-                    // Show each field in schema order with its proper label (not the raw
-                    // key), then any messaging keys the schema doesn't know about.
-                    const flds = messagingFields(selPost.channel, selPost.assetType)
-                    const m = (selPost.messaging ?? {}) as Record<string, string>
-                    const known = new Set(flds.map((f) => f.key))
-                    const rows: [string, string, string][] = flds.filter((f) => m[f.key]?.trim()).map((f) => [f.key, f.label, m[f.key]])
-                    for (const [k, v] of Object.entries(m)) if (!known.has(k) && v?.trim()) rows.push([k, k, v])
-                    return rows.map(([k, label, v]) => (
-                      <div key={k} className="flow-post-field">
-                        <label className="flow-inspect-label">{label}</label>
-                        <div className="flow-post-value">{v}</div>
-                      </div>
-                    ))
-                  })()}
+
                 </div>
               </>
             ) : selDeliv ? (

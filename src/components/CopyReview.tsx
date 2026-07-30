@@ -1,3 +1,4 @@
+import { CopyFields } from './CopyFields'
 import { useEffect, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typeLabel, typesFor } from '../domain/channelAssetTypes'
@@ -341,59 +342,39 @@ export function CopyReview() {
             </div>
           )}
 
-          {fields.map((fl) => {
-            const val = map[fl.key] ?? ''
-            const flag = fieldFlag(fl.key)
-            const over = fl.hardLimit ? val.length > fl.hardLimit : false
-            return (
-              <label className={`copy-field${flag ? ' flagged' : ''}`} key={fl.key}>
-                <span className="copy-label">
-                  {fl.label}
-                  <span className={`copy-count${over ? ' over' : ''}`}>
-                    {val.length}
-                    {fl.hardLimit ? `/${fl.hardLimit}` : ''}
-                  </span>
-                </span>
-                <textarea
-                  className={fl.multiline ? 'tall' : ''}
-                  value={val}
-                  placeholder={`${fl.label}…`}
-                  onChange={(e) => setField(fl.key, e.target.value)}
-                />
-                {flag && (
-                  <div className="msg-flag">
-                    <span className="flag-tag">drift</span>
-                    <div>
-                      <div className="flag-reason">{flag.issue}</div>
-                      {flag.suggestion && <div className="flag-suggest">→ {flag.suggestion}</div>}
-                    </div>
-                  </div>
-                )}
-                {rtbs.length > 0 && (
-                  <div className="rtb-row">
-                    <span className="rtb-tag-label">Proof</span>
-                    {rtbs.map((rtb) => {
-                      const on = (row.rtbMap?.[fl.key] ?? []).includes(rtb.id)
-                      return (
-                        <button
-                          key={rtb.id}
-                          type="button"
-                          className={`rtb-chip${on ? ' on' : ''}`}
-                          title={rtb.detail}
-                          onClick={() => toggleRtb(fl.key, rtb.id)}
-                        >
-                          {rtb.label}
-                        </button>
-                      )
-                    })}
-                    {val.trim() && (row.rtbMap?.[fl.key] ?? []).length === 0 && (
-                      <span className="rtb-warn">unsupported claim</span>
-                    )}
-                  </div>
-                )}
-              </label>
-            )
-          })}
+          <CopyFields
+            fields={fields}
+            values={map}
+            setField={setField}
+            flagOf={(key) => {
+              const f = fieldFlag(key)
+              return f ? { issue: f.issue, suggestion: f.suggestion } : undefined
+            }}
+            renderExtras={(fl, val) =>
+              rtbs.length > 0 ? (
+                <div className="rtb-row">
+                  <span className="rtb-tag-label">Proof</span>
+                  {rtbs.map((rtb) => {
+                    const on = (row.rtbMap?.[fl.key] ?? []).includes(rtb.id)
+                    return (
+                      <button
+                        key={rtb.id}
+                        type="button"
+                        className={`rtb-chip${on ? ' on' : ''}`}
+                        title={rtb.detail}
+                        onClick={() => toggleRtb(fl.key, rtb.id)}
+                      >
+                        {rtb.label}
+                      </button>
+                    )
+                  })}
+                  {val.trim() && (row.rtbMap?.[fl.key] ?? []).length === 0 && (
+                    <span className="rtb-warn">unsupported claim</span>
+                  )}
+                </div>
+              ) : null
+            }
+          />
 
           {(row.body !== undefined || row.mediaType === 'text') && (
             <label className="copy-field">
