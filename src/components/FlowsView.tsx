@@ -8,7 +8,7 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
-import { downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
+import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -34,12 +34,22 @@ import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPi
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
-import { messagingFields } from '../domain/messaging'
+import { messagingAllText, messagingFields } from '../domain/messaging'
 import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
+import { AggregatorConnect } from './AggregatorConnect'
+import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
+import { citableFigures, datasetProvenance } from '../domain/datasetRead'
+import { typeLabel } from '../domain/channelAssetTypes'
+import { isoToLocalInput, localInputToIso } from '../lib/format'
+import type { BrandDataset } from '../domain/brandDataset'
+import { sourceLabel } from '../domain/analyticsSources'
+import { SourceMark } from './SourceMark'
+import { DatasetRead } from './DatasetRead'
+import { CopyFields } from './CopyFields'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -96,6 +106,15 @@ type TagOps = {
 // Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
 // Segments / Media mix), so a tag reads the same as the page it comes from.
 const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
+  // The same cylinder the Data source card wears on the canvas, so a data set tag reads as the card
+  // it came from.
+  dataset: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="6" rx="7.5" ry="3" />
+      <path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6" />
+      <path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" />
+    </svg>
+  ),
   // Same speech bubble the Message card carries on the canvas, so a message tag reads as the
   // thing it came from rather than as a new concept.
   message: <path d="M21 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 21 11.5z" />,
@@ -142,7 +161,7 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season' }
+const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season', dataset: 'Data set' }
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -313,13 +332,6 @@ export type BoardObject = CanvasObject | FlowDeliverable
  * campaign's refs at once.
  */
 // Data-source cards link to an established connector (mirrors the ConnectorsPage list).
-const CONNECTOR_SOURCES: { id: string; label: string }[] = [
-  { id: 'google-analytics', label: 'Google Analytics' },
-  { id: 'search-console', label: 'Search Console' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'resend', label: 'Resend' },
-]
-
 const CampaignTile = () => (
   <span className="flow-tile" style={{ background: `color-mix(in srgb, ${CAMPAIGN_TONE} 20%, transparent)`, color: CAMPAIGN_TONE }}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -881,9 +893,40 @@ export function FlowsView() {
   const addSeason = useTrafficStore((s) => s.addSeason)
   const updateSeason = useTrafficStore((s) => s.updateSeason)
   const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
+  const refreshBrandDataset = useTrafficStore((s) => s.refreshBrandDataset)
+  const outputTypes = useTrafficStore((s) => s.outputTypes)
+  const addOutputType = useTrafficStore((s) => s.addOutputType)
+  const datasetUndo = useTrafficStore((s) => s.datasetUndo)
+  const undoDatasetRefresh = useTrafficStore((s) => s.undoDatasetRefresh)
   /** Per-card import feedback: what landed, or why nothing did. */
   const [importNote, setImportNote] = useState<Record<string, string>>({})
   const importFileRef = useRef<HTMLInputElement | null>(null)
+  /** Which card is being sketched, and what was typed into it. */
+  const [composeFor, setComposeFor] = useState<string | null>(null)
+  const [composePrompt, setComposePrompt] = useState('')
+  const [composing, setComposing] = useState(false)
+  /** Which card has the aggregator panel open, and which provider it was opened on. */
+  const [connectFor, setConnectFor] = useState<string | null>(null)
+  const [connectProvider, setConnectProvider] = useState<AggregatorProvider | undefined>(undefined)
+  /** Which channel was picked, so the panel opens on that channel's questions and no others. */
+  const [connectService, setConnectService] = useState<string | undefined>(undefined)
+  /** Which card is waiting for a paste. */
+  const [pasteFor, setPasteFor] = useState<string | null>(null)
+  /** Whether the picker is showing every data set or the three most recent. */
+  const [showAllSets, setShowAllSets] = useState(false)
+  /** Which card is re-pulling, and the grid it replaced, so the click is reversible for the session. */
+  const [refreshFor, setRefreshFor] = useState<string | null>(null)
+  /** The name being typed for a new custom format, or null when the form is shut. */
+  const [namingFormat, setNamingFormat] = useState<string | null>(null)
+
+  /**
+   * The providers that are actually usable right now, listed in the card's own picker.
+   *
+   * Fetched once for the view rather than per card: it is one small POST and the answer is the same
+   * for every Data source card on the board. Anything not implemented AND configured never appears,
+   * so the picker offers only things that will work.
+   */
+
   const importTargetRef = useRef<string | null>(null)
   /**
    * Read a delimited file into a new data set and link the card to it.
@@ -892,10 +935,97 @@ export function FlowsView() {
    * rows dropped, and the row count. A silent import is how you end up writing copy from the wrong
    * column of somebody's export.
    */
+  /**
+   * Sketch a data set from a description, when there is no file and nothing connected.
+   *
+   * The result is marked composite in the data set itself, not just in this component's state, so
+   * every later reader can tell invented figures from measured ones. That marking is the whole
+   * reason this is allowed to exist: a table of numbers looks equally authoritative however it got
+   * there, and this is the one route where none of them were counted.
+   */
+  const composeDataset = async (cardId: string) => {
+    const said = composePrompt.trim()
+    if (!said) return
+    // Was `!said || !brand`, so pressing Sketch it with no brand bound did nothing whatsoever: no
+    // spinner, no sentence, no change. The upload path already handled the identical case out loud.
+    if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Pick a brand for this canvas first. Then I can sketch a table for it.' })); return }
+    setComposing(true)
+    setImportNote((m) => { const { [cardId]: _d, ...rest } = m; return rest })
+    try {
+      const profile = clientProfiles[brand]
+      const res = await fetch('/api/compose-dataset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: said, brand: { name: brand, oneLiner: profile?.oneLiner } }),
+      })
+      if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `compose ${res.status}`)
+      const d = (await res.json()) as { name?: string; columns?: string[]; rows?: string[][]; caveat?: string }
+      if (!d.columns?.length) { setImportNote((m) => ({ ...m, [cardId]: 'Could not sketch that one. Try describing the columns you want.' })); return }
+      const id = importBrandDataset(brand, d.name || 'Sketched data set', d.columns, d.rows ?? [], {
+        kind: 'composite',
+        prompt: said,
+        generatedAt: Date.now(),
+      })
+      if (!id) return
+      setObjectRef(cardId, id)
+      if (isAttached(cardId)) attachToCampaign(cardId)
+      markCardDirty(cardId)
+      setComposeFor(null)
+      setComposePrompt('')
+      setImportNote((m) => ({ ...m, [cardId]: d.caveat || 'Sketched. Every figure here is invented.' }))
+    } catch (e) {
+      const noKey = (e as Error)?.message === 'NO_KEY'
+      setImportNote((m) => ({ ...m, [cardId]: noKey ? 'No model key set, so nothing can be sketched.' : 'Could not sketch that one.' }))
+    } finally {
+      setComposing(false)
+    }
+  }
+  /**
+   * PASTE A TABLE.
+   *
+   * The likeliest first move of somebody with a spreadsheet open in another tab is to select cells
+   * and hit paste, and until now the card answered that with a message telling them to go to Excel's
+   * File menu. The parser was already written and already sniffs tabs, which is exactly what a
+   * clipboard range is: this is a route to it, not new machinery.
+   */
+  const pasteTable = (cardId: string, text: string) => {
+    if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Pick a brand for this canvas first. A data set belongs to a brand.' })); return }
+    const t = parseTable(text)
+    // One cell is somebody copying a value, not a table. Landing a one by one grid would be worse
+    // than saying so.
+    if (!t.columns.length || (t.columns.length === 1 && t.rows.length === 0)) {
+      setImportNote((m) => ({ ...m, [cardId]: 'That is one cell. Copy the whole range, headers included, and paste again.' }))
+      return
+    }
+    const id = importBrandDataset(brand, 'Pasted table', t.columns, t.rows, {
+      kind: 'upload',
+      filename: 'Pasted',
+      importedAt: Date.now(),
+      rowCount: t.rows.length,
+    })
+    // The store refused the write and has already said why. Do not clear the card's existing link on
+    // top of that by pointing it at an empty id.
+    if (!id) return
+    setObjectRef(cardId, id)
+    if (isAttached(cardId)) attachToCampaign(cardId)
+    markCardDirty(cardId)
+    const delim = t.delimiter === '\t' ? 'tab' : t.delimiter === ';' ? 'semicolon' : 'comma'
+    const skipped = t.skippedBlankRows ? `, ${t.skippedBlankRows} blank row${t.skippedBlankRows === 1 ? '' : 's'} skipped` : ''
+    setImportNote((m) => ({
+      ...m,
+      [cardId]: `${t.rows.length} row${t.rows.length === 1 ? '' : 's'} and ${t.columns.length} columns, ${delim} separated${skipped}.`,
+    }))
+  }
+
   const importTableFile = async (cardId: string, file: File) => {
     if (!brand) { setImportNote((m) => ({ ...m, [cardId]: 'Bind this canvas to a brand first.' })); return }
     if (!isParsableTableFile(file.name)) {
-      setImportNote((m) => ({ ...m, [cardId]: `${file.name.split('.').pop()?.toUpperCase() ?? 'That'} is not readable yet. Export it as CSV and try again.` }))
+      // Points at the route that works right now rather than sending somebody to another
+      // application and back. Paste runs the same parser.
+      setImportNote((m) => ({
+        ...m,
+        [cardId]: `${file.name.split('.').pop()?.toUpperCase() ?? 'That'} files are not readable yet. Open it, select the cells you want, copy, and paste them here instead.`,
+      }))
       return
     }
     try {
@@ -909,7 +1039,9 @@ export function FlowsView() {
         importedAt: Date.now(),
         rowCount: t.rows.length,
       })
+      if (!id) return
       setObjectRef(cardId, id)
+      if (isAttached(cardId)) attachToCampaign(cardId)
       markCardDirty(cardId)
       const delim = t.delimiter === '\t' ? 'tab' : t.delimiter === ';' ? 'semicolon' : 'comma'
       const skipped = t.skippedBlankRows ? `, ${t.skippedBlankRows} blank row${t.skippedBlankRows === 1 ? '' : 's'} skipped` : ''
@@ -928,7 +1060,90 @@ export function FlowsView() {
 
   const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
-  const brandDatasets = useMemo(() => allBrandDatasets.filter((d) => d.brand === brand), [allBrandDatasets, brand])
+  const brandDatasets = useMemo(() => {
+    // NEWEST FIRST. A brand accumulates data sets and the useful one is almost always the last one
+    // you made, which was at the bottom of an unsorted list.
+    const when = (d: BrandDataset): number => {
+      const src = d.source
+      if (!src) return 0
+      if (src.kind === 'aggregator') return src.syncedAt ?? 0
+      if (src.kind === 'upload') return src.importedAt
+      if (src.kind === 'composite') return src.generatedAt
+      return 0
+    }
+    return allBrandDatasets.filter((d) => d.brand === brand).sort((a, b) => when(b) - when(a))
+  }, [allBrandDatasets, brand])
+  /**
+   * The ANALYTICS CHANNELS you can pull from, which is what the picker names.
+   *
+   * A warehouse is plumbing. Nobody sits down wanting to "pull from Summer"; they want Search
+   * Console. So the options are channels, each carrying the provider that serves it, and the routing
+   * is the app's problem rather than the user's.
+   *
+   * Built by asking each ready provider what it can answer. Deduped by channel, preferring a DIRECT
+   * connection over a warehouse when both offer the same one: same question, fewer hops, fresher
+   * answer. The sub-line says which route it took, so the choice is visible without being a decision.
+   */
+  const [channelOptions, setChannelOptions] = useState<
+    { service: string; provider: AggregatorProvider; sourceId: string; sourceLabel: string; direct: boolean }[]
+  >([])
+  /**
+   * WHY there are no channels, which is a different sentence in each case and was silence in all of
+   * them. Swallowing every failure into an empty list makes a broken status endpoint, an unbound
+   * brand and a genuinely unconnected account look identical, and all three look like the feature
+   * was never built.
+   */
+  const [channelState, setChannelState] = useState<'checking' | 'ready' | 'none' | 'no-brand' | 'error'>('checking')
+  useEffect(() => {
+    let live = true
+    const call = async (body: unknown): Promise<unknown> => {
+      const res = await fetch('/api/aggregator', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      return res.json()
+    }
+    void (async () => {
+      if (!brand) { setChannelState('no-brand'); setChannelOptions([]); return }
+      setChannelState('checking')
+      try {
+        const s = (await call({ op: 'status' })) as AggregatorStatus
+        const ready = s.providers.filter((p) => p.implemented && p.configured).map((p) => p.id)
+        if (!live) return
+        const found: { service: string; provider: AggregatorProvider; sourceId: string; sourceLabel: string; direct: boolean }[] = []
+        for (const id of ready) {
+          try {
+            const r = (await call({ op: 'sources', provider: id, brand, website: clientProfiles[brand]?.website })) as {
+              sources: { id: string; label: string; services: string[] }[]
+            }
+            const direct = specKind(aggregatorSpec(id) ?? { id, label: '', blurb: '', envVar: '', implemented: true }) === 'channel'
+            for (const src of r.sources) {
+              for (const service of src.services) {
+                found.push({ service, provider: id, sourceId: src.id, sourceLabel: src.label, direct })
+              }
+            }
+          } catch {
+            // One provider being unreachable must not cost the others their entries.
+          }
+        }
+        if (!live) return
+        const byService = new Map<string, (typeof found)[number]>()
+        for (const f of found) {
+          const seen = byService.get(f.service)
+          if (!seen || (f.direct && !seen.direct)) byService.set(f.service, f)
+        }
+        const opts = [...byService.values()]
+        setChannelOptions(opts)
+        setChannelState(opts.length ? 'ready' : 'none')
+      } catch {
+        // Upload, paste and describe still work, so the card is not stuck. It just has to say so.
+        if (live) { setChannelOptions([]); setChannelState('error') }
+      }
+    })()
+    return () => { live = false }
+  }, [brand])
   // The brand's Segments records (the Segments page IS the brand's audiences).
   const brandSegments = clientAudiences[brand] ?? []
   const audienceNames = useMemo(() => brandSegments.map((a) => a.name), [brandSegments])
@@ -1944,6 +2159,14 @@ export function FlowsView() {
    * invents nothing.
    */
   const presetSourcesFor = (nt: CanvasObject): DirectionPresetSources => {
+    // A Data source card's own figures, so "The figure" offers what the table actually says.
+    const cardFigures =
+      nt.kind === 'data-source' && nt.refId
+        ? (() => {
+            const ds = allBrandDatasets.find((d) => d.id === nt.refId)
+            return ds ? citableFigures(ds).map((f) => ({ value: f.value, label: f.label })) : undefined
+          })()
+        : undefined
     const aud = nt.kind === 'audience' && nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined
     const per = nt.kind === 'person' && nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined
     const profile = brand ? clientProfiles[brand] : undefined
@@ -1975,6 +2198,7 @@ export function FlowsView() {
       voice: profile?.voice,
       hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean),
       proof: brandProof.map((p) => ({ label: p.label, metric: p.metric })),
+      figures: cardFigures,
       messages: messages.map((m) => ({ angle: m.angle })),
       persona: per
         ? { optimizingFor: per.optimizingFor, saysLike: per.saysLike, usesNow: per.usesNow, hobbies: per.hobbies }
@@ -2424,6 +2648,21 @@ export function FlowsView() {
     // graph from the SAVED board — so drawing a wire and hitting Generate inside that window would
     // write copy that ignores the wire you just drew. buildFlow already does this for the same reason.
     saveFlowBoard(boardSnapshot(boardKey))
+    /**
+     * REFUSE BEFORE THE WIPE.
+     *
+     * The clear below is deliberate: draftCopy only fills EMPTY components, so a real rewrite needs
+     * the old copy gone first. But draftCopy then discovers a brand-less or unwired campaign and
+     * refuses, writing nothing back, which turned Generate into a delete button with an explanation
+     * attached: every asset lost its copy and the notice talked about why it had not generated.
+     *
+     * Checked AFTER the board flush above, because the wiring it tests is what that flush persists.
+     */
+    const blocked = useTrafficStore.getState().copyBlockerFor(viewName)
+    if (blocked) {
+      useTrafficStore.getState().setBrandNotice(`${blocked} Nothing was changed.`)
+      return
+    }
     setRegenerating(true)
     try {
       await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
@@ -2555,6 +2794,9 @@ export function FlowsView() {
     // carry others with it, and the card also picked up the group's .multi styling.
     setSelected(new Set())
     setBriefCollapsed(false)
+    // Returned so a caller that needs to link or wire the new card can do it without hunting for
+    // the last object added, which is a race as soon as anything else touches the board.
+    return id
   }
   const deleteObject = (id: string) => {
     // If it was attached to the campaign, its records go with it (unless another attached card
@@ -2583,6 +2825,9 @@ export function FlowsView() {
    * re-implementing it here and drifting.
    */
   /** Kinds whose record this card can create. Freeform kinds have no record; Data source has its own. */
+  // 'data-source' is deliberately ABSENT: createRecordForKind resolves an existing data set for it and
+// never creates one, so offering "+ New data set" through this path would promise something it does
+// not do. The card's own picker is where a data set is made.
   const CREATABLE_KINDS = new Set<CanvasObjectKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger', 'brand', 'product'])
   const createRecordForKind = (kind: CanvasObjectKind, rawName: string): { id: string; label: string } | null => {
     const nm = rawName.trim()
@@ -2595,6 +2840,21 @@ export function FlowsView() {
       case 'proof-point': {
         const r = ensureProofRef(nm)
         return r ? { id: r.ref.id, label: r.ref.label } : null
+      }
+      /**
+       * A data set is RESOLVED, never created.
+       *
+       * Every other kind here mints a record from a name, because a name is most of what an audience
+       * or a message is. A data set is a table: minting one from a name produces an empty
+       * spreadsheet titled after a question nobody can answer, and a card pointing at nothing. The
+       * agent gets a skip that names the fix instead.
+       */
+      case 'data-source': {
+        const key = nm.toLowerCase()
+        const hit =
+          brandDatasets.find((d) => d.name.trim().toLowerCase() === key) ??
+          brandDatasets.find((d) => d.name.trim().toLowerCase().includes(key))
+        return hit ? { id: hit.id, label: hit.name } : null
       }
       // The records slices take a Partial and return the new id. Brand-scoped so the record shows
       // up in the same rail the card was dropped in.
@@ -2686,9 +2946,13 @@ export function FlowsView() {
     }
     return (
       <>
+        {/* DISCUSSION, NOT COMMENTS. The store has a separate `comments` slice keyed by the same row
+            id holding ingested platform comments, surfaced by CommentDrawer and CommentInbox. One
+            word for two features on one card is how somebody answers a customer in a team note. */}
         <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-          Comments{open.length ? ` · ${open.length}` : ''}
+          Discussion{open.length ? ` · ${open.length}` : ''}
         </label>
+        <p className="flow-inspect-note">For your team. None of this is sent to the writer.</p>
         {thread.length > 0 && (
           <div className="flow-cmt-list">
             {[...open, ...done].map((c: CardComment) => (
@@ -2838,6 +3102,414 @@ export function FlowsView() {
    * the layered glyph, the name, then what is inside. Draggable onto the canvas, and a double-click
    * opens it in its own tab.
    */
+  /**
+   * The Data source picker, in the INSPECTOR.
+   *
+   * It used to sit on the card, which made the card the only kind you authored on the canvas itself:
+   * a select, a connect flow, a prompt box and a file dialog stacked under a node that is meant to be
+   * read at a glance. Every other kind puts its authoring here and leaves the card as the view of
+   * what was chosen, and this now matches.
+   */
+  /**
+   * The Data source picker, in the INSPECTOR.
+   *
+   * It used to sit on the card, which made this the only kind you authored on the canvas itself: a
+   * select, a connect flow, a prompt box and a file dialog stacked under a node meant to be read at a
+   * glance. Every other kind authors here and leaves the card as the view of what was chosen.
+   *
+   * BUTTONS, NOT A DROPDOWN. A select hides every option until you open it and shows no state beyond
+   * the current value, which is the wrong shape for a list where each entry is a different KIND of
+   * action: link one you have, pull from a source, upload, describe, start blank. As buttons they are
+   * all visible, and the one this card is actually on carries a check.
+   */
+  /**
+   * WHAT THIS TABLE WILL SEND, listed exactly as the writer will receive it.
+   *
+   * Modelled on renderResolvedDirection, which already does this job for direction under "What this
+   * will be told". The point is that every refusal in datasetRead is invisible otherwise, and a
+   * refusal the user cannot see is indistinguishable from the feature being broken: a sketched table
+   * wired to a campaign contributes nothing, and without this panel that reads as a bug.
+   */
+  /**
+   * TURN A FINDING INTO A PROOF POINT, on a card wired the way this one is.
+   *
+   * The number, the period and the source travel together onto the Rtb, because a figure that
+   * survives the trip without its provenance is a bare claim two edits later. It lands APPROVED
+   * FALSE, which now means something: an unvetted proof point contributes its claim to the writer
+   * and not its number, so this is a route from a measured table to a reviewable draft rather than
+   * a one click path from arithmetic to a stated claim in published copy.
+   *
+   * The new card is wired to whatever this Data source card is wired to, so the rule that a record
+   * counts only when a card carries it holds without the user having to redraw the line.
+   */
+  const makeProofFromFinding = (
+    nt: CanvasObject,
+    ds: BrandDataset,
+    f: { claim: string; value: string; period?: string; source: string },
+  ) => {
+    if (!brand) { setImportNote((m) => ({ ...m, [nt.id]: 'Pick a brand for this canvas first.' })); return }
+    const made = ensureProofRef(f.claim)
+    if (!made) { setImportNote((m) => ({ ...m, [nt.id]: 'Could not add that proof point.' })); return }
+    updateBrandProof(brand, made.ref.id, {
+      metric: f.value,
+      // The platform and the window, which is what makes the figure defensible when somebody asks
+      // where it came from a month later. The badge usually carries the period already, so it is
+      // only appended when it is missing: "Search Console, 90 days to Jul 25, 90 days to Jul 25"
+      // is what happens otherwise.
+      source: f.period && !f.source.includes(f.period) ? `${f.source}, ${f.period}` : f.source,
+      detail: f.claim,
+      approved: false,
+      fromDatasetId: ds.id,
+      figurePeriod: f.period,
+    })
+    // A card for it, wired to the same targets as the Data source card it came from. addObject
+    // places it itself, so the new card lands in the next free slot rather than on top of this one.
+    const cardId = addObject('proof-point')
+    setObjectRef(cardId, made.ref.id)
+    if (isAttached(nt.id)) attachToCampaign(cardId)
+    setImportNote((m) => ({
+      ...m,
+      [nt.id]: isAttached(nt.id)
+        ? 'Added a proof point with the number and where it came from, wired the same way this card is. Approve it before anyone quotes it.'
+        : 'Added a proof point. It is not wired to anything yet, so nothing reads it.',
+    }))
+  }
+
+  const renderDatasetContribution = (nt: CanvasObject) => {
+    const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
+    if (!ds) return null
+    const prov = datasetProvenance(ds)
+    const figures = citableFigures(ds)
+    // Same board assembly the "Applied to" readout uses, so the two cannot disagree about whether
+    // this card reaches anything.
+    const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+    const wired = isAttached(nt.id) || downstreamTargets(liveBoard, nt.id).length > 0
+
+    return (
+      <div className="flow-insp-send">
+        <label className="flow-inspect-label">
+          {/* The count belongs to what is ACTUALLY sent. Counting figures on an unwired card put
+              "will send, 6" directly above "Nothing yet". */}
+          {wired && figures.length ? `What this table will send, ${figures.length}` : 'What this table will send'}
+        </label>
+        {!wired && (
+          // The card can be perfect and still reach nothing. Said here because the "Applied to"
+          // block renders null when a card points at nothing, so today the panel is silent.
+          <span className="flow-send-none">
+            Nothing yet. Draw a line from this card to the campaign brief, or to one deliverable, and
+            its figures go to the writer.
+          </span>
+        )}
+        {wired && figures.length === 0 && <span className="flow-send-none">Nothing. {prov.why}</span>}
+        {wired &&
+          figures.map((f) => (
+            <div key={f.id} className="flow-send-row">
+              <span className="flow-send-val">{f.value}</span>
+              <span className="flow-send-lab">
+                {f.label}
+                {f.period ? `, in the ${f.period}` : ''}
+              </span>
+            </div>
+          ))}
+        {wired && figures.length > 0 && <span className="flow-send-foot">{prov.badge}</span>}
+        {wired && figures.length > 0 && prov.partial && (
+          <span className="flow-send-held">
+            Totals and shares are held back. The pull stopped at the row cap, so adding these up would
+            not give you a total.
+          </span>
+        )}
+        {/* The heuristic writer reads neither direction nor figures, so a fallback run silently
+            ignores everything on this panel. Better said once here than discovered in the output. */}
+        <span className="flow-send-foot">If the model is unreachable, the fallback writer uses none of this.</span>
+      </div>
+    )
+  }
+
+  const renderDataSourcePicker = (nt: CanvasObject) => {
+    const linked = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
+    // The check follows the LINKED DATA SET, and a provider row wears it when that set came from
+    // there: "connected" for this card means one table, not an account-level state.
+    const linkedService = linked?.source?.kind === 'aggregator' ? linked.source.service : undefined
+    const Row = ({
+      id,
+      mark,
+      label,
+      sub,
+      on,
+      onClick,
+    }: { id: string; mark?: string; label: string; sub?: string; on?: boolean; onClick: () => void }) => (
+      <button key={id} className={`flow-src-opt${on ? ' on' : ''}`} onClick={onClick}>
+        <span className="flow-src-mark">{mark ? <SourceMark id={mark} /> : <span className="flow-src-dot" />}</span>
+        <span className="flow-src-txt">
+          <span className="flow-src-name">{label}</span>
+          {sub && <span className="flow-src-sub">{sub}</span>}
+        </span>
+        {on && (
+          <span className="flow-src-tick" aria-label="linked">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </span>
+        )}
+      </button>
+    )
+    return (
+      <div className="flow-insp-src">
+        <label className="flow-inspect-label">Source</label>
+        <div className="flow-src-list">
+          {/* PULL IT AGAIN. Only when the linked set records the question and window it came from, which
+              is what makes this one click rather than four. */}
+          {linked?.source?.kind === 'aggregator' &&
+            parsePullQuery(linked.source.query) &&
+            Row({
+              id: 'refresh',
+              mark: linked.source.service,
+              label: 'Pull it again',
+              sub: 'Same question, same window, fresh numbers',
+              onClick: () => setRefreshFor(nt.id),
+            })}
+          {refreshFor === nt.id && linked?.source?.kind === 'aggregator' && (() => {
+            const q = parsePullQuery(linked.source.query)
+            const src = linked.source
+            return q ? (
+              <AggregatorConnect
+                initialProvider={src.provider}
+                initialService={src.service}
+                initialPull={q.pullId}
+                initialDays={q.days}
+                refreshing
+                brand={brand}
+                website={clientProfiles[brand]?.website}
+                onLand={(_name, columns, rows, provider, service, query, truncated, coverage) => {
+                  // Replaces the grid on the SAME id, so every card pointing at this set follows.
+                  const prev = refreshBrandDataset(linked.id, columns, rows, {
+                    kind: 'aggregator',
+                    provider,
+                    service,
+                    query,
+                    syncedAt: Date.now(),
+                    truncated,
+                    rowCount: rows.length,
+                    coverage,
+                  })
+                  return prev ? linked.id : ''
+                }}
+                onDone={(_id, note) => {
+                  setRefreshFor(null)
+                  markCardDirty(nt.id)
+                  setImportNote((m) => ({ ...m, [nt.id]: note }))
+                }}
+                onCancel={() => setRefreshFor(null)}
+              />
+            ) : null
+          })()}
+          {/* Survives the inspector closing, which is what killed the previous version of this: the
+              refresh lands, the panel shuts, and the undo went with it. */}
+          {datasetUndo && linked && datasetUndo.dsId === linked.id && (
+            <button
+              className="flow-src-more"
+              onClick={() => {
+                undoDatasetRefresh()
+                setImportNote((m) => ({ ...m, [nt.id]: 'Put back the table that was there before.' }))
+              }}
+            >
+              Undo the last pull
+            </button>
+          )}
+          {/* THE CARD'S OWN SET FIRST, even when it belongs to another brand.
+              The card resolves from every data set while this list renders only this brand's, so a
+              card holding another brand's table read as nothing selected on a plainly linked card. */}
+          {linked && !brandDatasets.some((d) => d.id === linked.id) &&
+            Row({
+              id: linked.id,
+              mark: linked.source?.kind === 'aggregator' ? linked.source.service : undefined,
+              label: linked.name || 'Untitled data set',
+              sub: `Belongs to ${linked.brand}`,
+              on: true,
+              onClick: () => {},
+            })}
+          {/* A REF THAT RESOLVES TO NOTHING. Deleting a set used to leave the card wearing a linked
+              spine over a mini sheet reading "No data set linked yet", with nothing to do about it. */}
+          {nt.refId && !linked && (
+            <span className="flow-src-why">The data set this card pointed at is gone. Pick another one below.</span>
+          )}
+          {/* Data sets this brand already has, newest first so a fresh pull is at the top. Capped,
+              because a brand accumulates these and the four ways to make one have to stay on screen. */}
+          {(showAllSets ? brandDatasets : brandDatasets.slice(0, 3)).map((d) =>
+            Row({
+              id: d.id,
+              mark: d.source?.kind === 'aggregator' ? d.source.service : undefined,
+              label: d.name || 'Untitled data set',
+              // One source of truth, so a row cannot read "Search Console" here and "Edited" on the
+              // card. The date distinguishes two pulls of one question made a week apart.
+              sub: `${datasetProvenance(d).badge} · ${d.rows.length} rows`,
+              on: nt.refId === d.id,
+              onClick: () => {
+                // A card already wired to the campaign must materialize the NEW data set onto it,
+                // the same way creating a record from an attached card does. Without this the wire
+                // stays drawn while the campaign's references still name the old table.
+                setObjectRef(nt.id, d.id)
+                if (isAttached(nt.id)) attachToCampaign(nt.id)
+              },
+            }),
+          )}
+          {brandDatasets.length > 3 && (
+            <button className="flow-src-more" onClick={() => setShowAllSets((v) => !v)}>
+              {showAllSets ? 'Show fewer' : `Show all ${brandDatasets.length} data sets`}
+            </button>
+          )}
+          {/* WHY THERE IS NOTHING TO PULL FROM, said in the case's own words. Every one of these was
+              silence before, which reads as the feature being broken rather than unconnected. */}
+          {channelState !== 'ready' && (
+            <span className="flow-src-why">
+              {channelState === 'checking' && 'Checking what is connected'}
+              {channelState === 'no-brand' && 'Pick a brand for this canvas first. A data set belongs to a brand.'}
+              {channelState === 'none' &&
+                'Nothing is connected yet, so there is nothing to pull. You can still paste a table, upload a CSV, or start a blank sheet.'}
+              {channelState === 'error' &&
+                'Could not check what is connected. Paste a table or start a blank sheet in the meantime.'}
+            </span>
+          )}
+          {/* THE CHANNEL IS THE OPTION, not the warehouse it arrives through. Only channels a
+              connected account can actually answer for this brand appear, so every row here is a
+              pull that will work. */}
+          {channelOptions.map((c) =>
+            Row({
+              id: `c_${c.service}`,
+              mark: c.service,
+              label: sourceLabel(c.service),
+              sub: c.direct ? `Straight from ${aggregatorSpec(c.provider)?.label ?? c.provider}` : `via ${aggregatorSpec(c.provider)?.label ?? c.provider}`,
+              on: linkedService === c.service,
+              onClick: () => {
+                setConnectProvider(c.provider)
+                setConnectService(c.service)
+                setConnectFor(nt.id)
+              },
+            }),
+          )}
+          {/* Paste sits above upload: it is the faster route and the one people reach for first. */}
+          {Row({
+            id: 'paste',
+            mark: 'paste',
+            label: 'Paste a table',
+            sub: 'Copy some cells and press paste',
+            on: linked?.source?.kind === 'upload' && linked.source.filename === 'Pasted',
+            onClick: () => setPasteFor(nt.id),
+          })}
+          {pasteFor === nt.id && (
+            <textarea
+              className="flow-paste"
+              autoFocus
+              placeholder="Paste here"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData('text/plain')
+                if (!text.trim()) return
+                e.preventDefault()
+                pasteTable(nt.id, text)
+                setPasteFor(null)
+              }}
+              onBlur={() => setPasteFor(null)}
+            />
+          )}
+          {Row({
+            id: 'upload',
+            mark: 'upload',
+            label: 'Upload a CSV',
+            sub: 'A file you already have',
+            // A pasted table is stored as an upload named "Pasted", so a bare kind check lit up BOTH
+            // rows for one data set. The two routes have to be mutually exclusive or the check stops
+            // meaning "this is where it came from".
+            on: linked?.source?.kind === 'upload' && linked.source.filename !== 'Pasted',
+            onClick: () => { importTargetRef.current = nt.id; importFileRef.current?.click() },
+          })}
+          {Row({
+            id: 'compose',
+            mark: 'describe',
+            label: 'Describe one instead',
+            sub: 'Sketch the shape when you have no data. Figures are invented',
+            on: linked?.source?.kind === 'composite',
+            onClick: () => { setComposeFor(nt.id); setComposePrompt('') },
+          })}
+          {linked &&
+            Row({
+              id: 'unlink',
+              label: 'Unlink',
+              sub: 'The data set stays in your data sets. The card goes empty.',
+              onClick: () => {
+                setObjectRef(nt.id, '')
+                if (isAttached(nt.id)) attachToCampaign(nt.id)
+              },
+            })}
+          {Row({
+            id: 'new',
+            mark: 'blank',
+            label: 'New data set',
+            sub: 'A blank sheet to fill in',
+            on: !!linked && !linked.source,
+            onClick: () => {
+              const id = addBrandDataset(brand)
+              setObjectRef(nt.id, id)
+              if (isAttached(nt.id)) attachToCampaign(nt.id)
+            },
+          })}
+        </div>
+      {connectFor === nt.id && (
+        <AggregatorConnect
+          initialProvider={connectProvider}
+          initialService={connectService}
+          linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
+          brand={brand}
+          website={clientProfiles[brand]?.website}
+          onLand={(name, columns, rows, provider, service, query, truncated, coverage) =>
+            importBrandDataset(brand, name, columns, rows, {
+              kind: 'aggregator',
+              provider,
+              service,
+              query,
+              syncedAt: Date.now(),
+              truncated,
+              rowCount: rows.length,
+              coverage,
+            })
+          }
+          onDone={(id, note) => {
+            setObjectRef(nt.id, id)
+            if (isAttached(nt.id)) attachToCampaign(nt.id)
+            markCardDirty(nt.id)
+            setConnectFor(null)
+            setConnectProvider(undefined)
+            setConnectService(undefined)
+            setImportNote((m) => ({ ...m, [nt.id]: note }))
+          }}
+          onCancel={() => { setConnectFor(null); setConnectProvider(undefined); setConnectService(undefined) }}
+        />
+      )}
+      {composeFor === nt.id && (
+        <div className="flow-compose" onMouseDown={(e) => e.stopPropagation()}>
+          <textarea
+            className="flow-compose-input"
+            rows={2}
+            autoFocus
+            value={composePrompt}
+            placeholder="Open rate by segment, monthly, for the last six months"
+            onChange={(e) => setComposePrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void composeDataset(nt.id) } }}
+          />
+          <div className="flow-compose-row">
+            <button className="flow-compose-go" disabled={composing || !composePrompt.trim()} onClick={() => void composeDataset(nt.id)}>
+              {composing ? 'Sketching…' : 'Sketch it'}
+            </button>
+            <button className="flow-compose-x" onClick={() => { setComposeFor(null); setComposePrompt('') }}>Cancel</button>
+          </div>
+          <span className="flow-compose-warn">Figures will be invented, to show the shape. Replace them with real data before anyone cites them.</span>
+        </div>
+      )}
+      {importNote[nt.id] && <span className="flow-note-mini-note">{importNote[nt.id]}</span>}
+      </div>
+    )
+  }
+
   const renderShelfObject = (o: SmartObject) => {
     const cards = objectCards(o)
     return (
@@ -3208,7 +3880,10 @@ export function FlowsView() {
   const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
     switch (kind) {
       case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
-      case 'data-source': return CONNECTOR_SOURCES
+      // A Data source card's refId is a DATA SET id, whatever route filled it. This used to return
+      // the four hardcoded connector names, so Layers and smart-object naming looked up a dataset id
+      // in a list of connectors, found nothing, and fell back to the bare kind ("Data source").
+      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set' }))
       case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
       case 'company': return named(companies)
       case 'person': return named(people)
@@ -3852,6 +4527,12 @@ export function FlowsView() {
       // A record NAME goes through the same create-or-reuse path the card's own picker uses, so the
       // agent can name an audience without inventing a record around it.
       const rec = c.record?.trim() ? createRecordForKind(kind, c.record.trim()) : undefined
+      // A Data source card named after a table this brand does not have would land as an empty card
+      // the user has to notice and clean up. Skipping with the fix is the more useful answer.
+      if (kind === 'data-source' && c.record?.trim() && !rec) {
+        skipped.push(`No data set called "${c.record.trim()}" on this brand. Pull or upload one, then link it.`)
+        return
+      }
       // Validated by the same closed vocabulary as every other source of direction: an unknown key
       // is dropped here rather than persisted and silently ignored at draft time.
       const dir = (c.direction ?? []).filter((d) => ALL_DIRECTION_KEYS.has(d.key as DirectionKey) && d.value?.trim())
@@ -4156,6 +4837,12 @@ export function FlowsView() {
         mediaMixes: brandMixesForRefs.map((m) => m.name),
         proof: brandProof.map((r) => r.label),
       }
+      // Names and shape only, never rows: enough to link one or say it does not exist, and not so
+      // much that a warehouse export rides along in every turn of a chat.
+      const agentDatasets = brandDatasets.map((d) => {
+        const prov = datasetProvenance(d)
+        return { name: d.name, rows: d.rows.length, measured: prov.citable, covers: prov.periodLabel }
+      })
       const flow = viewName !== null
         ? {
             mode: 'view' as const,
@@ -4200,6 +4887,7 @@ export function FlowsView() {
         flow,
         presets,
         records,
+        datasets: agentDatasets,
         message: t,
         history: chatMsgs.slice(-6).map((m) => ({ role: m.role, text: m.text })),
         // One chat, two dials: skill level sets autonomy/verbosity, role biases vocabulary + defaults.
@@ -4595,9 +5283,23 @@ export function FlowsView() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
           </span>
           <span className="flow-panel-title">{meta.label}</span>
+          {/* SAY THAT THIS ONE IS NOT FINISHED.
+              The card acquires, reads and cites a table, and the parts that are missing (connecting
+              LinkedIn or Instagram, reading an .xlsx, comparing two periods) are invisible from here:
+              somebody meeting it for the first time cannot tell a gap from a thing they have failed
+              to find. A tag is cheaper than that confusion, and it comes off in one line. */}
+          {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">{meta.menuDesc}</p>
+          {nt.kind === 'data-source' && (
+            <p className="flow-inspect-note flow-wip-note">
+              This card is still being built. Pasting, uploading and describing a table all work, and
+              so does pulling from a connected warehouse or from Google. LinkedIn and Instagram are
+              not connected yet, Excel files have to be pasted rather than opened, and nothing here
+              compares one period against another.
+            </p>
+          )}
           {/* DESCRIBE IT AND HAVE IT FILLED IN. First thing on the panel, because it is the fastest
               way past a dozen empty dropdowns and a blank card is the state this is for.
 
@@ -5696,6 +6398,13 @@ export function FlowsView() {
               </>
             )
           })()}
+          {nt.kind === 'data-source' &&
+          (() => {
+            const ds = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : undefined
+            return ds ? <DatasetRead ds={ds} onMakeProof={(f) => makeProofFromFinding(nt, ds, f)} /> : null
+          })()}
+        {nt.kind === 'data-source' && renderDataSourcePicker(nt)}
+        {nt.kind === 'data-source' && renderDatasetContribution(nt)}
           {/* DIRECTION: what this object instructs the writer to do for this campaign. One or two
               fields per kind, each landing in a named slot in every wired asset's payload. This is
               the whole point of an object: not which record it names, but what it says about it.
@@ -6644,63 +7353,55 @@ export function FlowsView() {
 
                   </div>
                   {nt.kind === 'data-source' ? (
-                    // A Data source links one of the brand's data sets (the spreadsheets) or a live
-                    // connector; "New data set" spins up a fresh spreadsheet and links it in one step.
-                    // The card previews the linked set as a mini spreadsheet; double-click opens it.
-                    <>
-                    <select
-                      className="flow-note-sel"
-                      value={nt.refId ?? ''}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        if (e.target.value === '__new__') {
-                          const id = addBrandDataset(brand)
-                          setObjectRef(nt.id, id)
-                        } else if (e.target.value === '__upload__') {
-                          // Remember which card asked, since one hidden input serves them all.
-                          importTargetRef.current = nt.id
-                          importFileRef.current?.click()
-                        } else setObjectRef(nt.id, e.target.value)
-                      }}
-                    >
-                      <option value="">Link a data source…</option>
-                      {brandDatasets.length > 0 && (
-                        <optgroup label="Your data sets">
-                          {brandDatasets.map((d) => (
-                            <option key={d.id} value={d.id}>{d.name || 'Untitled data set'}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      <optgroup label="Connectors">
-                        {CONNECTOR_SOURCES.map((o) => (
-                          <option key={o.id} value={o.id}>{o.label}</option>
-                        ))}
-                      </optgroup>
-                      <option value="__upload__">↑ Upload a CSV…</option>
-                      <option value="__new__">+ New data set…</option>
-                    </select>
-                    {(() => {
+                    // DISPLAY ONLY. Choosing a source is authoring, and authoring happens in the
+                    // inspector like it does for every other kind; the card shows what was chosen.
+                    // It previews the linked set as a mini spreadsheet; double-click opens it.
+                    (() => {
                       const linkedDs = nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId) : null
                       return (
                         <div
                           className={`flow-note-mini${linkedDs ? ' linked' : ''}`}
-                          title={linkedDs ? `${linkedDs.name || 'Untitled data set'} · double-click to open` : 'Link or create a data set, then double-click to open it'}
+                          title={
+                            linkedDs
+                              ? `${linkedDs.name || 'Untitled data set'} · double-click to open`
+                              : nt.refId
+                                ? 'That data set was deleted. Pick another one in the inspector.'
+                                : 'Link or create a data set, then double-click to open it'
+                          }
                         >
                           <MiniSheet columns={linkedDs?.columns ?? ['', '', '', '']} rows={linkedDs?.rows ?? []} bodyRows={3} />
-                          <span className="flow-note-mini-label">{linkedDs ? (linkedDs.name || 'Untitled data set') : 'No data set linked yet'}</span>
-                          {/* WHERE IT CAME FROM. A figure with no provenance is not evidence, so the
-                              card says the origin and the date rather than leaving a sheet of numbers
-                              looking equally authoritative however it got here. */}
-                          {linkedDs?.source?.kind === 'upload' && (
-                            <span className="flow-note-mini-src">
-                              {linkedDs.source.filename} · {new Date(linkedDs.source.importedAt).toLocaleDateString()}
-                            </span>
-                          )}
+                          <span className="flow-note-mini-label">
+                            {/* The platform's mark sits with the NAME, so a card read at a glance
+                                says what the data is before the provenance line is read at all. */}
+                            {linkedDs?.source?.kind === 'aggregator' && linkedDs.source.service && (
+                              <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.service} /></span>
+                            )}
+                            {linkedDs
+                              ? linkedDs.name || 'Untitled data set'
+                              : nt.refId
+                                ? 'That data set was deleted'
+                                : 'No data set linked yet'}
+                          </span>
+                          {/* WHERE IT CAME FROM, from the one function that decides it.
+                              These were four inline branches reading source.kind directly, which is
+                              how a table typed over by hand went on presenting itself as measured:
+                              the edit was invisible to every one of them. datasetProvenance holds
+                              the precedence (sketched, then edited, then how it arrived) and six
+                              surfaces now read it, so they cannot disagree. */}
+                          {linkedDs && (() => {
+                            const prov = datasetProvenance(linkedDs)
+                            return (
+                              <span className={`flow-note-mini-src${prov.tone === 'amber' ? ' sketched' : ''}`} title={prov.detail}>
+                                {linkedDs.source?.kind === 'aggregator' && (
+                                  <span className="flow-note-mini-mark"><SourceMark id={linkedDs.source.provider} /></span>
+                                )}
+                                {prov.badge}
+                              </span>
+                            )
+                          })()}
                         </div>
                       )
-                    })()}
-                    {importNote[nt.id] && <span className="flow-note-mini-note">{importNote[nt.id]}</span>}
-                    </>
+                    })()
                   ) : (() => {
                     const opts = objectOptions(nt.kind)
                     if (!opts) return null
@@ -6910,6 +7611,19 @@ export function FlowsView() {
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
                                     Post
                                   </span>
+                                  {/* An unanswered question has to be visible from across the board,
+                                      or the thread rots and the team goes back to Slack. */}
+                                  {openCommentCount(cardComments, boardKey, r.id) > 0 && (
+                                    <span
+                                      className="flow-note-cmt"
+                                      title={`${openCommentCount(cardComments, boardKey, r.id)} open comment(s) on this post`}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.8-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z" />
+                                      </svg>
+                                      {openCommentCount(cardComments, boardKey, r.id)}
+                                    </span>
+                                  )}
                                   {/* OUT OF DATE. Flagging an asset from the Save bar wrote a
                                       recheckFlag and nothing on the canvas showed it, so the flag
                                       existed only in a queue you had to go and look at. The card is
@@ -7167,8 +7881,203 @@ export function FlowsView() {
                     {selPost.audience ? ` · ${selPost.audience}` : ''}
                     {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
                   </p>
+                  {/* THE COPY, EDITABLE, AND EVERY COMPONENT OF IT.
+                      This was read-only text at the bottom of the panel with empty components
+                      filtered out, so a post with no copy showed nothing at all and changing one
+                      word meant leaving the canvas for the review page. Same editor as the review
+                      page now, rather than a second one that drifts. */}
+                  {(() => {
+                    const flds = messagingFields(selPost.channel, selPost.assetType)
+                    const m = (selPost.messaging ?? {}) as Record<string, string>
+                    const known = new Set(flds.map((f) => f.key))
+                    const strays = Object.entries(m).filter(([k, v]) => !known.has(k) && v?.trim())
+                    return (
+                      <>
+                        <label className="flow-inspect-label">Copy</label>
+                        <p className="flow-inspect-note">This is the copy that ships. It saves as you type.</p>
+                        <CopyFields
+                          fields={flds}
+                          values={m}
+                          stopKeys
+                          setField={(key, value) => void updateRow(selPost.id, { messaging: { ...m, [key]: value } })}
+                        />
+                        {/* Copy on the row under a key this format does not have. clampToLimit is a
+                            no-op on these (fieldByKey.get returns undefined), so nothing has checked
+                            their length, and saying so is more useful than rendering them as peers. */}
+                        {strays.length > 0 && (
+                          <>
+                            <label className="flow-inspect-label" style={{ marginTop: 14 }}>Not part of this format</label>
+                            <p className="flow-inspect-note">
+                              This copy is on the asset but it is not one of this format's components. Nothing checked its length.
+                            </p>
+                            {strays.map(([k, v]) => (
+                              <div key={k} className="flow-post-field">
+                                <label className="flow-inspect-label">{k}</label>
+                                <div className="flow-post-value">{v}</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
+
+                  {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
+                      board flush, the wipe and the phase 1 refusal, rather than growing a second path
+                      that could miss one of the three. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
+                  {(() => {
+                    const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
+                    return (
+                      <>
+                        <button
+                          className="flow-insp-open"
+                          disabled={regenerating}
+                          onClick={() => void regenerateFlow([selPost.id])}
+                        >
+                          {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
+                        </button>
+                        <p className="flow-inspect-note">
+                          {hasCopy
+                            ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
+                            : 'Writes this post from the campaign brief and everything wired to it.'}
+                        </p>
+                        {/* Which writer produced what is on the row now. Per row, from phase 1. */}
+                        {selPost.copySource && (
+                          <p className="flow-inspect-note">
+                            {selPost.copySource === 'heuristic'
+                              ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
+                              : 'Written by the model.'}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
+
+                  {/* SCHEDULE AND STATUS. Only the three states a person sets: everything past approved
+                      belongs to the publish path and nothing publishes on its own. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Schedule and status</label>
+                  <input
+                    className="flow-inspect-input"
+                    type="datetime-local"
+                    value={selPost.scheduledAt ? isoToLocalInput(selPost.scheduledAt) : ''}
+                    onChange={(e) => void updateRow(selPost.id, { scheduledAt: e.target.value ? localInputToIso(e.target.value) : undefined })}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                  <div className="flow-src-list" style={{ marginTop: 6 }}>
+                    {(['draft', 'in_review', 'approved'] as const).map((st) => (
+                      <button
+                        key={st}
+                        className={`flow-src-opt${selPost.status === st ? ' on' : ''}`}
+                        onClick={() => void updateRow(selPost.id, { status: st })}
+                      >
+                        <span className="flow-src-mark"><span className="flow-src-dot" /></span>
+                        <span className="flow-src-txt">
+                          <span className="flow-src-name">{st === 'in_review' ? 'In review' : st === 'draft' ? 'Draft' : 'Approved'}</span>
+                        </span>
+                        {selPost.status === st && (
+                          <span className="flow-src-tick" aria-label="current">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="flow-inspect-note">Approved means you have read it and you are happy. Nothing publishes on its own.</p>
+                  <button className="flow-insp-open subtle" style={{ marginTop: 8 }} onClick={() => void duplicateRow(selPost.id)}>
+                    Duplicate this post
+                  </button>
+
+                  {/* CONNECTED TO. The instructions this post is actually written under, assembled by
+                      the same function the writer uses, in the same precedence order. */}
+                  {(() => {
+                    const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+                    const resolved = resolveBoardDirection(liveBoard)
+                    const mine = directionForRow(resolved, deliverableKeyFor(selPost), selPost.id, [])
+                    const kept = buildDirection(mine)
+                    const dropped = mine.length - kept.length
+                    return (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                          Connected to{kept.length ? ` · ${kept.length}` : ''}
+                        </label>
+                        {kept.length === 0 ? (
+                          <p className="flow-inspect-note">
+                            Nothing is wired to this post or to its deliverable, so it is written from the campaign brief alone.
+                          </p>
+                        ) : (
+                          <div className="flow-insp-send">
+                            {kept.map((d) => (
+                              <div key={`${d.key}:${d.value}`} className="flow-send-row">
+                                <span className="flow-send-val">{DIRECTION_FIELD[d.key as DirectionKey]?.label ?? d.key}</span>
+                                <span className="flow-send-lab">{d.value}</span>
+                              </div>
+                            ))}
+                            {/* An asset carries one instruction per kind, so a second card naming the
+                                same thing loses. Saying how many were dropped is the difference
+                                between a rule and a surprise. */}
+                            {dropped > 0 && (
+                              <span className="flow-send-foot">
+                                {`${dropped} more instruction${dropped === 1 ? '' : 's'} reached here and ${dropped === 1 ? 'was' : 'were'} dropped: a post carries one instruction per kind.`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Wiring a card straight to a post materialises references onto the row,
+                            which silently stops it using the campaign's. */}
+                        {selPost.references && selPost.references.length > 0 && (
+                          <>
+                            <p className="flow-inspect-note">
+                              Wiring a card straight to this post pins it to those records only. It stops using the campaign's.
+                            </p>
+                            <button
+                              className="flow-reset-link"
+                              onClick={() => { void updateRow(selPost.id, { references: undefined }); setRefsDirty(true) }}
+                            >
+                              Go back to the campaign's
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
+
+                  {/* THE TEAM THREAD. Named Discussion, not Comments: the store already has a
+                      comments slice on the same row id holding ingested platform comments, and one
+                      word for two features on one card is how somebody replies in the wrong place. */}
+                  {renderCardComments(selPost.id)}
+
                   {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
                       Same list, same rules: what it holds reaches the writer for this one asset. */}
+                  {/* WHICH FIGURES ACTUALLY LANDED, matched against the copy rather than reported by
+                      the model. Absent when the asset predates this, empty when it was checked and
+                      nothing was found, and those are different sentences. */}
+                  {selPost.figuresUsed !== undefined &&
+                    (() => {
+                      const all = brandDatasets.flatMap((d) => citableFigures(d).map((f) => ({ f, d })))
+                      const used = selPost.figuresUsed
+                        .map((id) => all.find((x) => x.f.id === id))
+                        .filter((x): x is { f: (typeof all)[number]['f']; d: BrandDataset } => !!x)
+                      if (!used.length) {
+                        return <span className="flow-send-none">None of the figures from the wired tables made it into this one.</span>
+                      }
+                      return (
+                        <>
+                          <label className="flow-inspect-label">Figures it uses · {used.length}</label>
+                          {used.map(({ f, d }) => (
+                            <div key={f.id} className="flow-send-row">
+                              <span className="flow-send-val">{f.value}</span>
+                              <span className="flow-send-lab">
+                                {f.label}, from {d.name}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )
+                    })()}
                   {(() => {
                     const wired = contextRowsFor(selPost.id)
                     if (!wired.length) return null
@@ -7309,21 +8218,7 @@ export function FlowsView() {
                       </div>
                     )}
                   </div>
-                  {(() => {
-                    // Show each field in schema order with its proper label (not the raw
-                    // key), then any messaging keys the schema doesn't know about.
-                    const flds = messagingFields(selPost.channel, selPost.assetType)
-                    const m = (selPost.messaging ?? {}) as Record<string, string>
-                    const known = new Set(flds.map((f) => f.key))
-                    const rows: [string, string, string][] = flds.filter((f) => m[f.key]?.trim()).map((f) => [f.key, f.label, m[f.key]])
-                    for (const [k, v] of Object.entries(m)) if (!known.has(k) && v?.trim()) rows.push([k, k, v])
-                    return rows.map(([k, label, v]) => (
-                      <div key={k} className="flow-post-field">
-                        <label className="flow-inspect-label">{label}</label>
-                        <div className="flow-post-value">{v}</div>
-                      </div>
-                    ))
-                  })()}
+
                 </div>
               </>
             ) : selDeliv ? (
@@ -7337,7 +8232,7 @@ export function FlowsView() {
                 </div>
                 <div className="flow-inspect">
                   <p className="flow-inspect-desc">
-                    {selDeliv.channel} · {selDeliv.assetType}
+                    {CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · {typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}
                   </p>
                   <label className="flow-inspect-label">Assets</label>
                   {/* The count is TYPEABLE, not just steppable. Getting from 4 to 16 was twelve
@@ -7467,6 +8362,162 @@ export function FlowsView() {
                       </>
                     )
                   })()}
+
+                  {/* GENERATE, SCOPED. Three buttons, only the ones that apply, because "write the
+                      two that are empty" never touches a sentence anybody wrote and "rewrite all
+                      four" always does, and those are different enough acts to need different
+                      buttons rather than one with a warning. */}
+                  {(() => {
+                    const rows = selDeliv.rows
+                    const empty = rows.filter((r) => !messagingAllText(r).trim())
+                    const stale = rows.filter((r) => r.recheckFlag)
+                    const busy = regenerating || rows.some((r) => regenIds.has(r.id))
+                    return (
+                      <>
+                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
+                        {empty.length > 0 && (
+                          <button className="flow-insp-open" disabled={busy} onClick={() => void regenerateFlow(empty.map((r) => r.id))}>
+                            {busy ? 'Writing…' : `Write the ${empty.length} that ${empty.length === 1 ? 'is' : 'are'} empty`}
+                          </button>
+                        )}
+                        {stale.length > 0 && (
+                          <button className="flow-insp-open subtle" disabled={busy} onClick={() => void regenerateFlow(stale.map((r) => r.id))}>
+                            {`Write the ${stale.length} that ${stale.length === 1 ? 'is' : 'are'} out of date`}
+                          </button>
+                        )}
+                        <button className="flow-insp-open subtle" disabled={busy || !rows.length} onClick={() => void regenerateFlow(rows.map((r) => r.id))}>
+                          {rows.length === 1 ? 'Rewrite this post' : `Rewrite all ${rows.length} posts`}
+                        </button>
+                        <p className="flow-inspect-note">
+                          {rows.length === 1
+                            ? 'Rewriting clears the copy here, including anything you typed by hand, and writes it again. Undo puts it back until you reload.'
+                            : `Rewriting clears the copy on all ${rows.length} and writes them again, including anything you typed by hand. Undo puts it back until you reload.`}
+                        </p>
+                        {/* Which writer produced this deliverable's copy, as a count rather than a
+                            badge, since a deliverable can hold both. */}
+                        {(() => {
+                          const off = rows.filter((r) => r.copySource === 'heuristic').length
+                          return off > 0 ? (
+                            <p className="flow-inspect-note">
+                              {`${off} of these came from the offline writer, built from your own brand and audience.`}
+                            </p>
+                          ) : null
+                        })()}
+                      </>
+                    )
+                  })()}
+
+                  {/* WHAT EACH POST CONTAINS. The same shape as the Data source card's "What this
+                      table will send", deliberately: both answer "what does this thing actually
+                      hold", and reading as one object is the point. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>What each post contains</label>
+                  <div className="flow-insp-send">
+                    {messagingFields(selDeliv.channel, selDeliv.assetType).map((f) => (
+                      <div key={f.key} className="flow-send-row">
+                        <span className="flow-send-val">{f.label}</span>
+                        <span className="flow-send-lab">
+                          {f.hardLimit ? `up to ${f.hardLimit.toLocaleString('en-US')} characters` : 'no limit'}
+                        </span>
+                      </div>
+                    ))}
+                    <span className="flow-send-foot">Every post under this deliverable has these, and only these.</span>
+                  </div>
+
+                  {/* FEEDS THESE POSTS: the outbound half of Connected to, which needs no graph walk
+                      because the rows are already in scope. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                    {selDeliv.rows.length ? `Feeds ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}` : 'Feeds no posts yet'}
+                  </label>
+                  {selDeliv.rows.length === 0 ? (
+                    <p className="flow-inspect-note">No posts yet.</p>
+                  ) : (
+                    <div className="flow-deliv-list">
+                      {selDeliv.rows.map((r) => (
+                        <button key={r.id} className="flow-pitem" onClick={() => setSel(r.id)}>
+                          <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
+                          <div className="flow-pitem-text">
+                            <div className="flow-pitem-label">{r.assetName}</div>
+                            <div className="flow-pitem-desc">
+                              {r.scheduledAt ? new Date(r.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No date'}
+                              {` · ${r.status === 'in_review' ? 'In review' : r.status === 'approved' ? 'Approved' : 'Draft'}`}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* FORMAT: named, and refused in words rather than by a disabled control nobody
+                      can interpret. deliverableKeyFor IS this deliverable's identity: it keys every
+                      connector endpoint, the discussion thread, and the writer's direction lookup.
+                      Re-keying it is a three-slice write with no transaction anywhere in this app,
+                      where a partial failure leaves wires pointing at a key no asset answers to. So
+                      the honest move is to say so and make the stated alternative one click away. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Format</label>
+                  <div className="flow-src-list">
+                    <div className="flow-src-opt on" style={{ cursor: 'default' }}>
+                      <span className="flow-src-mark"><span className="flow-src-dot" /></span>
+                      <span className="flow-src-txt">
+                        <span className="flow-src-name">{typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}</span>
+                        <span className="flow-src-sub">
+                          {`${messagingFields(selDeliv.channel, selDeliv.assetType).length} component${messagingFields(selDeliv.channel, selDeliv.assetType).length === 1 ? '' : 's'}`}
+                        </span>
+                      </span>
+                      <span className="flow-src-tick" aria-label="current">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
+                  <p className="flow-inspect-note">
+                    {`You cannot change what this deliverable makes. Its format decides the components, the schedule and the tracking on all ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}. Add the deliverable you want and delete this one.`}
+                  </p>
+                  {/* MAKE YOUR OWN FORMAT. Names a format the 51 presets do not cover, on a channel
+                      that already exists. It inherits that channel's components deliberately: letting
+                      somebody author their own components and limits would have to reach
+                      messagingFields, which is called from dozens of places and is pure. The note
+                      below says which of the two this is, in as many words. */}
+                  <button className="flow-src-more" onClick={() => setNamingFormat(namingFormat === null ? '' : null)}>
+                    {namingFormat === null ? 'Make your own format' : 'Cancel'}
+                  </button>
+                  {namingFormat !== null && (
+                    <>
+                      <input
+                        className="flow-inspect-input"
+                        autoFocus
+                        placeholder="Booth panel, podcast description…"
+                        value={namingFormat}
+                        onChange={(e) => setNamingFormat(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      />
+                      <p className="flow-inspect-note">
+                        {`It gets its own deliverable and it generates. Its posts have the same components as any other ${CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} post, because choosing your own components is not built yet.`}
+                      </p>
+                      <button
+                        className="flow-insp-open"
+                        disabled={!namingFormat.trim() || !brand}
+                        onClick={() => {
+                          const v = addOutputType(brand, selDeliv.channel as ChannelId, namingFormat)
+                          if (v) setNamingFormat(null)
+                        }}
+                      >
+                        Add this format
+                      </button>
+                    </>
+                  )}
+                  {/* Formats this brand has named, so they are visible where they were made. */}
+                  {outputTypes.filter((o) => o.brand === brand && !o.retiredAt).length > 0 && (
+                    <p className="flow-inspect-note">
+                      {`Your formats: ${outputTypes.filter((o) => o.brand === brand && !o.retiredAt).map((o) => o.label).join(', ')}. Pick one when you add a deliverable.`}
+                    </p>
+                  )}
+
+                  {/* The thread is keyed by the deliverable's DERIVED key (channel|assetType), so
+                      changing either in the Grid orphans it. The same fragility its connectors
+                      already have, answered above with a refusal rather than a migration. */}
+                  {renderCardComments(selDeliv.key)}
                 </div>
               </>
             ) : sel !== 'campaign' ? (
@@ -7866,7 +8917,7 @@ export function FlowsView() {
                       ↻ Redraft this deliverable
                     </button>
                     <div className="flow-inspect-note" style={{ marginTop: 12 }}>
-                      {p.channel} · {p.assetType}
+                      {CHANNELS[p.channel as ChannelId]?.label ?? p.channel} · {typeLabel(p.channel as ChannelId, p.assetType) || p.assetType}
                       {node.audience ? ` · ${node.audience}` : ''}
                     </div>
                   </div>
@@ -8000,7 +9051,7 @@ export function FlowsView() {
                       </>
                     )}
                     <div className="flow-inspect-note" style={{ marginTop: 12 }}>
-                      {p.channel} · {p.assetType}
+                      {CHANNELS[p.channel as ChannelId]?.label ?? p.channel} · {typeLabel(p.channel as ChannelId, p.assetType) || p.assetType}
                     </div>
                     <button className="flow-inspect-del" onClick={() => removeNode(node.id)}>
                       Remove deliverable

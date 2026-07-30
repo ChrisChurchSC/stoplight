@@ -21446,3 +21446,182 @@ table.aud-sheet td.stick .aud-cell {
   overflow-wrap: anywhere;
 }
 .flow-note-mini-note { color: var(--text-muted); }
+
+/* Sketch-a-data-set, on the Data source card. Sits under the mini sheet; the warning is part of the
+   control rather than a tooltip, because it is the thing that decides whether the result is usable. */
+.flow-compose { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
+.flow-compose-input {
+  width: 100%; resize: vertical; min-height: 40px;
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 11.5px; line-height: 1.4; padding: 6px 7px;
+}
+.flow-compose-input::placeholder { color: var(--text-faint); }
+.flow-compose-row { display: flex; gap: 5px; }
+.flow-compose-go {
+  border: 0; border-radius: 7px; cursor: pointer;
+  background: var(--accent); color: #fff;
+  font: inherit; font-size: 11px; font-weight: 700; padding: 5px 10px;
+}
+.flow-compose-go:disabled { opacity: 0.5; cursor: default; }
+.flow-compose-x {
+  border: 1px solid var(--border); border-radius: 7px; cursor: pointer;
+  background: none; color: var(--text-muted);
+  font: inherit; font-size: 11px; font-weight: 600; padding: 5px 9px;
+}
+.flow-compose-warn {
+  font-family: var(--font-label);
+  font-size: 9.5px; line-height: 1.35; color: var(--amber);
+}
+/* A sketched data set says so in the warning tone; an uploaded one is merely quiet. */
+.flow-note-mini-src.sketched { color: var(--amber); }
+
+/* Aggregator connect panel. Same footprint as the compose panel it sits beside. */
+.flow-agg { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.flow-agg-head {
+  font-family: var(--font-label);
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.flow-agg-row {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 6px;
+  width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); padding: 5px 7px; font: inherit;
+}
+.flow-agg-row:hover:not(:disabled) { border-color: var(--border-strong); }
+/* Unavailable providers stay READABLE rather than vanishing: the row is the only place that says
+   which env var would connect it, so dimming it into illegibility hides the fix. */
+.flow-agg-row.off { cursor: default; opacity: 0.75; }
+.flow-agg-row:disabled { cursor: default; }
+.flow-agg-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-faint); align-self: center;
+}
+.flow-agg-dot.on { background: var(--green, #3fb950); }
+.flow-agg-name { font-size: 11.5px; font-weight: 600; color: var(--text); }
+.flow-agg-why {
+  grid-column: 2;
+  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--text-faint);
+}
+.flow-agg-win { display: flex; gap: 4px; margin: 2px 0; }
+.flow-agg-chip {
+  border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+  background: none; color: var(--text-muted);
+  font-family: var(--font-label); font-size: 9.5px; font-weight: 600; padding: 3px 8px;
+}
+.flow-agg-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.flow-agg-chip:disabled { cursor: default; }
+.flow-agg-foot { display: flex; gap: 5px; margin-top: 2px; }
+.flow-agg-muted,
+.flow-agg-err {
+  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--text-faint);
+}
+.flow-agg-err { color: var(--amber); }
+/* Warehouses and direct channels, as two labelled groups in one panel. */
+.flow-agg-group { display: flex; flex-direction: column; gap: 4px; }
+.flow-agg-group + .flow-agg-group { margin-top: 7px; }
+/* Source marks: aligned with the text they label, never stretched by the flex row. */
+.flow-agg-mark,
+.flow-note-mini-mark { display: inline-flex; align-items: center; flex: none; }
+.flow-note-mini-mark { margin-right: 4px; vertical-align: -3px; }
+.flow-agg-row { grid-template-columns: auto 1fr; }
+.flow-agg-mark { grid-row: span 2; align-self: center; }
+.flow-agg-name { display: inline-flex; align-items: center; gap: 5px; }
+/* The one-source rule, stated where the swap would otherwise be silent. */
+.flow-agg-replace {
+  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--amber);
+}
+
+/* The Data source picker, in the inspector rather than on the card. The controls were moved here so
+   the card stays a thing you read at a glance; this just gives them room to sit among the other
+   inspector fields. */
+.flow-insp-src { display: block; margin-bottom: 16px; }
+.flow-insp-src .flow-note-sel { width: 100%; }
+.flow-insp-src .flow-note-mini-note { margin-top: 5px; }
+.flow-insp-src .flow-agg,
+.flow-insp-src .flow-compose { margin-top: 8px; }
+
+/* Source options as buttons rather than a dropdown: every route visible at once, with a check on the
+   one this card is actually on. */
+.flow-src-list { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.flow-src-opt {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 8px;
+  width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface); padding: 7px 9px; font: inherit;
+}
+.flow-src-opt:hover { border-color: var(--border-strong); }
+.flow-src-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.flow-src-mark { display: inline-flex; align-items: center; }
+.flow-src-dot { width: 13px; height: 13px; border-radius: 4px; border: 1px dashed var(--border-strong); display: block; }
+.flow-src-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.flow-src-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.flow-src-sub {
+  font-family: var(--font-label); font-size: 9.5px; line-height: 1.3; color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.flow-src-tick { color: var(--accent); display: inline-flex; }
+
+/* What a Data source card will actually send to the writer. Mirrors the direction readout above it:
+   a list of the exact values that travel, and one sentence when nothing does. */
+.flow-insp-send { display: block; margin-top: 16px; }
+.flow-send-row { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; align-items: baseline; padding: 4px 0; }
+.flow-send-val { font-family: var(--font-label); font-size: 13px; font-weight: 700; color: var(--text); }
+.flow-send-lab { font-size: 11.5px; line-height: 1.35; color: var(--text-muted); }
+.flow-send-none,
+.flow-send-foot {
+  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4; color: var(--text-faint);
+  margin-top: 4px;
+}
+.flow-send-held {
+  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4; color: var(--amber);
+  margin-top: 4px;
+}
+.flow-paste {
+  width: 100%; min-height: 46px; resize: vertical; margin-top: 4px;
+  border: 1px dashed var(--accent); border-radius: 9px;
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 11.5px; padding: 7px 9px;
+}
+.flow-src-why {
+  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4;
+  color: var(--text-faint); margin: 2px 0 4px;
+}
+.flow-src-more {
+  border: 0; background: none; cursor: pointer; text-align: left; padding: 3px 2px;
+  font-family: var(--font-label); font-size: 9.5px; font-weight: 600; color: var(--accent);
+}
+
+/* What the table says. Sits above the source picker: the answer belongs above the question. */
+.flow-read { display: block; margin-bottom: 16px; }
+.flow-read-head { display: block; margin-bottom: 10px; }
+.flow-read-headline {
+  display: block; font-family: var(--font-label); font-size: 19px; font-weight: 700;
+  color: var(--text); line-height: 1.15;
+}
+.flow-read-clause { display: block; font-size: 12px; line-height: 1.4; color: var(--text-muted); margin-top: 3px; }
+.flow-read-find { display: block; padding: 6px 0; border-top: 1px solid var(--border); }
+.flow-read-claim { display: block; font-size: 12px; line-height: 1.4; color: var(--text); }
+.flow-read-detail,
+.flow-read-caveat,
+.flow-read-none {
+  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4;
+  color: var(--text-faint); margin-top: 3px;
+}
+.flow-read-caveat { color: var(--amber); }
+
+/* "Work in progress" on a card whose gaps are invisible from the panel. Quiet but not hidden: it is
+   there to stop somebody hunting for a feature that does not exist yet. */
+.flow-panel-wip {
+  /* The title already carries flex:1, so no auto margin is needed to push this right. The right
+     margin clears the panel's collapse control, which sits in the same corner. */
+  flex: 0 0 auto;
+  margin-right: 24px;
+  font-family: var(--font-label); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  border-radius: 999px; padding: 2px 7px; white-space: nowrap;
+}
+.flow-wip-note { color: var(--text-faint); }

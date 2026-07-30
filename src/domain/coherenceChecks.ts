@@ -41,6 +41,16 @@ export interface CoherenceVocab {
   foreign: Map<string, string>
   /** Proof points available to this brand, by id (for audience-tagged proof). */
   proofById: Map<string, { label: string; audienceId?: string }>
+  /**
+   * Every number this campaign can actually point at: the values of the citable figures from the
+   * data sets wired to it, plus the metric on every proof point available to it. Normalized.
+   *
+   * A number in copy that is in neither set came from nowhere, which is the one thing a figure in
+   * marketing copy must never have done.
+   */
+  citableValues?: Set<string>
+  /** Whether this campaign has any data set wired at all, which changes what the break can say. */
+  datasetsWired?: boolean
   /** The brands that contributed to the baseline (self + ancestors + shares), so the
    *  check can report which brand frame it measured against. */
   sources: BrandSource[]
@@ -83,6 +93,11 @@ export function buildCoherenceVocab(
   clientProfiles: Record<string, ClientProfile>,
   brandMeta: BrandMetaMap = {},
   accounts: { targetAccounts?: string[]; partners?: string[] } = {},
+  /**
+   * The numbers this campaign can point at, and whether it has any table wired at all. Optional:
+   * without it the unsourced-figure check does not run rather than flagging everything.
+   */
+  citable?: { values: Set<string>; datasetsWired: boolean },
   /**
    * ⚠️ REQUIRED for the gate to judge the same audiences generation wrote from. Audiences live in
    * the brand's system library AND in clientAudiences, and generation reads mergeAudiences of the
@@ -147,7 +162,7 @@ export function buildCoherenceVocab(
   const partnerLc = new Set(partners.map((p) => p.toLowerCase()))
   const targetAccounts = (accounts.targetAccounts ?? []).map((a) => a.trim()).filter((a) => a && !partnerLc.has(a.toLowerCase()))
 
-  return { client, campaign, audiences, ownTerms, foreign, proofById, sources, targetAccounts, partners }
+  return { client, campaign, audiences, ownTerms, foreign, proofById, sources, targetAccounts, partners, citableValues: citable?.values, datasetsWired: citable?.datasetsWired }
 }
 
 // ---- helpers -------------------------------------------------------------------
@@ -520,6 +535,62 @@ function detectFinancialClaims(rows: TrafficRow[], vocab: CoherenceVocab): Coher
   return out
 }
 
+/**
+ * A percentage or a multiple in copy, matched against everything this campaign can point at.
+ *
+ * Deliberately narrow to start: percentages and multiples only. Those are the shapes that read as
+ * measurement, and they are the ones a reader will hold you to. Prices, dates, counts of things and
+ * version strings are all numbers nobody mistakes for a result.
+ *
+ * UNLIKE detectFinancialClaims, an attached proof point does NOT excuse the number. That check asks
+ * "is anything attached"; this one asks "does this number exist anywhere we can point at", and a
+ * proof point attached to an asset is not evidence that the number in the headline came from it.
+ */
+const MEASURED_SHAPE = /\b\d{1,3}(?:\.\d+)?%|\b\d{1,3}(?:\.\d+)?x\b/gi
+/** Discount and pricing language around a percentage: an offer the brand set, not a result it measured. */
+const OFFER_CONTEXT = /\b(off|discount|save|saving|savings|deposit|apr|interest|vat|tax|commission|cashback)\b/i
+
+/** Strip a figure to its comparable core, so "1,240" and "1240" are the same number. */
+export const normalizeFigure = (v: string): string =>
+  v.trim().toLowerCase().replace(/[,\s$£€]/g, '').replace(/(\.\d*?)0+(?=%|x|$)/, '$1').replace(/\.$/, '')
+
+function detectUnsourcedFigures(rows: TrafficRow[], vocab: CoherenceVocab): CoherenceBreak[] {
+  const citable = vocab.citableValues
+  if (!citable) return []
+  const out: CoherenceBreak[] = []
+  for (const row of rows) {
+    let flagged = false
+    for (const [field, text] of fieldsOf(row)) {
+      if (flagged) break
+      for (const m of text.match(MEASURED_SHAPE) ?? []) {
+        // 24/7 and its kin: a number pair that is an idiom, not a measurement.
+        if (/\d\/\d/.test(text) && text.includes(m)) continue
+        // AN OFFER IS NOT A RESULT. "20% off" and "save 15%" are prices, and the brand decides them
+        // rather than measuring them, so there is no table that could ever back one. Flagging them
+        // is how a check like this earns a reputation for crying wolf and gets switched off.
+        if (OFFER_CONTEXT.test(text.slice(Math.max(0, text.indexOf(m) - 24), text.indexOf(m) + m.length + 16))) continue
+        if (citable.has(normalizeFigure(m))) continue
+        out.push(
+          mkBreak({
+            axis: 'claim',
+            severity: 'high',
+            headline: 'A number with no table behind it',
+            why: vocab.datasetsWired
+              ? `"${m}" does not appear in any data set wired to this campaign, and no proof point carries it either. A number in copy has to be one somebody can point at. Wire the table it came from, or take the figure out.`
+              : `"${m}" appears in this copy and this campaign has no data set wired to it, so this number came from nowhere.`,
+            from: evidence(row, field, text, m),
+            after: text.replace(m, '[figure, wire the table it came from or take it out]'),
+            vocab,
+          }),
+        )
+        flagged = true
+        break
+      }
+    }
+  }
+  return out
+}
+
 // Endorsement / relationship language — saying an account vouches for or partners with us.
 const ENDORSEMENT =
   /\b(trusted by|partnered with|in partnership with|backed by|chosen by|powering|works with|used by|relied on by|endorsed by)\b/i
@@ -561,6 +632,7 @@ export function detectStructuralBreaks(rows: TrafficRow[], vocab: CoherenceVocab
     ...detectOffAudience(rows, vocab),
     ...detectJourneyDrops(rows, vocab),
     ...detectFinancialClaims(rows, vocab),
+    ...detectUnsourcedFigures(rows, vocab),
     ...detectImpliedEndorsement(rows, vocab),
   ]
 }

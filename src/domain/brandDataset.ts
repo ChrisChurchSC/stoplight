@@ -1,4 +1,5 @@
 import { freshRecordId } from './records'
+import type { AggregatorProvider } from './aggregator'
 
 /**
  * A brand "data set" — the flexible half of the hybrid brand model. Where the preset brand basics
@@ -22,7 +23,38 @@ export type DatasetSource =
   // The routes below are planned, not built. Declared here so the shape is settled before three
   // separate features each invent their own.
   | { kind: 'channel'; channel: string; account?: string; syncedAt?: number }
-  | { kind: 'aggregator'; provider: 'supermetrics' | 'databox' | 'summer'; query?: string; syncedAt?: number }
+  /**
+   * `service` is the PLATFORM the rows came from (google_search_console, youtube_analytics, …),
+   * as opposed to `provider`, which is the warehouse they came through. Both are worth keeping: the
+   * card shows the platform's mark, because "is this search data or LinkedIn data" is the question
+   * you have at a glance, while provenance is the aggregator's name and the date.
+   */
+  | {
+      kind: 'aggregator'
+      provider: AggregatorProvider
+      service?: string
+      query?: string
+      syncedAt?: number
+      /**
+       * The pull hit its row cap, so this table is the top of something rather than all of it.
+       * Recorded because a SUM over a truncated table is not a total, and nothing downstream can tell
+       * the difference by looking at the rows.
+       */
+      truncated?: boolean
+      rowCount?: number
+      /**
+       * WHAT THE ROWS ACTUALLY COVER, as opposed to when we asked for them.
+       *
+       * syncedAt is the moment of the request, and three things break the assumption that the two are
+       * the same: Search Console lags two to three days, GA4's "today" is a partial day, and a
+       * warehouse mart whose connector broke in May still returns rows and still gets stamped now. So
+       * "the last 90 days" can mean the 90 days ending four days ago, or ending in May.
+       *
+       * Absent when the source will not say. That is a real state and it is said out loud rather than
+       * papered over with the window we asked for.
+       */
+      coverage?: { from: string; to: string }
+    }
   | { kind: 'composite'; prompt: string; generatedAt: number }
 
 export interface BrandDataset {
@@ -33,6 +65,24 @@ export interface BrandDataset {
   rows: string[][]
   /** Absent on data sets written before provenance existed; those are manual by definition. */
   source?: DatasetSource
+  /**
+   * WHEN SOMEBODY TYPED OVER IT, and how many cells they changed.
+   *
+   * Every cell of every data set is editable, including a pulled one, and until these existed that
+   * edit was invisible: you could type 99% into a Search Console CTR cell and the card would go on
+   * reading "Search Console, 14 Mar 2026" as though Google had said so. Harmless while nothing read
+   * the table, and a false claim in published copy the moment figures started travelling.
+   *
+   * A touched table is no longer what the source returned, so it stops being citable. It is still
+   * useful and still wireable; a number from it just has to be typed into "The figure" by a person
+   * who is willing to own it.
+   *
+   * GUARANTEE HOLDS GOING FORWARD ONLY. Sets edited before this shipped carry no stamp and still
+   * read as measured. There is no way to recover that history, and pretending otherwise by marking
+   * every existing set as suspect would be its own false claim.
+   */
+  editedAt?: number
+  editedCells?: number
 }
 
 const DEFAULT_COLS = 4

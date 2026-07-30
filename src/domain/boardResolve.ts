@@ -226,3 +226,31 @@ export function reachesOutput(board: FlowBoard, nodeId: string, maxDepth = MAX_O
   }
   return false
 }
+
+
+/**
+ * THE INSTRUCTIONS ONE ASSET IS WRITTEN UNDER, in precedence order.
+ *
+ * Exported so the panel and the writer read ONE function. They assembled the list differently: the
+ * writer used [deliverable, this row, campaign, legacy] while the panel's generic readout used
+ * [target, campaign, legacy]. Since buildDirection keeps the FIRST entry per key, pointing the
+ * panel at a row would have omitted the deliverable's instructions entirely and rendered the row's
+ * own as governing when it is in fact the one that loses. A readout that contradicts the writer is
+ * worse than no readout, because it is believed.
+ *
+ * ORDER IS THE MECHANISM: a card wired straight to this deliverable beats a card wired to the brief,
+ * which is what makes drawing a wire mean anything.
+ */
+export function directionForRow(
+  resolved: { campaign: ResolvedDirection[]; byTarget: Map<string, ResolvedDirection[]> },
+  deliverableKey: string,
+  rowId: string,
+  legacy: ResolvedDirection[] = [],
+): ResolvedDirection[] {
+  return [
+    ...(resolved.byTarget.get(deliverableKey) ?? []),
+    ...(resolved.byTarget.get(rowId) ?? []),
+    ...resolved.campaign,
+    ...legacy,
+  ]
+}

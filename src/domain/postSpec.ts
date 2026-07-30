@@ -1,7 +1,7 @@
 import { hasBudget, isPaidRow, money } from './budget'
 import { CHANNELS } from './channels'
 import { isValidType, typeLabel } from './channelAssetTypes'
-import { isCtaField, messagingFields, messagingMap } from './messaging'
+import { isCtaField, messagingFields, messagingMap, type MessagingField } from './messaging'
 import { isTrackingClean } from './tracking'
 import type { TrafficRow } from './types'
 
@@ -23,8 +23,10 @@ export interface PostCheck {
   fix?: 'details' | 'tracking' | 'budget'
 }
 
-export function postSpec(row: TrafficRow): PostCheck[] {
-  const fields = messagingFields(row.channel, row.assetType)
+export function postSpec(row: TrafficRow, fieldsOverride?: MessagingField[]): PostCheck[] {
+  // The override exists so the no-components branch below is testable: every supported format
+  // resolves to a non-empty schema today, which is what makes that branch unreachable and cheap.
+  const fields = fieldsOverride ?? messagingFields(row.channel, row.assetType)
   const map = messagingMap(row)
   const visual = row.mediaType === 'image' || row.mediaType === 'video'
   const paid = isPaidRow(row)
@@ -49,6 +51,26 @@ export function postSpec(row: TrafficRow): PostCheck[] {
       ok: !!row.mediaRef,
       detail: row.mediaRef ? 'attached' : 'Upload the image or video',
     })
+  }
+
+  /**
+   * NO COMPONENTS MEANS NOT READY, EXPLICITLY.
+   *
+   * The Copy and Call to action checks below both live inside `if (mainField)`, and mainField is a
+   * find with an `?? fields[0]` fallback, so an empty fields array skips both and postReady comes
+   * back TRUE for an asset with no copy at all. Nothing reaches that state through a supported
+   * format today, which is exactly why the guard belongs here now: it is cheap and provable while
+   * unreachable, and a later format whose components cannot be resolved would otherwise arrive
+   * looking finished.
+   */
+  if (fields.length === 0) {
+    checks.push({
+      key: 'copy',
+      label: 'Copy',
+      ok: false,
+      detail: 'Its format is missing, so nothing here can say what this post should contain.',
+    })
+    return checks
   }
 
   // Copy — the main content field filled, nothing over a hard limit.

@@ -33,7 +33,7 @@ import {
   mockDriveSource,
 } from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
-import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
+import { typesFor, isPreservableType, primaryTypeKey, customTypeValue, type OutputType } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { realExtractTransport } from '../adapters/copy/extractTransport'
 import {
@@ -142,7 +142,7 @@ import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRef
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
-import { assetRtbIds, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
+import { assetRtbIds, isApprovedProof, registerCampaignRtbs, rtbsForCampaign, rtbsFromAudiences, setAudienceRtbResolver, type Rtb } from '../domain/rtb'
 import { rowInScope, type CardFilter } from '../lib/scope'
 import { MockIcpSource, MockIcpReviewer, flagResolved } from '../adapters/icp/mockIcp'
 import { type CoherenceDecision, freshDecisionId } from '../domain/coherence'
@@ -163,7 +163,9 @@ import {
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
-import { resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { directionForRow, resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
+import { normalizeFigure } from '../domain/coherenceChecks'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
 import { buildDirection } from '../domain/direction'
 import { buildCoherenceVocab } from '../domain/coherenceChecks'
@@ -224,11 +226,20 @@ const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
  * by design (matched to stage), so a repeated CTA is correct, not a collision.
  * Bounded to a few rounds; each feeds the used strings back as an avoid list.
  */
+/**
+ * Rewrite colliding units so no two assets share a headline or a body.
+ *
+ * RETURNS THE ROWS IT REWROTE WITH THE OFFLINE WRITER. Each retry is a fresh draft call that can
+ * fall back independently, and the result's `source` was read once before this ran, so a run could
+ * report "claude" while up to three of its assets carried template copy. ClaudeCopyWriter catches
+ * every failure and returns the heuristic rather than throwing, so the source is the only signal.
+ */
 async function dedupeCampaignDrafts(
   result: DraftResult,
   assets: DraftAsset[],
   baseReq: Omit<DraftRequest, 'assets' | 'avoid'>,
-): Promise<void> {
+): Promise<Set<string>> {
+  const fellBack = new Set<string>()
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
   const byId = new Map(assets.map((a) => [a.rowId, a]))
   const rolesOf = (a: DraftAsset) => {
@@ -255,7 +266,7 @@ async function dedupeCampaignDrafts(
         if (b) seenB.add(b)
       }
     }
-    if (collisions.length === 0) return
+    if (collisions.length === 0) return fellBack
     const avoid = { headlines: [...seenH], bodies: [...seenB], ctas: [] }
     for (const d of collisions) {
       const a = byId.get(d.rowId)
@@ -263,12 +274,17 @@ async function dedupeCampaignDrafts(
       const bumped: DraftAsset = { ...a, index: (a.index ?? 0) + (round + 1) * 101 }
       try {
         const re = await copyWriter.draft({ ...baseReq, avoid, assets: [bumped] })
-        if (re.drafts[0]) d.components = re.drafts[0].components
+        if (re.drafts[0]) {
+          d.components = re.drafts[0].components
+          if (re.source === 'heuristic') fellBack.add(d.rowId)
+          else fellBack.delete(d.rowId)
+        }
       } catch {
         // Leave the unit as-is if regeneration fails; better than dropping copy.
       }
     }
   }
+  return fellBack
 }
 // Real Claude workspace setup (reads the site) when a backend + key are present; heuristic otherwise.
 const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSetupGenerator())
@@ -675,13 +691,48 @@ function loadBrandDatasets(): BrandDataset[] {
     return []
   }
 }
-function saveBrandDatasets(list: BrandDataset[]): void {
+/**
+ * Persist the brand's data sets, and SAY SO WHEN IT FAILS.
+ *
+ * This swallowed every error, which was survivable while a data set was a spreadsheet somebody typed
+ * and is not once a pull can land 500 rows: every set for every brand lives under one key, so a few
+ * big tables can exhaust the quota, and the failure looked exactly like success. You would pull a
+ * table, read it, reload, and find it gone with nothing ever having said why.
+ *
+ * Returns whether the write landed so callers can roll their in-memory state back to match what is
+ * actually on disk, rather than showing a table that will not survive a refresh.
+ */
+const OUTPUT_TYPES_KEY = 'stoplight.outputTypes.v1'
+function loadOutputTypes(): OutputType[] {
   try {
-    localStorage.setItem(BRAND_DATASETS_KEY, JSON.stringify(list))
+    const raw = localStorage.getItem(OUTPUT_TYPES_KEY)
+    return raw ? (JSON.parse(raw) as OutputType[]) : []
   } catch {
-    /* ignore */
+    return []
   }
 }
+/** Returns whether the write landed, so a caller can roll back rather than show a format that is gone on reload. */
+function saveOutputTypes(list: OutputType[]): boolean {
+  try {
+    localStorage.setItem(OUTPUT_TYPES_KEY, JSON.stringify(list))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function saveBrandDatasets(list: BrandDataset[]): boolean {
+  try {
+    localStorage.setItem(BRAND_DATASETS_KEY, JSON.stringify(list))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** What to tell somebody whose browser has no room left. Names the fix, not the exception. */
+const STORAGE_FULL =
+  'Could not save that table. There is no room left in this browser storage. Delete a data set you no longer need and try again.'
 
 // Records › Channels — the channel taxonomy as records, seeded once from CHANNEL_LIST.
 const CHANNEL_RECORDS_KEY = 'stoplight.channelRecords.v1'
@@ -1810,6 +1861,10 @@ interface TrafficState {
    */
   setSmartObjectFolder: (id: string, folder: string | undefined) => void
   deleteSmartObject: (id: string) => void
+  /** Formats somebody named, per brand. See OutputType. */
+  outputTypes: OutputType[]
+  /** Add a custom format for a brand and channel. Returns its type value, or '' if the write failed. */
+  addOutputType: (brand: string, channel: ChannelId, label: string) => string
   addBrandDataset: (brand: string, name?: string) => string
   /**
    * Create a data set from parsed content, with its provenance.
@@ -1819,6 +1874,26 @@ interface TrafficState {
    * caller must supply. Returns the id so the caller can open it.
    */
   importBrandDataset: (brand: string, name: string, columns: string[], rows: string[][], source: DatasetSource) => string
+  /**
+   * The grid a refresh replaced, so it can be put back.
+   *
+   * IN THE STORE, not in the card's component state. The inspector closes when a refresh lands, and
+   * component state dies with it, so an undo kept there was unreachable exactly when somebody wanted
+   * it. One slot: the last refresh is the one anybody undoes.
+   */
+  datasetUndo: { dsId: string; columns: string[]; rows: string[][]; source?: DatasetSource } | null
+  /** Put the replaced grid back. No-op when there is nothing to put back. */
+  undoDatasetRefresh: () => void
+  /**
+   * Swap a data set's grid for a fresh pull, keeping its id so every card stays attached. Returns the
+   * previous grid for an undo, or null when nothing was written.
+   */
+  refreshBrandDataset: (
+    id: string,
+    columns: string[],
+    rows: string[][],
+    source: DatasetSource,
+  ) => { columns: string[]; rows: string[][]; source?: DatasetSource; editedAt?: number; editedCells?: number } | null
   renameBrandDataset: (id: string, name: string) => void
   deleteBrandDataset: (id: string) => void
   setDatasetCell: (id: string, row: number, col: number, value: string) => void
@@ -2365,6 +2440,18 @@ interface TrafficState {
    *  Resolves to which writer produced the copy ('claude' | 'heuristic'), or null
    *  when nothing was drafted, so callers can show a source badge. 'heuristic' is
    *  sticky: if any campaign group fell back, the whole run reports 'heuristic'. */
+  /**
+   * WHY THIS CAMPAIGN CANNOT GENERATE, in the user's words, or null when it can.
+   *
+   * Exists so a caller can refuse BEFORE destroying anything. regenerateFlow clears every target's
+   * copy and then calls draftCopy, which discovers the same two boundaries and `continue`s without
+   * writing back, so pressing Generate on an unwired campaign deleted the copy and explained why it
+   * had not generated. A refusal that arrives after the deletion is a deletion with a note attached.
+   *
+   * draftCopy keeps its own copies of these checks as the backstop, because SheetGrid, CopyReview
+   * and the agent bridge all call it without passing through a panel.
+   */
+  copyBlockerFor: (campaign: string) => string | null
   draftCopy: (rowIds?: string[]) => Promise<CopySource | null>
   /**
    * Who wrote the copy the last time anything generated: the model, or the offline fallback. Set by
@@ -2775,6 +2862,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
   brandDatasets: loadBrandDatasets(),
+  outputTypes: loadOutputTypes(),
+  datasetUndo: null,
   smartObjects: loadSmartObjects(),
   segments: localDataMode ? loadSegments() : [],
   mediaMixes: loadMediaMixes(),
@@ -3521,6 +3610,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
     }),
 
+  addOutputType: (brand, channel, label) => {
+    const value = customTypeValue(label)
+    const existing = get().outputTypes.find((o) => o.brand === brand && o.channel === channel && o.value === value)
+    if (existing) return existing.value
+    const next: OutputType[] = [
+      ...get().outputTypes,
+      { id: `ot_${Date.now().toString(36)}`, brand, channel, value, label: label.trim(), createdAt: Date.now() },
+    ]
+    if (!saveOutputTypes(next)) {
+      get().setBrandNotice('That did not save. Your browser is out of room. Clear some space and add it again.')
+      return ''
+    }
+    set({ outputTypes: next })
+    return value
+  },
   addBrandDataset: (brand, name) => {
     const ds = blankDataset(brand, name ?? 'Untitled data set')
     set((s) => {
@@ -3532,12 +3636,63 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   importBrandDataset: (brand, name, columns, rows, source) => {
     const ds: BrandDataset = { ...blankDataset(brand, name), columns, rows, source }
+    let stored = true
     set((s) => {
       const brandDatasets = [...s.brandDatasets, ds]
-      saveBrandDatasets(brandDatasets)
-      return { brandDatasets }
+      stored = saveBrandDatasets(brandDatasets)
+      // A failed write is not applied in memory either. Showing a table the next reload will not have
+      // is worse than refusing it: you would build a campaign on a figure that quietly vanished.
+      return stored ? { brandDatasets } : {}
     })
+    if (!stored) {
+      get().setBrandNotice(STORAGE_FULL)
+      return ''
+    }
     return ds.id
+  },
+  /**
+   * REPLACE A DATA SET'S GRID IN PLACE, keeping its id.
+   *
+   * Not a new set: the id is what every card's refId, every campaign reference and every figure id is
+   * built on, so minting a fresh one on refresh would silently detach every card pointing at it and
+   * leave the old table behind as a duplicate. Same id, new rows, new coverage.
+   *
+   * Returns the rows it replaced so the caller can offer an undo. A click that destroys the table
+   * somebody was reading, with no way back, is how a marketer loses an afternoon.
+   */
+  refreshBrandDataset: (id, columns, rows, source) => {
+    const before = get().brandDatasets.find((d) => d.id === id)
+    if (!before) return null
+    let stored = true
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        // The edit stamp is dropped deliberately: these are fresh rows from the source, so whatever
+        // somebody typed over is gone and the table is measured again.
+        d.id === id ? { ...d, columns, rows, source, editedAt: undefined, editedCells: undefined } : d,
+      )
+      stored = saveBrandDatasets(brandDatasets)
+      return stored ? { brandDatasets } : {}
+    })
+    if (!stored) {
+      get().setBrandNotice(STORAGE_FULL)
+      return null
+    }
+    set({ datasetUndo: { dsId: id, columns: before.columns, rows: before.rows, source: before.source } })
+    return { columns: before.columns, rows: before.rows, source: before.source, editedAt: before.editedAt, editedCells: before.editedCells }
+  },
+  undoDatasetRefresh: () => {
+    const u = get().datasetUndo
+    if (!u) return
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        d.id === u.dsId ? { ...d, columns: u.columns, rows: u.rows, source: u.source } : d,
+      )
+      if (!saveBrandDatasets(brandDatasets)) {
+        get().setBrandNotice(STORAGE_FULL)
+        return {}
+      }
+      return { brandDatasets, datasetUndo: null }
+    })
   },
   renameBrandDataset: (id, name) =>
     set((s) => {
@@ -3545,28 +3700,64 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveBrandDatasets(brandDatasets)
       return { brandDatasets }
     }),
+  /**
+   * Delete the set AND clear every card pointing at it.
+   *
+   * Now that a data set is a wired record, a dangling refId is not a cosmetic problem: the card keeps
+   * its attached spine and its "Applied to" row while resolving to nothing, which is a board asserting
+   * a link that no longer exists. The same sweep the record deletions already do.
+   */
   deleteBrandDataset: (id) =>
     set((s) => {
       const brandDatasets = s.brandDatasets.filter((d) => d.id !== id)
       saveBrandDatasets(brandDatasets)
-      return { brandDatasets }
+      let touched = false
+      const flowBoards = s.flowBoards.map((board) => {
+        if (!board.objects.some((o) => o.refId === id)) return board
+        touched = true
+        return { ...board, objects: board.objects.map((o) => (o.refId === id ? { ...o, refId: undefined } : o)) }
+      })
+      if (!touched) return { brandDatasets }
+      saveFlowBoards(flowBoards)
+      return { brandDatasets, flowBoards }
     }),
+  /**
+   * STAMP THE EDIT. Every cell of every set is editable, including a pulled one, and until this
+   * stamp existed that edit left no trace: typing 99% into a Search Console CTR cell changed the
+   * number and the card went on reading "Search Console, 14 Mar 2026" as though Google had said so.
+   * The stamp is what makes datasetProvenance able to demote a touched table out of citable.
+   *
+   * editedCells counts REAL changes only, so clicking into a cell and clicking out does not brand a
+   * table as edited.
+   */
   setDatasetCell: (id, row, col, value) =>
     set((s) => {
+      let changed = false
       const brandDatasets = s.brandDatasets.map((d) => {
         if (d.id !== id) return d
+        const before = d.rows[row]?.[col] ?? ''
+        if (before === value) return d
+        changed = true
         const rows = d.rows.map((r, ri) =>
           ri === row ? Array.from({ length: d.columns.length }, (_, ci) => (ci === col ? value : r[ci] ?? '')) : r,
         )
-        return { ...d, rows }
+        return { ...d, rows, editedAt: Date.now(), editedCells: (d.editedCells ?? 0) + 1 }
       })
-      saveBrandDatasets(brandDatasets)
+      if (!changed) return {}
+      if (!saveBrandDatasets(brandDatasets)) {
+        get().setBrandNotice(STORAGE_FULL)
+        return {}
+      }
       return { brandDatasets }
     }),
   setDatasetColumn: (id, col, label) =>
     set((s) => {
       const brandDatasets = s.brandDatasets.map((d) =>
-        d.id === id ? { ...d, columns: d.columns.map((c, ci) => (ci === col ? label : c)) } : d,
+        d.id === id && (d.columns[col] ?? '') !== label
+          ? // A renamed column changes what the numbers under it CLAIM to be, which is as much an
+            // edit as changing a number. Stamped for the same reason.
+            { ...d, columns: d.columns.map((c, ci) => (ci === col ? label : c)), editedAt: Date.now(), editedCells: (d.editedCells ?? 0) + 1 }
+          : d,
       )
       saveBrandDatasets(brandDatasets)
       return { brandDatasets }
@@ -4992,7 +5183,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const rows: TrafficRow[] = []
     deliverables.forEach((d, di) => {
-      const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
+      const assetType = isPreservableType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
       const base = {
         assetId: '',
         mediaType: d.media,
@@ -5054,7 +5245,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const bt = CHANNELS[it.d.channel].bestTimes[0] ?? { hour: 10, minute: 0 }
       const at = new Date(slot)
       at.setHours(bt.hour, bt.minute ?? 0, 0, 0)
-      const assetType = isValidType(it.d.channel, it.d.assetType)
+      const assetType = isPreservableType(it.d.channel, it.d.assetType)
         ? it.d.assetType
         : primaryTypeKey(it.d.channel)
       rows.push({
@@ -5161,6 +5352,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.flowBoards.v1': 'flowBoards',
       'stoplight.smartObjects.v1': 'smartObjects',
       'stoplight.cardComments.v1': 'cardComments',
+      // Registered here, unlike brandDatasets, which is absent from this map and so is device-local:
+      // a brand-scoped format that a teammate cannot see is not a brand-scoped format.
+      'stoplight.outputTypes.v1': 'outputTypes',
       'stoplight.homeChats.v1': 'homeChats',
     }
     const state = await hydrateState()
@@ -5444,7 +5638,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().addClient(brand)
     if (c && !get().campaignList.some((x) => x.name === c)) get().addCampaign({ name: c, client: brand, strategy: 'Demand Gen' })
     const channel = (patch.channel ?? 'Instagram') as ChannelId
-    const assetType = patch.assetType && isValidType(channel, patch.assetType) ? patch.assetType : primaryTypeKey(channel)
+    const assetType = patch.assetType && isPreservableType(channel, patch.assetType) ? patch.assetType : primaryTypeKey(channel)
     const existing = new Set(get().rows.map((r) => r.assetName))
     let name = (patch.assetName ?? 'Authored asset').trim() || 'Authored asset'
     let n = 2
@@ -5511,7 +5705,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         continue
       }
       const channel = norm.channel
-      const assetType = norm.assetType && isValidType(channel, norm.assetType) ? norm.assetType : primaryTypeKey(channel)
+      const assetType = norm.assetType && isPreservableType(channel, norm.assetType) ? norm.assetType : primaryTypeKey(channel)
       // Map the normalized copy onto this channel's messaging field keys.
       const fields = messagingFields(channel, assetType)
       const key = (re: RegExp) => fields.find((f) => re.test(f.key))?.key
@@ -6250,6 +6444,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { savedViews }
     }),
 
+  copyBlockerFor: (campaign) => {
+    const client = clientForCampaign(campaign)
+    if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
+      return `Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`
+    }
+    if (!hasWiredContext(boardFor(get().flowBoards, campaign))) {
+      return `Nothing is wired up on "${campaign || 'this campaign'}" yet. Draw a line from a card to the campaign brief, or to one deliverable, so there is something to write from.`
+    }
+    return null
+  },
   draftCopy: async (rowIds) => {
     const { rows, icp, filter, query, clientFilter, campaignFilter } = get()
     // Targets: explicit ids, else every in-scope reviewable row with no copy yet.
@@ -6289,8 +6493,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // HARD BOUNDARY: a canvas must bind to a brand to generate. A brand-less
         // (Unassigned) campaign is the contamination failure mode — refuse rather than
         // read the shared catch-all bucket. A draft brand is a real, isolated binding.
-        if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
-          get().setBrandNotice(`Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`)
+        // Backstop. The panel refuses earlier via copyBlockerFor; this catches every other caller.
+        const blocked = get().copyBlockerFor(campaign)
+        if (blocked) {
+          get().setBrandNotice(blocked)
           continue
         }
         /**
@@ -6301,10 +6507,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
          * is the failure this rule exists to stop: copy written from no stated context at all, which
          * reads plausible and is accountable to nothing. Refuse instead, and say what to do.
          */
-        if (!hasWiredContext(boardFor(get().flowBoards, campaign))) {
-          get().setBrandNotice(`Nothing is wired up on "${campaign || 'this campaign'}" yet. Draw a line from a card to the campaign brief, or to one deliverable, so there is something to write from.`)
-          continue
-        }
+
         const brand = get().clientProfiles[client]
         const bg = get().brandGuides[client]
         const brandGuide = bg?.confirmed ? bg.guide : undefined
@@ -6397,6 +6600,20 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const snIds = new Set(refList.filter((x) => x.type === 'season').map((x) => x.id))
           const snNames = new Set(refList.filter((x) => x.type === 'season').map((x) => x.label))
           const sns = get().seasons.filter((x) => snIds.has(x.id) || snNames.has(x.name))
+          /**
+           * DATA SETS. Same terms as the rest, and one extra rule that applies to no other pool: a
+           * BrandDataset carries a required `brand`, so a stale refId pointing at another brand's
+           * table would cross exactly the boundary this file defends everywhere else. Filtered here
+           * rather than trusted from the ref.
+           *
+           * No library fallback, and it matters more here than anywhere: falling back to every table
+           * the brand owns would hand the writer numbers nobody chose.
+           */
+          const dsIds = new Set(refList.filter((x) => x.type === 'dataset').map((x) => x.id))
+          const dsNames = new Set(refList.filter((x) => x.type === 'dataset').map((x) => x.label))
+          const dss = get().brandDatasets.filter(
+            (d) => d.brand === client && (dsIds.has(d.id) || dsNames.has(d.name)),
+          )
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
@@ -6405,6 +6622,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             concepts: cpts,
             voices: vcs,
             seasons: sns,
+            datasets: dss,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -6528,8 +6746,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             ctaSeed: cond.cta ?? nextStepCta.get(r.assetName) ?? pickCta(stage),
             // metric and source were dropped, so "lean on this proof" reached the model without the
             // number that makes it proof or the citation that makes it safe to state.
+            // Same withholding as the pool above, or the strip is bypassed by the per-asset copy: an
+            // unvetted draft reaches the writer with its claim and without its number.
             proof: proof
-              ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+              ? isApprovedProof(proof)
+                ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+                : { id: proof.id, label: proof.label, detail: proof.detail, draft: true }
               : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
@@ -6541,12 +6763,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             // buildDirection stays the ONLY producer: it caps, prioritises and drops unknown keys,
             // so a stale persisted key can never reach the prompt.
             direction: (() => {
-              const mine = [
-                ...(resolved.byTarget.get(deliverableKeyFor(r)) ?? []),
-                ...(resolved.byTarget.get(r.id) ?? []),
-                ...resolved.campaign,
-                ...campaignDirection,
-              ]
+              // Shared with the panel, so a readout of "what this will be told" cannot disagree with
+              // what is actually sent.
+              const mine = directionForRow(resolved, deliverableKeyFor(r), r.id, campaignDirection)
               return mine.length ? buildDirection(mine) : undefined
             })(),
             index: i,
@@ -6576,13 +6795,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         const assignedProof = assets
           .map((a) => a.proof)
           .filter((pr): pr is { id: string; label: string; detail?: string } => !!pr)
-        const sentProof = [...activeProof]
+        const gathered = [...activeProof]
         for (const pr of assignedProof) {
-          if (!sentProof.some((x) => x.id === pr.id)) {
+          if (!gathered.some((x) => x.id === pr.id)) {
             const full = proofPool.find((x) => x.id === pr.id)
-            if (full) sentProof.push(full)
+            if (full) gathered.push(full)
           }
         }
+        /**
+         * AN UNAPPROVED PROOF POINT DOES NOT CARRY ITS NUMBER.
+         *
+         * `approved: false` means an unvetted draft, and the app says so wherever it lists one: proof
+         * authored on a canvas card, in the Library or on the Proof points page is all created that
+         * way. Generation ignored the flag entirely and the writer is told "when a proof point has a
+         * metric, state it", so a figure nobody reviewed came out of the model as a stated claim with
+         * a source attached. That is the same failure as citing a sketched table, by a different door.
+         *
+         * The CLAIM still travels, because somebody typed it and wired it deliberately and it is the
+         * reason the card is on the board. The METRIC and the SOURCE do not, and the writer is told
+         * which ones are drafts. Dropping unapproved proof outright would have been the other option,
+         * and it would silently empty the proof pool of every campaign whose proof was authored on a
+         * card, which is most of them.
+         */
+        const sentProof = gathered.map((p) =>
+          isApprovedProof(p) ? p : { ...p, metric: undefined, source: undefined, draft: true },
+        )
         // The model, resolved campaign-first: this campaign's pick, else the workspace pick, else
         // nothing sent so the server keeps its per-task defaults. Resolved here rather than in the
         // writer because this is the only place that knows which campaign a batch belongs to.
@@ -6667,8 +6904,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             permission: x.permission?.trim() || undefined,
             mindset: x.mindset?.trim() || undefined,
           }))
+        /**
+         * THE FIGURES. Computed here, in plain code, from real cells: the writer receives numbers to
+         * quote and never a table to do arithmetic over. citableFigures returns [] for anything
+         * sketched, edited or hand typed, so those tables reach this line and contribute nothing,
+         * which is the intended outcome rather than a gap.
+         */
+        const datasets = campaignPools.datasets
+          .flatMap((d) => citableFigures(d))
+          .slice(0, MAX_FIGURES_PER_CAMPAIGN)
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, datasets, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
@@ -6676,7 +6922,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         else if (result.source === 'claude' && copySource !== 'heuristic') copySource = 'claude'
         // Anti-repetition: regenerate any unit whose headline / primary / CTA
         // collides across the campaign, so the set reads as distinct assets.
-        await dedupeCampaignDrafts(result, assets, baseReq)
+        const redraftFellBack = await dedupeCampaignDrafts(result, assets, baseReq)
         // Register + persist the campaign's drafted proof (merged with any authored).
         if (campaign && result.rtbs.length) {
           const existing = rtbsForCampaign(campaign)
@@ -6684,6 +6930,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const merged = [...existing, ...result.rtbs.filter((r) => !seen.has(r.id))]
           registerCampaignRtbs(campaign, merged)
           rtbStore[campaign] = merged
+        }
+        /**
+         * ROWS THAT WERE ASKED FOR AND DID NOT COME BACK.
+         *
+         * The loop below patches only the rows present in result.drafts, so a row the model omitted
+         * was skipped in silence, after regenerateFlow had already cleared its copy. The asset ended
+         * up blank, unflagged, and still carrying the figures and proof of the copy it no longer has.
+         *
+         * No cause is named: the client cannot tell a timeout from a truncation from a refusal, and
+         * guessing one in a panel is the kind of confident wrongness this app is built to avoid.
+         */
+        const returned = new Set(result.drafts.map((d) => d.rowId))
+        for (const a of assets) {
+          if (returned.has(a.rowId)) continue
+          await sheet.update(a.rowId, {
+            recheckFlag: { reason: 'It came back empty', frame: 'Generation', at: Date.now() },
+            figuresUsed: undefined,
+            rtbMap: {},
+          })
         }
         // Fill ONLY empty fields (never overwrite a human edit); attach proof to
         // the primary + CTA components so the handoff carries through.
@@ -6710,7 +6975,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           // brief, so whatever raised the flag no longer applies. Without this a flag raised by the
           // Save bar survived the regeneration it was asking for, and the badge on the card became
           // permanent — a warning that cannot be cleared is one people learn to ignore.
-          const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap, recheckFlag: undefined }
+          /**
+           * WHICH FIGURES LANDED, computed from the text that was actually written.
+           *
+           * Not asked of the model: it will cite a figure it did not use and use one it did not
+           * cite, and a self-report rendered as provenance is a guess wearing the clothes of an
+           * audit trail. Recomputed on every draft, so removing a number by hand and redrafting
+           * clears it rather than leaving a claim about copy that no longer says it.
+           */
+          const usedFigures = figuresUsedIn(Object.values(map), datasets)
+          /**
+           * WHO WROTE THIS ROW. Per row rather than one workspace flag, because the dedupe pass
+           * above can re-draft a single unit through the offline writer while the run as a whole
+           * reports the model. A badge on one asset is a fact; a banner over the workspace was a
+           * claim about whichever campaign you happened to be looking at.
+           */
+          const rowSource: 'claude' | 'heuristic' =
+            redraftFellBack.has(row.id) ? 'heuristic' : result.source === 'claude' ? 'claude' : 'heuristic'
+          const patch: Partial<TrafficRow> = {
+            messaging: map,
+            rtbMap: rmap,
+            recheckFlag: undefined,
+            figuresUsed: usedFigures.length ? usedFigures : undefined,
+            copySource: rowSource,
+            copyAt: Date.now(),
+          }
           if (d.format && !row.format) patch.format = d.format
           await sheet.update(row.id, patch)
           // Cleared per row, not in one go at the end: a set of twelve finishing together tells you
@@ -6761,7 +7050,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Pin proof to the checked proof tags so preview cards lean on the same reasons-to-believe
     // a build would write; empty = the brand's whole proof library (unchanged behavior).
     const pinnedProof = proofRefLabels?.length ? sys.rtbs.filter((p) => proofRefLabels.includes(p.label)) : []
-    const proofPool: Rtb[] = pinnedProof.length ? pinnedProof : sys.rtbs
+    // Same rule as the build: an unvetted draft contributes its claim and not its number. Applied
+    // here too, or the preview shows copy citing a figure the build would refuse to write.
+    const proofPool: Rtb[] = (pinnedProof.length ? pinnedProof : sys.rtbs).map((p) =>
+      isApprovedProof(p) ? p : { ...p, metric: undefined, source: undefined, draft: true },
+    )
     const fields = messagingFields(channel, assetType)
     const stage = funnelStageFor(channel, assetType)
     // Which audiences to write to (selected names, else the brand's own), rotated per slot.
@@ -6796,7 +7089,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // A blueprint step's CTA wins over the rotated library CTA when present.
         ctaSeed: steps?.[i]?.cta || (sys.ctas.length ? sys.ctas[i % sys.ctas.length].label : undefined),
         proof: proof
-          ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+          ? isApprovedProof(proof)
+            ? { id: proof.id, label: proof.label, detail: proof.detail, metric: proof.metric, source: proof.source }
+            : { id: proof.id, label: proof.label, detail: proof.detail, draft: true }
           : undefined,
         // The mini brief drives this slot's copy (mirrors lineage.brief on a real build),
         // plus any blueprint guidance (framework / subject formula / allowed levers).
@@ -6997,7 +7292,35 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         ? (get().accountsByBrand[clientFilter] ?? []).map((acc) => acc.name)
         : get().accountsForCampaign(campaignFilter).map((acc) => acc.name)
     const partners = clientProfiles[clientFilter]?.notableClients ?? []
-    const vocab = buildCoherenceVocab(clientFilter, campaign, brandSystems, clientProfiles, brandMeta, { targetAccounts, partners }, get().clientAudiences)
+    /**
+     * EVERY NUMBER THIS CAMPAIGN CAN POINT AT: the figures from its wired data sets, plus the metric
+     * on any proof point available to it. The check is not "did you attach proof", it is "does this
+     * number exist anywhere we can show somebody", so both sources count and neither excuses the
+     * other.
+     */
+    const wiredSets = campaign
+      ? (() => {
+          const board = boardFor(get().flowBoards, campaign)
+          const refs = wiredRefsFor(board, get().smartObjects, 'campaign')
+          const ids = new Set(refs.filter((r) => r.type === 'dataset').map((r) => r.id))
+          return get().brandDatasets.filter((d) => d.brand === clientFilter && ids.has(d.id))
+        })()
+      : []
+    const citableValues = new Set<string>()
+    for (const d of wiredSets) for (const f of citableFigures(d)) citableValues.add(normalizeFigure(f.value))
+    for (const r of resolveBrandScope(clientFilter, brandSystems, brandMeta).library.rtbs) {
+      if (r.metric) citableValues.add(normalizeFigure(r.metric))
+    }
+    const vocab = buildCoherenceVocab(
+      clientFilter,
+      campaign,
+      brandSystems,
+      clientProfiles,
+      brandMeta,
+      { targetAccounts, partners },
+      { values: citableValues, datasetsWired: wiredSets.length > 0 },
+      get().clientAudiences,
+    )
     const baseline = get().brandBaselineFor(clientFilter)
     try {
       const { breaks, live } = await claudeCoherence(scoped, { client: clientFilter, campaign, icp, brandGuide, vocab })
