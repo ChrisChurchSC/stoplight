@@ -2,6 +2,7 @@ import { GTM_STRATEGIES, inferStrategy } from '../../domain/strategies'
 import type { Rtb } from '../../domain/rtb'
 import type { ChannelId } from '../../domain/types'
 import type { Icp } from '../icp/types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * "Claude sets up the workspace": from a URL (+ optional notes), generate a
@@ -45,7 +46,7 @@ export class ClaudeSetupGenerator implements SetupGenerator {
   constructor(private fallback: SetupGenerator) {}
   async generate(input: SetupInput): Promise<WorkspaceSetup> {
     try {
-      const res = await fetch('/api/setup', {
+      const res = await apiFetch('/api/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),

@@ -1,6 +1,7 @@
 import { messagingAllText, messagingMap } from '../../domain/messaging'
 import type { ChannelId, TrafficRow } from '../../domain/types'
 import type { Publisher, PublishResult } from './types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Real email publisher: POSTs the email row to the server-side /api/publish-email
@@ -35,7 +36,7 @@ export class ResendPublisher implements Publisher {
 
   async publish(row: TrafficRow): Promise<PublishResult> {
     try {
-      const res = await fetch('/api/publish-email', {
+      const res = await apiFetch('/api/publish-email', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

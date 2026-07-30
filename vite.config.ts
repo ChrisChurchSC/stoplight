@@ -1201,7 +1201,15 @@ function agentApi(): PluginOption {
  * (OpenRouter preferred, else Anthropic), so the client can tell if Claude is connected
  * without exposing the key. The "Connect Claude" onboarding step reads this. GET only.
  */
-/** Mirrors api/ai-credits.ts for the dev server, so the readout is the real balance locally too. */
+/**
+ * The balance readout for the dev server, so it shows the real number locally too.
+ *
+ * Imports server/aiCredits like every other middleware in this file, and that consistency is load
+ * bearing rather than tidiness: everything under api/ except the catch-all is listed in
+ * .vercelignore and deleted before the build runs, so importing from there compiles locally and
+ * fails the deploy with "Cannot find module". This middleware was the only one reaching into api/,
+ * which is the same reason it was the only endpoint file missing from .vercelignore.
+ */
 function aiCreditsApi(): PluginOption {
   return {
     name: 'ai-credits-api',
@@ -1211,7 +1219,7 @@ function aiCreditsApi(): PluginOption {
           res.statusCode = 405
           return res.end()
         }
-        void import('./api/ai-credits')
+        void import('./server/aiCredits')
           .then((m) => m.readAiCredits())
           .then((out) => {
             res.setHeader('content-type', 'application/json')

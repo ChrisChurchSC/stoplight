@@ -4,6 +4,8 @@
  * stored by HyperFocus as the connected map. The onboarding front door, map what
  * they have, then show where it does not connect.
  */
+import { apiFetch } from '../../lib/apiFetch'
+
 export interface SiteMapMessage {
   label: string
   headline: string
@@ -46,7 +48,7 @@ export interface SiteMap {
 /** Extract the current-state map from a URL. Requires the real engine (Claude);
  *  there is no heuristic fallback because the value is the real extraction. */
 export async function mapSite(input: { url: string; notes?: string; accounts?: string[] }): Promise<SiteMap> {
-  const res = await fetch('/api/map-site', {
+  const res = await apiFetch('/api/map-site', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -68,7 +70,7 @@ export async function mapSiteStream(
   input: { url: string; notes?: string; accounts?: string[] },
   onProgress: (e: MapProgress) => void,
 ): Promise<SiteMap> {
-  const res = await fetch('/api/map-site-stream', {
+  const res = await apiFetch('/api/map-site-stream', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

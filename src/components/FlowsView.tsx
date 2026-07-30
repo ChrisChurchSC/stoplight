@@ -66,6 +66,7 @@ import { useTrafficStore } from '../store/useTrafficStore'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
+import { apiFetch } from '../lib/apiFetch'
 
 /**
  * Flows — the campaign home + builder. A switcher lists the brand's campaigns; picking
@@ -670,7 +671,7 @@ export function FlowsView() {
     setFillNote((m) => { const { [nt.id]: _drop, ...rest } = m; return rest })
     try {
       const profile = brand ? clientProfiles[brand] : undefined
-      const res = await fetch('/api/fill-card', {
+      const res = await apiFetch('/api/fill-card', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -716,7 +717,7 @@ export function FlowsView() {
     setScanning(nodeId)
     setScanNote((m) => { const { [nodeId]: _drop, ...rest } = m; return rest })
     try {
-      const res = await fetch('/api/scan-site', {
+      const res = await apiFetch('/api/scan-site', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ url, kind }),
@@ -748,7 +749,7 @@ export function FlowsView() {
   }
   const suggestFor = async (field: string, already: string[], aud?: { name?: string; role?: string }): Promise<string[]> => {
     const profile = brand ? clientProfiles[brand] : undefined
-    const res = await fetch('/api/suggest-options', {
+    const res = await apiFetch('/api/suggest-options', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -953,7 +954,7 @@ export function FlowsView() {
     setImportNote((m) => { const { [cardId]: _d, ...rest } = m; return rest })
     try {
       const profile = clientProfiles[brand]
-      const res = await fetch('/api/compose-dataset', {
+      const res = await apiFetch('/api/compose-dataset', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ prompt: said, brand: { name: brand, oneLiner: profile?.oneLiner } }),
@@ -1097,7 +1098,7 @@ export function FlowsView() {
   useEffect(() => {
     let live = true
     const call = async (body: unknown): Promise<unknown> => {
-      const res = await fetch('/api/aggregator', {
+      const res = await apiFetch('/api/aggregator', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),

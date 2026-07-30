@@ -1,4 +1,5 @@
 import { heuristicFlowAgent, type FlowAgentContext, type FlowAgentResult } from '../../domain/flowAgent'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Asks the server-side /api/flow-agent endpoint (which calls Claude) and falls back to the
@@ -7,7 +8,7 @@ import { heuristicFlowAgent, type FlowAgentContext, type FlowAgentResult } from 
  */
 export async function generateFlowEdit(context: FlowAgentContext): Promise<FlowAgentResult & { live: boolean }> {
   try {
-    const res = await fetch('/api/flow-agent', {
+    const res = await apiFetch('/api/flow-agent', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ context }),

@@ -1,6 +1,7 @@
 import { messagingAllText } from '../../domain/messaging'
 import type { ChannelId, TrafficRow } from '../../domain/types'
 import type { Publisher, PublishResult } from './types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Real organic-social publisher: POSTs the row to the server-side
@@ -21,7 +22,7 @@ export class BufferPublisher implements Publisher {
 
   async publish(row: TrafficRow): Promise<PublishResult> {
     try {
-      const res = await fetch('/api/publish', {
+      const res = await apiFetch('/api/publish', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

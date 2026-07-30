@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTrafficStore, profileUrlForChannel } from '../store/useTrafficStore'
 import { CHANNELS } from '../domain/channels'
 import { ChannelIcon } from './ChannelIcon'
+import { apiFetch } from '../lib/apiFetch'
 
 /**
  * Link one channel and pull ALL of its copy — including the copy baked into the
@@ -88,7 +89,7 @@ export function ChannelIngestDrawer() {
     if (!u) return
     linkChannelUrl(client, channel, u)
     try {
-      const res = await fetch('/api/connect/start', {
+      const res = await apiFetch('/api/connect/start', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ url: u }),
@@ -102,7 +103,7 @@ export function ChannelIngestDrawer() {
   const saveConnect = async () => {
     if (!connectToken) return
     try {
-      await fetch('/api/connect/save', {
+      await apiFetch('/api/connect/save', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token: connectToken }),

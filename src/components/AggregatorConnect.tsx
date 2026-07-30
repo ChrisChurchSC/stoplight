@@ -14,6 +14,7 @@ import {
 } from '../domain/aggregator'
 import { SourceMark } from './SourceMark'
 import { sourceLabel } from '../domain/analyticsSources'
+import { apiFetch } from '../lib/apiFetch'
 
 /**
  * The aggregator panel on a Data source card: pick a provider, a source, a question, pull it.
@@ -118,7 +119,7 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
   const started = useRef(false)
 
   const post = async (body: unknown): Promise<unknown> => {
-    const res = await fetch('/api/aggregator', {
+    const res = await apiFetch('/api/aggregator', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ brand, website, ...(body as object) }),

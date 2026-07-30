@@ -6,6 +6,7 @@ import type { DirectionEntry } from '../../domain/direction'
 import type { Rtb } from '../../domain/rtb'
 import type { ChannelId } from '../../domain/types'
 import type { Icp } from '../icp/types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Drafts copy + proof for a campaign's assets. Each asset is composed from four
@@ -234,7 +235,7 @@ export class ClaudeCopyWriter implements CopyWriter {
 
   async draft(req: DraftRequest): Promise<DraftResult> {
     try {
-      const res = await fetch('/api/draft-copy', {
+      const res = await apiFetch('/api/draft-copy', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(req),

@@ -1,4 +1,5 @@
 import { IngestError, type IngestProgress } from './ingestChannel'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Client for the Resend ingest: pull a brand's email copy from their broadcasts
@@ -28,7 +29,7 @@ export async function ingestResendStream(
   input: { apiKey: string },
   onProgress: (e: IngestProgress) => void,
 ): Promise<ResendIngestResult> {
-  const res = await fetch('/api/ingest-resend', {
+  const res = await apiFetch('/api/ingest-resend', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

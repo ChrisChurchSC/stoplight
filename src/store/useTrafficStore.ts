@@ -182,6 +182,7 @@ import { can, type Role } from '../domain/access'
 import { decodeShareToken, type ShareGrant } from '../lib/shareLink'
 import { publishShareSnapshot } from '../lib/shareSnapshot'
 import { snapshotRows, diffChanged, diffSummary, type CampaignVersion } from '../domain/versions'
+import { apiFetch } from '../lib/apiFetch'
 
 // An anonymous share viewer (main.tsx seeded localStorage from the published snapshot and set a
 // flag) has no backend session — its data IS the seeded snapshot. So for a share view we run the
@@ -6255,7 +6256,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   refreshAiCredits: async () => {
     try {
-      const r = await fetch('/api/ai-credits')
+      const r = await apiFetch('/api/ai-credits')
       if (!r.ok) return set({ aiCredits: null })
       const d = (await r.json()) as { available?: boolean; remaining?: number; remainingCredits?: number; totalCredits?: number; totalUsage?: number }
       if (!d?.available || typeof d.remaining !== 'number') return set({ aiCredits: null })

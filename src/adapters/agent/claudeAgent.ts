@@ -5,6 +5,7 @@
  * caller then runs the same work directly through the adapters. Same seam pattern
  * as the other Claude endpoints.
  */
+import { apiFetch } from '../../lib/apiFetch'
 
 export interface AgentAction {
   tool: string
@@ -17,7 +18,7 @@ export async function claudeAgent(
   context: unknown,
 ): Promise<{ summary: string; actions: AgentAction[]; live: boolean }> {
   try {
-    const res = await fetch('/api/claude-agent', {
+    const res = await apiFetch('/api/claude-agent', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ instruction, context }),

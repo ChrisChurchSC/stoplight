@@ -3,6 +3,7 @@ import { detectStructuralBreaks, type CoherenceVocab } from '../../domain/cohere
 import { funnelStageFor } from '../../domain/funnel'
 import { messagingMap } from '../../domain/messaging'
 import type { ChannelId, TrafficRow } from '../../domain/types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Claude-powered coherence detection: POSTs the campaign's assets to the
@@ -99,7 +100,7 @@ export async function claudeCoherence(
   }
 
   try {
-    const res = await fetch('/api/coherence-check', {
+    const res = await apiFetch('/api/coherence-check', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ client: ctx.client, campaign: ctx.campaign, icp: ctx.icp, brandGuide: ctx.brandGuide, assets }),

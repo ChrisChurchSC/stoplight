@@ -19,6 +19,21 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.12',
+    dateLabel: 'July 30, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Being signed in is now required to use anything AI powered. Every server route behind Generate, Gretel, "fill this in from the site" and the brand and campaign suggestions could be called by anyone who knew the address, with no account, and each call spent real model budget. They now refuse anyone without a valid session. Nothing changes if you are signed in.',
+          'The account balance is no longer readable by strangers. One endpoint reported how much model budget had been used and how much was left, to anyone who asked.',
+          'A share link stays read only. Someone opening a shared campaign can read it but cannot run generation against it, so a link that gets forwarded cannot spend your budget.',
+          'Running out of model budget now falls back to the offline writer instead of failing. Reaching the account cap looked like a crash rather than the expected, temporary state it is.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.11',
     dateLabel: 'July 30, 2026',
     groups: [

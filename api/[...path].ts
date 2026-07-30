@@ -1,4 +1,5 @@
 import { jsonRoute } from '../server/apiRoute.js'
+import { requireAuth } from '../server/apiAuth.js'
 
 /**
  * Single catch-all API router. Vercel's Hobby plan caps a deployment at 12 serverless functions, so
@@ -67,9 +68,29 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
       res.statusCode = 405
       return res.end()
     }
+    if (!(await requireAuth(req, res))) return
     const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : process.env.ANTHROPIC_API_KEY ? 'anthropic' : null
     res.setHeader('content-type', 'application/json')
     return res.end(JSON.stringify({ connected: !!provider, provider }))
+  }
+
+  /**
+   * ai-credits is the model account's remaining balance, and it belongs here rather than in its own
+   * file. api/ai-credits.ts was the single endpoint missing from .vercelignore, so it shipped as its
+   * own function, never reached jsonRoute, and answered anonymously: a plain GET against the live
+   * pilot returned the account's usage and what was left of it. Routing it through the catch-all is
+   * what puts requireAuth in front of it.
+   */
+  if (path === 'ai-credits') {
+    if (req.method !== 'GET') {
+      res.statusCode = 405
+      return res.end()
+    }
+    if (!(await requireAuth(req, res))) return
+    const { readAiCredits } = await import('../server/aiCredits.js')
+    res.setHeader('content-type', 'application/json')
+    res.setHeader('cache-control', 'private, max-age=30')
+    return res.end(JSON.stringify(await readAiCredits()))
   }
 
   // actuals is a GET ?brand=<name> → BrandActuals JSON (Summer), or 204 when there's no data.
@@ -78,6 +99,7 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
       res.statusCode = 405
       return res.end()
     }
+    if (!(await requireAuth(req, res))) return
     const qs = new URLSearchParams((req.url ?? '').split('?')[1] ?? '')
     const brand = qs.get('brand') ?? ''
     const workspaceId = qs.get('workspace') ?? undefined
@@ -100,6 +122,12 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
   // In-app connect flow (single-segment paths — Vercel only routes those to this catch-all):
   // /api/google-connect?workspace=<id> begins OAuth; /api/google-callback stores the workspace's
   // refresh token + discovered sources, then redirects back to the app.
+  //
+  // These two are deliberately NOT behind requireAuth, and cannot be: google-connect is a top-level
+  // browser navigation and google-callback is Google calling us, so neither request can carry an
+  // Authorization header. Anyone who knows a workspace id can therefore start (and complete) an
+  // OAuth grant against it. Locking them down needs a signed state/nonce minted by an authenticated
+  // request, not a bearer token.
   if (path === 'google-connect') {
     const workspace = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('workspace') ?? ''
     const { googleAuthUrl, googleConfigured } = await import('../server/googleConnect.js')
@@ -132,6 +160,7 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
       res.statusCode = 405
       return res.end()
     }
+    if (!(await requireAuth(req, res))) return
     const raw =
       typeof req.body === 'string'
         ? (() => {

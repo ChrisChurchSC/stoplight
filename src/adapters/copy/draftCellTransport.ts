@@ -1,4 +1,5 @@
 import type { ChannelId } from '../../domain/types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /** What the Claude per-cell writer needs to compose one personalized asset. */
 export interface DraftCellRequest {
@@ -20,7 +21,7 @@ export interface DraftCellRequest {
  */
 export async function draftCellCopy(req: DraftCellRequest): Promise<Record<string, string> | null> {
   try {
-    const res = await fetch('/api/draft-cell', {
+    const res = await apiFetch('/api/draft-cell', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(req),

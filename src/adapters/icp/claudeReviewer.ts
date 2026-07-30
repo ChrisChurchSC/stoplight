@@ -2,6 +2,7 @@ import { assetRtbIds } from '../../domain/rtb'
 import { messagingMap } from '../../domain/messaging'
 import type { TrafficRow } from '../../domain/types'
 import type { BatchReview, Icp, IcpReviewer } from './types'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Real ICP reviewer: POSTs the ICP + the to-be-scheduled batch to the
@@ -26,7 +27,7 @@ export class ClaudeIcpReviewer implements IcpReviewer {
       }))
 
     try {
-      const res = await fetch('/api/icp-review', {
+      const res = await apiFetch('/api/icp-review', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ icp, assets }),

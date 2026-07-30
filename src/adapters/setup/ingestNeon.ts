@@ -1,4 +1,5 @@
 import { IngestError, type IngestProgress } from './ingestChannel'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Client for the Neon ingest: pull a brand's published assets (fundraising
@@ -26,7 +27,7 @@ export async function ingestNeonStream(
   input: { brand?: string },
   onProgress?: (e: IngestProgress) => void,
 ): Promise<NeonIngestResult> {
-  const res = await fetch('/api/ingest-neon', {
+  const res = await apiFetch('/api/ingest-neon', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

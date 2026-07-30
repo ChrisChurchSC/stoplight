@@ -1,4 +1,5 @@
 import { heuristicAnswer, type AskAnswer, type AskContext } from '../../domain/askClaude'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Asks the server-side /api/claude-ask endpoint (which calls Claude) and falls
@@ -11,7 +12,7 @@ export async function askClaude(context: AskContext, model?: string): Promise<As
   try {
     // 'auto' (or unset) keeps the server's tier default; any other id overrides the model per request.
     const body = model && model !== 'auto' ? { context, model } : { context }
-    const res = await fetch('/api/claude-ask', {
+    const res = await apiFetch('/api/claude-ask', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

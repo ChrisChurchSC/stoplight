@@ -6,6 +6,7 @@
  * never a dead button. Mirrors the draftChannels contract.
  */
 import { FUNNEL_STAGES, type FunnelStage } from '../../domain/funnel'
+import { apiFetch } from '../../lib/apiFetch'
 
 export interface DraftedAngle {
   /** The audience this recommendation is for (matched by name). */
@@ -110,7 +111,7 @@ function heuristicAngle(input: DraftAngleInput): DraftedAngle[] {
 
 export async function draftAngle(input: DraftAngleInput): Promise<DraftedAngle[]> {
   try {
-    const res = await fetch('/api/draft-angle', {
+    const res = await apiFetch('/api/draft-angle', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),

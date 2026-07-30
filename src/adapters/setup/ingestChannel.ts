@@ -5,6 +5,7 @@
  * can show the work, then returns the channel's mapped messaging. Mirrors
  * mapSiteStream; the real extraction runs server-side (/api/ingest-channel).
  */
+import { apiFetch } from '../../lib/apiFetch'
 
 export interface IngestedMessage {
   label: string
@@ -58,7 +59,7 @@ export async function ingestChannelStream(
   input: IngestInput,
   onProgress: (e: IngestProgress) => void,
 ): Promise<ChannelIngestResult> {
-  const res = await fetch('/api/ingest-channel', {
+  const res = await apiFetch('/api/ingest-channel', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

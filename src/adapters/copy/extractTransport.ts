@@ -1,4 +1,5 @@
 import type { ExtractResult, ExtractTransport } from './extract'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * The real ExtractTransport: reads the copy inside a creative via Claude vision
@@ -8,7 +9,7 @@ import type { ExtractResult, ExtractTransport } from './extract'
  */
 export const realExtractTransport: ExtractTransport = async (row): Promise<ExtractResult> => {
   try {
-    const res = await fetch('/api/extract-copy', {
+    const res = await apiFetch('/api/extract-copy', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

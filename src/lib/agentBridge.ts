@@ -13,6 +13,7 @@ import { type AssetFilter, type ViewGroupBy, assetMatchesFilter, assetDate, grou
 import { GTM_STRATEGIES, resolveStrategyKey } from '../domain/strategies'
 import { conditionSentence } from '../domain/conditions'
 import { STRATEGY_ASSETS } from '../domain/strategyAssets'
+import { apiFetch } from './apiFetch'
 
 /**
  * Browser side of the agent bridge: this tab is the executor. It listens for
@@ -1251,7 +1252,7 @@ function onCommand(e: Event): void {
     } catch (err) {
       payload = { id: cmd.id, error: String((err as Error)?.message ?? err) }
     }
-    void fetch('/api/agent-result', {
+    void apiFetch('/api/agent-result', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),

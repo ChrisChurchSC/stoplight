@@ -22,6 +22,16 @@ export class NoKeyError extends Error {
 }
 
 /**
+ * The provider will not serve us right now for money reasons: the account's spend cap is reached
+ * (402), or it is still rate limited after the one retry below. Its own code, because apiRoute maps
+ * it to 501 like NO_KEY, which is the status the client reads as "no model available, use the
+ * heuristic writer". Thrown as a plain 500 it looked like a crash and skipped every fallback.
+ */
+export class BudgetError extends Error {
+  code = 'NO_BUDGET'
+}
+
+/**
  * Task tiers. Handlers pick one so cheap work (structured extraction, ingest)
  * runs on a cheap model while copy and multi-step reasoning stay on stronger ones.
  *   - extract: high-volume structured pulls + vision (site map, ingest, coherence)
@@ -128,7 +138,20 @@ export function makeModelClient(tier: ModelTier = 'extract', modelOverride?: str
     // Supplies the model, exactly as the OpenRouter branch does. It used to forward whatever the
     // handler passed, which is why the tier defaults and the model picker did nothing on this path.
     const model = anthropicModelFor(modelPicksLocked() ? undefined : modelOverride, tier)
-    return { messages: { create: (params) => anth.messages.create({ ...params, model }) } }
+    return {
+      messages: {
+        create: async (params) => {
+          try {
+            return await anth.messages.create({ ...params, model })
+          } catch (err) {
+            // Same money-shaped statuses as the OpenRouter branch, so this path degrades identically.
+            const status = (err as { status?: number })?.status
+            if (status === 402 || status === 429) throw new BudgetError(`Anthropic ${status}`)
+            throw err
+          }
+        },
+      },
+    }
   }
 
   throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
@@ -266,6 +289,11 @@ function openRouterClient(orKey: string, tier: ModelTier, modelOverride?: string
       if (res.status === 429 && attempt < 1) {
         await new Promise((r) => setTimeout(r, 1200))
         continue
+      }
+      // 402 is a spent spend cap; a 429 that survived the retry is the same "cannot serve you"
+      // class. Both mean degrade to the offline writer rather than fail.
+      if (res.status === 402 || res.status === 429) {
+        throw new BudgetError(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`)
       }
       if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`)
       data = (await res.json()) as OpenRouterResponse

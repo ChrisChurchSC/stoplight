@@ -1,4 +1,5 @@
 import { heuristicRecordsAgent, type RecordAgentContext, type RecordAgentResult } from '../../domain/recordsAgent'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Asks the server-side /api/records-agent endpoint (which calls Claude) and falls back to the
@@ -8,7 +9,7 @@ import { heuristicRecordsAgent, type RecordAgentContext, type RecordAgentResult 
  */
 export async function generateRecordEdit(context: RecordAgentContext): Promise<RecordAgentResult & { live: boolean }> {
   try {
-    const res = await fetch('/api/records-agent', {
+    const res = await apiFetch('/api/records-agent', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ context }),
