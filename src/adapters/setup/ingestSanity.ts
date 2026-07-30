@@ -1,4 +1,5 @@
 import { IngestError, type IngestProgress } from './ingestChannel'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Client for the Sanity CMS ingest: pull a brand's owned content (the copy in
@@ -36,7 +37,7 @@ export async function ingestSanityStream(
   input: SanityInput,
   onProgress: (e: IngestProgress) => void,
 ): Promise<SanityIngestResult> {
-  const res = await fetch('/api/ingest-sanity', {
+  const res = await apiFetch('/api/ingest-sanity', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

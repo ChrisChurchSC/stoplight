@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getActiveWorkspaceId } from '../lib/session'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { siGoogleanalytics, siGooglesearchconsole, siYoutube, siResend } from 'simple-icons'
+import { apiFetch } from '../lib/apiFetch'
 
 /**
  * Connectors: the integrations page. Shows only the connectors that are actually wired today:
@@ -169,7 +170,7 @@ export function ConnectorsPage() {
     setVerifying(true)
     setConnectError(null)
     try {
-      const r = await fetch('/api/connect-resend', {
+      const r = await apiFetch('/api/connect-resend', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ workspace: wsId, key }),

@@ -3,12 +3,14 @@
  * loosely-shaped items (title / primaryText / description / url / channel) ready for the store's
  * importAssets. Returns [] on any failure so the caller can report a clean "couldn't read" message.
  */
+import { apiFetch } from '../../lib/apiFetch'
+
 export async function ingestSite(
   url: string,
   ctx?: { brand?: string; workspace?: string },
 ): Promise<Record<string, unknown>[]> {
   try {
-    const res = await fetch('/api/ingest-site', {
+    const res = await apiFetch('/api/ingest-site', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url, brand: ctx?.brand, workspace: ctx?.workspace }),

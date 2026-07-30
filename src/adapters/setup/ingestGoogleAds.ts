@@ -1,4 +1,5 @@
 import { IngestError, type IngestProgress } from './ingestChannel'
+import { apiFetch } from '../../lib/apiFetch'
 
 /**
  * Client for the Google Ads ingest: pull a brand's live ad copy via the Google
@@ -39,7 +40,7 @@ export async function ingestGoogleAdsStream(
   input: GoogleAdsCreds,
   onProgress: (e: IngestProgress) => void,
 ): Promise<GoogleAdsIngestResult> {
-  const res = await fetch('/api/ingest-google-ads', {
+  const res = await apiFetch('/api/ingest-google-ads', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

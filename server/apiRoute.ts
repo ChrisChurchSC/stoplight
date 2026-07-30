@@ -7,7 +7,11 @@
  * Keys stay server-side (Vercel env vars). Access is gated by Vercel Deployment Protection (see
  * DEPLOY.md); this adds a best-effort per-instance rate guard to blunt a runaway client loop. A
  * real cross-instance rate limit needs Vercel KV — a documented follow-up.
+ *
+ * Every POST handler is reached through jsonRoute, so the signed-in check lives here once rather
+ * than in 35 handlers.
  */
+import { requireAuth } from './apiAuth.js'
 
 // Minimal Node/Vercel function shapes (avoid pulling in @vercel/node for two interfaces).
 interface ApiReq {
@@ -56,6 +60,8 @@ export function jsonRoute(run: (body: any) => Promise<unknown>, method: 'POST' |
       res.statusCode = 405
       return res.end()
     }
+    // Before the rate guard: an unauthenticated caller must not be able to spend the window.
+    if (!(await requireAuth(req, res))) return
     if (!withinRate()) {
       res.statusCode = 429
       res.setHeader('content-type', 'application/json')
@@ -66,8 +72,11 @@ export function jsonRoute(run: (body: any) => Promise<unknown>, method: 'POST' |
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify(result))
     } catch (err) {
+      // NO_BUDGET shares NO_KEY's 501 on purpose. Every client adapter reads 501 as "the model is
+      // not available, use the heuristic writer"; an exhausted budget is that same state, and a 500
+      // would surface it as a crash and skip the fallbacks.
       const code = (err as { code?: string })?.code
-      res.statusCode = code === 'NO_KEY' ? 501 : 500
+      res.statusCode = code === 'NO_KEY' || code === 'NO_BUDGET' ? 501 : 500
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
     }

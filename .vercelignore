@@ -1,6 +1,7 @@
 # Vercel Hobby caps a deployment at 12 serverless functions. Every /api/* endpoint is served by the
 # single catch-all api/[...path].ts, so the individual per-endpoint files are excluded from the deploy
 # (they're still used by the local Vite dev middleware, which doesn't read this file).
+api/ai-credits.ts
 api/ai-status.ts
 api/claude-agent.ts
 api/claude-ask.ts
