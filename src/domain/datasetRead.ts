@@ -41,6 +41,19 @@ export interface DatasetProvenance {
 const day = (t: number): string =>
   new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
+/**
+ * Parse a date-only coverage string as LOCAL noon.
+ *
+ * "2026-07-25" parses as UTC midnight, which renders as 24 July anywhere west of Greenwich, so the
+ * card claimed a window ending the day before the one the warehouse reported. Noon puts it far enough
+ * from both boundaries that no timezone can move the date.
+ */
+const dateOnly = (v: string): number => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim())
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12).getTime()
+  return Date.parse(v)
+}
+
 /** Window in days, parsed out of the stored query ("gsc-pages:90d"). */
 export function windowDays(query?: string): number | undefined {
   const m = /:(\d+)d$/.exec(query ?? '')
@@ -62,9 +75,28 @@ export function pullId(query?: string): string | undefined {
  */
 export function periodOf(ds: BrandDataset): string | undefined {
   const s = ds.source
-  if (!s || s.kind !== 'aggregator' || !s.syncedAt) return undefined
+  if (!s || s.kind !== 'aggregator') return undefined
   const d = windowDays(s.query)
-  return d ? `${d} days to ${day(s.syncedAt)}` : `as at ${day(s.syncedAt)}`
+  // COVERAGE WINS over the request. It is what the rows say about themselves.
+  if (s.coverage?.to) {
+    const to = dateOnly(s.coverage.to)
+    if (!Number.isNaN(to)) return d ? `${d} days to ${day(to)}` : `to ${day(to)}`
+  }
+  if (!s.syncedAt) return undefined
+  // No coverage: do NOT date this to the request. Saying "the 90 days to today" when the rows end
+  // four days ago is the exact false precision this field exists to stop.
+  return undefined
+}
+
+/** The end of what the rows cover, for staleness. Falls back to the request when nothing else. */
+export function coverageEnd(ds: BrandDataset): number | undefined {
+  const s = ds.source
+  if (!s || s.kind !== 'aggregator') return undefined
+  if (s.coverage?.to) {
+    const t = dateOnly(s.coverage.to)
+    if (!Number.isNaN(t)) return t
+  }
+  return s.syncedAt
 }
 
 /**
@@ -76,9 +108,6 @@ export function periodOf(ds: BrandDataset): string | undefined {
  * better one.
  */
 export function datasetProvenance(ds: BrandDataset, now: number = Date.now()): DatasetProvenance {
-  // `now` is the clock the 'stale' tier will read once Phase 4 lands. Threaded through every caller
-  // from the start so adding staleness is a change to this function only, not to six call sites.
-  void now
   const s = ds.source
   const partial = !!(s && s.kind === 'aggregator' && s.truncated)
   const partialSuffix = partial ? ' Top 500 rows.' : ''
@@ -113,10 +142,39 @@ export function datasetProvenance(ds: BrandDataset, now: number = Date.now()): D
   }
 
   if (s?.kind === 'aggregator') {
+    /**
+     * STALE ONCE ITS OWN WINDOW HAS CLOSED. A 30 day pull expires in 30 days and a 365 day pull in a
+     * year, because the window is the user's own statement of how current this needs to be. A single
+     * hardcoded 90 would be a number nobody could defend to them.
+     *
+     * A stale set stops being citable, so its numbers leave the copy writer until it is pulled again.
+     * That is deliberately stronger than a warning: a figure quoted as current when its window shut
+     * four months ago is wrong in the one way this app must not be.
+     */
+    const win = windowDays(s.query)
+    const end = coverageEnd(ds)
+    const ageDays = end ? Math.floor((now - end) / 86_400_000) : undefined
+    if (win && ageDays !== undefined && ageDays > win) {
+      return {
+        tier: 'stale',
+        badge: period ? `${sourceName(ds)}, ${period}. Old now.` : `${sourceName(ds)}. Old now.`,
+        detail: `${sourceName(ds)}${period ? `, ${period}` : ''}. That window closed ${ageDays - win} day${ageDays - win === 1 ? '' : 's'} ago.${partialSuffix}`,
+        tone: 'amber',
+        citable: false,
+        why: period
+          ? `This covers ${period}, and that window closed ${ageDays - win} days ago. Its numbers are held back until you pull it again.`
+          : 'This is older than the window it was pulled for. Its numbers are held back until you pull it again.',
+        partial,
+        periodLabel: period,
+      }
+    }
     return {
       tier: 'measured',
       badge: period ? `${sourceName(ds)}, ${period}` : sourceName(ds),
-      detail: `${sourceName(ds)}${period ? `, ${period}` : ''}.${partialSuffix}`,
+      // Without coverage the source did not say what it returned, and the request is not a substitute.
+      detail: period
+        ? `${sourceName(ds)}, ${period}.${partialSuffix}`
+        : `${sourceName(ds)}. We asked for ${win ? `${win} days` : 'a window'}. What came back does not say what it covers.${partialSuffix}`,
       tone: 'plain',
       citable: true,
       why: '',

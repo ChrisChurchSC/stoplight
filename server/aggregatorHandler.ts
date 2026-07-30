@@ -223,6 +223,32 @@ GROUP BY 1,2 ORDER BY "Impressions" DESC LIMIT ${MAX_ROWS}`
   }
 }
 
+/**
+ * WHAT THE ROWS ACTUALLY COVER.
+ *
+ * The named pulls group by dimension and drop the date, so the grid cannot answer this and the
+ * request is not a substitute: Search Console lags a few days, and a mart whose connector broke in
+ * May still returns rows and still gets stamped now. One cheap min/max per pull, against the same
+ * table and the same window, so a data set can say what it spans rather than implying today.
+ */
+function coverageSql(pullId: string, schema: string, days: PullWindow): string | null {
+  const table: Record<string, string> = {
+    'gsc-queries': 'keyword_site_report_by_site',
+    'gsc-pages': 'page_report',
+    'ga4-channels': 'traffic_acquisition_session_default_channel_grouping_report',
+    'ga4-pages': 'pages_path_report',
+    'yt-videos': 'channel_report',
+    'li-posts': 'post_report',
+  }
+  const t = table[pullId]
+  if (!t) return null
+  // post_report is per post and carries created_at rather than a date_day column.
+  const col = pullId === 'li-posts' ? 'created_at' : 'date_day'
+  return `SELECT min(${col})::VARCHAR AS "from", max(${col})::VARCHAR AS "to"
+FROM marts.${schema}.${t}
+WHERE ${col} >= current_date - INTERVAL ${days} DAY`
+}
+
 /** Which service a pull needs, kept beside the SQL so the two cannot drift apart. */
 const PULL_SERVICE: Record<string, string> = {
   'gsc-queries': 'google_search_console',
@@ -317,7 +343,35 @@ export async function runAggregator(body: unknown): Promise<unknown> {
     // Naming is left to the caller: the card knows the pull's label and the source's label, and this
     // handler would only be reassembling strings it was handed.
     const { columns, rows, truncated } = await summerQuery(token, projectId, connectionId, sql)
-    const result: AggregatorPullResult = { columns, rows, truncated }
+
+    // Best effort: a warehouse that will not answer this leaves coverage absent, which the app says
+    // out loud rather than filling in with the window we asked for.
+    let coverage: { from: string; to: string } | undefined
+    const covSql = coverageSql(pullId, schema, window)
+    if (covSql) {
+      try {
+        const cov = await summerQuery(token, projectId, connectionId, covSql)
+        /**
+         * VALIDATED, NOT TRUSTED BY POSITION.
+         *
+         * Reading rows[0][0] and rows[0][1] blind turned an unexpected response into
+         * coverage {from: 'world with', to: '443'}, which would then have been rendered as a date and
+         * used to decide staleness. A made up date presented as fact is the exact failure this whole
+         * field exists to prevent, so the columns must be the ones asked for and both values must
+         * parse as real dates, or there is no coverage.
+         */
+        const iFrom = cov.columns.findIndex((c) => c.toLowerCase() === 'from')
+        const iTo = cov.columns.findIndex((c) => c.toLowerCase() === 'to')
+        const from = iFrom >= 0 ? (cov.rows[0]?.[iFrom] ?? '').slice(0, 10) : ''
+        const to = iTo >= 0 ? (cov.rows[0]?.[iTo] ?? '').slice(0, 10) : ''
+        const dated = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v))
+        if (dated(from) && dated(to)) coverage = { from, to }
+      } catch {
+        // Leave it undefined. An unknown span is a real state and a better answer than a guess.
+      }
+    }
+
+    const result: AggregatorPullResult = { columns, rows, truncated, coverage }
     return result
   }
 

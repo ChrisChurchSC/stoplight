@@ -676,13 +676,29 @@ function loadBrandDatasets(): BrandDataset[] {
     return []
   }
 }
-function saveBrandDatasets(list: BrandDataset[]): void {
+/**
+ * Persist the brand's data sets, and SAY SO WHEN IT FAILS.
+ *
+ * This swallowed every error, which was survivable while a data set was a spreadsheet somebody typed
+ * and is not once a pull can land 500 rows: every set for every brand lives under one key, so a few
+ * big tables can exhaust the quota, and the failure looked exactly like success. You would pull a
+ * table, read it, reload, and find it gone with nothing ever having said why.
+ *
+ * Returns whether the write landed so callers can roll their in-memory state back to match what is
+ * actually on disk, rather than showing a table that will not survive a refresh.
+ */
+function saveBrandDatasets(list: BrandDataset[]): boolean {
   try {
     localStorage.setItem(BRAND_DATASETS_KEY, JSON.stringify(list))
+    return true
   } catch {
-    /* ignore */
+    return false
   }
 }
+
+/** What to tell somebody whose browser has no room left. Names the fix, not the exception. */
+const STORAGE_FULL =
+  'Could not save that table. There is no room left in this browser storage. Delete a data set you no longer need and try again.'
 
 // Records › Channels — the channel taxonomy as records, seeded once from CHANNEL_LIST.
 const CHANNEL_RECORDS_KEY = 'stoplight.channelRecords.v1'
@@ -1820,6 +1836,26 @@ interface TrafficState {
    * caller must supply. Returns the id so the caller can open it.
    */
   importBrandDataset: (brand: string, name: string, columns: string[], rows: string[][], source: DatasetSource) => string
+  /**
+   * The grid a refresh replaced, so it can be put back.
+   *
+   * IN THE STORE, not in the card's component state. The inspector closes when a refresh lands, and
+   * component state dies with it, so an undo kept there was unreachable exactly when somebody wanted
+   * it. One slot: the last refresh is the one anybody undoes.
+   */
+  datasetUndo: { dsId: string; columns: string[]; rows: string[][]; source?: DatasetSource } | null
+  /** Put the replaced grid back. No-op when there is nothing to put back. */
+  undoDatasetRefresh: () => void
+  /**
+   * Swap a data set's grid for a fresh pull, keeping its id so every card stays attached. Returns the
+   * previous grid for an undo, or null when nothing was written.
+   */
+  refreshBrandDataset: (
+    id: string,
+    columns: string[],
+    rows: string[][],
+    source: DatasetSource,
+  ) => { columns: string[]; rows: string[][]; source?: DatasetSource; editedAt?: number; editedCells?: number } | null
   renameBrandDataset: (id: string, name: string) => void
   deleteBrandDataset: (id: string) => void
   setDatasetCell: (id: string, row: number, col: number, value: string) => void
@@ -2776,6 +2812,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
   brandDatasets: loadBrandDatasets(),
+  datasetUndo: null,
   smartObjects: loadSmartObjects(),
   segments: localDataMode ? loadSegments() : [],
   mediaMixes: loadMediaMixes(),
@@ -3533,12 +3570,63 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   },
   importBrandDataset: (brand, name, columns, rows, source) => {
     const ds: BrandDataset = { ...blankDataset(brand, name), columns, rows, source }
+    let stored = true
     set((s) => {
       const brandDatasets = [...s.brandDatasets, ds]
-      saveBrandDatasets(brandDatasets)
-      return { brandDatasets }
+      stored = saveBrandDatasets(brandDatasets)
+      // A failed write is not applied in memory either. Showing a table the next reload will not have
+      // is worse than refusing it: you would build a campaign on a figure that quietly vanished.
+      return stored ? { brandDatasets } : {}
     })
+    if (!stored) {
+      get().setBrandNotice(STORAGE_FULL)
+      return ''
+    }
     return ds.id
+  },
+  /**
+   * REPLACE A DATA SET'S GRID IN PLACE, keeping its id.
+   *
+   * Not a new set: the id is what every card's refId, every campaign reference and every figure id is
+   * built on, so minting a fresh one on refresh would silently detach every card pointing at it and
+   * leave the old table behind as a duplicate. Same id, new rows, new coverage.
+   *
+   * Returns the rows it replaced so the caller can offer an undo. A click that destroys the table
+   * somebody was reading, with no way back, is how a marketer loses an afternoon.
+   */
+  refreshBrandDataset: (id, columns, rows, source) => {
+    const before = get().brandDatasets.find((d) => d.id === id)
+    if (!before) return null
+    let stored = true
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        // The edit stamp is dropped deliberately: these are fresh rows from the source, so whatever
+        // somebody typed over is gone and the table is measured again.
+        d.id === id ? { ...d, columns, rows, source, editedAt: undefined, editedCells: undefined } : d,
+      )
+      stored = saveBrandDatasets(brandDatasets)
+      return stored ? { brandDatasets } : {}
+    })
+    if (!stored) {
+      get().setBrandNotice(STORAGE_FULL)
+      return null
+    }
+    set({ datasetUndo: { dsId: id, columns: before.columns, rows: before.rows, source: before.source } })
+    return { columns: before.columns, rows: before.rows, source: before.source, editedAt: before.editedAt, editedCells: before.editedCells }
+  },
+  undoDatasetRefresh: () => {
+    const u = get().datasetUndo
+    if (!u) return
+    set((s) => {
+      const brandDatasets = s.brandDatasets.map((d) =>
+        d.id === u.dsId ? { ...d, columns: u.columns, rows: u.rows, source: u.source } : d,
+      )
+      if (!saveBrandDatasets(brandDatasets)) {
+        get().setBrandNotice(STORAGE_FULL)
+        return {}
+      }
+      return { brandDatasets, datasetUndo: null }
+    })
   },
   renameBrandDataset: (id, name) =>
     set((s) => {
@@ -3590,7 +3678,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         return { ...d, rows, editedAt: Date.now(), editedCells: (d.editedCells ?? 0) + 1 }
       })
       if (!changed) return {}
-      saveBrandDatasets(brandDatasets)
+      if (!saveBrandDatasets(brandDatasets)) {
+        get().setBrandNotice(STORAGE_FULL)
+        return {}
+      }
       return { brandDatasets }
     }),
   setDatasetColumn: (id, col, label) =>

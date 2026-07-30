@@ -42,6 +42,18 @@ export type DatasetSource =
        */
       truncated?: boolean
       rowCount?: number
+      /**
+       * WHAT THE ROWS ACTUALLY COVER, as opposed to when we asked for them.
+       *
+       * syncedAt is the moment of the request, and three things break the assumption that the two are
+       * the same: Search Console lags two to three days, GA4's "today" is a partial day, and a
+       * warehouse mart whose connector broke in May still returns rows and still gets stamped now. So
+       * "the last 90 days" can mean the 90 days ending four days ago, or ending in May.
+       *
+       * Absent when the source will not say. That is a real state and it is said out loud rather than
+       * papered over with the window we asked for.
+       */
+      coverage?: { from: string; to: string }
     }
   | { kind: 'composite'; prompt: string; generatedAt: number }
 

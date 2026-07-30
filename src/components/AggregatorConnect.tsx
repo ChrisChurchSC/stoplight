@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
+  AGGREGATOR_PULLS,
   PULL_WINDOWS,
   aggregatorSpec,
   pullsForServices,
@@ -58,6 +59,14 @@ interface Props {
    * user just chose.
    */
   initialService?: string
+  /**
+   * A stored pull, replayed. When both are given the panel runs that exact question and window
+   * immediately: "pull it again" should be one click, not a walk back through four screens.
+   */
+  initialPull?: string
+  initialDays?: PullWindow
+  /** Land the result over an existing set rather than creating one. */
+  refreshing?: boolean
   /** Lands the pulled grid as a brand data set and returns its id. */
   onLand: (
     name: string,
@@ -67,6 +76,7 @@ interface Props {
     service: string,
     query: string,
     truncated: boolean,
+    coverage?: { from: string; to: string },
   ) => string
   onDone: (datasetId: string, note: string) => void
   onCancel: () => void
@@ -88,15 +98,24 @@ const sentenceFor = (code: string): string => ERROR_SENTENCE[code] ?? 'Could not
 
 type Step = 'provider' | 'source' | 'pull'
 
-export function AggregatorConnect({ linkedName, brand, website, initialProvider, initialService, onLand, onDone, onCancel }: Props) {
+export function AggregatorConnect({ linkedName, brand, website, initialProvider, initialService, initialPull, initialDays, refreshing, onLand, onDone, onCancel }: Props) {
   const [status, setStatus] = useState<AggregatorStatus | null>(null)
   const [step, setStep] = useState<Step>('provider')
   const [provider, setProvider] = useState<AggregatorProvider | null>(null)
   const [sources, setSources] = useState<AggregatorSource[] | null>(null)
   const [source, setSource] = useState<AggregatorSource | null>(null)
-  const [days, setDays] = useState<PullWindow>(90)
+  const [days, setDays] = useState<PullWindow>(initialDays ?? 90)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /**
+   * A MOUNT EFFECT THAT SPENDS A REQUEST MUST RUN ONCE.
+   *
+   * StrictMode invokes mount effects twice in development, which fired the replay pull twice. The
+   * second one was worse than wasteful: on a refresh it captured the ALREADY REFRESHED rows as the
+   * "previous" table, so Undo put back the thing you were trying to undo. Verified by a hand edit
+   * surviving the first pull and vanishing after the second.
+   */
+  const started = useRef(false)
 
   const post = async (body: unknown): Promise<unknown> => {
     const res = await fetch('/api/aggregator', {
@@ -117,6 +136,8 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
 
   useEffect(() => {
     let live = true
+    if (started.current) return
+    started.current = true
     void (async () => {
       // Picked in the card's list already: go straight to its sources. Asking again, with a list of
       // one, would be a step that offers no choice.
@@ -147,6 +168,12 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
       if (r.sources.length === 1) {
         setSource(r.sources[0])
         setStep('pull')
+        // A replay: the question and window are already known, so run it rather than showing a list
+        // whose only purpose would be to have the same thing picked again.
+        if (initialPull) {
+          const p = AGGREGATOR_PULLS.find((x) => x.id === initialPull)
+          if (p) { void runPullWith(p, r.sources[0], id) ; return }
+        }
       } else setStep('source')
     } catch (e) {
       setError(sentenceFor((e as Error).message))
@@ -158,25 +185,47 @@ export function AggregatorConnect({ linkedName, brand, website, initialProvider,
 
   const runPull = async (pull: AggregatorPull) => {
     if (!provider || !source) return
+    await runPullWith(pull, source, provider)
+  }
+
+  /**
+   * The pull itself, taking its source and provider explicitly.
+   *
+   * Split out because the replay path fires inside the same tick that sets them, and reading them
+   * back off state there would read the previous render's values.
+   */
+  const runPullWith = async (pull: AggregatorPull, src: AggregatorSource, prov: AggregatorProvider) => {
     setBusy(true)
     setError('')
     try {
-      const r = (await post({ op: 'pull', provider, source: source.id, pull: pull.id, days })) as AggregatorPullResult
+      const r = (await post({ op: 'pull', provider: prov, source: src.id, pull: pull.id, days })) as AggregatorPullResult
       if (!r.columns.length) {
         setError('That came back with no columns.')
         return
       }
       if (!r.rows.length) {
-        // An empty grid would land looking like a measured zero. Say it instead.
-        setError(`No rows in the last ${days} days. Try a longer window.`)
+        // An empty grid would land looking like a measured zero. Say it instead. On a refresh this
+        // matters more: the table on the card must be left exactly as it was.
+        setError(refreshing ? 'Nothing came back. The table on the card is unchanged.' : `No rows in the last ${days} days. Try a longer window.`)
         return
       }
-      const name = `${pull.shortName} · ${source.label.split(' · ')[0]} · ${days}d`
+      const name = `${pull.shortName} · ${src.label.split(' · ')[0]} · ${days}d`
       // r.truncated was already in hand here and thrown away. A table that stopped at the cap must
       // say so, or a sum over it later reads as a total.
-      const id = onLand(name, r.columns, r.rows, provider, pull.service, `${pull.id}:${days}d`, r.truncated)
+      const id = onLand(name, r.columns, r.rows, prov, pull.service, `${pull.id}:${days}d`, r.truncated, r.coverage)
+      // An empty id means the store refused the write (no room in this browser). It has already said
+      // so; claiming rows landed on top of that would be the app contradicting itself.
+      if (!id) {
+        setError('That table could not be saved. See the notice above.')
+        return
+      }
       const cap = r.truncated ? `, capped at ${r.rows.length}` : ''
-      onDone(id, `${r.rows.length} row${r.rows.length === 1 ? '' : 's'} from ${aggregatorSpec(provider)?.label}, last ${days} days${cap}.`)
+      onDone(
+        id,
+        refreshing
+          ? `Updated. ${r.rows.length} row${r.rows.length === 1 ? '' : 's'}${cap}.`
+          : `${r.rows.length} row${r.rows.length === 1 ? '' : 's'} from ${aggregatorSpec(prov)?.label}, last ${days} days${cap}.`,
+      )
     } catch (e) {
       setError(sentenceFor((e as Error).message))
     } finally {

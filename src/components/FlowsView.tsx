@@ -41,7 +41,7 @@ import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
-import { aggregatorSpec, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
+import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
 import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
@@ -890,6 +890,9 @@ export function FlowsView() {
   const addSeason = useTrafficStore((s) => s.addSeason)
   const updateSeason = useTrafficStore((s) => s.updateSeason)
   const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
+  const refreshBrandDataset = useTrafficStore((s) => s.refreshBrandDataset)
+  const datasetUndo = useTrafficStore((s) => s.datasetUndo)
+  const undoDatasetRefresh = useTrafficStore((s) => s.undoDatasetRefresh)
   /** Per-card import feedback: what landed, or why nothing did. */
   const [importNote, setImportNote] = useState<Record<string, string>>({})
   const importFileRef = useRef<HTMLInputElement | null>(null)
@@ -906,6 +909,9 @@ export function FlowsView() {
   const [pasteFor, setPasteFor] = useState<string | null>(null)
   /** Whether the picker is showing every data set or the three most recent. */
   const [showAllSets, setShowAllSets] = useState(false)
+  /** Which card is re-pulling, and the grid it replaced, so the click is reversible for the session. */
+  const [refreshFor, setRefreshFor] = useState<string | null>(null)
+
   /**
    * The providers that are actually usable right now, listed in the card's own picker.
    *
@@ -953,6 +959,7 @@ export function FlowsView() {
         prompt: said,
         generatedAt: Date.now(),
       })
+      if (!id) return
       setObjectRef(cardId, id)
       if (isAttached(cardId)) attachToCampaign(cardId)
       markCardDirty(cardId)
@@ -989,6 +996,9 @@ export function FlowsView() {
       importedAt: Date.now(),
       rowCount: t.rows.length,
     })
+    // The store refused the write and has already said why. Do not clear the card's existing link on
+    // top of that by pointing it at an empty id.
+    if (!id) return
     setObjectRef(cardId, id)
     if (isAttached(cardId)) attachToCampaign(cardId)
     markCardDirty(cardId)
@@ -1022,6 +1032,7 @@ export function FlowsView() {
         importedAt: Date.now(),
         rowCount: t.rows.length,
       })
+      if (!id) return
       setObjectRef(cardId, id)
       if (isAttached(cardId)) attachToCampaign(cardId)
       markCardDirty(cardId)
@@ -3154,6 +3165,65 @@ export function FlowsView() {
       <div className="flow-insp-src">
         <label className="flow-inspect-label">Source</label>
         <div className="flow-src-list">
+          {/* PULL IT AGAIN. Only when the linked set records the question and window it came from, which
+              is what makes this one click rather than four. */}
+          {linked?.source?.kind === 'aggregator' &&
+            parsePullQuery(linked.source.query) &&
+            Row({
+              id: 'refresh',
+              mark: linked.source.service,
+              label: 'Pull it again',
+              sub: 'Same question, same window, fresh numbers',
+              onClick: () => setRefreshFor(nt.id),
+            })}
+          {refreshFor === nt.id && linked?.source?.kind === 'aggregator' && (() => {
+            const q = parsePullQuery(linked.source.query)
+            const src = linked.source
+            return q ? (
+              <AggregatorConnect
+                initialProvider={src.provider}
+                initialService={src.service}
+                initialPull={q.pullId}
+                initialDays={q.days}
+                refreshing
+                brand={brand}
+                website={clientProfiles[brand]?.website}
+                onLand={(_name, columns, rows, provider, service, query, truncated, coverage) => {
+                  // Replaces the grid on the SAME id, so every card pointing at this set follows.
+                  const prev = refreshBrandDataset(linked.id, columns, rows, {
+                    kind: 'aggregator',
+                    provider,
+                    service,
+                    query,
+                    syncedAt: Date.now(),
+                    truncated,
+                    rowCount: rows.length,
+                    coverage,
+                  })
+                  return prev ? linked.id : ''
+                }}
+                onDone={(_id, note) => {
+                  setRefreshFor(null)
+                  markCardDirty(nt.id)
+                  setImportNote((m) => ({ ...m, [nt.id]: note }))
+                }}
+                onCancel={() => setRefreshFor(null)}
+              />
+            ) : null
+          })()}
+          {/* Survives the inspector closing, which is what killed the previous version of this: the
+              refresh lands, the panel shuts, and the undo went with it. */}
+          {datasetUndo && linked && datasetUndo.dsId === linked.id && (
+            <button
+              className="flow-src-more"
+              onClick={() => {
+                undoDatasetRefresh()
+                setImportNote((m) => ({ ...m, [nt.id]: 'Put back the table that was there before.' }))
+              }}
+            >
+              Undo the last pull
+            </button>
+          )}
           {/* THE CARD'S OWN SET FIRST, even when it belongs to another brand.
               The card resolves from every data set while this list renders only this brand's, so a
               card holding another brand's table read as nothing selected on a plainly linked card. */}
@@ -3299,7 +3369,7 @@ export function FlowsView() {
           linkedName={nt.refId ? allBrandDatasets.find((d) => d.id === nt.refId)?.name : undefined}
           brand={brand}
           website={clientProfiles[brand]?.website}
-          onLand={(name, columns, rows, provider, service, query, truncated) =>
+          onLand={(name, columns, rows, provider, service, query, truncated, coverage) =>
             importBrandDataset(brand, name, columns, rows, {
               kind: 'aggregator',
               provider,
@@ -3308,6 +3378,7 @@ export function FlowsView() {
               syncedAt: Date.now(),
               truncated,
               rowCount: rows.length,
+              coverage,
             })
           }
           onDone={(id, note) => {

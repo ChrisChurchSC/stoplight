@@ -206,6 +206,21 @@ export const AGGREGATOR_PULLS: AggregatorPull[] = [
   },
 ]
 
+/**
+ * Unpack a stored query ("gsc-pages:90d") back into the question and window that made it.
+ *
+ * This is what makes a data set re-pullable: the card knows what it asked for, so "pull it again"
+ * needs no extra state and works on a set made months ago by somebody else.
+ */
+export function parsePullQuery(q?: string): { pullId: string; days: PullWindow } | null {
+  const m = /^([a-z0-9-]+):(\d+)d$/.exec((q ?? '').trim())
+  if (!m) return null
+  const days = Number(m[2])
+  if (!isPullWindow(days)) return null
+  if (!AGGREGATOR_PULLS.some((p) => p.id === m[1])) return null
+  return { pullId: m[1], days }
+}
+
 export const pullsForServices = (services: string[]): AggregatorPull[] =>
   AGGREGATOR_PULLS.filter((p) => services.includes(p.service))
 
@@ -225,6 +240,8 @@ export interface AggregatorSource {
 export interface AggregatorPullResult {
   columns: string[]
   rows: string[][]
+  /** What the rows span, when the source will say. Absent is a real answer, not a missing field. */
+  coverage?: { from: string; to: string }
   /** True when the row cap was hit, so the card can say the table is partial rather than imply it is all. */
   truncated: boolean
 }
