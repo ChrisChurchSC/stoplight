@@ -5464,10 +5464,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return c && c !== r.channel ? { ...r, channel: c } : r
     })
     // Persist the normalization so it sticks (only the rows that actually changed).
-    for (const r of rows) {
-      const orig = raw.find((o) => o.id === r.id)
-      if (orig && orig.channel !== r.channel) void sheet.update(r.id, { channel: r.channel })
-    }
+    //
+    // Compared against the SOURCE row by index rather than by a find over `raw`: map preserves order,
+    // so the pair is already known, and the find made this pass quadratic (13ms at 2000 rows) for no
+    // information it did not already have.
+    rows.forEach((r, i) => {
+      if (raw[i]?.channel !== r.channel) void sheet.update(r.id, { channel: r.channel })
+    })
     set({ rows, loading: false })
   },
 
