@@ -43,6 +43,7 @@ import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
+import { typeLabel } from '../domain/channelAssetTypes'
 import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
@@ -2641,6 +2642,21 @@ export function FlowsView() {
     // graph from the SAVED board — so drawing a wire and hitting Generate inside that window would
     // write copy that ignores the wire you just drew. buildFlow already does this for the same reason.
     saveFlowBoard(boardSnapshot(boardKey))
+    /**
+     * REFUSE BEFORE THE WIPE.
+     *
+     * The clear below is deliberate: draftCopy only fills EMPTY components, so a real rewrite needs
+     * the old copy gone first. But draftCopy then discovers a brand-less or unwired campaign and
+     * refuses, writing nothing back, which turned Generate into a delete button with an explanation
+     * attached: every asset lost its copy and the notice talked about why it had not generated.
+     *
+     * Checked AFTER the board flush above, because the wiring it tests is what that flush persists.
+     */
+    const blocked = useTrafficStore.getState().copyBlockerFor(viewName)
+    if (blocked) {
+      useTrafficStore.getState().setBrandNotice(`${blocked} Nothing was changed.`)
+      return
+    }
     setRegenerating(true)
     try {
       await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
@@ -8038,7 +8054,7 @@ export function FlowsView() {
                 </div>
                 <div className="flow-inspect">
                   <p className="flow-inspect-desc">
-                    {selDeliv.channel} · {selDeliv.assetType}
+                    {CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · {typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}
                   </p>
                   <label className="flow-inspect-label">Assets</label>
                   {/* The count is TYPEABLE, not just steppable. Getting from 4 to 16 was twelve
@@ -8567,7 +8583,7 @@ export function FlowsView() {
                       ↻ Redraft this deliverable
                     </button>
                     <div className="flow-inspect-note" style={{ marginTop: 12 }}>
-                      {p.channel} · {p.assetType}
+                      {CHANNELS[p.channel as ChannelId]?.label ?? p.channel} · {typeLabel(p.channel as ChannelId, p.assetType) || p.assetType}
                       {node.audience ? ` · ${node.audience}` : ''}
                     </div>
                   </div>
@@ -8701,7 +8717,7 @@ export function FlowsView() {
                       </>
                     )}
                     <div className="flow-inspect-note" style={{ marginTop: 12 }}>
-                      {p.channel} · {p.assetType}
+                      {CHANNELS[p.channel as ChannelId]?.label ?? p.channel} · {typeLabel(p.channel as ChannelId, p.assetType) || p.assetType}
                     </div>
                     <button className="flow-inspect-del" onClick={() => removeNode(node.id)}>
                       Remove deliverable

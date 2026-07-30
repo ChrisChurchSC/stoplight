@@ -226,11 +226,20 @@ const copyWriter: CopyWriter = new ClaudeCopyWriter(new HeuristicCopyWriter())
  * by design (matched to stage), so a repeated CTA is correct, not a collision.
  * Bounded to a few rounds; each feeds the used strings back as an avoid list.
  */
+/**
+ * Rewrite colliding units so no two assets share a headline or a body.
+ *
+ * RETURNS THE ROWS IT REWROTE WITH THE OFFLINE WRITER. Each retry is a fresh draft call that can
+ * fall back independently, and the result's `source` was read once before this ran, so a run could
+ * report "claude" while up to three of its assets carried template copy. ClaudeCopyWriter catches
+ * every failure and returns the heuristic rather than throwing, so the source is the only signal.
+ */
 async function dedupeCampaignDrafts(
   result: DraftResult,
   assets: DraftAsset[],
   baseReq: Omit<DraftRequest, 'assets' | 'avoid'>,
-): Promise<void> {
+): Promise<Set<string>> {
+  const fellBack = new Set<string>()
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
   const byId = new Map(assets.map((a) => [a.rowId, a]))
   const rolesOf = (a: DraftAsset) => {
@@ -257,7 +266,7 @@ async function dedupeCampaignDrafts(
         if (b) seenB.add(b)
       }
     }
-    if (collisions.length === 0) return
+    if (collisions.length === 0) return fellBack
     const avoid = { headlines: [...seenH], bodies: [...seenB], ctas: [] }
     for (const d of collisions) {
       const a = byId.get(d.rowId)
@@ -265,12 +274,17 @@ async function dedupeCampaignDrafts(
       const bumped: DraftAsset = { ...a, index: (a.index ?? 0) + (round + 1) * 101 }
       try {
         const re = await copyWriter.draft({ ...baseReq, avoid, assets: [bumped] })
-        if (re.drafts[0]) d.components = re.drafts[0].components
+        if (re.drafts[0]) {
+          d.components = re.drafts[0].components
+          if (re.source === 'heuristic') fellBack.add(d.rowId)
+          else fellBack.delete(d.rowId)
+        }
       } catch {
         // Leave the unit as-is if regeneration fails; better than dropping copy.
       }
     }
   }
+  return fellBack
 }
 // Real Claude workspace setup (reads the site) when a backend + key are present; heuristic otherwise.
 const setupGenerator: SetupGenerator = new ClaudeSetupGenerator(new HeuristicSetupGenerator())
@@ -2403,6 +2417,18 @@ interface TrafficState {
    *  Resolves to which writer produced the copy ('claude' | 'heuristic'), or null
    *  when nothing was drafted, so callers can show a source badge. 'heuristic' is
    *  sticky: if any campaign group fell back, the whole run reports 'heuristic'. */
+  /**
+   * WHY THIS CAMPAIGN CANNOT GENERATE, in the user's words, or null when it can.
+   *
+   * Exists so a caller can refuse BEFORE destroying anything. regenerateFlow clears every target's
+   * copy and then calls draftCopy, which discovers the same two boundaries and `continue`s without
+   * writing back, so pressing Generate on an unwired campaign deleted the copy and explained why it
+   * had not generated. A refusal that arrives after the deletion is a deletion with a note attached.
+   *
+   * draftCopy keeps its own copies of these checks as the backstop, because SheetGrid, CopyReview
+   * and the agent bridge all call it without passing through a panel.
+   */
+  copyBlockerFor: (campaign: string) => string | null
   draftCopy: (rowIds?: string[]) => Promise<CopySource | null>
   /**
    * Who wrote the copy the last time anything generated: the model, or the offline fallback. Set by
@@ -6376,6 +6402,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { savedViews }
     }),
 
+  copyBlockerFor: (campaign) => {
+    const client = clientForCampaign(campaign)
+    if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
+      return `Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`
+    }
+    if (!hasWiredContext(boardFor(get().flowBoards, campaign))) {
+      return `Nothing is wired up on "${campaign || 'this campaign'}" yet. Draw a line from a card to the campaign brief, or to one deliverable, so there is something to write from.`
+    }
+    return null
+  },
   draftCopy: async (rowIds) => {
     const { rows, icp, filter, query, clientFilter, campaignFilter } = get()
     // Targets: explicit ids, else every in-scope reviewable row with no copy yet.
@@ -6415,8 +6451,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // HARD BOUNDARY: a canvas must bind to a brand to generate. A brand-less
         // (Unassigned) campaign is the contamination failure mode — refuse rather than
         // read the shared catch-all bucket. A draft brand is a real, isolated binding.
-        if (isBrandless(client) && !isDraftBrand(client, get().brandMeta)) {
-          get().setBrandNotice(`Bind "${campaign || 'this canvas'}" to a brand before generating. A brand-less canvas has no voice or proof to write from.`)
+        // Backstop. The panel refuses earlier via copyBlockerFor; this catches every other caller.
+        const blocked = get().copyBlockerFor(campaign)
+        if (blocked) {
+          get().setBrandNotice(blocked)
           continue
         }
         /**
@@ -6427,10 +6465,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
          * is the failure this rule exists to stop: copy written from no stated context at all, which
          * reads plausible and is accountable to nothing. Refuse instead, and say what to do.
          */
-        if (!hasWiredContext(boardFor(get().flowBoards, campaign))) {
-          get().setBrandNotice(`Nothing is wired up on "${campaign || 'this campaign'}" yet. Draw a line from a card to the campaign brief, or to one deliverable, so there is something to write from.`)
-          continue
-        }
+
         const brand = get().clientProfiles[client]
         const bg = get().brandGuides[client]
         const brandGuide = bg?.confirmed ? bg.guide : undefined
@@ -6848,7 +6883,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         else if (result.source === 'claude' && copySource !== 'heuristic') copySource = 'claude'
         // Anti-repetition: regenerate any unit whose headline / primary / CTA
         // collides across the campaign, so the set reads as distinct assets.
-        await dedupeCampaignDrafts(result, assets, baseReq)
+        const redraftFellBack = await dedupeCampaignDrafts(result, assets, baseReq)
         // Register + persist the campaign's drafted proof (merged with any authored).
         if (campaign && result.rtbs.length) {
           const existing = rtbsForCampaign(campaign)
@@ -6856,6 +6891,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const merged = [...existing, ...result.rtbs.filter((r) => !seen.has(r.id))]
           registerCampaignRtbs(campaign, merged)
           rtbStore[campaign] = merged
+        }
+        /**
+         * ROWS THAT WERE ASKED FOR AND DID NOT COME BACK.
+         *
+         * The loop below patches only the rows present in result.drafts, so a row the model omitted
+         * was skipped in silence, after regenerateFlow had already cleared its copy. The asset ended
+         * up blank, unflagged, and still carrying the figures and proof of the copy it no longer has.
+         *
+         * No cause is named: the client cannot tell a timeout from a truncation from a refusal, and
+         * guessing one in a panel is the kind of confident wrongness this app is built to avoid.
+         */
+        const returned = new Set(result.drafts.map((d) => d.rowId))
+        for (const a of assets) {
+          if (returned.has(a.rowId)) continue
+          await sheet.update(a.rowId, {
+            recheckFlag: { reason: 'It came back empty', frame: 'Generation', at: Date.now() },
+            figuresUsed: undefined,
+            rtbMap: {},
+          })
         }
         // Fill ONLY empty fields (never overwrite a human edit); attach proof to
         // the primary + CTA components so the handoff carries through.
@@ -6891,11 +6945,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
            * clears it rather than leaving a claim about copy that no longer says it.
            */
           const usedFigures = figuresUsedIn(Object.values(map), datasets)
+          /**
+           * WHO WROTE THIS ROW. Per row rather than one workspace flag, because the dedupe pass
+           * above can re-draft a single unit through the offline writer while the run as a whole
+           * reports the model. A badge on one asset is a fact; a banner over the workspace was a
+           * claim about whichever campaign you happened to be looking at.
+           */
+          const rowSource: 'claude' | 'heuristic' =
+            redraftFellBack.has(row.id) ? 'heuristic' : result.source === 'claude' ? 'claude' : 'heuristic'
           const patch: Partial<TrafficRow> = {
             messaging: map,
             rtbMap: rmap,
             recheckFlag: undefined,
             figuresUsed: usedFigures.length ? usedFigures : undefined,
+            copySource: rowSource,
+            copyAt: Date.now(),
           }
           if (d.format && !row.format) patch.format = d.format
           await sheet.update(row.id, patch)
