@@ -21610,3 +21610,18 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-faint); margin-top: 3px;
 }
 .flow-read-caveat { color: var(--amber); }
+
+/* "Work in progress" on a card whose gaps are invisible from the panel. Quiet but not hidden: it is
+   there to stop somebody hunting for a feature that does not exist yet. */
+.flow-panel-wip {
+  /* The title already carries flex:1, so no auto margin is needed to push this right. The right
+     margin clears the panel's collapse control, which sits in the same corner. */
+  flex: 0 0 auto;
+  margin-right: 24px;
+  font-family: var(--font-label); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  border-radius: 999px; padding: 2px 7px; white-space: nowrap;
+}
+.flow-wip-note { color: var(--text-faint); }

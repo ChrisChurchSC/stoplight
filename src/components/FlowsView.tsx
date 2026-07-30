@@ -5257,9 +5257,23 @@ export function FlowsView() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
           </span>
           <span className="flow-panel-title">{meta.label}</span>
+          {/* SAY THAT THIS ONE IS NOT FINISHED.
+              The card acquires, reads and cites a table, and the parts that are missing (connecting
+              LinkedIn or Instagram, reading an .xlsx, comparing two periods) are invisible from here:
+              somebody meeting it for the first time cannot tell a gap from a thing they have failed
+              to find. A tag is cheaper than that confusion, and it comes off in one line. */}
+          {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">{meta.menuDesc}</p>
+          {nt.kind === 'data-source' && (
+            <p className="flow-inspect-note flow-wip-note">
+              This card is still being built. Pasting, uploading and describing a table all work, and
+              so does pulling from a connected warehouse or from Google. LinkedIn and Instagram are
+              not connected yet, Excel files have to be pasted rather than opened, and nothing here
+              compares one period against another.
+            </p>
+          )}
           {/* DESCRIBE IT AND HAVE IT FILLED IN. First thing on the panel, because it is the fastest
               way past a dozen empty dropdowns and a blank card is the state this is for.
 
