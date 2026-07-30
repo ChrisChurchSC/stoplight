@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { recordTint } from '../domain/records'
 import { persistState } from '../adapters/state/workspaceState'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { useAssetTasks } from '../lib/assetTasks'
 
 /**
@@ -36,8 +37,6 @@ interface Task {
 }
 
 const KEY = 'stoplight.tasks.v1'
-// The signed-in user, used as the default assignee for a new task.
-const ME = 'Chris Church'
 
 // Normalize a persisted task: `record` used to be a free-text string, so migrate any old value.
 const normRecord = (r: unknown): TaskRecord | null =>
@@ -94,6 +93,20 @@ export function TasksView() {
   const [pickRec, setPickRec] = useState<string | null>(null)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const today = localDate()
+  // The signed-in user's name, used as the default assignee for a new task. It has to come from
+  // the session: a name written into this file would be that one person assigned to every task in
+  // every deployment. Empty when signed out or with no backend, which the assignee field already
+  // renders as "Unassigned".
+  const [me, setMe] = useState('')
+  useEffect(() => {
+    let live = true
+    void getSession().then((s) => live && setMe(firstNameOf(s?.user ?? null)))
+    const off = onAuthChange((u) => setMe(firstNameOf(u)))
+    return () => {
+      live = false
+      off()
+    }
+  }, [])
 
   useEffect(() => {
     // persistState writes localStorage AND mirrors to the workspace when a backend is configured,
@@ -137,7 +150,7 @@ export function TasksView() {
   const remove = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id))
   const addTask = () => {
     const id = freshId()
-    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: ME, done: false, createdAt: Date.now(), brand, notes: '' }])
+    setTasks((prev) => [...prev, { id, text: '', due: today, record: null, assignee: me, done: false, createdAt: Date.now(), brand, notes: '' }])
     // Open the detail drawer for the fresh task so it can be named and filled in.
     setOpenTaskId(id)
   }

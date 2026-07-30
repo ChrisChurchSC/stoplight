@@ -26,7 +26,7 @@ import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, fres
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
-import type { FlowRefType, FlowReference } from '../domain/clients'
+import { UNASSIGNED, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
@@ -453,6 +453,21 @@ function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): s
   const rr = Math.min(r, sep / 2)
   return `M ${sx} ${sy} H ${midX - rr} Q ${midX} ${sy} ${midX} ${sy + rr * dir} V ${ty - rr * dir} Q ${midX} ${ty} ${midX + rr} ${ty} H ${tx}`
 }
+
+/**
+ * A next-step chip that only asks for the build, e.g. "Build it now".
+ *
+ * A chip is a PROMPT, not a button: clicking one sends its text back to the chat. So a chip that
+ * says "Build it now" cannot build, and clicking it twice looked like a dead control while the
+ * thing that actually builds (Apply all, on the suggestions block) sat directly above it. Two
+ * affordances for one action, one of them inert, is worse than one. These are dropped.
+ *
+ * Deliberately narrow: it matches a bare imperative and nothing else, so a real next step that
+ * happens to start with the word ("Build a landing page for the offer") is still offered. "Generate
+ * the copy" is deliberately NOT here: that one becomes a regenerate command, so it works.
+ */
+const BUILD_ONLY_CHIP = /^(build|apply|create|make)(\s+(it|this|that|these|them|all|the campaign|the flow|the assets))?(\s+now)?\s*[.!]?$/i
+const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
 
 export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
@@ -1244,7 +1259,13 @@ export function FlowsView() {
   // Build always writes copy now (the toggle was removed); kept as a constant so the
   // preview + build paths that reference it stay unchanged.
   const writeCopy = true
-  const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null } | null>(null)
+  /**
+   * The post-build result card. `blocked` carries the copy refusal VERBATIM (copyBlockerFor's own
+   * words) when the assets were seeded but nothing was written, because the card used to claim
+   * "12 draft assets" over twelve empty ones: `copy` said only that copy had been ASKED for, and
+   * the refusal happened downstream where nothing reported back.
+   */
+  const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null; blocked: string | null } | null>(null)
   // Live draft copy per deliverable node, generated when it's added (and on redraft).
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
   const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
@@ -4224,9 +4245,15 @@ export function FlowsView() {
     return r
   }
 
-  // The campaign name this flow builds into (must match build()'s naming) — used to scope
-  // the real Grid / Calendar to just this flow's assets.
-  const flowCampaign = viewName ?? `${brand ? `${brand} — ` : ''}${name.trim() || 'New campaign'}`
+  /**
+   * The campaign name a build lands on, for a given builder name. One function because three
+   * places have to agree on it: the Grid / Calendar scope below, buildFlow itself, and the chat's
+   * "already built" guard. They were three copies of the same template string.
+   */
+  const campaignNameFor = (n: string) => `${brand ? `${brand} — ` : ''}${n.trim() || 'New campaign'}`
+  // The campaign name this flow builds into, used to scope the real Grid / Calendar to just
+  // this flow's assets.
+  const flowCampaign = viewName ?? campaignNameFor(name)
   // Whether this campaign has any built rows yet (so the grid/calendar can hint to Build).
   const hasBuiltRows = useTrafficStore((s) => s.rows.some((r) => r.campaign === flowCampaign))
 
@@ -4322,15 +4349,26 @@ export function FlowsView() {
     /** The chosen GTM motion (a strategy key); falls back to addCampaign's brand/role resolution. */
     strategy?: string
   }) => {
-    if (!cfg.nodes.length || building) return
+    if (!cfg.nodes.length || building) return null
     setBuilding(true)
-    const campaignName = `${brand ? `${brand} — ` : ''}${cfg.name.trim() || 'New campaign'}`
+    const campaignName = campaignNameFor(cfg.name)
     try {
-      if (brand) addCampaign({ name: campaignName, client: brand, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      /**
+       * REGISTER THE CAMPAIGN EVEN WITH NO BRAND.
+       *
+       * This used to be `if (brand)`, so a build from a workspace with no brand yet produced rows
+       * and no campaign record: clientForCampaign fell through to Unassigned, the subject / budget /
+       * objective had nowhere to land, and the campaign was absent from every list that reads
+       * campaignList. Binding it explicitly to UNASSIGNED changes nothing about what it RESOLVES to
+       * (that was already the fallback) and nothing about what it is allowed to do: copyBlockerFor
+       * refuses an Unassigned campaign exactly as before. Being listed and being allowed to generate
+       * are separate questions, and only the second is the brand boundary.
+       */
+      addCampaign({ name: campaignName, client: brand || UNASSIGNED, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
       // addCampaign treats 'content-seo' as a "no explicit choice" sentinel, so a deliberately
       // confirmed Content + SEO motion would be silently replaced by the brand/role default. When
       // the user actually chose a motion, stamp it directly so the campaign matches what we told them.
-      if (brand && cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
+      if (cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
       if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       // Hand the builder's board and any object made on it to the campaign that now exists. Without
@@ -4372,14 +4410,28 @@ export function FlowsView() {
         allNewIds.push(...fresh.map((r) => r.id))
       }
       let source: CopySource | null = null
-      if (writeCopy && allNewIds.length) source = await draftCopy(allNewIds)
-      setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source })
+      /**
+       * ASK BEFORE CLAIMING. draftCopy consults copyBlockerFor per campaign and quietly `continue`s
+       * past a campaign it refuses (a brand-less canvas has no voice or proof to write from), so
+       * every caller downstream of it used to describe a refusal as a success. Asking the same
+       * question here is the cheapest way to know which happened, and it is the SAME question, so
+       * the two can't drift: one refusal rule, reported by the code that already owned it.
+       *
+       * The notice is raised here because we no longer reach the branch of draftCopy that raises it.
+       */
+      let copyBlocked: string | null = null
+      if (writeCopy && allNewIds.length) {
+        copyBlocked = useTrafficStore.getState().copyBlockerFor(campaignName)
+        if (copyBlocked) useTrafficStore.getState().setBrandNotice(copyBlocked)
+        else source = await draftCopy(allNewIds)
+      }
+      setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source, blocked: copyBlocked })
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
       setClientFilter(brand || 'all')
       setCampaignFilter(campaignName)
-      return campaignName
+      return { name: campaignName, copyBlocked }
     } finally {
       setBuilding(false)
     }
@@ -4631,10 +4683,29 @@ export function FlowsView() {
     if (viewName !== null) {
       let vRefs = [...flowRefs]
       const createdRefs: FlowReference[] = []
+      /**
+       * The deliverables already on this campaign, by channel/type, kept live through the batch.
+       * viewDelivs is a render-time memo, so it cannot see an addViewDeliverable made two commands
+       * ago: without this set, one batch could add the same deliverable twice.
+       */
+      const vDelivKeys = new Set(viewDelivs.map((d) => `${d.channel}/${d.assetType}`))
       for (const c of cmds) {
         if (c.op === 'addDeliverable') {
           const p = presetByKey(c.preset)
-          if (p) { await addViewDeliverable(p); applied.push(`Added ${p.label}`) }
+          if (p) {
+            // ALREADY THERE IS NOT A REASON TO ADD IT AGAIN. A round of suggestions re-offers what
+            // the previous round already applied, and applying that second batch used to seed a
+            // whole duplicate deliverable (three "Nurture email" assets became six). Say so
+            // instead: the suggestion is honoured, it just has nothing left to do.
+            const key = `${p.channel}/${p.assetType}`
+            if (vDelivKeys.has(key)) {
+              skipped.push(`${p.label} is already on this campaign`)
+            } else {
+              vDelivKeys.add(key)
+              await addViewDeliverable(p)
+              applied.push(`Added ${p.label}`)
+            }
+          }
         } else if (c.op === 'setRecordTags') {
           // Preserve audiences created earlier this batch: their labels are not in the record list,
           // so a plain replace would silently drop them.
@@ -4693,8 +4764,18 @@ export function FlowsView() {
             skipped.push(`Could not read a budget from "${c.value}"`)
           }
         } else if (c.op === 'regenerate') {
-          await regenerateFlow()
-          applied.push('Regenerated the copy')
+          // Ask the same question the build branch asks, for the same reason. copyBlockerFor refuses
+          // a brand-less campaign, and this is the command the assistant offers RIGHT AFTER a
+          // brand-less build, so reporting "Regenerated the copy" unconditionally reproduced the
+          // exact lie that build was just fixed for, one turn later and in the same panel.
+          const regenBlocked = useTrafficStore.getState().copyBlockerFor(viewName)
+          if (regenBlocked) {
+            useTrafficStore.getState().setBrandNotice(regenBlocked)
+            skipped.push(`No copy was written. ${regenBlocked}`)
+          } else {
+            await regenerateFlow()
+            applied.push('Regenerated the copy')
+          }
         } else if (c.op === 'createObject' || c.op === 'setDirection' || c.op === 'setModel' || c.op === 'connect' || c.op === 'disconnect') {
           // Board ops work on a BUILT campaign too, and this is where they matter most: adding an
           // instruction to a live campaign and regenerating is the loop the board exists for.
@@ -4731,6 +4812,13 @@ export function FlowsView() {
         case 'addDeliverable': {
           const p = presetByKey(c.preset)
           if (!p) break
+          // Idempotent by preset, which is how removeDeliverable below already treats a deliverable
+          // (it filters every node with the key). Re-offered suggestions are the common case, and
+          // applying the same "Add Nurture email" twice used to double the assets it seeds.
+          if (wNodes.some((n) => n.presetKey === p.key)) {
+            skipped.push(`${p.label} is already on this campaign`)
+            break
+          }
           const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: c.perMonth ?? startCount(p) }
           wNodes = [...wNodes, node]
           setNodes((ns) => [...ns, node])
@@ -4759,6 +4847,15 @@ export function FlowsView() {
             if (!wRefs.some((x) => x.type === 'segment' && x.id === r.ref.id)) { wRefs = [...wRefs, r.ref]; setBriefRefs(wRefs) }
             if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
             applied.push(r.created ? `Created a placeholder audience "${r.ref.label}"` : `Tagged audience "${r.ref.label}"`)
+          } else {
+            // ensureAudienceRef refuses with no brand, so it never writes into an empty-brand
+            // bucket. Right call, but saying nothing meant the suggestion list offered "Create a
+            // placeholder audience", the user applied it, and it vanished with no line either way.
+            skipped.push(
+              brand
+                ? 'Could not read an audience name from that suggestion.'
+                : `Audience "${typeof c.name === 'string' ? c.name.trim() : ''}" needs a brand first. Bind this canvas to a brand and ask again.`,
+            )
           }
           break
         }
@@ -4768,6 +4865,13 @@ export function FlowsView() {
             if (!wRefs.some((x) => x.type === 'proof' && x.id === r.ref.id)) { wRefs = [...wRefs, r.ref]; setBriefRefs(wRefs) }
             if (!createdRefs.some((x) => x.id === r.ref.id)) createdRefs.push(r.ref)
             applied.push(r.created ? `Added a proof point "${r.ref.label}" (draft)` : `Tagged proof point "${r.ref.label}"`)
+          } else {
+            // Same silent drop as createAudience above, same reason, same fix.
+            skipped.push(
+              brand
+                ? 'Could not read a proof point from that suggestion.'
+                : 'That proof point needs a brand first. Bind this canvas to a brand and ask again.',
+            )
           }
           break
         }
@@ -4779,12 +4883,31 @@ export function FlowsView() {
           applyBoardCommand(c, { applied, skipped, batchRefs })
           break
         case 'build': {
+          // Building the same campaign twice APPENDS a second set of assets to it (seedCampaignAssets
+          // has no idea the first run happened), so a re-offered `build` turned four deliverables
+          // into eight. Nothing to do rather than quietly double the campaign.
+          const target = campaignNameFor(wName)
+          // Live rows only. Deleting a campaign is a SOFT delete (deleteCampaign archives its rows
+          // rather than removing them), so counting archived rows here would refuse to rebuild a
+          // campaign the user had deliberately deleted, with a message claiming it still exists.
+          if (useTrafficStore.getState().rows.some((r) => (r.campaign ?? '').trim() === target && !r.archivedAt)) {
+            skipped.push(`"${target}" is already built. Open it to change it.`)
+            break
+          }
           // Segment refs ONLY feed the audience rotation; proof/company/etc. refs must not leak
           // into row.audience (that would create phantom audiences). Mirrors audSelection.
           const segAuds = wRefs.filter((r) => r.type === 'segment').map((r) => r.label)
           const auds = segAuds.length ? segAuds : audienceNames
-          const nm = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg, strategy: wStrategy })
-          if (nm) applied.push(`Built ${wNodes.length} deliverable${wNodes.length === 1 ? '' : 's'} and wrote the copy`)
+          const outcome = await buildFlow({ name: wName, subject: wSubject, budget: wBudget, flightWeeks: wFlight, refs: wRefs, audiences: auds, nodes: wNodes, objective: objectiveCfg, strategy: wStrategy })
+          if (outcome) {
+            // SAY WHAT HAPPENED, NOT WHAT WAS ATTEMPTED. This line claimed "and wrote the copy"
+            // unconditionally, including on the run where copy was refused for having no brand to
+            // write from, which is how twelve empty assets got reported as written. The refusal
+            // carries its own wording (copyBlockerFor's), so the reason travels with the skip.
+            const n = wNodes.length
+            applied.push(`Built ${n} deliverable${n === 1 ? '' : 's'}${outcome.copyBlocked ? '' : ' and wrote the copy'}`)
+            if (outcome.copyBlocked) skipped.push(`No copy was written. ${outcome.copyBlocked}`)
+          }
           break
         }
       }
@@ -4819,7 +4942,10 @@ export function FlowsView() {
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
       case 'createProof': return `Add a proof point "${c.text}" and tag it`
       case 'setStrategy': return `Set the strategy to ${GTM_STRATEGIES.find((s) => s.key === c.value)?.name ?? c.value}`
-      case 'build': return 'Build the flow and write the copy'
+      // Only promise copy when there is a brand to write from. With none bound, the build seeds the
+      // assets and copyBlockerFor refuses the writing, so promising it here sets up the same lie the
+      // result card used to tell.
+      case 'build': return `Build the flow${brand ? ' and write the copy' : ''}`
       case 'regenerate': return 'Regenerate the copy'
     }
   }
@@ -4902,7 +5028,10 @@ export function FlowsView() {
       // Suggestions block the user approves before they apply.
       const commands = intent === 'analyze' ? [] : res.commands
       const suggestions = commands.map(describeCommand)
-      const nextSteps = (res.nextSteps ?? []).map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean).slice(0, 3)
+      const nextSteps = (res.nextSteps ?? [])
+        .map((s) => (typeof s === 'string' ? s.trim() : ''))
+        .filter((s) => s && !isBuildChip(s))
+        .slice(0, 3)
       setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: res.reply, live: res.live, commands: commands.length ? commands : undefined, suggestions: suggestions.length ? suggestions : undefined, nextSteps: nextSteps.length ? nextSteps : undefined }])
     } catch {
       setChatMsgs((m) => [...m, { id: nextChatId(), role: 'assistant', text: 'Something went wrong. Try rephrasing.', live: false }])
@@ -6810,10 +6939,22 @@ export function FlowsView() {
               ✓
             </div>
             <div className="flow-built-title">Campaign built</div>
+            {/* "12 draft assets" read as twelve written drafts, which is exactly what they were not
+                on the run that made this card lie. An asset that was scheduled but never written is
+                an EMPTY asset, and the card says so before the user opens twelve blank ones. */}
             <div className="flow-built-sub">
-              {built.name.replace(`${brand} — `, '')} · {built.count} draft asset{built.count === 1 ? '' : 's'}
+              {built.name.replace(`${brand} — `, '')} · {built.count}{' '}
+              {built.copy && !built.blocked ? 'draft' : 'empty'} asset{built.count === 1 ? '' : 's'}
             </div>
-            {built.copy && built.source && (
+            {built.blocked ? (
+              /* The refusal in copyBlockerFor's own words, so the card and the store cannot say two
+                 different things about the same rule. Styled with the amber variant the offline
+                 badge already defines: it is the warning tone, and reusing it needs no new CSS. */
+              <div className="flow-built-badge heuristic">
+                <span className="flow-built-badge-dot" aria-hidden="true" />
+                No copy was written. {built.blocked}
+              </div>
+            ) : built.copy && built.source ? (
               <div className={`flow-built-badge ${built.source}`}>
                 {built.source === 'claude' ? (
                   <>
@@ -6827,7 +6968,7 @@ export function FlowsView() {
                   </>
                 )}
               </div>
-            )}
+            ) : null}
             <div className="flow-built-actions">
               <button className="flow-built-open" onClick={() => { openView(built.name); setFlowView('flow') }}>
                 Open campaign

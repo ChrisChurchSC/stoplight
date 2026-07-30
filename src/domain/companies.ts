@@ -61,47 +61,18 @@ export function freshCompanyId(): string {
   return freshRecordId('co')
 }
 
-// Seed drawn from the agency's real, known clients — names, sites, and one-line
-// descriptions only. Quantitative fields (founded / country) are intentionally left
-// blank so nothing here is invented; the user fills or imports them.
-const SEED: Omit<Company, 'id'>[] = [
-  {
-    name: 'World Within',
-    description: 'Impact media movement backing community-owned businesses.',
-    website: 'worldwithin.org',
-    segment: 'Nonprofit / Media',
-    status: 'client',
-  },
-  {
-    name: 'Photon Health',
-    description: 'Prescription routing and pharmacy fulfillment platform.',
-    website: 'photonhealth.com',
-    segment: 'Health tech',
-    status: 'client',
-  },
-  {
-    name: 'Joon',
-    description: 'Local Services Ads management platform for home-service pros.',
-    website: 'joon.io',
-    segment: 'Ad tech',
-    status: 'client',
-  },
-  {
-    name: 'Oxyle',
-    description: 'Swiss PFAS water-treatment technology.',
-    website: 'oxyle.com',
-    segment: 'Cleantech',
-    status: 'client',
-  },
-]
-
 /**
- * The initial companies list: the curated real clients, merged with any brand already
- * live in this workspace (deduped by name) so the table opens populated with real rows.
+ * The initial companies list: only the brands already live in this workspace (deduped by
+ * name), which really are this user's own accounts.
+ *
+ * There is deliberately no fixed seed. This ships to every workspace, so any company named
+ * here would be presented to a stranger, a demo audience, or a prospect as their own record.
+ * With no rows the table opens on its own empty state (a "0 companies" count and a "+ New
+ * company" row), which is honest and already tells the user what to do.
  */
 export function seedCompanies(brandNames: string[]): Company[] {
-  const rows: Company[] = SEED.map((c) => ({ ...c, id: freshCompanyId() }))
-  const have = new Set(rows.map((r) => r.name.toLowerCase()))
+  const rows: Company[] = []
+  const have = new Set<string>()
   for (const name of brandNames) {
     const n = name.trim()
     if (!n || have.has(n.toLowerCase())) continue
