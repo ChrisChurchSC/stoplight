@@ -3,8 +3,8 @@ import { AGE_RANGES, INCOME_RANGES } from './taxonomy'
 
 /**
  * A Person record — the "Records › People" table, the contacts side of the lightweight
- * CRM. Same hand-editable, no-fabrication approach as Companies: seed only names, roles,
- * and the company they belong to; leave email/location blank for the user to fill.
+ * CRM. Same hand-editable, no-fabrication approach as Companies: the table starts empty and
+ * every row is one the user entered or imported, so no invented contact is ever shown as theirs.
  */
 export interface Person {
   id: string
@@ -162,13 +162,14 @@ export function freshPersonId(): string {
   return freshRecordId('pe')
 }
 
-// Seed drawn from real, publicly-known client contacts — names, roles, and company only.
-// Emails and locations are left blank so nothing is invented.
-const SEED: Omit<Person, 'id'>[] = [
-  { name: 'Jonathan Shooshani', title: 'President', company: 'Joon', status: 'contact' },
-  { name: 'Sebastian Elghanian', title: 'CEO', company: 'Joon', status: 'contact' },
-]
-
+/**
+ * A fresh workspace opens with no contacts, on purpose.
+ *
+ * Every row in this table is a named human being with a job title, and this file ships to every
+ * workspace, so a seeded contact is a real person shown to strangers as their contact. The table
+ * renders its own empty state (a "0 people" count and a "+ New person" row), which says what to
+ * do without putting anybody's name in somebody else's CRM.
+ */
 export function seedPeople(): Person[] {
-  return SEED.map((p) => ({ ...p, id: freshPersonId() }))
+  return []
 }

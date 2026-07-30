@@ -9,12 +9,23 @@ import { useTrafficStore } from '../store/useTrafficStore'
 export function BrandPicker({ verb }: { verb: string }) {
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const setPage = useTrafficStore((s) => s.setPage)
   const brands = brandRecords.filter((b) => b.name.trim() && b.name !== 'New brand')
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '48px 24px' }}>
       <div style={{ fontSize: 14, color: 'var(--text-muted, #5a6b72)' }}>Choose a brand to {verb}</div>
       {brands.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--text-faint, #8a969b)' }}>No brands yet — add one under Foundation → Brands.</div>
+        // This used to point at "Foundation → Brands", a section that does not exist in the
+        // navigation. Campaigns is where the first brand is actually made (FlowsHome shows a
+        // create-a-brand panel while the workspace has none), so send people there.
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-faint, #8a969b)' }}>
+            No brands yet. Brands are created on the Campaigns page.
+          </div>
+          <button className="btn primary" onClick={() => setPage('flows')}>
+            Create your first brand
+          </button>
+        </div>
       ) : (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
           {brands.map((b) => {

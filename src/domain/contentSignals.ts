@@ -754,7 +754,7 @@ export function reconciliationStat(rows: TrafficRow[]): ReconcileStat {
 const LINK_DESTINATIONS: [string, RegExp][] = [
   ['Newsletter', /subscribe|newsletter|sign ?up|join the (list|movement)/i],
   ['Podcast', /podcast|spotify|apple podcast|full episode|tune in|\blisten\b/i],
-  ['Website', /link in (bio|our bio)|\bin bio\b|worldwithin|\.org\b|our (website|site)|head (on )?over|learn more|read more|link below/i],
+  ['Website', /link in (bio|our bio)|\bin bio\b|\.org\b|our (website|site)|head (on )?over|learn more|read more|link below/i],
   ['YouTube', /\byoutube\b|watch (the|our|full|now)\b/i],
   ['Donate / Fund', /\bdonate\b|the fund|\binvest\b|wefunder|contribute|give today|chip in/i],
   ['Events', /\btickets?\b|screening|\brsvp\b|register|join us (on|at)/i],
@@ -898,8 +898,10 @@ export interface LinkRef {
   host: string
   count: number
 }
+// Platforms, not brands. A specific customer's domain used to head this list, so every other
+// brand's copy was scanned for one client's website and could never match its own. Own-site links
+// are caught by the generic 'Website' destination above.
 const PLATFORM_MENTIONS: [string, RegExp][] = [
-  ['worldwithin.org', /worldwithin\.org/i],
   ['spotify', /spotify/i],
   ['apple podcasts', /apple podcast/i],
   ['youtube', /\byoutube\b|youtu\.be/i],

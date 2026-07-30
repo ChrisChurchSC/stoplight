@@ -57,6 +57,14 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const deleteCampaign = useTrafficStore((s) => s.deleteCampaign)
   const renameCampaign = useTrafficStore((s) => s.renameCampaign)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
+  const brandRecords = useTrafficStore((s) => s.brandRecords)
+  const clientList = useTrafficStore((s) => s.clientList)
+  const addBrandRecord = useTrafficStore((s) => s.addBrandRecord)
+  const updateBrandRecord = useTrafficStore((s) => s.updateBrandRecord)
+  const setClientFilter = useTrafficStore((s) => s.setClientFilter)
+  const openBrandTab = useTrafficStore((s) => s.openBrandTab)
+  const setBrandTab = useTrafficStore((s) => s.setBrandTab)
+  const [newBrand, setNewBrand] = useState('')
   // Which folder a new-folder input is open under. '' = a new top-level folder, null = closed.
   const [newFolderUnder, setNewFolderUnder] = useState<string | null>(null)
   const [newFolder, setNewFolder] = useState('')
@@ -216,6 +224,58 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const knownFolders = new Set(withAncestors(folders))
   const unfiled = sortCards(topCards.filter((c) => !c.folder || !knownFolders.has(c.folder)))
   const folderTree = buildFolderTree(folders, sortCards(topCards), (c) => c.folder)
+
+  /**
+   * A cold workspace has no brand, and a brand is the thing everything else hangs off: campaigns are
+   * scoped to one, and copy generation refuses a campaign without one. The only other way to make a
+   * brand is buried in the canvas Assets panel, so a first-run user could build a campaign here and
+   * get no copy out of it and never learn why. Placeholder rows ('New brand', blank) don't count,
+   * matching the filter BrandPicker uses, so an abandoned row doesn't hide the prompt.
+   */
+  const hasBrand =
+    clientList.some((c) => c.trim()) || brandRecords.some((b) => b.name.trim() && b.name !== 'New brand')
+  /**
+   * Wait for the workspace to load before telling anyone it is empty.
+   *
+   * FlowsHome is the FIRST screen painted (the store boots to page 'flows'), and on a backend
+   * workspace it paints before hydrateRecords has returned. So on a fresh browser profile, or an
+   * incognito window, or a teammate opening an invite link, a workspace with brands in it briefly
+   * has none in memory, and this panel would invite them to create one that already exists.
+   *
+   * flightsHydrated is the right flag despite its name: it is seeded true in local-data mode, where
+   * there is nothing to wait for, and set only once hydrateState has landed the workspace slices,
+   * which is where brandRecords come from. It already gates ensureFlights against this same race.
+   */
+  const hydrated = useTrafficStore((s) => s.flightsHydrated)
+  /**
+   * Same creation path as the canvas Assets panel's "＋ New brand" (createBrandFolder in
+   * FlowsView): addBrandRecord mints the record, and it is updateBrandRecord that registers the
+   * name as a workspace client, so both calls are required. Then land on the brand's About tab,
+   * where the basics Gretel reads are waiting to be filled in.
+   */
+  const createBrand = () => {
+    const nm = newBrand.trim()
+    if (!nm) return
+    // Open an existing brand rather than minting a duplicate record for the same name. The panel is
+    // gated on hydration above, so this should be unreachable; it is here because the cost of being
+    // wrong is a split-brain brand whose campaigns and audiences land in two different buckets.
+    const already =
+      brandRecords.find((b) => b.name.trim().toLowerCase() === nm.toLowerCase()) ??
+      (clientList.some((c) => c.trim().toLowerCase() === nm.toLowerCase()) ? { name: nm } : undefined)
+    if (already) {
+      setNewBrand('')
+      setClientFilter(nm)
+      openBrandTab(nm)
+      setBrandTab('about')
+      return
+    }
+    const id = addBrandRecord({ name: nm })
+    updateBrandRecord(id, { name: nm })
+    setNewBrand('')
+    setClientFilter(nm)
+    openBrandTab(nm)
+    setBrandTab('about')
+  }
 
   const addFolder = () => {
     // newFolderUnder is the parent path; '' means top level. null can't reach here.
@@ -498,6 +558,44 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           </button>
         </div>
       </header>
+
+      {hydrated && !hasBrand && (
+        <div
+          style={{
+            maxWidth: 560,
+            marginBottom: 26,
+            padding: '22px 20px',
+            border: '1px dashed var(--border)',
+            borderRadius: 12,
+            background: 'var(--surface)',
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Start with a brand</div>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 14px', lineHeight: 1.5 }}>
+            Every campaign belongs to a brand, and the writing tools read that brand's voice and audience. Name yours
+            first and the rest of the workspace has something to work from.
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              className="flow-home-folder-input"
+              style={{ width: 220 }}
+              placeholder="Brand name"
+              value={newBrand}
+              onChange={(e) => setNewBrand(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation()
+                if (e.key === 'Enter') createBrand()
+              }}
+            />
+            <button className="btn primary" onClick={createBrand} disabled={!newBrand.trim()}>
+              Create brand
+            </button>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 10 }}>
+            This opens the brand's basics so you can fill them in. You can rename it later.
+          </p>
+        </div>
+      )}
 
       <div className="flow-home-groups">
         {folderTree.map(renderFolder)}

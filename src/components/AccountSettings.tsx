@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { User } from '@supabase/supabase-js'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { SKILL_LEVELS, MARKETER_ROLES } from '../domain/userPrefs'
 
 /**
@@ -29,21 +31,58 @@ const GROUPS: { group: string; items: Section[] }[] = [
 ]
 const ALL = GROUPS.flatMap((g) => g.items)
 
-// A lightweight personal profile, stored locally (no server account yet).
+// A lightweight personal profile, stored locally (no server profile yet). Blank when unset:
+// this file ships to every deployment, so a default name here would be one real person's name
+// sitting in everybody else's Settings. The signed-in account fills the gap instead.
 const ACCOUNT_KEY = 'stoplight.account.v1'
 type Account = { firstName: string; lastName: string; email: string }
+/** Whether this person has ever saved their profile, as opposed to simply having blank fields. */
+function hasSavedAccount(): boolean {
+  try {
+    return localStorage.getItem(ACCOUNT_KEY) !== null
+  } catch {
+    return false
+  }
+}
 function loadAccount(): Account {
   try {
     const raw = JSON.parse(localStorage.getItem(ACCOUNT_KEY) || '{}')
-    return { firstName: raw.firstName ?? 'Chris', lastName: raw.lastName ?? 'Church', email: raw.email ?? 'chris@super-conscious.studio' }
+    return { firstName: raw.firstName ?? '', lastName: raw.lastName ?? '', email: raw.email ?? '' }
   } catch {
-    return { firstName: 'Chris', lastName: 'Church', email: 'chris@super-conscious.studio' }
+    return { firstName: '', lastName: '', email: '' }
   }
 }
 
 function ProfileSection() {
   const [acct, setAcct] = useState<Account>(loadAccount)
+  // True once this person has saved anything, including saving a field as empty. Seeded from
+  // storage so it survives a remount, which is exactly when the naive version misbehaves.
+  const savedOnce = useRef(hasSavedAccount())
+  // Fill the blanks from the signed-in account. Gap-filling only, so anything already typed wins
+  // and clearing a field leaves it cleared instead of snapping back to the session value. Signed
+  // out, or with no backend configured, nothing arrives and the placeholders show.
+  useEffect(() => {
+    let live = true
+    const apply = (u: User | null) => {
+      if (!live) return
+      // Only ever fills an account that has NEVER been saved.
+      //
+      // The tempting version fills any blank field, and it is wrong in a way that is easy to miss:
+      // an empty field means two different things. Never typed, or deliberately cleared. Filling
+      // both means clearing your first name puts it back the next time this section remounts, and
+      // switching to Appearance and back is enough to remount it.
+      if (savedOnce.current) return
+      setAcct((prev) => ({ ...prev, firstName: prev.firstName || firstNameOf(u), email: prev.email || u?.email || '' }))
+    }
+    void getSession().then((s) => apply(s?.user ?? null))
+    const off = onAuthChange(apply)
+    return () => {
+      live = false
+      off()
+    }
+  }, [])
   const save = (next: Account) => {
+    savedOnce.current = true
     setAcct(next)
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next))
   }
@@ -61,16 +100,16 @@ function ProfileSection() {
       <div className="acct-grid">
         <label className="library-field">
           <span className="library-field-label">First name</span>
-          <input className="library-input" value={acct.firstName} onChange={(e) => save({ ...acct, firstName: e.target.value })} />
+          <input className="library-input" placeholder="First name" value={acct.firstName} onChange={(e) => save({ ...acct, firstName: e.target.value })} />
         </label>
         <label className="library-field">
           <span className="library-field-label">Last name</span>
-          <input className="library-input" value={acct.lastName} onChange={(e) => save({ ...acct, lastName: e.target.value })} />
+          <input className="library-input" placeholder="Last name" value={acct.lastName} onChange={(e) => save({ ...acct, lastName: e.target.value })} />
         </label>
       </div>
       <label className="library-field">
         <span className="library-field-label">Primary email address</span>
-        <input className="library-input" value={acct.email} onChange={(e) => save({ ...acct, email: e.target.value })} />
+        <input className="library-input" placeholder="you@yourcompany.com" value={acct.email} onChange={(e) => save({ ...acct, email: e.target.value })} />
       </label>
     </div>
   )

@@ -2463,6 +2463,14 @@ interface TrafficState {
    * and the agent bridge all call it without passing through a panel.
    */
   copyBlockerFor: (campaign: string) => string | null
+  /**
+   * Draft copy into the given rows (or every empty in-scope row). Returns WHO WROTE, not whether
+   * anything was written: `null` means only that no writer ran, and a campaign this refused is
+   * indistinguishable from one that had nothing to do. So a caller that intends to REPORT on the
+   * outcome ("built N assets and wrote the copy") must ask copyBlockerFor itself first, which is
+   * what buildFlow in FlowsView does. It claimed the copy unconditionally until it did, and shipped
+   * twelve empty assets described as written.
+   */
   draftCopy: (rowIds?: string[]) => Promise<CopySource | null>
   /**
    * Who wrote the copy the last time anything generated: the model, or the offline fallback. Set by
