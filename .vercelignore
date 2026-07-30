@@ -1,6 +1,11 @@
 # Vercel Hobby caps a deployment at 12 serverless functions. Every /api/* endpoint is served by the
-# single catch-all api/[...path].ts, so the individual per-endpoint files are excluded from the deploy
-# (they're still used by the local Vite dev middleware, which doesn't read this file).
+# single catch-all api/[...path].ts, so the individual per-endpoint files are excluded from the deploy.
+#
+# EVERY endpoint file must be listed here, and the dev middleware must import from server/ rather
+# than from api/. api/ai-credits.ts was missing from this list, so it shipped as its own function
+# that never passed through jsonRoute and answered the account balance to anyone who asked. It was
+# also the only file vite.config imported out of api/, which is what hid the omission: a file listed
+# here is deleted before the build, so such an import compiles locally and fails the deploy.
 api/ai-credits.ts
 api/ai-status.ts
 api/claude-agent.ts
