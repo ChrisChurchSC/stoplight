@@ -561,6 +561,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
 
       {hydrated && !hasBrand && (
         <div
+          className="tour-anchor-brand"
           style={{
             maxWidth: 560,
             marginBottom: 26,

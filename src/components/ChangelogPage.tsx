@@ -19,6 +19,18 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.13',
+    dateLabel: 'July 30, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A short tour on your first visit. Five cards covering what Breadcrumbs does, why a brand comes first, how to describe a campaign, what connecting cards on the canvas actually decides, and what happens when you generate. It points at the thing it is talking about where there is something to point at, it never covers the screen, and closing it once means it stays closed.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.12',
     dateLabel: 'July 30, 2026',
     groups: [

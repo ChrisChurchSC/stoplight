@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { ChunkBoundary } from './ChunkBoundary'
+import { Tour } from './Tour'
 import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { claimInvite } from '../lib/session'
@@ -456,6 +457,9 @@ export function Workbench() {
       {/* Dev only: clears this browser's workspace so a fresh state can be tested. */}
       <DevReset />
       <Toast />
+      {/* Last in the tree so it paints over everything, and mounted here rather than inside a
+          route so walking between screens does not unmount the card mid-sentence. */}
+      <Tour />
     </div>
   )
 }
