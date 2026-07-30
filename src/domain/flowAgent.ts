@@ -81,6 +81,15 @@ export interface FlowAgentContext {
   presets: { key: string; label: string; channel: string; group: string }[]
   /** Records available to tag, by label. */
   records: { companies: string[]; people: string[]; segments: string[]; mediaMixes: string[]; proof: string[] }
+  /**
+   * The brand's data sets, so the agent can link one by name instead of asking for a table that does
+   * not exist or inventing an empty card for it.
+   *
+   * NEVER THE ROWS. The agent needs to know a table exists, what question it answers and whether its
+   * numbers can be quoted. It does not need the numbers, and sending them would put a whole
+   * warehouse export into every turn of a chat.
+   */
+  datasets?: { name: string; rows: number; measured: boolean; covers?: string }[]
   message: string
   /** Prior turns for continuity (most recent last). */
   history: { role: 'user' | 'assistant'; text: string }[]

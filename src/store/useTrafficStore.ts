@@ -164,7 +164,7 @@ import {
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
-import { citableFigures, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
+import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { normalizeFigure } from '../domain/coherenceChecks'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
 import { buildDirection } from '../domain/direction'
@@ -6882,7 +6882,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           // brief, so whatever raised the flag no longer applies. Without this a flag raised by the
           // Save bar survived the regeneration it was asking for, and the badge on the card became
           // permanent — a warning that cannot be cleared is one people learn to ignore.
-          const patch: Partial<TrafficRow> = { messaging: map, rtbMap: rmap, recheckFlag: undefined }
+          /**
+           * WHICH FIGURES LANDED, computed from the text that was actually written.
+           *
+           * Not asked of the model: it will cite a figure it did not use and use one it did not
+           * cite, and a self-report rendered as provenance is a guess wearing the clothes of an
+           * audit trail. Recomputed on every draft, so removing a number by hand and redrafting
+           * clears it rather than leaving a claim about copy that no longer says it.
+           */
+          const usedFigures = figuresUsedIn(Object.values(map), datasets)
+          const patch: Partial<TrafficRow> = {
+            messaging: map,
+            rtbMap: rmap,
+            recheckFlag: undefined,
+            figuresUsed: usedFigures.length ? usedFigures : undefined,
+          }
           if (d.format && !row.format) patch.format = d.format
           await sheet.update(row.id, patch)
           // Cleared per row, not in one go at the end: a set of twelve finishing together tells you

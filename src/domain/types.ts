@@ -148,6 +148,14 @@ export interface TrafficRow {
    *  page) can't be, so it carries this flag until someone reworks it where it
    *  lives. Reconciled on every frame change (set when it stops fitting, cleared
    *  when it fits again) and cleared by hand from the card. */
+  /**
+   * The citable figures whose values appear verbatim in this asset's copy, by id.
+   *
+   * COMPUTED FROM THE TEXT, never reported by the model. Recomputed on every draft, so a number
+   * removed by hand and redrafted stops being claimed. Absent rather than empty when none landed,
+   * so an asset written before this existed does not read as "checked, found nothing".
+   */
+  figuresUsed?: string[]
   recheckFlag?: {
     /** Why it was flagged — a short, human reason. */
     reason: string

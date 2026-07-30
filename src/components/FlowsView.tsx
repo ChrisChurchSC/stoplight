@@ -2803,6 +2803,9 @@ export function FlowsView() {
    * re-implementing it here and drifting.
    */
   /** Kinds whose record this card can create. Freeform kinds have no record; Data source has its own. */
+  // 'data-source' is deliberately ABSENT: createRecordForKind resolves an existing data set for it and
+// never creates one, so offering "+ New data set" through this path would promise something it does
+// not do. The card's own picker is where a data set is made.
   const CREATABLE_KINDS = new Set<CanvasObjectKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger', 'brand', 'product'])
   const createRecordForKind = (kind: CanvasObjectKind, rawName: string): { id: string; label: string } | null => {
     const nm = rawName.trim()
@@ -2815,6 +2818,21 @@ export function FlowsView() {
       case 'proof-point': {
         const r = ensureProofRef(nm)
         return r ? { id: r.ref.id, label: r.ref.label } : null
+      }
+      /**
+       * A data set is RESOLVED, never created.
+       *
+       * Every other kind here mints a record from a name, because a name is most of what an audience
+       * or a message is. A data set is a table: minting one from a name produces an empty
+       * spreadsheet titled after a question nobody can answer, and a card pointing at nothing. The
+       * agent gets a skip that names the fix instead.
+       */
+      case 'data-source': {
+        const key = nm.toLowerCase()
+        const hit =
+          brandDatasets.find((d) => d.name.trim().toLowerCase() === key) ??
+          brandDatasets.find((d) => d.name.trim().toLowerCase().includes(key))
+        return hit ? { id: hit.id, label: hit.name } : null
       }
       // The records slices take a Partial and return the new id. Brand-scoped so the record shows
       // up in the same rail the card was dropped in.
@@ -4483,6 +4501,12 @@ export function FlowsView() {
       // A record NAME goes through the same create-or-reuse path the card's own picker uses, so the
       // agent can name an audience without inventing a record around it.
       const rec = c.record?.trim() ? createRecordForKind(kind, c.record.trim()) : undefined
+      // A Data source card named after a table this brand does not have would land as an empty card
+      // the user has to notice and clean up. Skipping with the fix is the more useful answer.
+      if (kind === 'data-source' && c.record?.trim() && !rec) {
+        skipped.push(`No data set called "${c.record.trim()}" on this brand. Pull or upload one, then link it.`)
+        return
+      }
       // Validated by the same closed vocabulary as every other source of direction: an unknown key
       // is dropped here rather than persisted and silently ignored at draft time.
       const dir = (c.direction ?? []).filter((d) => ALL_DIRECTION_KEYS.has(d.key as DirectionKey) && d.value?.trim())
@@ -4787,6 +4811,12 @@ export function FlowsView() {
         mediaMixes: brandMixesForRefs.map((m) => m.name),
         proof: brandProof.map((r) => r.label),
       }
+      // Names and shape only, never rows: enough to link one or say it does not exist, and not so
+      // much that a warehouse export rides along in every turn of a chat.
+      const agentDatasets = brandDatasets.map((d) => {
+        const prov = datasetProvenance(d)
+        return { name: d.name, rows: d.rows.length, measured: prov.citable, covers: prov.periodLabel }
+      })
       const flow = viewName !== null
         ? {
             mode: 'view' as const,
@@ -4831,6 +4861,7 @@ export function FlowsView() {
         flow,
         presets,
         records,
+        datasets: agentDatasets,
         message: t,
         history: chatMsgs.slice(-6).map((m) => ({ role: m.role, text: m.text })),
         // One chat, two dials: skill level sets autonomy/verbosity, role biases vocabulary + defaults.
@@ -7799,6 +7830,32 @@ export function FlowsView() {
                   </p>
                   {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
                       Same list, same rules: what it holds reaches the writer for this one asset. */}
+                  {/* WHICH FIGURES ACTUALLY LANDED, matched against the copy rather than reported by
+                      the model. Absent when the asset predates this, empty when it was checked and
+                      nothing was found, and those are different sentences. */}
+                  {selPost.figuresUsed !== undefined &&
+                    (() => {
+                      const all = brandDatasets.flatMap((d) => citableFigures(d).map((f) => ({ f, d })))
+                      const used = selPost.figuresUsed
+                        .map((id) => all.find((x) => x.f.id === id))
+                        .filter((x): x is { f: (typeof all)[number]['f']; d: BrandDataset } => !!x)
+                      if (!used.length) {
+                        return <span className="flow-send-none">None of the figures from the wired tables made it into this one.</span>
+                      }
+                      return (
+                        <>
+                          <label className="flow-inspect-label">Figures it uses · {used.length}</label>
+                          {used.map(({ f, d }) => (
+                            <div key={f.id} className="flow-send-row">
+                              <span className="flow-send-val">{f.value}</span>
+                              <span className="flow-send-lab">
+                                {f.label}, from {d.name}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )
+                    })()}
                   {(() => {
                     const wired = contextRowsFor(selPost.id)
                     if (!wired.length) return null

@@ -721,3 +721,40 @@ export function readDataset(ds: BrandDataset, now: number = Date.now()): Dataset
 
   return { ok: true, headline, read, period: prov.periodLabel, findings, caveats }
 }
+
+
+/**
+ * WHICH FIGURES ACTUALLY LANDED IN A PIECE OF COPY.
+ *
+ * Computed by looking at the text, never by asking the model what it used. A model will cite a
+ * figure it did not use and use one it did not cite, so a self-report rendered as provenance is a
+ * guess laundered into an audit trail, and an audit trail that is wrong is worse than none because
+ * somebody will trust it.
+ *
+ * Matching is on the value as the writer was told to reproduce it, allowing for the thousands
+ * separator being present or absent, since that is the one thing a writer legitimately varies.
+ */
+export function figuresUsedIn(texts: string[], figures: CitableFigure[]): string[] {
+  const hay = texts.join(' \u0000 ')
+  const out: string[] = []
+  for (const f of figures) {
+    const bare = f.value.replace(/,/g, '')
+    const grouped = Number(bare.replace(/%$/, ''))
+    const alt = Number.isFinite(grouped) && !bare.endsWith('%') ? grouped.toLocaleString('en-US') : ''
+    const forms = [...new Set([f.value, bare, alt].filter(Boolean))]
+    if (forms.some((v) => whole(hay, v))) out.push(f.id)
+  }
+  return out
+}
+
+/**
+ * Does this number appear as a NUMBER, rather than inside a bigger one?
+ *
+ * A plain substring test says the figure 443 landed in copy reading "4,430 sessions", which is a
+ * provenance line asserting something the copy does not say. An audit trail that is wrong is worse
+ * than none, because somebody will act on it.
+ */
+function whole(hay: string, value: string): boolean {
+  const esc = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?<![\\d.,])${esc}(?![\\d,]*\\d)`).test(hay)
+}
