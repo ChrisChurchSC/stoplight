@@ -44,6 +44,7 @@ import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
 import { typeLabel } from '../domain/channelAssetTypes'
+import { isoToLocalInput, localInputToIso } from '../lib/format'
 import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
@@ -2941,9 +2942,13 @@ export function FlowsView() {
     }
     return (
       <>
+        {/* DISCUSSION, NOT COMMENTS. The store has a separate `comments` slice keyed by the same row
+            id holding ingested platform comments, surfaced by CommentDrawer and CommentInbox. One
+            word for two features on one card is how somebody answers a customer in a team note. */}
         <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-          Comments{open.length ? ` · ${open.length}` : ''}
+          Discussion{open.length ? ` · ${open.length}` : ''}
         </label>
+        <p className="flow-inspect-note">For your team. None of this is sent to the writer.</p>
         {thread.length > 0 && (
           <div className="flow-cmt-list">
             {[...open, ...done].map((c: CardComment) => (
@@ -7602,6 +7607,19 @@ export function FlowsView() {
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
                                     Post
                                   </span>
+                                  {/* An unanswered question has to be visible from across the board,
+                                      or the thread rots and the team goes back to Slack. */}
+                                  {openCommentCount(cardComments, boardKey, r.id) > 0 && (
+                                    <span
+                                      className="flow-note-cmt"
+                                      title={`${openCommentCount(cardComments, boardKey, r.id)} open comment(s) on this post`}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.8-4.6A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z" />
+                                      </svg>
+                                      {openCommentCount(cardComments, boardKey, r.id)}
+                                    </span>
+                                  )}
                                   {/* OUT OF DATE. Flagging an asset from the Save bar wrote a
                                       recheckFlag and nothing on the canvas showed it, so the flag
                                       existed only in a queue you had to go and look at. The card is
@@ -7899,6 +7917,81 @@ export function FlowsView() {
                       </>
                     )
                   })()}
+
+                  {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
+                      board flush, the wipe and the phase 1 refusal, rather than growing a second path
+                      that could miss one of the three. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
+                  {(() => {
+                    const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
+                    return (
+                      <>
+                        <button
+                          className="flow-insp-open"
+                          disabled={regenerating}
+                          onClick={() => void regenerateFlow([selPost.id])}
+                        >
+                          {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
+                        </button>
+                        <p className="flow-inspect-note">
+                          {hasCopy
+                            ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
+                            : 'Writes this post from the campaign brief and everything wired to it.'}
+                        </p>
+                        {/* Which writer produced what is on the row now. Per row, from phase 1. */}
+                        {selPost.copySource && (
+                          <p className="flow-inspect-note">
+                            {selPost.copySource === 'heuristic'
+                              ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
+                              : 'Written by the model.'}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
+
+                  {/* SCHEDULE AND STATUS. Only the three states a person sets: everything past approved
+                      belongs to the publish path and nothing publishes on its own. */}
+                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Schedule and status</label>
+                  <input
+                    className="flow-inspect-input"
+                    type="datetime-local"
+                    value={selPost.scheduledAt ? isoToLocalInput(selPost.scheduledAt) : ''}
+                    onChange={(e) => void updateRow(selPost.id, { scheduledAt: e.target.value ? localInputToIso(e.target.value) : undefined })}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                  <div className="flow-src-list" style={{ marginTop: 6 }}>
+                    {(['draft', 'in_review', 'approved'] as const).map((st) => (
+                      <button
+                        key={st}
+                        className={`flow-src-opt${selPost.status === st ? ' on' : ''}`}
+                        onClick={() => void updateRow(selPost.id, { status: st })}
+                      >
+                        <span className="flow-src-mark"><span className="flow-src-dot" /></span>
+                        <span className="flow-src-txt">
+                          <span className="flow-src-name">{st === 'in_review' ? 'In review' : st === 'draft' ? 'Draft' : 'Approved'}</span>
+                        </span>
+                        {selPost.status === st && (
+                          <span className="flow-src-tick" aria-label="current">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="flow-inspect-note">Approved means you have read it and you are happy. Nothing publishes on its own.</p>
+                  <button className="flow-insp-open subtle" style={{ marginTop: 8 }} onClick={() => void duplicateRow(selPost.id)}>
+                    Duplicate this post
+                  </button>
+
+                  {/* THE TEAM THREAD. Named Discussion, not Comments: the store already has a
+                      comments slice on the same row id holding ingested platform comments, and one
+                      word for two features on one card is how somebody replies in the wrong place. */}
+                  {renderCardComments(selPost.id)}
+
                   {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
                       Same list, same rules: what it holds reaches the writer for this one asset. */}
                   {/* WHICH FIGURES ACTUALLY LANDED, matched against the copy rather than reported by
