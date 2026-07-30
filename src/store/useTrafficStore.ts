@@ -33,7 +33,7 @@ import {
   mockDriveSource,
 } from '../adapters/drive'
 import { sampleRows } from '../domain/sampleData'
-import { typesFor, isValidType, primaryTypeKey } from '../domain/channelAssetTypes'
+import { typesFor, isPreservableType, primaryTypeKey, customTypeValue, type OutputType } from '../domain/channelAssetTypes'
 import { extractInCreativeCopy } from '../adapters/copy/extract'
 import { realExtractTransport } from '../adapters/copy/extractTransport'
 import {
@@ -702,6 +702,25 @@ function loadBrandDatasets(): BrandDataset[] {
  * Returns whether the write landed so callers can roll their in-memory state back to match what is
  * actually on disk, rather than showing a table that will not survive a refresh.
  */
+const OUTPUT_TYPES_KEY = 'stoplight.outputTypes.v1'
+function loadOutputTypes(): OutputType[] {
+  try {
+    const raw = localStorage.getItem(OUTPUT_TYPES_KEY)
+    return raw ? (JSON.parse(raw) as OutputType[]) : []
+  } catch {
+    return []
+  }
+}
+/** Returns whether the write landed, so a caller can roll back rather than show a format that is gone on reload. */
+function saveOutputTypes(list: OutputType[]): boolean {
+  try {
+    localStorage.setItem(OUTPUT_TYPES_KEY, JSON.stringify(list))
+    return true
+  } catch {
+    return false
+  }
+}
+
 function saveBrandDatasets(list: BrandDataset[]): boolean {
   try {
     localStorage.setItem(BRAND_DATASETS_KEY, JSON.stringify(list))
@@ -1842,6 +1861,10 @@ interface TrafficState {
    */
   setSmartObjectFolder: (id: string, folder: string | undefined) => void
   deleteSmartObject: (id: string) => void
+  /** Formats somebody named, per brand. See OutputType. */
+  outputTypes: OutputType[]
+  /** Add a custom format for a brand and channel. Returns its type value, or '' if the write failed. */
+  addOutputType: (brand: string, channel: ChannelId, label: string) => string
   addBrandDataset: (brand: string, name?: string) => string
   /**
    * Create a data set from parsed content, with its provenance.
@@ -2839,6 +2862,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   libraryFolders: localDataMode ? loadRecordList<LibraryFolder>(LIBRARY_FOLDERS_KEY) : [],
   brandRecords: localDataMode ? loadOrSeedBrandRecords() : [],
   brandDatasets: loadBrandDatasets(),
+  outputTypes: loadOutputTypes(),
   datasetUndo: null,
   smartObjects: loadSmartObjects(),
   segments: localDataMode ? loadSegments() : [],
@@ -3586,6 +3610,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
     }),
 
+  addOutputType: (brand, channel, label) => {
+    const value = customTypeValue(label)
+    const existing = get().outputTypes.find((o) => o.brand === brand && o.channel === channel && o.value === value)
+    if (existing) return existing.value
+    const next: OutputType[] = [
+      ...get().outputTypes,
+      { id: `ot_${Date.now().toString(36)}`, brand, channel, value, label: label.trim(), createdAt: Date.now() },
+    ]
+    if (!saveOutputTypes(next)) {
+      get().setBrandNotice('That did not save. Your browser is out of room. Clear some space and add it again.')
+      return ''
+    }
+    set({ outputTypes: next })
+    return value
+  },
   addBrandDataset: (brand, name) => {
     const ds = blankDataset(brand, name ?? 'Untitled data set')
     set((s) => {
@@ -5144,7 +5183,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const rows: TrafficRow[] = []
     deliverables.forEach((d, di) => {
-      const assetType = isValidType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
+      const assetType = isPreservableType(d.channel, d.assetType) ? d.assetType : primaryTypeKey(d.channel)
       const base = {
         assetId: '',
         mediaType: d.media,
@@ -5206,7 +5245,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       const bt = CHANNELS[it.d.channel].bestTimes[0] ?? { hour: 10, minute: 0 }
       const at = new Date(slot)
       at.setHours(bt.hour, bt.minute ?? 0, 0, 0)
-      const assetType = isValidType(it.d.channel, it.d.assetType)
+      const assetType = isPreservableType(it.d.channel, it.d.assetType)
         ? it.d.assetType
         : primaryTypeKey(it.d.channel)
       rows.push({
@@ -5313,6 +5352,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.flowBoards.v1': 'flowBoards',
       'stoplight.smartObjects.v1': 'smartObjects',
       'stoplight.cardComments.v1': 'cardComments',
+      // Registered here, unlike brandDatasets, which is absent from this map and so is device-local:
+      // a brand-scoped format that a teammate cannot see is not a brand-scoped format.
+      'stoplight.outputTypes.v1': 'outputTypes',
       'stoplight.homeChats.v1': 'homeChats',
     }
     const state = await hydrateState()
@@ -5596,7 +5638,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().addClient(brand)
     if (c && !get().campaignList.some((x) => x.name === c)) get().addCampaign({ name: c, client: brand, strategy: 'Demand Gen' })
     const channel = (patch.channel ?? 'Instagram') as ChannelId
-    const assetType = patch.assetType && isValidType(channel, patch.assetType) ? patch.assetType : primaryTypeKey(channel)
+    const assetType = patch.assetType && isPreservableType(channel, patch.assetType) ? patch.assetType : primaryTypeKey(channel)
     const existing = new Set(get().rows.map((r) => r.assetName))
     let name = (patch.assetName ?? 'Authored asset').trim() || 'Authored asset'
     let n = 2
@@ -5663,7 +5705,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         continue
       }
       const channel = norm.channel
-      const assetType = norm.assetType && isValidType(channel, norm.assetType) ? norm.assetType : primaryTypeKey(channel)
+      const assetType = norm.assetType && isPreservableType(channel, norm.assetType) ? norm.assetType : primaryTypeKey(channel)
       // Map the normalized copy onto this channel's messaging field keys.
       const fields = messagingFields(channel, assetType)
       const key = (re: RegExp) => fields.find((f) => re.test(f.key))?.key

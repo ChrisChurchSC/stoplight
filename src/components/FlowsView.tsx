@@ -894,6 +894,8 @@ export function FlowsView() {
   const updateSeason = useTrafficStore((s) => s.updateSeason)
   const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
   const refreshBrandDataset = useTrafficStore((s) => s.refreshBrandDataset)
+  const outputTypes = useTrafficStore((s) => s.outputTypes)
+  const addOutputType = useTrafficStore((s) => s.addOutputType)
   const datasetUndo = useTrafficStore((s) => s.datasetUndo)
   const undoDatasetRefresh = useTrafficStore((s) => s.undoDatasetRefresh)
   /** Per-card import feedback: what landed, or why nothing did. */
@@ -914,6 +916,8 @@ export function FlowsView() {
   const [showAllSets, setShowAllSets] = useState(false)
   /** Which card is re-pulling, and the grid it replaced, so the click is reversible for the session. */
   const [refreshFor, setRefreshFor] = useState<string | null>(null)
+  /** The name being typed for a new custom format, or null when the form is shut. */
+  const [namingFormat, setNamingFormat] = useState<string | null>(null)
 
   /**
    * The providers that are actually usable right now, listed in the card's own picker.
@@ -8469,6 +8473,46 @@ export function FlowsView() {
                   <p className="flow-inspect-note">
                     {`You cannot change what this deliverable makes. Its format decides the components, the schedule and the tracking on all ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}. Add the deliverable you want and delete this one.`}
                   </p>
+                  {/* MAKE YOUR OWN FORMAT. Names a format the 51 presets do not cover, on a channel
+                      that already exists. It inherits that channel's components deliberately: letting
+                      somebody author their own components and limits would have to reach
+                      messagingFields, which is called from dozens of places and is pure. The note
+                      below says which of the two this is, in as many words. */}
+                  <button className="flow-src-more" onClick={() => setNamingFormat(namingFormat === null ? '' : null)}>
+                    {namingFormat === null ? 'Make your own format' : 'Cancel'}
+                  </button>
+                  {namingFormat !== null && (
+                    <>
+                      <input
+                        className="flow-inspect-input"
+                        autoFocus
+                        placeholder="Booth panel, podcast description…"
+                        value={namingFormat}
+                        onChange={(e) => setNamingFormat(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      />
+                      <p className="flow-inspect-note">
+                        {`It gets its own deliverable and it generates. Its posts have the same components as any other ${CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} post, because choosing your own components is not built yet.`}
+                      </p>
+                      <button
+                        className="flow-insp-open"
+                        disabled={!namingFormat.trim() || !brand}
+                        onClick={() => {
+                          const v = addOutputType(brand, selDeliv.channel as ChannelId, namingFormat)
+                          if (v) setNamingFormat(null)
+                        }}
+                      >
+                        Add this format
+                      </button>
+                    </>
+                  )}
+                  {/* Formats this brand has named, so they are visible where they were made. */}
+                  {outputTypes.filter((o) => o.brand === brand && !o.retiredAt).length > 0 && (
+                    <p className="flow-inspect-note">
+                      {`Your formats: ${outputTypes.filter((o) => o.brand === brand && !o.retiredAt).map((o) => o.label).join(', ')}. Pick one when you add a deliverable.`}
+                    </p>
+                  )}
 
                   {/* The thread is keyed by the deliverable's DERIVED key (channel|assetType), so
                       changing either in the Grid orphans it. The same fragility its connectors
