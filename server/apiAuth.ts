@@ -24,19 +24,20 @@ const anonKey = (): string => process.env.VITE_SUPABASE_ANON_KEY || ''
  *
  * THE CONDITION IS THE CLIENT'S, NOT THE SERVER'S, and getting that backwards is the whole risk in
  * this file. The obvious version mirrors connections.ts and asks for SUPABASE_URL plus
- * SUPABASE_SERVICE_ROLE_KEY, and it is wrong twice over.
+ * SUPABASE_SERVICE_ROLE_KEY. Both happen to be set in the pilot today, so that version would work
+ * there. It is still the wrong condition, because what makes it work is a coincidence.
  *
- * It is wrong in production, where SUPABASE_SERVICE_ROLE_KEY is not set at all, so the guard would
- * compile, pass its tests, deploy, and quietly never run.
- *
- * It is worse in the deployment where the service key IS set but the build did not receive
- * VITE_SUPABASE_ANON_KEY. The client inlines the VITE_ pair at build time; without them `supabase`
- * is null, so getSession() returns nothing, apiFetch sends no header, AND AuthGate turns into a
- * pass-through that never offers a sign-in screen. Every user would be refused by every endpoint
- * with no way in, while the app still looked healthy because it runs on localStorage.
+ * The server names and the client names are independent facts. The client inlines VITE_SUPABASE_URL
+ * and VITE_SUPABASE_ANON_KEY at BUILD time; without them `supabase` is null, so getSession() returns
+ * nothing and apiFetch has no header to send, AND AuthGate turns into a pass-through that never
+ * offers a sign-in screen. A deployment whose functions have the server pair but whose build missed
+ * the client pair would therefore refuse every request from users who had no way to obtain a token
+ * and no sign-in screen to reach, while the app still looked healthy because it runs on
+ * localStorage. Nothing about the server-side names rules that out.
  *
  * So the guard asks for exactly the two facts the client needs to produce a token in the first
- * place. It cannot then be active in a build whose users could never sign in.
+ * place. It cannot then be active in a build whose users could never sign in. That is a property of
+ * the condition rather than of how the environment happens to be configured this week.
  */
 export function authReady(): boolean {
   return !!(supaUrl() && anonKey())

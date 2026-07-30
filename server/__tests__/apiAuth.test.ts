@@ -71,9 +71,11 @@ describe('requireAuth with Supabase unconfigured', () => {
 
   /**
    * THE LOCKOUT THIS CONDITION EXISTS TO PREVENT. The server-only names are what connections.ts
-   * uses, and gating on them is the obvious mistake: the client inlines the VITE_ pair at build
-   * time, so a deployment with only these two would refuse every request from a client that could
-   * never obtain a token, behind an AuthGate that never offers a sign-in screen either.
+   * uses, and gating on them is the obvious mistake. The client inlines the VITE_ pair at BUILD
+   * time, so a deployment holding only these two would refuse every request from a client that
+   * could never obtain a token, behind an AuthGate that never offers a sign-in screen either. The
+   * pilot happens to have both pairs set, so the wrong condition would work there by luck; this
+   * test is what stops the luck being mistaken for a design.
    */
   it('stays inert when only the server-side names are set, so no build can lock its users out', async () => {
     delete process.env.VITE_SUPABASE_URL
