@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { MockSheetAdapter } from '../adapters/sheet/mockSheetAdapter'
 import { SupabaseSheetAdapter } from '../adapters/sheet/supabaseSheetAdapter'
 import { SupabaseRecordAdapter } from '../adapters/records/supabaseRecordAdapter'
-import { persistState, hydrateState } from '../adapters/state/workspaceState'
+import { persistState, hydrateState, flushPersistedState } from '../adapters/state/workspaceState'
 import { RECORD_GROUPING_KEY } from '../domain/recordGrouping'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type { SheetAdapter } from '../adapters/sheet/types'
@@ -201,6 +201,16 @@ const localDataMode = !isSupabaseConfigured || shareViewMode
 // is configured (VITE_SUPABASE_*), and by localStorage otherwise — so the backend
 // is additive and the app runs unchanged until you provision one.
 const sheet: SheetAdapter = localDataMode ? new MockSheetAdapter() : new SupabaseSheetAdapter()
+/**
+ * Multi-row writes the SheetAdapter interface doesn't declare. The Supabase adapter implements them
+ * so a selection edit is one round trip instead of one HTTP request per row; the localStorage mock
+ * doesn't (a write there is free), so every caller keeps its per-row fallback.
+ */
+type BatchWrites = {
+  updateMany?: (updates: { id: string; patch: Partial<TrafficRow> }[]) => Promise<void>
+  removeMany?: (ids: string[]) => Promise<void>
+}
+const batchSheet = sheet as SheetAdapter & BatchWrites
 const publishers: PublisherRegistry = channelPublishers
 const icpSource: IcpSource = new MockIcpSource()
 // Real Claude batch review when a backend + key are present; heuristic otherwise.
@@ -5429,6 +5439,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           try { persistState(key, JSON.parse(raw)) } catch { /* skip malformed */ }
         }
       }
+      // persistState coalesces its workspace writes over half a second, which is wrong here: a
+      // migration reports success and the user may close the tab on the strength of it, so the
+      // uploads have to have been attempted before we say it worked.
+      await flushPersistedState()
       // Assets (the sheet) → the Supabase sheet. The mock snapshot is { rows: TrafficRow[] }, so
       // read `.rows` (tolerate a bare array too). Only append rows not already in the workspace.
       try {
@@ -5547,7 +5561,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   updateRows: async (updates) => {
     if (!updates.length) return
     pushUndo(get().rows)
-    for (const u of updates) await sheet.update(u.id, u.patch)
+    // One request for the whole set where the adapter can do it: every caller here derives its
+    // updates from get().rows, so there's one patch per id and nothing depends on the order they
+    // land in. The per-row fallback stays sequential for the same reason removeRows' does.
+    if (batchSheet.updateMany) await batchSheet.updateMany(updates)
+    else for (const u of updates) await sheet.update(u.id, u.patch)
     await get().refresh()
   },
 
@@ -5629,9 +5647,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   removeRows: async (ids) => {
     if (!ids.length) return
     pushUndo(get().rows)
-    // Sequential, not Promise.all: the Supabase adapter deletes by id and a burst of parallel
-    // writes has no ordering guarantee, so a failure halfway leaves an unpredictable set behind.
-    for (const id of ids) await sheet.remove(id)
+    // One delete for the whole set where the adapter can do it, which also removes the reason the
+    // fallback below is sequential rather than Promise.all: a burst of parallel per-id deletes has
+    // no ordering guarantee, so a failure halfway leaves an unpredictable set behind.
+    if (batchSheet.removeMany) await batchSheet.removeMany(ids)
+    else for (const id of ids) await sheet.remove(id)
     await get().refresh()
   },
 

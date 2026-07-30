@@ -21625,3 +21625,19 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 999px; padding: 2px 7px; white-space: nowrap;
 }
 .flow-wip-note { color: var(--text-faint); }
+
+/* A lazily loaded view that failed to arrive, almost always a chunk retired by a redeploy while
+   this tab stayed open. Sized and centred like an empty state rather than an error banner: the app
+   around it is fine, and only this panel needs replacing. */
+.chunk-fail {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 48px 24px; min-height: 240px; text-align: center;
+}
+.chunk-fail-title { font-weight: 600; color: var(--text); margin: 0; }
+.chunk-fail-body { color: var(--text-muted); margin: 0; max-width: 46ch; line-height: 1.5; }
+.chunk-fail-btn {
+  margin-top: 4px; padding: 7px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  font: inherit; cursor: pointer;
+}
+.chunk-fail-btn:hover { background: var(--surface-2); }

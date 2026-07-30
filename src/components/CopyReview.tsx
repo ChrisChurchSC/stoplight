@@ -1,3 +1,4 @@
+import { BufferedTextarea } from './BufferedTextarea'
 import { CopyFields } from './CopyFields'
 import { useEffect, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
@@ -216,10 +217,14 @@ export function CopyReview() {
           <>
           <label className="copy-field">
             <span className="copy-label">Asset name</span>
-            <input
+            {/* Keyed by row so opening a different asset starts a clean box rather than inheriting
+                whatever the last one was holding. */}
+            <BufferedTextarea
+              key={row.id}
+              as="input"
               className="drawer-input"
               value={row.assetName}
-              onChange={(e) => updateRow(row.id, { assetName: e.target.value })}
+              onCommit={(assetName) => updateRow(row.id, { assetName })}
             />
           </label>
 
@@ -265,21 +270,27 @@ export function CopyReview() {
 
             <label className="copy-field">
               <span className="copy-label">Campaign</span>
-              <input
+              {/* Free text, not a picker, so it costs a write and a full workspace read per character
+                  the same way the copy boxes did. */}
+              <BufferedTextarea
+                key={row.id}
+                as="input"
                 className="drawer-input"
                 value={row.campaign ?? ''}
                 placeholder="—"
-                onChange={(e) => updateRow(row.id, { campaign: e.target.value })}
+                onCommit={(campaign) => updateRow(row.id, { campaign })}
               />
             </label>
 
             <label className="copy-field">
               <span className="copy-label">Audience</span>
-              <input
+              <BufferedTextarea
+                key={row.id}
+                as="input"
                 className="drawer-input"
                 value={row.audience ?? ''}
                 placeholder="—"
-                onChange={(e) => updateRow(row.id, { audience: e.target.value })}
+                onCommit={(audience) => updateRow(row.id, { audience })}
               />
             </label>
 
@@ -379,11 +390,12 @@ export function CopyReview() {
           {(row.body !== undefined || row.mediaType === 'text') && (
             <label className="copy-field">
               <span className="copy-label">Body</span>
-              <textarea
+              <BufferedTextarea
+                key={row.id}
                 className="tall"
                 value={row.body ?? ''}
                 placeholder="Body copy…"
-                onChange={(e) => updateRow(row.id, { body: e.target.value })}
+                onCommit={(body) => updateRow(row.id, { body })}
               />
             </label>
           )}
@@ -396,11 +408,12 @@ export function CopyReview() {
                   ⟳ Extract
                 </button>
               </span>
-              <textarea
+              <BufferedTextarea
+                key={row.id}
                 className="tall"
                 value={row.extractedCopy ?? ''}
                 placeholder="Text baked into the creative (overlays, VO, page copy). Click Extract."
-                onChange={(e) => updateRow(row.id, { extractedCopy: e.target.value })}
+                onCommit={(extractedCopy) => updateRow(row.id, { extractedCopy })}
               />
               <span className="copy-hint">
                 Image/video text is transcribed via Claude vision when wired (stubbed in v1).

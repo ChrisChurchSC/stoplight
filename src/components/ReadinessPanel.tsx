@@ -7,6 +7,7 @@ import {
 import { rtbsForCampaign } from '../domain/rtb'
 import { INSTALLED_TRACKING } from '../domain/tracking'
 import { useTrafficStore } from '../store/useTrafficStore'
+import { BufferedTextarea } from './BufferedTextarea'
 
 const STATUS_LABEL: Record<ReadyStatus, string> = {
   ready: 'Ready',
@@ -162,18 +163,24 @@ export function ReadinessPanel() {
               <div className="rdy-brand-head">
                 ✦ Starter brand guide for {client} — review and confirm
               </div>
+              {/* Buffered, and keyed by client so switching brands never shows one brand's half-typed
+                  guide over another's. updateBrandGuide saves through persistState, so the direct
+                  wiring was one Supabase upsert of the whole guide map per character. */}
               <label className="rdy-brand-field">
                 <span>Voice</span>
-                <textarea
+                <BufferedTextarea
+                  key={`${client}:voice`}
                   value={entry.guide.voice}
-                  onChange={(e) => updateBrandGuide(client, { voice: e.target.value })}
+                  onCommit={(voice) => updateBrandGuide(client, { voice })}
                 />
               </label>
               <label className="rdy-brand-field">
                 <span>Tone</span>
-                <input
+                <BufferedTextarea
+                  key={`${client}:tone`}
+                  as="input"
                   value={entry.guide.tone}
-                  onChange={(e) => updateBrandGuide(client, { tone: e.target.value })}
+                  onCommit={(tone) => updateBrandGuide(client, { tone })}
                 />
               </label>
               <div className="rdy-brand-cols">
@@ -196,9 +203,10 @@ export function ReadinessPanel() {
               </div>
               <label className="rdy-brand-field">
                 <span>Visual</span>
-                <textarea
+                <BufferedTextarea
+                  key={`${client}:visual`}
                   value={entry.guide.visual}
-                  onChange={(e) => updateBrandGuide(client, { visual: e.target.value })}
+                  onCommit={(visual) => updateBrandGuide(client, { visual })}
                 />
               </label>
               <button className="btn sm primary rdy-confirm" onClick={() => confirmBrandGuide(client)}>

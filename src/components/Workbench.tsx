@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { ChunkBoundary } from './ChunkBoundary'
 import type { DragEvent } from 'react'
 import { filesToAssets, looksLikeUrl, urlToAsset } from '../lib/files'
 import { claimInvite } from '../lib/session'
@@ -9,41 +10,16 @@ import { HomeShell } from './HomeShell'
 import { AccountSettings } from './AccountSettings'
 import { Sidebar } from './Sidebar'
 import { Breadcrumb } from './Breadcrumb'
-import { BrandWorkspace } from './BrandWorkspace'
-import { ClientsOverview } from './ClientsOverview'
 import { IngestTray } from './IngestTray'
+import { CanvasProjectTabs } from './CanvasProjectTabs'
+import { ViewToggle } from './ViewToggle'
+import { InsightsTabs } from './InsightsTabs'
+import { FlowsView } from './FlowsView'
+// FlowsView imports both of these itself, so they are in the entry chunk whatever this file does.
+// Splitting them here would buy no bytes and cost a frame of blank canvas on every switch into
+// Grid or Calendar, so they stay static.
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
-import { CanvasView } from './CanvasView'
-import { CanvasProjectTabs } from './CanvasProjectTabs'
-import { InsightsView } from './InsightsView'
-import { ViewToggle } from './ViewToggle'
-import { ConnectorsPage } from './ConnectorsPage'
-import { LibraryPage } from './LibraryPage'
-import { LibraryView } from './LibraryView'
-import { PrioritiesView } from './PrioritiesView'
-import { ChannelsView } from './ChannelsView'
-import { ChannelRecordsView } from './ChannelRecordsView'
-import { ReportsView } from './ReportsView'
-import { InsightsTabs } from './InsightsTabs'
-import { CompaniesView } from './CompaniesView'
-import { PeopleView } from './PeopleView'
-import { SegmentsView } from './SegmentsView'
-import { ProofPointsView } from './ProofPointsView'
-import { MessagesView } from './MessagesView'
-import { VoicesView } from './VoicesView'
-import { PatternsView } from './PatternsView'
-import { TriggersView } from './TriggersView'
-import { ObjectivesView } from './ObjectivesView'
-import { TasksView } from './TasksView'
-import { BrandsView } from './BrandsView'
-import { FlowsView } from './FlowsView'
-import { CampaignCalendar } from './CampaignCalendar'
-import { BrandPage } from './BrandPage'
-import { DatasetPage } from './DatasetPage'
-import { ObjectPage } from './ObjectPage'
-import { BillingPage } from './BillingPage'
-import { Portfolio } from './Portfolio'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { IcpDrawer } from './IcpDrawer'
 import { PersonalizationDrawer } from './PersonalizationDrawer'
@@ -66,6 +42,55 @@ import { ClaudeEngine } from './ClaudeEngine'
 import { ChannelIngestDrawer } from './ChannelIngestDrawer'
 import { DevReset } from './DevReset'
 import { Toast } from './Toast'
+
+/**
+ * THE ROUTED SCREENS, one chunk each.
+ *
+ * Everything above is either chrome that renders on every route (rail, breadcrumb, tab bar, view
+ * pills) or an overlay that is always mounted and decides for itself whether to show anything.
+ * Those have to stay static: a lazy component that is on screen the whole time buys nothing and
+ * only adds a suspense boundary the shell can fall through.
+ *
+ * Everything below is a destination reached by a click, so it does not belong in the first
+ * download. Statically importing all of them is what made the app one 1.3MB chunk in which every
+ * user paid for every screen they would never open. Each is a NAMED export, hence the `.then`
+ * unwrap: React.lazy only understands a module whose `default` is the component.
+ *
+ * FlowsView is the deliberate exception and stays static above. `page` boots to 'flows'
+ * (useTrafficStore's initial state), so it is the front door: making it lazy would put a second
+ * round trip in front of the one screen almost everybody sees first. It is also by far the largest
+ * module here, so splitting it internally is the next real win, not splitting it off the entry.
+ * SheetGrid and CalendarView stay static for a duller reason, noted at their imports: FlowsView
+ * pulls them in anyway, so a lazy() around them would be a suspend with nothing to wait for.
+ */
+const BrandWorkspace = lazy(() => import('./BrandWorkspace').then((m) => ({ default: m.BrandWorkspace })))
+const ClientsOverview = lazy(() => import('./ClientsOverview').then((m) => ({ default: m.ClientsOverview })))
+const CanvasView = lazy(() => import('./CanvasView').then((m) => ({ default: m.CanvasView })))
+const InsightsView = lazy(() => import('./InsightsView').then((m) => ({ default: m.InsightsView })))
+const ConnectorsPage = lazy(() => import('./ConnectorsPage').then((m) => ({ default: m.ConnectorsPage })))
+const LibraryPage = lazy(() => import('./LibraryPage').then((m) => ({ default: m.LibraryPage })))
+const LibraryView = lazy(() => import('./LibraryView').then((m) => ({ default: m.LibraryView })))
+const PrioritiesView = lazy(() => import('./PrioritiesView').then((m) => ({ default: m.PrioritiesView })))
+const ChannelsView = lazy(() => import('./ChannelsView').then((m) => ({ default: m.ChannelsView })))
+const ChannelRecordsView = lazy(() => import('./ChannelRecordsView').then((m) => ({ default: m.ChannelRecordsView })))
+const ReportsView = lazy(() => import('./ReportsView').then((m) => ({ default: m.ReportsView })))
+const CompaniesView = lazy(() => import('./CompaniesView').then((m) => ({ default: m.CompaniesView })))
+const PeopleView = lazy(() => import('./PeopleView').then((m) => ({ default: m.PeopleView })))
+const SegmentsView = lazy(() => import('./SegmentsView').then((m) => ({ default: m.SegmentsView })))
+const ProofPointsView = lazy(() => import('./ProofPointsView').then((m) => ({ default: m.ProofPointsView })))
+const MessagesView = lazy(() => import('./MessagesView').then((m) => ({ default: m.MessagesView })))
+const VoicesView = lazy(() => import('./VoicesView').then((m) => ({ default: m.VoicesView })))
+const PatternsView = lazy(() => import('./PatternsView').then((m) => ({ default: m.PatternsView })))
+const TriggersView = lazy(() => import('./TriggersView').then((m) => ({ default: m.TriggersView })))
+const ObjectivesView = lazy(() => import('./ObjectivesView').then((m) => ({ default: m.ObjectivesView })))
+const TasksView = lazy(() => import('./TasksView').then((m) => ({ default: m.TasksView })))
+const BrandsView = lazy(() => import('./BrandsView').then((m) => ({ default: m.BrandsView })))
+const CampaignCalendar = lazy(() => import('./CampaignCalendar').then((m) => ({ default: m.CampaignCalendar })))
+const BrandPage = lazy(() => import('./BrandPage').then((m) => ({ default: m.BrandPage })))
+const DatasetPage = lazy(() => import('./DatasetPage').then((m) => ({ default: m.DatasetPage })))
+const ObjectPage = lazy(() => import('./ObjectPage').then((m) => ({ default: m.ObjectPage })))
+const BillingPage = lazy(() => import('./BillingPage').then((m) => ({ default: m.BillingPage })))
+const Portfolio = lazy(() => import('./Portfolio').then((m) => ({ default: m.Portfolio })))
 
 export function Workbench() {
   const refresh = useTrafficStore((s) => s.refresh)
@@ -260,19 +285,21 @@ export function Workbench() {
               </>
             )}
             <div className="main">
-              {overview ? (
-                <>
-                  {/* Show freshly-ingested assets here too — otherwise an upload
-                      from the home overview gives no visible feedback. */}
-                  <IngestTray />
-                  <ClientsOverview />
-                </>
-              ) : level1 ? (
-                <BrandWorkspace />
-              ) : (
-                <>
-                  <IngestTray />
-                  {view === 'calendar' ? (
+              {/* The tray and the view pills are hoisted OUT of the branches so they sit outside
+                  the boundary below. Same three combinations as before (the tray shows on the
+                  overview and on a campaign, the pills only on a campaign), but a screen that has
+                  not downloaded yet now blanks on its own instead of taking the controls you just
+                  clicked with it.
+                  The tray on the overview is deliberate: without it an upload from the home
+                  overview gives no visible feedback. */}
+              {!level1 && <IngestTray />}
+              <ChunkBoundary>
+                <Suspense fallback={null}>
+                  {overview ? (
+                    <ClientsOverview />
+                  ) : level1 ? (
+                    <BrandWorkspace />
+                  ) : view === 'calendar' ? (
                     <CalendarView />
                   ) : view === 'flow' || view === 'canvas' ? (
                     <CanvasView />
@@ -281,9 +308,9 @@ export function Workbench() {
                   ) : (
                     <SheetGrid />
                   )}
-                  <ViewToggle />
-                </>
-              )}
+                </Suspense>
+              </ChunkBoundary>
+              {!overview && !level1 && <ViewToggle />}
             </div>
 
             {over && <div className="drop-veil">Drop to add assets</div>}
@@ -293,107 +320,118 @@ export function Workbench() {
         // Library / Connectors / Billing share the home's dashboard shell (files
         // sidebar + tab bar) so the layout never changes between them and the hub.
         <HomeShell>
-          {page === 'priorities' ? (
-            <div className="home-main-scroll">
-              <PrioritiesView scopeClient={scopedBrand} />
-            </div>
-          ) : page === 'brand' ? (
-            <div className="home-main-scroll">
-              <BrandPage brand={scopedBrand} />
-            </div>
-          ) : page === 'dataset' ? (
-            <div className="home-main-scroll">
-              <DatasetPage />
-            </div>
-          ) : page === 'object' ? (
-            <div className="home-main-scroll">
-              <ObjectPage />
-            </div>
-          ) : page === 'content' ? (
-            <div className="home-main-scroll">
-              <InsightsTabs />
-              <LibraryView scopeClient={scopedBrand} />
-            </div>
-          ) : page === 'channels' ? (
-            <div className="home-main-scroll">
-              <ChannelsView scopeClient={scopedBrand} />
-            </div>
-          ) : page === 'reports' ? (
-            <div className="home-main-scroll">
-              <InsightsTabs />
-              <ReportsView scopeClient={scopedBrand} />
-            </div>
-          ) : page === 'records' ? (
-            <div className="home-main-page">
-              <CompaniesView />
-            </div>
-          ) : page === 'channelrecords' ? (
-            <div className="home-main-page">
-              <ChannelRecordsView />
-            </div>
-          ) : page === 'people' ? (
-            <div className="home-main-page">
-              <PeopleView />
-            </div>
-          ) : page === 'segments' ? (
-            <div className="home-main-page">
-              <SegmentsView />
-            </div>
-          ) : page === 'proofpoints' ? (
-            <div className="home-main-page">
-              <ProofPointsView />
-            </div>
-          ) : page === 'messages' ? (
-            <div className="home-main-page">
-              <MessagesView />
-            </div>
-          ) : page === 'voices' ? (
-            <div className="home-main-page">
-              <VoicesView />
-            </div>
-          ) : page === 'patterns' ? (
-            <div className="home-main-page">
-              <PatternsView />
-            </div>
-          ) : page === 'objectives' ? (
-            <div className="home-main-page">
-              <ObjectivesView />
-            </div>
-          ) : page === 'triggers' ? (
-            <div className="home-main-page">
-              <TriggersView />
-            </div>
-          ) : page === 'tasks' ? (
-            <div className="home-main-scroll">
-              <TasksView />
-            </div>
-          ) : page === 'brands' ? (
-            // This brand's strategy record. BrandsView is single-brand only now — never the
-            // cross-brand roster — so this can't expose the whole portfolio.
-            <div className="home-main-page">
-              <BrandsView />
-            </div>
-          ) : page === 'flows' ? (
-            <div className="home-main-page">
-              <FlowsView />
-            </div>
-          ) : page === 'calendar' ? (
-            <div className="home-main-scroll">
-              <CampaignCalendar />
-            </div>
-          ) : (
-            <div className="home-main-page">
-              {page === 'portfolio' ? (
-                <Portfolio />
-              ) : page === 'library' ? (
-                <LibraryPage />
-              ) : page === 'billing' ? (
-                <BillingPage />
+          {/* One boundary for the whole routed region, INSIDE the shell rather than around it.
+              Around it, a screen that has not downloaded yet would take the rail and the tab bar
+              down with it on the way in, because a boundary that suspends hides everything it
+              wraps, not just the part that is waiting. Here the shell stays put and only the
+              content area is briefly empty.
+              fallback={null} on purpose: a skeleton sized for the wrong screen shifts the layout
+              twice, once when it appears and once when the real thing replaces it. */}
+          <ChunkBoundary>
+            <Suspense fallback={null}>
+              {page === 'priorities' ? (
+                <div className="home-main-scroll">
+                  <PrioritiesView scopeClient={scopedBrand} />
+                </div>
+              ) : page === 'brand' ? (
+                <div className="home-main-scroll">
+                  <BrandPage brand={scopedBrand} />
+                </div>
+              ) : page === 'dataset' ? (
+                <div className="home-main-scroll">
+                  <DatasetPage />
+                </div>
+              ) : page === 'object' ? (
+                <div className="home-main-scroll">
+                  <ObjectPage />
+                </div>
+              ) : page === 'content' ? (
+                <div className="home-main-scroll">
+                  <InsightsTabs />
+                  <LibraryView scopeClient={scopedBrand} />
+                </div>
+              ) : page === 'channels' ? (
+                <div className="home-main-scroll">
+                  <ChannelsView scopeClient={scopedBrand} />
+                </div>
+              ) : page === 'reports' ? (
+                <div className="home-main-scroll">
+                  <InsightsTabs />
+                  <ReportsView scopeClient={scopedBrand} />
+                </div>
+              ) : page === 'records' ? (
+                <div className="home-main-page">
+                  <CompaniesView />
+                </div>
+              ) : page === 'channelrecords' ? (
+                <div className="home-main-page">
+                  <ChannelRecordsView />
+                </div>
+              ) : page === 'people' ? (
+                <div className="home-main-page">
+                  <PeopleView />
+                </div>
+              ) : page === 'segments' ? (
+                <div className="home-main-page">
+                  <SegmentsView />
+                </div>
+              ) : page === 'proofpoints' ? (
+                <div className="home-main-page">
+                  <ProofPointsView />
+                </div>
+              ) : page === 'messages' ? (
+                <div className="home-main-page">
+                  <MessagesView />
+                </div>
+              ) : page === 'voices' ? (
+                <div className="home-main-page">
+                  <VoicesView />
+                </div>
+              ) : page === 'patterns' ? (
+                <div className="home-main-page">
+                  <PatternsView />
+                </div>
+              ) : page === 'objectives' ? (
+                <div className="home-main-page">
+                  <ObjectivesView />
+                </div>
+              ) : page === 'triggers' ? (
+                <div className="home-main-page">
+                  <TriggersView />
+                </div>
+              ) : page === 'tasks' ? (
+                <div className="home-main-scroll">
+                  <TasksView />
+                </div>
+              ) : page === 'brands' ? (
+                // This brand's strategy record. BrandsView is single-brand only now — never the
+                // cross-brand roster — so this can't expose the whole portfolio.
+                <div className="home-main-page">
+                  <BrandsView />
+                </div>
+              ) : page === 'flows' ? (
+                <div className="home-main-page">
+                  <FlowsView />
+                </div>
+              ) : page === 'calendar' ? (
+                <div className="home-main-scroll">
+                  <CampaignCalendar />
+                </div>
               ) : (
-                <ConnectorsPage />
+                <div className="home-main-page">
+                  {page === 'portfolio' ? (
+                    <Portfolio />
+                  ) : page === 'library' ? (
+                    <LibraryPage />
+                  ) : page === 'billing' ? (
+                    <BillingPage />
+                  ) : (
+                    <ConnectorsPage />
+                  )}
+                </div>
               )}
-            </div>
-          )}
+            </Suspense>
+          </ChunkBoundary>
         </HomeShell>
       )}
 
