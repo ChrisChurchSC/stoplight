@@ -4358,10 +4358,16 @@ export function FlowsView() {
       // journey (asset → next step) reads as a forward edge on the canvas.
       for (const d of viewDelivs) {
         // A deliverable added off an asset card hangs from that asset, so the journey reads as a
-        // forward edge. With no such source it hangs from nothing until you connect it.
+        // forward edge; otherwise it hangs off the campaign.
+        //
+        // A BUILT campaign draws this line and the BUILDER does not, and that is the distinction
+        // rather than an inconsistency. In the builder a deliverable is a thing you are adding and
+        // connecting it to the brief is a decision, so drawing the line for you claims a link the
+        // writer would not honour. Here the deliverable already belongs to this campaign: its rows
+        // carry the campaign name, which is what put it in viewDelivs. The line states a fact.
         const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
         const srcRow = branchSrc ? viewRows.find((r) => r.assetName === branchSrc) : undefined
-        if (srcRow) out.push({ from: srcRow.id, to: d.key })
+        out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
         for (const r of d.rows) out.push({ from: d.key, to: r.id })
       }
       return out
