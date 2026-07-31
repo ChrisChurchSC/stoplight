@@ -11,17 +11,18 @@ export function Toast() {
   const toast = useTrafficStore((s) => s.toast)
   const toastAction = useTrafficStore((s) => s.toastAction)
   const showToast = useTrafficStore((s) => s.showToast)
+  const tone = useTrafficStore((s) => s.toastTone)
 
   useEffect(() => {
     if (!toast) return
     // Give an actionable toast (undo) a bit longer to be noticed and clicked.
-    const t = window.setTimeout(() => showToast(null), toastAction ? 9000 : 6000)
+    const t = window.setTimeout(() => showToast(null), tone === 'warn' ? 14000 : toastAction ? 9000 : 6000)
     return () => window.clearTimeout(t)
-  }, [toast, toastAction, showToast])
+  }, [toast, toastAction, showToast, tone])
 
   if (!toast) return null
   return (
-    <div className="toast" role="status" onClick={() => showToast(null)}>
+    <div className={`toast${tone === 'warn' ? ' warn' : ''}`} role="status" onClick={() => showToast(null)}>
       <span className="toast-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />

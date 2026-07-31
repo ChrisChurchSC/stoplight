@@ -8,7 +8,7 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
-import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
+import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -26,7 +26,7 @@ import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, fres
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
-import { UNASSIGNED, type FlowRefType, type FlowReference } from '../domain/clients'
+import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
@@ -44,12 +44,13 @@ import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
 import { typeLabel } from '../domain/channelAssetTypes'
-import { isoToLocalInput, localInputToIso } from '../lib/format'
 import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
 import { CopyFields } from './CopyFields'
+import { Hint } from './Hint'
+import { FlowSteps } from './FlowSteps'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -162,7 +163,12 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season', dataset: 'Data set' }
+/**
+ * Whether cards carry a team discussion thread. Off until a workspace holds more than one person:
+ * see renderCardComments. Typed as boolean, not inferred as `false`, so the code under it stays
+ * reachable to the compiler and does not rot behind a narrowed constant.
+ */
+const DISCUSSION_ENABLED: boolean = false
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -419,6 +425,90 @@ function roundedPath(pts: { x: number; y: number }[], r: number): string {
 // zoomed node spacing: the corner radius and lane offsets are screen pixels, so without
 // scaling they overwhelm the shrunken gaps between nodes when zoomed out and the routing
 // looks busy and overshoots.
+/**
+ * WHICH EDGE OF EACH CARD A CONNECTOR SHOULD USE.
+ *
+ * Every edge used to leave the source's right side and enter the target's left, whatever the two
+ * cards were doing. A card sitting directly BELOW another was reached by exiting right, dropping,
+ * running back left and re-entering from the left: a long detour around a card that was six pixels
+ * away, and the line said nothing true about the relationship.
+ *
+ * The sides come from the geometry. Whichever axis the two cards are further apart on wins, so
+ * side-by-side cards connect left/right and stacked cards connect top/bottom. Ties go horizontal,
+ * which is the reading direction of the board.
+ */
+type EdgeSide = 'left' | 'right' | 'top' | 'bottom'
+interface EdgeRect { x: number; y: number; w: number; h: number }
+
+function sidePoint(r: EdgeRect, side: EdgeSide): { x: number; y: number } {
+  if (side === 'left') return { x: r.x, y: r.y + r.h / 2 }
+  if (side === 'right') return { x: r.x + r.w, y: r.y + r.h / 2 }
+  if (side === 'top') return { x: r.x + r.w / 2, y: r.y }
+  return { x: r.x + r.w / 2, y: r.y + r.h }
+}
+
+export function anchorsFor(a: EdgeRect, b: EdgeRect): { s: { x: number; y: number }; t: { x: number; y: number }; sSide: EdgeSide; tSide: EdgeSide } {
+  const dx = b.x + b.w / 2 - (a.x + a.w / 2)
+  const dy = b.y + b.h / 2 - (a.y + a.h / 2)
+  // Compare the CLEAR gap on each axis, not centre distance: two tall cards side by side can have a
+  // bigger dy than dx while still obviously being left-to-right neighbours.
+  const gapX = dx > 0 ? b.x - (a.x + a.w) : a.x - (b.x + b.w)
+  const gapY = dy > 0 ? b.y - (a.y + a.h) : a.y - (b.y + b.h)
+  const vertical = gapY > gapX
+  const sSide: EdgeSide = vertical ? (dy > 0 ? 'bottom' : 'top') : dx >= 0 ? 'right' : 'left'
+  const tSide: EdgeSide = vertical ? (dy > 0 ? 'top' : 'bottom') : dx >= 0 ? 'left' : 'right'
+  return { s: sidePoint(a, sSide), t: sidePoint(b, tSide), sSide, tSide }
+}
+
+/**
+ * A right-angled path that LEAVES and ENTERS perpendicular to the sides it was given.
+ *
+ * The old version assumed the source always exited rightward, which is why it needed a special case
+ * for a target to the left and had no idea what to do with a vertical exit. This one steps out from
+ * each card along its own side's normal, then joins the two stubs with at most one more corner.
+ */
+function sidedPath(
+  s: { x: number; y: number },
+  t: { x: number; y: number },
+  sSide: EdgeSide,
+  tSide: EdgeSide,
+  scale = 1,
+): string {
+  const k = Math.max(0.25, Math.min(1, scale))
+  const gap = 28 * k
+  const r = 14 * k
+  const out = (p: { x: number; y: number }, side: EdgeSide) => ({
+    x: p.x + (side === 'left' ? -gap : side === 'right' ? gap : 0),
+    y: p.y + (side === 'top' ? -gap : side === 'bottom' ? gap : 0),
+  })
+  const s1 = out(s, sSide)
+  const t1 = out(t, tSide)
+  const sHoriz = sSide === 'left' || sSide === 'right'
+  const tHoriz = tSide === 'left' || tSide === 'right'
+  const pts = [s, s1]
+  if (sHoriz && tHoriz) {
+    // Both stubs horizontal: meet on a shared vertical lane between them.
+    const midX = (s1.x + t1.x) / 2
+    pts.push({ x: midX, y: s1.y }, { x: midX, y: t1.y })
+  } else if (!sHoriz && !tHoriz) {
+    const midY = (s1.y + t1.y) / 2
+    pts.push({ x: s1.x, y: midY }, { x: t1.x, y: midY })
+  } else if (sHoriz) {
+    // One horizontal, one vertical: a single corner joins them.
+    pts.push({ x: t1.x, y: s1.y })
+  } else {
+    pts.push({ x: s1.x, y: t1.y })
+  }
+  pts.push(t1, t)
+  return roundedPath(pts, r)
+}
+
+/** Sides chosen from the two rects, then routed. The one call every edge should make. */
+function edgePath(a: EdgeRect, b: EdgeRect, scale = 1): string {
+  const { s, t, sSide, tSide } = anchorsFor(a, b)
+  return sidedPath(s, t, sSide, tSide, scale)
+}
+
 function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): string {
   const s = Math.max(0.25, Math.min(1, scale))
   const r = 14 * s
@@ -468,6 +558,19 @@ function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): s
  */
 const BUILD_ONLY_CHIP = /^(build|apply|create|make)(\s+(it|this|that|these|them|all|the campaign|the flow|the assets))?(\s+now)?\s*[.!]?$/i
 const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
+
+/**
+ * The four drag handles on a card, one per side.
+ *
+ * There used to be one, on the right, so starting a connection meant reaching for the right edge no
+ * matter where the other card was. The edge itself now picks its own sides from the geometry, so
+ * these are purely about where your cursor already is: drag from whichever is nearest.
+ *
+ * All four call the same startConnect with the same id. The side you grab does not decide where the
+ * line attaches, because a line that attached where you happened to grab would fight the router the
+ * moment either card moved.
+ */
+const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
 
 export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
@@ -839,6 +942,7 @@ export function FlowsView() {
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const patchCampaignRaw = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
+  const showToastAction = useTrafficStore((s) => s.showToastAction)
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const allCompanies = useTrafficStore((s) => s.companies)
@@ -853,6 +957,7 @@ export function FlowsView() {
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
@@ -910,8 +1015,6 @@ export function FlowsView() {
   const updateSeason = useTrafficStore((s) => s.updateSeason)
   const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
   const refreshBrandDataset = useTrafficStore((s) => s.refreshBrandDataset)
-  const outputTypes = useTrafficStore((s) => s.outputTypes)
-  const addOutputType = useTrafficStore((s) => s.addOutputType)
   const datasetUndo = useTrafficStore((s) => s.datasetUndo)
   const undoDatasetRefresh = useTrafficStore((s) => s.undoDatasetRefresh)
   /** Per-card import feedback: what landed, or why nothing did. */
@@ -933,7 +1036,6 @@ export function FlowsView() {
   /** Which card is re-pulling, and the grid it replaced, so the click is reversible for the session. */
   const [refreshFor, setRefreshFor] = useState<string | null>(null)
   /** The name being typed for a new custom format, or null when the form is shut. */
-  const [namingFormat, setNamingFormat] = useState<string | null>(null)
 
   /**
    * The providers that are actually usable right now, listed in the card's own picker.
@@ -1255,6 +1357,14 @@ export function FlowsView() {
   const connectFromRef = useRef<string | null>(null)
   connectFromRef.current = connectFrom
   const [building, setBuilding] = useState(false)
+  /**
+   * The model picked in the builder, before there is a campaign to store it on.
+   *
+   * The toolbar's picker is always present now, so it has to be answerable before Build. Held here
+   * and stamped onto the campaign the moment buildFlow names one, rather than being a control that
+   * silently does nothing until a campaign exists.
+   */
+  const [buildModel, setBuildModel] = useState<string | undefined>(undefined)
   // The goal card's objective picker (open state), so you can link/change the goal on the card.
   // Build always writes copy now (the toggle was removed); kept as a constant so the
   // preview + build paths that reference it stay unchanged.
@@ -1265,7 +1375,6 @@ export function FlowsView() {
    * "12 draft assets" over twelve empty ones: `copy` said only that copy had been ASKED for, and
    * the refusal happened downstream where nothing reported back.
    */
-  const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null; blocked: string | null } | null>(null)
   // Live draft copy per deliverable node, generated when it's added (and on redraft).
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
   const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
@@ -1364,9 +1473,6 @@ export function FlowsView() {
       return next
     })
   // Swap a generated-idea post for a real ingested post from the library.
-  const [swapOpen, setSwapOpen] = useState(false)
-  const [swapSearch, setSwapSearch] = useState('')
-  const [replacing, setReplacing] = useState(false)
   const [patternBusy, setPatternBusy] = useState(false)
   // References changed since the last generation → offer a Regenerate button.
   const [refsDirty, setRefsDirty] = useState(false)
@@ -2332,8 +2438,15 @@ export function FlowsView() {
    * An unconnected card is a draft thought: on the board, not yet part of the campaign. That is
    * what makes it safe to leave loose cards lying around.
    *
-   * Only the kinds with a FlowRefType can attach, because a ref is what the rest of the app reads.
-   * Of these, segment and proof are the two that actually reach the copy writer today.
+   * Only the kinds with a FlowRefType can CONTRIBUTE A RECORD, because a ref is what the rest of the
+   * app reads. Of these, segment and proof are the two that actually reach the copy writer today.
+   *
+   * This used to read "only the kinds with a FlowRefType can attach", and one kind now attaches
+   * without one: a Brand card BINDS the campaign to its brand instead of handing it a record (see
+   * bindBrandFromCard). It is not an exception waiting for a FlowRefType. A brand is the campaign's
+   * owner, not something the campaign refers to alongside a segment and a proof point, and the
+   * gesture is the same gesture for a good reason: the thing that decides whose voice gets written
+   * should be a wire you can see, not the rail you happened to be standing in when you hit Build.
    */
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
@@ -2360,16 +2473,146 @@ export function FlowsView() {
     return [refForObject(nt)].filter((r): r is FlowReference => !!r)
   }
   /**
+   * THE BRAND A BRAND CARD NAMES, or null when this node is not one (or has not named one yet).
+   *
+   * Resolved against ALL brand objects rather than the workspace-scoped `brandObjects`, because this
+   * lookup is what DECIDES which workspace the campaign belongs to: scoping it by the brand you
+   * happen to be standing in would make a card resolvable only once the binding it is trying to make
+   * had already happened.
+   *
+   * Reads objectsRef, not `objects`. Every path that changes a card's record calls setObjectRef and
+   * then re-attaches in the SAME tick, so the render closure still holds the record the card pointed
+   * at a moment ago, which for a Brand card would bind the campaign to the brand you just replaced.
+   * setObjectRef pushes the new id into the ref for exactly this reason.
+   */
+  const brandCardName = (nodeId: string): string | null => {
+    const o = objectsRef.current.find((n) => n.id === nodeId)
+    if (!o || o.kind !== 'brand' || !o.refId) return null
+    return allBrandObjects.find((b) => b.id === o.refId)?.name?.trim() || null
+  }
+  /** The brands named by the Brand cards wired into the campaign hub, ignoring one node. */
+  const wiredBrandNames = (exceptId?: string): string[] => {
+    const out: string[] = []
+    for (const e of connectors) {
+      if (e.to !== 'campaign' || e.from === exceptId) continue
+      const nm = brandCardName(e.from)
+      if (nm && !out.includes(nm)) out.push(nm)
+    }
+    return out
+  }
+  /** How many of this campaign's assets already carry copy. What makes a rebind or an unbind costly. */
+  const writtenAssetCount = (): number => viewRows.filter((r) => messagingAllText(r).trim()).length
+  /**
+   * WIRING A BRAND CARD INTO THE BRIEF IS HOW A CAMPAIGN GETS ITS BRAND.
+   *
+   * A campaign's brand used to come only from the workspace you were standing in when you built it,
+   * so one built without a brand landed on Unassigned and then refused to write a word: correctly,
+   * but with no gesture on the canvas that could fix it. The Brand card drew, wired, lit up as
+   * connected and did nothing whatsoever, because 'brand' carries no FlowRefType.
+   *
+   * It still carries none, deliberately. A brand is not a record the campaign REFERENCES alongside a
+   * segment and a proof point; it is the campaign's owner, and the three exhaustive
+   * Record<FlowRefType, …> maps would have to grow a member that means something different from
+   * every other one. So the binding runs beside the ref plumbing rather than through it, and
+   * attachToCampaign's early return on "no refs" is left exactly as it was.
+   *
+   * Returns a refusal to show the user, or null when the wire is allowed (having bound it).
+   *
+   * TWO BRAND CARDS ON ONE BRIEF ARE REFUSED, not resolved. Last-wins and first-wins both leave the
+   * board showing two brands while the campaign quietly holds one, and every reader downstream (whose
+   * voice, whose proof, whose rail) then gives an answer the canvas contradicts. Refusing
+   * says which brand already owns the campaign and what to do about it. A second card naming the
+   * SAME brand is allowed: it states nothing new.
+   */
+  const bindBrandFromCard = (nodeId: string): string | null => {
+    const name = brandCardName(nodeId)
+    // Not a Brand card, or an empty one. Wiring a Brand card you have not filled in yet is allowed:
+    // that is an unfinished card, not a contradiction.
+    if (!name) return null
+    const other = wiredBrandNames(nodeId).find((n) => n !== name)
+    if (other) {
+      return `${viewName ? `"${viewName}"` : 'This campaign'} is already bound to ${other} by another Brand card. Unwire that one first. A campaign has one brand, and quietly choosing between two is how one brand's voice ends up in another's copy.`
+    }
+    // BUILD MODE has no campaign to bind yet. buildFlow reads the same wire off the builder board at
+    // the moment it names one, so the binding is made once, from one place.
+    if (viewName === null) return null
+    const current = clientForCampaign(viewName)
+    if (current === name) return null
+    bindCampaignBrand(viewName, name)
+    /**
+     * THE RAIL FOLLOWS THE CAMPAIGN. Every record list on this canvas (segments, proof, messages,
+     * products, and the Brand card's own options) is scoped by clientFilter, so leaving the
+     * workspace pointed at the old brand would mean an open campaign that generates under one brand
+     * while offering you another brand's records to wire into it.
+     */
+    setClientFilter(name)
+    const written = writtenAssetCount()
+    // Moving a campaign that has already been written is not the same as binding one that never had
+    // a brand. Both are allowed (one card owns the binding, and swapping its record is a deliberate
+    // act), but the second is a change to copy that already exists, so it does not pass in silence.
+    if (current !== UNASSIGNED && written) {
+      useTrafficStore.getState().setBrandNotice(
+        `"${viewName}" moved from ${current} to ${name}. ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} still written in ${current}'s voice. Generate again so the copy matches the brand it now belongs to.`,
+      )
+    } else {
+      showToast(`"${viewName}" is bound to ${name}. Its copy is written in that brand's voice.`)
+    }
+    return null
+  }
+  /**
+   * UNWIRING A BRAND CARD (or deleting it): what becomes of the binding it made.
+   *
+   * NEITHER an automatic unbind nor a silent keep. An automatic unbind cuts the brand out from under
+   * assets already written in its voice: the copy survives, its brand does not, and the campaign
+   * lands back in the state generation refuses while claiming a body of work nothing answers for. A
+   * silent keep leaves the campaign bound to a brand no card on the board mentions, which is the
+   * implicit binding this whole change exists to remove.
+   *
+   * So: unbind when nothing has been written, because there is nothing to strand; keep it and SAY SO
+   * when there is, naming how many assets and how to move them. The choice is the user's either way,
+   * it just stops being invisible.
+   *
+   * Unbinding returns the campaign to Unassigned, not to the Drafts space a loose canvas started in.
+   * Unassigned is the state copyBlockerFor refuses, which is the honest answer to "this campaign has
+   * no brand", and it is the same refusal, unchanged, that a campaign with no Brand card has always
+   * got.
+   */
+  const unbindBrandFromCard = (nodeId: string, edges: { from: string; to: string }[]) => {
+    const name = brandCardName(nodeId)
+    if (!name || viewName === null) return
+    // Bound to some other brand: this card never made that binding, so removing it undoes nothing.
+    if (clientForCampaign(viewName) !== name) return
+    // A second card naming the same brand still states it, so the binding stands.
+    if (edges.some((e) => e.to === 'campaign' && e.from !== nodeId && brandCardName(e.from) === name)) return
+    const written = writtenAssetCount()
+    if (written) {
+      useTrafficStore.getState().setBrandNotice(
+        `"${viewName}" is still bound to ${name}: ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} already written in that voice, and taking the brand away would leave copy no brand answers for. Connect a different Brand card to move it, or clear those assets first.`,
+      )
+      return
+    }
+    bindCampaignBrand(viewName, '')
+    showToast(`"${viewName}" is no longer bound to ${name}. Nothing had been written yet. Connect a Brand card before generating.`)
+  }
+  /**
    * Connecting a card to the campaign tags its records on the campaign.
    *
    * The default-set trap: briefRefsEffective falls back to defaultBriefRefs, which is EVERY brand
    * segment. So on an untouched campaign hasRef already matches any audience you attach and the
    * add would no-op while the UI claimed otherwise. The first explicit segment attach therefore
    * REPLACES that implicit default rather than adding to it.
+   *
+   * Returns false when the wire must NOT be drawn (a second Brand card contradicting the one that
+   * already binds this campaign). Every caller that adds the connector has to honour that, or the
+   * board keeps an edge the binding refused.
    */
-  const attachToCampaign = (nodeId: string) => {
+  const attachToCampaign = (nodeId: string): boolean => {
+    // Before the refs, because a Brand card has none: it binds the campaign instead of contributing
+    // to it, and that is the whole of what wiring one does.
+    const refused = bindBrandFromCard(nodeId)
+    if (refused) { useTrafficStore.getState().setBrandNotice(refused); return false }
     const refs = refsBehind(nodeId)
-    if (!refs.length) return
+    if (!refs.length) return true
     const explicit = viewName !== null ? flowRefs : briefRefs
     const firstSegment = refs.some((r) => r.type === 'segment') && explicit === null
     const base = firstSegment ? [] : (explicit ?? [])
@@ -2381,9 +2624,13 @@ export function FlowsView() {
     } else {
       commitBriefRefs(next)
     }
+    return true
   }
   /** Detaching drops the card's refs, unless another attached card still contributes the same one. */
   const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]) => {
+    // Before the refs early-return below, for the same reason attachToCampaign binds before it: a
+    // Brand card carries no refs, so anything downstream of that guard never runs for one.
+    unbindBrandFromCard(nodeId, edges)
     const mine = refsBehind(nodeId)
     if (!mine.length) return
     const stillAttached = edges
@@ -2547,10 +2794,19 @@ export function FlowsView() {
     }
     return out
   }
+  /**
+   * The cards informing `target`, for the panel.
+   *
+   * Reads upstreamCardIds rather than filtering connectors directly, because records chain now: a
+   * card two hops away reaches the writer, and a panel still listing only direct wires would say
+   * "1" over a campaign the writer read two records for. Whether a record ended up in the copy has
+   * to be answerable by looking at this list, so it is the same walk the writer uses.
+   */
   const contextRowsFor = (target: string) => {
-    return connectors
-      .filter((e) => e.to === target)
-      .map((e) => {
+    // key is not read by the walk; viewName is nullable in the builder, before a campaign is named.
+    return upstreamCardIds({ key: viewName ?? '', objects, placements, pos, connectors }, target)
+      .map((from) => {
+        const e = { from, to: target }
         const g = placements.find((p) => p.id === e.from)
         if (g) {
           const so = smartObjectFor(g)
@@ -2571,18 +2827,76 @@ export function FlowsView() {
         const meta = OBJECT_META[nt.kind]
         const linked = smartObjects.find((o) => o.id === nt.smartObjectId)
         const own = refForObject(nt)
+        // A Brand card names a record like every other card, but refForObject returns null for it:
+        // there is no FlowRefType for a brand, deliberately, because a brand OWNS the campaign
+        // rather than being referred to by it. Falling back to the same option list the card's own
+        // dropdown reads is what stops it showing up here as an unnamed row. Same for Product.
+        const named = nt.refId ? objectOptions(nt.kind)?.find((o) => o.id === nt.refId)?.label : undefined
         return {
           id: nt.id,
           tone: meta.tone,
           icon: meta.icon,
           kindLabel: meta.label,
-          label: linked?.name ?? own?.label ?? nt.text.trim().split('\n')[0] ?? '',
-          detail: linked ? describeSmartObject(linked) : '',
+          label: linked?.name ?? own?.label ?? named ?? nt.text.trim().split('\n')[0] ?? '',
+          // A brand card carries no refs and still decides a great deal, so it says what it does
+          // rather than falling through to "Contributes nothing yet", which is simply untrue.
+          detail: linked ? describeSmartObject(linked) : nt.kind === 'brand' && named ? 'Sets the brand this is written as' : '',
           refs: refsBehind(nt.id),
         }
       })
       .filter((r): r is NonNullable<typeof r> => !!r)
   }
+  /**
+   * ONE ROW OF "what is connected here", shared by the campaign card and the post card.
+   *
+   * `onDisconnect` is what separates the two callers. The campaign owns the wires drawn into it, so
+   * its rows can cut them. A post is reached THROUGH the campaign and its channel, so the wire a
+   * post is showing you is not the post's to cut, and offering a ✕ there would delete a connection
+   * somewhere else on the board without saying so.
+   */
+  const renderContextRow = (r: ReturnType<typeof contextRowsFor>[number], onDisconnect?: () => void) => (
+    <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
+      <button
+        className="flow-ctxrow-open"
+        title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+        onClick={() => { setSel(r.id); setSelected(new Set()) }}
+      >
+        <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+        </span>
+        <span className="flow-ctxrow-txt">
+          <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
+          <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
+          {/* What it actually contributes, because a card can be connected and still be empty, and
+              an empty card reaching the writer is worth seeing. Suppressed when it would only repeat
+              the name, which is the common case for a plain card carrying one record. A card with no
+              refs is not automatically contributing nothing: a Brand card carries none and decides
+              which brand the whole campaign is written as, so its own detail wins. */}
+          {(() => {
+            const sub =
+              r.refs.length === 0
+                ? r.detail || 'Contributes nothing yet'
+                : r.detail ||
+                  (r.refs.length === 1 && r.refs[0].label === r.label
+                    ? ''
+                    : r.refs.map((x) => x.label).join(' · '))
+            return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
+          })()}
+        </span>
+      </button>
+      {onDisconnect && (
+        /* Disconnects: the card stays on the board, it just stops feeding the campaign. */
+        <button
+          className="flow-ctxrow-del"
+          title="Disconnect from the campaign (the card stays on the board)"
+          aria-label={`Disconnect ${r.label || r.kindLabel}`}
+          onClick={onDisconnect}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
   const renderCampaignContext = () => {
     const rows = contextRowsFor('campaign')
 
@@ -2599,49 +2913,12 @@ export function FlowsView() {
           </div>
         ) : (
           <div className="flow-ctxlist">
-            {rows.map((r) => (
-              <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
-                <button
-                  className="flow-ctxrow-open"
-                  title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
-                  onClick={() => { setSel(r.id); setSelected(new Set()) }}
-                >
-                  <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
-                  </span>
-                  <span className="flow-ctxrow-txt">
-                    <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
-                    <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
-                    {/* What it actually contributes, because a card can be connected and still be
-                        empty, and an empty card reaching the writer is worth seeing. Suppressed when
-                        it would only repeat the name, which is the common case for a plain card
-                        carrying one record. */}
-                    {(() => {
-                      const sub =
-                        r.refs.length === 0
-                          ? 'Contributes nothing yet'
-                          : r.detail ||
-                            (r.refs.length === 1 && r.refs[0].label === r.label
-                              ? ''
-                              : r.refs.map((x) => x.label).join(' · '))
-                      return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
-                    })()}
-                  </span>
-                </button>
-                {/* Disconnects: the card stays on the board, it just stops feeding the campaign. */}
-                <button
-                  className="flow-ctxrow-del"
-                  title="Disconnect from the campaign (the card stays on the board)"
-                  aria-label={`Disconnect ${r.label || r.kindLabel}`}
-                  onClick={() => {
-                    setConnectors((c) => c.filter((x) => !(x.from === r.id && x.to === 'campaign')))
-                    detachFromCampaign(r.id, connectors)
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+            {rows.map((r) =>
+              renderContextRow(r, () => {
+                setConnectors((c) => c.filter((x) => !(x.from === r.id && x.to === 'campaign')))
+                detachFromCampaign(r.id, connectors)
+              }),
+            )}
           </div>
         )}
         {/* NO SECOND GROUP. A record used to be able to reach the campaign with no card behind it —
@@ -2727,17 +3004,13 @@ export function FlowsView() {
     // A budget needs to be assigned to paid assets. Flag it if there's nowhere to put it, or if
     // it isn't fully assigned across the paid groups yet.
     if (n && n > 0) {
-      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
       else if (assignedBudget < n) showToast(`$${n.toLocaleString()} budget set — assign it across your paid assets so it's fully allocated.`)
     }
   }
 
   // The brand's real ingested posts (from the Library), most-reached first — the pool a
   // generated-idea post can be swapped for.
-  const ingestedPosts = useMemo(
-    () => canvases.filter((c) => c.client === brand).flatMap((c) => c.rows).filter(isIngestedPost).sort((a, b) => postReach(b) - postReach(a)),
-    [canvases, brand],
-  )
 
   const addPreset = (p: DeliverablePreset) => {
     const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: startCount(p) }
@@ -2780,9 +3053,12 @@ export function FlowsView() {
     // the measure effect does, just current.
     const cr = cv?.getBoundingClientRect()
     // .flow-goal-card is the brief's goal readout: it sits on the canvas and takes up room, but
-    // it isn't a node, so scanning nodes alone would drop a card on top of it.
+    // it isn't a node, so scanning nodes alone would drop a card on top of it. .setup-steps and
+    // .nc-hint are the same problem: the step list sits in the top-left corner, which is exactly
+    // where the first card of an empty board goes, and a hint is anchored under the card it
+    // describes, which is where the next one goes. Both were landed on before this listed them.
     const taken = cv && cr
-      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card')].map((el) => {
+      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card, .setup-steps, .nc-hint')].map((el) => {
           const r = el.getBoundingClientRect()
           return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
         })
@@ -2956,8 +3232,15 @@ export function FlowsView() {
    * Deliberately not the "Team note" one field below it, and the two are worth keeping apart: the
    * note is one piece of text belonging to the card, a comment is a remark by a person at a time.
    * Neither is ever sent to the writer.
+   *
+   * OFF FOR NOW, via DISCUSSION_ENABLED. Threads are only worth having once more than one person is
+   * in a workspace, and until then the section is a prompt to talk to yourself on every card. The
+   * implementation stays whole rather than being deleted: comments already written are still in the
+   * store and reappear the moment the flag flips back, so turning it on is a one-line change and not
+   * a rebuild.
    */
   const renderCardComments = (cardId: string) => {
+    if (!DISCUSSION_ENABLED) return null
     const thread = commentsFor(cardComments, boardKey, cardId)
     const open = thread.filter((c: CardComment) => !c.resolvedAt)
     const done = thread.filter((c: CardComment) => c.resolvedAt)
@@ -3764,6 +4047,16 @@ export function FlowsView() {
     // field does, so it raises the Save bar too.
     markCardDirty(id)
     setObjects((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+    /**
+     * AND PUSH IT INTO THE REF, in the same tick.
+     *
+     * Every caller of this re-attaches immediately afterwards (`if (isAttached(…)) attachToCampaign`),
+     * inside the same handler, so `objects` is still the pre-change array. For most kinds that only
+     * costs a lagging ref. For a Brand card it decides which brand OWNS the campaign, so the bind
+     * would follow the record the card pointed at a moment ago — picking Acme on a wired card bound
+     * the campaign back to whatever it named before. brandCardName reads this ref instead.
+     */
+    objectsRef.current = objectsRef.current.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x))
   }
   /**
    * The record a card edits, CREATING it if the card has not named one yet.
@@ -4069,7 +4362,6 @@ export function FlowsView() {
     persistActiveChat()
     setChatMsgs([])
     setViewName(null)
-    setBuilt(null)
     setNodes([])
     setObjects([])
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
@@ -4095,9 +4387,12 @@ export function FlowsView() {
     setSel(null)
     setPickAt(null)
     setCampaignFilter('all')
-    // A new campaign opens with Gretel expanded, because Gretel IS the front door now: its
-    // empty state asks what you're launching. Only on creation, so collapsing it later sticks.
-    setChatCollapsed(false)
+    // A new campaign opens with Gretel COLLAPSED. It used to open expanded, on the reasoning that
+    // Gretel was the front door and its empty state asked what you were launching. The cards are
+    // the front door now: you start at a Brand card and connect your way to a brief, and the setup
+    // steps say so in the corner. Opening onto a chat panel over a canvas you are meant to be
+    // building on is two front doors, and the quieter one is the canvas.
+    setChatCollapsed(true)
   }
   const openView = (n: string) => {
     persistActiveChat()
@@ -4124,7 +4419,6 @@ export function FlowsView() {
     setConnectors(loaded.connectors)
     setPos((p) => ({ ...p, ...loaded.pos }))
     setViewName(n)
-    setBuilt(null)
     setPickAt(null)
     setSel(null)
     setBriefHidden(false)
@@ -4163,8 +4457,18 @@ export function FlowsView() {
     return [...map.entries()]
   }, [pickGroup])
 
-  // Every deliverable is pre-wired to each of its per-month post cards (the same SVG
-  // connectors you can draw by hand), so they arrive connected to the main card.
+  /**
+   * Edges drawn for you, as opposed to ones you connected.
+   *
+   * A deliverable is pre-wired to its own post cards, because those posts ARE that deliverable and
+   * the line says so. It is NOT wired to the campaign brief: that connection is a decision, it is
+   * what the setup asks you to make, and drawing it automatically made the board claim a link the
+   * writer would not honour. A card only reaches the copy once it is connected, so a line nobody
+   * drew is the one thing on this canvas that must not appear.
+   *
+   * These are render-only. They are never merged into board.connectors, so nothing here changes what
+   * generation reads.
+   */
   const implicitConnectors = useMemo(() => {
     const out: { from: string; to: string }[] = []
     if (viewName !== null) {
@@ -4172,6 +4476,14 @@ export function FlowsView() {
       // that was added off an asset card hangs from that asset instead of the campaign, so the
       // journey (asset → next step) reads as a forward edge on the canvas.
       for (const d of viewDelivs) {
+        // A deliverable added off an asset card hangs from that asset, so the journey reads as a
+        // forward edge; otherwise it hangs off the campaign.
+        //
+        // A BUILT campaign draws this line and the BUILDER does not, and that is the distinction
+        // rather than an inconsistency. In the builder a deliverable is a thing you are adding and
+        // connecting it to the brief is a decision, so drawing the line for you claims a link the
+        // writer would not honour. Here the deliverable already belongs to this campaign: its rows
+        // carry the campaign name, which is what put it in viewDelivs. The line states a fact.
         const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
         const srcRow = branchSrc ? viewRows.find((r) => r.assetName === branchSrc) : undefined
         out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
@@ -4180,8 +4492,6 @@ export function FlowsView() {
       return out
     }
     for (const n of nodes) {
-      // Every deliverable hangs off the campaign card.
-      out.push({ from: 'campaign', to: n.id })
       const p = presetByKey(n.presetKey)
       if (!p) continue
       // Wire the deliverable to each sub-card it renders (posts, sections, or a page card).
@@ -4352,6 +4662,22 @@ export function FlowsView() {
     if (!cfg.nodes.length || building) return null
     setBuilding(true)
     const campaignName = campaignNameFor(cfg.name)
+    /**
+     * THE BRAND CARD WIRED TO THE BRIEF NAMES THE BRAND, ahead of the workspace you happen to be
+     * standing in. Build mode has no campaign to bind while you are drawing, so the wire is read
+     * here, once, at the moment Build names one: the same wire, the same rule, just resolved later.
+     *
+     * More than one distinct brand can only reach this from a board saved before wiring a second
+     * Brand card was refused. Take the first one wired and say what was ignored: picking silently is
+     * the one thing that must not happen.
+     */
+    const wiredBrands = wiredBrandNames()
+    if (wiredBrands.length > 1) {
+      useTrafficStore.getState().setBrandNotice(
+        `Two Brand cards are wired into this brief. "${campaignName}" is being built under ${wiredBrands[0]}; unwire ${wiredBrands.slice(1).join(', ')} so the board says what the campaign does.`,
+      )
+    }
+    const buildBrand = wiredBrands[0] || brand
     try {
       /**
        * REGISTER THE CAMPAIGN EVEN WITH NO BRAND.
@@ -4363,12 +4689,32 @@ export function FlowsView() {
        * (that was already the fallback) and nothing about what it is allowed to do: copyBlockerFor
        * refuses an Unassigned campaign exactly as before. Being listed and being allowed to generate
        * are separate questions, and only the second is the brand boundary.
+       *
+       * A Brand card wired to the brief now answers the first question BEFORE the workspace does, so
+       * a build with no workspace brand is no longer automatically Unassigned: it is bound to the
+       * brand the board says it belongs to. With no Brand card wired, this is unchanged, Unassigned
+       * included.
        */
-      addCampaign({ name: campaignName, client: brand || UNASSIGNED, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      addCampaign({ name: campaignName, client: buildBrand || UNASSIGNED, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      /**
+       * Then bind it properly. addCampaign registers the NAME, but a brand that only ever existed on
+       * a card is not yet a client of this workspace, so the campaign would resolve to a brand with
+       * no rail, no profile and no library. bindCampaignBrand adds it and is a no-op when the brand
+       * is already there, which is every build that came from the workspace brand.
+       *
+       * The rail follows too (see the setClientFilter at the end of this build), for the same reason
+       * it does when you wire a Brand card into a live campaign: the canvas about to open must offer
+       * the records of the brand the campaign now belongs to.
+       */
+      if (wiredBrands[0]) bindCampaignBrand(campaignName, wiredBrands[0])
       // addCampaign treats 'content-seo' as a "no explicit choice" sentinel, so a deliberately
       // confirmed Content + SEO motion would be silently replaced by the brand/role default. When
       // the user actually chose a motion, stamp it directly so the campaign matches what we told them.
       if (cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
+      // The model chosen in the toolbar before this campaign existed. Stamped now that it does, so
+      // the picker is not a control that quietly forgets what you told it the moment you press
+      // Build. Undefined means Auto, which is the stored absence rather than a value.
+      if (buildModel) patchCampaign(campaignName, { aiModel: buildModel })
       if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       // Hand the builder's board and any object made on it to the campaign that now exists. Without
@@ -4425,11 +4771,55 @@ export function FlowsView() {
         if (copyBlocked) useTrafficStore.getState().setBrandNotice(copyBlocked)
         else source = await draftCopy(allNewIds)
       }
-      setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source, blocked: copyBlocked })
+      /**
+       * A toast, not a modal.
+       *
+       * The card that used to appear here stopped the screen to report a result you had just asked
+       * for, and its two buttons were "open the thing" and "do nothing", which is what closing it
+       * did anyway. A toast says the same thing without taking the canvas away, and it carries the
+       * one action worth offering. Starting another needs no button: doing nothing leaves you in the
+       * builder, which IS starting another.
+       *
+       * The refusal keeps copyBlockerFor's own words, so the toast and the store cannot say two
+       * different things about the same rule, and it goes out in the warning tone: "built" and
+       * "built but nothing was written" must not look alike.
+       */
+      const n = allNewIds.length
+      /**
+       * Short enough to read at a glance, which is the whole point of a toast. The full reason a
+       * refusal happened is already on the brand notice in the panel and in the setup steps, so
+       * repeating copyBlockerFor's sentence here would be a paragraph in the corner of the screen
+       * saying what two other surfaces already say properly.
+       */
+      const msg = copyBlocked
+        ? `Built · ${n} empty asset${n === 1 ? '' : 's'}. No copy yet.`
+        : `Built · ${n} draft${n === 1 ? '' : 's'}${source === 'heuristic' ? ', written offline' : ''}.`
+      /**
+       * OPEN THE CAMPAIGN THAT WAS JUST BUILT. This is not optional and it is not the toast's job.
+       *
+       * The builder shows placeholder subcards; the copy that was just written lives on rows, which
+       * only render once the campaign is open. Leaving the board in build mode after a build means
+       * standing in front of empty placeholders while your copy sits one screen away, and the copy
+       * looks like it never arrived.
+       *
+       * The modal this replaced got away with it because it BLOCKED: you had to press "Open
+       * campaign" or dismiss it. A toast expires, so doing nothing left you stranded, which is
+       * exactly what happened the first time somebody generated a real campaign.
+       */
+      openView(campaignName)
+      setFlowView('flow')
+      // No action on the toast: you are already looking at the campaign, so "Open campaign" would
+      // be a button that does nothing. It reports, it does not navigate.
+      if (copyBlocked) showToastAction(msg, 'Why', () => useTrafficStore.getState().setBrandNotice(copyBlocked), 'warn')
+      else showToast(msg)
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
-      setClientFilter(brand || 'all')
+      //
+      // buildBrand, not `brand`: a Brand card wired to the brief has just re-homed this campaign, so
+      // pointing the rail at the workspace you were standing in would scope every one of those views
+      // to a brand the campaign no longer belongs to, and hide the assets it just built.
+      setClientFilter(buildBrand || 'all')
       setCampaignFilter(campaignName)
       return { name: campaignName, copyBlocked }
     } finally {
@@ -4628,11 +5018,15 @@ export function FlowsView() {
       if (!to) { skipped.push(`Could not find "${c.to}" on the board`); return }
       if (from === to) { skipped.push('A card cannot be wired to itself'); return }
       if (c.op === 'connect') {
-        setConnectors((cs) => (cs.some((x) => x.from === from && x.to === to) ? cs : [...cs, { from, to }]))
         // The same two calls the drag gesture makes, so a wire drawn by the chat and one drawn by
-        // hand are the same wire: records onto the campaign or onto the target's rows.
-        if (to === 'campaign') attachToCampaign(from)
-        else if (isContextNode(from)) attachToTarget(from, to)
+        // hand are the same wire: records onto the campaign (or a brand binding), or records onto
+        // the target's rows. Attach FIRST, because it can refuse (a second Brand card contradicting
+        // the one that already binds this campaign) and a refused wire must not be drawn. Skipping
+        // it here is how the agent hears about the refusal instead of stamping the batch applied.
+        if (to === 'campaign') {
+          if (!attachToCampaign(from)) { skipped.push(`Could not wire ${c.from} into ${c.to}: this campaign is already bound to another brand`); return }
+        } else if (isContextNode(from)) attachToTarget(from, to)
+        setConnectors((cs) => (cs.some((x) => x.from === from && x.to === to) ? cs : [...cs, { from, to }]))
         applied.push(`Wired ${c.from} into ${c.to}`)
       } else {
         setConnectors((cs) => cs.filter((x) => !(x.from === from && x.to === to)))
@@ -4905,7 +5299,7 @@ export function FlowsView() {
             // write from, which is how twelve empty assets got reported as written. The refusal
             // carries its own wording (copyBlockerFor's), so the reason travels with the skip.
             const n = wNodes.length
-            applied.push(`Built ${n} deliverable${n === 1 ? '' : 's'}${outcome.copyBlocked ? '' : ' and wrote the copy'}`)
+            applied.push(`Built ${n} channel${n === 1 ? '' : 's'}${outcome.copyBlocked ? '' : ' and wrote the copy'}`)
             if (outcome.copyBlocked) skipped.push(`No copy was written. ${outcome.copyBlocked}`)
           }
           break
@@ -4936,7 +5330,7 @@ export function FlowsView() {
         const m = AI_MODELS.find((x) => x.id === c.value)
         return `Write this campaign with ${m?.label ?? c.value}`
       }
-      case 'connect': return `Wire ${c.from} into ${c.to}`
+      case 'connect': return `Connect ${c.from} to ${c.to}`
       case 'disconnect': return `Unwire ${c.from} from ${c.to}`
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
@@ -5084,6 +5478,145 @@ export function FlowsView() {
    */
   const hasHub = !briefHidden && (viewing || briefSummoned)
 
+  /**
+   * WHICH ONE HINT TO SHOW, read off the board rather than counted.
+   *
+   * The steps are the flow this canvas is for: add a Brand card, say who the brand is, add the
+   * brief, name what you are launching, connect them. Each condition requires the one before it to
+   * be satisfied, so exactly one can be true and the canvas never carries two of these at once.
+   *
+   * Board state rather than a step counter, because a person does not arrive here in order. Someone
+   * who adds the brief first, or opens a campaign that already has half of this done, gets the step
+   * they are actually missing instead of being walked through work they have already finished. It
+   * also means there is nothing to reset: undo a step and its hint comes back on its own.
+   *
+   * `null` once the chain is complete, which is the normal state of every campaign after the first.
+   */
+  const brandCard = objects.find((o) => o.kind === 'brand')
+  const brandCardObj = brandCard?.refId ? allBrandObjects.find((x) => x.id === brandCard.refId) : undefined
+  // Named AND described. A card holding only a name binds the campaign but tells the writing nothing,
+  // which is the state this step exists to move people out of.
+  const brandFilled = !!(
+    brandCardObj?.name?.trim() &&
+    (brandCardObj.oneLiner?.trim() || (brandCardObj.differentiators ?? []).length > 0)
+  )
+  const brandConnected = !!brandCard && connectors.some((c) => c.from === brandCard.id && c.to === 'campaign')
+  // A built campaign carries its subject already; in the builder it is the name field.
+  const briefFilled = viewing || !!name.trim()
+  /**
+   * Steps the person has said they are done with.
+   *
+   * The chain is otherwise inferred from the board, which is right for "have you added a card" and
+   * wrong for "have you said enough about the brand". brandFilled asks for a name AND a one-liner or
+   * a differentiator, so somebody who fills in only what they know is held on a step they consider
+   * finished, with no way past it. Next is that way past: it does not fake the underlying state, it
+   * records that you were asked and answered.
+   *
+   * Persisted, so it survives a reload, and global like the hint dismissals rather than per
+   * campaign: this is scaffolding for the first campaign, not a per-campaign checklist.
+   */
+  const ACK_KEY = 'stoplight.setupAcked.v1'
+  const [stepsAcked, setStepsAcked] = useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(ACK_KEY) || '[]')
+      return Array.isArray(raw) ? (raw as string[]) : []
+    } catch {
+      return []
+    }
+  })
+  /**
+   * Done with the setup entirely, whatever the board says. Separate from acknowledging one step:
+   * this is "I know how this works, stop telling me", and it takes the corner list and every hint
+   * with it.
+   */
+  const SETUP_DONE_KEY = 'stoplight.setupDone.v1'
+  const [setupDone, setSetupDone] = useState(() => {
+    try {
+      return localStorage.getItem(SETUP_DONE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  /**
+   * Bumped to bring a dismissed hint back.
+   *
+   * Hint reads its dismissal from localStorage once, on mount, which is right for a card you closed
+   * and wrong for one you have asked to see again. Clearing the key alone changes nothing because
+   * the component is already mounted holding `true`, so the nonce goes into its React key and
+   * remounts it against the cleared key. Cheaper and less stateful than teaching Hint to watch
+   * storage it owns.
+   */
+  const [hintNonce, setHintNonce] = useState(0)
+  /** Which stored dismissal belongs to which step, for reviving one. */
+  const HINT_KEY_FOR_STEP: Record<string, string> = {
+    brand: 'stoplight.hint.brandCard.v1',
+    fillBrand: 'stoplight.hint.fillBrand.v1',
+    brief: 'stoplight.hint.briefCard.v1',
+    fillBrief: 'stoplight.hint.fillBrief.v1',
+    deliverables: 'stoplight.hint.deliverables.v1',
+    connect: 'stoplight.hint.connect.v1',
+    generate: 'stoplight.hint.generate.v1',
+  }
+  const reviveHint = (id: string) => {
+    try {
+      localStorage.removeItem(HINT_KEY_FOR_STEP[id])
+    } catch {
+      /* private mode: the card simply will not come back */
+    }
+    setHintNonce((n) => n + 1)
+  }
+  const ackStep = (id: string) => {
+    setStepsAcked((prev) => {
+      if (prev.includes(id)) return prev
+      const next = [...prev, id]
+      try {
+        localStorage.setItem(ACK_KEY, JSON.stringify(next))
+      } catch {
+        /* private mode: the step reappearing next reload is not worth failing over */
+      }
+      return next
+    })
+  }
+
+  /**
+   * The steps, in one place, so the corner indicator and the hint cards cannot disagree about what
+   * step you are on. Labels match the hint titles for the same reason.
+   */
+  const SETUP_STEPS = [
+    { id: 'brand', label: 'Add a Brand card' },
+    { id: 'fillBrand', label: 'Say who the brand is' },
+    { id: 'brief', label: 'Add the campaign brief' },
+    { id: 'fillBrief', label: 'Say what you are launching' },
+    { id: 'deliverables', label: 'Add what you are shipping' },
+    { id: 'connect', label: 'Connect them' },
+    { id: 'generate', label: 'Generate the copy' },
+  ]
+  // A step is behind you when the board says so OR when you said so. Only the two "say something"
+  // steps can be acknowledged; adding a card and connecting it are facts, not opinions.
+  const ack = (id: string) => stepsAcked.includes(id)
+  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'deliverables' | 'connect' | 'generate' | null = setupDone
+    ? null
+    : !brandCard
+    ? 'brand'
+    : !brandFilled && !ack('fillBrand')
+      ? 'fillBrand'
+      : !hasHub
+        ? 'brief'
+        : !briefFilled && !ack('fillBrief')
+          ? 'fillBrief'
+          : // Nothing to ship yet. Before connecting, because a connection needs something to reach,
+            // and before generating for the obvious reason. Counts a built campaign's deliverables,
+            // the builder's nodes, and channel tags, which Build turns into deliverables too.
+            !viewDelivs.length && !nodes.length && !channelTagPresets.length
+            ? 'deliverables'
+            : !brandConnected
+              ? 'connect'
+            : // Written, not merely built: a campaign with assets and no copy in them has not
+              // finished this step, and that is the state the whole chain exists to get you out of.
+              !viewRows.some((r) => (r.body ?? '').trim())
+                ? 'generate'
+                : null
+
   // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
   // blank canvas + the "What are you launching?" starter as the only front door; the brief card
   // isn't pre-placed until the campaign gains some shape (or the user summons it from the toolbar).
@@ -5156,60 +5689,11 @@ export function FlowsView() {
   // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
   // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
   // can never stand in for a LinkedIn ad). No cross-platform fallback. Filtered by the search box.
-  const swapCandidates = useMemo(() => {
-    if (!selPost) return []
-    const q = swapSearch.trim().toLowerCase()
-    const platform = CHANNELS[selPost.channel as ChannelId]?.platform
-    const matches = ingestedPosts.filter(
-      (r) => r.id !== selPost.id && (r.channel === selPost.channel || (!!platform && CHANNELS[r.channel as ChannelId]?.platform === platform)),
-    )
-    if (!q) return matches
-    return matches.filter((r) => (r.assetName ?? '').toLowerCase().includes(q) || Object.values((r.messaging ?? {}) as Record<string, string>).some((v) => v?.toLowerCase().includes(q)))
-  }, [selPost, ingestedPosts, swapSearch])
 
   // Replace the selected generated-idea post's content with a real ingested post, keeping
   // its slot in the flow (id, campaign, schedule, audience) so it stays in place.
-  const swapForIngested = async (cand: TrafficRow) => {
-    if (!selPost) return
-    await updateRow(selPost.id, {
-      assetName: cand.assetName,
-      channel: cand.channel,
-      assetType: cand.assetType,
-      mediaType: cand.mediaType,
-      messaging: cand.messaging,
-      source: cand.source,
-      sourceUrl: cand.sourceUrl,
-      socialMetrics: cand.socialMetrics,
-      engagement: cand.engagement,
-      status: 'posted',
-      postedAt: cand.postedAt,
-      publishedAt: cand.publishedAt,
-    })
-    setSwapOpen(false)
-    setSwapSearch('')
-  }
   // The reverse of a swap: drop the ingested post's live fields (source, url, metrics, posted
   // status) back to a generated draft, then write fresh AI copy for the slot.
-  const replaceWithGenerated = async () => {
-    if (!selPost || replacing) return
-    setReplacing(true)
-    try {
-      await updateRow(selPost.id, {
-        messaging: {},
-        source: 'generated',
-        sourceUrl: undefined,
-        socialMetrics: undefined,
-        engagement: undefined,
-        status: 'draft',
-        postedAt: undefined,
-        publishedAt: undefined,
-      })
-      await draftCopy([selPost.id])
-    } finally {
-      setReplacing(false)
-      setSwapOpen(false)
-    }
-  }
   // Change the copy PATTERN (blueprint) on a single asset: reapply the blueprint's step at this
   // asset's position, keeping its slot, then rewrite its copy to the new framework/CTA/levers.
   const applyPatternToPost = async (row: TrafficRow, bp: EmailBlueprint) => {
@@ -5227,10 +5711,6 @@ export function FlowsView() {
       setPatternBusy(false)
     }
   }
-  useEffect(() => {
-    setSwapOpen(false)
-    setSwapSearch('')
-  }, [sel])
   useEffect(() => {
     setRefsDirty(false)
   }, [viewName])
@@ -5339,7 +5819,7 @@ export function FlowsView() {
         const p = presetByKey(n.presetKey)
         return {
           id: n.id,
-          label: p?.label ?? 'Deliverable',
+          label: p?.label ?? 'Channel',
           count: p ? subcardCount(p, n.perMonth) : 0,
           sub: p?.channel,
           icon: <PresetTile tone={DELIV_TONE} channel={p?.channel} />,
@@ -5505,6 +5985,19 @@ export function FlowsView() {
             const busy = filling === nt.id
             return (
               <div className="flow-fillbox">
+                {/* The box used to be a bare textarea whose only explanation was a placeholder, and
+                    a placeholder is gone the moment you type. What it does, what it costs you, and
+                    that you stay in charge afterwards are all things you need BEFORE you use it. */}
+                <div className="flow-fill-head">
+                  <span className="flow-fill-title">
+                    Describe this {(OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()}
+                  </span>
+                  <span className="flow-fill-help">
+                    One sentence in your own words fills the fields below. Everything it writes is a
+                    draft you can change, and nothing here reaches the copy until this card is
+                    connected.
+                  </span>
+                </div>
                 <textarea
                   className="flow-fill-input"
                   rows={4}
@@ -6932,55 +7425,6 @@ export function FlowsView() {
         </div>
       </header>
 
-      {built && (
-        <div className="flow-built">
-          <div className="flow-built-card">
-            <div className="flow-built-check" aria-hidden="true">
-              ✓
-            </div>
-            <div className="flow-built-title">Campaign built</div>
-            {/* "12 draft assets" read as twelve written drafts, which is exactly what they were not
-                on the run that made this card lie. An asset that was scheduled but never written is
-                an EMPTY asset, and the card says so before the user opens twelve blank ones. */}
-            <div className="flow-built-sub">
-              {built.name.replace(`${brand} — `, '')} · {built.count}{' '}
-              {built.copy && !built.blocked ? 'draft' : 'empty'} asset{built.count === 1 ? '' : 's'}
-            </div>
-            {built.blocked ? (
-              /* The refusal in copyBlockerFor's own words, so the card and the store cannot say two
-                 different things about the same rule. Styled with the amber variant the offline
-                 badge already defines: it is the warning tone, and reusing it needs no new CSS. */
-              <div className="flow-built-badge heuristic">
-                <span className="flow-built-badge-dot" aria-hidden="true" />
-                No copy was written. {built.blocked}
-              </div>
-            ) : built.copy && built.source ? (
-              <div className={`flow-built-badge ${built.source}`}>
-                {built.source === 'claude' ? (
-                  <>
-                    <span className="flow-built-badge-dot" aria-hidden="true" />
-                    {built.count} draft{built.count === 1 ? '' : 's'} written by Claude
-                  </>
-                ) : (
-                  <>
-                    <span className="flow-built-badge-dot" aria-hidden="true" />
-                    Written offline · add Anthropic API credits for Claude drafts
-                  </>
-                )}
-              </div>
-            ) : null}
-            <div className="flow-built-actions">
-              <button className="flow-built-open" onClick={() => { openView(built.name); setFlowView('flow') }}>
-                Open campaign
-              </button>
-              <button className="flow-built-new" onClick={startNew}>
-                Start another
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {flowView === 'flow' && (
         <>
       <div className="flow-body">
@@ -7274,12 +7718,15 @@ export function FlowsView() {
               // the right way round rather than making the user guess which end to start from.
               const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
               if (pair && pair.from !== pair.to) {
-                setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
-                if (pair.to === 'campaign') attachToCampaign(pair.from)
+                // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
+                // already bound to a different brand is refused (attachToCampaign says why), and a
+                // refused wire must not be left on the board contradicting the binding.
+                const ok = pair.to === 'campaign' ? attachToCampaign(pair.from) : true
                 // A card wired to a DELIVERABLE or a POST informs just that one. The edge was already
                 // drawable and already saved; nothing acted on it, so it looked connected and changed
                 // nothing about the copy.
-                else if (isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
+                if (ok && pair.to !== 'campaign' && isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
+                if (ok) setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
               }
               drawingFrom.current = null
               setDrawing(null)
@@ -7341,14 +7788,14 @@ export function FlowsView() {
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
-              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)} />
+              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={edgePath(a, b, zoom / 100)} />
             })}
             {connectors.map((cn, i) => {
               const a = connRect(cn.from)
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
-              const d = elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)
+              const d = edgePath(a, b, zoom / 100)
               return (
                 <g key={`${cn.from}-${cn.to}-${i}`} className="flow-edge-g">
                   <path className={`flow-edge${paid ? ' paid' : ''}`} d={d} />
@@ -7377,7 +7824,7 @@ export function FlowsView() {
             <>
               <div className="flow-addmenu-scrim" onMouseDown={() => setAddMenu(null)} />
               <div className="flow-addmenu" style={{ left: menuAnchor.x, top: menuAnchor.y }} onMouseDown={(e) => e.stopPropagation()}>
-                <input className="flow-addmenu-search" autoFocus placeholder="Search deliverables" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
+                <input className="flow-addmenu-search" autoFocus placeholder="Search channels" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
                 <div className="flow-addmenu-list">
                   {menuGroups.map(([group, presets]) => (
                     <div key={group}>
@@ -7422,6 +7869,24 @@ export function FlowsView() {
               onMouseDown={(e) => startDrag(e, 'campaign')}
               onClick={(e) => clickSelect(e, 'campaign')}
             >
+              {/* Anchored to the brief node itself, so it follows the canvas when you pan or zoom
+                  rather than sitting at a viewport coordinate the board has moved away from. */}
+              <Hint
+                key={`connect-${hintNonce}`}
+              show={hintStep === 'connect'}
+                storageKey="stoplight.hint.connect.v1"
+                title="Connect the Brand card"
+                // Below, not above. The brief starts near the top of the canvas, so a card placed
+                // above it is clipped by the viewport, and there is no measurement here to notice.
+                // Below is empty at this point in the flow, which is the whole reason this step
+                // exists.
+                placement="below"
+                align="center"
+                body={[
+                  'Drag from the Brand card onto this brief. That connection is what binds the campaign to the brand and lets it write.',
+                  'Connect the cards that shape the message the same way. A card reaches the writing only once it is connected, and it carries through a chain.',
+                ]}
+              />
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
                 Campaign brief
               </span>
@@ -7431,7 +7896,7 @@ export function FlowsView() {
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
                   <div className="flow-node-desc">
-                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week campaign`}
+                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} channel${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week campaign`}
                   </div>
                   {/* Audience, proof and goal deliberately do NOT live on this card. They are
                       canvas input cards now ("what it's made from"), and the inspector owns the
@@ -7451,14 +7916,15 @@ export function FlowsView() {
               {/* The hub's own port. Everything converges here, and until now this was the one
                   card you could not connect. Drag from a context card to this, or from here to
                   one: either way round the edge is stored as card into campaign. */}
-              <button
-                className="flow-note-port flow-brief-port"
-                title="Connect an object to this campaign"
-                aria-label="Connect an object to this campaign"
-                onMouseDown={(e) => startConnect(e, 'campaign')}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-              </button>
+              {CONNECT_SIDES.map((side) => (
+                <button
+                  key={side}
+                  className={`flow-note-port flow-brief-port side-${side}`}
+                  title="Draw a connection"
+                  aria-label={`Draw a connection from the ${side}`}
+                  onMouseDown={(e) => startConnect(e, 'campaign')}
+                />
+              ))}
             </div>
             )}
 
@@ -7603,9 +8069,15 @@ export function FlowsView() {
                       onChange={(e) => updateObjectText(nt.id, e.target.value)}
                     />
                   )}
-                  <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, nt.id)}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                  </button>
+                  {CONNECT_SIDES.map((side) => (
+                    <button
+                      key={side}
+                      className={`flow-note-port side-${side}`}
+                      title="Draw a connection"
+                      aria-label={`Draw a connection from the ${side}`}
+                      onMouseDown={(e) => startConnect(e, nt.id)}
+                    />
+                  ))}
                 </div>
               )
             })}
@@ -7666,9 +8138,15 @@ export function FlowsView() {
                     ))}
                     <span className="flow-obj-count">{members.length} inside</span>
                   </div>
-                  <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, g.id)}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                  </button>
+                  {CONNECT_SIDES.map((side) => (
+                    <button
+                      key={side}
+                      className={`flow-note-port side-${side}`}
+                      title="Draw a connection"
+                      aria-label={`Draw a connection from the ${side}`}
+                      onMouseDown={(e) => startConnect(e, g.id)}
+                    />
+                  ))}
                 </div>
               )
             })}
@@ -7697,8 +8175,11 @@ export function FlowsView() {
                           onMouseDown={(e) => startDrag(e, d.key)}
                           onClick={(e) => clickSelect(e, d.key)}
                         >
+                          {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
+                              DELIVERABLE_PRESETS, the same split Flows kept when it became
+                              Campaigns: rename what a person reads, leave what the code keys on. */}
                           <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
-                            Deliverable
+                            Channel
                           </span>
                           <div className="flow-node-main">
                             <div className="flow-node-text">
@@ -7732,7 +8213,18 @@ export function FlowsView() {
                                   two amber "Needs a..." prompts on every card on the board. */}
                             </div>
                           </div>
-
+                          {/* A channel could always be connected TO and never FROM: it was a drop
+                              target with no handles of its own, so the one direction you could not
+                              draw was the one going onward. Same four handles every other card has. */}
+                          {CONNECT_SIDES.map((side) => (
+                            <button
+                              key={side}
+                              className={`flow-note-port flow-out-port side-${side}`}
+                              title="Draw a connection"
+                              aria-label={`Draw a connection from the ${side}`}
+                              onMouseDown={(e) => startConnect(e, d.key)}
+                            />
+                          ))}
                         </div>
                         <div className="flow-branch-list">
                           {posts.map((r) => {
@@ -7748,6 +8240,16 @@ export function FlowsView() {
                                   onMouseDown={(e) => startDrag(e, r.id)}
                                   onClick={(e) => clickSelect(e, r.id)}
                                 >
+                                  {/* A floating pill above the card while it is being written. The
+                                      border tint alone is easy to miss on a board of thirty cards,
+                                      and the skeleton inside only says something is happening once
+                                      you are already looking at that card. */}
+                                  {regenIds.has(r.id) && (
+                                    <span className="flow-node-status" aria-hidden="true">
+                                      <span className="flow-node-status-spin" />
+                                      Writing
+                                    </span>
+                                  )}
                                   {/* Every output wears a filled kind chip; an input never does. Post
                                       cards were the one output missing theirs. */}
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
@@ -7827,6 +8329,19 @@ export function FlowsView() {
                                       <path d="M12 6v12M6 12h12" />
                                     </svg>
                                   </button>
+                                  {/* Same four handles as every other card. A post was the end of the
+                                      line: you could wire a card into one, and never draw anything out
+                                      of it, which made the last row of the board the only place the
+                                      canvas stopped behaving like a canvas. */}
+                                  {CONNECT_SIDES.map((side) => (
+                                    <button
+                                      key={side}
+                                      className={`flow-note-port flow-out-port side-${side}`}
+                                      title="Draw a connection"
+                                      aria-label={`Draw a connection from the ${side}`}
+                                      onMouseDown={(e) => startConnect(e, r.id)}
+                                    />
+                                  ))}
                                 </div>
                               </div>
                             )
@@ -7862,8 +8377,11 @@ export function FlowsView() {
                           onMouseDown={(e) => startDrag(e, n.id)}
                           onClick={(e) => clickSelect(e, n.id)}
                         >
+                          {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
+                              DELIVERABLE_PRESETS, the same split Flows kept when it became
+                              Campaigns: rename what a person reads, leave what the code keys on. */}
                           <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
-                            Deliverable
+                            Channel
                           </span>
                           <div className="flow-node-main">
                             <div className="flow-node-text">
@@ -7893,13 +8411,24 @@ export function FlowsView() {
                               <div className="flow-branch-row" key={bi}>
                                 <span className="flow-branch-port" style={{ borderColor: TONE_HEX[p.tone] }} />
                                 <div
-                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}`}
+                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}${building ? ' generating' : ''}`}
                                   data-node-id={`${n.id}:${bi}`}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[`${n.id}:${bi}`]?.x ?? 0}px, ${pos[`${n.id}:${bi}`]?.y ?? 0}px)` }}
                                   onMouseDown={(e) => startDrag(e, `${n.id}:${bi}`)}
                                   onClick={(e) => clickSelect(e, `${n.id}:${bi}`)}
                                 >
+                                  {/* The build is the generation people actually watch, and until
+                                      this was here the only sign it was running was the toolbar
+                                      button. regenIds cannot drive it: these are builder subcards
+                                      and the rows it names do not exist until the build creates
+                                      them, so the builder's own `building` flag is the signal. */}
+                                  {building && (
+                                    <span className="flow-node-status" aria-hidden="true">
+                                      <span className="flow-node-status-spin" />
+                                      Writing
+                                    </span>
+                                  )}
                                   {/* Matches the view-mode post chip. Uses the preset's own word so a
                                       lead magnet reads Section and a site page reads Page. */}
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
@@ -7937,6 +8466,42 @@ export function FlowsView() {
           </div>
           {/* Connector endpoint dots, redrawn on a layer ABOVE the cards so they sit on
               top of each card's edge instead of tucking behind it. */}
+          {/* Inside the canvas, so "bottom left" means the canvas corner rather than the window's:
+              Gretel and the inspector are 360px docked columns, and a sibling of the toolbar would
+              sit underneath whichever of them is open. Beside the hints rather than instead of
+              them, because the card says what to do and this says how far through it you are. */}
+          <FlowSteps
+            steps={SETUP_STEPS}
+            current={hintStep}
+            onComplete={() => {
+              setSetupDone(true)
+              try {
+                localStorage.setItem(SETUP_DONE_KEY, '1')
+              } catch {
+                /* private mode: it comes back next reload */
+              }
+            }}
+            onPick={(id) => {
+              // Bring this step's card back. Clicking a step you have already dismissed the card for
+              // and getting nothing but a selection is the case this exists for: the list is how you
+              // ask to be told again.
+              reviveHint(id)
+              // Select the card the step is about, which opens the inspector on it. The two "add"
+              // steps do the adding when there is nothing there yet, so the list does the same
+              // thing its hint's button does rather than pointing at a card that does not exist.
+              setBriefCollapsed(false)
+              setSelected(new Set())
+              if (id === 'brand' || id === 'fillBrand' || id === 'connect') {
+                const card = objects.find((o) => o.kind === 'brand')
+                if (card) setSel(card.id)
+                else addObject('brand')
+                return
+              }
+              if (id === 'deliverables') { setPickGroup(null); openAddDeliverable(); return }
+              if (!hasHub) { setBriefHidden(false); setBriefSummoned(true) }
+              setSel('campaign')
+            }}
+          />
           <svg className="flow-edges-top" width="100%" height="100%">
             {implicitConnectors.map((cn) => {
               const b = connRect(cn.to)
@@ -7961,6 +8526,32 @@ export function FlowsView() {
           </div>
         ) : (
         <aside className="flow-panel">
+          {/* The two steps that happen IN the panel, pointing at it from outside. A full-height side
+              panel has no room above or below it, so these sit beside it. */}
+          <Hint
+            key={`fillBrand-${hintNonce}`}
+              show={hintStep === 'fillBrand'}
+            storageKey="stoplight.hint.fillBrand.v1"
+            title="Say who the brand is"
+            placement="left"
+            body={[
+              'The card is on the board but empty, so it binds the campaign and tells the writing nothing.',
+              'Fill in the one-liner and what sets the brand apart. That is the voice and the claims every asset is allowed to make.',
+            ]}
+            cta={{ label: 'Next', onClick: () => ackStep('fillBrand') }}
+          />
+          <Hint
+            key={`fillBrief-${hintNonce}`}
+              show={hintStep === 'fillBrief'}
+            storageKey="stoplight.hint.fillBrief.v1"
+            title="Say what you are launching"
+            placement="left"
+            body={[
+              'Name the campaign and set its length. This is the throughline every asset is written to orient around.',
+              'Then connect the Brand card to it, and add the cards that shape the message.',
+            ]}
+            cta={{ label: 'Next', onClick: () => ackStep('fillBrief') }}
+          />
           <button className="flow-panel-collapse" title="Collapse panel" aria-label="Collapse panel" onClick={() => setBriefCollapsed(true)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d="M9 9l2 3-2 3" />
@@ -7988,7 +8579,7 @@ export function FlowsView() {
                   <span className="flow-panel-title">
                     {connectFrom
                       ? `Next step after ${viewRows.find((r) => r.id === connectFrom)?.assetName ?? 'this asset'}`
-                      : 'Add deliverable'}
+                      : 'Add channel'}
                   </span>
                 </div>
                 <div className="flow-picker-list">
@@ -8035,8 +8626,8 @@ export function FlowsView() {
                     const strays = Object.entries(m).filter(([k, v]) => !known.has(k) && v?.trim())
                     return (
                       <>
-                        <label className="flow-inspect-label">Copy</label>
-                        <p className="flow-inspect-note">This is the copy that ships. It saves as you type.</p>
+                        {/* No heading. The fields are the first thing in the panel and they are
+                            labelled, so a "Copy" label over them named what was already obvious. */}
                         <CopyFields
                           fields={flds}
                           values={m}
@@ -8067,91 +8658,52 @@ export function FlowsView() {
                   {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
                       board flush, the wipe and the phase 1 refusal, rather than growing a second path
                       that could miss one of the three. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
-                  {(() => {
-                    const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
-                    return (
-                      <>
-                        <button
-                          className="flow-insp-open"
-                          disabled={regenerating}
-                          onClick={() => void regenerateFlow([selPost.id])}
-                        >
-                          {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
-                        </button>
-                        <p className="flow-inspect-note">
-                          {hasCopy
-                            ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
-                            : 'Writes this post from the campaign brief and everything wired to it.'}
-                        </p>
-                        {/* Which writer produced what is on the row now. Per row, from phase 1. */}
-                        {selPost.copySource && (
-                          <p className="flow-inspect-note">
-                            {selPost.copySource === 'heuristic'
-                              ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
-                              : 'Written by the model.'}
-                          </p>
-                        )}
-                      </>
-                    )
-                  })()}
 
-                  {/* SCHEDULE AND STATUS. Only the three states a person sets: everything past approved
-                      belongs to the publish path and nothing publishes on its own. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Schedule and status</label>
-                  <input
-                    className="flow-inspect-input"
-                    type="datetime-local"
-                    value={selPost.scheduledAt ? isoToLocalInput(selPost.scheduledAt) : ''}
-                    onChange={(e) => void updateRow(selPost.id, { scheduledAt: e.target.value ? localInputToIso(e.target.value) : undefined })}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  />
-                  <div className="flow-src-list" style={{ marginTop: 6 }}>
-                    {(['draft', 'in_review', 'approved'] as const).map((st) => (
-                      <button
-                        key={st}
-                        className={`flow-src-opt${selPost.status === st ? ' on' : ''}`}
-                        onClick={() => void updateRow(selPost.id, { status: st })}
-                      >
-                        <span className="flow-src-mark"><span className="flow-src-dot" /></span>
-                        <span className="flow-src-txt">
-                          <span className="flow-src-name">{st === 'in_review' ? 'In review' : st === 'draft' ? 'Draft' : 'Approved'}</span>
-                        </span>
-                        {selPost.status === st && (
-                          <span className="flow-src-tick" aria-label="current">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 6L9 17l-5-5" />
-                            </svg>
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="flow-inspect-note">Approved means you have read it and you are happy. Nothing publishes on its own.</p>
-                  <button className="flow-insp-open subtle" style={{ marginTop: 8 }} onClick={() => void duplicateRow(selPost.id)}>
-                    Duplicate this post
-                  </button>
-
-                  {/* CONNECTED TO. The instructions this post is actually written under, assembled by
-                      the same function the writer uses, in the same precedence order. */}
+                  {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
+                      This asked the wrong question and answered it confidently. It read only the
+                      DIRECTION channel: the typed instruction fields on a card. A card can be
+                      connected and reach this post through two other channels entirely, and both
+                      were reported as nothing. A Brand card carries no direction and no reference at
+                      all, because a brand OWNS the campaign rather than being referred to by it, so
+                      a board whose only wire was a Brand card into the brief printed "Nothing is
+                      wired to this post", while that very wire decided which brand every word was
+                      written as.
+                      Now it lists the CARDS upstream of this post, which is the question a person
+                      asks when they look at a board, and the instructions underneath as a second
+                      group. A card with nothing typed into it still shows, and says so. */}
                   {(() => {
                     const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
                     const resolved = resolveBoardDirection(liveBoard)
                     const mine = directionForRow(resolved, deliverableKeyFor(selPost), selPost.id, [])
                     const kept = buildDirection(mine)
                     const dropped = mine.length - kept.length
+                    // Three routes reach a post, in the same order the resolver walks them: wired
+                    // straight in, through its channel, or through the campaign every asset inherits.
+                    // Deduped, because one card can arrive by more than one of them.
+                    const seen = new Set<string>()
+                    const cards = [
+                      ...contextRowsFor(selPost.id),
+                      ...contextRowsFor(deliverableKeyFor(selPost)),
+                      ...contextRowsFor('campaign'),
+                    ].filter((r) => {
+                      if (seen.has(r.id)) return false
+                      seen.add(r.id)
+                      return true
+                    })
                     return (
                       <>
                         <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                          Connected to{kept.length ? ` · ${kept.length}` : ''}
+                          Connected to{cards.length ? ` · ${cards.length}` : ''}
                         </label>
-                        {kept.length === 0 ? (
+                        {cards.length === 0 ? (
                           <p className="flow-inspect-note">
-                            Nothing is wired to this post or to its deliverable, so it is written from the campaign brief alone.
+                            Nothing is connected to this post, to its channel, or to the campaign, so it is written from the brief alone.
                           </p>
                         ) : (
-                          <div className="flow-insp-send">
+                          <div className="flow-ctxlist">{cards.map((r) => renderContextRow(r))}</div>
+                        )}
+                        {kept.length > 0 && (
+                          <div className="flow-insp-send" style={{ marginTop: 10 }}>
                             {kept.map((d) => (
                               <div key={`${d.key}:${d.value}`} className="flow-send-row">
                                 <span className="flow-send-val">{DIRECTION_FIELD[d.key as DirectionKey]?.label ?? d.key}</span>
@@ -8300,66 +8852,6 @@ export function FlowsView() {
                       </div>
                     )
                   })()}
-                  <div className="flow-swap">
-                    <div className="flow-swap-tag">
-                      {isIngestedPost(selPost) ? (
-                        <>
-                          <span className="flow-swap-badge ingested">Ingested post</span>
-                          {selPost.sourceUrl && (
-                            <a className="flow-swap-link" href={selPost.sourceUrl} target="_blank" rel="noreferrer">
-                              View original ↗
-                            </a>
-                          )}
-                        </>
-                      ) : (
-                        <span className="flow-swap-badge">Generated idea</span>
-                      )}
-                    </div>
-                    <button className="flow-swap-btn" onClick={() => setSwapOpen((o) => !o)}>
-                      ⇄ Swap for an ingested post
-                    </button>
-                    {isIngestedPost(selPost) && (
-                      <button className="flow-swap-btn flow-swap-regen" onClick={() => void replaceWithGenerated()} disabled={replacing}>
-                        {replacing ? 'Generating…' : '✦ Replace with a generated post'}
-                      </button>
-                    )}
-                    {swapOpen && (
-                      <div className="flow-swap-panel">
-                        <input
-                          className="flow-swap-search"
-                          value={swapSearch}
-                          placeholder={`Search ${brand || 'brand'} ingested posts…`}
-                          onChange={(e) => setSwapSearch(e.target.value)}
-                          autoFocus
-                        />
-                        {swapCandidates.length === 0 ? (
-                          <div className="flow-swap-empty">
-                            {swapSearch.trim()
-                              ? 'No matches.'
-                              : ingestedPosts.length
-                                ? `No live ${CHANNELS[selPost.channel as ChannelId]?.platform ?? 'matching'} posts in your Library to swap in for this deliverable.`
-                                : 'No ingested posts to swap in yet. Ingest content into the Library first.'}
-                          </div>
-                        ) : (
-                          <div className="flow-swap-list">
-                            {swapCandidates.slice(0, 50).map((r) => {
-                              const reach = postReach(r)
-                              const reachTxt = reach >= 1e6 ? (reach / 1e6).toFixed(1) + 'M' : reach >= 1e3 ? Math.round(reach / 1e3) + 'k' : reach ? String(reach) : ''
-                              return (
-                                <button key={r.id} className="flow-swap-item" onClick={() => swapForIngested(r)}>
-                                  <span className="flow-swap-item-title">{r.assetName}</span>
-                                  <span className="flow-swap-item-meta">
-                                    {CHANNELS[r.channel as ChannelId]?.label ?? r.channel}
-                                    {reachTxt ? ` · ${reachTxt} reach` : ''}
-                                  </span>
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
 
                 </div>
               </>
@@ -8421,149 +8913,9 @@ export function FlowsView() {
                         : `Apply ${Number(delivCountDraft) > selDeliv.count ? `+${Number(delivCountDraft) - selDeliv.count}` : Number(delivCountDraft) - selDeliv.count} and rewrite the copy`}
                     </button>
                   )}
-                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>{countBusy ? 'Updating…' : 'The − and + add or remove one, drafting fresh copy for anything new. Type a number and Apply to change it in one go and rewrite every post from the current brief.'}</div>
-                  {/* WHAT INFORMS IT, as objects. This was "Linked records" with an "Add a record"
-                      row, which named the wrong unit for the same reason the campaign card did: a
-                      deliverable is informed by the cards wired to the campaign, and the record list
-                      showed the residue of that rather than the thing itself. Inherited by default;
-                      the override, when there is one, still shows exactly what it pins. */}
-                  {(() => {
-                    const overridden = selDeliv.rows.some((r) => r.references && r.references.length)
-                    const inherited = contextRowsFor('campaign')
-                    const wired = contextRowsFor(selDeliv.key)
-                    return (
-                      <>
-                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                          {overridden ? 'Pinned for this deliverable' : 'Informing this deliverable'}
-                          {!overridden && inherited.length > 0 ? ` · ${inherited.length}` : ''}
-                        </label>
-                        {overridden ? (
-                          <div className="flow-ctxlist">
-                            {delivEffRefs(selDeliv).map((ref) => (
-                              <div key={refKey(ref)} className="flow-ctxrow">
-                                <span className="flow-ctxrow-open" style={{ cursor: 'default' }}>
-                                  <span className="flow-ctxrow-ic" style={{ color: 'var(--text-muted)' }} aria-hidden="true">
-                                    <RecordTypeIcon type={ref.type} />
-                                  </span>
-                                  <span className="flow-ctxrow-txt">
-                                    <span className="flow-ctxrow-kind" style={{ color: 'var(--text-muted)' }}>{RECORD_TYPE_LABEL[ref.type]}</span>
-                                    <span className="flow-ctxrow-name">{ref.label}</span>
-                                  </span>
-                                </span>
-                                <button
-                                  className="flow-ctxrow-del"
-                                  title="Stop pinning this record on this deliverable"
-                                  aria-label={`Remove ${ref.label}`}
-                                  onClick={() => delivTagOps(selDeliv).remove(refKey(ref))}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : inherited.length === 0 && !wired.length ? (
-                          <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                            Nothing is wired to the campaign yet, so this deliverable has no context to
-                            write from. Draw a line from a card to this deliverable to give it its own.
-                          </div>
-                        ) : (
-                          renderContextRows(inherited)
-                        )}
-                        {/* WIRED STRAIGHT TO THIS ONE, above and beyond the campaign's. Its own head,
-                            because "this applies to this deliverable only" is the whole difference and
-                            mixing the two lists would lose it. */}
-                        {wired.length > 0 && (
-                          <>
-                            <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                              Wired to this deliverable only · {wired.length}
-                            </label>
-                            {renderContextRows(wired, (id) => {
-                              setConnectors((c) => c.filter((x) => !(x.from === id && x.to === selDeliv.key)))
-                              detachFromTarget(id, selDeliv.key, connectors)
-                            })}
-                          </>
-                        )}
-                        {/* Nothing here when it is simply inheriting. The "pin different records"
-                            link is gone: wiring a card straight to this deliverable is how you give it
-                            its own context now, which is the same gesture as everywhere else on the
-                            board rather than a second, record-shaped mechanism reachable only from a
-                            footnote. An override that already exists stays explained and reversible. */}
-                        {renderResolvedDirection(selDeliv.key)}
-                        {overridden && (
-                          <div className="flow-inspect-note" style={{ marginTop: 8 }}>
-                            This deliverable ignores the campaign's context and uses only what is pinned
-                            above.{' '}
-                            <button
-                              className="flow-reset-link"
-                              onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
-                            >
-                              Go back to the campaign's
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  {/* GENERATE, SCOPED. Three buttons, only the ones that apply, because "write the
-                      two that are empty" never touches a sentence anybody wrote and "rewrite all
-                      four" always does, and those are different enough acts to need different
-                      buttons rather than one with a warning. */}
-                  {(() => {
-                    const rows = selDeliv.rows
-                    const empty = rows.filter((r) => !messagingAllText(r).trim())
-                    const stale = rows.filter((r) => r.recheckFlag)
-                    const busy = regenerating || rows.some((r) => regenIds.has(r.id))
-                    return (
-                      <>
-                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
-                        {empty.length > 0 && (
-                          <button className="flow-insp-open" disabled={busy} onClick={() => void regenerateFlow(empty.map((r) => r.id))}>
-                            {busy ? 'Writing…' : `Write the ${empty.length} that ${empty.length === 1 ? 'is' : 'are'} empty`}
-                          </button>
-                        )}
-                        {stale.length > 0 && (
-                          <button className="flow-insp-open subtle" disabled={busy} onClick={() => void regenerateFlow(stale.map((r) => r.id))}>
-                            {`Write the ${stale.length} that ${stale.length === 1 ? 'is' : 'are'} out of date`}
-                          </button>
-                        )}
-                        <button className="flow-insp-open subtle" disabled={busy || !rows.length} onClick={() => void regenerateFlow(rows.map((r) => r.id))}>
-                          {rows.length === 1 ? 'Rewrite this post' : `Rewrite all ${rows.length} posts`}
-                        </button>
-                        <p className="flow-inspect-note">
-                          {rows.length === 1
-                            ? 'Rewriting clears the copy here, including anything you typed by hand, and writes it again. Undo puts it back until you reload.'
-                            : `Rewriting clears the copy on all ${rows.length} and writes them again, including anything you typed by hand. Undo puts it back until you reload.`}
-                        </p>
-                        {/* Which writer produced this deliverable's copy, as a count rather than a
-                            badge, since a deliverable can hold both. */}
-                        {(() => {
-                          const off = rows.filter((r) => r.copySource === 'heuristic').length
-                          return off > 0 ? (
-                            <p className="flow-inspect-note">
-                              {`${off} of these came from the offline writer, built from your own brand and audience.`}
-                            </p>
-                          ) : null
-                        })()}
-                      </>
-                    )
-                  })()}
-
                   {/* WHAT EACH POST CONTAINS. The same shape as the Data source card's "What this
                       table will send", deliberately: both answer "what does this thing actually
                       hold", and reading as one object is the point. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>What each post contains</label>
-                  <div className="flow-insp-send">
-                    {messagingFields(selDeliv.channel, selDeliv.assetType).map((f) => (
-                      <div key={f.key} className="flow-send-row">
-                        <span className="flow-send-val">{f.label}</span>
-                        <span className="flow-send-lab">
-                          {f.hardLimit ? `up to ${f.hardLimit.toLocaleString('en-US')} characters` : 'no limit'}
-                        </span>
-                      </div>
-                    ))}
-                    <span className="flow-send-foot">Every post under this deliverable has these, and only these.</span>
-                  </div>
 
                   {/* FEEDS THESE POSTS: the outbound half of Connected to, which needs no graph walk
                       because the rows are already in scope. */}
@@ -8595,67 +8947,6 @@ export function FlowsView() {
                       Re-keying it is a three-slice write with no transaction anywhere in this app,
                       where a partial failure leaves wires pointing at a key no asset answers to. So
                       the honest move is to say so and make the stated alternative one click away. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Format</label>
-                  <div className="flow-src-list">
-                    <div className="flow-src-opt on" style={{ cursor: 'default' }}>
-                      <span className="flow-src-mark"><span className="flow-src-dot" /></span>
-                      <span className="flow-src-txt">
-                        <span className="flow-src-name">{typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}</span>
-                        <span className="flow-src-sub">
-                          {`${messagingFields(selDeliv.channel, selDeliv.assetType).length} component${messagingFields(selDeliv.channel, selDeliv.assetType).length === 1 ? '' : 's'}`}
-                        </span>
-                      </span>
-                      <span className="flow-src-tick" aria-label="current">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 6L9 17l-5-5" />
-                        </svg>
-                      </span>
-                    </div>
-                  </div>
-                  <p className="flow-inspect-note">
-                    {`You cannot change what this deliverable makes. Its format decides the components, the schedule and the tracking on all ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}. Add the deliverable you want and delete this one.`}
-                  </p>
-                  {/* MAKE YOUR OWN FORMAT. Names a format the 51 presets do not cover, on a channel
-                      that already exists. It inherits that channel's components deliberately: letting
-                      somebody author their own components and limits would have to reach
-                      messagingFields, which is called from dozens of places and is pure. The note
-                      below says which of the two this is, in as many words. */}
-                  <button className="flow-src-more" onClick={() => setNamingFormat(namingFormat === null ? '' : null)}>
-                    {namingFormat === null ? 'Make your own format' : 'Cancel'}
-                  </button>
-                  {namingFormat !== null && (
-                    <>
-                      <input
-                        className="flow-inspect-input"
-                        autoFocus
-                        placeholder="Booth panel, podcast description…"
-                        value={namingFormat}
-                        onChange={(e) => setNamingFormat(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      />
-                      <p className="flow-inspect-note">
-                        {`It gets its own deliverable and it generates. Its posts have the same components as any other ${CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} post, because choosing your own components is not built yet.`}
-                      </p>
-                      <button
-                        className="flow-insp-open"
-                        disabled={!namingFormat.trim() || !brand}
-                        onClick={() => {
-                          const v = addOutputType(brand, selDeliv.channel as ChannelId, namingFormat)
-                          if (v) setNamingFormat(null)
-                        }}
-                      >
-                        Add this format
-                      </button>
-                    </>
-                  )}
-                  {/* Formats this brand has named, so they are visible where they were made. */}
-                  {outputTypes.filter((o) => o.brand === brand && !o.retiredAt).length > 0 && (
-                    <p className="flow-inspect-note">
-                      {`Your formats: ${outputTypes.filter((o) => o.brand === brand && !o.retiredAt).map((o) => o.label).join(', ')}. Pick one when you add a deliverable.`}
-                    </p>
-                  )}
-
                   {/* The thread is keyed by the deliverable's DERIVED key (channel|assetType), so
                       changing either in the Grid orphans it. The same fragility its connectors
                       already have, answered above with a refusal rather than a migration. */}
@@ -8834,7 +9125,7 @@ export function FlowsView() {
                     </div>
                   </div>
                   {renderCampaignContext()}
-                  <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
+                  <label className="flow-inspect-label" style={{ marginTop: 20 }}>Channels</label>
                   <div className="flow-deliv-list">
                     {viewDelivs.map((d) => (
                       <button key={d.key} className="flow-pitem" onClick={() => setSel(d.key)}>
@@ -8847,7 +9138,7 @@ export function FlowsView() {
                     ))}
                   </div>
                   <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                    {viewRows.length} assets · {viewDelivs.length} deliverable type{viewDelivs.length === 1 ? '' : 's'}. Click a post to see its copy, or use the Grid and Calendar tabs above.
+                    {viewRows.length} assets · {viewDelivs.length} channel{viewDelivs.length === 1 ? '' : 's'}. Click a post to see its copy, or use the Grid and Calendar tabs above.
                   </div>
                 </div>
               </>
@@ -8858,7 +9149,7 @@ export function FlowsView() {
                 <button className="flow-back" onClick={() => setPickAt(null)}>
                   ‹ Back
                 </button>
-                <span className="flow-panel-title">Add deliverable</span>
+                <span className="flow-panel-title">Add channel</span>
               </div>
               <div className="flow-picker-list">
                 {grouped.map(([group, presets]) => (
@@ -8956,7 +9247,7 @@ export function FlowsView() {
                         onChange={(e) => setBudget(e.target.value)}
                         onBlur={() => {
                           const n = Math.max(0, +budget || 0)
-                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
                         }}
                       />
                     </div>
@@ -8968,14 +9259,15 @@ export function FlowsView() {
                   </div>
                 </div>
                 {renderCampaignContext()}
+                {/* No build button here any more. Generate lives in the toolbar, where it is on
+                    screen whatever is selected, and two buttons doing the same job in two places is
+                    how you get two behaviours: this one was `build`, the toolbar's is the same call
+                    plus the empty-board case. The note stays, pointing at the one that remains. */}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
-                    ? `Build writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
-                    : 'Add deliverables from the canvas toolbar (or tag channels above), then Build.'}
+                    ? `Generate writes ${channelTagPresets.length} channel${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
+                    : 'Add channels from the canvas toolbar (or tag channels above), then press Generate.'}
                 </div>
-                <button className="flow-brief-build" onClick={build} disabled={(!nodes.length && !channelTagPresets.length) || building}>
-                  {building ? 'Building…' : 'Build & write copy'}
-                </button>
               </div>
             </>
           ) : sel && sel.includes(':') ? (
@@ -9083,7 +9375,7 @@ export function FlowsView() {
                     <textarea
                       className="flow-desc"
                       rows={2}
-                      placeholder="What is this deliverable about?"
+                      placeholder="What is this channel about?"
                       value={node.description || ''}
                       onChange={(e) => setNodeField(node.id, { description: e.target.value })}
                     />
@@ -9375,31 +9667,64 @@ export function FlowsView() {
             labels were paying rent in the one place with the least room. Its own row because the
             palette will not fit beside zoom + tools + Generate when both side panels are open. */}
         <div className="flow-tb-palette">
-          <button
-            className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
-            aria-label="Add the campaign brief"
-            onClick={() => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
-          </button>
+          <div className="flow-tb-brand-wrap">
+            <button
+              className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
+              aria-label="Add the campaign brief"
+              onClick={() => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
+            </button>
+            <Hint
+              key={`brief-${hintNonce}`}
+              show={hintStep === 'brief'}
+              storageKey="stoplight.hint.briefCard.v1"
+              title="Add the campaign brief"
+              placement="above"
+              align="center"
+              body={[
+                'The brief is what the campaign is: what you are launching, to whom, over how long.',
+                'Everything you connect to it is read when the copy is written, and the channels hang off it.',
+              ]}
+              cta={{
+                label: 'Add the brief',
+                onClick: () => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) },
+              }}
+            />
+          </div>
           {/* Deliverable, with the eight motions the presets already carry behind its caret. The
               button opens everything; the caret picks a motion and scopes the picker to it. */}
-          {palGroup(
-            'deliverable',
-            {
-              title: 'Deliverable. A thing you ship, on a cadence. (B)',
-              tone: DELIV_TONE,
-              icon: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></>,
-              onClick: () => { setPickGroup(null); openAddDeliverable() },
-            },
-            DELIVERABLE_GROUPS.map((g) => ({
-              label: g.label,
-              hint: `${DELIVERABLE_PRESETS.filter((p) => p.group === g.group).length}`,
-              tone: g.tone,
-              icon: g.icon,
-              onClick: () => { setPickGroup(g.group); openAddDeliverable() },
-            })),
-          )}
+          <div className="flow-tb-brand-wrap">
+            {palGroup(
+              'deliverable',
+              {
+                title: 'Channel. A thing you ship, on a cadence. (B)',
+                tone: DELIV_TONE,
+                icon: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></>,
+                onClick: () => { setPickGroup(null); openAddDeliverable() },
+              },
+              DELIVERABLE_GROUPS.map((g) => ({
+                label: g.label,
+                hint: `${DELIVERABLE_PRESETS.filter((p) => p.group === g.group).length}`,
+                tone: g.tone,
+                icon: g.icon,
+                onClick: () => { setPickGroup(g.group); openAddDeliverable() },
+              })),
+            )}
+            <Hint
+              key={`deliverables-${hintNonce}`}
+              show={hintStep === 'deliverables'}
+              storageKey="stoplight.hint.deliverables.v1"
+              title="Add what you are shipping"
+              placement="above"
+              align="center"
+              body={[
+                'Channels are the things this campaign puts out: posts, emails, pages, ads. Each one comes with the fields its channel expects.',
+                'Pick how many of each and over what period. Nothing is written yet, so this is the shape of the campaign rather than the work.',
+              ]}
+              cta={{ label: 'Add a channel', onClick: () => { setPickGroup(null); openAddDeliverable() } }}
+            />
+          </div>
           <span className="flow-tb-divider" />
           {/* BRAND sits where the glossary tip was. The tip explained what an input card is, which is
               a thing you learn once; the brand is the context every card on the board is written
@@ -9407,22 +9732,40 @@ export function FlowsView() {
           {/* BRAND, with Product behind its caret. A product belongs to the brand that sells it, so it
               nests under Brand rather than sitting beside it: the bar says what the hierarchy is
               without a label explaining it. Clicking Brand drops a brand; the caret offers both. */}
-          {palGroup(
-            'brand',
-            {
-              title: `${OBJECT_META.brand.label}. ${OBJECT_META.brand.menuDesc}.`,
-              tone: OBJECT_META.brand.tone,
-              icon: OBJECT_META.brand.icon,
-              onClick: () => addObject('brand'),
-            },
-            (['brand', 'product'] as CanvasObjectKind[]).map((k) => ({
-              label: OBJECT_META[k].label,
-              hint: OBJECT_META[k].menuDesc,
-              tone: OBJECT_META[k].tone,
-              icon: OBJECT_META[k].icon,
-              onClick: () => addObject(k),
-            })),
-          )}
+          {/* Wrapped so the hint can anchor to this button in the layout rather than be measured. */}
+          <div className="flow-tb-brand-wrap">
+            {palGroup(
+              'brand',
+              {
+                title: `${OBJECT_META.brand.label}. ${OBJECT_META.brand.menuDesc}.`,
+                tone: OBJECT_META.brand.tone,
+                icon: OBJECT_META.brand.icon,
+                onClick: () => addObject('brand'),
+              },
+              (['brand', 'product'] as CanvasObjectKind[]).map((k) => ({
+                label: OBJECT_META[k].label,
+                hint: OBJECT_META[k].menuDesc,
+                tone: OBJECT_META[k].tone,
+                icon: OBJECT_META[k].icon,
+                onClick: () => addObject(k),
+              })),
+            )}
+            {/* Only while the board has no Brand card. That is the one state where the campaign
+                cannot say whose voice it is written in, and the toolbar is where the answer is. */}
+            <Hint
+              key={`brand-${hintNonce}`}
+              show={hintStep === 'brand'}
+              storageKey="stoplight.hint.brandCard.v1"
+              title="Add a Brand card"
+              placement="above"
+              align="center"
+              body={[
+                'A campaign belongs to a brand, and the writing reads that brand\u2019s voice, audiences and proof.',
+                'Add a Brand card and connect it to the campaign brief. That connection is what binds the campaign, and until it is made there is nothing to write from.',
+              ]}
+              cta={{ label: 'Add a Brand card', onClick: () => addObject('brand') }}
+            />
+          </div>
           {/* One entry per family: the button drops that family's most common card, the caret
               offers the rest. Eleven kinds inline was most of why the bar had outgrown the canvas. */}
           {INPUT_FAMILIES.map((f) => {
@@ -9519,15 +9862,19 @@ export function FlowsView() {
             </svg>
           </button>
         </div>
-        {viewing && (
-          <>
+        {/* ALWAYS PRESENT. These three were gated on `viewing`, so the toolbar changed shape the
+            moment a campaign was built and the controls that matter most were missing from the
+            screen where you are deciding what to make. Each one answers for itself in the builder:
+            the picker holds its choice until Build, the balance is an account fact rather than a
+            campaign one, and Generate does the same thing the panel's build button does. */}
+        <>
             <span className="flow-tb-divider" />
             {/* WHICH MODEL GENERATE USES, next to the button that uses it. It was only on the
                 campaign brief, which meant choosing it was a trip to another panel and the choice
                 was invisible at the moment you pressed Generate. Same store field either way, so
                 the brief and this stay in step. */}
             {(() => {
-              const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? 'auto')) ?? AI_MODELS[0]
+              const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? buildModel ?? 'auto')) ?? AI_MODELS[0]
               return (
                 <div className="flow-tb-zoom-wrap">
                   <button
@@ -9539,7 +9886,9 @@ export function FlowsView() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
                     </svg>
-                    {cur.label}
+                    {/* Wrapped so it can truncate. A bare text node cannot take text-overflow, and
+                        the longer model names wrapped the button onto two lines. */}
+                    <span className="flow-tb-model-label">{cur.label}</span>
                     <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
@@ -9554,6 +9903,7 @@ export function FlowsView() {
                             className={`flow-tb-zoom-item flow-tb-model-item${m.id === cur.id ? ' on' : ''}`}
                             onClick={() => {
                               if (viewName) patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
+                              else setBuildModel(m.id === 'auto' ? undefined : m.id)
                               setModelOpen(false)
                             }}
                           >
@@ -9579,29 +9929,52 @@ export function FlowsView() {
                 {aiCredits.remainingCredits.toLocaleString()} credits
               </span>
             )}
+            <div className="flow-tb-brand-wrap">
             <button
               className="flow-tb-regen"
               // A flow with assets regenerates their copy (from the current selection, as before).
               // An empty flow has nothing to regenerate yet, so Generate seeds its first assets the
-              // same way "Add deliverable" / the AI build does — this keeps AI-built and from-scratch
+              // same way "Add channel" / the AI build does — this keeps AI-built and from-scratch
               // flows behaving identically instead of hiding the control on empty flows.
-              onClick={() => (viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds))}
-              disabled={regenerating || (viewRows.length > 0 && genIds.length === 0)}
+              // Three modes, one button. On a built campaign it regenerates the selection, as
+              // before. In the builder it does what the panel's build button does, because those
+              // being different actions on the same screen is how you get two ways to make a
+              // campaign that behave differently. With nothing to act on either way, it opens the
+              // deliverable picker rather than sitting there dead.
+              onClick={() => {
+                if (!viewing) return nodes.length || channelTagPresets.length ? build() : openAddDeliverable()
+                return viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds)
+              }}
+              disabled={regenerating || building || (viewing && viewRows.length > 0 && genIds.length === 0)}
               aria-label={
-                viewRows.length === 0
-                  ? 'Pick a deliverable to generate its first copy'
-                  : genIds.length
-                    ? 'Generate copy for the selected cards'
-                    : 'Select a card to generate its copy'
+                !viewing
+                  ? 'Build this campaign and write its copy'
+                  : viewRows.length === 0
+                    ? 'Pick a channel to generate its first copy'
+                    : genIds.length
+                      ? 'Generate copy for the selected cards'
+                      : 'Select a card to generate its copy'
               }
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
               </svg>
-              {regenerating ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
+              {regenerating || building ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
             </button>
-          </>
-        )}
+            <Hint
+              key={`generate-${hintNonce}`}
+              show={hintStep === 'generate'}
+              storageKey="stoplight.hint.generate.v1"
+              title="Generate the copy"
+              placement="above"
+              align="center"
+              body={[
+                'Everything you connected is what it reads from: the brand, the audiences, the proof, the figures.',
+                'Every asset keeps a record of what it was written from, so anything it could not stand behind is flagged rather than quietly smoothed over.',
+              ]}
+            />
+            </div>
+        </>
         </div>
       </div>
         </>

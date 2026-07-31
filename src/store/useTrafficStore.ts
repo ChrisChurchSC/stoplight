@@ -11,7 +11,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
-import { registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
+import { UNASSIGNED, registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
 import { FOLDER_SEP, buildFolderPath, folderName, folderParent, isDescendantFolder, sanitizeSegment, withAncestors } from '../domain/campaignFolders'
 import { newFlight, flightForRow, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
@@ -2131,6 +2131,27 @@ interface TrafficState {
   /** Patch arbitrary campaign metadata (flight length, budget, …) on an existing campaign.
    *  A no-op if the campaign isn't found (only meaningful for built flows). */
   patchCampaign: (name: string, patch: Partial<Campaign>) => void
+  /**
+   * BIND A CAMPAIGN TO A BRAND. This is what wiring a Brand card into the campaign brief does.
+   *
+   * A campaign's brand used to be decided ONLY by the workspace you happened to be standing in when
+   * you built it. Build from a workspace with no brand and the campaign landed on UNASSIGNED, and
+   * from there copyBlockerFor refused to write a word: correctly, but with nothing on the canvas
+   * you could do about it, because no gesture existed that said "this campaign belongs to Acme". The
+   * Brand card is that gesture now: the card names the brand, the wire to the brief says it owns
+   * this campaign.
+   *
+   * Pass an empty brand to UNBIND (back to UNASSIGNED, the state generation refuses). Callers decide
+   * whether unbinding is safe; this only performs it.
+   *
+   * Goes through addCampaign / patchCampaign rather than writing campaignList, and REGISTERS the
+   * name itself, because patchCampaign does not: clientForCampaign resolves through
+   * runtimeCampaignClients, and that is what every reader of a campaign's brand actually asks:
+   * copyBlockerFor, the row scoping, the rails. A patch without the register moves the record and
+   * leaves the resolution stale, i.e. a campaign that lists under one brand and generates under
+   * another, which is the exact leak the brand boundary exists to prevent.
+   */
+  bindCampaignBrand: (campaign: string, brand: string) => void
   /** Shift every scheduled asset in a campaign by N days — drag-to-move a campaign on the calendar. */
   /** Rescale a campaign's assets into a new [startMs, endMs] window and update its duration —
    *  drag-to-resize a campaign on the calendar. */
@@ -2138,7 +2159,9 @@ interface TrafficState {
   moveAssetSchedule: (rowId: string, deltaDays: number) => Promise<void>
   /** Set a campaign's goal (its objective) — what it's meant to achieve. Empty clears it. */
   /** Set the structured goal parts: message override, KPI, target. Only the passed keys change. */
-  /** Swap a campaign's brand/client — the Brand card picker. Re-homes the campaign. */
+  /** RETIRED as a picker: swapping a campaign's brand is what the Brand card ON the canvas does now,
+   *  through bindCampaignBrand above. A wire you can see beats a dropdown that re-homed a campaign
+   *  with nothing on the board to account for it. */
   /** Campaign folders per brand: the ordered folder names each brand's gallery files under. */
   campaignFolders: Record<string, string[]>
   /** Campaign Flights — each a scheduled run of a campaign (Umbrella → Campaign → Flight → Asset). */
@@ -2551,8 +2574,10 @@ interface TrafficState {
   showToast: (msg: string | null) => void
   /** Optional action shown on the toast (e.g. "Undo" after a soft delete). Cleared with the toast. */
   toastAction: { label: string; run: () => void } | null
+  /** 'warn' for a toast reporting something that did not happen, so success and refusal do not look alike. */
+  toastTone: 'info' | 'warn'
   /** Show a toast with an action button (used for undo after archive/delete). */
-  showToastAction: (msg: string, label: string, run: () => void) => void
+  showToastAction: (msg: string, label: string, run: () => void, tone?: 'info' | 'warn') => void
   /** The inspectable baseline for a brand: which voice / proof set is in force and from
    *  where (self + ancestors + shares). Drives the canvas baseline chip + coherence report. */
   brandBaselineFor: (brand: string) => BrandBaseline
@@ -2932,6 +2957,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   aiCredits: null,
   toast: null,
   toastAction: null,
+  toastTone: 'info',
   accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
   targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
   campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
@@ -4413,6 +4439,34 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveCampaigns(campaignList)
       return { campaignList }
     }),
+
+  bindCampaignBrand: (campaign, brand) => {
+    const name = campaign.trim()
+    if (!name) return
+    // An empty brand is an UNBIND, and the catch-all is what "no brand" is called everywhere else.
+    const client = isBrandless(brand) ? UNASSIGNED : brand.trim()
+    /**
+     * A CARD CAN NAME A BRAND THE WORKSPACE HAS NEVER HEARD OF, and that is the main case: the
+     * first-run path is a blank canvas with no brand at all. Registering the name is what gives the
+     * campaign a rail to live in; binding to a name with no client record files it somewhere that
+     * does not exist. addClient is a no-op for one that is already there.
+     *
+     * Ahead of the idempotence check below, because the two are answers to different questions: the
+     * campaign can already carry this client while the client itself was never registered (buildFlow
+     * names it on the campaign first, then binds).
+     */
+    if (!isBrandless(client)) get().addClient(client)
+    const current = get().campaignList.find((c) => c.name === name)
+    // Idempotent, because the wiring paths call this on every re-attach (picking the card's record
+    // again, re-drawing a wire that already exists). Both halves have to agree before we can skip:
+    // the stored record and the resolver can disagree, and re-syncing them is half the point.
+    if (current?.client === client && clientForCampaign(name) === client) return
+    registerCampaign(name, client)
+    // Row-only campaigns (assets but no wizard record) are common enough that every writer here
+    // handles them the same way: create the minimal record rather than drop the binding.
+    if (current) get().patchCampaign(name, { client })
+    else get().addCampaign({ name, client, strategy: 'Current state' })
+  },
 
   setCampaignFolder: (name, folder) =>
     set((s) => {
@@ -6281,8 +6335,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ aiCredits: null })
     }
   },
-  showToast: (msg) => set({ toast: msg, toastAction: null }),
-  showToastAction: (msg, label, run) => set({ toast: msg, toastAction: { label, run } }),
+  showToast: (msg) => set({ toast: msg, toastAction: null, toastTone: 'info' }),
+  showToastAction: (msg, label, run, tone = 'info') => set({ toast: msg, toastAction: { label, run }, toastTone: tone }),
 
   brandBaselineFor: (brand) => {
     const s = get()
@@ -6603,9 +6657,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
            * Unlike audiences and proof there is no fallback to "all of them": an unnamed persona is
            * not a default, it is nobody. A campaign with no person ref sends none.
            */
+          /**
+           * A record belonging to ANOTHER brand never travels, whatever a ref says.
+           *
+           * The dataset pool below has always done this, with a comment calling it "one extra rule
+           * that applies to no other pool". That was true while a campaign's brand could not change:
+           * refs and client were laid down together and stayed consistent. A Brand card can now
+           * rebind an existing campaign, and its board is keyed by campaign name and survives the
+           * move, so the previous brand's Voice and Message cards stay wired to the brief. Without
+           * this the writer would be handed the new brand's guide and the old brand's tone in the
+           * same request, and the visible pools (audience, proof) would fall back to the new brand
+           * and make the rebind look like it had worked.
+           *
+           * An unbranded record is shared, not foreign, so it passes. Only an explicit mismatch is
+           * refused.
+           */
+          const ofBrand = (r: { brand?: string }): boolean => !r.brand || r.brand === client
           const perIds = new Set(refList.filter((x) => x.type === 'person').map((x) => x.id))
           const perNames = new Set(refList.filter((x) => x.type === 'person').map((x) => x.label))
-          const people = get().people.filter((pp) => perIds.has(pp.id) || perNames.has(pp.name))
+          const people = get().people.filter((pp) => ofBrand(pp) && (perIds.has(pp.id) || perNames.has(pp.name)))
           /**
            * MESSAGES. Same shape as personas, and the same reason for it: a wired Message card
            * names the angle this campaign argues, and until now that record reached nothing — only
@@ -6617,26 +6687,27 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
            */
           const msgIds = new Set(refList.filter((x) => x.type === 'message').map((x) => x.id))
           const msgNames = new Set(refList.filter((x) => x.type === 'message').map((x) => x.label))
-          const msgs = get().messages.filter((m) => msgIds.has(m.id) || msgNames.has(m.name))
+          const msgs = get().messages.filter((m) => ofBrand(m) && (msgIds.has(m.id) || msgNames.has(m.name)))
           // Concepts, on the same terms as messages: what the work is built from, no library fallback.
           const cptIds = new Set(refList.filter((x) => x.type === 'concept').map((x) => x.id))
           const cptNames = new Set(refList.filter((x) => x.type === 'concept').map((x) => x.label))
-          const cpts = get().concepts.filter((c) => cptIds.has(c.id) || cptNames.has(c.name))
+          const cpts = get().concepts.filter((c) => ofBrand(c) && (cptIds.has(c.id) || cptNames.has(c.name)))
           // Voices, same terms again. No fallback: the brand guide already sets a default register,
           // so an unpinned campaign is not voiceless, it is simply written in the brand's voice.
           const vcIds = new Set(refList.filter((x) => x.type === 'voice').map((x) => x.id))
           const vcNames = new Set(refList.filter((x) => x.type === 'voice').map((x) => x.label))
-          const vcs = get().voices.filter((v) => vcIds.has(v.id) || vcNames.has(v.name))
+          const vcs = get().voices.filter((v) => ofBrand(v) && (vcIds.has(v.id) || vcNames.has(v.name)))
           // Seasons, same terms. No fallback: most campaigns are not tied to a moment, and inventing
           // one would have the writer reaching for an occasion that is not happening.
           const snIds = new Set(refList.filter((x) => x.type === 'season').map((x) => x.id))
           const snNames = new Set(refList.filter((x) => x.type === 'season').map((x) => x.label))
-          const sns = get().seasons.filter((x) => snIds.has(x.id) || snNames.has(x.name))
+          const sns = get().seasons.filter((x) => ofBrand(x) && (snIds.has(x.id) || snNames.has(x.name)))
           /**
-           * DATA SETS. Same terms as the rest, and one extra rule that applies to no other pool: a
-           * BrandDataset carries a required `brand`, so a stale refId pointing at another brand's
-           * table would cross exactly the boundary this file defends everywhere else. Filtered here
-           * rather than trusted from the ref.
+           * DATA SETS. Same terms as the rest, including the brand check, which every pool above
+           * now shares (see ofBrand). A BrandDataset carries a REQUIRED brand rather than an
+           * optional one, so it is filtered on equality directly instead of through that helper.
+           * Either way the rule is the same: a stale refId pointing at another brand's table would
+           * cross exactly the boundary this file defends everywhere else.
            *
            * No library fallback, and it matters more here than anywhere: falling back to every table
            * the brand owns would hand the writer numbers nobody chose.

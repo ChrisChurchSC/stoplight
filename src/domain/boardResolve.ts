@@ -13,12 +13,22 @@ import type { FlowReference } from './clients'
  * piece of the canvas that is worth being able to test against a hand-built board rather than by
  * dragging things around.
  *
- * WHAT IT DELIBERATELY DOES NOT DO: it resolves DIRECTION, not records. A card's records reach a
- * campaign only by a wire to the brief, and that stays a single hop (see attachToCampaign). The two
- * differ because they have different readers: direction has exactly one consumer, the copy writer,
- * so resolving it at draft time is cheap and reversible; records are read by the audience rotation,
- * the coherence check, fan-out and the Records rails, so a chain silently widening who an asset is
- * written to would be felt in places nobody was looking at.
+ * RECORDS CHAIN THE SAME WAY, and that is a reversal worth explaining. This module used to resolve
+ * DIRECTION transitively and records at a single hop: a card's records reached a campaign only by a
+ * wire straight into the brief (see attachToCampaign). The argument was that the two have different
+ * readers. Direction has exactly one consumer, the copy writer, so resolving it at draft time is
+ * cheap and reversible, whereas records are read by the audience rotation, the coherence check,
+ * fan-out and the Records rails, so a chain quietly widening who an asset is written to would be
+ * felt in places nobody was looking at.
+ *
+ * That rule is now overturned on purpose, because it contradicted the flow the board exists to
+ * support: start at a brand card, wire it through the cards that shape the message, then wire that
+ * into the brief and pick deliverables. Under the single-hop rule the brand at the head of that
+ * chain reached nothing, so a campaign that plainly described a brand came out unbranded and the
+ * writer then refused it. An arrow means "this helps write that" for records exactly as it does for
+ * direction, and anything that wants only the wires drawn straight into a target should read the
+ * connectors, not this. The consequences the old note warned about are accepted knowingly: the four
+ * readers above all widen together, which is the point of them sharing one definition.
  */
 
 /** An instruction as it travels: the kind is carried so buildDirection can keep reading its shape. */
@@ -124,42 +134,111 @@ function forwardEdges(board: FlowBoard): Map<string, string[]> {
  * what the chain ends at, not to its neighbour.
  */
 /**
- * The records wired DIRECTLY into `target` on this board, and nothing else.
+ * Every record that reaches `target` on this board, however many hops back it starts.
  *
- * SINGLE HOP, for the reason in the header above: direction chains through the graph, records do
- * not. This is the one definition of "what is wired in", shared by the panel, deliverable
- * inheritance and the copy writer, so those three cannot drift apart again — they each used to
- * answer it differently, and the writer was still answering it from the campaign's stored
- * references long after the panel had stopped.
+ * TRANSITIVE, per the reversal in the header: brand -> message -> brief hands the brief BOTH
+ * records, because the brand is upstream of the brief even though no wire touches it. It is still
+ * the one definition of "what is wired in", shared by the panel, deliverable inheritance and the
+ * copy writer, so those three cannot drift apart again: they each used to answer it differently,
+ * and the writer was still answering it from the campaign's stored references long after the panel
+ * had stopped. Widening it here widens all three at once, which is intended.
+ *
+ * CYCLE-SAFE, because a board is drawn by a person. A -> B -> A and a card wired to itself are both
+ * things you can draw, and a walk without a visited set would sit in that loop until the tab dies.
+ * `seen` is what terminates this, not a depth cap. Unlike upstreamObjects there is no
+ * MAX_OBJECT_DEPTH here on purpose: a cap would silently drop the card at the head of a long chain,
+ * which is the exact failure this change exists to remove, and "silently" is the bad half.
+ *
+ * TRAVERSAL IS SEPARATE FROM CONTRIBUTION. A smart-object placement contributes every record inside
+ * it AND is walked through: the old code returned early once it had read a placement's refs, which
+ * under a transitive walk would stop the chain dead at the first object on it.
+ *
+ * Deduped across the whole walk rather than per hop, so a record reached down two paths appears
+ * once, at the nearest position it was found.
+ *
+ * ORDER is breadth-first outwards from the target: cards wired straight in first, then their
+ * feeders, ties broken by the order the wires were drawn. That is stable across runs (it reads the
+ * connector array, never iteration order over a Set of ids) and it leaves the old single-hop result
+ * intact as the leading block, so nothing that relied on "nearest wins" moved.
+ *
+ * COST is now O(nodes + edges) per call rather than O(edges into one target). It is called per
+ * campaign, not per row, and a board is tens of nodes, so a plain walk is the right shape: no index
+ * to build, no cache to invalidate against a board that changes on every drag.
  *
  * Returns ids without labels. Labels live on the record slices, which this module deliberately does
  * not know about; every reader matches on id first and treats a label as a legacy fallback. A card
  * that names no record contributes nothing, which is what makes "wired but empty" distinguishable
  * from "wired and carrying something".
  */
+/**
+ * The ids of every CARD that reaches `target`, nearest first.
+ *
+ * Exported and shared on purpose. The panel lists what is informing a target and the copy writer
+ * reads what informs it, and those two answering the question differently is the exact drift this
+ * file has warned about since it was written. One walk, one answer, both callers.
+ *
+ * ONLY CARDS CONDUCT. An output (the brief, a deliverable key, a post row id) contributes nothing
+ * and passes nothing through, and the second half is the one that is easy to miss: connectors
+ * between outputs exist. Dragging the brief hub onto a deliverable persists a deliverable ->
+ * campaign wire, so a walk that traversed outputs would climb from the campaign into that
+ * deliverable and collect every card the user had deliberately scoped to it alone. downstreamTargets
+ * and reachesOutput already stop at outputs; this is the same rule in the other direction.
+ *
+ * Breadth-first outward from the target, so nearest cards come first and ties keep the order the
+ * wires were drawn in. Stable across runs because it reads the connector array and never iterates a
+ * Set. No depth cap, unlike upstreamObjects: a cap silently drops the card at the head of a long
+ * chain, which is the failure chaining exists to remove. The visited set is seeded with the target,
+ * so a wire looping back into it stops there.
+ */
+export function upstreamCardIds(board: FlowBoard, target: string): string[] {
+  const objectById = new Map(board.objects.map((o) => [o.id, o]))
+  const placementById = new Map(board.placements.map((p) => [p.id, p]))
+  const isCard = (id: string): boolean => placementById.has(id) || objectById.has(id)
+  const incoming = new Map<string, string[]>()
+  for (const e of board.connectors) {
+    const list = incoming.get(e.to)
+    if (list) list.push(e.from)
+    else incoming.set(e.to, [e.from])
+  }
+  const out: string[] = []
+  const seen = new Set<string>([target])
+  let frontier = incoming.get(target) ?? []
+  while (frontier.length) {
+    const next: string[] = []
+    for (const id of frontier) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      if (!isCard(id)) continue
+      out.push(id)
+      for (const up of incoming.get(id) ?? []) if (!seen.has(up)) next.push(up)
+    }
+    frontier = next
+  }
+  return out
+}
+
 export function wiredRefsFor(board: FlowBoard, smartObjects: SmartObject[], target: string): FlowReference[] {
   const byId = new Map(smartObjects.map((o) => [o.id, o]))
+  const objectById = new Map(board.objects.map((o) => [o.id, o]))
+  const placementById = new Map(board.placements.map((p) => [p.id, p]))
+  /** What ONE node contributes, said once so the walk can stay about ids. */
+  const refsOf = (id: string): FlowReference[] => {
+    // A placed smart object contributes every record inside it; the library object is the truth.
+    const placed = placementById.get(id)
+    if (placed) return byId.get(placed.smartObjectId)?.refs ?? []
+    const obj = objectById.get(id)
+    if (!obj) return []
+    if (obj.smartObjectId) return byId.get(obj.smartObjectId)?.refs ?? []
+    const type = REF_TYPE_FOR_OBJECT_KIND[obj.kind]
+    return type && obj.refId ? [{ type, id: obj.refId, label: '' }] : []
+  }
   const out: FlowReference[] = []
   const push = (r: FlowReference) => {
     if (!out.some((x) => x.type === r.type && x.id === r.id)) out.push(r)
   }
-  for (const e of board.connectors) {
-    if (e.to !== target) continue
-    // A placed smart object contributes every record inside it; the library object is the truth.
-    const placed = board.placements.find((p) => p.id === e.from)
-    if (placed) {
-      for (const r of byId.get(placed.smartObjectId)?.refs ?? []) push(r)
-      continue
-    }
-    const obj = board.objects.find((o) => o.id === e.from)
-    if (!obj) continue
-    if (obj.smartObjectId) {
-      for (const r of byId.get(obj.smartObjectId)?.refs ?? []) push(r)
-      continue
-    }
-    const type = REF_TYPE_FOR_OBJECT_KIND[obj.kind]
-    if (type && obj.refId) push({ type, id: obj.refId, label: '' })
-  }
+  // The walk lives in upstreamCardIds so the panel cannot answer this differently. Dedupe is applied
+  // here rather than there, and so holds across the whole chain rather than per hop.
+  for (const id of upstreamCardIds(board, target)) for (const r of refsOf(id)) push(r)
   return out
 }
 

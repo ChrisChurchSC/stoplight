@@ -3795,7 +3795,11 @@ button {
    block right from the node (the Attio node hover). */
 .flow-hover {
   position: absolute;
-  left: 100%;
+  /* Clear of the connect port, which now sits on this edge like every other card's and occupies
+     the first 10px past it. At left:100% this widget's own dot landed on top of it: measured, port
+     -10 to +10 against widget -1 to +56. Two affordances in one place, one of which you cannot
+     see. */
+  left: calc(100% + 16px);
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -4062,6 +4066,13 @@ button {
   padding: 16px 16px 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+/* Inside the inspector, the collapse button is absolutely positioned in the same top-right corner
+   the head's ✕ flexes to, so the two sat on top of each other. The head keeps clear of it: 12px
+   offset + 28px button + 8px gap. Only inside .flow-panel, because every other head (the rail
+   pickers, the drawers) has that corner to itself. */
+.flow-panel .flow-panel-head {
+  padding-right: 48px;
 }
 .flow-panel-title {
   font-size: 15px;
@@ -4470,7 +4481,6 @@ button {
    placeholder can have the shape of the thing you are waiting for. The card also dims its border
    rather than pulsing the whole tile: several of these run at once and a canvas of throbbing cards
    is harder to read than one that simply looks busy. */
-.flow-node.generating { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .flow-copy-skel { display: flex; flex-direction: column; gap: 5px; padding: 1px 0 2px; }
 .flow-copy-skel span {
   display: block; height: 7px; border-radius: 4px;
@@ -4800,26 +4810,6 @@ button {
 /* Deliverables list in the flow-view panel (reuses .flow-pitem visuals) */
 .flow-deliv-list { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; }
 
-/* Selected post: swap a generated idea for a real ingested post */
-.flow-swap { margin: 4px 0 16px; }
-.flow-swap-tag { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
-.flow-swap-badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; }
-.flow-swap-badge.ingested { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: color-mix(in srgb, var(--green) 8%, transparent); }
-.flow-swap-link { font-size: 11.5px; color: var(--accent); text-decoration: none; font-weight: 600; }
-.flow-swap-link:hover { text-decoration: underline; }
-.flow-swap-btn { display: inline-flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; justify-content: center; border: 1px solid var(--border-strong, var(--border)); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 9px; padding: 8px 12px; cursor: pointer; }
-.flow-swap-btn:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
-.flow-swap-btn:disabled { opacity: .55; cursor: default; }
-.flow-swap-regen { margin-top: 6px; }
-.flow-swap-panel { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 8px; }
-.flow-swap-search { width: 100%; box-sizing: border-box; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 12.5px; color: var(--text); outline: none; }
-.flow-swap-search:focus { border-color: var(--accent); }
-.flow-swap-empty { font-size: 12px; color: var(--text-faint); padding: 12px 6px; }
-.flow-swap-list { margin-top: 8px; max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.flow-swap-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; border: 0; background: none; border-radius: 8px; padding: 8px 9px; cursor: pointer; }
-.flow-swap-item:hover { background: var(--surface); }
-.flow-swap-item-title { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.flow-swap-item-meta { font-size: 11px; color: var(--text-faint); }
 /* Deliverable brief: borderless description + a Configuration section header. */
 .flow-desc {
   width: 100%;
@@ -6746,7 +6736,9 @@ button {
   border: 0;
   background: none;
   font: inherit;
-  font-size: 13px;
+  /* Matches the model picker beside it. These are readouts you glance at, and two sizes in one
+     toolbar row reads as one of them being more important than it is. */
+  font-size: 10px;
   font-weight: 600;
   color: var(--text);
   padding: 7px 10px;
@@ -6806,7 +6798,23 @@ button {
 }
 /* The model picker reuses the zoom control's shape (same toolbar, same gesture) but its rows carry
    a second line: the model name is the choice, the note is why you would pick it. */
-.flow-tb-model { max-width: 168px; }
+/* Much smaller than the zoom control it inherits from. The model name and the balance are things
+   to glance at, not read, and at the inherited size a full name pushed the toolbar wide enough to
+   reach the setup panel. */
+.flow-tb-model {
+  max-width: 132px;
+  gap: 5px;
+  padding: 7px 8px;
+  /* One line, always. Wrapping made the button two rows tall and shoved the whole toolbar down. */
+  flex-wrap: nowrap;
+}
+.flow-tb-model-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The full name is on the button's title, so truncating loses nothing. */
 .flow-tb-model svg:first-child { color: var(--accent); }
 .flow-tb-model-menu { min-width: 208px; }
 .flow-tb-model-item { display: flex; flex-direction: column; gap: 1px; }
@@ -6818,8 +6826,8 @@ button {
 .flow-tb-credits {
   display: inline-flex;
   align-items: center;
-  padding: 0 8px;
-  font-size: 12px;
+  padding: 0 6px;
+  font-size: 9.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
@@ -6993,13 +7001,38 @@ button {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .flow-note-mini.linked .flow-note-mini-label { color: var(--text-muted); }
+/* One handle per side. Position comes from the side- modifier, so the base rule carries only what
+   every handle shares. Empty circles: the plus that used to sit inside read as "add" next to real
+   add buttons, and a connector handle is not an add. */
 .flow-note-port {
-  position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
-  width: 20px; height: 20px; border-radius: 50%; cursor: crosshair;
+  position: absolute;
+  width: 13px; height: 13px; border-radius: 50%; cursor: crosshair;
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted);
   display: inline-flex; align-items: center; justify-content: center; opacity: 0;
 }
+/* The offset centres the dot on the card's edge: half the width, plus the 1px border. Four sides now
+   carry one, so the dot is small enough that four of them read as handles rather than as decoration.
+   The hit area is restored below, larger than the dot itself. */
+.flow-note-port.side-right { right: -7px; top: 50%; transform: translateY(-50%); }
+.flow-note-port.side-left { left: -7px; top: 50%; transform: translateY(-50%); }
+.flow-note-port.side-top { top: -7px; left: 50%; transform: translateX(-50%); }
+.flow-note-port.side-bottom { bottom: -7px; left: 50%; transform: translateX(-50%); }
+/* A 13px circle is a small target, so the port claims a 26px square to be grabbed by without
+   drawing one. Same trick the connector lines use: what you see and what you can hit are separate. */
+.flow-note-port::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+}
 .flow-note:hover .flow-note-port { opacity: 1; }
+/* OUTPUT CARDS GET THE SAME HANDLES. A channel and a post were drop targets with no ports of their
+   own: you could draw a line INTO one and never out of one, so the direction that carried the board
+   forward was the one direction you could not draw. They are not .flow-note, so the reveal is keyed
+   on .flow-node instead. Direct child only, so a post inside a channel does not light up the
+   channel's ports as the cursor crosses it. */
+.flow-node:hover > .flow-out-port,
+.flow-canvas.connecting .flow-out-port { opacity: 1; }
 .flow-note-port:hover { border-color: var(--accent); color: var(--accent); }
 /* Connect tool: crosshair over the whole canvas so it reads as "draw a link". user-select off so
    dragging across a card's text doesn't highlight it mid-connection. */
@@ -7245,17 +7278,27 @@ button {
 }
 /* Wide invisible click target along each connector so the thin dotted line is easy to hit; hovering
    the band turns the edge red to signal "click to delete". */
+/* The clickable band around a connector, which is much wider than the line you can see. A 1.4px
+   stroke is a hard thing to hit with a mouse and impossible to hit while the canvas is zoomed out,
+   so the target is generous. Cards render above this layer, so widening it cannot steal their
+   clicks. */
 .flow-edge-hit {
   fill: none;
   stroke: transparent;
-  stroke-width: 16;
+  stroke-width: 30;
   stroke-linecap: round;
   pointer-events: stroke;
   cursor: pointer;
 }
+/* Thicker as well as red on hover: at 2px the feedback was the colour alone, which is easy to miss
+   on a board with a lot of lines and no help at all if you are unsure WHICH line you are about to
+   act on. */
 .flow-edge-g:hover .flow-edge {
   stroke: var(--red);
-  stroke-width: 2;
+  stroke-width: 3.2;
+}
+.flow-edge-g:hover .flow-edge-dot {
+  fill: var(--red);
 }
 /* A connector that touches a card carrying media budget/spend: gold, so paid paths read at a
    glance apart from organic ones. */
@@ -7285,50 +7328,6 @@ button {
   display: none;
 }
 /* Post-build result — stays in the flow instead of jumping to the old canvas. */
-.flow-built {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: blur(2px);
-}
-.flow-built-card {
-  background: var(--surface);
-  border: 1px solid var(--border-strong, var(--border));
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.22);
-  padding: 28px 30px;
-  text-align: center;
-  max-width: 380px;
-}
-.flow-built-check {
-  width: 46px;
-  height: 46px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--green, #33b579) 18%, transparent);
-  color: var(--green, #33b579);
-  font-size: 24px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.flow-built-title {
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.flow-built-sub {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 6px;
-  line-height: 1.5;
-}
 /* Copy-source badge: which writer produced the drafts. Green = real Claude API,
    amber = offline heuristic fallback (no API key/credits). Colors blend the hue
    toward --text so the label stays legible in both light and dark themes. */
@@ -7366,37 +7365,6 @@ button {
 }
 .flow-built-badge.heuristic .flow-built-badge-dot {
   background: #eab308;
-}
-.flow-built-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 20px;
-}
-.flow-built-open,
-.flow-built-new {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 9px 15px;
-  border-radius: 9px;
-  cursor: pointer;
-}
-.flow-built-open {
-  border: 0;
-  background: var(--accent);
-  color: #fff;
-}
-.flow-built-open:hover {
-  filter: brightness(1.05);
-}
-.flow-built-new {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-}
-.flow-built-new:hover {
-  background: var(--surface-2);
 }
 
 /* ---- main column ---- */
@@ -9459,6 +9427,10 @@ button {
 }
 .copy-count {
   font-variant-numeric: tabular-nums;
+  /* Pushed to the far edge so the counts line up in a column down the panel instead of sitting at a
+     different offset under every label. Safe against `.copy-label .btn`'s own margin-left: auto
+     below, because a label carries a count or a button and never both. */
+  margin-left: auto;
   color: var(--text-faint);
   text-transform: none;
   letter-spacing: 0;
@@ -9466,17 +9438,30 @@ button {
 .copy-count.over {
   color: var(--red);
 }
+/* OUTLINED, NOT FILLED. This set no background and no colour at all, so a copy box was whatever the
+   browser draws for a form field in a dark scheme: a flat #3b3b3b slab with pure white text, lighter
+   than everything around it and matching nothing in the panel. The box is now the outline and the
+   panel shows through it, which is also how every other field in the inspector reads. */
 .copy-field textarea {
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
   border-radius: var(--radius-sm);
   padding: 9px 11px;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 12.5px;
   line-height: 1.5;
   resize: vertical;
   min-height: 56px;
   white-space: pre-wrap;
+}
+.copy-field textarea::placeholder {
+  color: var(--text-faint);
+}
+/* The filled state is reserved for the one thing that needs to stand out: a box you are typing in. */
+.copy-field textarea:hover {
+  border-color: var(--text-faint);
 }
 .copy-field textarea.tall {
   min-height: 110px;
@@ -9487,6 +9472,35 @@ button {
 }
 .copy-label .btn {
   margin-left: auto;
+}
+/* ---- COPY FIELDS INSIDE THE INSPECTOR ----
+   The same component reads differently in the two places it is used. In the review drawer its
+   parent is a flex column with `gap: 16px`, so the fields are spaced. `.flow-inspect` is a plain
+   block, so consecutive fields touch: a label ends up 6px from the box below it and 0px from the
+   box above, and reads as belonging to the wrong one. Everything here is scoped to the inspector
+   so the drawer keeps the measurements it was built with. */
+.flow-inspect .copy-field + .copy-field {
+  margin-top: 16px;
+}
+/* SIZED TO THE FIELD. One 110px height covered a 200 character pinned comment and a 5,000 character
+   description: half empty under the short one and showing four and a bit lines of the long one.
+   The heights are line boxes (1.5em each) plus the 20px of padding and border, so they scale with
+   the type rather than being magic numbers.
+
+   A long field still overflows, and the last visible line is still cut through the middle. That is
+   left alone deliberately: a textarea paints into its own bottom padding, so a height that ends on
+   a whole line puts the descenders hard against the border, and macOS hides the scrollbar until you
+   touch it. The half line IS the overflow cue. The grabber pulls the box open when you want it. */
+.flow-inspect .copy-field textarea.tall {
+  min-height: calc(6em + 20px); /* a pinned comment is 200 characters, so four lines holds it */
+}
+.flow-inspect .copy-field textarea.tall.xl {
+  min-height: calc(9em + 20px); /* a description runs to thousands, so it gets half again as much */
+}
+/* A title is capped at 100 characters and its box already holds two lines, so it can never be
+   dragged into showing anything more. The handle came off the field it did nothing for. */
+.flow-inspect .copy-field textarea:not(.tall) {
+  resize: none;
 }
 .copy-hint {
   font-size: 11.5px;
@@ -14454,9 +14468,12 @@ button {
   font-size: 11.5px;
   font-weight: 700;
 }
+/* A flagged field used to fill itself cream, which was written for a light theme and never revisited:
+   against the panel's own light text it was white on off-white. Outlined like the rest, with the
+   amber carried by the border and a tint mixed from it, so it reads in either scheme. */
 .copy-field.flagged textarea {
   border-color: #f0c000;
-  background: #fffdf5;
+  background: color-mix(in srgb, #f0c000 8%, transparent);
 }
 .msg-flag {
   display: flex;
@@ -20383,11 +20400,19 @@ table.aud-sheet td.stick .aud-cell {
 .flow-note[data-role='input'].attached .flow-note-kind { color: var(--note-tone, var(--text-muted)); }
 /* The hub's connection port. Sits on the brief's left edge, because context flows IN from the
    board toward the campaign, and the deliverables hang off its right. */
-.flow-brief-port {
-  right: auto;
-  left: -11px;
-  opacity: 0;
-}
+/**
+ * The brief's connect port is the same port every other card has.
+ *
+ * It used to sit on the LEFT with a plus inside it, which made the one card everything converges on
+ * the one card whose connector looked like nothing else on the board, and the plus read as "add"
+ * next to a real add button eleven pixels away. Right edge, plain circle, revealed on hover: the
+ * only rule this file needs about it is that it inherits .flow-note-port and adds nothing.
+ *
+ * The position override is gone entirely rather than set back to `right: -11px`, so there is one
+ * definition of where a port lives instead of two that can drift.
+ */
+/* .flow-note-port is revealed by `.flow-note:hover`, and the brief is not a .flow-note, so it needs
+   its own reveal. Same behaviour, different ancestor. */
 .flow-node[data-role='brief']:hover .flow-brief-port,
 .flow-canvas.connecting .flow-brief-port { opacity: 1; }
 
@@ -21641,3 +21666,364 @@ table.aud-sheet td.stick .aud-cell {
   font: inherit; cursor: pointer;
 }
 .chunk-fail-btn:hover { background: var(--surface-2); }
+
+/* ── "Start a campaign" hint ──────────────────────────────────────────────────
+   Anchored to the New campaign button's wrapper rather than measured from the
+   viewport, so it tracks the button through resize, zoom and the rail opening
+   with no JS and no reflow. */
+.flow-home-new-wrap {
+  position: relative;
+}
+.flow-tb-brand-wrap {
+  position: relative;
+  display: inline-flex;
+}
+/* The panel is the positioning context for the two hints that point at it from outside. */
+.flow-panel {
+  position: relative;
+}
+.nc-hint {
+  position: absolute;
+  width: 320px;
+  z-index: 40;
+  padding: 14px 15px 13px;
+  border-radius: 10px;
+  background: var(--surface);
+  /* Accent outline and a soft halo of the same colour, so it reads as the one thing asking for
+     attention on an otherwise empty page. */
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 14px 34px rgba(16, 24, 40, 0.2);
+  text-align: left;
+  /* Slow and small on purpose. Enough movement to catch the eye on arrival, not enough to keep
+     pulling it away from the page afterwards. */
+  animation: nc-hint-bob 2.6s ease-in-out infinite;
+}
+@keyframes nc-hint-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+/* Motion is decoration here: the outline already does the attention-getting, so a person who has
+   asked the OS for less movement loses nothing by having it stopped. */
+@media (prefers-reduced-motion: reduce) {
+  .nc-hint {
+    animation: none;
+  }
+}
+.nc-hint.place-below {
+  top: calc(100% + 12px);
+}
+.nc-hint.place-above {
+  bottom: calc(100% + 12px);
+}
+.nc-hint.align-right {
+  right: 0;
+}
+.nc-hint.align-center {
+  left: 50%;
+  margin-left: -160px;
+}
+/* Beside, for a full-height side panel: there is never room above or below one, and a card placed
+   there lands on top of the thing it is pointing at. */
+.nc-hint.place-left {
+  right: calc(100% + 12px);
+  top: 74px;
+}
+.nc-hint.place-left .nc-hint-arrow {
+  right: -6px;
+  top: 22px;
+  border-right: 1px solid var(--accent);
+  border-top: 1px solid var(--accent);
+}
+/* Rotated square rather than an SVG, so it inherits the card's fill and border. Only the two edges
+   facing the control are drawn, so the arrow reads as part of the card rather than a diamond. */
+.nc-hint-arrow {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  transform: rotate(45deg);
+  background: var(--surface);
+}
+.nc-hint.place-below .nc-hint-arrow {
+  top: -6px;
+  border-left: 1px solid var(--accent);
+  border-top: 1px solid var(--accent);
+}
+.nc-hint.place-above .nc-hint-arrow {
+  bottom: -6px;
+  border-right: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
+}
+/* Alignment moves the arrow ALONG the card's top or bottom edge, so it only applies to the
+   placements that use those edges. Unscoped, `align-right` also set `right` on a place-left arrow,
+   which pulled the pointer off the card's side and dropped it inside the card over the close
+   button, reading as a stray icon rather than part of the card. Same specificity, later rule won. */
+.nc-hint.place-below.align-right .nc-hint-arrow,
+.nc-hint.place-above.align-right .nc-hint-arrow {
+  right: 26px;
+}
+.nc-hint.place-below.align-center .nc-hint-arrow,
+.nc-hint.place-above.align-center .nc-hint-arrow {
+  left: 50%;
+  margin-left: -5px;
+}
+.nc-hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.nc-hint-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.nc-hint-x {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+.nc-hint-x:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.nc-hint-body {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.nc-hint-body:last-child {
+  margin-bottom: 0;
+}
+/* The action that does the thing the card describes. Left-aligned with the text above it, so the
+   card reads top to bottom in one column rather than sending the eye back across to the right. */
+.nc-hint-foot {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 11px;
+}
+.nc-hint-cta {
+  padding: 6px 14px;
+  font-size: 12.5px;
+}
+
+/* ── Campaign setup steps ─────────────────────────────────────────────────────
+   Bottom-left of the canvas: the toolbar owns the bottom centre and the two side
+   panels own the edges, so this is the one corner that is reliably free. */
+.setup-steps {
+  position: absolute;
+  left: 18px;
+  /* Top left, out of the toolbar's way entirely. The toolbar is centred, grew when the model picker,
+     the balance and Generate stopped being hidden in the builder, and reaches far enough left to
+     cover anything sharing the bottom band. Up here the two cannot meet at any width. */
+  top: 18px;
+  z-index: 30;
+  width: 258px;
+  padding: 11px 13px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.18);
+}
+.setup-steps-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 9px;
+}
+.setup-steps-count {
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+.setup-steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.setup-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+/* The number is the state: outlined ahead, filled accent now, ticked once done. */
+.setup-step-n {
+  /* Fixed basis, not auto: as a flex item with a wrapping label beside it, auto lets the circle
+     stretch into an oval. */
+  flex: 0 0 18px;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+}
+.setup-step.now .setup-step-n {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.setup-step.done .setup-step-n {
+  border-color: var(--green);
+  color: var(--green);
+}
+.setup-step-label {
+  color: var(--text-faint);
+}
+.setup-step.now .setup-step-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.setup-step.done .setup-step-label {
+  color: var(--text-muted);
+}
+/* A clickable step is a button filling the row, so the whole line is the target rather than the
+   label alone. Unstyled otherwise: the row already looks the way it should. */
+.setup-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.setup-step.go:hover .setup-step-label {
+  color: var(--text);
+}
+.setup-step.go:hover .setup-step-n {
+  border-color: var(--accent);
+}
+/* Outline, not filled: finishing the setup is a way out, not the thing the panel wants you to do
+   next. The accented control on screen should stay the current step. */
+.setup-steps-done {
+  display: block;
+  width: 100%;
+  margin-top: 11px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.setup-steps-done:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+/* A toast reporting something that did NOT happen. Amber rather than the default, so a refusal and
+   a success are not the same shape in the corner of the eye. */
+.toast.warn {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 16%, transparent);
+}
+.toast.warn .toast-icon {
+  color: var(--amber);
+}
+
+/* ── Generating state ─────────────────────────────────────────────────────────
+   A pill floating above the card, not a tint on it. A board can hold thirty cards
+   and a border shift is easy to miss; the skeleton inside only reads once you are
+   already looking at that one. */
+.flow-node-status {
+  position: absolute;
+  top: -13px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.16);
+}
+.flow-node-status-spin {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.6px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  animation: flow-node-status-spin 0.7s linear infinite;
+}
+@keyframes flow-node-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-node-status-spin {
+    animation: none;
+  }
+}
+/* A clear border while writing, matching the pill, rather than the barely-there tint it replaces. */
+.flow-node.generating {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Parked rail items: visibly present, visibly not available. Dimmed rather than hidden, because a
+   control that vanishes reads as something you broke, and these are coming back. */
+.nav-item.soon {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.nav-item.soon:hover {
+  background: none;
+}
+/* The AI fill box's explainer. Above the field, because what a control does has to be readable
+   before you use it, and the placeholder it replaced disappeared on the first keystroke. */
+.flow-fill-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.flow-fill-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.flow-fill-help {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}

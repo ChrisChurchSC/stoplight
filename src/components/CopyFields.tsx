@@ -89,8 +89,12 @@ export function CopyFields({ fields, values, setField, renderExtras, flagOf, sto
                 {fl.hardLimit ? `/${fl.hardLimit}` : ''}
               </span>
             </span>
+            {/* SIZED BY WHAT IT HOLDS, in two steps rather than one. `tall` covered both a 200
+                character pinned comment and a 5,000 character description, so one height was either
+                too short for the long one or mostly empty under the short one. A field that can take
+                a thousand characters gets the taller box; the heights themselves are in the CSS. */}
             <textarea
-              className={fl.multiline ? 'tall' : ''}
+              className={fl.multiline ? (fl.hardLimit && fl.hardLimit >= 1000 ? 'tall xl' : 'tall') : ''}
               value={val}
               placeholder={`${fl.label}…`}
               onChange={(e) => onType(fl.key, e.target.value)}

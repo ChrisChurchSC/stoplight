@@ -19,6 +19,69 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.14',
+    dateLabel: 'July 31, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A campaign walks you through building itself. Seven steps in the top left corner say what to do and how far along you are, and a card appears beside the control each one needs: add a Brand card, say who the brand is, add the campaign brief, say what you are launching, add what you are shipping, connect them, generate the copy. Clicking a step you have done brings its card back so the list is a way around the board and not only a progress bar, and Complete takes the whole thing away for good.',
+          'Connectors come from any side of a card. A line to the card directly below now leaves the bottom and enters the top instead of exiting right, dropping, and running back around. The sides are worked out from where the two cards actually sit.',
+          'Connectors are easier to grab. The clickable band along a line is much wider than the line you see, so selecting one no longer means hitting a one pixel target.',
+          'Every card can be connected from, not only connected to. Channels and posts were drop targets with no handles of their own, so the one line you could not draw was the one going onward. They now carry the same four handles as every other card, and the handles themselves are smaller.',
+        ],
+      },
+      {
+        tag: 'Improved',
+        items: [
+          'Deliverable cards are called channels, everywhere. Same card, a word people already use for the thing it represents.',
+          'Generating finishes. A twelve asset campaign took 65 seconds against a 60 second ceiling, so it was killed partway through and reported as "the AI could not be reached". The work is now split into batches of four, which finishes in about half the time and costs one batch rather than the campaign when a request does fail.',
+          'Generating says so while it runs, as a small pill on the toolbar, during a build as well as a rewrite.',
+          'Building a campaign drops you into it. It used to leave you looking at the builder while the campaign it had just written sat on a canvas you had not opened.',
+          'Finishing a build is a toast, not a modal you have to dismiss.',
+          'A canvas opens quiet. The assistant panel starts closed, so the first thing you see is the board.',
+          'The model name, the credit balance and Generate are always in the toolbar, and the readouts are small enough to stay on one line.',
+          'The inspector says less. Explanatory notes about things you can see, the generate and rewrite controls that duplicated the toolbar, the schedule and status fields, the format section, the swap and duplicate controls, and the per card discussion thread have all come out. What is left is the copy that ships, what the card is connected to, and the controls that change it.',
+          'The AI prompt box on a card explains what it does to that card, rather than sitting there unlabelled.',
+          'Assets and the assistant tab are greyed out with a "coming soon" note, instead of opening surfaces that are not finished.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'A post says what it is connected to. It was reading only the typed instruction fields on a card, so a Brand card wired into the brief, which carries none and decides which brand every word is written as, was reported as nothing at all: "nothing is wired to this post, so it is written from the campaign brief alone" while that wire was doing exactly that. It now lists the cards, and a card that holds nothing still shows and says so.',
+          'A Brand or Product card shows its name where it is listed, instead of reading "Nothing picked yet" next to the brand it plainly names.',
+          'The copy boxes on a post are outlined like the rest of the panel. They had no colours set at all, so they were whatever the browser draws for a form field: a flat grey slab, lighter than everything around it. Their heights now follow the field, so a 200 character pinned comment is not given the same room as a 5,000 character description, and there is space between one field and the next.',
+          'The inspector’s close button and its collapse button no longer sit on top of each other.',
+          'Channels added to a campaign no longer connect themselves to the brief. You draw that line, which is the same rule every other card follows.',
+          'A built campaign draws its channel lines again. They were being drawn only in the builder, so opening a finished campaign showed cards with nothing between them.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.13',
+    dateLabel: 'July 30, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Cards now carry through a chain. Connecting a card to another card, and that one to the campaign brief, used to deliver only the last card in the line: everything behind it was decoration. The whole chain now reaches the writing, so you can build up a message step by step instead of connecting every card straight to the brief.',
+          'A Brand card decides whose campaign it is. Adding a Brand card to the canvas and connecting it to the brief is now what binds the campaign to that brand, which is also what lets it write copy. Before, the card drew and connected and did nothing at all.',
+          'Connecting the brief to a deliverable no longer pulls that deliverable\u2019s cards into the whole campaign. Cards you scoped to one post stay scoped to it.',
+          'The card list on a campaign now shows everything the writing reads from, not just what is connected directly. It used to say one while the writing used two.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Moving a campaign to a different brand no longer leaves the old brand\u2019s voice in the copy. Records belonging to another brand are refused outright rather than travelling with the board.',
+          'The Campaigns page lost its create-a-brand panel, which no longer matched how brands work. A short note next to New campaign explains what a campaign is instead, and it goes away once you have one.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.12',
     dateLabel: 'July 30, 2026',
     groups: [
@@ -62,7 +125,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
-          'Generate no longer deletes your copy when it cannot run. Pressing it on a campaign with nothing wired up, or one not bound to a brand, cleared every asset\u2019s copy and then refused, and the message that appeared explained why it had not generated rather than that it had just emptied your work. It now checks before it clears anything and says "Nothing was changed".',
+          'Generate no longer deletes your copy when it cannot run. Pressing it on a campaign with nothing connected, or one not bound to a brand, cleared every asset\u2019s copy and then refused, and the message that appeared explained why it had not generated rather than that it had just emptied your work. It now checks before it clears anything and says "Nothing was changed".',
           'Each post records which writer produced it. When the model cannot be reached the app falls back to an offline writer built from your own brand and audience, and that used to be reported as one flag across the whole workspace, so generating one campaign offline put a warning over a different one. Worse, the pass that stops two posts sharing a headline rewrites them one at a time and each rewrite can fall back on its own, so a run could report the model wrote everything while some posts came from templates. Every post now carries its own answer.',
           'A post the model skipped no longer goes quietly blank. If a post was asked for and nothing came back, its copy had already been cleared, and it was left empty with no flag, still carrying the figures and proof of copy it no longer had. It is now marked out of date, so the amber dot on the card tells you to generate it again.',
           'Three website deliverables were quietly making homepages. "Product / feature page", "Solutions page" and "Comparison page" named types the website channel did not list, so every asset seeded from them came out as a homepage with the wrong fields. The three types now exist, and a test fails the build if any deliverable ever names a type its channel does not have.',
@@ -73,11 +136,11 @@ const RELEASES: Release[] = [
           'A table you typed over stops passing as measured. Every cell of every data set is editable, including a pulled one, and that edit used to leave no trace: type 99 percent into a Search Console cell and the card carried on saying "Search Console, 14 Mar 2026" as though Google had said so. An edited table now says so on the card, and holds its figures back, because it is no longer what the source returned. You can still use a number from it by writing that number into The figure yourself, where the claim belongs to a person.',
           'A sketched table sends nothing at all, not even its name. Describe one instead invents every figure it shows, so none of them may reach copy. The writer is not told about the table and then asked not to use it. It is simply never told, because naming a table in order to forbid it just puts the name in front of the model.',
           'Adding up part of a table no longer reads as a total. A pull that stopped at the row cap now records that it did, so totals and shares are held back for it, and the biggest row is described as the biggest of the rows that were fetched rather than the biggest there is.',
-          'The card says what it will send, before you build anything. The inspector lists every figure that will reach the writer, exactly as it will arrive, and when nothing will it says why in one sentence: not wired up yet, sketched, edited, or typed by hand. A rule you cannot see is indistinguishable from the feature being broken.',
+          'The card says what it will send, before you build anything. The inspector lists every figure that will reach the writer, exactly as it will arrive, and when nothing will it says why in one sentence: not connected yet, sketched, edited, or typed by hand. A rule you cannot see is indistinguishable from the feature being broken.',
           'Gretel no longer says it did something it has only suggested. It was told to lead with what it did and to tick each item off with a check mark, while nothing it returns is applied until you press Apply, and some of it is refused even then. So a proposal arrived reading "✓ Set campaign length to 6 weeks" above the Apply button that had not been pressed yet. It now says what it will do, and the check marks appear only in the app’s own report of what actually landed.',
           'Gretel can change the length of a campaign that is already built. Asking for it was refused as "not available on a campaign that is already built" while the stepper in the brief two panels away did exactly that. The command was missing from the saved-campaign path rather than withheld from it, the same way the budget was already handled.',
           'The toolbar says what is left to spend. A balance readout sits next to Generate, showing the model account\u2019s remaining credit and turning amber under a dollar, with the exact usage on hover. It reads the provider account rather than an app ledger, because there is no app ledger, so it is shown honestly in dollars. When the balance cannot be read at all \u2014 no key, no connection \u2014 it shows nothing rather than a zero.',
-          'A campaign with nothing wired up will not generate. The audience and proof pools fall back to the brand\u2019s whole library when nothing pins them, so an unwired campaign used to generate happily by rotating everything the brand owns: copy written from no stated context, which reads plausible and answers to nothing. It now says so and asks you to draw a line from a card first.',
+          'A campaign with nothing connected will not generate. The audience and proof pools fall back to the brand\u2019s whole library when nothing pins them, so a campaign with nothing connected used to generate happily by rotating everything the brand owns: copy written from no stated context, which reads plausible and answers to nothing. It now says so and asks you to draw a line from a card first.',
           'What the writer is told comes from the board. Generation was still reading the campaign\u2019s stored record list to decide which audience each asset speaks to, which proof it cites and which personas it gets, so records with no card behind them were shaping the copy long after the panel had stopped showing them.',
           'A deliverable inherits what the campaign is wired to, not what it has stored. Brand objects are a library you pull onto a campaign, so one counts only once a card on the canvas connects it, and that rule now holds all the way down: a deliverable with no override of its own used to inherit the campaign’s whole stored set, which is how records with no card behind them still reached the assets and still decided who a new deliverable was written to.',
           'A record is linked when a card carrying it is wired to the campaign, and at no other time. An untouched campaign used to link every one of the brand’s audiences by default, the picker and the assistant could pin records with no card behind them, and all of it showed on the brief under "Linked directly" while steering every draft. One campaign had 51 records listed this way, and 377 were spread across eight. What the writer is told now comes from the board, so the panel and the copy agree on one answer.',
@@ -119,7 +182,7 @@ const RELEASES: Release[] = [
           'Data sources carry their platform’s mark. The connect list, the questions and the card itself now show who the data belongs to: Search Console blue, GA4 orange, YouTube red, LinkedIn blue, with the aggregator’s own mark on the provenance line. A card read at a glance, or zoomed out, tells you whether you are looking at search data or LinkedIn data before you read a word of it.',
           'A Data source card holds one source, and now says so. Every route on the card points it at a different data set rather than adding one, so with something already linked, uploading or describing or pulling is a replacement. It used to happen silently: the table you had been reading from was swapped for one with different columns while the card looked much the same. The card states the rule, and the connect panel names the data set it is about to replace and confirms it stays in your data sets. To use one source across several campaigns, make it a smart object and add it to an asset library.',
           'The four connector names on a Data source card were doing nothing. "Google Analytics", "Search Console", "YouTube" and "Resend" sat in the card’s picker, and choosing one set a label and fetched no data, wired to nothing downstream. A card could sit on a canvas looking connected to your analytics while contributing nothing to a single draft. They are replaced by a connect flow that reports what is genuinely reachable.',
-          'Describe a data set when you have none. Pick "Describe one instead" on a Data source card, say what you wish you had, and it sketches the shape: the columns a real export would have, sensible granularity, and dates in the period you asked for. The figures are invented and the card says so in as many words, in the warning tone, with the model\u2019s own note on exactly which columns you need to replace. It is for deciding whether a metric is worth wiring up, not for citing.',
+          'Describe a data set when you have none. Pick "Describe one instead" on a Data source card, say what you wish you had, and it sketches the shape: the columns a real export would have, sensible granularity, and dates in the period you asked for. The figures are invented and the card says so in as many words, in the warning tone, with the model\u2019s own note on exactly which columns you need to replace. It is for deciding whether a metric is worth connecting, not for citing.',
           'Three AI buttons that only ever worked on localhost now work in production. "Describe this card and fill it in", "Fill this in from the site" and the per-field suggestions each had a development-only route and no production one, so on the live app they did nothing. Every card kind that grew a describe-it box was relying on the first of those.',
           'Upload a CSV onto a Data source card. Pick "Upload a CSV" on the card and the file becomes one of your data sets, opened like any other. It reads what real exports actually contain \u2014 quoted commas, escaped quotes, line breaks inside a cell, tab and semicolon files, and the invisible marker Excel puts at the start of a file \u2014 and it tells you what it read: the row and column count, which separator it found, and how many blank rows it skipped. The card shows the filename and the date it came from, because a figure with no provenance is not evidence. Excel files still need exporting as CSV first.',
           'A Data source card stops throwing away your connector. Picking a connector and then double-clicking the card used to silently create a blank spreadsheet and overwrite the connector you had chosen, with nothing to say it had happened.',
