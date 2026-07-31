@@ -51,6 +51,7 @@ import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
 import { CopyFields } from './CopyFields'
 import { Hint } from './Hint'
+import { FlowSteps } from './FlowSteps'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -5311,6 +5312,17 @@ export function FlowsView() {
   const brandConnected = !!brandCard && connectors.some((c) => c.from === brandCard.id && c.to === 'campaign')
   // A built campaign carries its subject already; in the builder it is the name field.
   const briefFilled = viewing || !!name.trim()
+  /**
+   * The steps, in one place, so the corner indicator and the hint cards cannot disagree about what
+   * step you are on. Labels match the hint titles for the same reason.
+   */
+  const SETUP_STEPS = [
+    { id: 'brand', label: 'Add a Brand card' },
+    { id: 'fillBrand', label: 'Say who the brand is' },
+    { id: 'brief', label: 'Add the campaign brief' },
+    { id: 'fillBrief', label: 'Say what you are launching' },
+    { id: 'connect', label: 'Connect them' },
+  ]
   const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | null = !brandCard
     ? 'brand'
     : !brandFilled
@@ -8196,6 +8208,11 @@ export function FlowsView() {
           </div>
           {/* Connector endpoint dots, redrawn on a layer ABOVE the cards so they sit on
               top of each card's edge instead of tucking behind it. */}
+          {/* Inside the canvas, so "bottom left" means the canvas corner rather than the window's:
+              Gretel and the inspector are 360px docked columns, and a sibling of the toolbar would
+              sit underneath whichever of them is open. Beside the hints rather than instead of
+              them, because the card says what to do and this says how far through it you are. */}
+          <FlowSteps steps={SETUP_STEPS} current={hintStep} />
           <svg className="flow-edges-top" width="100%" height="100%">
             {implicitConnectors.map((cn) => {
               const b = connRect(cn.to)

@@ -21786,3 +21786,86 @@ table.aud-sheet td.stick .aud-cell {
   padding: 6px 14px;
   font-size: 12.5px;
 }
+
+/* ── Campaign setup steps ─────────────────────────────────────────────────────
+   Bottom-left of the canvas: the toolbar owns the bottom centre and the two side
+   panels own the edges, so this is the one corner that is reliably free. */
+.setup-steps {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 30;
+  width: 258px;
+  padding: 11px 13px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.18);
+}
+.setup-steps-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 9px;
+}
+.setup-steps-count {
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+.setup-steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.setup-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+/* The number is the state: outlined ahead, filled accent now, ticked once done. */
+.setup-step-n {
+  /* Fixed basis, not auto: as a flex item with a wrapping label beside it, auto lets the circle
+     stretch into an oval. */
+  flex: 0 0 18px;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+}
+.setup-step.now .setup-step-n {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.setup-step.done .setup-step-n {
+  border-color: var(--green);
+  color: var(--green);
+}
+.setup-step-label {
+  color: var(--text-faint);
+}
+.setup-step.now .setup-step-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.setup-step.done .setup-step-label {
+  color: var(--text-muted);
+}
