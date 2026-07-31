@@ -5330,6 +5330,40 @@ export function FlowsView() {
   // A built campaign carries its subject already; in the builder it is the name field.
   const briefFilled = viewing || !!name.trim()
   /**
+   * Steps the person has said they are done with.
+   *
+   * The chain is otherwise inferred from the board, which is right for "have you added a card" and
+   * wrong for "have you said enough about the brand". brandFilled asks for a name AND a one-liner or
+   * a differentiator, so somebody who fills in only what they know is held on a step they consider
+   * finished, with no way past it. Next is that way past: it does not fake the underlying state, it
+   * records that you were asked and answered.
+   *
+   * Persisted, so it survives a reload, and global like the hint dismissals rather than per
+   * campaign: this is scaffolding for the first campaign, not a per-campaign checklist.
+   */
+  const ACK_KEY = 'stoplight.setupAcked.v1'
+  const [stepsAcked, setStepsAcked] = useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(ACK_KEY) || '[]')
+      return Array.isArray(raw) ? (raw as string[]) : []
+    } catch {
+      return []
+    }
+  })
+  const ackStep = (id: string) => {
+    setStepsAcked((prev) => {
+      if (prev.includes(id)) return prev
+      const next = [...prev, id]
+      try {
+        localStorage.setItem(ACK_KEY, JSON.stringify(next))
+      } catch {
+        /* private mode: the step reappearing next reload is not worth failing over */
+      }
+      return next
+    })
+  }
+
+  /**
    * The steps, in one place, so the corner indicator and the hint cards cannot disagree about what
    * step you are on. Labels match the hint titles for the same reason.
    */
@@ -5339,18 +5373,26 @@ export function FlowsView() {
     { id: 'brief', label: 'Add the campaign brief' },
     { id: 'fillBrief', label: 'Say what you are launching' },
     { id: 'connect', label: 'Connect them' },
+    { id: 'generate', label: 'Generate the copy' },
   ]
-  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | null = !brandCard
+  // A step is behind you when the board says so OR when you said so. Only the two "say something"
+  // steps can be acknowledged; adding a card and connecting it are facts, not opinions.
+  const ack = (id: string) => stepsAcked.includes(id)
+  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | 'generate' | null = !brandCard
     ? 'brand'
-    : !brandFilled
+    : !brandFilled && !ack('fillBrand')
       ? 'fillBrand'
       : !hasHub
         ? 'brief'
-        : !briefFilled
+        : !briefFilled && !ack('fillBrief')
           ? 'fillBrief'
           : !brandConnected
             ? 'connect'
-            : null
+            : // Written, not merely built: a campaign with assets and no copy in them has not
+              // finished this step, and that is the state the whole chain exists to get you out of.
+              !viewRows.some((r) => (r.body ?? '').trim())
+              ? 'generate'
+              : null
 
   // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
   // blank canvas + the "What are you launching?" starter as the only front door; the brief card
@@ -8283,6 +8325,7 @@ export function FlowsView() {
               'The card is on the board but empty, so it binds the campaign and tells the writing nothing.',
               'Fill in the one-liner and what sets the brand apart. That is the voice and the claims every asset is allowed to make.',
             ]}
+            cta={{ label: 'Next', onClick: () => ackStep('fillBrand') }}
           />
           <Hint
             show={hintStep === 'fillBrief'}
@@ -8293,6 +8336,7 @@ export function FlowsView() {
               'Name the campaign and set its length. This is the throughline every asset is written to orient around.',
               'Then connect the Brand card to it, and add the cards that shape the message.',
             ]}
+            cta={{ label: 'Next', onClick: () => ackStep('fillBrief') }}
           />
           <button className="flow-panel-collapse" title="Collapse panel" aria-label="Collapse panel" onClick={() => setBriefCollapsed(true)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -9951,6 +9995,7 @@ export function FlowsView() {
                 {aiCredits.remainingCredits.toLocaleString()} credits
               </span>
             )}
+            <div className="flow-tb-brand-wrap">
             <button
               className="flow-tb-regen"
               // A flow with assets regenerates their copy (from the current selection, as before).
@@ -9982,6 +10027,18 @@ export function FlowsView() {
               </svg>
               {regenerating || building ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
             </button>
+            <Hint
+              show={hintStep === 'generate'}
+              storageKey="stoplight.hint.generate.v1"
+              title="Generate the copy"
+              placement="above"
+              align="center"
+              body={[
+                'Everything you connected is what it reads from: the brand, the audiences, the proof, the figures.',
+                'Every asset keeps a record of what it was written from, so anything it could not stand behind is flagged rather than quietly smoothed over.',
+              ]}
+            />
+            </div>
         </>
         </div>
       </div>
