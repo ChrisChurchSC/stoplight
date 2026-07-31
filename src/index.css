@@ -21793,11 +21793,10 @@ table.aud-sheet td.stick .aud-cell {
 .setup-steps {
   position: absolute;
   left: 18px;
-  /* Clear of the toolbar rather than beside it. The toolbar is centred and 105px tall from the
-     canvas floor, and it grew when the model picker, the balance and Generate stopped being hidden
-     in the builder, so a panel sharing that band gets covered as soon as the toolbar is wide enough
-     to reach it. Sitting above it means the two cannot collide at any width. */
-  bottom: 117px;
+  /* Top left, out of the toolbar's way entirely. The toolbar is centred, grew when the model picker,
+     the balance and Generate stopped being hidden in the builder, and reaches far enough left to
+     cover anything sharing the bottom band. Up here the two cannot meet at any width. */
+  top: 18px;
   z-index: 30;
   width: 258px;
   padding: 11px 13px 12px;
@@ -21872,4 +21871,25 @@ table.aud-sheet td.stick .aud-cell {
 }
 .setup-step.done .setup-step-label {
   color: var(--text-muted);
+}
+/* A clickable step is a button filling the row, so the whole line is the target rather than the
+   label alone. Unstyled otherwise: the row already looks the way it should. */
+.setup-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.setup-step.go:hover .setup-step-label {
+  color: var(--text);
+}
+.setup-step.go:hover .setup-step-n {
+  border-color: var(--accent);
 }

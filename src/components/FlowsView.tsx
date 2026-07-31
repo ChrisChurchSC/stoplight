@@ -2941,9 +2941,11 @@ export function FlowsView() {
     // the measure effect does, just current.
     const cr = cv?.getBoundingClientRect()
     // .flow-goal-card is the brief's goal readout: it sits on the canvas and takes up room, but
-    // it isn't a node, so scanning nodes alone would drop a card on top of it.
+    // it isn't a node, so scanning nodes alone would drop a card on top of it. .setup-steps is the
+    // same problem: it sits in the top-left corner, which is exactly where the first card of an
+    // empty board goes, so the very first Brand card landed underneath it.
     const taken = cv && cr
-      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card')].map((el) => {
+      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card, .setup-steps')].map((el) => {
           const r = el.getBoundingClientRect()
           return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
         })
@@ -4266,9 +4268,12 @@ export function FlowsView() {
     setSel(null)
     setPickAt(null)
     setCampaignFilter('all')
-    // A new campaign opens with Gretel expanded, because Gretel IS the front door now: its
-    // empty state asks what you're launching. Only on creation, so collapsing it later sticks.
-    setChatCollapsed(false)
+    // A new campaign opens with Gretel COLLAPSED. It used to open expanded, on the reasoning that
+    // Gretel was the front door and its empty state asked what you were launching. The cards are
+    // the front door now: you start at a Brand card and connect your way to a brief, and the setup
+    // steps say so in the corner. Opening onto a chat panel over a canvas you are meant to be
+    // building on is two front doors, and the quieter one is the canvas.
+    setChatCollapsed(true)
   }
   const openView = (n: string) => {
     persistActiveChat()
@@ -8224,7 +8229,25 @@ export function FlowsView() {
               Gretel and the inspector are 360px docked columns, and a sibling of the toolbar would
               sit underneath whichever of them is open. Beside the hints rather than instead of
               them, because the card says what to do and this says how far through it you are. */}
-          <FlowSteps steps={SETUP_STEPS} current={hintStep} />
+          <FlowSteps
+            steps={SETUP_STEPS}
+            current={hintStep}
+            onPick={(id) => {
+              // Select the card the step is about, which opens the inspector on it. The two "add"
+              // steps do the adding when there is nothing there yet, so the list does the same
+              // thing its hint's button does rather than pointing at a card that does not exist.
+              setBriefCollapsed(false)
+              setSelected(new Set())
+              if (id === 'brand' || id === 'fillBrand' || id === 'connect') {
+                const card = objects.find((o) => o.kind === 'brand')
+                if (card) setSel(card.id)
+                else addObject('brand')
+                return
+              }
+              if (!hasHub) { setBriefHidden(false); setBriefSummoned(true) }
+              setSel('campaign')
+            }}
+          />
           <svg className="flow-edges-top" width="100%" height="100%">
             {implicitConnectors.map((cn) => {
               const b = connRect(cn.to)

@@ -19,7 +19,21 @@ export interface FlowStep {
   label: string
 }
 
-export function FlowSteps({ steps, current }: { steps: FlowStep[]; current: string | null }) {
+/**
+ * CLICKING A STEP GOES TO IT. A finished step takes you back to the card you filled in, so the list
+ * is a way around the board and not only a progress bar. The current one does whatever it is asking
+ * for, which is the same thing its hint's button does. Steps ahead of the current one are not
+ * clickable: they depend on work that has not happened, and offering them would be offering to skip.
+ */
+export function FlowSteps({
+  steps,
+  current,
+  onPick,
+}: {
+  steps: FlowStep[]
+  current: string | null
+  onPick?: (id: string) => void
+}) {
   if (!current) return null
   const at = steps.findIndex((s) => s.id === current)
   return (
@@ -33,12 +47,24 @@ export function FlowSteps({ steps, current }: { steps: FlowStep[]; current: stri
       <ol className="setup-steps-list">
         {steps.map((s, i) => {
           const state = i < at ? 'done' : i === at ? 'now' : 'todo'
+          const go = state !== 'todo' && onPick ? () => onPick(s.id) : undefined
           return (
-            <li key={s.id} className={`setup-step ${state}`}>
-              <span className="setup-step-n" aria-hidden="true">
-                {state === 'done' ? '✓' : i + 1}
-              </span>
-              <span className="setup-step-label">{s.label}</span>
+            <li key={s.id} className={`setup-step ${state}${go ? ' go' : ''}`}>
+              {go ? (
+                <button className="setup-step-btn" onClick={go}>
+                  <span className="setup-step-n" aria-hidden="true">
+                    {state === 'done' ? '✓' : i + 1}
+                  </span>
+                  <span className="setup-step-label">{s.label}</span>
+                </button>
+              ) : (
+                <>
+                  <span className="setup-step-n" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  <span className="setup-step-label">{s.label}</span>
+                </>
+              )}
             </li>
           )
         })}
