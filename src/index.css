@@ -21793,7 +21793,11 @@ table.aud-sheet td.stick .aud-cell {
 .setup-steps {
   position: absolute;
   left: 18px;
-  bottom: 18px;
+  /* Clear of the toolbar rather than beside it. The toolbar is centred and 105px tall from the
+     canvas floor, and it grew when the model picker, the balance and Generate stopped being hidden
+     in the builder, so a panel sharing that band gets covered as soon as the toolbar is wide enough
+     to reach it. Sitting above it means the two cannot collide at any width. */
+  bottom: 117px;
   z-index: 30;
   width: 258px;
   padding: 11px 13px 12px;

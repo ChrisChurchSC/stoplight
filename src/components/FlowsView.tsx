@@ -1258,6 +1258,14 @@ export function FlowsView() {
   const connectFromRef = useRef<string | null>(null)
   connectFromRef.current = connectFrom
   const [building, setBuilding] = useState(false)
+  /**
+   * The model picked in the builder, before there is a campaign to store it on.
+   *
+   * The toolbar's picker is always present now, so it has to be answerable before Build. Held here
+   * and stamped onto the campaign the moment buildFlow names one, rather than being a control that
+   * silently does nothing until a campaign exists.
+   */
+  const [buildModel, setBuildModel] = useState<string | undefined>(undefined)
   // The goal card's objective picker (open state), so you can link/change the goal on the card.
   // Build always writes copy now (the toggle was removed); kept as a constant so the
   // preview + build paths that reference it stay unchanged.
@@ -4564,6 +4572,10 @@ export function FlowsView() {
       // confirmed Content + SEO motion would be silently replaced by the brand/role default. When
       // the user actually chose a motion, stamp it directly so the campaign matches what we told them.
       if (cfg.strategy) patchCampaign(campaignName, { strategy: cfg.strategy })
+      // The model chosen in the toolbar before this campaign existed. Stamped now that it does, so
+      // the picker is not a control that quietly forgets what you told it the moment you press
+      // Build. Undefined means Auto, which is the stored absence rather than a value.
+      if (buildModel) patchCampaign(campaignName, { aiModel: buildModel })
       if (newCampaignParent) setNewCampaignParent(null)
       if (cfg.refs.length) setCampaignReferences(campaignName, cfg.refs)
       // Hand the builder's board and any object made on it to the campaign that now exists. Without
@@ -9851,15 +9863,19 @@ export function FlowsView() {
             </svg>
           </button>
         </div>
-        {viewing && (
-          <>
+        {/* ALWAYS PRESENT. These three were gated on `viewing`, so the toolbar changed shape the
+            moment a campaign was built and the controls that matter most were missing from the
+            screen where you are deciding what to make. Each one answers for itself in the builder:
+            the picker holds its choice until Build, the balance is an account fact rather than a
+            campaign one, and Generate does the same thing the panel's build button does. */}
+        <>
             <span className="flow-tb-divider" />
             {/* WHICH MODEL GENERATE USES, next to the button that uses it. It was only on the
                 campaign brief, which meant choosing it was a trip to another panel and the choice
                 was invisible at the moment you pressed Generate. Same store field either way, so
                 the brief and this stay in step. */}
             {(() => {
-              const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? 'auto')) ?? AI_MODELS[0]
+              const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? buildModel ?? 'auto')) ?? AI_MODELS[0]
               return (
                 <div className="flow-tb-zoom-wrap">
                   <button
@@ -9886,6 +9902,7 @@ export function FlowsView() {
                             className={`flow-tb-zoom-item flow-tb-model-item${m.id === cur.id ? ' on' : ''}`}
                             onClick={() => {
                               if (viewName) patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
+                              else setBuildModel(m.id === 'auto' ? undefined : m.id)
                               setModelOpen(false)
                             }}
                           >
@@ -9917,23 +9934,32 @@ export function FlowsView() {
               // An empty flow has nothing to regenerate yet, so Generate seeds its first assets the
               // same way "Add deliverable" / the AI build does — this keeps AI-built and from-scratch
               // flows behaving identically instead of hiding the control on empty flows.
-              onClick={() => (viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds))}
-              disabled={regenerating || (viewRows.length > 0 && genIds.length === 0)}
+              // Three modes, one button. On a built campaign it regenerates the selection, as
+              // before. In the builder it does what the panel's build button does, because those
+              // being different actions on the same screen is how you get two ways to make a
+              // campaign that behave differently. With nothing to act on either way, it opens the
+              // deliverable picker rather than sitting there dead.
+              onClick={() => {
+                if (!viewing) return nodes.length || channelTagPresets.length ? build() : openAddDeliverable()
+                return viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds)
+              }}
+              disabled={regenerating || building || (viewing && viewRows.length > 0 && genIds.length === 0)}
               aria-label={
-                viewRows.length === 0
-                  ? 'Pick a deliverable to generate its first copy'
-                  : genIds.length
-                    ? 'Generate copy for the selected cards'
-                    : 'Select a card to generate its copy'
+                !viewing
+                  ? 'Build this campaign and write its copy'
+                  : viewRows.length === 0
+                    ? 'Pick a deliverable to generate its first copy'
+                    : genIds.length
+                      ? 'Generate copy for the selected cards'
+                      : 'Select a card to generate its copy'
               }
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
               </svg>
-              {regenerating ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
+              {regenerating || building ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
             </button>
-          </>
-        )}
+        </>
         </div>
       </div>
         </>
