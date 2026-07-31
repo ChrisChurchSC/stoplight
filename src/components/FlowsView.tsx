@@ -8,7 +8,7 @@ import {
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
-import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection } from '../domain/boardResolve'
+import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -26,7 +26,7 @@ import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, fres
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
-import { UNASSIGNED, type FlowRefType, type FlowReference } from '../domain/clients'
+import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
@@ -853,6 +853,7 @@ export function FlowsView() {
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
@@ -2332,8 +2333,15 @@ export function FlowsView() {
    * An unconnected card is a draft thought: on the board, not yet part of the campaign. That is
    * what makes it safe to leave loose cards lying around.
    *
-   * Only the kinds with a FlowRefType can attach, because a ref is what the rest of the app reads.
-   * Of these, segment and proof are the two that actually reach the copy writer today.
+   * Only the kinds with a FlowRefType can CONTRIBUTE A RECORD, because a ref is what the rest of the
+   * app reads. Of these, segment and proof are the two that actually reach the copy writer today.
+   *
+   * This used to read "only the kinds with a FlowRefType can attach", and one kind now attaches
+   * without one: a Brand card BINDS the campaign to its brand instead of handing it a record (see
+   * bindBrandFromCard). It is not an exception waiting for a FlowRefType. A brand is the campaign's
+   * owner, not something the campaign refers to alongside a segment and a proof point, and the
+   * gesture is the same gesture for a good reason: the thing that decides whose voice gets written
+   * should be a wire you can see, not the rail you happened to be standing in when you hit Build.
    */
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
@@ -2360,16 +2368,146 @@ export function FlowsView() {
     return [refForObject(nt)].filter((r): r is FlowReference => !!r)
   }
   /**
+   * THE BRAND A BRAND CARD NAMES, or null when this node is not one (or has not named one yet).
+   *
+   * Resolved against ALL brand objects rather than the workspace-scoped `brandObjects`, because this
+   * lookup is what DECIDES which workspace the campaign belongs to: scoping it by the brand you
+   * happen to be standing in would make a card resolvable only once the binding it is trying to make
+   * had already happened.
+   *
+   * Reads objectsRef, not `objects`. Every path that changes a card's record calls setObjectRef and
+   * then re-attaches in the SAME tick, so the render closure still holds the record the card pointed
+   * at a moment ago, which for a Brand card would bind the campaign to the brand you just replaced.
+   * setObjectRef pushes the new id into the ref for exactly this reason.
+   */
+  const brandCardName = (nodeId: string): string | null => {
+    const o = objectsRef.current.find((n) => n.id === nodeId)
+    if (!o || o.kind !== 'brand' || !o.refId) return null
+    return allBrandObjects.find((b) => b.id === o.refId)?.name?.trim() || null
+  }
+  /** The brands named by the Brand cards wired into the campaign hub, ignoring one node. */
+  const wiredBrandNames = (exceptId?: string): string[] => {
+    const out: string[] = []
+    for (const e of connectors) {
+      if (e.to !== 'campaign' || e.from === exceptId) continue
+      const nm = brandCardName(e.from)
+      if (nm && !out.includes(nm)) out.push(nm)
+    }
+    return out
+  }
+  /** How many of this campaign's assets already carry copy. What makes a rebind or an unbind costly. */
+  const writtenAssetCount = (): number => viewRows.filter((r) => messagingAllText(r).trim()).length
+  /**
+   * WIRING A BRAND CARD INTO THE BRIEF IS HOW A CAMPAIGN GETS ITS BRAND.
+   *
+   * A campaign's brand used to come only from the workspace you were standing in when you built it,
+   * so one built without a brand landed on Unassigned and then refused to write a word: correctly,
+   * but with no gesture on the canvas that could fix it. The Brand card drew, wired, lit up as
+   * connected and did nothing whatsoever, because 'brand' carries no FlowRefType.
+   *
+   * It still carries none, deliberately. A brand is not a record the campaign REFERENCES alongside a
+   * segment and a proof point; it is the campaign's owner, and the three exhaustive
+   * Record<FlowRefType, …> maps would have to grow a member that means something different from
+   * every other one. So the binding runs beside the ref plumbing rather than through it, and
+   * attachToCampaign's early return on "no refs" is left exactly as it was.
+   *
+   * Returns a refusal to show the user, or null when the wire is allowed (having bound it).
+   *
+   * TWO BRAND CARDS ON ONE BRIEF ARE REFUSED, not resolved. Last-wins and first-wins both leave the
+   * board showing two brands while the campaign quietly holds one, and every reader downstream (whose
+   * voice, whose proof, whose rail) then gives an answer the canvas contradicts. Refusing
+   * says which brand already owns the campaign and what to do about it. A second card naming the
+   * SAME brand is allowed: it states nothing new.
+   */
+  const bindBrandFromCard = (nodeId: string): string | null => {
+    const name = brandCardName(nodeId)
+    // Not a Brand card, or an empty one. Wiring a Brand card you have not filled in yet is allowed:
+    // that is an unfinished card, not a contradiction.
+    if (!name) return null
+    const other = wiredBrandNames(nodeId).find((n) => n !== name)
+    if (other) {
+      return `${viewName ? `"${viewName}"` : 'This campaign'} is already bound to ${other} by another Brand card. Unwire that one first. A campaign has one brand, and quietly choosing between two is how one brand's voice ends up in another's copy.`
+    }
+    // BUILD MODE has no campaign to bind yet. buildFlow reads the same wire off the builder board at
+    // the moment it names one, so the binding is made once, from one place.
+    if (viewName === null) return null
+    const current = clientForCampaign(viewName)
+    if (current === name) return null
+    bindCampaignBrand(viewName, name)
+    /**
+     * THE RAIL FOLLOWS THE CAMPAIGN. Every record list on this canvas (segments, proof, messages,
+     * products, and the Brand card's own options) is scoped by clientFilter, so leaving the
+     * workspace pointed at the old brand would mean an open campaign that generates under one brand
+     * while offering you another brand's records to wire into it.
+     */
+    setClientFilter(name)
+    const written = writtenAssetCount()
+    // Moving a campaign that has already been written is not the same as binding one that never had
+    // a brand. Both are allowed (one card owns the binding, and swapping its record is a deliberate
+    // act), but the second is a change to copy that already exists, so it does not pass in silence.
+    if (current !== UNASSIGNED && written) {
+      useTrafficStore.getState().setBrandNotice(
+        `"${viewName}" moved from ${current} to ${name}. ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} still written in ${current}'s voice. Generate again so the copy matches the brand it now belongs to.`,
+      )
+    } else {
+      showToast(`"${viewName}" is bound to ${name}. Its copy is written in that brand's voice.`)
+    }
+    return null
+  }
+  /**
+   * UNWIRING A BRAND CARD (or deleting it): what becomes of the binding it made.
+   *
+   * NEITHER an automatic unbind nor a silent keep. An automatic unbind cuts the brand out from under
+   * assets already written in its voice: the copy survives, its brand does not, and the campaign
+   * lands back in the state generation refuses while claiming a body of work nothing answers for. A
+   * silent keep leaves the campaign bound to a brand no card on the board mentions, which is the
+   * implicit binding this whole change exists to remove.
+   *
+   * So: unbind when nothing has been written, because there is nothing to strand; keep it and SAY SO
+   * when there is, naming how many assets and how to move them. The choice is the user's either way,
+   * it just stops being invisible.
+   *
+   * Unbinding returns the campaign to Unassigned, not to the Drafts space a loose canvas started in.
+   * Unassigned is the state copyBlockerFor refuses, which is the honest answer to "this campaign has
+   * no brand", and it is the same refusal, unchanged, that a campaign with no Brand card has always
+   * got.
+   */
+  const unbindBrandFromCard = (nodeId: string, edges: { from: string; to: string }[]) => {
+    const name = brandCardName(nodeId)
+    if (!name || viewName === null) return
+    // Bound to some other brand: this card never made that binding, so removing it undoes nothing.
+    if (clientForCampaign(viewName) !== name) return
+    // A second card naming the same brand still states it, so the binding stands.
+    if (edges.some((e) => e.to === 'campaign' && e.from !== nodeId && brandCardName(e.from) === name)) return
+    const written = writtenAssetCount()
+    if (written) {
+      useTrafficStore.getState().setBrandNotice(
+        `"${viewName}" is still bound to ${name}: ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} already written in that voice, and taking the brand away would leave copy no brand answers for. Wire a different Brand card to move it, or clear those assets first.`,
+      )
+      return
+    }
+    bindCampaignBrand(viewName, '')
+    showToast(`"${viewName}" is no longer bound to ${name}. Nothing had been written yet. Wire a Brand card before generating.`)
+  }
+  /**
    * Connecting a card to the campaign tags its records on the campaign.
    *
    * The default-set trap: briefRefsEffective falls back to defaultBriefRefs, which is EVERY brand
    * segment. So on an untouched campaign hasRef already matches any audience you attach and the
    * add would no-op while the UI claimed otherwise. The first explicit segment attach therefore
    * REPLACES that implicit default rather than adding to it.
+   *
+   * Returns false when the wire must NOT be drawn (a second Brand card contradicting the one that
+   * already binds this campaign). Every caller that adds the connector has to honour that, or the
+   * board keeps an edge the binding refused.
    */
-  const attachToCampaign = (nodeId: string) => {
+  const attachToCampaign = (nodeId: string): boolean => {
+    // Before the refs, because a Brand card has none: it binds the campaign instead of contributing
+    // to it, and that is the whole of what wiring one does.
+    const refused = bindBrandFromCard(nodeId)
+    if (refused) { useTrafficStore.getState().setBrandNotice(refused); return false }
     const refs = refsBehind(nodeId)
-    if (!refs.length) return
+    if (!refs.length) return true
     const explicit = viewName !== null ? flowRefs : briefRefs
     const firstSegment = refs.some((r) => r.type === 'segment') && explicit === null
     const base = firstSegment ? [] : (explicit ?? [])
@@ -2381,9 +2519,13 @@ export function FlowsView() {
     } else {
       commitBriefRefs(next)
     }
+    return true
   }
   /** Detaching drops the card's refs, unless another attached card still contributes the same one. */
   const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]) => {
+    // Before the refs early-return below, for the same reason attachToCampaign binds before it: a
+    // Brand card carries no refs, so anything downstream of that guard never runs for one.
+    unbindBrandFromCard(nodeId, edges)
     const mine = refsBehind(nodeId)
     if (!mine.length) return
     const stillAttached = edges
@@ -2547,10 +2689,19 @@ export function FlowsView() {
     }
     return out
   }
+  /**
+   * The cards informing `target`, for the panel.
+   *
+   * Reads upstreamCardIds rather than filtering connectors directly, because records chain now: a
+   * card two hops away reaches the writer, and a panel still listing only direct wires would say
+   * "1" over a campaign the writer read two records for. Whether a record ended up in the copy has
+   * to be answerable by looking at this list, so it is the same walk the writer uses.
+   */
   const contextRowsFor = (target: string) => {
-    return connectors
-      .filter((e) => e.to === target)
-      .map((e) => {
+    // key is not read by the walk; viewName is nullable in the builder, before a campaign is named.
+    return upstreamCardIds({ key: viewName ?? '', objects, placements, pos, connectors }, target)
+      .map((from) => {
+        const e = { from, to: target }
         const g = placements.find((p) => p.id === e.from)
         if (g) {
           const so = smartObjectFor(g)
@@ -3764,6 +3915,16 @@ export function FlowsView() {
     // field does, so it raises the Save bar too.
     markCardDirty(id)
     setObjects((n) => n.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x)))
+    /**
+     * AND PUSH IT INTO THE REF, in the same tick.
+     *
+     * Every caller of this re-attaches immediately afterwards (`if (isAttached(…)) attachToCampaign`),
+     * inside the same handler, so `objects` is still the pre-change array. For most kinds that only
+     * costs a lagging ref. For a Brand card it decides which brand OWNS the campaign, so the bind
+     * would follow the record the card pointed at a moment ago — picking Acme on a wired card bound
+     * the campaign back to whatever it named before. brandCardName reads this ref instead.
+     */
+    objectsRef.current = objectsRef.current.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x))
   }
   /**
    * The record a card edits, CREATING it if the card has not named one yet.
@@ -4352,6 +4513,22 @@ export function FlowsView() {
     if (!cfg.nodes.length || building) return null
     setBuilding(true)
     const campaignName = campaignNameFor(cfg.name)
+    /**
+     * THE BRAND CARD WIRED TO THE BRIEF NAMES THE BRAND, ahead of the workspace you happen to be
+     * standing in. Build mode has no campaign to bind while you are drawing, so the wire is read
+     * here, once, at the moment Build names one: the same wire, the same rule, just resolved later.
+     *
+     * More than one distinct brand can only reach this from a board saved before wiring a second
+     * Brand card was refused. Take the first one wired and say what was ignored: picking silently is
+     * the one thing that must not happen.
+     */
+    const wiredBrands = wiredBrandNames()
+    if (wiredBrands.length > 1) {
+      useTrafficStore.getState().setBrandNotice(
+        `Two Brand cards are wired into this brief. "${campaignName}" is being built under ${wiredBrands[0]}; unwire ${wiredBrands.slice(1).join(', ')} so the board says what the campaign does.`,
+      )
+    }
+    const buildBrand = wiredBrands[0] || brand
     try {
       /**
        * REGISTER THE CAMPAIGN EVEN WITH NO BRAND.
@@ -4363,8 +4540,24 @@ export function FlowsView() {
        * (that was already the fallback) and nothing about what it is allowed to do: copyBlockerFor
        * refuses an Unassigned campaign exactly as before. Being listed and being allowed to generate
        * are separate questions, and only the second is the brand boundary.
+       *
+       * A Brand card wired to the brief now answers the first question BEFORE the workspace does, so
+       * a build with no workspace brand is no longer automatically Unassigned: it is bound to the
+       * brand the board says it belongs to. With no Brand card wired, this is unchanged, Unassigned
+       * included.
        */
-      addCampaign({ name: campaignName, client: brand || UNASSIGNED, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      addCampaign({ name: campaignName, client: buildBrand || UNASSIGNED, strategy: cfg.strategy ?? 'content-seo', parent: newCampaignParent ?? undefined, subject: cfg.subject.trim() || undefined, durationWeeks: cfg.flightWeeks, overallBudget: cfg.budget ? Math.max(0, +cfg.budget || 0) : undefined, objective: cfg.objective?.text, goalKpi: cfg.objective?.kpi, goalTarget: cfg.objective?.target })
+      /**
+       * Then bind it properly. addCampaign registers the NAME, but a brand that only ever existed on
+       * a card is not yet a client of this workspace, so the campaign would resolve to a brand with
+       * no rail, no profile and no library. bindCampaignBrand adds it and is a no-op when the brand
+       * is already there, which is every build that came from the workspace brand.
+       *
+       * The rail follows too (see the setClientFilter at the end of this build), for the same reason
+       * it does when you wire a Brand card into a live campaign: the canvas about to open must offer
+       * the records of the brand the campaign now belongs to.
+       */
+      if (wiredBrands[0]) bindCampaignBrand(campaignName, wiredBrands[0])
       // addCampaign treats 'content-seo' as a "no explicit choice" sentinel, so a deliberately
       // confirmed Content + SEO motion would be silently replaced by the brand/role default. When
       // the user actually chose a motion, stamp it directly so the campaign matches what we told them.
@@ -4429,7 +4622,11 @@ export function FlowsView() {
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
-      setClientFilter(brand || 'all')
+      //
+      // buildBrand, not `brand`: a Brand card wired to the brief has just re-homed this campaign, so
+      // pointing the rail at the workspace you were standing in would scope every one of those views
+      // to a brand the campaign no longer belongs to, and hide the assets it just built.
+      setClientFilter(buildBrand || 'all')
       setCampaignFilter(campaignName)
       return { name: campaignName, copyBlocked }
     } finally {
@@ -4628,11 +4825,15 @@ export function FlowsView() {
       if (!to) { skipped.push(`Could not find "${c.to}" on the board`); return }
       if (from === to) { skipped.push('A card cannot be wired to itself'); return }
       if (c.op === 'connect') {
-        setConnectors((cs) => (cs.some((x) => x.from === from && x.to === to) ? cs : [...cs, { from, to }]))
         // The same two calls the drag gesture makes, so a wire drawn by the chat and one drawn by
-        // hand are the same wire: records onto the campaign or onto the target's rows.
-        if (to === 'campaign') attachToCampaign(from)
-        else if (isContextNode(from)) attachToTarget(from, to)
+        // hand are the same wire: records onto the campaign (or a brand binding), or records onto
+        // the target's rows. Attach FIRST, because it can refuse (a second Brand card contradicting
+        // the one that already binds this campaign) and a refused wire must not be drawn. Skipping
+        // it here is how the agent hears about the refusal instead of stamping the batch applied.
+        if (to === 'campaign') {
+          if (!attachToCampaign(from)) { skipped.push(`Could not wire ${c.from} into ${c.to}: this campaign is already bound to another brand`); return }
+        } else if (isContextNode(from)) attachToTarget(from, to)
+        setConnectors((cs) => (cs.some((x) => x.from === from && x.to === to) ? cs : [...cs, { from, to }]))
         applied.push(`Wired ${c.from} into ${c.to}`)
       } else {
         setConnectors((cs) => cs.filter((x) => !(x.from === from && x.to === to)))
@@ -7274,12 +7475,15 @@ export function FlowsView() {
               // the right way round rather than making the user guess which end to start from.
               const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
               if (pair && pair.from !== pair.to) {
-                setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
-                if (pair.to === 'campaign') attachToCampaign(pair.from)
+                // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
+                // already bound to a different brand is refused (attachToCampaign says why), and a
+                // refused wire must not be left on the board contradicting the binding.
+                const ok = pair.to === 'campaign' ? attachToCampaign(pair.from) : true
                 // A card wired to a DELIVERABLE or a POST informs just that one. The edge was already
                 // drawable and already saved; nothing acted on it, so it looked connected and changed
                 // nothing about the copy.
-                else if (isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
+                if (ok && pair.to !== 'campaign' && isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
+                if (ok) setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
               }
               drawingFrom.current = null
               setDrawing(null)
