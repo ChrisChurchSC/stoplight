@@ -2941,11 +2941,12 @@ export function FlowsView() {
     // the measure effect does, just current.
     const cr = cv?.getBoundingClientRect()
     // .flow-goal-card is the brief's goal readout: it sits on the canvas and takes up room, but
-    // it isn't a node, so scanning nodes alone would drop a card on top of it. .setup-steps is the
-    // same problem: it sits in the top-left corner, which is exactly where the first card of an
-    // empty board goes, so the very first Brand card landed underneath it.
+    // it isn't a node, so scanning nodes alone would drop a card on top of it. .setup-steps and
+    // .nc-hint are the same problem: the step list sits in the top-left corner, which is exactly
+    // where the first card of an empty board goes, and a hint is anchored under the card it
+    // describes, which is where the next one goes. Both were landed on before this listed them.
     const taken = cv && cr
-      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card, .setup-steps')].map((el) => {
+      ? [...cv.querySelectorAll('.flow-node[data-node-id], .flow-goal-card, .setup-steps, .nc-hint')].map((el) => {
           const r = el.getBoundingClientRect()
           return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }
         })
@@ -8270,13 +8271,24 @@ export function FlowsView() {
                               <div className="flow-branch-row" key={bi}>
                                 <span className="flow-branch-port" style={{ borderColor: TONE_HEX[p.tone] }} />
                                 <div
-                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}`}
+                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}${building ? ' generating' : ''}`}
                                   data-node-id={`${n.id}:${bi}`}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[`${n.id}:${bi}`]?.x ?? 0}px, ${pos[`${n.id}:${bi}`]?.y ?? 0}px)` }}
                                   onMouseDown={(e) => startDrag(e, `${n.id}:${bi}`)}
                                   onClick={(e) => clickSelect(e, `${n.id}:${bi}`)}
                                 >
+                                  {/* The build is the generation people actually watch, and until
+                                      this was here the only sign it was running was the toolbar
+                                      button. regenIds cannot drive it: these are builder subcards
+                                      and the rows it names do not exist until the build creates
+                                      them, so the builder's own `building` flag is the signal. */}
+                                  {building && (
+                                    <span className="flow-node-status" aria-hidden="true">
+                                      <span className="flow-node-status-spin" />
+                                      Writing
+                                    </span>
+                                  )}
                                   {/* Matches the view-mode post chip. Uses the preset's own word so a
                                       lead magnet reads Section and a site page reads Page. */}
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
