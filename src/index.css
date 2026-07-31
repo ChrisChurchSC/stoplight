@@ -21742,6 +21742,24 @@ table.aud-sheet td.stick .aud-cell {
 .tour-card.arrow-top .tour-arrow {
   top: -6px;
 }
+/* Side arrows run down the card's edge, so they cancel the horizontal centring the top/bottom ones
+   need and take a vertical one instead. */
+.tour-card.arrow-left .tour-arrow,
+.tour-card.arrow-right .tour-arrow {
+  margin-left: 0;
+  margin-top: -6px;
+  background: var(--surface);
+}
+.tour-card.arrow-left .tour-arrow {
+  left: -6px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.tour-card.arrow-right .tour-arrow {
+  right: -6px;
+  border-right: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
 .tour-card.arrow-bottom .tour-arrow {
   bottom: -6px;
   background: var(--surface);
@@ -21772,4 +21790,12 @@ table.aud-sheet td.stick .aud-cell {
 .tour-card.arrow-top .tour-arrow {
   border-left: 1px solid var(--border);
   border-top: 1px solid var(--border);
+}
+/* Shown only while a step is waiting for the screen that holds its target. Quieter than the body
+   copy because it is an instruction about where to go, not part of the lesson. */
+.tour-body .tour-waiting {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  font-style: italic;
+  margin-top: -4px;
 }

@@ -26,8 +26,18 @@ export interface TourStep {
   /**
    * Optional element to point at. Degrades to a centred card when it does not resolve, so a
    * selector going stale is a cosmetic loss rather than a broken step.
+   *
+   * These are structural class names, not decorative ones, which is why it is safe to target them:
+   * .fchat is the assistant panel, .flow-tb-palette the canvas toolbar, .flow-tb-regen the Generate
+   * button. If one is ever renamed the step centres instead of breaking.
    */
   anchor?: string
+  /**
+   * Shown while the anchor has not appeared yet, because the step describes something that only
+   * exists on another screen. Without it a card would sit in the middle talking about a Generate
+   * button nobody can see, which is the failure this whole change is meant to remove.
+   */
+  waitingFor?: string
   /** Overrides the "Next" label on the last card, so the tour ends on an action. */
   cta?: string
 }
@@ -54,17 +64,21 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'gretel',
     title: 'Describe the campaign',
     body: [
-      'Open a campaign and tell Gretel what you are launching, in the words you would use with a colleague.',
+      'Tell Gretel what you are launching, in the words you would use with a colleague.',
       'She picks a motion, proposes the posts and emails, and shows you the plan before anything is created.',
     ],
+    anchor: '.fchat',
+    waitingFor: 'Open a campaign and this card will point at the assistant.',
   },
   {
     id: 'wiring',
     title: 'Connect what it writes from',
     body: [
-      'The canvas is not a diagram. A card only reaches the copy when you draw a line from it, so what you connect is exactly what the writing is allowed to use.',
-      'That is why a campaign with nothing wired up will refuse to write rather than invent something.',
+      'Add cards from here, then draw a line from each one to what it should inform.',
+      'The canvas is not a diagram: a card only reaches the copy once it is connected, which is why a campaign with nothing wired up refuses to write rather than inventing something.',
     ],
+    anchor: '.flow-tb-palette',
+    waitingFor: 'Open a campaign and this card will point at the toolbar.',
   },
   {
     id: 'generate',
@@ -73,7 +87,9 @@ export const TOUR_STEPS: TourStep[] = [
       'Generate writes every asset at once, and each one keeps the audience, proof and figures it came from.',
       'Anything it could not stand behind is flagged rather than quietly smoothed over.',
     ],
-    cta: 'Start with a brand',
+    anchor: '.flow-tb-regen',
+    waitingFor: 'Build the campaign and this card will point at Generate.',
+    cta: 'Got it',
   },
 ]
 

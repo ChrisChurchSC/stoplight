@@ -61,8 +61,11 @@ interface Placement {
   top: number
   left: number
   /** Which edge the arrow sits on, or null when the card is centred and has no arrow. */
-  arrow: 'top' | 'bottom' | null
+  arrow: 'top' | 'bottom' | 'left' | 'right' | null
+  /** Offset of the arrow along the card's edge. Horizontal for top/bottom, vertical for left/right. */
   arrowLeft: number
+  /** False while a step that wants an anchor has not found one, so the card can say why. */
+  anchored: boolean
 }
 
 const CARD_W = 380
@@ -112,23 +115,77 @@ export function Tour() {
       // An element that is present but scrolled out of view is no better than a missing one.
       const visible = r && r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight
       if (!visible || !r) {
-        setPlace({ top: Math.max(24, (window.innerHeight - h) / 2), left: (window.innerWidth - CARD_W) / 2, arrow: null, arrowLeft: 0 })
+        setPlace({
+          top: Math.max(24, (window.innerHeight - h) / 2),
+          left: (window.innerWidth - CARD_W) / 2,
+          arrow: null,
+          arrowLeft: 0,
+          anchored: !step.anchor,
+        })
         return
       }
-      // Below the anchor when there is room, above it when there is not.
-      const below = r.bottom + GAP + h < window.innerHeight - 16
-      const top = below ? r.bottom + GAP : Math.max(16, r.top - GAP - h)
-      const rawLeft = r.left + r.width / 2 - CARD_W / 2
-      const left = Math.min(Math.max(16, rawLeft), window.innerWidth - CARD_W - 16)
-      setPlace({ top, left, arrow: below ? 'top' : 'bottom', arrowLeft: r.left + r.width / 2 - left })
+      /**
+       * Below, above, or beside, in that order of preference.
+       *
+       * Beside is not a nicety: the assistant is a full-height side panel, so there is never room
+       * above or below it, and an above/below-only version lands the card ON TOP of the thing it is
+       * pointing at. Toolbars sit at the bottom and take "above"; panels take "beside".
+       */
+      const clampY = (y: number) => Math.min(Math.max(16, y), Math.max(16, window.innerHeight - h - 16))
+      const clampX = (x: number) => Math.min(Math.max(16, x), Math.max(16, window.innerWidth - CARD_W - 16))
+
+      if (r.bottom + GAP + h < window.innerHeight - 16) {
+        const left = clampX(r.left + r.width / 2 - CARD_W / 2)
+        setPlace({ top: r.bottom + GAP, left, arrow: 'top', arrowLeft: r.left + r.width / 2 - left, anchored: true })
+      } else if (r.top - GAP - h > 16) {
+        const left = clampX(r.left + r.width / 2 - CARD_W / 2)
+        setPlace({ top: r.top - GAP - h, left, arrow: 'bottom', arrowLeft: r.left + r.width / 2 - left, anchored: true })
+      } else {
+        // To the right when it fits, otherwise to the left. The arrow runs down the card's edge.
+        const toRight = r.right + GAP + CARD_W < window.innerWidth - 16
+        const left = toRight ? r.right + GAP : Math.max(16, r.left - GAP - CARD_W)
+        const top = clampY(r.top + r.height / 2 - h / 2)
+        setPlace({ top, left, arrow: toRight ? 'left' : 'right', arrowLeft: r.top + r.height / 2 - top, anchored: true })
+      }
     }
     compute()
     window.addEventListener('resize', compute)
     // Capture phase: most scrolling here happens inside panels, not on window, and those do not bubble.
     window.addEventListener('scroll', compute, true)
+
+    /**
+     * Watch for the anchor arriving.
+     *
+     * Steps 3 to 5 describe things that only exist inside a campaign, so when the card first shows
+     * its target is not in the document at all. Without this the card would sit in the middle
+     * talking about a Generate button that appears a moment later and never move to it.
+     *
+     * Only runs while an anchor is genuinely missing, and coalesces to one measurement per frame.
+     * A permanent whole-document observer in an app with a live canvas would fire constantly for
+     * nothing; this one stops itself as soon as the element it is waiting for exists.
+     */
+    let obs: MutationObserver | null = null
+    if (step.anchor && !document.querySelector(step.anchor)) {
+      let queued = false
+      obs = new MutationObserver(() => {
+        if (queued) return
+        queued = true
+        requestAnimationFrame(() => {
+          queued = false
+          compute()
+          if (step.anchor && document.querySelector(step.anchor)) {
+            obs?.disconnect()
+            obs = null
+          }
+        })
+      })
+      obs.observe(document.body, { childList: true, subtree: true })
+    }
+
     return () => {
       window.removeEventListener('resize', compute)
       window.removeEventListener('scroll', compute, true)
+      obs?.disconnect()
     }
   }, [state.step, state.done, step])
 
@@ -166,7 +223,16 @@ export function Tour() {
       role="dialog"
       aria-label={step.title}
     >
-      {place?.arrow && <span className="tour-arrow" style={{ left: place.arrowLeft }} />}
+      {place?.arrow && (
+        <span
+          className="tour-arrow"
+          style={
+            place.arrow === 'left' || place.arrow === 'right'
+              ? { top: place.arrowLeft }
+              : { left: place.arrowLeft }
+          }
+        />
+      )}
       <div className="tour-head">
         <span className="tour-title">{step.title}</span>
         <button className="tour-x" onClick={finish} aria-label="Close the tour">
@@ -177,6 +243,7 @@ export function Tour() {
         {step.body.map((p) => (
           <p key={p}>{p}</p>
         ))}
+        {place && !place.anchored && step.waitingFor && <p className="tour-waiting">{step.waitingFor}</p>}
       </div>
       <div className="tour-foot">
         <span className="tour-count">
