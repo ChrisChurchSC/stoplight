@@ -841,6 +841,7 @@ export function FlowsView() {
   const userPrefs = useTrafficStore((s) => s.userPrefs)
   const patchCampaignRaw = useTrafficStore((s) => s.patchCampaign)
   const showToast = useTrafficStore((s) => s.showToast)
+  const showToastAction = useTrafficStore((s) => s.showToastAction)
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const allCompanies = useTrafficStore((s) => s.companies)
@@ -1276,7 +1277,6 @@ export function FlowsView() {
    * "12 draft assets" over twelve empty ones: `copy` said only that copy had been ASKED for, and
    * the refusal happened downstream where nothing reported back.
    */
-  const [built, setBuilt] = useState<{ name: string; count: number; copy: boolean; source: CopySource | null; blocked: string | null } | null>(null)
   // Live draft copy per deliverable node, generated when it's added (and on redraft).
   // Ephemeral UI state: never seeded into rows or localStorage until you Build.
   const [preview, setPreview] = useState<Record<string, { loading: boolean; source: CopySource | null; posts: { headline: string; primary: string; components: { key: string; label: string; value: string }[] }[] }>>({})
@@ -4242,7 +4242,6 @@ export function FlowsView() {
     persistActiveChat()
     setChatMsgs([])
     setViewName(null)
-    setBuilt(null)
     setNodes([])
     setObjects([])
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
@@ -4300,7 +4299,6 @@ export function FlowsView() {
     setConnectors(loaded.connectors)
     setPos((p) => ({ ...p, ...loaded.pos }))
     setViewName(n)
-    setBuilt(null)
     setPickAt(null)
     setSel(null)
     setBriefHidden(false)
@@ -4339,8 +4337,18 @@ export function FlowsView() {
     return [...map.entries()]
   }, [pickGroup])
 
-  // Every deliverable is pre-wired to each of its per-month post cards (the same SVG
-  // connectors you can draw by hand), so they arrive connected to the main card.
+  /**
+   * Edges drawn for you, as opposed to ones you connected.
+   *
+   * A deliverable is pre-wired to its own post cards, because those posts ARE that deliverable and
+   * the line says so. It is NOT wired to the campaign brief: that connection is a decision, it is
+   * what the setup asks you to make, and drawing it automatically made the board claim a link the
+   * writer would not honour. A card only reaches the copy once it is connected, so a line nobody
+   * drew is the one thing on this canvas that must not appear.
+   *
+   * These are render-only. They are never merged into board.connectors, so nothing here changes what
+   * generation reads.
+   */
   const implicitConnectors = useMemo(() => {
     const out: { from: string; to: string }[] = []
     if (viewName !== null) {
@@ -4348,16 +4356,16 @@ export function FlowsView() {
       // that was added off an asset card hangs from that asset instead of the campaign, so the
       // journey (asset → next step) reads as a forward edge on the canvas.
       for (const d of viewDelivs) {
+        // A deliverable added off an asset card hangs from that asset, so the journey reads as a
+        // forward edge. With no such source it hangs from nothing until you connect it.
         const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
         const srcRow = branchSrc ? viewRows.find((r) => r.assetName === branchSrc) : undefined
-        out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
+        if (srcRow) out.push({ from: srcRow.id, to: d.key })
         for (const r of d.rows) out.push({ from: d.key, to: r.id })
       }
       return out
     }
     for (const n of nodes) {
-      // Every deliverable hangs off the campaign card.
-      out.push({ from: 'campaign', to: n.id })
       const p = presetByKey(n.presetKey)
       if (!p) continue
       // Wire the deliverable to each sub-card it renders (posts, sections, or a page card).
@@ -4637,7 +4645,35 @@ export function FlowsView() {
         if (copyBlocked) useTrafficStore.getState().setBrandNotice(copyBlocked)
         else source = await draftCopy(allNewIds)
       }
-      setBuilt({ name: campaignName, count: allNewIds.length, copy: writeCopy, source, blocked: copyBlocked })
+      /**
+       * A toast, not a modal.
+       *
+       * The card that used to appear here stopped the screen to report a result you had just asked
+       * for, and its two buttons were "open the thing" and "do nothing", which is what closing it
+       * did anyway. A toast says the same thing without taking the canvas away, and it carries the
+       * one action worth offering. Starting another needs no button: doing nothing leaves you in the
+       * builder, which IS starting another.
+       *
+       * The refusal keeps copyBlockerFor's own words, so the toast and the store cannot say two
+       * different things about the same rule, and it goes out in the warning tone: "built" and
+       * "built but nothing was written" must not look alike.
+       */
+      const n = allNewIds.length
+      /**
+       * Short enough to read at a glance, which is the whole point of a toast. The full reason a
+       * refusal happened is already on the brand notice in the panel and in the setup steps, so
+       * repeating copyBlockerFor's sentence here would be a paragraph in the corner of the screen
+       * saying what two other surfaces already say properly.
+       */
+      const msg = copyBlocked
+        ? `Built · ${n} empty asset${n === 1 ? '' : 's'}. No copy yet.`
+        : `Built · ${n} draft${n === 1 ? '' : 's'}${source === 'heuristic' ? ', written offline' : ''}.`
+      showToastAction(
+        msg,
+        'Open campaign',
+        () => { openView(campaignName); setFlowView('flow') },
+        copyBlocked ? 'warn' : 'info',
+      )
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
@@ -7291,55 +7327,6 @@ export function FlowsView() {
         </div>
       </header>
 
-      {built && (
-        <div className="flow-built">
-          <div className="flow-built-card">
-            <div className="flow-built-check" aria-hidden="true">
-              ✓
-            </div>
-            <div className="flow-built-title">Campaign built</div>
-            {/* "12 draft assets" read as twelve written drafts, which is exactly what they were not
-                on the run that made this card lie. An asset that was scheduled but never written is
-                an EMPTY asset, and the card says so before the user opens twelve blank ones. */}
-            <div className="flow-built-sub">
-              {built.name.replace(`${brand} — `, '')} · {built.count}{' '}
-              {built.copy && !built.blocked ? 'draft' : 'empty'} asset{built.count === 1 ? '' : 's'}
-            </div>
-            {built.blocked ? (
-              /* The refusal in copyBlockerFor's own words, so the card and the store cannot say two
-                 different things about the same rule. Styled with the amber variant the offline
-                 badge already defines: it is the warning tone, and reusing it needs no new CSS. */
-              <div className="flow-built-badge heuristic">
-                <span className="flow-built-badge-dot" aria-hidden="true" />
-                No copy was written. {built.blocked}
-              </div>
-            ) : built.copy && built.source ? (
-              <div className={`flow-built-badge ${built.source}`}>
-                {built.source === 'claude' ? (
-                  <>
-                    <span className="flow-built-badge-dot" aria-hidden="true" />
-                    {built.count} draft{built.count === 1 ? '' : 's'} written by Claude
-                  </>
-                ) : (
-                  <>
-                    <span className="flow-built-badge-dot" aria-hidden="true" />
-                    Written offline · add Anthropic API credits for Claude drafts
-                  </>
-                )}
-              </div>
-            ) : null}
-            <div className="flow-built-actions">
-              <button className="flow-built-open" onClick={() => { openView(built.name); setFlowView('flow') }}>
-                Open campaign
-              </button>
-              <button className="flow-built-new" onClick={startNew}>
-                Start another
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {flowView === 'flow' && (
         <>
       <div className="flow-body">
@@ -8128,6 +8115,16 @@ export function FlowsView() {
                                   onMouseDown={(e) => startDrag(e, r.id)}
                                   onClick={(e) => clickSelect(e, r.id)}
                                 >
+                                  {/* A floating pill above the card while it is being written. The
+                                      border tint alone is easy to miss on a board of thirty cards,
+                                      and the skeleton inside only says something is happening once
+                                      you are already looking at that card. */}
+                                  {regenIds.has(r.id) && (
+                                    <span className="flow-node-status" aria-hidden="true">
+                                      <span className="flow-node-status-spin" />
+                                      Writing
+                                    </span>
+                                  )}
                                   {/* Every output wears a filled kind chip; an input never does. Post
                                       cards were the one output missing theirs. */}
                                   <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>

@@ -4470,7 +4470,6 @@ button {
    placeholder can have the shape of the thing you are waiting for. The card also dims its border
    rather than pulsing the whole tile: several of these run at once and a canvas of throbbing cards
    is harder to read than one that simply looks busy. */
-.flow-node.generating { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .flow-copy-skel { display: flex; flex-direction: column; gap: 5px; padding: 1px 0 2px; }
 .flow-copy-skel span {
   display: block; height: 7px; border-radius: 4px;
@@ -7263,17 +7262,27 @@ button {
 }
 /* Wide invisible click target along each connector so the thin dotted line is easy to hit; hovering
    the band turns the edge red to signal "click to delete". */
+/* The clickable band around a connector, which is much wider than the line you can see. A 1.4px
+   stroke is a hard thing to hit with a mouse and impossible to hit while the canvas is zoomed out,
+   so the target is generous. Cards render above this layer, so widening it cannot steal their
+   clicks. */
 .flow-edge-hit {
   fill: none;
   stroke: transparent;
-  stroke-width: 16;
+  stroke-width: 30;
   stroke-linecap: round;
   pointer-events: stroke;
   cursor: pointer;
 }
+/* Thicker as well as red on hover: at 2px the feedback was the colour alone, which is easy to miss
+   on a board with a lot of lines and no help at all if you are unsure WHICH line you are about to
+   act on. */
 .flow-edge-g:hover .flow-edge {
   stroke: var(--red);
-  stroke-width: 2;
+  stroke-width: 3.2;
+}
+.flow-edge-g:hover .flow-edge-dot {
+  fill: var(--red);
 }
 /* A connector that touches a card carrying media budget/spend: gold, so paid paths read at a
    glance apart from organic ones. */
@@ -7303,50 +7312,6 @@ button {
   display: none;
 }
 /* Post-build result — stays in the flow instead of jumping to the old canvas. */
-.flow-built {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: blur(2px);
-}
-.flow-built-card {
-  background: var(--surface);
-  border: 1px solid var(--border-strong, var(--border));
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.22);
-  padding: 28px 30px;
-  text-align: center;
-  max-width: 380px;
-}
-.flow-built-check {
-  width: 46px;
-  height: 46px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--green, #33b579) 18%, transparent);
-  color: var(--green, #33b579);
-  font-size: 24px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.flow-built-title {
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.flow-built-sub {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 6px;
-  line-height: 1.5;
-}
 /* Copy-source badge: which writer produced the drafts. Green = real Claude API,
    amber = offline heuristic fallback (no API key/credits). Colors blend the hue
    toward --text so the label stays legible in both light and dark themes. */
@@ -7384,37 +7349,6 @@ button {
 }
 .flow-built-badge.heuristic .flow-built-badge-dot {
   background: #eab308;
-}
-.flow-built-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 20px;
-}
-.flow-built-open,
-.flow-built-new {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 9px 15px;
-  border-radius: 9px;
-  cursor: pointer;
-}
-.flow-built-open {
-  border: 0;
-  background: var(--accent);
-  color: #fff;
-}
-.flow-built-open:hover {
-  filter: brightness(1.05);
-}
-.flow-built-new {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-}
-.flow-built-new:hover {
-  background: var(--surface-2);
 }
 
 /* ---- main column ---- */
@@ -21936,4 +21870,60 @@ table.aud-sheet td.stick .aud-cell {
 .setup-steps-done:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+/* A toast reporting something that did NOT happen. Amber rather than the default, so a refusal and
+   a success are not the same shape in the corner of the eye. */
+.toast.warn {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 16%, transparent);
+}
+.toast.warn .toast-icon {
+  color: var(--amber);
+}
+
+/* ── Generating state ─────────────────────────────────────────────────────────
+   A pill floating above the card, not a tint on it. A board can hold thirty cards
+   and a border shift is easy to miss; the skeleton inside only reads once you are
+   already looking at that one. */
+.flow-node-status {
+  position: absolute;
+  top: -13px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.16);
+}
+.flow-node-status-spin {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.6px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  animation: flow-node-status-spin 0.7s linear infinite;
+}
+@keyframes flow-node-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-node-status-spin {
+    animation: none;
+  }
+}
+/* A clear border while writing, matching the pill, rather than the barely-there tint it replaces. */
+.flow-node.generating {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }

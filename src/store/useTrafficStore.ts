@@ -2574,8 +2574,10 @@ interface TrafficState {
   showToast: (msg: string | null) => void
   /** Optional action shown on the toast (e.g. "Undo" after a soft delete). Cleared with the toast. */
   toastAction: { label: string; run: () => void } | null
+  /** 'warn' for a toast reporting something that did not happen, so success and refusal do not look alike. */
+  toastTone: 'info' | 'warn'
   /** Show a toast with an action button (used for undo after archive/delete). */
-  showToastAction: (msg: string, label: string, run: () => void) => void
+  showToastAction: (msg: string, label: string, run: () => void, tone?: 'info' | 'warn') => void
   /** The inspectable baseline for a brand: which voice / proof set is in force and from
    *  where (self + ancestors + shares). Drives the canvas baseline chip + coherence report. */
   brandBaselineFor: (brand: string) => BrandBaseline
@@ -2955,6 +2957,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   aiCredits: null,
   toast: null,
   toastAction: null,
+  toastTone: 'info',
   accountsByBrand: loadJson<Record<string, Account[]>>(ACCOUNTS_KEY, {}),
   targetLists: loadJson<TargetList[]>(TARGET_LISTS_KEY, []),
   campaignTargetList: loadJson<Record<string, string>>(CAMPAIGN_TARGET_KEY, {}),
@@ -6332,8 +6335,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ aiCredits: null })
     }
   },
-  showToast: (msg) => set({ toast: msg, toastAction: null }),
-  showToastAction: (msg, label, run) => set({ toast: msg, toastAction: { label, run } }),
+  showToast: (msg) => set({ toast: msg, toastAction: null, toastTone: 'info' }),
+  showToastAction: (msg, label, run, tone = 'info') => set({ toast: msg, toastAction: { label, run }, toastTone: tone }),
 
   brandBaselineFor: (brand) => {
     const s = get()
