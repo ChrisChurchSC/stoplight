@@ -230,24 +230,82 @@ function stripEmDashes(d: AssetDraft): AssetDraft {
   return { ...d, components: d.components.map((c) => ({ ...c, value: fix(c.value) })) }
 }
 
+/**
+ * How many assets go in one request.
+ *
+ * MEASURED, not chosen. The endpoint writes every asset it is given in a single model call, and the
+ * time scales with the count: 1 asset 12.4s, 3 assets 25.9s, 12 assets 64.8s. Vercel caps every
+ * function in this project at 60 seconds (vercel.json), so a real campaign of a dozen posts and
+ * emails was killed by the platform partway through, and the client reported it as "the AI could
+ * not be reached".
+ *
+ * Four keeps a request near 30s, half the ceiling, with room for a slower day. Chunks go out
+ * together, so twelve assets now finish in about the time three used to take rather than timing out.
+ */
+const ASSETS_PER_REQUEST = 4
+
 export class ClaudeCopyWriter implements CopyWriter {
   constructor(private fallback: CopyWriter) {}
 
+  /** One request. Throws on anything that is not a usable result, for the caller to decide about. */
+  private async once(req: DraftRequest): Promise<DraftResult> {
+    const res = await apiFetch('/api/draft-copy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) throw new Error(`draft-copy ${res.status}`)
+    const out = (await res.json()) as DraftResult
+    if (!out?.drafts?.length) throw new Error('empty draft')
+    return { ...out, drafts: out.drafts.map(stripEmDashes) }
+  }
+
   async draft(req: DraftRequest): Promise<DraftResult> {
-    try {
-      const res = await apiFetch('/api/draft-copy', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(req),
-      })
-      if (!res.ok) throw new Error(`draft-copy ${res.status}`)
-      const out = (await res.json()) as DraftResult
-      if (!out?.drafts?.length) throw new Error('empty draft')
-      return { ...out, drafts: out.drafts.map(stripEmDashes), source: 'claude' }
-    } catch {
-      const fb = await this.fallback.draft(req)
-      return { ...fb, source: 'heuristic' }
+    const assets = req.assets ?? []
+    if (assets.length <= ASSETS_PER_REQUEST) {
+      try {
+        return { ...(await this.once(req)), source: 'claude' }
+      } catch {
+        return { ...(await this.fallback.draft(req)), source: 'heuristic' }
+      }
     }
+
+    const batches: DraftRequest['assets'][] = []
+    for (let i = 0; i < assets.length; i += ASSETS_PER_REQUEST) batches.push(assets.slice(i, i + ASSETS_PER_REQUEST))
+
+    /**
+     * A batch that fails falls back on its own, so one bad request costs four assets rather than the
+     * whole campaign. Every batch carries the SAME avoid list, so two of them can still land on the
+     * same line; that is what dedupeCampaignDrafts already exists to catch, and it is a better
+     * trade than serialising the requests to keep them informed of each other.
+     */
+    let anyFellBack = false
+    const results = await Promise.all(
+      batches.map(async (batch) => {
+        const part = { ...req, assets: batch }
+        try {
+          return await this.once(part)
+        } catch {
+          anyFellBack = true
+          return await this.fallback.draft(part)
+        }
+      }),
+    )
+
+    // Order follows the batches, which follow the assets, so drafts come back in the order asked for.
+    const drafts = results.flatMap((r) => r.drafts)
+    // Proof is shared across the campaign and every batch proposes its own, so the pool is merged by
+    // id. First writer of an id wins, which keeps the ids the earlier drafts already cite valid.
+    const rtbs: Rtb[] = []
+    for (const r of results) for (const rtb of r.rtbs ?? []) if (!rtbs.some((x) => x.id === rtb.id)) rtbs.push(rtb)
+
+    /**
+     * 'claude' only when EVERY batch came from the model. A partial run reports heuristic, which
+     * under-claims: some of this copy really was written by the model. That direction is deliberate.
+     * The opposite, claiming the model wrote a set where some came from templates, is a bug this
+     * codebase has already fixed once.
+     */
+    return { rtbs, drafts, source: anyFellBack ? 'heuristic' : 'claude' }
   }
 }
 
