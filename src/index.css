@@ -21733,10 +21733,16 @@ table.aud-sheet td.stick .aud-cell {
   border-right: 1px solid var(--accent);
   border-bottom: 1px solid var(--accent);
 }
-.nc-hint.align-right .nc-hint-arrow {
+/* Alignment moves the arrow ALONG the card's top or bottom edge, so it only applies to the
+   placements that use those edges. Unscoped, `align-right` also set `right` on a place-left arrow,
+   which pulled the pointer off the card's side and dropped it inside the card over the close
+   button, reading as a stray icon rather than part of the card. Same specificity, later rule won. */
+.nc-hint.place-below.align-right .nc-hint-arrow,
+.nc-hint.place-above.align-right .nc-hint-arrow {
   right: 26px;
 }
-.nc-hint.align-center .nc-hint-arrow {
+.nc-hint.place-below.align-center .nc-hint-arrow,
+.nc-hint.place-above.align-center .nc-hint-arrow {
   left: 50%;
   margin-left: -5px;
 }
@@ -21775,11 +21781,11 @@ table.aud-sheet td.stick .aud-cell {
 .nc-hint-body:last-child {
   margin-bottom: 0;
 }
-/* The action that does the thing the card describes. Right-aligned like every other primary action
-   in the app, so it reads as a button rather than part of the sentence above it. */
+/* The action that does the thing the card describes. Left-aligned with the text above it, so the
+   card reads top to bottom in one column rather than sending the eye back across to the right. */
 .nc-hint-foot {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin-top: 11px;
 }
 .nc-hint-cta {
