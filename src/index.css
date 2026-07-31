@@ -7014,12 +7014,19 @@ button {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .flow-note-mini.linked .flow-note-mini-label { color: var(--text-muted); }
+/* One handle per side. Position comes from the side- modifier, so the base rule carries only what
+   every handle shares. Empty circles: the plus that used to sit inside read as "add" next to real
+   add buttons, and a connector handle is not an add. */
 .flow-note-port {
-  position: absolute; right: -11px; top: 50%; transform: translateY(-50%);
+  position: absolute;
   width: 20px; height: 20px; border-radius: 50%; cursor: crosshair;
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted);
   display: inline-flex; align-items: center; justify-content: center; opacity: 0;
 }
+.flow-note-port.side-right { right: -11px; top: 50%; transform: translateY(-50%); }
+.flow-note-port.side-left { left: -11px; top: 50%; transform: translateY(-50%); }
+.flow-note-port.side-top { top: -11px; left: 50%; transform: translateX(-50%); }
+.flow-note-port.side-bottom { bottom: -11px; left: 50%; transform: translateX(-50%); }
 .flow-note:hover .flow-note-port { opacity: 1; }
 .flow-note-port:hover { border-color: var(--accent); color: var(--accent); }
 /* Connect tool: crosshair over the whole canvas so it reads as "draw a link". user-select off so

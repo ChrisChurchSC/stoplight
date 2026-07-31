@@ -44,7 +44,6 @@ import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
 import { typeLabel } from '../domain/channelAssetTypes'
-import { isoToLocalInput, localInputToIso } from '../lib/format'
 import type { BrandDataset } from '../domain/brandDataset'
 import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
@@ -421,6 +420,90 @@ function roundedPath(pts: { x: number; y: number }[], r: number): string {
 // zoomed node spacing: the corner radius and lane offsets are screen pixels, so without
 // scaling they overwhelm the shrunken gaps between nodes when zoomed out and the routing
 // looks busy and overshoots.
+/**
+ * WHICH EDGE OF EACH CARD A CONNECTOR SHOULD USE.
+ *
+ * Every edge used to leave the source's right side and enter the target's left, whatever the two
+ * cards were doing. A card sitting directly BELOW another was reached by exiting right, dropping,
+ * running back left and re-entering from the left: a long detour around a card that was six pixels
+ * away, and the line said nothing true about the relationship.
+ *
+ * The sides come from the geometry. Whichever axis the two cards are further apart on wins, so
+ * side-by-side cards connect left/right and stacked cards connect top/bottom. Ties go horizontal,
+ * which is the reading direction of the board.
+ */
+type EdgeSide = 'left' | 'right' | 'top' | 'bottom'
+interface EdgeRect { x: number; y: number; w: number; h: number }
+
+function sidePoint(r: EdgeRect, side: EdgeSide): { x: number; y: number } {
+  if (side === 'left') return { x: r.x, y: r.y + r.h / 2 }
+  if (side === 'right') return { x: r.x + r.w, y: r.y + r.h / 2 }
+  if (side === 'top') return { x: r.x + r.w / 2, y: r.y }
+  return { x: r.x + r.w / 2, y: r.y + r.h }
+}
+
+export function anchorsFor(a: EdgeRect, b: EdgeRect): { s: { x: number; y: number }; t: { x: number; y: number }; sSide: EdgeSide; tSide: EdgeSide } {
+  const dx = b.x + b.w / 2 - (a.x + a.w / 2)
+  const dy = b.y + b.h / 2 - (a.y + a.h / 2)
+  // Compare the CLEAR gap on each axis, not centre distance: two tall cards side by side can have a
+  // bigger dy than dx while still obviously being left-to-right neighbours.
+  const gapX = dx > 0 ? b.x - (a.x + a.w) : a.x - (b.x + b.w)
+  const gapY = dy > 0 ? b.y - (a.y + a.h) : a.y - (b.y + b.h)
+  const vertical = gapY > gapX
+  const sSide: EdgeSide = vertical ? (dy > 0 ? 'bottom' : 'top') : dx >= 0 ? 'right' : 'left'
+  const tSide: EdgeSide = vertical ? (dy > 0 ? 'top' : 'bottom') : dx >= 0 ? 'left' : 'right'
+  return { s: sidePoint(a, sSide), t: sidePoint(b, tSide), sSide, tSide }
+}
+
+/**
+ * A right-angled path that LEAVES and ENTERS perpendicular to the sides it was given.
+ *
+ * The old version assumed the source always exited rightward, which is why it needed a special case
+ * for a target to the left and had no idea what to do with a vertical exit. This one steps out from
+ * each card along its own side's normal, then joins the two stubs with at most one more corner.
+ */
+function sidedPath(
+  s: { x: number; y: number },
+  t: { x: number; y: number },
+  sSide: EdgeSide,
+  tSide: EdgeSide,
+  scale = 1,
+): string {
+  const k = Math.max(0.25, Math.min(1, scale))
+  const gap = 28 * k
+  const r = 14 * k
+  const out = (p: { x: number; y: number }, side: EdgeSide) => ({
+    x: p.x + (side === 'left' ? -gap : side === 'right' ? gap : 0),
+    y: p.y + (side === 'top' ? -gap : side === 'bottom' ? gap : 0),
+  })
+  const s1 = out(s, sSide)
+  const t1 = out(t, tSide)
+  const sHoriz = sSide === 'left' || sSide === 'right'
+  const tHoriz = tSide === 'left' || tSide === 'right'
+  const pts = [s, s1]
+  if (sHoriz && tHoriz) {
+    // Both stubs horizontal: meet on a shared vertical lane between them.
+    const midX = (s1.x + t1.x) / 2
+    pts.push({ x: midX, y: s1.y }, { x: midX, y: t1.y })
+  } else if (!sHoriz && !tHoriz) {
+    const midY = (s1.y + t1.y) / 2
+    pts.push({ x: s1.x, y: midY }, { x: t1.x, y: midY })
+  } else if (sHoriz) {
+    // One horizontal, one vertical: a single corner joins them.
+    pts.push({ x: t1.x, y: s1.y })
+  } else {
+    pts.push({ x: s1.x, y: t1.y })
+  }
+  pts.push(t1, t)
+  return roundedPath(pts, r)
+}
+
+/** Sides chosen from the two rects, then routed. The one call every edge should make. */
+function edgePath(a: EdgeRect, b: EdgeRect, scale = 1): string {
+  const { s, t, sSide, tSide } = anchorsFor(a, b)
+  return sidedPath(s, t, sSide, tSide, scale)
+}
+
 function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): string {
   const s = Math.max(0.25, Math.min(1, scale))
   const r = 14 * s
@@ -470,6 +553,19 @@ function elbowPath(sx: number, sy: number, tx: number, ty: number, scale = 1): s
  */
 const BUILD_ONLY_CHIP = /^(build|apply|create|make)(\s+(it|this|that|these|them|all|the campaign|the flow|the assets))?(\s+now)?\s*[.!]?$/i
 const isBuildChip = (s: string): boolean => BUILD_ONLY_CHIP.test(s.trim())
+
+/**
+ * The four drag handles on a card, one per side.
+ *
+ * There used to be one, on the right, so starting a connection meant reaching for the right edge no
+ * matter where the other card was. The edge itself now picks its own sides from the geometry, so
+ * these are purely about where your cursor already is: drag from whichever is nearest.
+ *
+ * All four call the same startConnect with the same id. The side you grab does not decide where the
+ * line attaches, because a line that attached where you happened to grab would fight the router the
+ * moment either card moved.
+ */
+const CONNECT_SIDES = ['left', 'right', 'top', 'bottom'] as const
 
 export function FlowsView() {
   const { brands, canvases } = useHomeCanvases()
@@ -914,8 +1010,6 @@ export function FlowsView() {
   const updateSeason = useTrafficStore((s) => s.updateSeason)
   const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
   const refreshBrandDataset = useTrafficStore((s) => s.refreshBrandDataset)
-  const outputTypes = useTrafficStore((s) => s.outputTypes)
-  const addOutputType = useTrafficStore((s) => s.addOutputType)
   const datasetUndo = useTrafficStore((s) => s.datasetUndo)
   const undoDatasetRefresh = useTrafficStore((s) => s.undoDatasetRefresh)
   /** Per-card import feedback: what landed, or why nothing did. */
@@ -937,7 +1031,6 @@ export function FlowsView() {
   /** Which card is re-pulling, and the grid it replaced, so the click is reversible for the session. */
   const [refreshFor, setRefreshFor] = useState<string | null>(null)
   /** The name being typed for a new custom format, or null when the form is shut. */
-  const [namingFormat, setNamingFormat] = useState<string | null>(null)
 
   /**
    * The providers that are actually usable right now, listed in the card's own picker.
@@ -2888,7 +2981,7 @@ export function FlowsView() {
     // A budget needs to be assigned to paid assets. Flag it if there's nowhere to put it, or if
     // it isn't fully assigned across the paid groups yet.
     if (n && n > 0) {
-      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
       else if (assignedBudget < n) showToast(`$${n.toLocaleString()} budget set — assign it across your paid assets so it's fully allocated.`)
     }
   }
@@ -5180,7 +5273,7 @@ export function FlowsView() {
             // write from, which is how twelve empty assets got reported as written. The refusal
             // carries its own wording (copyBlockerFor's), so the reason travels with the skip.
             const n = wNodes.length
-            applied.push(`Built ${n} deliverable${n === 1 ? '' : 's'}${outcome.copyBlocked ? '' : ' and wrote the copy'}`)
+            applied.push(`Built ${n} channel${n === 1 ? '' : 's'}${outcome.copyBlocked ? '' : ' and wrote the copy'}`)
             if (outcome.copyBlocked) skipped.push(`No copy was written. ${outcome.copyBlocked}`)
           }
           break
@@ -5753,7 +5846,7 @@ export function FlowsView() {
         const p = presetByKey(n.presetKey)
         return {
           id: n.id,
-          label: p?.label ?? 'Deliverable',
+          label: p?.label ?? 'Channel',
           count: p ? subcardCount(p, n.perMonth) : 0,
           sub: p?.channel,
           icon: <PresetTile tone={DELIV_TONE} channel={p?.channel} />,
@@ -7722,14 +7815,14 @@ export function FlowsView() {
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
-              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)} />
+              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={edgePath(a, b, zoom / 100)} />
             })}
             {connectors.map((cn, i) => {
               const a = connRect(cn.from)
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
-              const d = elbowPath(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2, zoom / 100)
+              const d = edgePath(a, b, zoom / 100)
               return (
                 <g key={`${cn.from}-${cn.to}-${i}`} className="flow-edge-g">
                   <path className={`flow-edge${paid ? ' paid' : ''}`} d={d} />
@@ -7758,7 +7851,7 @@ export function FlowsView() {
             <>
               <div className="flow-addmenu-scrim" onMouseDown={() => setAddMenu(null)} />
               <div className="flow-addmenu" style={{ left: menuAnchor.x, top: menuAnchor.y }} onMouseDown={(e) => e.stopPropagation()}>
-                <input className="flow-addmenu-search" autoFocus placeholder="Search deliverables" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
+                <input className="flow-addmenu-search" autoFocus placeholder="Search channels" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
                 <div className="flow-addmenu-list">
                   {menuGroups.map(([group, presets]) => (
                     <div key={group}>
@@ -7830,7 +7923,7 @@ export function FlowsView() {
                 <div className="flow-node-text">
                   <div className="flow-node-label">{viewing ? viewShort : name.trim() || 'Untitled campaign'}</div>
                   <div className="flow-node-desc">
-                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} deliverable${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week campaign`}
+                    {viewing ? `${viewRows.length} assets · ${viewDelivs.length} channel${viewDelivs.length === 1 ? '' : 's'}` : `${flightWeeks}-week campaign`}
                   </div>
                   {/* Audience, proof and goal deliberately do NOT live on this card. They are
                       canvas input cards now ("what it's made from"), and the inspector owns the
@@ -7850,12 +7943,15 @@ export function FlowsView() {
               {/* The hub's own port. Everything converges here, and until now this was the one
                   card you could not connect. Drag from a context card to this, or from here to
                   one: either way round the edge is stored as card into campaign. */}
-              <button
-                className="flow-note-port flow-brief-port"
-                title="Draw a connection"
-                aria-label="Draw a connection"
-                onMouseDown={(e) => startConnect(e, 'campaign')}
-              />
+              {CONNECT_SIDES.map((side) => (
+                <button
+                  key={side}
+                  className={`flow-note-port flow-brief-port side-${side}`}
+                  title="Draw a connection"
+                  aria-label={`Draw a connection from the ${side}`}
+                  onMouseDown={(e) => startConnect(e, 'campaign')}
+                />
+              ))}
             </div>
             )}
 
@@ -8000,9 +8096,15 @@ export function FlowsView() {
                       onChange={(e) => updateObjectText(nt.id, e.target.value)}
                     />
                   )}
-                  <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, nt.id)}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                  </button>
+                  {CONNECT_SIDES.map((side) => (
+                    <button
+                      key={side}
+                      className={`flow-note-port side-${side}`}
+                      title="Draw a connection"
+                      aria-label={`Draw a connection from the ${side}`}
+                      onMouseDown={(e) => startConnect(e, nt.id)}
+                    />
+                  ))}
                 </div>
               )
             })}
@@ -8063,9 +8165,15 @@ export function FlowsView() {
                     ))}
                     <span className="flow-obj-count">{members.length} inside</span>
                   </div>
-                  <button className="flow-note-port" title="Draw a connection" aria-label="Draw a connection" onMouseDown={(e) => startConnect(e, g.id)}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                  </button>
+                  {CONNECT_SIDES.map((side) => (
+                    <button
+                      key={side}
+                      className={`flow-note-port side-${side}`}
+                      title="Draw a connection"
+                      aria-label={`Draw a connection from the ${side}`}
+                      onMouseDown={(e) => startConnect(e, g.id)}
+                    />
+                  ))}
                 </div>
               )
             })}
@@ -8094,8 +8202,11 @@ export function FlowsView() {
                           onMouseDown={(e) => startDrag(e, d.key)}
                           onClick={(e) => clickSelect(e, d.key)}
                         >
+                          {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
+                              DELIVERABLE_PRESETS, the same split Flows kept when it became
+                              Campaigns: rename what a person reads, leave what the code keys on. */}
                           <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
-                            Deliverable
+                            Channel
                           </span>
                           <div className="flow-node-main">
                             <div className="flow-node-text">
@@ -8269,8 +8380,11 @@ export function FlowsView() {
                           onMouseDown={(e) => startDrag(e, n.id)}
                           onClick={(e) => clickSelect(e, n.id)}
                         >
+                          {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
+                              DELIVERABLE_PRESETS, the same split Flows kept when it became
+                              Campaigns: rename what a person reads, leave what the code keys on. */}
                           <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
-                            Deliverable
+                            Channel
                           </span>
                           <div className="flow-node-main">
                             <div className="flow-node-text">
@@ -8578,37 +8692,6 @@ export function FlowsView() {
 
                   {/* SCHEDULE AND STATUS. Only the three states a person sets: everything past approved
                       belongs to the publish path and nothing publishes on its own. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Schedule and status</label>
-                  <input
-                    className="flow-inspect-input"
-                    type="datetime-local"
-                    value={selPost.scheduledAt ? isoToLocalInput(selPost.scheduledAt) : ''}
-                    onChange={(e) => void updateRow(selPost.id, { scheduledAt: e.target.value ? localInputToIso(e.target.value) : undefined })}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  />
-                  <div className="flow-src-list" style={{ marginTop: 6 }}>
-                    {(['draft', 'in_review', 'approved'] as const).map((st) => (
-                      <button
-                        key={st}
-                        className={`flow-src-opt${selPost.status === st ? ' on' : ''}`}
-                        onClick={() => void updateRow(selPost.id, { status: st })}
-                      >
-                        <span className="flow-src-mark"><span className="flow-src-dot" /></span>
-                        <span className="flow-src-txt">
-                          <span className="flow-src-name">{st === 'in_review' ? 'In review' : st === 'draft' ? 'Draft' : 'Approved'}</span>
-                        </span>
-                        {selPost.status === st && (
-                          <span className="flow-src-tick" aria-label="current">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 6L9 17l-5-5" />
-                            </svg>
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="flow-inspect-note">Approved means you have read it and you are happy. Nothing publishes on its own.</p>
                   <button className="flow-insp-open subtle" style={{ marginTop: 8 }} onClick={() => void duplicateRow(selPost.id)}>
                     Duplicate this post
                   </button>
@@ -8932,7 +9015,7 @@ export function FlowsView() {
                                 </span>
                                 <button
                                   className="flow-ctxrow-del"
-                                  title="Stop pinning this record on this deliverable"
+                                  title="Stop pinning this record on this channel"
                                   aria-label={`Remove ${ref.label}`}
                                   onClick={() => delivTagOps(selDeliv).remove(refKey(ref))}
                                 >
@@ -9042,7 +9125,7 @@ export function FlowsView() {
                         </span>
                       </div>
                     ))}
-                    <span className="flow-send-foot">Every post under this deliverable has these, and only these.</span>
+                    <span className="flow-send-foot">Every post under this channel has these, and only these.</span>
                   </div>
 
                   {/* FEEDS THESE POSTS: the outbound half of Connected to, which needs no graph walk
@@ -9075,67 +9158,6 @@ export function FlowsView() {
                       Re-keying it is a three-slice write with no transaction anywhere in this app,
                       where a partial failure leaves wires pointing at a key no asset answers to. So
                       the honest move is to say so and make the stated alternative one click away. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Format</label>
-                  <div className="flow-src-list">
-                    <div className="flow-src-opt on" style={{ cursor: 'default' }}>
-                      <span className="flow-src-mark"><span className="flow-src-dot" /></span>
-                      <span className="flow-src-txt">
-                        <span className="flow-src-name">{typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}</span>
-                        <span className="flow-src-sub">
-                          {`${messagingFields(selDeliv.channel, selDeliv.assetType).length} component${messagingFields(selDeliv.channel, selDeliv.assetType).length === 1 ? '' : 's'}`}
-                        </span>
-                      </span>
-                      <span className="flow-src-tick" aria-label="current">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 6L9 17l-5-5" />
-                        </svg>
-                      </span>
-                    </div>
-                  </div>
-                  <p className="flow-inspect-note">
-                    {`You cannot change what this deliverable makes. Its format decides the components, the schedule and the tracking on all ${selDeliv.rows.length} post${selDeliv.rows.length === 1 ? '' : 's'}. Add the deliverable you want and delete this one.`}
-                  </p>
-                  {/* MAKE YOUR OWN FORMAT. Names a format the 51 presets do not cover, on a channel
-                      that already exists. It inherits that channel's components deliberately: letting
-                      somebody author their own components and limits would have to reach
-                      messagingFields, which is called from dozens of places and is pure. The note
-                      below says which of the two this is, in as many words. */}
-                  <button className="flow-src-more" onClick={() => setNamingFormat(namingFormat === null ? '' : null)}>
-                    {namingFormat === null ? 'Make your own format' : 'Cancel'}
-                  </button>
-                  {namingFormat !== null && (
-                    <>
-                      <input
-                        className="flow-inspect-input"
-                        autoFocus
-                        placeholder="Booth panel, podcast description…"
-                        value={namingFormat}
-                        onChange={(e) => setNamingFormat(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      />
-                      <p className="flow-inspect-note">
-                        {`It gets its own deliverable and it generates. Its posts have the same components as any other ${CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} post, because choosing your own components is not built yet.`}
-                      </p>
-                      <button
-                        className="flow-insp-open"
-                        disabled={!namingFormat.trim() || !brand}
-                        onClick={() => {
-                          const v = addOutputType(brand, selDeliv.channel as ChannelId, namingFormat)
-                          if (v) setNamingFormat(null)
-                        }}
-                      >
-                        Add this format
-                      </button>
-                    </>
-                  )}
-                  {/* Formats this brand has named, so they are visible where they were made. */}
-                  {outputTypes.filter((o) => o.brand === brand && !o.retiredAt).length > 0 && (
-                    <p className="flow-inspect-note">
-                      {`Your formats: ${outputTypes.filter((o) => o.brand === brand && !o.retiredAt).map((o) => o.label).join(', ')}. Pick one when you add a deliverable.`}
-                    </p>
-                  )}
-
                   {/* The thread is keyed by the deliverable's DERIVED key (channel|assetType), so
                       changing either in the Grid orphans it. The same fragility its connectors
                       already have, answered above with a refusal rather than a migration. */}
@@ -9338,7 +9360,7 @@ export function FlowsView() {
                 <button className="flow-back" onClick={() => setPickAt(null)}>
                   ‹ Back
                 </button>
-                <span className="flow-panel-title">Add deliverable</span>
+                <span className="flow-panel-title">Add channel</span>
               </div>
               <div className="flow-picker-list">
                 {grouped.map(([group, presets]) => (
@@ -9436,7 +9458,7 @@ export function FlowsView() {
                         onChange={(e) => setBudget(e.target.value)}
                         onBlur={() => {
                           const n = Math.max(0, +budget || 0)
-                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.`)
+                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
                         }}
                       />
                     </div>
@@ -9455,7 +9477,7 @@ export function FlowsView() {
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
                     ? `Generate writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
-                    : 'Add deliverables from the canvas toolbar (or tag channels above), then press Generate.'}
+                    : 'Add channels from the canvas toolbar (or tag channels above), then press Generate.'}
                 </div>
               </div>
             </>
@@ -9564,7 +9586,7 @@ export function FlowsView() {
                     <textarea
                       className="flow-desc"
                       rows={2}
-                      placeholder="What is this deliverable about?"
+                      placeholder="What is this channel about?"
                       value={node.description || ''}
                       onChange={(e) => setNodeField(node.id, { description: e.target.value })}
                     />
@@ -9873,7 +9895,7 @@ export function FlowsView() {
               align="center"
               body={[
                 'The brief is what the campaign is: what you are launching, to whom, over how long.',
-                'Everything you connect to it is read when the copy is written, and the deliverables hang off it.',
+                'Everything you connect to it is read when the copy is written, and the channels hang off it.',
               ]}
               cta={{
                 label: 'Add the brief',
@@ -9887,7 +9909,7 @@ export function FlowsView() {
             {palGroup(
               'deliverable',
               {
-                title: 'Deliverable. A thing you ship, on a cadence. (B)',
+                title: 'Channel. A thing you ship, on a cadence. (B)',
                 tone: DELIV_TONE,
                 icon: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></>,
                 onClick: () => { setPickGroup(null); openAddDeliverable() },
@@ -9908,10 +9930,10 @@ export function FlowsView() {
               placement="above"
               align="center"
               body={[
-                'Deliverables are the things this campaign puts out: posts, emails, pages, ads. Each one comes with the fields its channel expects.',
+                'Channels are the things this campaign puts out: posts, emails, pages, ads. Each one comes with the fields its channel expects.',
                 'Pick how many of each and over what period. Nothing is written yet, so this is the shape of the campaign rather than the work.',
               ]}
-              cta={{ label: 'Add a deliverable', onClick: () => { setPickGroup(null); openAddDeliverable() } }}
+              cta={{ label: 'Add a channel', onClick: () => { setPickGroup(null); openAddDeliverable() } }}
             />
           </div>
           <span className="flow-tb-divider" />
@@ -10139,7 +10161,7 @@ export function FlowsView() {
                 !viewing
                   ? 'Build this campaign and write its copy'
                   : viewRows.length === 0
-                    ? 'Pick a deliverable to generate its first copy'
+                    ? 'Pick a channel to generate its first copy'
                     : genIds.length
                       ? 'Generate copy for the selected cards'
                       : 'Select a card to generate its copy'
