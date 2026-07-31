@@ -2827,18 +2827,76 @@ export function FlowsView() {
         const meta = OBJECT_META[nt.kind]
         const linked = smartObjects.find((o) => o.id === nt.smartObjectId)
         const own = refForObject(nt)
+        // A Brand card names a record like every other card, but refForObject returns null for it:
+        // there is no FlowRefType for a brand, deliberately, because a brand OWNS the campaign
+        // rather than being referred to by it. Falling back to the same option list the card's own
+        // dropdown reads is what stops it showing up here as an unnamed row. Same for Product.
+        const named = nt.refId ? objectOptions(nt.kind)?.find((o) => o.id === nt.refId)?.label : undefined
         return {
           id: nt.id,
           tone: meta.tone,
           icon: meta.icon,
           kindLabel: meta.label,
-          label: linked?.name ?? own?.label ?? nt.text.trim().split('\n')[0] ?? '',
-          detail: linked ? describeSmartObject(linked) : '',
+          label: linked?.name ?? own?.label ?? named ?? nt.text.trim().split('\n')[0] ?? '',
+          // A brand card carries no refs and still decides a great deal, so it says what it does
+          // rather than falling through to "Contributes nothing yet", which is simply untrue.
+          detail: linked ? describeSmartObject(linked) : nt.kind === 'brand' && named ? 'Sets the brand this is written as' : '',
           refs: refsBehind(nt.id),
         }
       })
       .filter((r): r is NonNullable<typeof r> => !!r)
   }
+  /**
+   * ONE ROW OF "what is connected here", shared by the campaign card and the post card.
+   *
+   * `onDisconnect` is what separates the two callers. The campaign owns the wires drawn into it, so
+   * its rows can cut them. A post is reached THROUGH the campaign and its channel, so the wire a
+   * post is showing you is not the post's to cut, and offering a ✕ there would delete a connection
+   * somewhere else on the board without saying so.
+   */
+  const renderContextRow = (r: ReturnType<typeof contextRowsFor>[number], onDisconnect?: () => void) => (
+    <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
+      <button
+        className="flow-ctxrow-open"
+        title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+        onClick={() => { setSel(r.id); setSelected(new Set()) }}
+      >
+        <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+        </span>
+        <span className="flow-ctxrow-txt">
+          <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
+          <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
+          {/* What it actually contributes, because a card can be connected and still be empty, and
+              an empty card reaching the writer is worth seeing. Suppressed when it would only repeat
+              the name, which is the common case for a plain card carrying one record. A card with no
+              refs is not automatically contributing nothing: a Brand card carries none and decides
+              which brand the whole campaign is written as, so its own detail wins. */}
+          {(() => {
+            const sub =
+              r.refs.length === 0
+                ? r.detail || 'Contributes nothing yet'
+                : r.detail ||
+                  (r.refs.length === 1 && r.refs[0].label === r.label
+                    ? ''
+                    : r.refs.map((x) => x.label).join(' · '))
+            return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
+          })()}
+        </span>
+      </button>
+      {onDisconnect && (
+        /* Disconnects: the card stays on the board, it just stops feeding the campaign. */
+        <button
+          className="flow-ctxrow-del"
+          title="Disconnect from the campaign (the card stays on the board)"
+          aria-label={`Disconnect ${r.label || r.kindLabel}`}
+          onClick={onDisconnect}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
   const renderCampaignContext = () => {
     const rows = contextRowsFor('campaign')
 
@@ -2855,49 +2913,12 @@ export function FlowsView() {
           </div>
         ) : (
           <div className="flow-ctxlist">
-            {rows.map((r) => (
-              <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
-                <button
-                  className="flow-ctxrow-open"
-                  title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
-                  onClick={() => { setSel(r.id); setSelected(new Set()) }}
-                >
-                  <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
-                  </span>
-                  <span className="flow-ctxrow-txt">
-                    <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
-                    <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
-                    {/* What it actually contributes, because a card can be connected and still be
-                        empty, and an empty card reaching the writer is worth seeing. Suppressed when
-                        it would only repeat the name, which is the common case for a plain card
-                        carrying one record. */}
-                    {(() => {
-                      const sub =
-                        r.refs.length === 0
-                          ? 'Contributes nothing yet'
-                          : r.detail ||
-                            (r.refs.length === 1 && r.refs[0].label === r.label
-                              ? ''
-                              : r.refs.map((x) => x.label).join(' · '))
-                      return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
-                    })()}
-                  </span>
-                </button>
-                {/* Disconnects: the card stays on the board, it just stops feeding the campaign. */}
-                <button
-                  className="flow-ctxrow-del"
-                  title="Disconnect from the campaign (the card stays on the board)"
-                  aria-label={`Disconnect ${r.label || r.kindLabel}`}
-                  onClick={() => {
-                    setConnectors((c) => c.filter((x) => !(x.from === r.id && x.to === 'campaign')))
-                    detachFromCampaign(r.id, connectors)
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+            {rows.map((r) =>
+              renderContextRow(r, () => {
+                setConnectors((c) => c.filter((x) => !(x.from === r.id && x.to === 'campaign')))
+                detachFromCampaign(r.id, connectors)
+              }),
+            )}
           </div>
         )}
         {/* NO SECOND GROUP. A record used to be able to reach the campaign with no card behind it —
@@ -8581,8 +8602,8 @@ export function FlowsView() {
                     const strays = Object.entries(m).filter(([k, v]) => !known.has(k) && v?.trim())
                     return (
                       <>
-                        <label className="flow-inspect-label">Copy</label>
-                        <p className="flow-inspect-note">This is the copy that ships. It saves as you type.</p>
+                        {/* No heading. The fields are the first thing in the panel and they are
+                            labelled, so a "Copy" label over them named what was already obvious. */}
                         <CopyFields
                           fields={flds}
                           values={m}
@@ -8614,25 +8635,51 @@ export function FlowsView() {
                       board flush, the wipe and the phase 1 refusal, rather than growing a second path
                       that could miss one of the three. */}
 
-                  {/* CONNECTED TO. The instructions this post is actually written under, assembled by
-                      the same function the writer uses, in the same precedence order. */}
+                  {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
+                      This asked the wrong question and answered it confidently. It read only the
+                      DIRECTION channel: the typed instruction fields on a card. A card can be
+                      connected and reach this post through two other channels entirely, and both
+                      were reported as nothing. A Brand card carries no direction and no reference at
+                      all, because a brand OWNS the campaign rather than being referred to by it, so
+                      a board whose only wire was a Brand card into the brief printed "Nothing is
+                      wired to this post", while that very wire decided which brand every word was
+                      written as.
+                      Now it lists the CARDS upstream of this post, which is the question a person
+                      asks when they look at a board, and the instructions underneath as a second
+                      group. A card with nothing typed into it still shows, and says so. */}
                   {(() => {
                     const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
                     const resolved = resolveBoardDirection(liveBoard)
                     const mine = directionForRow(resolved, deliverableKeyFor(selPost), selPost.id, [])
                     const kept = buildDirection(mine)
                     const dropped = mine.length - kept.length
+                    // Three routes reach a post, in the same order the resolver walks them: wired
+                    // straight in, through its channel, or through the campaign every asset inherits.
+                    // Deduped, because one card can arrive by more than one of them.
+                    const seen = new Set<string>()
+                    const cards = [
+                      ...contextRowsFor(selPost.id),
+                      ...contextRowsFor(deliverableKeyFor(selPost)),
+                      ...contextRowsFor('campaign'),
+                    ].filter((r) => {
+                      if (seen.has(r.id)) return false
+                      seen.add(r.id)
+                      return true
+                    })
                     return (
                       <>
                         <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                          Connected to{kept.length ? ` · ${kept.length}` : ''}
+                          Connected to{cards.length ? ` · ${cards.length}` : ''}
                         </label>
-                        {kept.length === 0 ? (
+                        {cards.length === 0 ? (
                           <p className="flow-inspect-note">
-                            Nothing is wired to this post or to its channel, so it is written from the campaign brief alone.
+                            Nothing is connected to this post, to its channel, or to the campaign, so it is written from the brief alone.
                           </p>
                         ) : (
-                          <div className="flow-insp-send">
+                          <div className="flow-ctxlist">{cards.map((r) => renderContextRow(r))}</div>
+                        )}
+                        {kept.length > 0 && (
+                          <div className="flow-insp-send" style={{ marginTop: 10 }}>
                             {kept.map((d) => (
                               <div key={`${d.key}:${d.value}`} className="flow-send-row">
                                 <span className="flow-send-val">{DIRECTION_FIELD[d.key as DirectionKey]?.label ?? d.key}</span>

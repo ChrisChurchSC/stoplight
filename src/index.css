@@ -7006,14 +7006,25 @@ button {
    add buttons, and a connector handle is not an add. */
 .flow-note-port {
   position: absolute;
-  width: 20px; height: 20px; border-radius: 50%; cursor: crosshair;
+  width: 13px; height: 13px; border-radius: 50%; cursor: crosshair;
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted);
   display: inline-flex; align-items: center; justify-content: center; opacity: 0;
 }
-.flow-note-port.side-right { right: -11px; top: 50%; transform: translateY(-50%); }
-.flow-note-port.side-left { left: -11px; top: 50%; transform: translateY(-50%); }
-.flow-note-port.side-top { top: -11px; left: 50%; transform: translateX(-50%); }
-.flow-note-port.side-bottom { bottom: -11px; left: 50%; transform: translateX(-50%); }
+/* The offset centres the dot on the card's edge: half the width, plus the 1px border. Four sides now
+   carry one, so the dot is small enough that four of them read as handles rather than as decoration.
+   The hit area is restored below, larger than the dot itself. */
+.flow-note-port.side-right { right: -7px; top: 50%; transform: translateY(-50%); }
+.flow-note-port.side-left { left: -7px; top: 50%; transform: translateY(-50%); }
+.flow-note-port.side-top { top: -7px; left: 50%; transform: translateX(-50%); }
+.flow-note-port.side-bottom { bottom: -7px; left: 50%; transform: translateX(-50%); }
+/* A 13px circle is a small target, so the port claims a 26px square to be grabbed by without
+   drawing one. Same trick the connector lines use: what you see and what you can hit are separate. */
+.flow-note-port::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+}
 .flow-note:hover .flow-note-port { opacity: 1; }
 .flow-note-port:hover { border-color: var(--accent); color: var(--accent); }
 /* Connect tool: crosshair over the whole canvas so it reads as "draw a link". user-select off so
@@ -9409,6 +9420,10 @@ button {
 }
 .copy-count {
   font-variant-numeric: tabular-nums;
+  /* Pushed to the far edge so the counts line up in a column down the panel instead of sitting at a
+     different offset under every label. Safe against `.copy-label .btn`'s own margin-left: auto
+     below, because a label carries a count or a button and never both. */
+  margin-left: auto;
   color: var(--text-faint);
   text-transform: none;
   letter-spacing: 0;
@@ -9437,6 +9452,35 @@ button {
 }
 .copy-label .btn {
   margin-left: auto;
+}
+/* ---- COPY FIELDS INSIDE THE INSPECTOR ----
+   The same component reads differently in the two places it is used. In the review drawer its
+   parent is a flex column with `gap: 16px`, so the fields are spaced. `.flow-inspect` is a plain
+   block, so consecutive fields touch: a label ends up 6px from the box below it and 0px from the
+   box above, and reads as belonging to the wrong one. Everything here is scoped to the inspector
+   so the drawer keeps the measurements it was built with. */
+.flow-inspect .copy-field + .copy-field {
+  margin-top: 16px;
+}
+/* SIZED TO THE FIELD. One 110px height covered a 200 character pinned comment and a 5,000 character
+   description: half empty under the short one and showing four and a bit lines of the long one.
+   The heights are line boxes (1.5em each) plus the 20px of padding and border, so they scale with
+   the type rather than being magic numbers.
+
+   A long field still overflows, and the last visible line is still cut through the middle. That is
+   left alone deliberately: a textarea paints into its own bottom padding, so a height that ends on
+   a whole line puts the descenders hard against the border, and macOS hides the scrollbar until you
+   touch it. The half line IS the overflow cue. The grabber pulls the box open when you want it. */
+.flow-inspect .copy-field textarea.tall {
+  min-height: calc(6em + 20px); /* a pinned comment is 200 characters, so four lines holds it */
+}
+.flow-inspect .copy-field textarea.tall.xl {
+  min-height: calc(9em + 20px); /* a description runs to thousands, so it gets half again as much */
+}
+/* A title is capped at 100 characters and its box already holds two lines, so it can never be
+   dragged into showing anything more. The handle came off the field it did nothing for. */
+.flow-inspect .copy-field textarea:not(.tall) {
+  resize: none;
 }
 .copy-hint {
   font-size: 11.5px;
