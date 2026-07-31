@@ -295,7 +295,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             )}
           </div>
           <div className="flow-home-card-meta">
-            {c.types} deliverable{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
+            {c.types} channel{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
           </div>
           <div className="flow-home-chans">
             {c.channels.slice(0, 8).map((ch) => (

@@ -163,7 +163,12 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
     </>
   ),
 }
-const RECORD_TYPE_LABEL: Record<FlowRefType, string> = { company: 'Company', person: 'Person', segment: 'Audience', channel: 'Channel', proof: 'Proof point', 'media-mix': 'Media mix', message: 'Message', concept: 'Concept', voice: 'Voice', season: 'Season', dataset: 'Data set' }
+/**
+ * Whether cards carry a team discussion thread. Off until a workspace holds more than one person:
+ * see renderCardComments. Typed as boolean, not inferred as `false`, so the code under it stays
+ * reachable to the compiler and does not rot behind a narrowed constant.
+ */
+const DISCUSSION_ENABLED: boolean = false
 // The record-type categories in the "Add a record" picker: Audience nests the three WHO types.
 const PICKER_SECTIONS: { label: string; types: FlowRefType[] }[] = [
   { label: 'Audience', types: ['segment', 'company', 'person'] },
@@ -1468,9 +1473,6 @@ export function FlowsView() {
       return next
     })
   // Swap a generated-idea post for a real ingested post from the library.
-  const [swapOpen, setSwapOpen] = useState(false)
-  const [swapSearch, setSwapSearch] = useState('')
-  const [replacing, setReplacing] = useState(false)
   const [patternBusy, setPatternBusy] = useState(false)
   // References changed since the last generation → offer a Regenerate button.
   const [refsDirty, setRefsDirty] = useState(false)
@@ -2988,10 +2990,6 @@ export function FlowsView() {
 
   // The brand's real ingested posts (from the Library), most-reached first — the pool a
   // generated-idea post can be swapped for.
-  const ingestedPosts = useMemo(
-    () => canvases.filter((c) => c.client === brand).flatMap((c) => c.rows).filter(isIngestedPost).sort((a, b) => postReach(b) - postReach(a)),
-    [canvases, brand],
-  )
 
   const addPreset = (p: DeliverablePreset) => {
     const node: FlowDeliverable = { id: freshNodeId(), presetKey: p.key, perMonth: startCount(p) }
@@ -3213,8 +3211,15 @@ export function FlowsView() {
    * Deliberately not the "Team note" one field below it, and the two are worth keeping apart: the
    * note is one piece of text belonging to the card, a comment is a remark by a person at a time.
    * Neither is ever sent to the writer.
+   *
+   * OFF FOR NOW, via DISCUSSION_ENABLED. Threads are only worth having once more than one person is
+   * in a workspace, and until then the section is a prompt to talk to yourself on every card. The
+   * implementation stays whole rather than being deleted: comments already written are still in the
+   * store and reappear the moment the flag flips back, so turning it on is a one-line change and not
+   * a rebuild.
    */
   const renderCardComments = (cardId: string) => {
+    if (!DISCUSSION_ENABLED) return null
     const thread = commentsFor(cardComments, boardKey, cardId)
     const open = thread.filter((c: CardComment) => !c.resolvedAt)
     const done = thread.filter((c: CardComment) => c.resolvedAt)
@@ -5663,60 +5668,11 @@ export function FlowsView() {
   // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
   // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
   // can never stand in for a LinkedIn ad). No cross-platform fallback. Filtered by the search box.
-  const swapCandidates = useMemo(() => {
-    if (!selPost) return []
-    const q = swapSearch.trim().toLowerCase()
-    const platform = CHANNELS[selPost.channel as ChannelId]?.platform
-    const matches = ingestedPosts.filter(
-      (r) => r.id !== selPost.id && (r.channel === selPost.channel || (!!platform && CHANNELS[r.channel as ChannelId]?.platform === platform)),
-    )
-    if (!q) return matches
-    return matches.filter((r) => (r.assetName ?? '').toLowerCase().includes(q) || Object.values((r.messaging ?? {}) as Record<string, string>).some((v) => v?.toLowerCase().includes(q)))
-  }, [selPost, ingestedPosts, swapSearch])
 
   // Replace the selected generated-idea post's content with a real ingested post, keeping
   // its slot in the flow (id, campaign, schedule, audience) so it stays in place.
-  const swapForIngested = async (cand: TrafficRow) => {
-    if (!selPost) return
-    await updateRow(selPost.id, {
-      assetName: cand.assetName,
-      channel: cand.channel,
-      assetType: cand.assetType,
-      mediaType: cand.mediaType,
-      messaging: cand.messaging,
-      source: cand.source,
-      sourceUrl: cand.sourceUrl,
-      socialMetrics: cand.socialMetrics,
-      engagement: cand.engagement,
-      status: 'posted',
-      postedAt: cand.postedAt,
-      publishedAt: cand.publishedAt,
-    })
-    setSwapOpen(false)
-    setSwapSearch('')
-  }
   // The reverse of a swap: drop the ingested post's live fields (source, url, metrics, posted
   // status) back to a generated draft, then write fresh AI copy for the slot.
-  const replaceWithGenerated = async () => {
-    if (!selPost || replacing) return
-    setReplacing(true)
-    try {
-      await updateRow(selPost.id, {
-        messaging: {},
-        source: 'generated',
-        sourceUrl: undefined,
-        socialMetrics: undefined,
-        engagement: undefined,
-        status: 'draft',
-        postedAt: undefined,
-        publishedAt: undefined,
-      })
-      await draftCopy([selPost.id])
-    } finally {
-      setReplacing(false)
-      setSwapOpen(false)
-    }
-  }
   // Change the copy PATTERN (blueprint) on a single asset: reapply the blueprint's step at this
   // asset's position, keeping its slot, then rewrite its copy to the new framework/CTA/levers.
   const applyPatternToPost = async (row: TrafficRow, bp: EmailBlueprint) => {
@@ -5734,10 +5690,6 @@ export function FlowsView() {
       setPatternBusy(false)
     }
   }
-  useEffect(() => {
-    setSwapOpen(false)
-    setSwapSearch('')
-  }, [sel])
   useEffect(() => {
     setRefsDirty(false)
   }, [viewName])
@@ -8582,7 +8534,7 @@ export function FlowsView() {
                   <span className="flow-panel-title">
                     {connectFrom
                       ? `Next step after ${viewRows.find((r) => r.id === connectFrom)?.assetName ?? 'this asset'}`
-                      : 'Add deliverable'}
+                      : 'Add channel'}
                   </span>
                 </div>
                 <div className="flow-picker-list">
@@ -8661,40 +8613,6 @@ export function FlowsView() {
                   {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
                       board flush, the wipe and the phase 1 refusal, rather than growing a second path
                       that could miss one of the three. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
-                  {(() => {
-                    const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
-                    return (
-                      <>
-                        <button
-                          className="flow-insp-open"
-                          disabled={regenerating}
-                          onClick={() => void regenerateFlow([selPost.id])}
-                        >
-                          {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
-                        </button>
-                        <p className="flow-inspect-note">
-                          {hasCopy
-                            ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
-                            : 'Writes this post from the campaign brief and everything wired to it.'}
-                        </p>
-                        {/* Which writer produced what is on the row now. Per row, from phase 1. */}
-                        {selPost.copySource && (
-                          <p className="flow-inspect-note">
-                            {selPost.copySource === 'heuristic'
-                              ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
-                              : 'Written by the model.'}
-                          </p>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  {/* SCHEDULE AND STATUS. Only the three states a person sets: everything past approved
-                      belongs to the publish path and nothing publishes on its own. */}
-                  <button className="flow-insp-open subtle" style={{ marginTop: 8 }} onClick={() => void duplicateRow(selPost.id)}>
-                    Duplicate this post
-                  </button>
 
                   {/* CONNECTED TO. The instructions this post is actually written under, assembled by
                       the same function the writer uses, in the same precedence order. */}
@@ -8711,7 +8629,7 @@ export function FlowsView() {
                         </label>
                         {kept.length === 0 ? (
                           <p className="flow-inspect-note">
-                            Nothing is wired to this post or to its deliverable, so it is written from the campaign brief alone.
+                            Nothing is wired to this post or to its channel, so it is written from the campaign brief alone.
                           </p>
                         ) : (
                           <div className="flow-insp-send">
@@ -8863,66 +8781,6 @@ export function FlowsView() {
                       </div>
                     )
                   })()}
-                  <div className="flow-swap">
-                    <div className="flow-swap-tag">
-                      {isIngestedPost(selPost) ? (
-                        <>
-                          <span className="flow-swap-badge ingested">Ingested post</span>
-                          {selPost.sourceUrl && (
-                            <a className="flow-swap-link" href={selPost.sourceUrl} target="_blank" rel="noreferrer">
-                              View original ↗
-                            </a>
-                          )}
-                        </>
-                      ) : (
-                        <span className="flow-swap-badge">Generated idea</span>
-                      )}
-                    </div>
-                    <button className="flow-swap-btn" onClick={() => setSwapOpen((o) => !o)}>
-                      ⇄ Swap for an ingested post
-                    </button>
-                    {isIngestedPost(selPost) && (
-                      <button className="flow-swap-btn flow-swap-regen" onClick={() => void replaceWithGenerated()} disabled={replacing}>
-                        {replacing ? 'Generating…' : '✦ Replace with a generated post'}
-                      </button>
-                    )}
-                    {swapOpen && (
-                      <div className="flow-swap-panel">
-                        <input
-                          className="flow-swap-search"
-                          value={swapSearch}
-                          placeholder={`Search ${brand || 'brand'} ingested posts…`}
-                          onChange={(e) => setSwapSearch(e.target.value)}
-                          autoFocus
-                        />
-                        {swapCandidates.length === 0 ? (
-                          <div className="flow-swap-empty">
-                            {swapSearch.trim()
-                              ? 'No matches.'
-                              : ingestedPosts.length
-                                ? `No live ${CHANNELS[selPost.channel as ChannelId]?.platform ?? 'matching'} posts in your Library to swap in for this deliverable.`
-                                : 'No ingested posts to swap in yet. Ingest content into the Library first.'}
-                          </div>
-                        ) : (
-                          <div className="flow-swap-list">
-                            {swapCandidates.slice(0, 50).map((r) => {
-                              const reach = postReach(r)
-                              const reachTxt = reach >= 1e6 ? (reach / 1e6).toFixed(1) + 'M' : reach >= 1e3 ? Math.round(reach / 1e3) + 'k' : reach ? String(reach) : ''
-                              return (
-                                <button key={r.id} className="flow-swap-item" onClick={() => swapForIngested(r)}>
-                                  <span className="flow-swap-item-title">{r.assetName}</span>
-                                  <span className="flow-swap-item-meta">
-                                    {CHANNELS[r.channel as ChannelId]?.label ?? r.channel}
-                                    {reachTxt ? ` · ${reachTxt} reach` : ''}
-                                  </span>
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
 
                 </div>
               </>
@@ -8984,149 +8842,9 @@ export function FlowsView() {
                         : `Apply ${Number(delivCountDraft) > selDeliv.count ? `+${Number(delivCountDraft) - selDeliv.count}` : Number(delivCountDraft) - selDeliv.count} and rewrite the copy`}
                     </button>
                   )}
-                  <div className="flow-inspect-note" style={{ marginTop: 8 }}>{countBusy ? 'Updating…' : 'The − and + add or remove one, drafting fresh copy for anything new. Type a number and Apply to change it in one go and rewrite every post from the current brief.'}</div>
-                  {/* WHAT INFORMS IT, as objects. This was "Linked records" with an "Add a record"
-                      row, which named the wrong unit for the same reason the campaign card did: a
-                      deliverable is informed by the cards wired to the campaign, and the record list
-                      showed the residue of that rather than the thing itself. Inherited by default;
-                      the override, when there is one, still shows exactly what it pins. */}
-                  {(() => {
-                    const overridden = selDeliv.rows.some((r) => r.references && r.references.length)
-                    const inherited = contextRowsFor('campaign')
-                    const wired = contextRowsFor(selDeliv.key)
-                    return (
-                      <>
-                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                          {overridden ? 'Pinned for this deliverable' : 'Informing this deliverable'}
-                          {!overridden && inherited.length > 0 ? ` · ${inherited.length}` : ''}
-                        </label>
-                        {overridden ? (
-                          <div className="flow-ctxlist">
-                            {delivEffRefs(selDeliv).map((ref) => (
-                              <div key={refKey(ref)} className="flow-ctxrow">
-                                <span className="flow-ctxrow-open" style={{ cursor: 'default' }}>
-                                  <span className="flow-ctxrow-ic" style={{ color: 'var(--text-muted)' }} aria-hidden="true">
-                                    <RecordTypeIcon type={ref.type} />
-                                  </span>
-                                  <span className="flow-ctxrow-txt">
-                                    <span className="flow-ctxrow-kind" style={{ color: 'var(--text-muted)' }}>{RECORD_TYPE_LABEL[ref.type]}</span>
-                                    <span className="flow-ctxrow-name">{ref.label}</span>
-                                  </span>
-                                </span>
-                                <button
-                                  className="flow-ctxrow-del"
-                                  title="Stop pinning this record on this channel"
-                                  aria-label={`Remove ${ref.label}`}
-                                  onClick={() => delivTagOps(selDeliv).remove(refKey(ref))}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : inherited.length === 0 && !wired.length ? (
-                          <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
-                            Nothing is wired to the campaign yet, so this deliverable has no context to
-                            write from. Draw a line from a card to this deliverable to give it its own.
-                          </div>
-                        ) : (
-                          renderContextRows(inherited)
-                        )}
-                        {/* WIRED STRAIGHT TO THIS ONE, above and beyond the campaign's. Its own head,
-                            because "this applies to this deliverable only" is the whole difference and
-                            mixing the two lists would lose it. */}
-                        {wired.length > 0 && (
-                          <>
-                            <label className="flow-inspect-label" style={{ marginTop: 14 }}>
-                              Wired to this deliverable only · {wired.length}
-                            </label>
-                            {renderContextRows(wired, (id) => {
-                              setConnectors((c) => c.filter((x) => !(x.from === id && x.to === selDeliv.key)))
-                              detachFromTarget(id, selDeliv.key, connectors)
-                            })}
-                          </>
-                        )}
-                        {/* Nothing here when it is simply inheriting. The "pin different records"
-                            link is gone: connecting a card straight to this deliverable is how you give it
-                            its own context now, which is the same gesture as everywhere else on the
-                            board rather than a second, record-shaped mechanism reachable only from a
-                            footnote. An override that already exists stays explained and reversible. */}
-                        {renderResolvedDirection(selDeliv.key)}
-                        {overridden && (
-                          <div className="flow-inspect-note" style={{ marginTop: 8 }}>
-                            This deliverable ignores the campaign's context and uses only what is pinned
-                            above.{' '}
-                            <button
-                              className="flow-reset-link"
-                              onClick={() => { void updateRows(selDeliv.rows.map((r) => ({ id: r.id, patch: { references: undefined } }))); setRefsDirty(true) }}
-                            >
-                              Go back to the campaign's
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  {/* GENERATE, SCOPED. Three buttons, only the ones that apply, because "write the
-                      two that are empty" never touches a sentence anybody wrote and "rewrite all
-                      four" always does, and those are different enough acts to need different
-                      buttons rather than one with a warning. */}
-                  {(() => {
-                    const rows = selDeliv.rows
-                    const empty = rows.filter((r) => !messagingAllText(r).trim())
-                    const stale = rows.filter((r) => r.recheckFlag)
-                    const busy = regenerating || rows.some((r) => regenIds.has(r.id))
-                    return (
-                      <>
-                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
-                        {empty.length > 0 && (
-                          <button className="flow-insp-open" disabled={busy} onClick={() => void regenerateFlow(empty.map((r) => r.id))}>
-                            {busy ? 'Writing…' : `Write the ${empty.length} that ${empty.length === 1 ? 'is' : 'are'} empty`}
-                          </button>
-                        )}
-                        {stale.length > 0 && (
-                          <button className="flow-insp-open subtle" disabled={busy} onClick={() => void regenerateFlow(stale.map((r) => r.id))}>
-                            {`Write the ${stale.length} that ${stale.length === 1 ? 'is' : 'are'} out of date`}
-                          </button>
-                        )}
-                        <button className="flow-insp-open subtle" disabled={busy || !rows.length} onClick={() => void regenerateFlow(rows.map((r) => r.id))}>
-                          {rows.length === 1 ? 'Rewrite this post' : `Rewrite all ${rows.length} posts`}
-                        </button>
-                        <p className="flow-inspect-note">
-                          {rows.length === 1
-                            ? 'Rewriting clears the copy here, including anything you typed by hand, and writes it again. Undo puts it back until you reload.'
-                            : `Rewriting clears the copy on all ${rows.length} and writes them again, including anything you typed by hand. Undo puts it back until you reload.`}
-                        </p>
-                        {/* Which writer produced this deliverable's copy, as a count rather than a
-                            badge, since a deliverable can hold both. */}
-                        {(() => {
-                          const off = rows.filter((r) => r.copySource === 'heuristic').length
-                          return off > 0 ? (
-                            <p className="flow-inspect-note">
-                              {`${off} of these came from the offline writer, built from your own brand and audience.`}
-                            </p>
-                          ) : null
-                        })()}
-                      </>
-                    )
-                  })()}
-
                   {/* WHAT EACH POST CONTAINS. The same shape as the Data source card's "What this
                       table will send", deliberately: both answer "what does this thing actually
                       hold", and reading as one object is the point. */}
-                  <label className="flow-inspect-label" style={{ marginTop: 16 }}>What each post contains</label>
-                  <div className="flow-insp-send">
-                    {messagingFields(selDeliv.channel, selDeliv.assetType).map((f) => (
-                      <div key={f.key} className="flow-send-row">
-                        <span className="flow-send-val">{f.label}</span>
-                        <span className="flow-send-lab">
-                          {f.hardLimit ? `up to ${f.hardLimit.toLocaleString('en-US')} characters` : 'no limit'}
-                        </span>
-                      </div>
-                    ))}
-                    <span className="flow-send-foot">Every post under this channel has these, and only these.</span>
-                  </div>
 
                   {/* FEEDS THESE POSTS: the outbound half of Connected to, which needs no graph walk
                       because the rows are already in scope. */}
@@ -9336,7 +9054,7 @@ export function FlowsView() {
                     </div>
                   </div>
                   {renderCampaignContext()}
-                  <label className="flow-inspect-label" style={{ marginTop: 20 }}>Deliverables</label>
+                  <label className="flow-inspect-label" style={{ marginTop: 20 }}>Channels</label>
                   <div className="flow-deliv-list">
                     {viewDelivs.map((d) => (
                       <button key={d.key} className="flow-pitem" onClick={() => setSel(d.key)}>
@@ -9349,7 +9067,7 @@ export function FlowsView() {
                     ))}
                   </div>
                   <div className="flow-inspect-note" style={{ marginTop: 14 }}>
-                    {viewRows.length} assets · {viewDelivs.length} deliverable type{viewDelivs.length === 1 ? '' : 's'}. Click a post to see its copy, or use the Grid and Calendar tabs above.
+                    {viewRows.length} assets · {viewDelivs.length} channel{viewDelivs.length === 1 ? '' : 's'}. Click a post to see its copy, or use the Grid and Calendar tabs above.
                   </div>
                 </div>
               </>
@@ -9476,7 +9194,7 @@ export function FlowsView() {
                     plus the empty-board case. The note stays, pointing at the one that remains. */}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
-                    ? `Generate writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
+                    ? `Generate writes ${channelTagPresets.length} channel${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
                     : 'Add channels from the canvas toolbar (or tag channels above), then press Generate.'}
                 </div>
               </div>
@@ -10145,7 +9863,7 @@ export function FlowsView() {
               className="flow-tb-regen"
               // A flow with assets regenerates their copy (from the current selection, as before).
               // An empty flow has nothing to regenerate yet, so Generate seeds its first assets the
-              // same way "Add deliverable" / the AI build does — this keeps AI-built and from-scratch
+              // same way "Add channel" / the AI build does — this keeps AI-built and from-scratch
               // flows behaving identically instead of hiding the control on empty flows.
               // Three modes, one button. On a built campaign it regenerates the selection, as
               // before. In the builder it does what the panel's build button does, because those

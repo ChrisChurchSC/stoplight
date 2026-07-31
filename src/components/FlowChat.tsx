@@ -36,7 +36,7 @@ const BUILD_EXAMPLES: Example[] = [
 ]
 const VIEW_EXAMPLES: Example[] = [
   { title: 'Regenerate the copy', desc: 'Rewrite every asset so they read distinct and on-brand.', prompt: 'Regenerate the copy for this campaign' },
-  { title: 'Add a deliverable', desc: 'Grow the campaign with another channel.', prompt: 'Add a LinkedIn post to this campaign' },
+  { title: 'Add a channel', desc: 'Grow the campaign with another channel.', prompt: 'Add a LinkedIn post to this campaign' },
   { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this campaign?", mode: 'analyze' },
 ]
 
@@ -161,7 +161,7 @@ export function FlowChat({
             ) : (
               <>
                 <p className="fchat-empty-lead">I&rsquo;m Gretel.</p>
-                <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add deliverables, wire in context, set a budget and length, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
+                <p className="fchat-empty-sub">In <strong>Build</strong> I edit this campaign (add channels, wire in context, set a budget and length, {flowMode === 'build' ? 'build it' : 'regenerate copy'}). In <strong>Analyze</strong> I answer questions without changing anything.</p>
               </>
             )}
             <div className="fchat-cards">

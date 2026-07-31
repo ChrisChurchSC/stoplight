@@ -19,6 +19,43 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.14',
+    dateLabel: 'July 31, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A campaign walks you through building itself. Seven steps in the top left corner say what to do and how far along you are, and a card appears beside the control each one needs: add a Brand card, say who the brand is, add the campaign brief, say what you are launching, add what you are shipping, connect them, generate the copy. Clicking a step you have done brings its card back so the list is a way around the board and not only a progress bar, and Complete takes the whole thing away for good.',
+          'Connectors come from any side of a card. A line to the card directly below now leaves the bottom and enters the top instead of exiting right, dropping, and running back around. The sides are worked out from where the two cards actually sit.',
+          'Connectors are easier to grab. The clickable band along a line is much wider than the line you see, so selecting one no longer means hitting a one pixel target.',
+        ],
+      },
+      {
+        tag: 'Improved',
+        items: [
+          'Deliverable cards are called channels, everywhere. Same card, a word people already use for the thing it represents.',
+          'Generating finishes. A twelve asset campaign took 65 seconds against a 60 second ceiling, so it was killed partway through and reported as "the AI could not be reached". The work is now split into batches of four, which finishes in about half the time and costs one batch rather than the campaign when a request does fail.',
+          'Generating says so while it runs, as a small pill on the toolbar, during a build as well as a rewrite.',
+          'Building a campaign drops you into it. It used to leave you looking at the builder while the campaign it had just written sat on a canvas you had not opened.',
+          'Finishing a build is a toast, not a modal you have to dismiss.',
+          'A canvas opens quiet. The assistant panel starts closed, so the first thing you see is the board.',
+          'The model name, the credit balance and Generate are always in the toolbar, and the readouts are small enough to stay on one line.',
+          'The inspector says less. Explanatory notes about things you can see, the generate and rewrite controls that duplicated the toolbar, the schedule and status fields, the format section, the swap and duplicate controls, and the per card discussion thread have all come out. What is left is the copy that ships, what the card is connected to, and the controls that change it.',
+          'The AI prompt box on a card explains what it does to that card, rather than sitting there unlabelled.',
+          'Assets and the assistant tab are greyed out with a "coming soon" note, instead of opening surfaces that are not finished.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'The inspector’s close button and its collapse button no longer sit on top of each other.',
+          'Channels added to a campaign no longer connect themselves to the brief. You draw that line, which is the same rule every other card follows.',
+          'A built campaign draws its channel lines again. They were being drawn only in the builder, so opening a finished campaign showed cards with nothing between them.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.13',
     dateLabel: 'July 30, 2026',
     groups: [
