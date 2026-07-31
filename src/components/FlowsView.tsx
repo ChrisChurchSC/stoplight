@@ -5350,6 +5350,46 @@ export function FlowsView() {
       return []
     }
   })
+  /**
+   * Done with the setup entirely, whatever the board says. Separate from acknowledging one step:
+   * this is "I know how this works, stop telling me", and it takes the corner list and every hint
+   * with it.
+   */
+  const SETUP_DONE_KEY = 'stoplight.setupDone.v1'
+  const [setupDone, setSetupDone] = useState(() => {
+    try {
+      return localStorage.getItem(SETUP_DONE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  /**
+   * Bumped to bring a dismissed hint back.
+   *
+   * Hint reads its dismissal from localStorage once, on mount, which is right for a card you closed
+   * and wrong for one you have asked to see again. Clearing the key alone changes nothing because
+   * the component is already mounted holding `true`, so the nonce goes into its React key and
+   * remounts it against the cleared key. Cheaper and less stateful than teaching Hint to watch
+   * storage it owns.
+   */
+  const [hintNonce, setHintNonce] = useState(0)
+  /** Which stored dismissal belongs to which step, for reviving one. */
+  const HINT_KEY_FOR_STEP: Record<string, string> = {
+    brand: 'stoplight.hint.brandCard.v1',
+    fillBrand: 'stoplight.hint.fillBrand.v1',
+    brief: 'stoplight.hint.briefCard.v1',
+    fillBrief: 'stoplight.hint.fillBrief.v1',
+    connect: 'stoplight.hint.connect.v1',
+    generate: 'stoplight.hint.generate.v1',
+  }
+  const reviveHint = (id: string) => {
+    try {
+      localStorage.removeItem(HINT_KEY_FOR_STEP[id])
+    } catch {
+      /* private mode: the card simply will not come back */
+    }
+    setHintNonce((n) => n + 1)
+  }
   const ackStep = (id: string) => {
     setStepsAcked((prev) => {
       if (prev.includes(id)) return prev
@@ -5378,7 +5418,9 @@ export function FlowsView() {
   // A step is behind you when the board says so OR when you said so. Only the two "say something"
   // steps can be acknowledged; adding a card and connecting it are facts, not opinions.
   const ack = (id: string) => stepsAcked.includes(id)
-  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | 'generate' | null = !brandCard
+  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | 'generate' | null = setupDone
+    ? null
+    : !brandCard
     ? 'brand'
     : !brandFilled && !ack('fillBrand')
       ? 'fillBrand'
@@ -7738,7 +7780,8 @@ export function FlowsView() {
               {/* Anchored to the brief node itself, so it follows the canvas when you pan or zoom
                   rather than sitting at a viewport coordinate the board has moved away from. */}
               <Hint
-                show={hintStep === 'connect'}
+                key={`connect-${hintNonce}`}
+              show={hintStep === 'connect'}
                 storageKey="stoplight.hint.connect.v1"
                 title="Connect the Brand card"
                 // Below, not above. The brief starts near the top of the canvas, so a card placed
@@ -8274,7 +8317,19 @@ export function FlowsView() {
           <FlowSteps
             steps={SETUP_STEPS}
             current={hintStep}
+            onComplete={() => {
+              setSetupDone(true)
+              try {
+                localStorage.setItem(SETUP_DONE_KEY, '1')
+              } catch {
+                /* private mode: it comes back next reload */
+              }
+            }}
             onPick={(id) => {
+              // Bring this step's card back. Clicking a step you have already dismissed the card for
+              // and getting nothing but a selection is the case this exists for: the list is how you
+              // ask to be told again.
+              reviveHint(id)
               // Select the card the step is about, which opens the inspector on it. The two "add"
               // steps do the adding when there is nothing there yet, so the list does the same
               // thing its hint's button does rather than pointing at a card that does not exist.
@@ -8317,7 +8372,8 @@ export function FlowsView() {
           {/* The two steps that happen IN the panel, pointing at it from outside. A full-height side
               panel has no room above or below it, so these sit beside it. */}
           <Hint
-            show={hintStep === 'fillBrand'}
+            key={`fillBrand-${hintNonce}`}
+              show={hintStep === 'fillBrand'}
             storageKey="stoplight.hint.fillBrand.v1"
             title="Say who the brand is"
             placement="left"
@@ -8328,7 +8384,8 @@ export function FlowsView() {
             cta={{ label: 'Next', onClick: () => ackStep('fillBrand') }}
           />
           <Hint
-            show={hintStep === 'fillBrief'}
+            key={`fillBrief-${hintNonce}`}
+              show={hintStep === 'fillBrief'}
             storageKey="stoplight.hint.fillBrief.v1"
             title="Say what you are launching"
             placement="left"
@@ -9761,6 +9818,7 @@ export function FlowsView() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
             </button>
             <Hint
+              key={`brief-${hintNonce}`}
               show={hintStep === 'brief'}
               storageKey="stoplight.hint.briefCard.v1"
               title="Add the campaign brief"
@@ -9822,6 +9880,7 @@ export function FlowsView() {
             {/* Only while the board has no Brand card. That is the one state where the campaign
                 cannot say whose voice it is written in, and the toolbar is where the answer is. */}
             <Hint
+              key={`brand-${hintNonce}`}
               show={hintStep === 'brand'}
               storageKey="stoplight.hint.brandCard.v1"
               title="Add a Brand card"
@@ -10028,6 +10087,7 @@ export function FlowsView() {
               {regenerating || building ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
             </button>
             <Hint
+              key={`generate-${hintNonce}`}
               show={hintStep === 'generate'}
               storageKey="stoplight.hint.generate.v1"
               title="Generate the copy"

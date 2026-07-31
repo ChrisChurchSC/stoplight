@@ -29,10 +29,13 @@ export function FlowSteps({
   steps,
   current,
   onPick,
+  onComplete,
 }: {
   steps: FlowStep[]
   current: string | null
   onPick?: (id: string) => void
+  /** Done with the whole thing. Takes the list and its cards away for good. */
+  onComplete?: () => void
 }) {
   if (!current) return null
   const at = steps.findIndex((s) => s.id === current)
@@ -69,6 +72,11 @@ export function FlowSteps({
           )
         })}
       </ol>
+      {onComplete && (
+        <button className="setup-steps-done" onClick={onComplete}>
+          Complete
+        </button>
+      )}
     </div>
   )
 }

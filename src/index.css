@@ -21899,3 +21899,23 @@ table.aud-sheet td.stick .aud-cell {
 .setup-step.go:hover .setup-step-n {
   border-color: var(--accent);
 }
+/* Outline, not filled: finishing the setup is a way out, not the thing the panel wants you to do
+   next. The accented control on screen should stay the current step. */
+.setup-steps-done {
+  display: block;
+  width: 100%;
+  margin-top: 11px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.setup-steps-done:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
