@@ -5379,6 +5379,7 @@ export function FlowsView() {
     fillBrand: 'stoplight.hint.fillBrand.v1',
     brief: 'stoplight.hint.briefCard.v1',
     fillBrief: 'stoplight.hint.fillBrief.v1',
+    deliverables: 'stoplight.hint.deliverables.v1',
     connect: 'stoplight.hint.connect.v1',
     generate: 'stoplight.hint.generate.v1',
   }
@@ -5412,13 +5413,14 @@ export function FlowsView() {
     { id: 'fillBrand', label: 'Say who the brand is' },
     { id: 'brief', label: 'Add the campaign brief' },
     { id: 'fillBrief', label: 'Say what you are launching' },
+    { id: 'deliverables', label: 'Add what you are shipping' },
     { id: 'connect', label: 'Connect them' },
     { id: 'generate', label: 'Generate the copy' },
   ]
   // A step is behind you when the board says so OR when you said so. Only the two "say something"
   // steps can be acknowledged; adding a card and connecting it are facts, not opinions.
   const ack = (id: string) => stepsAcked.includes(id)
-  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | 'generate' | null = setupDone
+  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'deliverables' | 'connect' | 'generate' | null = setupDone
     ? null
     : !brandCard
     ? 'brand'
@@ -5428,13 +5430,18 @@ export function FlowsView() {
         ? 'brief'
         : !briefFilled && !ack('fillBrief')
           ? 'fillBrief'
-          : !brandConnected
-            ? 'connect'
+          : // Nothing to ship yet. Before connecting, because a connection needs something to reach,
+            // and before generating for the obvious reason. Counts a built campaign's deliverables,
+            // the builder's nodes, and channel tags, which Build turns into deliverables too.
+            !viewDelivs.length && !nodes.length && !channelTagPresets.length
+            ? 'deliverables'
+            : !brandConnected
+              ? 'connect'
             : // Written, not merely built: a campaign with assets and no copy in them has not
               // finished this step, and that is the state the whole chain exists to get you out of.
               !viewRows.some((r) => (r.body ?? '').trim())
-              ? 'generate'
-              : null
+                ? 'generate'
+                : null
 
   // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
   // blank canvas + the "What are you launching?" starter as the only front door; the brief card
@@ -8341,6 +8348,7 @@ export function FlowsView() {
                 else addObject('brand')
                 return
               }
+              if (id === 'deliverables') { setPickGroup(null); openAddDeliverable(); return }
               if (!hasHub) { setBriefHidden(false); setBriefSummoned(true) }
               setSel('campaign')
             }}
@@ -9836,22 +9844,37 @@ export function FlowsView() {
           </div>
           {/* Deliverable, with the eight motions the presets already carry behind its caret. The
               button opens everything; the caret picks a motion and scopes the picker to it. */}
-          {palGroup(
-            'deliverable',
-            {
-              title: 'Deliverable. A thing you ship, on a cadence. (B)',
-              tone: DELIV_TONE,
-              icon: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></>,
-              onClick: () => { setPickGroup(null); openAddDeliverable() },
-            },
-            DELIVERABLE_GROUPS.map((g) => ({
-              label: g.label,
-              hint: `${DELIVERABLE_PRESETS.filter((p) => p.group === g.group).length}`,
-              tone: g.tone,
-              icon: g.icon,
-              onClick: () => { setPickGroup(g.group); openAddDeliverable() },
-            })),
-          )}
+          <div className="flow-tb-brand-wrap">
+            {palGroup(
+              'deliverable',
+              {
+                title: 'Deliverable. A thing you ship, on a cadence. (B)',
+                tone: DELIV_TONE,
+                icon: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></>,
+                onClick: () => { setPickGroup(null); openAddDeliverable() },
+              },
+              DELIVERABLE_GROUPS.map((g) => ({
+                label: g.label,
+                hint: `${DELIVERABLE_PRESETS.filter((p) => p.group === g.group).length}`,
+                tone: g.tone,
+                icon: g.icon,
+                onClick: () => { setPickGroup(g.group); openAddDeliverable() },
+              })),
+            )}
+            <Hint
+              key={`deliverables-${hintNonce}`}
+              show={hintStep === 'deliverables'}
+              storageKey="stoplight.hint.deliverables.v1"
+              title="Add what you are shipping"
+              placement="above"
+              align="center"
+              body={[
+                'Deliverables are the things this campaign puts out: posts, emails, pages, ads. Each one comes with the fields its channel expects.',
+                'Pick how many of each and over what period. Nothing is written yet, so this is the shape of the campaign rather than the work.',
+              ]}
+              cta={{ label: 'Add a deliverable', onClick: () => { setPickGroup(null); openAddDeliverable() } }}
+            />
+          </div>
           <span className="flow-tb-divider" />
           {/* BRAND sits where the glossary tip was. The tip explained what an input card is, which is
               a thing you learn once; the brand is the context every card on the board is written
