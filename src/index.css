@@ -21653,6 +21653,10 @@ table.aud-sheet td.stick .aud-cell {
   position: relative;
   display: inline-flex;
 }
+/* The panel is the positioning context for the two hints that point at it from outside. */
+.flow-panel {
+  position: relative;
+}
 .nc-hint {
   position: absolute;
   width: 320px;
@@ -21697,6 +21701,18 @@ table.aud-sheet td.stick .aud-cell {
 .nc-hint.align-center {
   left: 50%;
   margin-left: -160px;
+}
+/* Beside, for a full-height side panel: there is never room above or below one, and a card placed
+   there lands on top of the thing it is pointing at. */
+.nc-hint.place-left {
+  right: calc(100% + 12px);
+  top: 74px;
+}
+.nc-hint.place-left .nc-hint-arrow {
+  right: -6px;
+  top: 22px;
+  border-right: 1px solid var(--accent);
+  border-top: 1px solid var(--accent);
 }
 /* Rotated square rather than an SVG, so it inherits the card's fill and border. Only the two edges
    facing the control are drawn, so the arrow reads as part of the card rather than a diamond. */

@@ -5286,6 +5286,43 @@ export function FlowsView() {
    */
   const hasHub = !briefHidden && (viewing || briefSummoned)
 
+  /**
+   * WHICH ONE HINT TO SHOW, read off the board rather than counted.
+   *
+   * The steps are the flow this canvas is for: add a Brand card, say who the brand is, add the
+   * brief, name what you are launching, connect them. Each condition requires the one before it to
+   * be satisfied, so exactly one can be true and the canvas never carries two of these at once.
+   *
+   * Board state rather than a step counter, because a person does not arrive here in order. Someone
+   * who adds the brief first, or opens a campaign that already has half of this done, gets the step
+   * they are actually missing instead of being walked through work they have already finished. It
+   * also means there is nothing to reset: undo a step and its hint comes back on its own.
+   *
+   * `null` once the chain is complete, which is the normal state of every campaign after the first.
+   */
+  const brandCard = objects.find((o) => o.kind === 'brand')
+  const brandCardObj = brandCard?.refId ? allBrandObjects.find((x) => x.id === brandCard.refId) : undefined
+  // Named AND described. A card holding only a name binds the campaign but tells the writing nothing,
+  // which is the state this step exists to move people out of.
+  const brandFilled = !!(
+    brandCardObj?.name?.trim() &&
+    (brandCardObj.oneLiner?.trim() || (brandCardObj.differentiators ?? []).length > 0)
+  )
+  const brandConnected = !!brandCard && connectors.some((c) => c.from === brandCard.id && c.to === 'campaign')
+  // A built campaign carries its subject already; in the builder it is the name field.
+  const briefFilled = viewing || !!name.trim()
+  const hintStep: 'brand' | 'fillBrand' | 'brief' | 'fillBrief' | 'connect' | null = !brandCard
+    ? 'brand'
+    : !brandFilled
+      ? 'fillBrand'
+      : !hasHub
+        ? 'brief'
+        : !briefFilled
+          ? 'fillBrief'
+          : !brandConnected
+            ? 'connect'
+            : null
+
   // A brand-new, untouched campaign — no deliverables, objects, chat, or name yet. It opens with a
   // blank canvas + the "What are you launching?" starter as the only front door; the brief card
   // isn't pre-placed until the campaign gains some shape (or the user summons it from the toolbar).
@@ -7627,6 +7664,23 @@ export function FlowsView() {
               onMouseDown={(e) => startDrag(e, 'campaign')}
               onClick={(e) => clickSelect(e, 'campaign')}
             >
+              {/* Anchored to the brief node itself, so it follows the canvas when you pan or zoom
+                  rather than sitting at a viewport coordinate the board has moved away from. */}
+              <Hint
+                show={hintStep === 'connect'}
+                storageKey="stoplight.hint.connect.v1"
+                title="Connect the Brand card"
+                // Below, not above. The brief starts near the top of the canvas, so a card placed
+                // above it is clipped by the viewport, and there is no measurement here to notice.
+                // Below is empty at this point in the flow, which is the whole reason this step
+                // exists.
+                placement="below"
+                align="center"
+                body={[
+                  'Drag from the Brand card onto this brief. That connection is what binds the campaign to the brand and lets it write.',
+                  'Connect the cards that shape the message the same way. A card reaches the writing only once it is connected, and it carries through a chain.',
+                ]}
+              />
               <span className="flow-node-kind" style={{ color: CAMPAIGN_TONE, background: `color-mix(in srgb, ${CAMPAIGN_TONE} 16%, transparent)` }}>
                 Campaign brief
               </span>
@@ -8166,6 +8220,28 @@ export function FlowsView() {
           </div>
         ) : (
         <aside className="flow-panel">
+          {/* The two steps that happen IN the panel, pointing at it from outside. A full-height side
+              panel has no room above or below it, so these sit beside it. */}
+          <Hint
+            show={hintStep === 'fillBrand'}
+            storageKey="stoplight.hint.fillBrand.v1"
+            title="Say who the brand is"
+            placement="left"
+            body={[
+              'The card is on the board but empty, so it binds the campaign and tells the writing nothing.',
+              'Fill in the one-liner and what sets the brand apart. That is the voice and the claims every asset is allowed to make.',
+            ]}
+          />
+          <Hint
+            show={hintStep === 'fillBrief'}
+            storageKey="stoplight.hint.fillBrief.v1"
+            title="Say what you are launching"
+            placement="left"
+            body={[
+              'Name the campaign and set its length. This is the throughline every asset is written to orient around.',
+              'Then connect the Brand card to it, and add the cards that shape the message.',
+            ]}
+          />
           <button className="flow-panel-collapse" title="Collapse panel" aria-label="Collapse panel" onClick={() => setBriefCollapsed(true)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d="M9 9l2 3-2 3" />
@@ -9580,13 +9656,30 @@ export function FlowsView() {
             labels were paying rent in the one place with the least room. Its own row because the
             palette will not fit beside zoom + tools + Generate when both side panels are open. */}
         <div className="flow-tb-palette">
-          <button
-            className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
-            aria-label="Add the campaign brief"
-            onClick={() => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
-          </button>
+          <div className="flow-tb-brand-wrap">
+            <button
+              className="flow-tb-pal" style={{ color: CAMPAIGN_TONE }}
+              aria-label="Add the campaign brief"
+              onClick={() => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4h11l-1.5 3.5L16 11H5" /></svg>
+            </button>
+            <Hint
+              show={hintStep === 'brief'}
+              storageKey="stoplight.hint.briefCard.v1"
+              title="Add the campaign brief"
+              placement="above"
+              align="center"
+              body={[
+                'The brief is what the campaign is: what you are launching, to whom, over how long.',
+                'Everything you connect to it is read when the copy is written, and the deliverables hang off it.',
+              ]}
+              cta={{
+                label: 'Add the brief',
+                onClick: () => { setBriefHidden(false); setBriefSummoned(true); setSel('campaign'); setSelected(new Set()); setBriefCollapsed(false) },
+              }}
+            />
+          </div>
           {/* Deliverable, with the eight motions the presets already carry behind its caret. The
               button opens everything; the caret picks a motion and scopes the picker to it. */}
           {palGroup(
@@ -9633,7 +9726,7 @@ export function FlowsView() {
             {/* Only while the board has no Brand card. That is the one state where the campaign
                 cannot say whose voice it is written in, and the toolbar is where the answer is. */}
             <Hint
-              show={!objects.some((o) => o.kind === 'brand')}
+              show={hintStep === 'brand'}
               storageKey="stoplight.hint.brandCard.v1"
               title="Add a Brand card"
               placement="above"

@@ -30,7 +30,7 @@ export interface HintProps {
    * Which side of the control the card sits on, and therefore where its arrow points. 'below' hangs
    * under a header button, 'above' sits over a toolbar pinned to the bottom of the canvas.
    */
-  placement?: 'below' | 'above'
+  placement?: 'below' | 'above' | 'left'
   /** Horizontal alignment against the wrapper. Right suits a header, centre suits a toolbar. */
   align?: 'right' | 'center'
   /**
