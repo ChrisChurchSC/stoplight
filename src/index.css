@@ -7026,6 +7026,13 @@ button {
   border-radius: 50%;
 }
 .flow-note:hover .flow-note-port { opacity: 1; }
+/* OUTPUT CARDS GET THE SAME HANDLES. A channel and a post were drop targets with no ports of their
+   own: you could draw a line INTO one and never out of one, so the direction that carried the board
+   forward was the one direction you could not draw. They are not .flow-note, so the reveal is keyed
+   on .flow-node instead. Direct child only, so a post inside a channel does not light up the
+   channel's ports as the cursor crosses it. */
+.flow-node:hover > .flow-out-port,
+.flow-canvas.connecting .flow-out-port { opacity: 1; }
 .flow-note-port:hover { border-color: var(--accent); color: var(--accent); }
 /* Connect tool: crosshair over the whole canvas so it reads as "draw a link". user-select off so
    dragging across a card's text doesn't highlight it mid-connection. */
@@ -9431,17 +9438,30 @@ button {
 .copy-count.over {
   color: var(--red);
 }
+/* OUTLINED, NOT FILLED. This set no background and no colour at all, so a copy box was whatever the
+   browser draws for a form field in a dark scheme: a flat #3b3b3b slab with pure white text, lighter
+   than everything around it and matching nothing in the panel. The box is now the outline and the
+   panel shows through it, which is also how every other field in the inspector reads. */
 .copy-field textarea {
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
   border-radius: var(--radius-sm);
   padding: 9px 11px;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 12.5px;
   line-height: 1.5;
   resize: vertical;
   min-height: 56px;
   white-space: pre-wrap;
+}
+.copy-field textarea::placeholder {
+  color: var(--text-faint);
+}
+/* The filled state is reserved for the one thing that needs to stand out: a box you are typing in. */
+.copy-field textarea:hover {
+  border-color: var(--text-faint);
 }
 .copy-field textarea.tall {
   min-height: 110px;
@@ -14448,9 +14468,12 @@ button {
   font-size: 11.5px;
   font-weight: 700;
 }
+/* A flagged field used to fill itself cream, which was written for a light theme and never revisited:
+   against the panel's own light text it was white on off-white. Outlined like the rest, with the
+   amber carried by the border and a tint mixed from it, so it reads in either scheme. */
 .copy-field.flagged textarea {
   border-color: #f0c000;
-  background: #fffdf5;
+  background: color-mix(in srgb, #f0c000 8%, transparent);
 }
 .msg-flag {
   display: flex;

@@ -28,6 +28,7 @@ const RELEASES: Release[] = [
           'A campaign walks you through building itself. Seven steps in the top left corner say what to do and how far along you are, and a card appears beside the control each one needs: add a Brand card, say who the brand is, add the campaign brief, say what you are launching, add what you are shipping, connect them, generate the copy. Clicking a step you have done brings its card back so the list is a way around the board and not only a progress bar, and Complete takes the whole thing away for good.',
           'Connectors come from any side of a card. A line to the card directly below now leaves the bottom and enters the top instead of exiting right, dropping, and running back around. The sides are worked out from where the two cards actually sit.',
           'Connectors are easier to grab. The clickable band along a line is much wider than the line you see, so selecting one no longer means hitting a one pixel target.',
+          'Every card can be connected from, not only connected to. Channels and posts were drop targets with no handles of their own, so the one line you could not draw was the one going onward. They now carry the same four handles as every other card, and the handles themselves are smaller.',
         ],
       },
       {
@@ -48,6 +49,9 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'A post says what it is connected to. It was reading only the typed instruction fields on a card, so a Brand card wired into the brief, which carries none and decides which brand every word is written as, was reported as nothing at all: "nothing is wired to this post, so it is written from the campaign brief alone" while that wire was doing exactly that. It now lists the cards, and a card that holds nothing still shows and says so.',
+          'A Brand or Product card shows its name where it is listed, instead of reading "Nothing picked yet" next to the brand it plainly names.',
+          'The copy boxes on a post are outlined like the rest of the panel. They had no colours set at all, so they were whatever the browser draws for a form field: a flat grey slab, lighter than everything around it. Their heights now follow the field, so a 200 character pinned comment is not given the same room as a 5,000 character description, and there is space between one field and the next.',
           'The inspector’s close button and its collapse button no longer sit on top of each other.',
           'Channels added to a campaign no longer connect themselves to the brief. You draw that line, which is the same rule every other card follows.',
           'A built campaign draws its channel lines again. They were being drawn only in the builder, so opening a finished campaign showed cards with nothing between them.',

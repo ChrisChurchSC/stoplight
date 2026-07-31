@@ -8213,7 +8213,18 @@ export function FlowsView() {
                                   two amber "Needs a..." prompts on every card on the board. */}
                             </div>
                           </div>
-
+                          {/* A channel could always be connected TO and never FROM: it was a drop
+                              target with no handles of its own, so the one direction you could not
+                              draw was the one going onward. Same four handles every other card has. */}
+                          {CONNECT_SIDES.map((side) => (
+                            <button
+                              key={side}
+                              className={`flow-note-port flow-out-port side-${side}`}
+                              title="Draw a connection"
+                              aria-label={`Draw a connection from the ${side}`}
+                              onMouseDown={(e) => startConnect(e, d.key)}
+                            />
+                          ))}
                         </div>
                         <div className="flow-branch-list">
                           {posts.map((r) => {
@@ -8318,6 +8329,19 @@ export function FlowsView() {
                                       <path d="M12 6v12M6 12h12" />
                                     </svg>
                                   </button>
+                                  {/* Same four handles as every other card. A post was the end of the
+                                      line: you could wire a card into one, and never draw anything out
+                                      of it, which made the last row of the board the only place the
+                                      canvas stopped behaving like a canvas. */}
+                                  {CONNECT_SIDES.map((side) => (
+                                    <button
+                                      key={side}
+                                      className={`flow-note-port flow-out-port side-${side}`}
+                                      title="Draw a connection"
+                                      aria-label={`Draw a connection from the ${side}`}
+                                      onMouseDown={(e) => startConnect(e, r.id)}
+                                    />
+                                  ))}
                                 </div>
                               </div>
                             )
