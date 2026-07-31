@@ -21641,3 +21641,121 @@ table.aud-sheet td.stick .aud-cell {
   font: inherit; cursor: pointer;
 }
 .chunk-fail-btn:hover { background: var(--surface-2); }
+
+/* ── "Start a campaign" hint ──────────────────────────────────────────────────
+   Anchored to the New campaign button's wrapper rather than measured from the
+   viewport, so it tracks the button through resize, zoom and the rail opening
+   with no JS and no reflow. */
+.flow-home-new-wrap {
+  position: relative;
+}
+.flow-tb-brand-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.nc-hint {
+  position: absolute;
+  width: 320px;
+  z-index: 40;
+  padding: 14px 15px 13px;
+  border-radius: 10px;
+  background: var(--surface);
+  /* Accent outline and a soft halo of the same colour, so it reads as the one thing asking for
+     attention on an otherwise empty page. */
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 14px 34px rgba(16, 24, 40, 0.2);
+  text-align: left;
+  /* Slow and small on purpose. Enough movement to catch the eye on arrival, not enough to keep
+     pulling it away from the page afterwards. */
+  animation: nc-hint-bob 2.6s ease-in-out infinite;
+}
+@keyframes nc-hint-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+/* Motion is decoration here: the outline already does the attention-getting, so a person who has
+   asked the OS for less movement loses nothing by having it stopped. */
+@media (prefers-reduced-motion: reduce) {
+  .nc-hint {
+    animation: none;
+  }
+}
+.nc-hint.place-below {
+  top: calc(100% + 12px);
+}
+.nc-hint.place-above {
+  bottom: calc(100% + 12px);
+}
+.nc-hint.align-right {
+  right: 0;
+}
+.nc-hint.align-center {
+  left: 50%;
+  margin-left: -160px;
+}
+/* Rotated square rather than an SVG, so it inherits the card's fill and border. Only the two edges
+   facing the control are drawn, so the arrow reads as part of the card rather than a diamond. */
+.nc-hint-arrow {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  transform: rotate(45deg);
+  background: var(--surface);
+}
+.nc-hint.place-below .nc-hint-arrow {
+  top: -6px;
+  border-left: 1px solid var(--accent);
+  border-top: 1px solid var(--accent);
+}
+.nc-hint.place-above .nc-hint-arrow {
+  bottom: -6px;
+  border-right: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
+}
+.nc-hint.align-right .nc-hint-arrow {
+  right: 26px;
+}
+.nc-hint.align-center .nc-hint-arrow {
+  left: 50%;
+  margin-left: -5px;
+}
+.nc-hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.nc-hint-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.nc-hint-x {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+.nc-hint-x:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.nc-hint-body {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.nc-hint-body:last-child {
+  margin-bottom: 0;
+}

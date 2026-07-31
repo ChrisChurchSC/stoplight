@@ -50,6 +50,7 @@ import { sourceLabel } from '../domain/analyticsSources'
 import { SourceMark } from './SourceMark'
 import { DatasetRead } from './DatasetRead'
 import { CopyFields } from './CopyFields'
+import { Hint } from './Hint'
 import { GTM_STRATEGIES, mediaSharePct, resolveStrategyKey } from '../domain/strategies'
 import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
@@ -9611,22 +9612,38 @@ export function FlowsView() {
           {/* BRAND, with Product behind its caret. A product belongs to the brand that sells it, so it
               nests under Brand rather than sitting beside it: the bar says what the hierarchy is
               without a label explaining it. Clicking Brand drops a brand; the caret offers both. */}
-          {palGroup(
-            'brand',
-            {
-              title: `${OBJECT_META.brand.label}. ${OBJECT_META.brand.menuDesc}.`,
-              tone: OBJECT_META.brand.tone,
-              icon: OBJECT_META.brand.icon,
-              onClick: () => addObject('brand'),
-            },
-            (['brand', 'product'] as CanvasObjectKind[]).map((k) => ({
-              label: OBJECT_META[k].label,
-              hint: OBJECT_META[k].menuDesc,
-              tone: OBJECT_META[k].tone,
-              icon: OBJECT_META[k].icon,
-              onClick: () => addObject(k),
-            })),
-          )}
+          {/* Wrapped so the hint can anchor to this button in the layout rather than be measured. */}
+          <div className="flow-tb-brand-wrap">
+            {palGroup(
+              'brand',
+              {
+                title: `${OBJECT_META.brand.label}. ${OBJECT_META.brand.menuDesc}.`,
+                tone: OBJECT_META.brand.tone,
+                icon: OBJECT_META.brand.icon,
+                onClick: () => addObject('brand'),
+              },
+              (['brand', 'product'] as CanvasObjectKind[]).map((k) => ({
+                label: OBJECT_META[k].label,
+                hint: OBJECT_META[k].menuDesc,
+                tone: OBJECT_META[k].tone,
+                icon: OBJECT_META[k].icon,
+                onClick: () => addObject(k),
+              })),
+            )}
+            {/* Only while the board has no Brand card. That is the one state where the campaign
+                cannot say whose voice it is written in, and the toolbar is where the answer is. */}
+            <Hint
+              show={!objects.some((o) => o.kind === 'brand')}
+              storageKey="stoplight.hint.brandCard.v1"
+              title="Add a Brand card"
+              placement="above"
+              align="center"
+              body={[
+                'A campaign belongs to a brand, and the writing reads that brand\u2019s voice, audiences and proof.',
+                'Drop a Brand card here and wire it to the campaign brief. That is what binds the campaign, and until it is wired there is nothing to write from.',
+              ]}
+            />
+          </div>
           {/* One entry per family: the button drops that family's most common card, the caret
               offers the rest. Eleven kinds inline was most of why the bar had outgrown the canvas. */}
           {INPUT_FAMILIES.map((f) => {

@@ -16,14 +16,14 @@ export function BrandPicker({ verb }: { verb: string }) {
       <div style={{ fontSize: 14, color: 'var(--text-muted, #5a6b72)' }}>Choose a brand to {verb}</div>
       {brands.length === 0 ? (
         // This used to point at "Foundation → Brands", a section that does not exist in the
-        // navigation. Campaigns is where the first brand is actually made (FlowsHome shows a
-        // create-a-brand panel while the workspace has none), so send people there.
+        // navigation. A brand is made by dropping a Brand card on a campaign canvas and wiring it to
+        // the brief, which is what binds the campaign to it, so send people to a campaign.
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <div style={{ fontSize: 13, color: 'var(--text-faint, #8a969b)' }}>
-            No brands yet. Brands are created on the Campaigns page.
+            No brands yet. Open a campaign and add a Brand card to the canvas.
           </div>
           <button className="btn primary" onClick={() => setPage('flows')}>
-            Create your first brand
+            Go to campaigns
           </button>
         </div>
       ) : (

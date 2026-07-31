@@ -19,6 +19,28 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.13',
+    dateLabel: 'July 30, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Cards now carry through a chain. Wiring a card into another card, and that one into the campaign brief, used to deliver only the last card in the line: everything behind it was decoration. The whole chain now reaches the writing, so you can build up a message step by step instead of wiring every card straight to the brief.',
+          'A Brand card decides whose campaign it is. Dropping a Brand card on the canvas and wiring it to the brief is now what binds the campaign to that brand, which is also what lets it write copy. Before, the card drew and connected and did nothing at all.',
+          'Wiring the brief to a deliverable no longer pulls that deliverable\u2019s cards into the whole campaign. Cards you scoped to one post stay scoped to it.',
+          'The card list on a campaign now shows everything the writing reads from, not just what is wired directly. It used to say one while the writing used two.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Moving a campaign to a different brand no longer leaves the old brand\u2019s voice in the copy. Records belonging to another brand are refused outright rather than travelling with the board.',
+          'The Campaigns page lost its create-a-brand panel, which no longer matched how brands work. A short note next to New campaign explains what a campaign is instead, and it goes away once you have one.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.12',
     dateLabel: 'July 30, 2026',
     groups: [
