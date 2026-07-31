@@ -5901,6 +5901,19 @@ export function FlowsView() {
             const busy = filling === nt.id
             return (
               <div className="flow-fillbox">
+                {/* The box used to be a bare textarea whose only explanation was a placeholder, and
+                    a placeholder is gone the moment you type. What it does, what it costs you, and
+                    that you stay in charge afterwards are all things you need BEFORE you use it. */}
+                <div className="flow-fill-head">
+                  <span className="flow-fill-title">
+                    Describe this {(OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()}
+                  </span>
+                  <span className="flow-fill-help">
+                    One sentence in your own words fills the fields below. Everything it writes is a
+                    draft you can change, and nothing here reaches the copy until this card is
+                    connected.
+                  </span>
+                </div>
                 <textarea
                   className="flow-fill-input"
                   rows={4}
@@ -7821,12 +7834,10 @@ export function FlowsView() {
                   one: either way round the edge is stored as card into campaign. */}
               <button
                 className="flow-note-port flow-brief-port"
-                title="Connect an object to this campaign"
-                aria-label="Connect an object to this campaign"
+                title="Draw a connection"
+                aria-label="Draw a connection"
                 onMouseDown={(e) => startConnect(e, 'campaign')}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-              </button>
+              />
             </div>
             )}
 
@@ -9419,14 +9430,15 @@ export function FlowsView() {
                   </div>
                 </div>
                 {renderCampaignContext()}
+                {/* No build button here any more. Generate lives in the toolbar, where it is on
+                    screen whatever is selected, and two buttons doing the same job in two places is
+                    how you get two behaviours: this one was `build`, the toolbar's is the same call
+                    plus the empty-board case. The note stays, pointing at the one that remains. */}
                 <div className="flow-inspect-note" style={{ marginTop: 14 }}>
                   {channelTagPresets.length && !nodes.length
-                    ? `Build writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
-                    : 'Add deliverables from the canvas toolbar (or tag channels above), then Build.'}
+                    ? `Generate writes ${channelTagPresets.length} deliverable${channelTagPresets.length === 1 ? '' : 's'} from your channel tags. Add more from the toolbar.`
+                    : 'Add deliverables from the canvas toolbar (or tag channels above), then press Generate.'}
                 </div>
-                <button className="flow-brief-build" onClick={build} disabled={(!nodes.length && !channelTagPresets.length) || building}>
-                  {building ? 'Building…' : 'Build & write copy'}
-                </button>
               </div>
             </>
           ) : sel && sel.includes(':') ? (

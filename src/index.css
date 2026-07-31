@@ -3795,7 +3795,11 @@ button {
    block right from the node (the Attio node hover). */
 .flow-hover {
   position: absolute;
-  left: 100%;
+  /* Clear of the connect port, which now sits on this edge like every other card's and occupies
+     the first 10px past it. At left:100% this widget's own dot landed on top of it: measured, port
+     -10 to +10 against widget -1 to +56. Two affordances in one place, one of which you cannot
+     see. */
+  left: calc(100% + 16px);
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -20335,11 +20339,19 @@ table.aud-sheet td.stick .aud-cell {
 .flow-note[data-role='input'].attached .flow-note-kind { color: var(--note-tone, var(--text-muted)); }
 /* The hub's connection port. Sits on the brief's left edge, because context flows IN from the
    board toward the campaign, and the deliverables hang off its right. */
-.flow-brief-port {
-  right: auto;
-  left: -11px;
-  opacity: 0;
-}
+/**
+ * The brief's connect port is the same port every other card has.
+ *
+ * It used to sit on the LEFT with a plus inside it, which made the one card everything converges on
+ * the one card whose connector looked like nothing else on the board, and the plus read as "add"
+ * next to a real add button eleven pixels away. Right edge, plain circle, revealed on hover: the
+ * only rule this file needs about it is that it inherits .flow-note-port and adds nothing.
+ *
+ * The position override is gone entirely rather than set back to `right: -11px`, so there is one
+ * definition of where a port lives instead of two that can drift.
+ */
+/* .flow-note-port is revealed by `.flow-note:hover`, and the brief is not a .flow-note, so it needs
+   its own reveal. Same behaviour, different ancestor. */
 .flow-node[data-role='brief']:hover .flow-brief-port,
 .flow-canvas.connecting .flow-brief-port { opacity: 1; }
 
@@ -21926,4 +21938,31 @@ table.aud-sheet td.stick .aud-cell {
 .flow-node.generating {
   border-color: color-mix(in srgb, var(--accent) 70%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Parked rail items: visibly present, visibly not available. Dimmed rather than hidden, because a
+   control that vanishes reads as something you broke, and these are coming back. */
+.nav-item.soon {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.nav-item.soon:hover {
+  background: none;
+}
+/* The AI fill box's explainer. Above the field, because what a control does has to be readable
+   before you use it, and the placeholder it replaced disappeared on the first keystroke. */
+.flow-fill-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.flow-fill-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.flow-fill-help {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
 }
