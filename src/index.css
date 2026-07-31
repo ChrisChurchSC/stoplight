@@ -6746,7 +6746,9 @@ button {
   border: 0;
   background: none;
   font: inherit;
-  font-size: 13px;
+  /* Matches the model picker beside it. These are readouts you glance at, and two sizes in one
+     toolbar row reads as one of them being more important than it is. */
+  font-size: 10px;
   font-weight: 600;
   color: var(--text);
   padding: 7px 10px;
@@ -6806,7 +6808,23 @@ button {
 }
 /* The model picker reuses the zoom control's shape (same toolbar, same gesture) but its rows carry
    a second line: the model name is the choice, the note is why you would pick it. */
-.flow-tb-model { max-width: 168px; }
+/* Much smaller than the zoom control it inherits from. The model name and the balance are things
+   to glance at, not read, and at the inherited size a full name pushed the toolbar wide enough to
+   reach the setup panel. */
+.flow-tb-model {
+  max-width: 132px;
+  gap: 5px;
+  padding: 7px 8px;
+  /* One line, always. Wrapping made the button two rows tall and shoved the whole toolbar down. */
+  flex-wrap: nowrap;
+}
+.flow-tb-model-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The full name is on the button's title, so truncating loses nothing. */
 .flow-tb-model svg:first-child { color: var(--accent); }
 .flow-tb-model-menu { min-width: 208px; }
 .flow-tb-model-item { display: flex; flex-direction: column; gap: 1px; }
@@ -6818,8 +6836,8 @@ button {
 .flow-tb-credits {
   display: inline-flex;
   align-items: center;
-  padding: 0 8px;
-  font-size: 12px;
+  padding: 0 6px;
+  font-size: 9.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);

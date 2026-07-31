@@ -10036,7 +10036,9 @@ export function FlowsView() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
                     </svg>
-                    {cur.label}
+                    {/* Wrapped so it can truncate. A bare text node cannot take text-overflow, and
+                        the longer model names wrapped the button onto two lines. */}
+                    <span className="flow-tb-model-label">{cur.label}</span>
                     <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
