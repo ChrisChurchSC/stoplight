@@ -4669,12 +4669,24 @@ export function FlowsView() {
       const msg = copyBlocked
         ? `Built · ${n} empty asset${n === 1 ? '' : 's'}. No copy yet.`
         : `Built · ${n} draft${n === 1 ? '' : 's'}${source === 'heuristic' ? ', written offline' : ''}.`
-      showToastAction(
-        msg,
-        'Open campaign',
-        () => { openView(campaignName); setFlowView('flow') },
-        copyBlocked ? 'warn' : 'info',
-      )
+      /**
+       * OPEN THE CAMPAIGN THAT WAS JUST BUILT. This is not optional and it is not the toast's job.
+       *
+       * The builder shows placeholder subcards; the copy that was just written lives on rows, which
+       * only render once the campaign is open. Leaving the board in build mode after a build means
+       * standing in front of empty placeholders while your copy sits one screen away, and the copy
+       * looks like it never arrived.
+       *
+       * The modal this replaced got away with it because it BLOCKED: you had to press "Open
+       * campaign" or dismiss it. A toast expires, so doing nothing left you stranded, which is
+       * exactly what happened the first time somebody generated a real campaign.
+       */
+      openView(campaignName)
+      setFlowView('flow')
+      // No action on the toast: you are already looking at the campaign, so "Open campaign" would
+      // be a button that does nothing. It reports, it does not navigate.
+      if (copyBlocked) showToastAction(msg, 'Why', () => useTrafficStore.getState().setBrandNotice(copyBlocked), 'warn')
+      else showToast(msg)
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
