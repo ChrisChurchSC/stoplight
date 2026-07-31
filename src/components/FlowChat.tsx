@@ -31,7 +31,7 @@ const START_EXAMPLES: Example[] = [
 ]
 const BUILD_EXAMPLES: Example[] = [
   { title: 'Add a newsletter and socials', desc: 'Add a newsletter and 4 Instagram posts a month.', prompt: 'Add a weekly newsletter and 4 Instagram posts a month' },
-  { title: 'Wire in the right context', desc: 'Point this campaign at the audiences it targets.', prompt: 'Tag this campaign to the segments it targets' },
+  { title: 'Connect the right context', desc: 'Point this campaign at the audiences it targets.', prompt: 'Tag this campaign to the segments it targets' },
   { title: "What's weak here?", desc: 'An honest read on gaps and overlaps.', prompt: "What's weak about this campaign?", mode: 'analyze' },
 ]
 const VIEW_EXAMPLES: Example[] = [

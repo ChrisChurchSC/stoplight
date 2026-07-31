@@ -21759,3 +21759,14 @@ table.aud-sheet td.stick .aud-cell {
 .nc-hint-body:last-child {
   margin-bottom: 0;
 }
+/* The action that does the thing the card describes. Right-aligned like every other primary action
+   in the app, so it reads as a button rather than part of the sentence above it. */
+.nc-hint-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 11px;
+}
+.nc-hint-cta {
+  padding: 6px 14px;
+  font-size: 12.5px;
+}

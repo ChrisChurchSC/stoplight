@@ -33,6 +33,13 @@ export interface HintProps {
   placement?: 'below' | 'above'
   /** Horizontal alignment against the wrapper. Right suits a header, centre suits a toolbar. */
   align?: 'right' | 'center'
+  /**
+   * Optional action that does the thing the card describes.
+   *
+   * Dismisses on click, because a person who took the action has read the card, and a hint still
+   * pointing at a button you just pressed is the second-time noise this whole component avoids.
+   */
+  cta?: { label: string; onClick: () => void }
 }
 
 function seen(key: string): boolean {
@@ -43,7 +50,7 @@ function seen(key: string): boolean {
   }
 }
 
-export function Hint({ show, storageKey, title, body, placement = 'below', align = 'right' }: HintProps) {
+export function Hint({ show, storageKey, title, body, placement = 'below', align = 'right', cta }: HintProps) {
   const [dismissed, setDismissed] = useState(() => seen(storageKey))
   if (!show || dismissed) return null
   const close = () => {
@@ -68,6 +75,19 @@ export function Hint({ show, storageKey, title, body, placement = 'below', align
           {p}
         </p>
       ))}
+      {cta && (
+        <div className="nc-hint-foot">
+          <button
+            className="btn primary nc-hint-cta"
+            onClick={() => {
+              close()
+              cta.onClick()
+            }}
+          >
+            {cta.label}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

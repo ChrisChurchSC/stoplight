@@ -2483,12 +2483,12 @@ export function FlowsView() {
     const written = writtenAssetCount()
     if (written) {
       useTrafficStore.getState().setBrandNotice(
-        `"${viewName}" is still bound to ${name}: ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} already written in that voice, and taking the brand away would leave copy no brand answers for. Wire a different Brand card to move it, or clear those assets first.`,
+        `"${viewName}" is still bound to ${name}: ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} already written in that voice, and taking the brand away would leave copy no brand answers for. Connect a different Brand card to move it, or clear those assets first.`,
       )
       return
     }
     bindCampaignBrand(viewName, '')
-    showToast(`"${viewName}" is no longer bound to ${name}. Nothing had been written yet. Wire a Brand card before generating.`)
+    showToast(`"${viewName}" is no longer bound to ${name}. Nothing had been written yet. Connect a Brand card before generating.`)
   }
   /**
    * Connecting a card to the campaign tags its records on the campaign.
@@ -5138,7 +5138,7 @@ export function FlowsView() {
         const m = AI_MODELS.find((x) => x.id === c.value)
         return `Write this campaign with ${m?.label ?? c.value}`
       }
-      case 'connect': return `Wire ${c.from} into ${c.to}`
+      case 'connect': return `Connect ${c.from} to ${c.to}`
       case 'disconnect': return `Unwire ${c.from} from ${c.to}`
       case 'setRecordTags': return `Tag ${c.labels.length} record${c.labels.length === 1 ? '' : 's'}: ${c.labels.join(', ')}`
       case 'createAudience': return `Create a placeholder audience "${c.name}" and tag it`
@@ -8689,7 +8689,7 @@ export function FlowsView() {
                           </>
                         )}
                         {/* Nothing here when it is simply inheriting. The "pin different records"
-                            link is gone: wiring a card straight to this deliverable is how you give it
+                            link is gone: connecting a card straight to this deliverable is how you give it
                             its own context now, which is the same gesture as everywhere else on the
                             board rather than a second, record-shaped mechanism reachable only from a
                             footnote. An override that already exists stays explained and reversible. */}
@@ -9640,8 +9640,9 @@ export function FlowsView() {
               align="center"
               body={[
                 'A campaign belongs to a brand, and the writing reads that brand\u2019s voice, audiences and proof.',
-                'Drop a Brand card here and wire it to the campaign brief. That is what binds the campaign, and until it is wired there is nothing to write from.',
+                'Add a Brand card and connect it to the campaign brief. That connection is what binds the campaign, and until it is made there is nothing to write from.',
               ]}
+              cta={{ label: 'Add a Brand card', onClick: () => addObject('brand') }}
             />
           </div>
           {/* One entry per family: the button drops that family's most common card, the caret

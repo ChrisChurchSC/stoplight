@@ -507,8 +507,15 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               title="Start a campaign"
               body={[
                 'A campaign opens a canvas. It is where you plan, shape and ship the work, and it is built from cards.',
-                'Start with a Brand card, wire it through the cards that shape the message, then into the brief and pick what you are shipping. What you connect is what the writing reads from.',
+                'Start with a Brand card, connect it through the cards that shape the message, then connect that to the brief and pick what you are shipping. What you connect is what the writing reads from.',
               ]}
+              cta={{
+                label: 'New campaign',
+                onClick: () => {
+                  setNewCampaignParent(null)
+                  onNew()
+                },
+              }}
             />
           </div>
         </div>
