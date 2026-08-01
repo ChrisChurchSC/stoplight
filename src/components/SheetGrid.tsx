@@ -5,7 +5,6 @@ import { messagingFields, messagingMap } from '../domain/messaging'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
-import { newAudience } from '../domain/audiences'
 import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
@@ -127,6 +126,7 @@ export function SheetGrid({
   scopeClient,
   scopeCampaign,
   onPickObject,
+  onCreateObject,
 }: {
   liveScope?: boolean
   scopeClient?: string
@@ -140,6 +140,12 @@ export function SheetGrid({
    * than being handed an invented card.
    */
   onPickObject?: (pick: { kind: CanvasObjectKind; cardId?: string; label: string }) => void
+  /**
+   * "Add a voice" makes a real CARD on the board and opens the real form on it, which is what
+   * adding one on the canvas does. The grid asks for it and does not do it: the board belongs to
+   * whoever rendered this.
+   */
+  onCreateObject?: (req: { kind: CanvasObjectKind; rowId: string }) => void
 } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
@@ -308,16 +314,6 @@ export function SheetGrid({
   const brandObjects = useTrafficStore((s) => s.brandObjects)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
-  const addBrandObject = useTrafficStore((s) => s.addBrandObject)
-  const addProduct = useTrafficStore((s) => s.addProduct)
-  const addMessage = useTrafficStore((s) => s.addMessage)
-  const addVoice = useTrafficStore((s) => s.addVoice)
-  const addConcept = useTrafficStore((s) => s.addConcept)
-  const addSeason = useTrafficStore((s) => s.addSeason)
-  const addCompany = useTrafficStore((s) => s.addCompany)
-  const addPerson = useTrafficStore((s) => s.addPerson)
-  const addTrigger = useTrafficStore((s) => s.addTrigger)
-  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
 
   const nameFor = (o: CanvasObject): string => {
     if (o.smartObjectId) {
@@ -366,51 +362,6 @@ export function SheetGrid({
     }
   }
 
-  /**
-   * MAKE THE RECORD FROM THE CELL THAT WANTS IT.
-   *
-   * A picker over an empty library is a dead end — "—" and nothing else — and the answer everywhere
-   * else in this app is to let you make one from where you noticed it was missing. The canvas cards
-   * already do exactly this with their own "+ New …" option; this is the same move in the grid.
-   *
-   * What gets made is a labelled PLACEHOLDER: the name you typed and nothing invented around it. The
-   * record's own library is where it gets filled in, and until it is, it carries a name and no
-   * claims — which is the honest state for something created in the middle of doing something else.
-   */
-  const createRecord = (kind: CanvasObjectKind, rawName: string): string | null => {
-    const name = rawName.trim()
-    if (!name) return null
-    const brand = clientFilter === 'all' ? undefined : clientFilter
-    switch (kind) {
-      case 'brand': return addBrandObject({ name })
-      case 'product': return addProduct({ name, brand })
-      case 'message': return addMessage({ name, brand })
-      case 'voice': return addVoice({ name, brand })
-      case 'concept': return addConcept({ name, brand })
-      case 'season': return addSeason({ name, brand })
-      case 'company': return addCompany({ name, brand })
-      case 'person': return addPerson({ name, brand })
-      case 'trigger': return addTrigger({ name, brand })
-      case 'audience': {
-        if (!brand) return null
-        // Through the factory, so a new audience has the full shape every reader expects rather
-        // than an id and a name that the next consumer trips over.
-        const a = newAudience({ name })
-        setClientAudiences(brand, [...(clientAudiences[brand] ?? []), a])
-        return a.id
-      }
-      /**
-       * Proof and data sets are NOT created here, deliberately, and the canvas takes the same line
-       * about data sets: a proof point is a claim with a number and a source behind it, and a data
-       * set is a table. Minting either from a name produces something that looks established and
-       * says nothing, which is worse than an empty picker that sends you to build it properly.
-       */
-      default: return null
-    }
-  }
-  /** The cell currently being named: which row, which kind. */
-  const [creating, setCreating] = useState<{ rowId: string; kind: CanvasObjectKind } | null>(null)
-  const [creatingName, setCreatingName] = useState('')
 
   /**
    * SETTING ONE KIND MUST NOT DROP THE OTHERS.
@@ -797,27 +748,6 @@ export function SheetGrid({
                             {OBJECT_META[oc.objKind].icon}
                           </svg>
                         </span>
-                        {creating && creating.rowId === row.id && creating.kind === oc.objKind ? (
-                          <input
-                            className="cell-input obj-new"
-                            autoFocus
-                            value={creatingName}
-                            placeholder={`New ${oc.label.toLowerCase()} name…`}
-                            onChange={(e) => setCreatingName(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') { setCreating(null); return }
-                              if (e.key !== 'Enter') return
-                              const name = creatingName.trim()
-                              const id = createRecord(oc.objKind, name)
-                              if (id) setRowRecord(row, oc.objKind, id, name)
-                              setCreating(null)
-                            }}
-                            // Leaving without pressing Enter is a cancel: a half-typed name is not a
-                            // record, and creating one on blur would litter the library with them.
-                            onBlur={() => setCreating(null)}
-                          />
-                        ) : (
                         <select
                           className={`cell-select obj-select${value ? '' : ' unset'}`}
                           value={value}
@@ -829,8 +759,7 @@ export function SheetGrid({
                           }
                           onChange={(e) => {
                           if (e.target.value === '__new__') {
-                            setCreatingName('')
-                            setCreating({ rowId: row.id, kind: oc.objKind })
+                            onCreateObject?.({ kind: oc.objKind, rowId: row.id })
                             return
                           }
                           setRowRecord(row, oc.objKind, e.target.value)
@@ -858,7 +787,6 @@ export function SheetGrid({
                               see createRecord. */}
                           {CREATABLE.has(oc.objKind) && <option value="__new__">+ New {oc.label.toLowerCase()}…</option>}
                         </select>
-                        )}
                         </span>
                         {extra.map((c) => (
                           <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>

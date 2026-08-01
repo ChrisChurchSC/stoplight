@@ -10258,6 +10258,22 @@ export function FlowsView() {
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
                 onPickObject={(pick) => setGridPick(pick)}
+                /**
+                 * ADDING ONE FROM A CELL IS ADDING A CARD. Same addObject the toolbar calls, wired
+                 * straight to the asset whose cell you used, and then its own inspector opens on it
+                 * — which is the whole gesture on the canvas, minus having to find the canvas.
+                 *
+                 * A real card rather than a bare record, because the card is what carries it: the
+                 * cell reads its value by walking the board, so a record with no card behind it
+                 * would be filled in and then not appear in the cell that asked for it. The wire is
+                 * to the ROW, not the campaign, because that is the cell you clicked — this voice is
+                 * for this asset until you say otherwise.
+                 */
+                onCreateObject={({ kind, rowId }) => {
+                  const id = addObject(kind)
+                  setConnectors((c) => (c.some((x) => x.from === id && x.to === rowId) ? c : [...c, { from: id, to: rowId }]))
+                  setGridPick({ kind, cardId: id, label: OBJECT_META[kind].label })
+                }}
               />
             ) : (
               <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)} />
