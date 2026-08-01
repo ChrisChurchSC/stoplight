@@ -2,11 +2,10 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
 import { STATUS_LABEL, STATUS_ORDER } from '../domain/assetBadge'
-import { filledFields, hasCopy, messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
+import { hasCopy, messagingFields, messagingMap } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
-import { mockAttio } from '../adapters/attio/mockAttio'
 import { assetRtbIds, rtbById } from '../domain/rtb'
 import { can } from '../domain/access'
 import { boardFor, deliverableKeyFor } from '../domain/flowBoard'
@@ -15,40 +14,43 @@ import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
-import { journeyPerformance, formatReach, isBrandCalibrated } from '../domain/journeyPerf'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
-import { Thumb } from './Thumb'
-import { proxiedMedia } from '../lib/media'
 
 
 
-// Named columns of the spreadsheet, in order, with a type glyph per column.
-const COLUMNS = [
-  { key: 'asset', label: 'Asset', icon: '▦' },
-  { key: 'channel', label: 'Channel', icon: '◉' },
-  { key: 'type', label: 'Type', icon: '◆' },
-  { key: 'campaign', label: 'Campaign', icon: '◇' },
-  { key: 'audience', label: 'Audience', icon: '◎' },
-  { key: 'messaging', label: 'Messaging', icon: '¶' },
-  { key: 'rtb', label: 'Proof', icon: '◆' },
-  { key: 'review', label: 'ICP', icon: '◑' },
-  { key: 'scheduled', label: 'Scheduled', icon: '◷' },
-  { key: 'status', label: 'Status', icon: '●' },
-  { key: 'tracking', label: 'Tracking', icon: '◈' },
-  { key: 'budget', label: 'Budget', icon: '◧' },
-  { key: 'attribution', label: 'Attribution', icon: '↗' },
-  { key: 'performance', label: 'Performance', icon: '📊' },
-  { key: 'posted', label: 'Posted', icon: '✓' },
-  { key: 'comments', label: 'Platform comments', icon: '💬' },
-  { key: 'publish', label: 'Publish', icon: '▷' },
-  { key: 'actions', label: '', icon: '' },
-  { key: 'delete', label: '', icon: '' },
-] as const
-
-// Widths include the leading row-number gutter (index 0), then one per COLUMN.
-const DEFAULT_WIDTHS = [40, 220, 140, 160, 150, 150, 320, 300, 116, 184, 138, 200, 200, 150, 150, 120, 150, 100, 84, 64]
+/**
+ * THE COLUMNS THE SHEET CAN SHOW, in order. What it DOES show is worked out per render: see `cols`.
+ *
+ * Two things make the list dynamic rather than fixed. Messaging used to stack every copy component
+ * into one cell as labelled pills, which is a list wearing a column's clothes: you could not read a
+ * column of titles down the page, widen the one you were working in, or see at a glance which posts
+ * had no description. Each component the rows actually carry gets a column now. And a column that is
+ * empty on every row in view is a column of dashes, spending the width this screen has least of.
+ *
+ * `width` lives on the descriptor. It was a parallel array indexed by position, which is the kind of
+ * thing that silently misaligns the moment a column is added or removed — and six have just gone.
+ *
+ * `always` marks the ones that stay whether or not they hold anything: what a row IS, and the
+ * controls. An empty Asset column would not read as "nothing here", it would read as no sheet.
+ */
+const COLUMNS: { key: string; label: string; icon: string; width: number; always?: true }[] = [
+  { key: 'asset', label: 'Asset', icon: '▦', width: 220, always: true },
+  { key: 'channel', label: 'Channel', icon: '◉', width: 140, always: true },
+  { key: 'type', label: 'Type', icon: '◆', width: 160, always: true },
+  { key: 'campaign', label: 'Campaign', icon: '◇', width: 150 },
+  { key: 'audience', label: 'Audience', icon: '◎', width: 150 },
+  { key: 'messaging', label: 'Messaging', icon: '¶', width: 320 },
+  { key: 'rtb', label: 'Proof', icon: '◆', width: 300 },
+  { key: 'scheduled', label: 'Scheduled', icon: '◷', width: 184 },
+  { key: 'status', label: 'Status', icon: '●', width: 138, always: true },
+  { key: 'tracking', label: 'Tracking', icon: '◈', width: 200 },
+  { key: 'budget', label: 'Budget', icon: '◧', width: 200 },
+  { key: 'actions', label: '', icon: '', width: 84, always: true },
+  { key: 'delete', label: '', icon: '', width: 64, always: true },
+]
+const GUTTER_W = 40
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -60,28 +62,6 @@ const colLetter = (i: number) => String.fromCharCode(65 + i)
  * `publishedAt ?? postedAt`; this was the one that did not. One is an ISO string and the other a
  * timestamp, which is why both go through Date.
  */
-function postedLabel(row: TrafficRow): string {
-  const when = row.publishedAt ?? row.postedAt
-  if (!when) return '—'
-  return new Date(when).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function CovBar({ n, total }: { n: number; total: number }) {
-  const pct = total ? Math.round((n / total) * 100) : 0
-  return (
-    <div className="cov">
-      <div className="cov-bar">
-        <div className="cov-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="cov-pct">{pct}%</span>
-    </div>
-  )
-}
 
 /**
  * Auto-growing text cell: wraps content and expands the row to fit.
@@ -157,15 +137,10 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const updateRow = useTrafficStore((s) => s.updateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
-  const publishRow = useTrafficStore((s) => s.publishRow)
   const openReview = useTrafficStore((s) => s.openReview)
-  const fillRowMedia = useTrafficStore((s) => s.fillRowMedia)
-  const openComments = useTrafficStore((s) => s.openComments)
-  const commentMap = useTrafficStore((s) => s.comments)
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
-  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   // Batch (column-header) actions.
   const approveAll = useTrafficStore((s) => s.approveAll)
   const role = useTrafficStore((s) => s.role)
@@ -179,68 +154,28 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const acceptTracking = useTrafficStore((s) => s.acceptTracking)
   const acceptBudget = useTrafficStore((s) => s.acceptBudget)
   const syncSpend = useTrafficStore((s) => s.syncSpend)
-  const syncComments = useTrafficStore((s) => s.syncComments)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const drafting = useTrafficStore((s) => s.drafting)
 
   const pains = icp?.pains ?? []
-  const unresolvedFlags = (row: TrafficRow) =>
-    batchReview
-      ? batchReview.flags.filter((fl) => fl.rowId === row.id && !flagResolved(fl, row, pains)).length
-      : 0
-
-  // Per-row ICP verdict shown in the grid (the review, row by row).
-  type RowVerdict = 'none' | 'on' | 'drift' | 'off'
-  const rowVerdict = (row: TrafficRow): RowVerdict => {
-    if (!batchReview) return 'none'
-    if (row.status === 'posted' || row.status === 'failed') return 'none'
-    const flags = batchReview.flags.filter(
-      (fl) => fl.rowId === row.id && !flagResolved(fl, row, pains),
-    )
-    if (flags.length === 0) return 'on'
-    return flags.some((fl) => fl.verdict === 'off-icp') ? 'off' : 'drift'
-  }
 
   // Heuristic ICP-fit grade for content that's already live (the batch review
   // only scores unshipped rows). Graded on whether the piece is targeted to a
   // defined audience, substantiated by proof, and resonant with that audience's
   // needs. A "Recheck with Claude" deepens it.
-  const audMap = new Map((clientAudiences[clientFilter] ?? []).map((a) => [a.name, a] as const))
-  const icpGrade = (row: TrafficRow): { letter: 'A' | 'B' | 'C' | 'D'; reasons: string } => {
-    const aud = audMap.get((row.audience ?? '').trim())
-    const targeted = !!aud
-    const proof = assetRtbIds(row).length > 0
-    const text = messagingAllText(row).toLowerCase()
-    const terms = aud ? [...aud.pains, aud.messageAngle].filter(Boolean) : []
-    const resonant = terms.some((t) =>
-      String(t)
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((w) => w.length > 4)
-        .slice(0, 4)
-        .some((w) => text.includes(w)),
-    )
-    const score = (targeted ? 1 : 0) + (proof ? 1 : 0) + (resonant ? 1 : 0)
-    const letter = score >= 3 ? 'A' : score === 2 ? 'B' : score === 1 ? 'C' : 'D'
-    const reasons = `${targeted ? 'targeted' : 'no audience'} · ${proof ? 'has proof' : 'no proof'} · ${resonant ? 'resonant' : 'generic'}`
-    return { letter, reasons }
-  }
 
-  const [widths, setWidths] = useState<number[]>(DEFAULT_WIDTHS)
-  const total = widths.reduce((a, b) => a + b, 0)
+  const [widthByKey, setWidthByKey] = useState<Record<string, number>>({})
 
   function startResize(idx: number, e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
     const startX = e.clientX
     const startW = widths[idx]
+    const key = cols[idx - 1]?.key
+    if (!key) return
     const onMove = (ev: MouseEvent) => {
       const w = Math.max(MIN_COL, startW + (ev.clientX - startX))
-      setWidths((prev) => {
-        const next = [...prev]
-        next[idx] = w
-        return next
-      })
+      setWidthByKey((prev) => ({ ...prev, [key]: w }))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
@@ -276,26 +211,8 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
       (scoped || inTimeRange(r, timeRange, rangeNow)),
   )
 
-  const totalRows = view.length
-  const typeSet = view.filter((r) => isValidType(r.channel, r.assetType)).length
   // Through hasCopy, the same question the Messaging cell asks. These disagreed: this counted a
   // row filled on any stored key while the cell showed "Add messaging…" for the same row.
-  const messagingFilled = view.filter((r) => hasCopy(r)).length
-  const rtbSetN = view.filter((r) => assetRtbIds(r).length > 0).length
-  const reviewableN = view.filter((r) => r.status !== 'posted' && r.status !== 'failed').length
-  const onMessageN = view.filter((r) => rowVerdict(r) === 'on').length
-  const campaignFilled = view.filter((r) => (r.campaign ?? '').trim()).length
-  const audienceFilled = view.filter((r) => (r.audience ?? '').trim()).length
-  const postedN = view.filter((r) => r.status === 'posted').length
-  const trackingCleanN = view.filter((r) => r.utm && isTrackingClean(r)).length
-  const paidN = view.filter(isPaidRow).length
-  const budgetSetN = view.filter((r) => isPaidRow(r) && hasBudget(r)).length
-  const commentedN = view.filter((r) => (commentMap[r.id]?.length ?? 0) > 0).length
-  const approvedN = view.filter((r) => r.status === 'approved' || r.status === 'scheduled').length
-  const wonScoped = [...new Set(view.map((r) => r.assetName))].reduce(
-    (a, name) => a + mockAttio.attributionForAsset(name).wonRevenue,
-    0,
-  )
   const now = Date.now()
 
   // ---- Batch-action states for the column headers ----
@@ -311,7 +228,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   ).length
   // Journey performance (reach + per-fork flow) on the campaign — the same numbers
   // the canvas shows, surfaced per row here so performance reads the same everywhere.
-  const journeyPerf = journeyPerformance(scopedForBreaks)
   const connectionCleared = openBreakN === 0
   /**
    * WHAT THE HEADER BUTTONS ACT ON, so they act on what they counted.
@@ -321,8 +237,53 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    * it passes nothing and the actions keep the reach they were written with.
    */
   const scopeIds = scopeCampaign || scopeClient ? view.map((r) => r.id) : undefined
-  /** Whether the reach figures are modelled rather than measured, for this brand. */
-  const reachIsProjected = !isBrandCalibrated(clientFilter === 'all' ? undefined : clientFilter)
+
+  /**
+   * ONE COLUMN PER COPY COMPONENT the rows in view actually carry, in the order the formats declare
+   * them. A campaign of YouTube posts gets Title, Description and Pinned comment; a mixed one gets
+   * the union, and a component nobody has filled in does not get a column at all.
+   */
+  const msgCols = (() => {
+    const seen = new Map<string, string>()
+    for (const r of view) {
+      for (const f of messagingFields(r.channel, r.assetType)) {
+        if (!seen.has(f.key) && (messagingMap(r)[f.key] ?? '').trim()) seen.set(f.key, f.label)
+      }
+    }
+    return [...seen].map(([key, label]) => ({ key: `msg:${key}`, label, icon: '¶', width: 280, fieldKey: key }))
+  })()
+
+  /** Empty on every row in view? Only asked of columns that are allowed to disappear. */
+  const columnEmpty = (key: string): boolean => {
+    const none = (fn: (r: TrafficRow) => unknown) =>
+      !view.some((r) => {
+        const v = fn(r)
+        return v !== undefined && v !== null && v !== '' && v !== 0 && v !== false
+      })
+    switch (key) {
+      case 'campaign': return none((r) => (r.campaign ?? '').trim())
+      case 'audience': return none((r) => (r.audience ?? '').trim())
+      case 'rtb': return none((r) => assetRtbIds(r).length)
+      case 'scheduled': return none((r) => r.scheduledAt)
+      case 'tracking': return none((r) => r.utm && Object.values(r.utm).some((x) => (x ?? '').trim()))
+      case 'budget': return none((r) => r.budget?.amount)
+      default: return false
+    }
+  }
+
+  const cols = (() => {
+    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string }[] = []
+    for (const c of COLUMNS) {
+      if (c.key === 'messaging') { out.push(...msgCols); continue }
+      if (!c.always && columnEmpty(c.key)) continue
+      out.push(c)
+    }
+    return out
+  })()
+  /** Is this column on screen? The body cells are written in order, so they ask before rendering. */
+  const show = (key: string) => cols.some((c) => c.key === key)
+  const widths = [GUTTER_W, ...cols.map((c) => widthByKey[c.key] ?? c.width)]
+  const total = widths.reduce((a, b) => a + b, 0)
   /**
    * CHANNELS CUT OFF FROM THE BRIEF, as row ids.
    *
@@ -352,10 +313,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const missingBudgetN = paidReviewable.filter((r) => !hasBudget(r)).length
   const paidWithBudget = paidReviewable.some((r) => hasBudget(r))
   const emptyMsgN = reviewable.filter((r) => !hasCopy(r)).length
-  const hasPosted = view.some((r) => r.status === 'posted')
-  const needsReplyN = view
-    .flatMap((r) => commentMap[r.id] ?? [])
-    .filter((c) => c.needsResponse).length
 
   const pad = Math.max(0, MIN_ROWS - view.length)
 
@@ -394,13 +351,13 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
           <thead>
             <tr className="letters">
               <th className="corner" />
-              {COLUMNS.map((_, i) => (
-                <th key={i}>{colLetter(i)}</th>
+              {cols.map((c, i) => (
+                <th key={c.key}>{colLetter(i)}</th>
               ))}
             </tr>
             <tr className="names">
               <th className="corner">#</th>
-              {COLUMNS.map((c, i) => (
+              {cols.map((c, i) => (
                 <th key={c.key}>
                   {c.icon && <span className="col-ico">{c.icon}</span>}
                   {c.label}
@@ -408,150 +365,100 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                 </th>
               ))}
             </tr>
+            {/* HEADER ACTIONS, BY COLUMN KEY. This row was twenty hand-written cells in a fixed
+                order, matched to the columns by counting — so removing one column left an orphan
+                and shifted every action one place left, silently. Keyed, it cannot drift, which
+                matters now that the column list changes with the data.
+
+                The connection gate moved off Scheduled, where a broken thread had no business
+                sitting under a date, and onto the asset column, which is the row itself. */}
             <tr className="col-actions">
               <th className="corner" />
-              <th />
-              <th />
-              <th />
-              <th />
-              <th />
-              <th>
-                {drafting ? (
-                  <span className="cov-ok">✦ Drafting…</span>
-                ) : emptyMsgN > 0 ? (
-                  <button
-                    className="cov-btn"
-                    onClick={() => draftCopy()}
-                    title="Draft starter copy + proof for every empty asset, from the ICP"
-                  >
-                    ✦ Draft ({emptyMsgN})
-                  </button>
-                ) : null}
-              </th>
-              <th />
-              <th />
-              <th className="gate-conn">
-                {/* Two independent facts, so both are said. A break is a thread that does not hold
-                    together and it gates publish; being cut off is a decision somebody made and it
-                    does not. Showing one INSTEAD of the other hid the cut whenever anything else was
-                    also wrong, which is exactly when you would want to know. */}
-                {reviewable.length === 0 ? null : (
-                  <>
-                    {connectionCleared ? (
-                      detachedRowIds.size ? null : <span className="cov-ok">✓ Connected</span>
-                    ) : (
+              {cols.map((c, ci) => {
+                const firstMsg = c.key.startsWith('msg:') && ci === cols.findIndex((x) => x.key.startsWith('msg:'))
+                return (
+                  <th key={c.key} className={c.key === 'asset' ? 'gate-conn' : undefined}>
+                    {c.key === 'asset' && reviewable.length > 0 && (
+                      <>
+                        {connectionCleared ? (
+                          detachedRowIds.size ? null : <span className="cov-ok">✓ Connected</span>
+                        ) : (
+                          <button
+                            className="cov-btn warn"
+                            onClick={() => openBreaksQueue()}
+                            title="Resolve the thread before you ship: the connection check gates publish"
+                          >
+                            ⚠ {openBreakN} break{openBreakN === 1 ? '' : 's'}
+                          </button>
+                        )}
+                        {detachedRowIds.size > 0 && (
+                          <span
+                            className="cov-cut"
+                            title={`${detachedRowIds.size} asset${detachedRowIds.size === 1 ? '' : 's'} sit under a channel cut off from the campaign brief, so ${detachedRowIds.size === 1 ? 'it takes' : 'they take'} none of the campaign's cards or instructions. Reconnect the channel on the Flow tab.`}
+                          >
+                            {detachedRowIds.size} cut off
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {firstMsg &&
+                      (drafting ? (
+                        <span className="cov-ok">✦ Drafting…</span>
+                      ) : emptyMsgN > 0 ? (
+                        <button
+                          className="cov-btn"
+                          onClick={() => draftCopy()}
+                          title="Draft starter copy + proof for every empty asset, from the ICP"
+                        >
+                          ✦ Draft ({emptyMsgN})
+                        </button>
+                      ) : null)}
+                    {c.key === 'status' && draftN > 0 && (
                       <button
-                        className="cov-btn warn"
-                        onClick={() => openBreaksQueue()}
-                        title="Resolve the thread before you ship: the connection check gates publish"
+                        className="cov-btn green"
+                        disabled={!allGatesCleared || !canPublish}
+                        onClick={() => void approveAll(scopeIds)}
+                        title={
+                          !canPublish
+                            ? 'Publishing is owner / editor only'
+                            : allGatesCleared
+                              ? 'Approve all draft rows'
+                              : !connectionCleared
+                                ? `Resolve ${openBreakN} connection break${openBreakN === 1 ? '' : 's'} to unlock`
+                                : 'Clear tracking and budget gates to unlock'
+                        }
                       >
-                        ⚠ {openBreakN} break{openBreakN === 1 ? '' : 's'}
+                        Approve {draftN}
+                        {!canPublish ? ' 🔒' : !allGatesCleared && ' 🔒'}
                       </button>
                     )}
-                    {detachedRowIds.size > 0 && (
-                      <span
-                        className="cov-cut"
-                        title={`${detachedRowIds.size} asset${detachedRowIds.size === 1 ? '' : 's'} sit under a channel cut off from the campaign brief, so ${detachedRowIds.size === 1 ? 'it takes' : 'they take'} none of the campaign's cards or instructions. Reconnect the channel on the Flow tab.`}
-                      >
-                        {detachedRowIds.size} cut off
-                      </span>
-                    )}
-                  </>
-                )}
-              </th>
-              <th>
-                {draftN > 0 ? (
-                  <button
-                    className="cov-btn green"
-                    disabled={!allGatesCleared || !canPublish}
-                    onClick={() => void approveAll(scopeIds)}
-                    title={
-                      !canPublish
-                        ? 'Publishing is owner / editor only'
-                        : allGatesCleared
-                          ? 'Approve all draft rows'
-                          : !connectionCleared
-                            ? `Resolve ${openBreakN} connection break${openBreakN === 1 ? '' : 's'} to unlock`
-                            : 'Clear ICP, tracking, and budget gates to unlock'
-                    }
-                  >
-                    Approve {draftN}
-                    {!canPublish ? ' 🔒' : !allGatesCleared && ' 🔒'}
-                  </button>
-                ) : null}
-              </th>
-              <th>
-                {trackingCleared ? (
-                  <span className="cov-ok">✓ Tracked</span>
-                ) : missingUtmN > 0 ? (
-                  <button className="cov-btn" onClick={() => void generateTracking(scopeIds)} title="Build UTMs for every row in view">
-                    Generate ({missingUtmN})
-                  </button>
-                ) : dirtyTrackingN === 0 && reviewable.length > 0 ? (
-                  <button className="cov-btn green" onClick={() => acceptTracking(scopeIds)}>
-                    Accept
-                  </button>
-                ) : null}
-              </th>
-              <th>
-                {paidReviewable.length === 0 ? null : budgetCleared ? (
-                  <span className="cov-ok">✓ Set</span>
-                ) : missingBudgetN === 0 ? (
-                  <button className="cov-btn green" onClick={() => acceptBudget(scopeIds)}>
-                    Accept
-                  </button>
-                ) : paidWithBudget ? (
-                  <button className="cov-btn" onClick={() => void syncSpend(scopeIds)} title="Pull actual spend">
-                    ↻ Spend
-                  </button>
-                ) : null}
-              </th>
-              <th />
-              <th />
-              <th />
-              <th>
-                {hasPosted ? (
-                  <button className="cov-btn" onClick={() => void syncComments(scopeIds)} title="Pull comments from the posted assets in view">
-                    ↻ Sync{needsReplyN > 0 ? ` (${needsReplyN})` : ''}
-                  </button>
-                ) : null}
-              </th>
-              <th />
-              <th />
-              <th />
-            </tr>
-            <tr className="coverage">
-              <th className="corner">%</th>
-              <th><span className="cov-stat">{totalRows} row{totalRows === 1 ? '' : 's'}</span></th>
-              <th><span className="cov-check">✓</span></th>
-              <th><CovBar n={typeSet} total={totalRows} /></th>
-              <th><CovBar n={campaignFilled} total={totalRows} /></th>
-              <th><CovBar n={audienceFilled} total={totalRows} /></th>
-              <th><CovBar n={messagingFilled} total={totalRows} /></th>
-              <th><CovBar n={rtbSetN} total={totalRows} /></th>
-              <th><CovBar n={onMessageN} total={reviewableN} /></th>
-              <th><span className="cov-check">✓</span></th>
-              <th><span className="cov-stat">{approvedN} approved · {postedN} posted</span></th>
-              <th><CovBar n={trackingCleanN} total={totalRows} /></th>
-              <th><CovBar n={budgetSetN} total={paidN} /></th>
-              {/* Only when there is attribution to report. "$0 won" reads as a measured zero,
-                  and on any campaign that is not the seeded demo data it is simply the absence of a
-                  connected source: the adapter recognises three hardcoded asset names. */}
-              <th>{wonScoped > 0 ? <span className="cov-stat">↗ {money(wonScoped)} won</span> : null}</th>
-              {/* PROJECTED until the brand has measured numbers. journeyPerf is a model — reach
-                  decays down the funnel from a per-channel base with a stable per-asset jitter — and
-                  it exported isBrandCalibrated "so surfaces can label projections" and then had no
-                  callers, so a figure nobody had measured was printed exactly like one that had. */}
-              <th>
-                <span className="cov-stat" title={reachIsProjected ? 'Projected from channel benchmarks. No measured reach for this brand yet.' : 'From measured reach for this brand.'}>
-                  📊 {formatReach(journeyPerf.plan.topReach)} reach{reachIsProjected ? ' (est.)' : ''}
-                </span>
-              </th>
-              <th><CovBar n={postedN} total={totalRows} /></th>
-              <th><CovBar n={commentedN} total={postedN} /></th>
-              <th />
-              <th />
-              <th />
+                    {c.key === 'tracking' &&
+                      (trackingCleared ? (
+                        <span className="cov-ok">✓ Tracked</span>
+                      ) : missingUtmN > 0 ? (
+                        <button className="cov-btn" onClick={() => void generateTracking(scopeIds)} title="Build UTMs for every row in view">
+                          Generate ({missingUtmN})
+                        </button>
+                      ) : dirtyTrackingN === 0 && reviewable.length > 0 ? (
+                        <button className="cov-btn green" onClick={() => acceptTracking(scopeIds)}>
+                          Accept
+                        </button>
+                      ) : null)}
+                    {c.key === 'budget' &&
+                      (paidReviewable.length === 0 ? null : budgetCleared ? (
+                        <span className="cov-ok">✓ Set</span>
+                      ) : missingBudgetN === 0 ? (
+                        <button className="cov-btn green" onClick={() => acceptBudget(scopeIds)}>
+                          Accept
+                        </button>
+                      ) : paidWithBudget ? (
+                        <button className="cov-btn" onClick={() => void syncSpend(scopeIds)} title="Pull actual spend">
+                          ↻ Spend
+                        </button>
+                      ) : null)}
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
@@ -573,29 +480,11 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   <td className="gutter">{i + 1}</td>
 
                   <td>
+                    {/* No thumbnail. It reserved a 200px slot on every row for a picture most
+                        assets do not have, so the column was mostly an upload arrow repeated down
+                        the page — and the canvas, which is where you look at creative, has no
+                        thumbnails either. The name is what you scan this column for. */}
                     <div className="sheet-asset">
-                      <div className="mini">
-                        {row.mediaRef ? (
-                          <Thumb mediaType={row.mediaType} url={proxiedMedia(row.mediaRef, 200)} />
-                        ) : (
-                          <label
-                            className="mini-upload"
-                            title="Upload creative for this slot"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            ⬆
-                            <input
-                              type="file"
-                              accept="image/*,video/*,.pdf,.txt,.md,.html,.json"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0]
-                                if (f) fillRowMedia(row.id, f)
-                                e.currentTarget.value = ''
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
                       <span className="nm" title={row.assetName}>
                         {row.assetName}
                       </span>
@@ -678,143 +567,118 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     </div>
                   </td>
 
-                  <td>
-                    {/* Read-only inside a campaign, and buffered everywhere else. This wrote per
-                        keystroke, and the campaign is what the grid FILTERS on: inside a campaign
-                        tab the row failed the filter on the first character, left the view, and the
-                        textarea unmounted mid-word. The canvas deliberately does not let this be
-                        typed freely either — it edits only the part after "Brand — " and rebuilds
-                        the rest, because that prefix is how every reader finds the row's brand. */}
-                    <GrowCell
-                      value={row.campaign ?? ''}
-                      placeholder="—"
-                      dep={total}
-                      commitOnBlur
-                      readOnly={!!scopeCampaign}
-                      title={scopeCampaign ? 'You are inside this campaign. Move the asset from the campaign it belongs to.' : undefined}
-                      onChange={(v) => updateRow(row.id, { campaign: v })}
-                    />
-                  </td>
+                  {show('campaign') && (
+                    <td>
+                      {/* Read-only inside a campaign, and buffered everywhere else. This wrote per
+                          keystroke, and the campaign is what the grid FILTERS on: inside a campaign
+                          tab the row failed the filter on the first character, left the view, and the
+                          textarea unmounted mid-word. The canvas deliberately does not let this be
+                          typed freely either — it edits only the part after "Brand — " and rebuilds
+                          the rest, because that prefix is how every reader finds the row's brand. */}
+                      <GrowCell
+                        value={row.campaign ?? ''}
+                        placeholder="—"
+                        dep={total}
+                        commitOnBlur
+                        readOnly={!!scopeCampaign}
+                        title={scopeCampaign ? 'You are inside this campaign. Move the asset from the campaign it belongs to.' : undefined}
+                        onChange={(v) => updateRow(row.id, { campaign: v })}
+                      />
+                    </td>
+                  )}
 
-                  <td>
-                    <GrowCell
-                      value={row.audience ?? ''}
-                      placeholder="—"
-                      dep={total}
-                      onChange={(v) => updateRow(row.id, { audience: v })}
-                    />
-                  </td>
+                  {show('audience') && (
+                    <td>
+                      <GrowCell
+                        value={row.audience ?? ''}
+                        placeholder="—"
+                        dep={total}
+                        onChange={(v) => updateRow(row.id, { audience: v })}
+                      />
+                    </td>
+                  )}
 
-                  <td
-                    className="msg-cell"
-                    onClick={() => openReview(row.id)}
-                    title="Open messaging"
-                  >
-                    {(() => {
-                      const map = messagingMap(row)
-                      const filled = filledFields(row)
-                      const flagged = (key: string) =>
-                        !!batchReview &&
-                        batchReview.flags.some(
-                          (f) => f.rowId === row.id && f.field?.key === key && !flagResolved(f, row, pains),
+                  {msgCols.map((mc) => {
+                    const copy = (messagingMap(row)[mc.fieldKey] ?? '').trim()
+                    const isFlagged =
+                      !!batchReview &&
+                      batchReview.flags.some(
+                        (f) => f.rowId === row.id && f.field?.key === mc.fieldKey && !flagResolved(f, row, pains),
+                      )
+                    return (
+                      <td
+                        key={mc.key}
+                        className={`msg-cell${isFlagged ? ' flagged' : ''}`}
+                        onClick={() => openReview(row.id)}
+                        title={copy || 'Open messaging'}
+                      >
+                        {copy ? <span className="msg-copy">{copy}</span> : <span className="cell-ro">—</span>}
+                      </td>
+                    )
+                  })}
+
+                  {show('rtb') && (
+                    <td
+                      className="rtb-cell"
+                      onClick={() => openReview(row.id)}
+                      title="Map proof to each claim in the messaging"
+                    >
+                      {(() => {
+                        const map = messagingMap(row)
+                        const fields = messagingFields(row.channel, row.assetType)
+                        const labelFor = (key: string) =>
+                          fields.find((f) => f.key === key)?.label ?? key
+                        const entries = Object.entries(row.rtbMap ?? {}).filter(
+                          ([, ids]) => ids.length,
                         )
-                      if (filled.length === 0) return <span className="msg-empty">Add messaging…</span>
-                      return (
-                        <div className="msg-pills">
-                          {filled.map((fl) => {
-                            const copy = (map[fl.key] ?? '').trim()
-                            return (
-                              <span
-                                key={fl.key}
-                                className={`msg-pill${flagged(fl.key) ? ' flagged' : ''}`}
-                                title={`${fl.label}: ${copy}`}
-                              >
-                                <span className="msg-pill-key">{fl.label}</span>
-                                <span className="msg-pill-copy">{copy}</span>
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )
-                    })()}
-                  </td>
-
-                  <td
-                    className="rtb-cell"
-                    onClick={() => openReview(row.id)}
-                    title="Map proof to each claim in the messaging"
-                  >
-                    {(() => {
-                      const map = messagingMap(row)
-                      const fields = messagingFields(row.channel, row.assetType)
-                      const labelFor = (key: string) =>
-                        fields.find((f) => f.key === key)?.label ?? key
-                      const entries = Object.entries(row.rtbMap ?? {}).filter(
-                        ([, ids]) => ids.length,
-                      )
-                      if (entries.length) {
-                        return (
-                          <div className="rtb-map">
-                            {entries.map(([key, ids]) => (
-                              <div key={key} className="rtb-map-row">
-                                <span
-                                  className="rtb-map-claim"
-                                  title={(map[key] ?? '').trim() || labelFor(key)}
-                                >
-                                  {labelFor(key)}
-                                </span>
-                                <span className="rtb-map-proof">
-                                  {ids.map((id) => (
-                                    <span
-                                      key={id}
-                                      className="rtb-mini"
-                                      title={rtbById(row.campaign, id)?.detail}
-                                    >
-                                      {rtbById(row.campaign, id)?.label ?? id}
-                                    </span>
-                                  ))}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                        if (entries.length) {
+                          return (
+                            <div className="rtb-map">
+                              {entries.map(([key, ids]) => (
+                                <div key={key} className="rtb-map-row">
+                                  <span
+                                    className="rtb-map-claim"
+                                    title={(map[key] ?? '').trim() || labelFor(key)}
+                                  >
+                                    {labelFor(key)}
+                                  </span>
+                                  <span className="rtb-map-proof">
+                                    {ids.map((id) => (
+                                      <span
+                                        key={id}
+                                        className="rtb-mini"
+                                        title={rtbById(row.campaign, id)?.detail}
+                                      >
+                                        {rtbById(row.campaign, id)?.label ?? id}
+                                      </span>
+                                    ))}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        }
+                        return hasCopy(row) ? (
+                          <span className="rtb-warn">unsupported</span>
+                        ) : (
+                          <span className="cell-ro">—</span>
                         )
-                      }
-                      return hasCopy(row) ? (
-                        <span className="rtb-warn">unsupported</span>
-                      ) : (
-                        <span className="cell-ro">—</span>
-                      )
-                    })()}
-                  </td>
+                      })()}
+                    </td>
+                  )}
 
-                  <td className="icp-cell" onClick={() => openReview(row.id)} title="Open to review vs ICP">
-                    {(() => {
-                      const v = rowVerdict(row)
-                      if (v === 'on') return <span className="icp-verdict on">✓ On-ICP</span>
-                      if (v === 'off') return <span className="icp-verdict off">✕ Off-ICP</span>
-                      if (v === 'drift')
-                        return <span className="icp-verdict drift">⚠ Drift {unresolvedFlags(row)}</span>
-                      // Live / posted content: a heuristic ICP-fit grade.
-                      if (!hasCopy(row)) return <span className="cell-ro">—</span>
-                      const g = icpGrade(row)
-                      return (
-                        <span className={`icp-grade g-${g.letter}`} title={`ICP fit: ${g.reasons}`}>
-                          {g.letter}
-                        </span>
-                      )
-                    })()}
-                  </td>
-
-                  <td>
-                    <input
-                      className="cell-input"
-                      type="datetime-local"
-                      value={isoToLocalInput(row.scheduledAt)}
-                      onChange={(e) =>
-                        updateRow(row.id, { scheduledAt: localInputToIso(e.target.value) })
-                      }
-                    />
-                  </td>
+                  {show('scheduled') && (
+                    <td>
+                      <input
+                        className="cell-input"
+                        type="datetime-local"
+                        value={isoToLocalInput(row.scheduledAt)}
+                        onChange={(e) =>
+                          updateRow(row.id, { scheduledAt: localInputToIso(e.target.value) })
+                        }
+                      />
+                    </td>
+                  )}
 
                   <td>
                     <select
@@ -834,176 +698,95 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     </select>
                   </td>
 
-                  <td className="track-cell">
-                    {row.utm ? (
-                      (() => {
-                        const checks = trackingChecks(row)
-                        const clean = checks.every((c) => c.ok)
-                        const bad = checks.filter((c) => !c.ok).map((c) => c.label)
-                        return (
-                          <div
-                            className="track-cell-inner"
-                            title={clean ? utmQuery(row.utm) : `Missing: ${bad.join(', ')}`}
-                          >
-                            <span className={`trk ${clean ? 'ok' : 'bad'}`}>
-                              {clean ? '✓ Tracked' : `⚑ ${bad.length}`}
-                            </span>
-                            <code className="trk-utm">?{utmQuery(row.utm)}</code>
-                          </div>
-                        )
-                      })()
-                    ) : (
-                      <button
-                        className="btn ghost sm"
-                        onClick={() => generateTrackingForRow(row.id)}
-                      >
-                        Generate
-                      </button>
-                    )}
-                  </td>
-
-                  <td className="budget-cell">
-                    {isPaidRow(row) ? (
-                      <div className="bud">
-                        <div className="bud-line">
-                          <span className="bud-cur">$</span>
-                          <input
-                            className="bud-amt"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            value={row.budget?.amount || ''}
-                            onChange={(e) =>
-                              updateRow(row.id, {
-                                budget: {
-                                  amount: Number(e.target.value) || 0,
-                                  type: row.budget?.type ?? 'daily',
-                                  endDate: row.budget?.endDate,
-                                },
-                              })
-                            }
-                          />
-                          <select
-                            className="bud-type"
-                            value={row.budget?.type ?? 'daily'}
-                            onChange={(e) =>
-                              updateRow(row.id, {
-                                budget: {
-                                  amount: row.budget?.amount ?? 0,
-                                  type: e.target.value as 'daily' | 'lifetime',
-                                  endDate: row.budget?.endDate,
-                                },
-                              })
-                            }
-                          >
-                            <option value="daily">daily</option>
-                            <option value="lifetime">lifetime</option>
-                          </select>
-                        </div>
-                        {!hasBudget(row) && row.status !== 'posted' && row.status !== 'failed' && (
-                          <span className="bud-flag" title="Set a budget to clear the budget gate">
-                            ⚑ needs budget
-                          </span>
-                        )}
-                        {row.spend &&
-                          (() => {
-                            const p = pacing(row, now)
-                            return (
-                              <span className={`pace pace-${p.status}`} title={`Planned ${money(p.planned)} · spent ${money(p.spent)}`}>
-                                {money(p.spent)} · {PACE_LABEL[p.status]}
-                              </span>
-                            )
-                          })()}
-                      </div>
-                    ) : (
-                      <span className="cell-ro">—</span>
-                    )}
-                  </td>
-
-                  <td className="attr-cell">
-                    {(() => {
-                      const a = mockAttio.attributionForAsset(row.assetName)
-                      if (!a.leads && !a.wonRevenue) return <span className="cell-ro">—</span>
-                      return (
-                        <div className="attr">
-                          {a.wonRevenue > 0 && <span className="attr-rev">{money(a.wonRevenue)}</span>}
-                          <span className="attr-leads">
-                            {a.leads} lead{a.leads === 1 ? '' : 's'}
-                            {a.openDeals ? ` · ${a.openDeals} open` : ''}
-                          </span>
-                        </div>
-                      )
-                    })()}
-                  </td>
-
-                  <td className="perf-cell">
-                    {(() => {
-                      const p = journeyPerf.perAsset.get(row.id)
-                      if (!p || !p.reach) return <span className="cell-ro">—</span>
-                      return (
-                        <div className="perf" title={`Reached ${p.reach.toLocaleString()} · ${(p.rate * 100).toFixed(1)}% ${p.rateLabel}`}>
-                          <span className="perf-reach">{formatReach(p.reach)}{reachIsProjected ? <span className="perf-est"> est.</span> : null}</span>
-                          {/* NO LEAK FLAG. It painted anything under 12% in the same red as the
-                              delete button, and these numbers are simulated: a leaf's rate is its
-                              stage benchmark times a jitter of 0.8 to 1.2 (journeyPerf), and the
-                              first two benchmarks are 3% and 6%. So every awareness and
-                              consideration asset was flagged as underperforming every time, by
-                              construction, and a bottom-funnel one never could be. A threshold
-                              relative to the stage would be just as empty, because the number is
-                              generated FROM the stage. It can come back when the rates are real and
-                              there is a target to miss. */}
-                          <span className="perf-rate">
-                            {(p.rate * 100).toFixed(0)}% {p.rateLabel}
-                          </span>
-                        </div>
-                      )
-                    })()}
-                  </td>
-
-                  <td className="cell-ro">{postedLabel(row)}</td>
-
-                  <td className="comments-cell">
-                    {row.status === 'posted'
-                      ? (() => {
-                          const cs = commentMap[row.id] ?? []
-                          const needs = cs.filter((c) => c.needsResponse).length
-                          if (cs.length === 0)
-                            return (
-                              <button
-                                className="comments-link muted"
-                                onClick={() => openComments(row.id)}
-                                title="Sync comments to pull replies"
-                              >
-                                No comments
-                              </button>
-                            )
+                  {show('tracking') && (
+                    <td className="track-cell">
+                      {row.utm ? (
+                        (() => {
+                          const checks = trackingChecks(row)
+                          const clean = checks.every((c) => c.ok)
+                          const bad = checks.filter((c) => !c.ok).map((c) => c.label)
                           return (
-                            <button
-                              className="comments-link"
-                              onClick={() => openComments(row.id)}
-                              title="Open comments"
+                            <div
+                              className="track-cell-inner"
+                              title={clean ? utmQuery(row.utm) : `Missing: ${bad.join(', ')}`}
                             >
-                              💬 {cs.length}
-                              {needs > 0 && (
-                                <span className="comments-badge" title={`${needs} need a reply`}>
-                                  {needs} to reply
-                                </span>
-                              )}
-                            </button>
+                              <span className={`trk ${clean ? 'ok' : 'bad'}`}>
+                                {clean ? '✓ Tracked' : `⚑ ${bad.length}`}
+                              </span>
+                              <code className="trk-utm">?{utmQuery(row.utm)}</code>
+                            </div>
                           )
                         })()
-                      : <span className="cell-ro">—</span>}
-                  </td>
+                      ) : (
+                        <button
+                          className="btn ghost sm"
+                          onClick={() => generateTrackingForRow(row.id)}
+                        >
+                          Generate
+                        </button>
+                      )}
+                    </td>
+                  )}
 
-                  <td className="act-publish">
-                    {(row.status === 'approved' || row.status === 'failed') && canPublish ? (
-                      <button className="btn sm" onClick={() => publishRow(row.id)}>
-                        Publish
-                      </button>
-                    ) : (
-                      <span className="cell-ro">—</span>
-                    )}
-                  </td>
+                  {show('budget') && (
+                    <td className="budget-cell">
+                      {isPaidRow(row) ? (
+                        <div className="bud">
+                          <div className="bud-line">
+                            <span className="bud-cur">$</span>
+                            <input
+                              className="bud-amt"
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              value={row.budget?.amount || ''}
+                              onChange={(e) =>
+                                updateRow(row.id, {
+                                  budget: {
+                                    amount: Number(e.target.value) || 0,
+                                    type: row.budget?.type ?? 'daily',
+                                    endDate: row.budget?.endDate,
+                                  },
+                                })
+                              }
+                            />
+                            <select
+                              className="bud-type"
+                              value={row.budget?.type ?? 'daily'}
+                              onChange={(e) =>
+                                updateRow(row.id, {
+                                  budget: {
+                                    amount: row.budget?.amount ?? 0,
+                                    type: e.target.value as 'daily' | 'lifetime',
+                                    endDate: row.budget?.endDate,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="daily">daily</option>
+                              <option value="lifetime">lifetime</option>
+                            </select>
+                          </div>
+                          {!hasBudget(row) && row.status !== 'posted' && row.status !== 'failed' && (
+                            <span className="bud-flag" title="Set a budget to clear the budget gate">
+                              ⚑ needs budget
+                            </span>
+                          )}
+                          {row.spend &&
+                            (() => {
+                              const p = pacing(row, now)
+                              return (
+                                <span className={`pace pace-${p.status}`} title={`Planned ${money(p.planned)} · spent ${money(p.spent)}`}>
+                                  {money(p.spent)} · {PACE_LABEL[p.status]}
+                                </span>
+                              )
+                            })()}
+                        </div>
+                      ) : (
+                        <span className="cell-ro">—</span>
+                      )}
+                    </td>
+                  )}
 
                   <td className="act-hover">
                     <button
@@ -1038,7 +821,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
             {Array.from({ length: pad }).map((_, i) => (
               <tr key={`pad-${i}`} className="pad-row">
                 <td className="gutter">{view.length + i + 1}</td>
-                {COLUMNS.map((c) => (
+                {cols.map((c) => (
                   <td key={c.key} />
                 ))}
               </tr>
