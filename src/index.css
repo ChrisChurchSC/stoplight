@@ -6745,6 +6745,17 @@ button {
   border-radius: 9px;
   cursor: pointer;
 }
+/* A NUMBER THAT CHANGES MUST NOT CHANGE THE LAYOUT. The zoom readout runs from "10%" to "200%", one
+   character of difference, and this row is centre-aligned, so every control in the toolbar slid
+   sideways as you zoomed. Tabular figures keep the digits the same width as each other; the slot
+   keeps the whole string the same width as itself. Sized for the longest value the control can show,
+   which is 200%: three figures and a sign. */
+.flow-tb-num {
+  display: inline-block;
+  min-width: 4.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .flow-tb-zoom:hover {
   background: var(--surface-2);
 }

@@ -19,6 +19,19 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.15',
+    dateLabel: 'August 1, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The toolbar stays put while you zoom. The readout runs from 10% to 200%, so the button holding it grew by a character between 50 and 100, and because the row is centred every control in it slid sideways as you turned the wheel. The number now sits in a slot wide enough for the longest value it can show.',
+          '"Fit to board" is just "Fit".',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.14',
     dateLabel: 'July 31, 2026',
     groups: [

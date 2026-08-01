@@ -9800,7 +9800,10 @@ export function FlowsView() {
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.5-3.5" />
             </svg>
-            {Math.round(zoom)}%
+            {/* The readout sits in a slot wide enough for the longest value it can hold, because
+                the toolbar is centred: 50% and 100% are one character apart, so zooming resized this
+                button and shifted every control in the row sideways as you did it. */}
+            <span className="flow-tb-num">{Math.round(zoom)}%</span>
             <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m6 9 6 6 6-6" />
             </svg>
@@ -9815,7 +9818,7 @@ export function FlowsView() {
                   className="flow-tb-zoom-item"
                   onClick={() => { fitToContent(); setZoomOpen(false) }}
                 >
-                  Fit to board
+                  Fit
                 </button>
                 <div className="flow-tb-zoom-sep" />
                 {[150, 125, 100, 75, 50, 25, 10].map((z) => (
