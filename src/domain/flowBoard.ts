@@ -28,7 +28,7 @@ export type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
  * across campaigns has to know what a plain card contributes, and comparing contributions needs
  * only a type and an id, never a label.
  */
-export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset'>> = {
+export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger'>> = {
   audience: 'segment',
   'proof-point': 'proof',
   company: 'company',
@@ -46,6 +46,10 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
    * a table, and the table reached nothing.
    */
   'data-source': 'dataset',
+  // Both had a card, a library and a picker on the canvas while carrying no ref type, so the card
+  // drew, wired, lit up as connected and reached the writer with nothing.
+  product: 'product',
+  trigger: 'trigger',
 }
 
 export interface CanvasObject {
@@ -89,6 +93,20 @@ export interface FlowBoard {
   /** Position per node id, in stack coordinates. Covers objects, placements and deliverables. */
   pos: Record<string, { x: number; y: number }>
   connectors: { from: string; to: string }[]
+  /**
+   * CHANNELS CUT OFF FROM THE BRIEF, by deliverable key.
+   *
+   * A channel hangs off the campaign because its assets carry the campaign's name, so the line
+   * between them is derived rather than drawn and there is no connector to remove. This is the
+   * exception the person asked for: cut the line and the channel keeps every asset it has, but stops
+   * inheriting what is wired to the campaign, so its copy is written from the brief alone.
+   *
+   * Stored as the ABSENCE of a connection rather than as a connection, because belonging to the
+   * campaign is still the default and the overwhelmingly common case. A board with nothing detached
+   * carries no field at all, which is also why it is optional: every board saved before this existed
+   * loads with the old meaning intact.
+   */
+  detached?: string[]
 }
 
 /**
@@ -162,5 +180,14 @@ export function pruneBoard(
     // An endpoint is legal if it is on the board, is a live output, or is a build-mode brief
     // sub-card (`${nodeId}:${briefIndex}` — the one id shape that genuinely carries a colon).
     connectors: board.connectors.filter((c) => [c.from, c.to].every((e) => liveIds.has(e) || known.targetIds?.has(e) || e.includes(':'))),
+    // A cut survives only while the channel it names does. A key left behind by a channel that has
+    // gone would silently cut off a NEW channel that later takes the same key, since the key is
+    // derived from the channel and type rather than being unique to one.
+    ...(board.detached?.length
+      ? (() => {
+          const kept = board.detached.filter((k) => known.targetIds?.has(k))
+          return kept.length ? { detached: kept } : {}
+        })()
+      : {}),
   }
 }

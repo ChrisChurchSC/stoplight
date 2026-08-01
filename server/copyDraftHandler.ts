@@ -106,7 +106,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY)
     throw new NoKeyError('No model key set (OPENROUTER_API_KEY or ANTHROPIC_API_KEY)')
 
-  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas, messages, concepts, voices, seasons, datasets } = (body ?? {}) as {
+  const { icp, campaign, theme, flightWeeks, brand, brandGuide, proofPool, hooks, avoid, assets, model, personas, messages, concepts, voices, seasons, datasets, products, triggers } = (body ?? {}) as {
     icp?: unknown
     datasets?: unknown
     campaign?: unknown
@@ -123,6 +123,8 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
     messages?: unknown
     concepts?: unknown
     voices?: unknown
+    products?: unknown
+    triggers?: unknown
     seasons?: unknown
   }
   // The campaign's model pick. Validated against the catalog rather than forwarded: this is a
@@ -201,6 +203,38 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
         }))
     : []
   /**
+   * The PRODUCT this campaign sells. Gated on the parts that change what the copy can say — the job
+   * it does, who it is for, what it is — because a name alone is something the writer already has
+   * from the brand. One product: a campaign selling two things is two campaigns.
+   */
+  const productList = Array.isArray(products)
+    ? (products as Record<string, unknown>[])
+        .filter((p) => p && typeof p === 'object' && ['jobToBeDone', 'summary', 'forWho'].some((k) => typeof p[k] === 'string' && (p[k] as string).trim()))
+        .slice(0, 1)
+        .map((p) => ({
+          name: typeof p.name === 'string' ? p.name.slice(0, 120) : undefined,
+          kind: typeof p.kind === 'string' && p.kind.trim() ? p.kind.trim().slice(0, 80) : undefined,
+          summary: typeof p.summary === 'string' && p.summary.trim() ? p.summary.trim().slice(0, 300) : undefined,
+          forWho: typeof p.forWho === 'string' && p.forWho.trim() ? p.forWho.trim().slice(0, 200) : undefined,
+          jobToBeDone: typeof p.jobToBeDone === 'string' && p.jobToBeDone.trim() ? p.jobToBeDone.trim().slice(0, 300) : undefined,
+        }))
+    : []
+  /**
+   * The TRIGGER that starts this. Gated on the SIGNAL, which is the half that earns its place: it is
+   * what lets an asset open with what just happened rather than with a standing pitch.
+   */
+  const triggerList = Array.isArray(triggers)
+    ? (triggers as Record<string, unknown>[])
+        .filter((t) => t && typeof t === 'object' && ['signal', 'response'].some((k) => typeof t[k] === 'string' && (t[k] as string).trim()))
+        .slice(0, 2)
+        .map((t) => ({
+          name: typeof t.name === 'string' ? t.name.slice(0, 120) : undefined,
+          type: typeof t.type === 'string' && t.type.trim() ? t.type.trim().slice(0, 80) : undefined,
+          signal: typeof t.signal === 'string' && t.signal.trim() ? t.signal.trim().slice(0, 300) : undefined,
+          response: typeof t.response === 'string' && t.response.trim() ? t.response.trim().slice(0, 300) : undefined,
+        }))
+    : []
+  /**
    * The concepts the campaign is built on. Keyed on IDEA for the same reason messages are keyed on
    * angle: a named concept with nothing written under it is a filing label, not something to write
    * from.
@@ -251,7 +285,7 @@ export async function runCopyDraft(body: unknown): Promise<unknown> {
   // floored at 8k, capped at Opus's ceiling.
   const assetCount = Array.isArray(assets) ? assets.length : 1
   const maxTokens = Math.min(60000, Math.max(8000, assetCount * 1500))
-  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}${seasonList.length ? `\n\nThe moment this campaign runs into. "permission" is what it lets the brand say that it could not say otherwise, and it is the only reason to mention the moment at all: write to the permission, not to the calendar, and never open an asset with the date itself:\n${JSON.stringify(seasonList, null, 2)}` : ''}${voiceList.length ? `\n\nThe voice THIS campaign is written in. It narrows the brand guide above, it does not replace it: the guide's don'ts still bind, and where the two disagree the guide wins. Match the sample's register rather than quoting it:\n${JSON.stringify(voiceList, null, 2)}` : ''}${conceptList.length ? `\n\nThe concept this campaign is built on. The idea is what the work is ABOUT and the insight is why it lands; "likeThis" is the register to write in, not a thing to name. Every asset should feel like it came from this, without any of them restating it:\n${JSON.stringify(conceptList, null, 2)}` : ''}${messageList.length ? `\n\nThe messages this campaign argues (from the Message cards wired to it). Each asset should advance ONE of these rather than restating all of them; the angle is the line to make, the proof is what backs it. Where a message names an audience or a stage, prefer it for assets that match:\n${JSON.stringify(messageList, null, 2)}` : ''}${figureList.length ? `\n\nFIGURES from the data sets wired to this campaign. The app computed every one of these from real cells, you did not, and you may not compute another. Use each value verbatim, honour its period and its source, and treat any figure marked partial as drawn from part of the table rather than all of it:\n${JSON.stringify(figureList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience — its pains and wants, its triggers, its tone, its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
+  const userContent = `ICP:\n${JSON.stringify(icp, null, 2)}\n\nBrand profile:\n${JSON.stringify(brand ?? {}, null, 2)}\n\nBrand guide (the contract, write in this voice, never break a don't):\n${JSON.stringify(brandGuide ?? {}, null, 2)}\n\nCampaign: ${String(campaign)}\n\nCampaign theme (the throughline every asset must orient around): ${themeStr || '(none given — write to the brand and each asset\'s own audience/brief)'}\n\nCampaign timeframe: ${flightStr}\n\nShared proof pool (reuse these ids; do not invent new proof when this is non-empty):\n${JSON.stringify(proofPool ?? [], null, 2)}${hookList.length ? `\n\nBrand hooks (the brand's own opening lines; use one where it genuinely fits an asset, adapt freely, and never at the cost of the brand guide or the campaign theme. Ignore them all if none fit):\n${JSON.stringify(hookList, null, 2)}` : ''}${personaList.length ? `\n\nPersonas this campaign is written to (COMPOSITE, never real people, see the rules):\n${JSON.stringify(personaList, null, 2)}` : ''}${seasonList.length ? `\n\nThe moment this campaign runs into. "permission" is what it lets the brand say that it could not say otherwise, and it is the only reason to mention the moment at all: write to the permission, not to the calendar, and never open an asset with the date itself:\n${JSON.stringify(seasonList, null, 2)}` : ''}${voiceList.length ? `\n\nThe voice THIS campaign is written in. It narrows the brand guide above, it does not replace it: the guide's don'ts still bind, and where the two disagree the guide wins. Match the sample's register rather than quoting it:\n${JSON.stringify(voiceList, null, 2)}` : ''}${productList.length ? `\n\nWhat this campaign is SELLING. Write to the job it does, not to its name: the reader does not care what it is called until they care what it is for. Never restate the summary as a line of copy:\n${JSON.stringify(productList, null, 2)}` : ''}${triggerList.length ? `\n\nWhat STARTS this. The signal is a thing that has just happened to the reader, which is why an asset may open from it — "you just…", "now that…" — instead of from a standing pitch. Use it where an asset genuinely follows from it and ignore it everywhere else; never name the trigger itself:\n${JSON.stringify(triggerList, null, 2)}` : ''}${conceptList.length ? `\n\nThe concept this campaign is built on. The idea is what the work is ABOUT and the insight is why it lands; "likeThis" is the register to write in, not a thing to name. Every asset should feel like it came from this, without any of them restating it:\n${JSON.stringify(conceptList, null, 2)}` : ''}${messageList.length ? `\n\nThe messages this campaign argues (from the Message cards wired to it). Each asset should advance ONE of these rather than restating all of them; the angle is the line to make, the proof is what backs it. Where a message names an audience or a stage, prefer it for assets that match:\n${JSON.stringify(messageList, null, 2)}` : ''}${figureList.length ? `\n\nFIGURES from the data sets wired to this campaign. The app computed every one of these from real cells, you did not, and you may not compute another. Use each value verbatim, honour its period and its source, and treat any figure marked partial as drawn from part of the table rather than all of it:\n${JSON.stringify(figureList, null, 2)}` : ''}\n\nAVOID (strings already used in this campaign, do not reuse any of them):\n${JSON.stringify(avoid ?? {}, null, 2)}\n\nAssets to write (each carries its stage, audience — its pains and wants, its triggers, its tone, its objections to answer and its antiMessage never to write; ctaSeed, proof with any metric/source, its components + char limits, and any 'direction': the planner's instructions for that asset):\n${JSON.stringify(assets, null, 2)}\n\nWrite distinct copy for every asset and return it with the proof pool as rtbs.`
 
   const client = makeModelClient('copy', pick)
   const message = await client.messages.create({
