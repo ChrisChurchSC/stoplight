@@ -12889,7 +12889,7 @@ button {
    */
   height: 100dvh;
   min-height: 620px;
-  background: #c29fed;
+  background: #000000;
   overflow: hidden;
 }
 .auth-gate-loading {
@@ -12897,11 +12897,13 @@ button {
   justify-content: center;
 }
 .auth-loading {
-  color: rgba(26, 29, 35, 0.78);
+  color: rgba(233, 236, 241, 0.72);
   font-size: 14px;
   font-weight: 600;
 }
-/* Public changelog link on the sign-in page — a glassy pill top-right on the purple field. */
+/* Public changelog link on the sign-in page — a glassy pill top-right on the black field. Inverted
+   with the field: dark ink on a white veil went to ~3.5:1 once the lilac underneath it turned
+   black, because the veil is translucent and takes its value from what it sits on. */
 .auth-changelog {
   position: absolute;
   top: 20px;
@@ -12909,17 +12911,17 @@ button {
   z-index: 2;
   font-size: 13px;
   font-weight: 650;
-  color: #211d1a;
+  color: #e9ecf1;
   text-decoration: none;
   padding: 7px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.28);
-  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
   transition: background 0.14s ease, border-color 0.14s ease;
 }
 .auth-changelog:hover {
-  background: rgba(255, 255, 255, 0.62);
-  border-color: rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
 }
 /* No min-height:0 here on purpose: that would let the card itself be crushed. Without it this item
    refuses to shrink below its own content, so the shortfall lands on the wordmark instead. */
@@ -12943,6 +12945,8 @@ button {
 .auth-tagline {
   flex: none;
 }
+/* Light on black, inverted with the field. These were dark ink tuned for the lilac; left alone on
+   black they would have been near-invisible rather than merely low-contrast. */
 .auth-kicker {
   margin: 0 0 7px;
   font-size: 11px;
@@ -12950,16 +12954,14 @@ button {
   line-height: 1.5;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: rgba(26, 29, 35, 0.88);
+  color: rgba(233, 236, 241, 0.95);
 }
-/* Was .66 alpha on the lilac: 3.76:1, under AA for 13px. .78 is 4.91:1 and still clearly the
-   quieter of the two lines. */
 .auth-tagline {
   margin: 0 0 22px;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
-  color: rgba(26, 29, 35, 0.78);
+  color: rgba(233, 236, 241, 0.68);
   max-width: 34ch;
 }
 /**
@@ -12982,14 +12984,33 @@ button {
   object-fit: contain;
   object-position: left bottom;
   color: #1a1d23;
+  /**
+   * drop-shadow, not box-shadow: the mark is an SVG with transparency, so box-shadow would trace
+   * the rectangular <img> box while this traces the letterforms themselves.
+   *
+   * Three passes. The cast is BURNT orange rather than the coral itself — the mark's hatching is
+   * now #ff6347, and a cast in the same #ff6347 sat flush against it and stopped reading as depth
+   * at all; darkening it is what keeps the letters standing off the field. A thin coral rim sits
+   * between the two so the step from fill to cast still reads as orange rather than as dirt, and
+   * the wide pass is the bloom the black field needs to stop the whole thing looking pasted on.
+   */
+  filter: drop-shadow(2px 2px 0 rgba(255, 138, 112, 0.85))
+    drop-shadow(6px 7px 0 rgba(122, 38, 20, 0.95))
+    drop-shadow(0 8px 30px rgba(255, 99, 71, 0.38));
 }
 /* Literal hex throughout, not var(--…): see the palette note on .auth-gate. */
+/**
+ * Lifted OFF the field rather than sitting on it. #16191f on lilac was a panel; the same #16191f
+ * on black is 1.2:1 against its own background — a card you can only find by its border. It goes a
+ * step lighter and the border a step brighter, so the panel reads as a panel, and the drop shadow
+ * (invisible black-on-black) is replaced by a hairline of light along the top edge.
+ */
 .auth-card {
   width: min(360px, 92vw);
-  background: #16191f;
-  border: 1px solid #2f3640;
+  background: #181c24;
+  border: 1px solid #363f4d;
   border-radius: 14px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   padding: 28px 24px;
   display: flex;
   flex-direction: column;
@@ -13014,8 +13035,11 @@ button {
   color: #98a1b0;
   margin-top: 8px;
 }
+/* RECESSED, not raised. Against the lifted card the old #1d2129 fill was 1.06:1 — a field you
+   could only locate by its border. Going darker than the card instead of lighter reads as a well,
+   and it takes the placeholder from 4.39:1 to 5.06:1 without touching the placeholder's colour. */
 .auth-input {
-  background: #1d2129;
+  background: #0f1319;
   border: 1px solid #39404d;
   border-radius: 8px;
   padding: 10px 12px;
@@ -13024,7 +13048,6 @@ button {
   color: #e9ecf1;
 }
 .auth-input::placeholder {
-  /* 4.79:1 on the field, up from 3.73:1. */
   color: #7d8694;
 }
 .auth-input:focus {
