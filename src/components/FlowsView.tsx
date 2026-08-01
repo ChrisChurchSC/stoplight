@@ -1642,6 +1642,18 @@ export function FlowsView() {
    * channel cards carry outbound ports now, so a person can draw the same channel → post line the
    * structure already implies, and Gretel can store campaign → channel.
    */
+  /**
+   * THE OBJECT CELL PICKED IN THE GRID, so the Grid tab can open THE inspector rather than one of
+   * its own. It can, without a line of it moving, because the grid is rendered from inside this
+   * component: renderObjectInspector is already in scope where <SheetGrid> is mounted, and the panel
+   * it fills is the same <aside className="flow-panel"> the canvas uses.
+   *
+   * This holds a CARD ID, never a synthesised card. Every record form writes through ensure*For,
+   * whose "already linked" guard resolves refId against the BRAND-FILTERED record list — so handing
+   * it a card that is not on the board does not fail loudly, it mints a duplicate blank record and
+   * relinks the cell to it. A cell with no card behind it gets a sentence instead.
+   */
+  const [gridPick, setGridPick] = useState<{ kind: CanvasObjectKind; cardId?: string; label: string } | null>(null)
   const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
   /**
    * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
@@ -10242,9 +10254,49 @@ export function FlowsView() {
           </div>
           <div className="flow-real-view">
             {flowView === 'grid' ? (
-              <SheetGrid scopeClient={brand || undefined} scopeCampaign={flowCampaign} />
+              <SheetGrid
+                scopeClient={brand || undefined}
+                scopeCampaign={flowCampaign}
+                onPickObject={(pick) => setGridPick(pick)}
+              />
             ) : (
               <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)} />
+            )}
+            {/* THE SAME INSPECTOR, on the same board, editing the same objects array the canvas
+                edits — because this is the canvas's own component. Nothing is duplicated and nothing
+                can drift, which is the whole reason it is rendered here rather than built in the
+                grid. */}
+            {gridPick && (
+              <aside className="flow-panel flow-panel-grid" role="complementary" aria-label={`${gridPick.label} details`}>
+                <button className="flow-panel-collapse" title="Close" aria-label="Close" onClick={() => setGridPick(null)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                {(() => {
+                  const card = gridPick.cardId ? objects.find((o) => o.id === gridPick.cardId) : undefined
+                  if (card) return renderObjectInspector(card)
+                  /* No card behind this cell: it was pinned on the row, or it is the campaign's
+                     brand. Saying so beats inventing a card to satisfy the panel — see gridPick. */
+                  return (
+                    <>
+                      <div className="flow-panel-head">
+                        <span className="flow-note-ic flow-insp-ic" style={{ color: OBJECT_META[gridPick.kind].tone }} aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[gridPick.kind].icon}</svg>
+                        </span>
+                        <span className="flow-panel-title">{gridPick.label}</span>
+                      </div>
+                      <div className="flow-inspect">
+                        <p className="flow-inspect-note">
+                          {gridPick.kind === 'brand'
+                            ? 'The brand is bound to the campaign, not to this asset. Open it from the Brand card on the Flow tab.'
+                            : 'This is pinned on the asset itself rather than coming from a card, so there is no card to open. Add one on the Flow tab and wire it in to edit it here.'}
+                        </p>
+                      </div>
+                    </>
+                  )
+                })()}
+              </aside>
             )}
           </div>
         </div>

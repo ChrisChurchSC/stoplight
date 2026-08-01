@@ -122,7 +122,25 @@ function GrowCell({
   )
 }
 
-export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { liveScope?: boolean; scopeClient?: string; scopeCampaign?: string } = {}) {
+export function SheetGrid({
+  liveScope = false,
+  scopeClient,
+  scopeCampaign,
+  onPickObject,
+}: {
+  liveScope?: boolean
+  scopeClient?: string
+  scopeCampaign?: string
+  /**
+   * Clicking an object cell hands the CARD BEHIND IT back to whoever rendered this grid, so they can
+   * open their own inspector on it. The grid does not open one itself, deliberately: the inspector
+   * that matters already exists on the canvas, and a second one built here would be a second answer
+   * to the same question. `cardId` is undefined when the cell's value came from a row pin or the
+   * campaign's brand rather than from a card — a real state, and the caller has to say so rather
+   * than being handed an invented card.
+   */
+  onPickObject?: (pick: { kind: CanvasObjectKind; cardId?: string; label: string }) => void
+} = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -765,7 +783,14 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     // named beside it, so the cell does not quietly under-report what is reaching the asset.
                     const extra = mine.filter((c) => c.refId && c.refId !== value)
                     return (
-                      <td key={oc.key} className="obj-cell" style={{ ['--note-tone' as string]: oc.tone } as React.CSSProperties}>
+                      <td
+                        key={oc.key}
+                        className="obj-cell"
+                        style={{ ['--note-tone' as string]: oc.tone } as React.CSSProperties}
+                        // The picker stops its own clicks, so this fires on the rest of the cell:
+                        // pointing at the cell asks what it names, using the picker changes it.
+                        onClick={() => onPickObject?.({ kind: oc.objKind, cardId: mine.find((c) => c.refId === value)?.id, label: oc.label })}
+                      >
                         <span className="obj-row">
                         <span className="obj-ic" aria-hidden="true">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

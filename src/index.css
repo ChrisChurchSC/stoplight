@@ -5768,8 +5768,39 @@ button {
 .flow-real-view {
   flex: 1;
   min-height: 0;
+  /* A row, so the inspector can sit beside the sheet rather than over it. The sheet keeps its own
+     scrolling; the container must not scroll, or the panel would scroll away with the grid. */
+  display: flex;
+  overflow: hidden;
+}
+/* The sheet takes the room the panel is not using. */
+.flow-real-view > *:first-child {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 14px 18px;
+}
+/* THE INSPECTOR, BESIDE THE GRID. Same .flow-panel the canvas uses — same component, same board —
+   so this adds only where it sits and how it arrives. It slides rather than appears, because a
+   360px column materialising next to a spreadsheet reads as the layout breaking. */
+.flow-panel-grid {
+  position: relative;
+  animation: flow-panel-in 0.16s ease-out;
+}
+@keyframes flow-panel-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-panel-grid {
+    animation: none;
+  }
 }
 /* ---- Flows landing page (all flows), one card per campaign ---- */
 .flow-home {
