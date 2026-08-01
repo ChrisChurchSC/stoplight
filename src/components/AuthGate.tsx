@@ -44,7 +44,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!isSupabaseConfigured) return <>{children}</>
   // A valid share link grants access without an account — don't wall it behind sign-in.
   if (hasValidShareLink()) return <>{children}</>
-  if (user === undefined) return <div className="auth-loading">Connecting…</div>
+  // On the SAME lilac field as the gate it precedes. This used to be grey text on the app's --bg,
+  // so arriving logged-out meant a neutral screen that then swapped wholesale to a purple one —
+  // two different pages for what is one wait.
+  if (user === undefined)
+    return (
+      <div className="auth-gate auth-gate-loading">
+        <div className="auth-loading">Connecting…</div>
+      </div>
+    )
   if (user) return <>{children}</>
 
   const submit = async () => {
@@ -62,31 +70,61 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="auth-gate">
       <a className="auth-changelog" href="/changelog">What&rsquo;s new</a>
       <div className="auth-center">
-        <div className="auth-card">
-        <div className="auth-title">{mode === 'in' ? 'Sign in' : 'Create your account'}</div>
-        <input
-          className="auth-input"
-          type="email"
-          placeholder="you@agency.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          className="auth-input"
-          type="password"
-          placeholder="Password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-        />
-        {err && <div className="auth-err">{err}</div>}
-        <button className="btn primary auth-submit" disabled={busy} onClick={submit}>
-          {busy ? '…' : mode === 'in' ? 'Sign in' : 'Sign up'}
-        </button>
-        <button className="auth-switch" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
-          {mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
-        </button>
-        </div>
+        {/**
+         * A REAL FORM, not two inputs and a click handler. As a plain div this could only be
+         * submitted from the password field (the one that carried an Enter handler), browsers had
+         * nothing to recognise as a login and so never offered to save or fill the credentials, and
+         * the button defaulted to type="submit" inside no form at all. A <form onSubmit> gets Enter
+         * from either field, password-manager fill, and the button's native role, for free.
+         */}
+        <form
+          className="auth-card"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void submit()
+          }}
+        >
+          <h1 className="auth-title">{mode === 'in' ? 'Sign in' : 'Create your account'}</h1>
+          {/* Labelled, not placeholder-only. A placeholder is not a label: it is gone the moment
+              you type, it is not what a screen reader announces as the field's name, and at 2.6:1
+              on white it was the lowest-contrast text on the page doing the most important job. */}
+          <label className="auth-label" htmlFor="auth-email">
+            Email
+          </label>
+          <input
+            id="auth-email"
+            className="auth-input"
+            type="email"
+            autoComplete="email"
+            placeholder="you@agency.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <label className="auth-label" htmlFor="auth-pw">
+            Password
+          </label>
+          <input
+            id="auth-pw"
+            className="auth-input"
+            type="password"
+            autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+            placeholder={mode === 'in' ? 'Your password' : 'At least 8 characters'}
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+          />
+          {/* role=alert so the failure is announced rather than only drawn. */}
+          {err && (
+            <div className="auth-err" role="alert">
+              {err}
+            </div>
+          )}
+          <button className="btn primary auth-submit" type="submit" disabled={busy}>
+            {busy ? 'One moment…' : mode === 'in' ? 'Sign in' : 'Sign up'}
+          </button>
+          <button className="auth-switch" type="button" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
+            {mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+          </button>
+        </form>
       </div>
       <div className="auth-footer">
         <p className="auth-kicker">Marketing infrastructure<br />and automation platform</p>
