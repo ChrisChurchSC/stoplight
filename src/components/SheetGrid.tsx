@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
-import { hasCopy, messagingFields, messagingMap } from '../domain/messaging'
+import { messagingFields, messagingMap } from '../domain/messaging'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
-import { assetRtbIds, rtbById, rtbsForCampaign } from '../domain/rtb'
+import { rtbsForCampaign } from '../domain/rtb'
 import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
@@ -42,7 +42,6 @@ const COLUMNS: { key: string; label: string; icon: string; width: number; always
   { key: 'campaign', label: 'Campaign', icon: '◇', width: 150 },
   { key: 'audience', label: 'Audience', icon: '◎', width: 150 },
   { key: 'messaging', label: 'Messaging', icon: '¶', width: 320 },
-  { key: 'rtb', label: 'Proof', icon: '◆', width: 300 },
   { key: 'scheduled', label: 'Scheduled', icon: '◷', width: 184 },
   { key: 'budget', label: 'Budget', icon: '◧', width: 200 },
   { key: 'actions', label: '', icon: '', width: 84, always: true },
@@ -252,7 +251,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
     switch (key) {
       case 'campaign': return none((r) => (r.campaign ?? '').trim())
       case 'audience': return none((r) => (r.audience ?? '').trim())
-      case 'rtb': return none((r) => assetRtbIds(r).length)
       case 'scheduled': return none((r) => r.scheduledAt)
       case 'budget': return none((r) => r.budget?.amount)
       default: return false
@@ -671,54 +669,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     )
                   })}
 
-                  {show('rtb') && (
-                    <td
-                      className="rtb-cell"
-                      title="The proof mapped to each claim in the messaging"
-                    >
-                      {(() => {
-                        const map = messagingMap(row)
-                        const fields = messagingFields(row.channel, row.assetType)
-                        const labelFor = (key: string) =>
-                          fields.find((f) => f.key === key)?.label ?? key
-                        const entries = Object.entries(row.rtbMap ?? {}).filter(
-                          ([, ids]) => ids.length,
-                        )
-                        if (entries.length) {
-                          return (
-                            <div className="rtb-map">
-                              {entries.map(([key, ids]) => (
-                                <div key={key} className="rtb-map-row">
-                                  <span
-                                    className="rtb-map-claim"
-                                    title={(map[key] ?? '').trim() || labelFor(key)}
-                                  >
-                                    {labelFor(key)}
-                                  </span>
-                                  <span className="rtb-map-proof">
-                                    {ids.map((id) => (
-                                      <span
-                                        key={id}
-                                        className="rtb-mini"
-                                        title={rtbById(row.campaign, id)?.detail}
-                                      >
-                                        {rtbById(row.campaign, id)?.label ?? id}
-                                      </span>
-                                    ))}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )
-                        }
-                        return hasCopy(row) ? (
-                          <span className="rtb-warn">unsupported</span>
-                        ) : (
-                          <span className="cell-ro">—</span>
-                        )
-                      })()}
-                    </td>
-                  )}
 
                   {show('scheduled') && (
                     <td>
@@ -801,8 +751,14 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   {objectCols.map((oc) => {
                     const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
                     const opts = optionsFor(oc.objKind)
-                    const settable = !!REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
-                    const value = mine.find((c) => c.refId)?.refId ?? ''
+                    const type = REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
+                    const settable = !!type
+                    // THE ROW'S OWN PIN WINS, because that is the order the writer resolves in:
+                    // row.references overrides what the board wires in. Reading only the board walk
+                    // meant the picker wrote a value and then did not show it — the control and its
+                    // own readout disagreeing about what had just happened.
+                    const pinned = type ? (row.references ?? []).find((r) => r.type === type) : undefined
+                    const value = pinned?.id ?? mine.find((c) => c.refId)?.refId ?? ''
                     // A kind can be reached by more than one card and the picker shows one. The rest are
                     // named beside it, so the cell does not quietly under-report what is reaching the asset.
                     const extra = mine.filter((c) => c.refId && c.refId !== value)
@@ -824,7 +780,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                           {/* A record reaching this row from a card that is not in the picker's list still has
                               to be selectable, or opening the dropdown would silently change the answer. */}
                           {value && !opts.some((o) => o.id === value) && (
-                            <option value={value}>{mine.find((c) => c.refId === value)?.label || 'Set on the canvas'}</option>
+                            <option value={value}>{pinned?.label || mine.find((c) => c.refId === value)?.label || 'Set on the canvas'}</option>
                           )}
                           {opts.map((o) => (
                             <option key={o.id} value={o.id}>

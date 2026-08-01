@@ -1293,19 +1293,42 @@ button {
 .obj-cell {
   padding: 6px 9px;
 }
-/* The picker in an object cell. Quiet when nothing is set: an empty one is saying "nothing is
-   shaping this", which is information, not an error. */
+/* THE PICKER IN AN OBJECT CELL, and it has to LOOK like one.
+   `.cell-select` is appearance:none over a transparent background with no border, which is right
+   for the cells whose value reads as data — a channel, a type. These are different: their whole
+   point is that you can set something that is currently unset, and an empty one rendered as bare
+   text is indistinguishable from an empty cell. So it carries a field and a caret. Quiet at rest,
+   because a column of twelve of them per row should not shout. */
 .obj-select {
   width: 100%;
   font-size: 11.5px;
+  padding: 5px 20px 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+  background-position: calc(100% - 11px) calc(50% + 1px), calc(100% - 7px) calc(50% + 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  cursor: pointer;
 }
+.obj-select:hover {
+  border-color: var(--border-strong);
+  background-color: var(--surface-2);
+}
+/* Nothing picked. Faint, and still plainly a control. */
 .obj-select.unset {
   color: var(--text-faint);
+  border-style: dashed;
 }
+/* Set elsewhere: no caret, no hover, because pressing it does nothing. */
 .obj-select:disabled {
   opacity: 1;
   cursor: default;
   color: var(--text-muted);
+  border-color: transparent;
+  background-image: none;
 }
 .obj-chip {
   display: inline-block;
