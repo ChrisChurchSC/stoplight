@@ -1,21 +1,17 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
-import { STATUS_LABEL, STATUS_ORDER } from '../domain/assetBadge'
 import { hasCopy, messagingFields, messagingMap } from '../domain/messaging'
-import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { assetRtbIds, rtbById } from '../domain/rtb'
-import { can } from '../domain/access'
 import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
-import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
+import type { ChannelId, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
-import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
@@ -46,8 +42,6 @@ const COLUMNS: { key: string; label: string; icon: string; width: number; always
   { key: 'messaging', label: 'Messaging', icon: '¶', width: 320 },
   { key: 'rtb', label: 'Proof', icon: '◆', width: 300 },
   { key: 'scheduled', label: 'Scheduled', icon: '◷', width: 184 },
-  { key: 'status', label: 'Status', icon: '●', width: 138, always: true },
-  { key: 'tracking', label: 'Tracking', icon: '◈', width: 200 },
   { key: 'budget', label: 'Budget', icon: '◧', width: 200 },
   { key: 'actions', label: '', icon: '', width: 84, always: true },
   { key: 'delete', label: '', icon: '', width: 64, always: true },
@@ -140,26 +134,11 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const openReview = useTrafficStore((s) => s.openReview)
-  const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   // Batch (column-header) actions.
-  const approveAll = useTrafficStore((s) => s.approveAll)
-  const role = useTrafficStore((s) => s.role)
-  const canPublish = can(role, 'publish')
-  const gateCleared = useTrafficStore((s) => s.gateCleared)
-  const trackingCleared = useTrafficStore((s) => s.trackingCleared)
-  const budgetCleared = useTrafficStore((s) => s.budgetCleared)
-  const breakStatus = useTrafficStore((s) => s.breakStatus)
-  const openBreaksQueue = useTrafficStore((s) => s.openBreaks)
-  const generateTracking = useTrafficStore((s) => s.generateTracking)
-  const acceptTracking = useTrafficStore((s) => s.acceptTracking)
-  const acceptBudget = useTrafficStore((s) => s.acceptBudget)
-  const syncSpend = useTrafficStore((s) => s.syncSpend)
-  const draftCopy = useTrafficStore((s) => s.draftCopy)
-  const drafting = useTrafficStore((s) => s.drafting)
 
   const pains = icp?.pains ?? []
 
@@ -220,19 +199,10 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const now = Date.now()
 
   // ---- Batch-action states for the column headers ----
-  const reviewable = view.filter((r) => r.status !== 'posted' && r.status !== 'failed')
-  const draftN = view.filter((r) => r.status === 'draft').length
   // Connection gate: the thread must be intact (no open breaks in scope) before
   // anything ships. "Review connections" actually gates "Publish."
-  const scopedForBreaks = rows.filter((r) =>
-    rowInScope(r, { filter: 'all', query: '', clientFilter, campaignFilter }),
-  )
-  const openBreakN = applyBreakStatus(detectBreaks(scopedForBreaks), breakStatus).filter(
-    (b) => b.status === 'open',
-  ).length
   // Journey performance (reach + per-fork flow) on the campaign — the same numbers
   // the canvas shows, surfaced per row here so performance reads the same everywhere.
-  const connectionCleared = openBreakN === 0
   /**
    * WHAT THE HEADER BUTTONS ACT ON, so they act on what they counted.
    *
@@ -240,7 +210,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    * subset and the actions were not. At the unpinned workbench the grid already IS the workspace, so
    * it passes nothing and the actions keep the reach they were written with.
    */
-  const scopeIds = scopeCampaign || scopeClient ? view.map((r) => r.id) : undefined
 
   /**
    * ONE COLUMN PER COPY COMPONENT the rows in view actually carry, in the order the formats declare
@@ -269,7 +238,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
       case 'audience': return none((r) => (r.audience ?? '').trim())
       case 'rtb': return none((r) => assetRtbIds(r).length)
       case 'scheduled': return none((r) => r.scheduledAt)
-      case 'tracking': return none((r) => r.utm && Object.values(r.utm).some((x) => (x ?? '').trim()))
       case 'budget': return none((r) => r.budget?.amount)
       default: return false
     }
@@ -330,14 +298,20 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
     return out
   })()
 
-  /** The object kinds any row in view is written from, in the palette's own order. */
-  const objectCols = (() => {
-    const kinds = new Set<CanvasObjectKind>()
-    for (const list of cardsByRow.values()) for (const c of list) if (c.kind !== 'note') kinds.add(c.kind)
-    return (Object.keys(OBJECT_META) as CanvasObjectKind[])
-      .filter((k) => kinds.has(k))
-      .map((k) => ({ key: `obj:${k}`, label: OBJECT_META[k].label, icon: '◈', width: 170, objKind: k }))
-  })()
+  /**
+   * A COLUMN FOR EVERY OBJECT TYPE, whether or not anything is wired to one.
+   *
+   * This is the exception to the empty-column rule, and it is the whole point of these columns. An
+   * empty Voice column does not mean "nothing to show here", it means NOTHING IS SHAPING THE VOICE —
+   * which is exactly what the canvas says by having no line, and exactly the gap a person opens the
+   * sheet to find. Hiding it would hide the finding.
+   *
+   * Note cards are left out: a note is markup on the board, deliberately never sent to the writer,
+   * so a column of them would say nothing about how anything was written.
+   */
+  const objectCols = (Object.keys(OBJECT_META) as CanvasObjectKind[])
+    .filter((k) => k !== 'note')
+    .map((k) => ({ key: `obj:${k}`, label: OBJECT_META[k].label, icon: '◈', width: 170, objKind: k }))
 
   const cols = (() => {
     const out: { key: string; label: string; icon: string; width: number; fieldKey?: string; objKind?: CanvasObjectKind }[] = []
@@ -377,23 +351,8 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
     if (!cut.length) return new Set<string>()
     return new Set(view.filter((r) => cut.includes(deliverableKeyFor(r))).map((r) => r.id))
   })()
-  const allGatesCleared = gateCleared && trackingCleared && budgetCleared && connectionCleared
-  const missingUtmN = reviewable.filter((r) => !r.utm).length
-  const dirtyTrackingN = reviewable.filter((r) => r.utm && !isTrackingClean(r)).length
-  const paidReviewable = reviewable.filter(isPaidRow)
-  const missingBudgetN = paidReviewable.filter((r) => !hasBudget(r)).length
-  const paidWithBudget = paidReviewable.some((r) => hasBudget(r))
-  const emptyMsgN = reviewable.filter((r) => !hasCopy(r)).length
 
   const pad = Math.max(0, MIN_ROWS - view.length)
-
-  function onStatusChange(row: TrafficRow, status: RowStatus) {
-    updateRow(row.id, {
-      status,
-      approvedAt: status === 'approved' ? row.approvedAt ?? Date.now() : row.approvedAt,
-      postedAt: status === 'posted' ? row.postedAt ?? Date.now() : row.postedAt,
-    })
-  }
 
   return (
     <div className="sheet-grid">
@@ -435,101 +394,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   <span className="col-resizer" onMouseDown={(e) => startResize(i + 1, e)} />
                 </th>
               ))}
-            </tr>
-            {/* HEADER ACTIONS, BY COLUMN KEY. This row was twenty hand-written cells in a fixed
-                order, matched to the columns by counting — so removing one column left an orphan
-                and shifted every action one place left, silently. Keyed, it cannot drift, which
-                matters now that the column list changes with the data.
-
-                The connection gate moved off Scheduled, where a broken thread had no business
-                sitting under a date, and onto the asset column, which is the row itself. */}
-            <tr className="col-actions">
-              <th className="corner" />
-              {cols.map((c, ci) => {
-                const firstMsg = c.key.startsWith('msg:') && ci === cols.findIndex((x) => x.key.startsWith('msg:'))
-                return (
-                  <th key={c.key} className={c.key === 'asset' ? 'gate-conn' : undefined}>
-                    {c.key === 'asset' && reviewable.length > 0 && (
-                      <>
-                        {connectionCleared ? (
-                          detachedRowIds.size ? null : <span className="cov-ok">✓ Connected</span>
-                        ) : (
-                          <button
-                            className="cov-btn warn"
-                            onClick={() => openBreaksQueue()}
-                            title="Resolve the thread before you ship: the connection check gates publish"
-                          >
-                            ⚠ {openBreakN} break{openBreakN === 1 ? '' : 's'}
-                          </button>
-                        )}
-                        {detachedRowIds.size > 0 && (
-                          <span
-                            className="cov-cut"
-                            title={`${detachedRowIds.size} asset${detachedRowIds.size === 1 ? '' : 's'} sit under a channel cut off from the campaign brief, so ${detachedRowIds.size === 1 ? 'it takes' : 'they take'} none of the campaign's cards or instructions. Reconnect the channel on the Flow tab.`}
-                          >
-                            {detachedRowIds.size} cut off
-                          </span>
-                        )}
-                      </>
-                    )}
-                    {firstMsg &&
-                      (drafting ? (
-                        <span className="cov-ok">✦ Drafting…</span>
-                      ) : emptyMsgN > 0 ? (
-                        <button
-                          className="cov-btn"
-                          onClick={() => draftCopy()}
-                          title="Draft starter copy + proof for every empty asset, from the ICP"
-                        >
-                          ✦ Draft ({emptyMsgN})
-                        </button>
-                      ) : null)}
-                    {c.key === 'status' && draftN > 0 && (
-                      <button
-                        className="cov-btn green"
-                        disabled={!allGatesCleared || !canPublish}
-                        onClick={() => void approveAll(scopeIds)}
-                        title={
-                          !canPublish
-                            ? 'Publishing is owner / editor only'
-                            : allGatesCleared
-                              ? 'Approve all draft rows'
-                              : !connectionCleared
-                                ? `Resolve ${openBreakN} connection break${openBreakN === 1 ? '' : 's'} to unlock`
-                                : 'Clear tracking and budget gates to unlock'
-                        }
-                      >
-                        Approve {draftN}
-                        {!canPublish ? ' 🔒' : !allGatesCleared && ' 🔒'}
-                      </button>
-                    )}
-                    {c.key === 'tracking' &&
-                      (trackingCleared ? (
-                        <span className="cov-ok">✓ Tracked</span>
-                      ) : missingUtmN > 0 ? (
-                        <button className="cov-btn" onClick={() => void generateTracking(scopeIds)} title="Build UTMs for every row in view">
-                          Generate ({missingUtmN})
-                        </button>
-                      ) : dirtyTrackingN === 0 && reviewable.length > 0 ? (
-                        <button className="cov-btn green" onClick={() => acceptTracking(scopeIds)}>
-                          Accept
-                        </button>
-                      ) : null)}
-                    {c.key === 'budget' &&
-                      (paidReviewable.length === 0 ? null : budgetCleared ? (
-                        <span className="cov-ok">✓ Set</span>
-                      ) : missingBudgetN === 0 ? (
-                        <button className="cov-btn green" onClick={() => acceptBudget(scopeIds)}>
-                          Accept
-                        </button>
-                      ) : paidWithBudget ? (
-                        <button className="cov-btn" onClick={() => void syncSpend(scopeIds)} title="Pull actual spend">
-                          ↻ Spend
-                        </button>
-                      ) : null)}
-                  </th>
-                )
-              })}
             </tr>
           </thead>
           <tbody>
@@ -751,53 +615,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     </td>
                   )}
 
-                  <td>
-                    <select
-                      className={`cell-select st-${row.status}`}
-                      value={row.status}
-                      onChange={(e) => onStatusChange(row, e.target.value as RowStatus)}
-                    >
-                      {/* All seven. This offered five, so a row the review drawer had just put
-                          into `in_review` or `rejected` matched no option and the cell rendered
-                          blank: the one column whose whole job is to say where a row is up to went
-                          empty exactly when it had something to say. */}
-                      {STATUS_ORDER.map((s) => (
-                        <option key={s} value={s}>
-                          {STATUS_LABEL[s]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
 
-                  {show('tracking') && (
-                    <td className="track-cell">
-                      {row.utm ? (
-                        (() => {
-                          const checks = trackingChecks(row)
-                          const clean = checks.every((c) => c.ok)
-                          const bad = checks.filter((c) => !c.ok).map((c) => c.label)
-                          return (
-                            <div
-                              className="track-cell-inner"
-                              title={clean ? utmQuery(row.utm) : `Missing: ${bad.join(', ')}`}
-                            >
-                              <span className={`trk ${clean ? 'ok' : 'bad'}`}>
-                                {clean ? '✓ Tracked' : `⚑ ${bad.length}`}
-                              </span>
-                              <code className="trk-utm">?{utmQuery(row.utm)}</code>
-                            </div>
-                          )
-                        })()
-                      ) : (
-                        <button
-                          className="btn ghost sm"
-                          onClick={() => generateTrackingForRow(row.id)}
-                        >
-                          Generate
-                        </button>
-                      )}
-                    </td>
-                  )}
 
                   {show('budget') && (
                     <td className="budget-cell">
