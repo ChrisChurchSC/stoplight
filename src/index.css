@@ -1313,6 +1313,29 @@ button {
   align-items: center;
   gap: 8px;
 }
+/**
+ * A SELECTED OBJECT CELL CARRIES BOTH MARKS.
+ *
+ * box-shadow does not stack across rules — the last one to win the cascade replaces the others
+ * outright — and `.sheet td.obj-cell` sits after `.sheet td.cell-sel` at the same specificity. So
+ * clicking an object cell showed its tone edge and no selection ring whatsoever: the one cell in the
+ * sheet that also opens a panel was the one cell that never looked selected.
+ *
+ * Declared together, after both, so neither is lost. The tint is here rather than on .cell-sel
+ * because this cell is doing more than being selected: the inspector on the right is showing it, and
+ * it should be obvious which of thirty cells that panel belongs to.
+ */
+.sheet td.obj-cell.cell-sel {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* Its picker follows, so the whole cell reads as one selected thing rather than a ring drawn around
+   an unchanged control. */
+.sheet td.obj-cell.cell-sel .obj-select {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
 .obj-ic,
 .col-obj-ic {
   color: var(--note-tone, var(--text-muted));
