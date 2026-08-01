@@ -8,7 +8,9 @@ import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budge
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { assetRtbIds, rtbById } from '../domain/rtb'
 import { can } from '../domain/access'
-import { boardFor, deliverableKeyFor } from '../domain/flowBoard'
+import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+import { cardsForRow } from '../domain/cardsForRow'
+import { OBJECT_META } from '../domain/canvasObjectMeta'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
@@ -141,6 +143,8 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const generateTrackingForRow = useTrafficStore((s) => s.generateTrackingForRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
+  const flowBoards = useTrafficStore((s) => s.flowBoards)
+  const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   // Batch (column-header) actions.
   const approveAll = useTrafficStore((s) => s.approveAll)
   const role = useTrafficStore((s) => s.role)
@@ -271,13 +275,81 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
     }
   }
 
+  /**
+   * WHAT EACH ASSET IS WRITTEN FROM, by object kind — one column per kind, so a Brand, a Message and
+   * a Voice sit side by side and can be read down the page.
+   *
+   * The canvas answers this by having you look at it: the lines run from those cards into the brief
+   * and down to the post. The grid said nothing about it, so it described the copy and the schedule
+   * and the budget while staying silent on the thing that decided what the copy says.
+   *
+   * A card names a record in one of a dozen collections, so the name is resolved here where those
+   * live. A card with nothing picked shows its own typed text, and failing that its kind, because a
+   * card that is connected and empty is worth seeing — it is reaching the writer with nothing.
+   */
+  const smartObjects = useTrafficStore((s) => s.smartObjects)
+  const companies = useTrafficStore((s) => s.companies)
+  const people = useTrafficStore((s) => s.people)
+  const messages = useTrafficStore((s) => s.messages)
+  const concepts = useTrafficStore((s) => s.concepts)
+  const seasons = useTrafficStore((s) => s.seasons)
+  const voices = useTrafficStore((s) => s.voices)
+  const triggers = useTrafficStore((s) => s.triggers)
+  const products = useTrafficStore((s) => s.products)
+  const brandObjects = useTrafficStore((s) => s.brandObjects)
+
+  const nameFor = (o: CanvasObject): string => {
+    if (o.smartObjectId) {
+      const so = smartObjects.find((x) => x.id === o.smartObjectId)
+      if (so) return so.name
+    }
+    const byId = (list: { id: string; name?: string; label?: string }[]) =>
+      o.refId ? (list.find((x) => x.id === o.refId)?.name ?? list.find((x) => x.id === o.refId)?.label) : undefined
+    const named =
+      o.kind === 'brand' ? byId(brandObjects)
+      : o.kind === 'product' ? byId(products)
+      : o.kind === 'message' ? byId(messages)
+      : o.kind === 'voice' ? byId(voices)
+      : o.kind === 'concept' ? byId(concepts)
+      : o.kind === 'season' ? byId(seasons)
+      : o.kind === 'company' ? byId(companies)
+      : o.kind === 'person' ? byId(people)
+      : o.kind === 'trigger' ? byId(triggers)
+      : o.kind === 'audience' ? byId(clientAudiences[clientFilter] ?? [])
+      : undefined
+    return named ?? o.text.trim().split('\n')[0] ?? ''
+  }
+
+  /** Cards reaching each row, by row id. One board walk per row, only when a board exists. */
+  const cardsByRow = (() => {
+    const out = new Map<string, ReturnType<typeof cardsForRow>>()
+    if (!scopeCampaign) return out
+    const board = boardFor(flowBoards, scopeCampaign)
+    if (!board.objects.length) return out
+    for (const r of view) out.set(r.id, cardsForRow(board, r, nameFor))
+    return out
+  })()
+
+  /** The object kinds any row in view is written from, in the palette's own order. */
+  const objectCols = (() => {
+    const kinds = new Set<CanvasObjectKind>()
+    for (const list of cardsByRow.values()) for (const c of list) if (c.kind !== 'note') kinds.add(c.kind)
+    return (Object.keys(OBJECT_META) as CanvasObjectKind[])
+      .filter((k) => kinds.has(k))
+      .map((k) => ({ key: `obj:${k}`, label: OBJECT_META[k].label, icon: '◈', width: 170, objKind: k }))
+  })()
+
   const cols = (() => {
-    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string }[] = []
+    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string; objKind?: CanvasObjectKind }[] = []
     for (const c of COLUMNS) {
       if (c.key === 'messaging') { out.push(...msgCols); continue }
       if (!c.always && columnEmpty(c.key)) continue
       out.push(c)
     }
+    // The object columns sit after the copy and before the controls: they say where the words came
+    // from, which you read after the words themselves.
+    const at = out.findIndex((c) => c.key === 'actions')
+    out.splice(at < 0 ? out.length : at, 0, ...objectCols)
     return out
   })()
   /** Is this column on screen? The body cells are written in order, so they ask before rendering. */
@@ -299,7 +371,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    * instructions). Only meaningful when the grid is scoped to one campaign, which is the only time
    * there is a single board to read.
    */
-  const flowBoards = useTrafficStore((s) => s.flowBoards)
   const detachedRowIds = (() => {
     if (!scopeCampaign) return new Set<string>()
     const cut = boardFor(flowBoards, scopeCampaign).detached ?? []
@@ -788,6 +859,25 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     </td>
                   )}
 
+                  {/* WHAT THIS ASSET IS WRITTEN FROM, one cell per object kind. A card that reaches the row
+                      with nothing picked still shows, greyed, because a connected empty card is reaching the
+                      writer with nothing and that is worth seeing. */}
+                  {objectCols.map((oc) => {
+                    const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
+                    return (
+                      <td key={oc.key} className="obj-cell">
+                        {mine.length === 0 ? (
+                          <span className="cell-ro">—</span>
+                        ) : (
+                          mine.map((c) => (
+                            <span key={c.id} className={`obj-chip${c.label ? '' : ' empty'}`} title={c.label || `${oc.label} card with nothing picked yet`}>
+                              {c.label || 'Nothing picked'}
+                            </span>
+                          ))
+                        )}
+                      </td>
+                    )
+                  })}
                   <td className="act-hover">
                     <button
                       className="btn ghost sm"

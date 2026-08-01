@@ -1262,6 +1262,31 @@ button {
    back read as an unstyled blank cell in the one column whose job is to say where it is up to. */
 /* Cut off from the brief: a fact, not a failure. Quiet, because the assets still ship — it is only
    saying they are written without the campaign's cards. Same word the canvas and the panel use. */
+/* WHAT AN ASSET IS WRITTEN FROM. One chip per card reaching the row, quiet by default: this column
+   answers "where did these words come from", which you read after the words, not instead of them. */
+.obj-cell {
+  padding: 6px 9px;
+}
+.obj-chip {
+  display: inline-block;
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 7px;
+  margin: 1px 3px 1px 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+}
+/* Connected and holding nothing. It reaches the writer either way, so it shows either way. */
+.obj-chip.empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
 /* The connection gate can carry two independent things at once: a break to resolve, and a count of
    channels deliberately cut off. They are not alternatives, so they need room from each other. */
 .sheet th.gate-conn {
