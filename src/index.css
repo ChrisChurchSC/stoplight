@@ -12984,19 +12984,6 @@ button {
   object-fit: contain;
   object-position: left bottom;
   color: #1a1d23;
-  /**
-   * drop-shadow, not box-shadow: the mark is an SVG with transparency, so box-shadow would trace
-   * the rectangular <img> box while this traces the letterforms themselves.
-   *
-   * Three passes. The cast is BURNT orange rather than the coral itself — the mark's hatching is
-   * now #ff6347, and a cast in the same #ff6347 sat flush against it and stopped reading as depth
-   * at all; darkening it is what keeps the letters standing off the field. A thin coral rim sits
-   * between the two so the step from fill to cast still reads as orange rather than as dirt, and
-   * the wide pass is the bloom the black field needs to stop the whole thing looking pasted on.
-   */
-  filter: drop-shadow(2px 2px 0 rgba(255, 138, 112, 0.85))
-    drop-shadow(6px 7px 0 rgba(122, 38, 20, 0.95))
-    drop-shadow(0 8px 30px rgba(255, 99, 71, 0.38));
 }
 /* Literal hex throughout, not var(--…): see the palette note on .auth-gate. */
 /**
