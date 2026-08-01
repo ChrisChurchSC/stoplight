@@ -4412,7 +4412,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     set((s) => {
       // An empty board is a REMOVAL, not a blank row: otherwise every campaign you ever opened
       // leaves a row behind, and the slice grows with visits rather than with work.
-      const empty = !board.objects.length && !board.placements.length && !board.connectors.length
+      // A board whose only content is a CUT is not empty: dropping the row would silently reattach
+      // the channel, which is the state the person went out of their way to change.
+      const empty = !board.objects.length && !board.placements.length && !board.connectors.length && !board.detached?.length
       // Never persist a partial board. One saved without `placements` crashed every reader that
       // walks all boards (the smart-object inspector counts how many boards use an object), and a
       // board with no key is unreachable but still iterated. Normalise here so a bad shape cannot
@@ -4424,6 +4426,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         placements: board.placements ?? [],
         pos: board.pos ?? {},
         connectors: board.connectors ?? [],
+        // Rebuilt field by field on purpose (a partial board crashes readers that walk all boards),
+        // so anything new has to be added here or it is silently dropped on the way to storage.
+        ...(board.detached?.length ? { detached: board.detached } : {}),
       }
       const rest = s.flowBoards.filter((b) => b.key !== board2.key)
       const flowBoards = empty ? rest : [...rest, board2]
@@ -6729,6 +6734,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
+        /** Channels the board says are cut off from the brief. See FlowBoard.detached. */
+        const detachedKeys = boardFor(get().flowBoards, campaign).detached ?? []
         const activeProof = campaignPools.activeProof
         // CTAs are VERBATIM from the brand's list and DISTRIBUTED across the set:
         // pick the globally least-used CTA, preferring a stage match among ties. This
@@ -6788,7 +6795,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const stage = funnelStageFor(r.channel, r.assetType)
           // Per-row effective pools: the row's own record-tag override if it has one, else the
           // campaign's. Lets a single deliverable speak to a different segment/proof.
-          const eff = r.references && r.references.length ? poolsFrom(r.references) : campaignPools
+          // A channel CUT OFF from the brief takes nothing from it: no records, the same way it
+          // takes no instructions below. Detaching has to reach the writing or the canvas would show
+          // a channel standing apart from the campaign while the campaign kept writing it.
+          const eff = r.references && r.references.length
+            ? poolsFrom(r.references)
+            : detachedKeys.includes(deliverableKeyFor(r))
+              ? poolsFrom([])
+              : campaignPools
           const aud =
             eff.audiencePool.find((x) => x.name === r.audience) ??
             (eff.audiencePool.length ? eff.audiencePool[i % eff.audiencePool.length] : undefined)
@@ -6868,7 +6882,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             direction: (() => {
               // Shared with the panel, so a readout of "what this will be told" cannot disagree with
               // what is actually sent.
-              const mine = directionForRow(resolved, deliverableKeyFor(r), r.id, campaignDirection)
+              const mine = directionForRow(resolved, deliverableKeyFor(r), r.id, campaignDirection, detachedKeys)
               return mine.length ? buildDirection(mine) : undefined
             })(),
             index: i,

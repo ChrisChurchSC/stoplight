@@ -1638,6 +1638,11 @@ export function FlowsView() {
    * structure already implies, and Gretel can store campaign → channel.
    */
   const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
+  /**
+   * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
+   * campaign to a channel is derived rather than drawn, so severing it is recorded as an absence.
+   */
+  const [detached, setDetached] = useState<string[]>([])
   const selEdgeRef = useRef(selEdge)
   selEdgeRef.current = selEdge
   const isSelEdge = (from: string, to: string, kind: 'stored' | 'implicit') =>
@@ -1826,11 +1831,13 @@ export function FlowsView() {
         if (ed) {
           e.preventDefault()
           if (ed.kind === 'stored') deleteEdgeRef.current(ed.from, ed.to)
-          // A derived line has nothing stored behind it to remove: a post sits under its channel and
-          // a channel under its campaign because of what they ARE, not because of a wire somebody
-          // drew. Saying so out loud, because a key that silently does nothing is the defect this
-          // file already fixed once for Delete on a built channel.
-          else showToast('This line follows from where the post lives, so there is nothing to delete. Move or delete the card instead.')
+          // Campaign → channel is a decision, so cutting it detaches rather than deletes: the channel
+          // and its assets stay, and stop taking anything from the brief.
+          else if (canDetachRef.current(ed.from, ed.to)) setChannelDetachedRef.current(ed.to, true)
+          // The rest are not decisions. A post sits under its channel because of what it IS. Saying
+          // so out loud, because a key that silently does nothing is the defect this file already
+          // fixed once for Delete on a built channel.
+          else showToast('This line follows from where the post lives, so there is nothing to cut. Move or delete the card instead.')
           return
         }
         const ids = selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []
@@ -2724,6 +2731,21 @@ export function FlowsView() {
    * Matched by pair rather than by index: see selEdge. Held in a ref as well, because the keydown
    * listener is registered once and would otherwise close over a stale `connectors`.
    */
+  /**
+   * Can this derived line be cut? Only campaign → channel. That one is the person's decision to make:
+   * a channel taking the campaign's cards is the default, not a law, and cutting it leaves the
+   * channel and every asset under it exactly where they are. The others are not decisions at all. A
+   * post sits under its channel because of what it IS, and a channel branched off an asset is
+   * describing a journey that asset's own field records; there is nothing to cut without deleting or
+   * moving the card itself.
+   */
+  const canDetach = (from: string, to: string) => viewName !== null && from === 'campaign' && viewDelivs.some((d) => d.key === to)
+  /** Cut a channel off from the brief, or restore it. */
+  const setChannelDetached = (key: string, off: boolean) => {
+    recordHistory(true)
+    setDetached((cur) => (off ? (cur.includes(key) ? cur : [...cur, key]) : cur.filter((k) => k !== key)))
+    setSelEdge(null)
+  }
   const deleteEdge = (from: string, to: string) => {
     if (!connectors.some((c) => c.from === from && c.to === to)) return
     // A refused unbind keeps its wire. Unbinding a Brand card is refused while assets are already
@@ -4126,6 +4148,10 @@ export function FlowsView() {
   releaseRef.current = releasePlacement
   const deleteEdgeRef = useRef(deleteEdge)
   deleteEdgeRef.current = deleteEdge
+  const canDetachRef = useRef(canDetach)
+  canDetachRef.current = canDetach
+  const setChannelDetachedRef = useRef(setChannelDetached)
+  setChannelDetachedRef.current = setChannelDetached
   /** Drop a member out of an object without deleting the card. */
   const removeFromPlacement = (gid: string, noteId: string) =>
     setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
@@ -4457,6 +4483,7 @@ export function FlowsView() {
     // (The library OBJECTS survive: that is the point of them. Only "it is on this canvas" resets.)
     setPlacements([])
     setConnectors([])
+    setDetached([])
     setSelEdge(null)
     setOpenGroupId(null)
     // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
@@ -4507,6 +4534,7 @@ export function FlowsView() {
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
+    setDetached(loaded.detached ?? [])
     // The line you had selected belongs to the campaign you just left. Without this the next one
     // opens with an unrelated line lit up, and Delete acts on a board that is no longer on screen.
     setSelEdge(null)
@@ -4579,7 +4607,9 @@ export function FlowsView() {
         // carry the campaign name, which is what put it in viewDelivs. The line states a fact.
         const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
         const srcRow = branchSrc ? viewRows.find((r) => r.assetName === branchSrc) : undefined
-        out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
+        // A channel cut off from the brief draws no line to it, and takes nothing from it: the store
+        // reads the same list when it assembles what each asset is written from.
+        if (!(srcRow === undefined && detached.includes(d.key))) out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
         for (const r of d.rows) out.push({ from: d.key, to: r.id })
       }
       return out
@@ -4592,7 +4622,7 @@ export function FlowsView() {
       for (let bi = 0; bi < slots; bi++) out.push({ from: n.id, to: `${n.id}:${bi}` })
     }
     return out
-  }, [nodes, viewName, viewDelivs, viewRows])
+  }, [nodes, viewName, viewDelivs, viewRows, detached])
 
   // Card ids (posts, deliverables, build sub-cards) that carry media budget/spend. Connectors
   // touching one of these are tinted gold so a paid path stands out from organic on the canvas.
@@ -4689,7 +4719,9 @@ export function FlowsView() {
     const ids = new Set([...objects.map((o) => o.id), ...placements.map((p) => p.id), 'campaign'])
     const boardPos: Record<string, { x: number; y: number }> = {}
     for (const [k, v] of Object.entries(pos)) if (ids.has(k)) boardPos[k] = v
-    return { key, objects, placements, pos: boardPos, connectors }
+    // `detached` is omitted when empty so a board that has never had a line cut carries no field at
+    // all, which is what lets every board saved before this existed load with its old meaning.
+    return { key, objects, placements, pos: boardPos, connectors, ...(detached.length ? { detached } : {}) }
   }
   const boardSaveTimer = useRef<number | null>(null)
   useEffect(() => {
@@ -4701,7 +4733,10 @@ export function FlowsView() {
       if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardKey, objects, placements, connectors, pos])
+    // `detached` belongs here for the same reason `connectors` does: it is part of what the board
+    // says about itself. Left out, a cut line vanished on screen and came back on the next load,
+    // because the save never fired for it.
+  }, [boardKey, objects, placements, connectors, pos, detached])
 
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
   // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's
@@ -7824,6 +7859,16 @@ export function FlowsView() {
               // campaign onto a card is the same statement backwards, so accept it and store it
               // the right way round rather than making the user guess which end to start from.
               const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
+              // RECONNECTING A CUT CHANNEL restores the derived line rather than storing a second
+              // one beside it. Otherwise the board would carry a real connector saying exactly what
+              // the absent one said, and the next cut would have two things to remove.
+              if (pair && pair.from === 'campaign' && detached.includes(pair.to)) {
+                setChannelDetached(pair.to, false)
+                drawingFrom.current = null
+                setDrawing(null)
+                setConnectOver(null)
+                return
+              }
               if (pair && pair.from !== pair.to) {
                 // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
                 // already bound to a different brand is refused (attachToCampaign says why), and a
@@ -7910,13 +7955,14 @@ export function FlowsView() {
               return (
                 <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}`}>
                   <path className={`flow-edge implicit${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
-                  {/* A NARROWER band than a stored line gets. These run down a 68px corridor between
-                      every channel and its posts, and the hit stroke is in screen pixels on an
-                      untransformed svg, so a 30px band on every one of them would carpet the canvas
-                      at low zoom and swallow the marquee. A stored line is drawn after this pass and
-                      so wins any overlap, which is the right precedence: the one you can act on. */}
+                  {/* THE SAME BAND EVERY OTHER LINE GETS. It was narrower at first, on the theory
+                      that these are numerous (one from every channel to every post) and would carpet
+                      the canvas at low zoom. In use the narrow band was simply hard to hit, which is
+                      the complaint that matters: a line you cannot point at may as well still be
+                      inert. A stored line is drawn after this pass and so wins any overlap, which is
+                      the right precedence — the one that deletes something stays reachable. */}
                   <path
-                    className="flow-edge-hit thin"
+                    className="flow-edge-hit"
                     d={d}
                     onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
                     onClick={() => selectEdge(cn.from, cn.to, 'implicit')}
@@ -7955,7 +8001,8 @@ export function FlowsView() {
                 delete. Its presence is the answer to "why will this line not go away": a derived
                 line never shows one, so you can see that before you press anything. */}
             {(() => {
-              if (!selEdge || selEdge.kind !== 'stored') return null
+              if (!selEdge) return null
+              if (selEdge.kind !== 'stored' && !canDetach(selEdge.from, selEdge.to)) return null
               const a = connRect(selEdge.from)
               const b = connRect(selEdge.to)
               if (!a || !b) return null
@@ -7966,9 +8013,13 @@ export function FlowsView() {
                 <g
                   className="flow-edge-del"
                   onMouseDown={(ev) => ev.stopPropagation()}
-                  onClick={(ev) => { ev.stopPropagation(); deleteEdge(selEdge.from, selEdge.to) }}
+                  onClick={(ev) => {
+                    ev.stopPropagation()
+                    if (selEdge.kind === 'stored') deleteEdge(selEdge.from, selEdge.to)
+                    else setChannelDetached(selEdge.to, true)
+                  }}
                 >
-                  <title>Delete this connection</title>
+                  <title>{selEdge.kind === 'stored' ? 'Delete this connection' : 'Cut this channel off from the brief'}</title>
                   <circle cx={mx} cy={my} r={9} />
                   <path d={`M${mx - 3.4} ${my - 3.4} L${mx + 3.4} ${my + 3.4} M${mx + 3.4} ${my - 3.4} L${mx - 3.4} ${my + 3.4}`} />
                 </g>
@@ -9024,6 +9075,21 @@ export function FlowsView() {
                   <p className="flow-inspect-desc">
                     {CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · {typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}
                   </p>
+                  {/* CUT OFF FROM THE BRIEF. The missing line says it on the canvas, but a missing
+                      thing is a poor way to state a fact: you have to know it used to be there. The
+                      panel says it in words, and offers the way back, because reconnecting by drawing
+                      a line to a card with no line on it is the one gesture that is not obvious. */}
+                  {detached.includes(selDeliv.key) && (
+                    <>
+                      <p className="flow-inspect-note">
+                        Cut off from the campaign brief. Its assets keep everything they have, and are
+                        written without the cards wired to the campaign.
+                      </p>
+                      <button className="flow-reset-link" onClick={() => setChannelDetached(selDeliv.key, false)}>
+                        Connect it to the brief again
+                      </button>
+                    </>
+                  )}
                   <label className="flow-inspect-label">Assets</label>
                   {/* The count is TYPEABLE, not just steppable. Getting from 4 to 16 was twelve
                       clicks, and the number was the one thing on this panel you could see but not

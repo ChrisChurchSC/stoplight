@@ -25,7 +25,8 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
-          'Every connector line can be selected, the structural ones included. The lines from a campaign to its channels and from a channel to its posts used to be inert, so the lines holding the board together were the only ones you could not point at. Click any line to select it, Escape to drop it.',
+          'Every connector line can be selected, the structural ones included. The lines from a campaign to its channels and from a channel to its posts used to be inert, so the lines holding the board together were the only ones you could not point at. Click any line to select it, Escape to drop it. They all take the same generous click band, so a line is easy to hit at any zoom.',
+          'A channel can be cut off from the campaign brief. That line is derived, not drawn, so there was no connector to remove and no way to say "write this channel without the campaign\u2019s cards". Cut it and the channel keeps every asset it has and stops taking the campaign\u2019s cards and instructions, which reaches the writing and not only the picture. The panel says so and offers the way back, or draw the line again.',
           'Clicking a line no longer deletes it. One unmodified click destroyed a connection and took the records it carried with it, with nothing but a tooltip to warn you. A selected line carries a ✕, and Delete does the same from the keyboard. A structural line has no ✕, because there is nothing stored behind it to remove, and pressing Delete on one now says so instead of doing nothing.',
           'Channel and post cards lost the ✕ in the inspector. Clicking the canvas or another card already closes them.',
         ],

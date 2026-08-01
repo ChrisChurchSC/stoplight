@@ -7301,13 +7301,10 @@ button {
   pointer-events: stroke;
   cursor: pointer;
 }
-/* Structural lines get a much narrower band. There is one from every channel to every post it
-   feeds, all running down the same corridor, and this stroke is screen pixels on an untransformed
-   svg: 30 stays 30 however far you zoom out, so a full-width band on each of them would carpet the
-   canvas at low zoom and swallow marquee-select and space-pan along with it. */
-.flow-edge-hit.thin {
-  stroke-width: 12;
-}
+/* Every line gets the same band, structural ones included: a narrower one for the derived lines was
+   tried and was simply hard to hit, and a line you cannot point at may as well still be inert. Note
+   this is a presentation-beating CSS rule, so a strokeWidth attribute in the markup would lose to
+   it — set the width here or not at all. */
 /* Thicker as well as coloured on hover: at 2px the feedback was the colour alone, which is easy to
    miss on a board with a lot of lines and no help at all if you are unsure WHICH line you are about
    to act on.
