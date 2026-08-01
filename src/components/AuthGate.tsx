@@ -127,8 +127,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <button className="btn primary auth-submit" disabled={busy} onClick={submit}>
           {busy ? '…' : 'Sign in'}
         </button>
-        <button className="auth-switch" onClick={showSignUp}>
-          Need an account? Sign up
+        <div className="auth-or">
+          <span>new here?</span>
+        </div>
+        <button className="btn auth-create" type="button" onClick={showSignUp}>
+          Create an account
         </button>
       </div>
     </AuthShell>
