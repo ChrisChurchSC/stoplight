@@ -6834,17 +6834,22 @@ button {
 .flow-tb-model-item.on .flow-tb-model-note { color: var(--accent); opacity: 0.75; }
 /* The model-account balance, beside Generate. Quiet by default: it is a thing to glance at, not a
    thing to read, right up until it is nearly gone. */
-.flow-tb-credits {
+/* THE BALANCE, in the header beside Share. It sat on the canvas toolbar, which is a row of things
+   you DO to the board; what is left to spend is a property of the workspace and belongs where the
+   workspace-level controls are. Sized to sit quietly next to Share rather than compete with it: this
+   is a number you glance at, not one you act on. Tabular figures so it does not jitter as it spends
+   down, which matters more here than it did at 9.5px. */
+.flow-top-credits {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  font-size: 9.5px;
+  padding: 0 4px;
+  font-size: 11.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   white-space: nowrap;
 }
-.flow-tb-credits.low { color: var(--amber); }
+.flow-top-credits.low { color: var(--amber); }
 .flow-tb-tools {
   display: flex;
   gap: 2px;
@@ -21482,7 +21487,7 @@ table.aud-sheet td.stick .aud-cell {
 
 /* Numbers you compare rather than read: zoom, the credit balance, counts. */
 .flow-tb-zoom,
-.flow-tb-credits,
+.flow-top-credits,
 .flow-outline-row .flow-tile,
 .flow-home-card-meta {
   font-family: var(--font-label);

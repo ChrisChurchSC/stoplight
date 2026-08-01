@@ -7540,6 +7540,20 @@ export function FlowsView() {
           )}
         </div>
         <div className="flow-top-right">
+          {/* WHAT IS LEFT TO SPEND, in the header rather than on the canvas toolbar. The balance is
+              a property of the workspace, not of the board you happen to be looking at, and the
+              toolbar it used to sit on is a row of things you DO to the canvas. Reads the provider
+              account rather than an app ledger, because there is no app ledger. Hidden entirely
+              while unknown: a balance nobody can read is not zero. Turns warning-toned under $1,
+              which is roughly a couple of full campaign generations. */}
+          {aiCredits && (
+            <span
+              className={`flow-top-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
+              title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
+            >
+              {aiCredits.remainingCredits.toLocaleString()} credits
+            </span>
+          )}
           {can(role, 'share') && (
             <button
               className="flow-share-btn"
@@ -10142,18 +10156,6 @@ export function FlowsView() {
                 </div>
               )
             })()}
-            {/* WHAT IS LEFT TO SPEND. Reads the provider account, not an app ledger, because there
-                is no app ledger — so it is shown in dollars rather than dressed up as a credit
-                count. Hidden entirely while unknown: a balance nobody can read is not zero. Turns
-                warning-toned under $1, which is roughly a couple of full campaign generations. */}
-            {aiCredits && (
-              <span
-                className={`flow-tb-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
-                title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
-              >
-                {aiCredits.remainingCredits.toLocaleString()} credits
-              </span>
-            )}
             <div className="flow-tb-brand-wrap">
             <button
               className="flow-tb-regen"
