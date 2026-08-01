@@ -767,11 +767,11 @@ export function SheetGrid({
                           onClick={(e) => e.stopPropagation()}
                         >
                           {/* Named, not a dash. An empty cell in this column is not missing data, it
-                              is a question nobody has answered yet, and "Add voice" says both what
-                              the column is and what pressing it will do. A dash says neither, and in
-                              a row of twelve identical dashes it does not even say which column you
-                              are looking at. */}
-                          <option value="">Add {oc.label.toLowerCase()}</option>
+                              is a question nobody has answered yet, and "Select voice" says both
+                              what the column is and what pressing it will do. A dash says neither,
+                              and in a row of twelve identical dashes it does not even say which
+                              column you are looking at. */}
+                          <option value="">Select {oc.label.toLowerCase()}</option>
                           {/* A record reaching this row from a card that is not in the picker's list still has
                               to be selectable, or opening the dropdown would silently change the answer. */}
                           {value && !opts.some((o) => o.id === value) && (
