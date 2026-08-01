@@ -1262,6 +1262,18 @@ button {
    back read as an unstyled blank cell in the one column whose job is to say where it is up to. */
 /* Cut off from the brief: a fact, not a failure. Quiet, because the assets still ship — it is only
    saying they are written without the campaign's cards. Same word the canvas and the panel use. */
+/* The connection gate can carry two independent things at once: a break to resolve, and a count of
+   channels deliberately cut off. They are not alternatives, so they need room from each other. */
+.sheet th.gate-conn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* "est." beside a modelled figure. Faint, because it is a qualifier on the number, not news. */
+.perf-est {
+  color: var(--text-faint);
+  font-weight: 500;
+}
 .ch-cut,
 .cov-cut {
   font-size: 10px;
@@ -9315,6 +9327,9 @@ button {
   align-items: center;
   gap: 7px;
   padding: 6px 9px;
+  /* The cut-off chip drops to its own line rather than squeezing the channel name, which is the
+     thing you are actually scanning this column for. */
+  flex-wrap: wrap;
 }
 .ch-cell .cell-select {
   padding: 0;

@@ -15,7 +15,7 @@ import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
-import { journeyPerformance, formatReach } from '../domain/journeyPerf'
+import { journeyPerformance, formatReach, isBrandCalibrated } from '../domain/journeyPerf'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { ChannelIcon } from './ChannelIcon'
 import { CompletenessBar } from './CompletenessBar'
@@ -32,7 +32,7 @@ const COLUMNS = [
   { key: 'campaign', label: 'Campaign', icon: '◇' },
   { key: 'audience', label: 'Audience', icon: '◎' },
   { key: 'messaging', label: 'Messaging', icon: '¶' },
-  { key: 'rtb', label: 'RTB', icon: '◆' },
+  { key: 'rtb', label: 'Proof', icon: '◆' },
   { key: 'review', label: 'ICP', icon: '◑' },
   { key: 'scheduled', label: 'Scheduled', icon: '◷' },
   { key: 'status', label: 'Status', icon: '●' },
@@ -41,7 +41,7 @@ const COLUMNS = [
   { key: 'attribution', label: 'Attribution', icon: '↗' },
   { key: 'performance', label: 'Performance', icon: '📊' },
   { key: 'posted', label: 'Posted', icon: '✓' },
-  { key: 'comments', label: 'Comments', icon: '💬' },
+  { key: 'comments', label: 'Platform comments', icon: '💬' },
   { key: 'publish', label: 'Publish', icon: '▷' },
   { key: 'actions', label: '', icon: '' },
   { key: 'delete', label: '', icon: '' },
@@ -83,33 +83,55 @@ function CovBar({ n, total }: { n: number; total: number }) {
   )
 }
 
-/** Auto-growing text cell: wraps content and expands the row to fit. */
+/**
+ * Auto-growing text cell: wraps content and expands the row to fit.
+ *
+ * `commitOnBlur` holds the keystrokes locally and writes once you leave. It exists because a cell
+ * whose value is also part of the grid's FILTER cannot write per keystroke: the row leaves the view
+ * on the first character and the textarea unmounts under the cursor. `readOnly` is for the same
+ * field when the answer is fixed by where you are standing.
+ */
 function GrowCell({
   value,
   placeholder,
   onChange,
   dep,
+  commitOnBlur,
+  readOnly,
+  title,
 }: {
   value: string
   placeholder?: string
   onChange: (v: string) => void
   dep: number
+  commitOnBlur?: boolean
+  readOnly?: boolean
+  title?: string
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? value
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
-  }, [value, dep])
+  }, [shown, dep])
   return (
     <textarea
       ref={ref}
       className="cell-input grow"
       rows={1}
-      value={value}
+      value={shown}
       placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
+      readOnly={readOnly}
+      title={title}
+      onChange={(e) => (commitOnBlur ? setDraft(e.target.value) : onChange(e.target.value))}
+      onBlur={(e) => {
+        if (!commitOnBlur) return
+        setDraft(null)
+        if (e.target.value !== value) onChange(e.target.value)
+      }}
     />
   )
 }
@@ -299,6 +321,8 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    * it passes nothing and the actions keep the reach they were written with.
    */
   const scopeIds = scopeCampaign || scopeClient ? view.map((r) => r.id) : undefined
+  /** Whether the reach figures are modelled rather than measured, for this brand. */
+  const reachIsProjected = !isBrandCalibrated(clientFilter === 'all' ? undefined : clientFilter)
   /**
    * CHANNELS CUT OFF FROM THE BRIEF, as row ids.
    *
@@ -350,7 +374,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
         {rows.length === 0 && (
           <div className="sheet-hint">
             <div>
-              Drag assets anywhere here to start the sheet.
+              Add an asset to start the sheet.
             </div>
             <button
               className="btn sm"
@@ -407,25 +431,32 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               <th />
               <th />
               <th className="gate-conn">
-                {reviewable.length === 0 ? null : connectionCleared ? (
-                  detachedRowIds.size ? (
-                    <span
-                      className="cov-cut"
-                      title={`${detachedRowIds.size} asset${detachedRowIds.size === 1 ? '' : 's'} sit under a channel cut off from the campaign brief, so ${detachedRowIds.size === 1 ? 'it takes' : 'they take'} none of the campaign's cards or instructions. Reconnect the channel on the Flow tab.`}
-                    >
-                      {detachedRowIds.size} cut off
-                    </span>
-                  ) : (
-                    <span className="cov-ok">✓ Connected</span>
-                  )
-                ) : (
-                  <button
-                    className="cov-btn warn"
-                    onClick={() => openBreaksQueue()}
-                    title="Resolve the thread before you ship: the connection check gates publish"
-                  >
-                    ⚠ {openBreakN} break{openBreakN === 1 ? '' : 's'}
-                  </button>
+                {/* Two independent facts, so both are said. A break is a thread that does not hold
+                    together and it gates publish; being cut off is a decision somebody made and it
+                    does not. Showing one INSTEAD of the other hid the cut whenever anything else was
+                    also wrong, which is exactly when you would want to know. */}
+                {reviewable.length === 0 ? null : (
+                  <>
+                    {connectionCleared ? (
+                      detachedRowIds.size ? null : <span className="cov-ok">✓ Connected</span>
+                    ) : (
+                      <button
+                        className="cov-btn warn"
+                        onClick={() => openBreaksQueue()}
+                        title="Resolve the thread before you ship: the connection check gates publish"
+                      >
+                        ⚠ {openBreakN} break{openBreakN === 1 ? '' : 's'}
+                      </button>
+                    )}
+                    {detachedRowIds.size > 0 && (
+                      <span
+                        className="cov-cut"
+                        title={`${detachedRowIds.size} asset${detachedRowIds.size === 1 ? '' : 's'} sit under a channel cut off from the campaign brief, so ${detachedRowIds.size === 1 ? 'it takes' : 'they take'} none of the campaign's cards or instructions. Reconnect the channel on the Flow tab.`}
+                      >
+                        {detachedRowIds.size} cut off
+                      </span>
+                    )}
+                  </>
                 )}
               </th>
               <th>
@@ -503,8 +534,19 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               <th><span className="cov-stat">{approvedN} approved · {postedN} posted</span></th>
               <th><CovBar n={trackingCleanN} total={totalRows} /></th>
               <th><CovBar n={budgetSetN} total={paidN} /></th>
-              <th><span className="cov-stat">↗ {money(wonScoped)} won</span></th>
-              <th><span className="cov-stat">📊 {formatReach(journeyPerf.plan.topReach)} reach</span></th>
+              {/* Only when there is attribution to report. "$0 won" reads as a measured zero,
+                  and on any campaign that is not the seeded demo data it is simply the absence of a
+                  connected source: the adapter recognises three hardcoded asset names. */}
+              <th>{wonScoped > 0 ? <span className="cov-stat">↗ {money(wonScoped)} won</span> : null}</th>
+              {/* PROJECTED until the brand has measured numbers. journeyPerf is a model — reach
+                  decays down the funnel from a per-channel base with a stable per-asset jitter — and
+                  it exported isBrandCalibrated "so surfaces can label projections" and then had no
+                  callers, so a figure nobody had measured was printed exactly like one that had. */}
+              <th>
+                <span className="cov-stat" title={reachIsProjected ? 'Projected from channel benchmarks. No measured reach for this brand yet.' : 'From measured reach for this brand.'}>
+                  📊 {formatReach(journeyPerf.plan.topReach)} reach{reachIsProjected ? ' (est.)' : ''}
+                </span>
+              </th>
               <th><CovBar n={postedN} total={totalRows} /></th>
               <th><CovBar n={commentedN} total={postedN} /></th>
               <th />
@@ -637,10 +679,19 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   </td>
 
                   <td>
+                    {/* Read-only inside a campaign, and buffered everywhere else. This wrote per
+                        keystroke, and the campaign is what the grid FILTERS on: inside a campaign
+                        tab the row failed the filter on the first character, left the view, and the
+                        textarea unmounted mid-word. The canvas deliberately does not let this be
+                        typed freely either — it edits only the part after "Brand — " and rebuilds
+                        the rest, because that prefix is how every reader finds the row's brand. */}
                     <GrowCell
                       value={row.campaign ?? ''}
                       placeholder="—"
                       dep={total}
+                      commitOnBlur
+                      readOnly={!!scopeCampaign}
+                      title={scopeCampaign ? 'You are inside this campaign. Move the asset from the campaign it belongs to.' : undefined}
                       onChange={(v) => updateRow(row.id, { campaign: v })}
                     />
                   </td>
@@ -691,7 +742,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   <td
                     className="rtb-cell"
                     onClick={() => openReview(row.id)}
-                    title="Map proof (RTBs) in messaging"
+                    title="Map proof to each claim in the messaging"
                   >
                     {(() => {
                       const map = messagingMap(row)
@@ -891,7 +942,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       if (!p || !p.reach) return <span className="cell-ro">—</span>
                       return (
                         <div className="perf" title={`Reached ${p.reach.toLocaleString()} · ${(p.rate * 100).toFixed(1)}% ${p.rateLabel}`}>
-                          <span className="perf-reach">{formatReach(p.reach)}</span>
+                          <span className="perf-reach">{formatReach(p.reach)}{reachIsProjected ? <span className="perf-est"> est.</span> : null}</span>
                           {/* NO LEAK FLAG. It painted anything under 12% in the same red as the
                               delete button, and these numbers are simulated: a leaf's rate is its
                               stage benchmark times a jitter of 0.8 to 1.2 (journeyPerf), and the
@@ -964,7 +1015,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     </button>
                     <button
                       className="btn ghost sm"
-                      title="Duplicate row (re-traffic to another channel)"
+                      title="Duplicate this asset onto another channel"
                       onClick={() => duplicateRow(row.id)}
                     >
                       ⎘

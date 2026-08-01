@@ -3114,7 +3114,7 @@ export function FlowsView() {
     // A budget needs to be assigned to paid assets. Flag it if there's nowhere to put it, or if
     // it isn't fully assigned across the paid groups yet.
     if (n && n > 0) {
-      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
+      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this campaign has no paid media to spend it on — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
       else if (assignedBudget < n) showToast(`$${n.toLocaleString()} budget set — assign it across your paid assets so it's fully allocated.`)
     }
   }
@@ -7559,7 +7559,7 @@ export function FlowsView() {
             <button
               className="flow-share-btn"
               onClick={() => openShareDialog(viewName ?? undefined)}
-              title={viewName ? 'Share just this flow (view-only)' : 'Share this workspace'}
+              title={viewName ? 'Share just this campaign (view-only)' : 'Share this workspace'}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />
@@ -9356,7 +9356,7 @@ export function FlowsView() {
                       </div>
                       {campaignBudget > 0 && (viewPaidRows.length === 0 ? (
                         <div className="flow-budget-warn">
-                          No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                          No paid media to spend this budget on. Add a paid channel (Meta, LinkedIn Ads, …) to allocate it.
                         </div>
                       ) : assignedBudget < campaignBudget ? (
                         <div className="flow-budget-warn">
@@ -9496,13 +9496,13 @@ export function FlowsView() {
                         onChange={(e) => setBudget(e.target.value)}
                         onBlur={() => {
                           const n = Math.max(0, +budget || 0)
-                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
+                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this campaign — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
                         }}
                       />
                     </div>
                     {(+budget || 0) > 0 && !hasPaidBuild && (
                       <div className="flow-budget-warn">
-                        No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                        No paid media to spend this budget on. Add a paid channel (Meta, LinkedIn Ads, …) to allocate it.
                       </div>
                     )}
                   </div>
@@ -9597,7 +9597,7 @@ export function FlowsView() {
                       </div>
                     )}
                     <button className="flow-inspect-regen" onClick={() => void genPreview(node)} disabled={!writeCopy}>
-                      ↻ Redraft this deliverable
+                      ↻ Redraft this channel
                     </button>
                     <div className="flow-inspect-note" style={{ marginTop: 12 }}>
                       {CHANNELS[p.channel as ChannelId]?.label ?? p.channel} · {typeLabel(p.channel as ChannelId, p.assetType) || p.assetType}
@@ -9838,7 +9838,7 @@ export function FlowsView() {
                   onClick={() => { close(); void (onDeliv ? removeRows(onDeliv.rows.map((r) => r.id)) : removeRow(onPost!.id)) }}
                 >
                   {onDeliv
-                    ? `Delete deliverable and its ${onDeliv.rows.length} post${onDeliv.rows.length === 1 ? '' : 's'}`
+                    ? `Delete channel and its ${onDeliv.rows.length} post${onDeliv.rows.length === 1 ? '' : 's'}`
                     : 'Delete post'}
                   <span className="flow-ctx-kbd">⌫</span>
                 </button>
@@ -10225,13 +10225,13 @@ export function FlowsView() {
           <div className="flow-real-bar">
             {!hasBuiltRows ? (
               <div className="flow-real-hint">
-                This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}, it shows built assets. Click "Build & write copy" to populate it, or add one yourself.
+                This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}. It shows built assets. Press Generate to populate it, or add one yourself.
               </div>
             ) : (
               <span />
             )}
             {!flowShareLock && (
-              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this flow">
+              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this campaign">
                 ＋ Add asset
               </button>
             )}
