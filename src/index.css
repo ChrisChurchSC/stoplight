@@ -1297,14 +1297,19 @@ button {
    twelve pickers stacked inside one column while the copy slid two places left. The flex lives on an
    inner wrapper, and the cell stays a cell. */
 .obj-cell {
-  padding: 6px 9px;
-  /* The tone as a hairline down the leading edge, the way the card wears it as a border. */
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 55%, transparent);
+  /* Room to breathe. These were 6px/9px, inherited from the text cells, and a picker is a taller
+     object than a line of text: the field's own border sat almost on the row line above it and the
+     icon was pressed against the leading edge. */
+  padding: 9px 12px;
+  vertical-align: top;
+  /* The tone as a hairline down the leading edge, the way the card wears it as a border. Softer than
+     it was at 55%: twelve of these side by side read as a barcode. */
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 38%, transparent);
 }
 .obj-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .obj-ic,
 .col-obj-ic {
@@ -1333,7 +1338,9 @@ button {
 .obj-select {
   width: 100%;
   font-size: 11.5px;
-  padding: 5px 20px 5px 8px;
+  /* Was 5px/8px, which put the caret hard against the value on a narrow column. */
+  padding: 6px 22px 6px 9px;
+  line-height: 1.4;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background-color: transparent;
@@ -1368,13 +1375,14 @@ button {
 }
 .obj-chip {
   display: inline-block;
-  font-size: 11.5px;
+  margin-top: 5px;
+  font-size: 11px;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 1px 7px;
-  margin: 1px 3px 1px 0;
+  padding: 2px 7px;
+  margin-right: 4px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

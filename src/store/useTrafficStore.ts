@@ -6732,6 +6732,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const dss = get().brandDatasets.filter(
             (d) => d.brand === client && (dsIds.has(d.id) || dsNames.has(d.name)),
           )
+          /**
+           * PRODUCTS AND TRIGGERS. Both had a card, a library and a picker while resolving nowhere:
+           * poolsFrom read eight ref types and not these two, so wiring a Product card passed the
+           * one instruction typed on it and left the product it named as decoration.
+           *
+           * No fallback to "all of them", for the same reason personas have none: an unnamed product
+           * is not a default, it is no product, and a campaign that has not said which one it is
+           * selling should not have the writer pick.
+           */
+          const pdIds = new Set(refList.filter((x) => x.type === 'product').map((x) => x.id))
+          const pdNames = new Set(refList.filter((x) => x.type === 'product').map((x) => x.label))
+          const pds = get().products.filter(
+            (x) => ofBrand(x) && (pdIds.has(x.id) || pdNames.has(x.name)),
+          )
+          const tgIds = new Set(refList.filter((x) => x.type === 'trigger').map((x) => x.id))
+          const tgNames = new Set(refList.filter((x) => x.type === 'trigger').map((x) => x.label))
+          const tgs = get().triggers.filter(
+            (x) => ofBrand(x) && (tgIds.has(x.id) || tgNames.has(x.name)),
+          )
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
@@ -6741,6 +6760,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             voices: vcs,
             seasons: sns,
             datasets: dss,
+            products: pds,
+            triggers: tgs,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -7032,6 +7053,31 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             mindset: x.mindset?.trim() || undefined,
           }))
         /**
+         * THE PRODUCT this campaign is selling, and the TRIGGER that starts it.
+         *
+         * Both keyed on the parts that change what the copy can say. A product's name alone earns
+         * nothing — the writer already knows the brand — so it is sent only once it carries the job
+         * it does or who it is for. A trigger is the same: the signal is the useful half, because it
+         * is what lets the copy open with "you just…" instead of a standing pitch.
+         */
+        const products = campaignPools.products
+          .filter((x) => (x.jobToBeDone ?? '').trim() || (x.summary ?? '').trim() || (x.forWho ?? '').trim())
+          .map((x) => ({
+            name: x.name,
+            kind: x.kind?.trim() || undefined,
+            summary: x.summary?.trim() || undefined,
+            forWho: x.forWho?.trim() || undefined,
+            jobToBeDone: x.jobToBeDone?.trim() || undefined,
+          }))
+        const triggers = campaignPools.triggers
+          .filter((x) => (x.signal ?? '').trim() || (x.response ?? '').trim())
+          .map((x) => ({
+            name: x.name,
+            type: x.type?.trim() || undefined,
+            signal: x.signal?.trim() || undefined,
+            response: x.response?.trim() || undefined,
+          }))
+        /**
          * THE FIGURES. Computed here, in plain code, from real cells: the writer receives numbers to
          * quote and never a table to do arithmetic over. citableFigures returns [] for anything
          * sketched, edited or hand typed, so those tables reach this line and contribute nothing,
@@ -7041,7 +7087,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           .flatMap((d) => citableFigures(d))
           .slice(0, MAX_FIGURES_PER_CAMPAIGN)
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, datasets, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, datasets, products, triggers, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
