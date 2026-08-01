@@ -4,11 +4,13 @@ import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTyp
 import { hasCopy, messagingFields, messagingMap } from '../domain/messaging'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
-import { assetRtbIds, rtbById } from '../domain/rtb'
+import { assetRtbIds, rtbById, rtbsForCampaign } from '../domain/rtb'
 import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
+import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import type { ChannelId, TrafficRow } from '../domain/types'
+import type { FlowReference } from '../domain/clients'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
 import { inTimeRange } from '../domain/timeRange'
@@ -133,7 +135,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const updateRow = useTrafficStore((s) => s.updateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
-  const openReview = useTrafficStore((s) => s.openReview)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
@@ -280,6 +281,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const triggers = useTrafficStore((s) => s.triggers)
   const products = useTrafficStore((s) => s.products)
   const brandObjects = useTrafficStore((s) => s.brandObjects)
+  const brandDatasets = useTrafficStore((s) => s.brandDatasets)
 
   const nameFor = (o: CanvasObject): string => {
     if (o.smartObjectId) {
@@ -301,6 +303,60 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
       : o.kind === 'audience' ? byId(clientAudiences[clientFilter] ?? [])
       : undefined
     return named ?? o.text.trim().split('\n')[0] ?? ''
+  }
+
+  /**
+   * THE RECORDS YOU CAN PICK for each object kind. The same lists the canvas card's own dropdown
+   * offers, so the two surfaces are choosing from one library rather than two.
+   */
+  const optionsFor = (kind: CanvasObjectKind): { id: string; label: string }[] => {
+    const named = (l: { id: string; name?: string }[]) => l.map((x) => ({ id: x.id, label: x.name || 'Untitled' }))
+    switch (kind) {
+      case 'brand': return named(brandObjects)
+      case 'product': return named(products)
+      case 'audience': return named(clientAudiences[clientFilter] ?? [])
+      case 'message': return named(messages)
+      case 'voice': return named(voices)
+      case 'concept': return named(concepts)
+      case 'season': return named(seasons)
+      case 'company': return named(companies)
+      case 'person': return named(people)
+      case 'trigger': return named(triggers)
+      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set' }))
+      // Proof lives per campaign rather than per brand, which is why it is fetched differently
+      // from every other kind here.
+      case 'proof-point': return rtbsForCampaign(scopeCampaign).map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
+      default: return []
+    }
+  }
+
+  /**
+   * SETTING ONE KIND MUST NOT DROP THE OTHERS.
+   *
+   * `row.references`, when it has anything in it, REPLACES the campaign's records wholesale for that
+   * asset (see poolsFrom in the store). So writing a single picked voice into an empty references
+   * array would silently detach the row from the campaign's audience and proof at the same time —
+   * one dropdown quietly answering three questions.
+   *
+   * The set is therefore seeded from whatever is reaching the row today, and only the one kind is
+   * replaced. Clearing a kind removes just that entry; clearing the last one drops back to the
+   * campaign's records rather than pinning the row to nothing.
+   */
+  const setRowRecord = (row: TrafficRow, kind: CanvasObjectKind, refId: string) => {
+    const type = REF_TYPE_FOR_OBJECT_KIND[kind]
+    if (!type) return
+    const current: FlowReference[] =
+      row.references && row.references.length
+        ? row.references
+        : (cardsByRow.get(row.id) ?? [])
+            .flatMap((c) => {
+              const t = REF_TYPE_FOR_OBJECT_KIND[c.kind]
+              return t && c.refId ? [{ type: t, id: c.refId, label: c.label }] : []
+            })
+    const rest = current.filter((r) => r.type !== type)
+    const picked = optionsFor(kind).find((o) => o.id === refId)
+    const next = refId && picked ? [...rest, { type, id: refId, label: picked.label }] : rest
+    void updateRow(row.id, { references: next.length ? next : undefined })
   }
 
   /** Cards reaching each row, by row id. One board walk per row, only when a board exists. */
@@ -475,11 +531,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                         : { kind: 'cell', rowId: row.id, colKey },
                     )
                   }}
-                  onDoubleClick={(e) => {
-                    const t = e.target as HTMLElement
-                    if (t.closest('input, select, textarea, button, code, a, .col-resizer')) return
-                    openReview(row.id)
-                  }}
                 >
                   <td className="gutter">{i + 1}</td>
 
@@ -613,8 +664,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       <td
                         key={mc.key}
                         className={`msg-cell${isFlagged ? ' flagged' : ''}`}
-                        onClick={() => openReview(row.id)}
-                        title={copy || 'Open messaging'}
+                        title={copy || undefined}
                       >
                         {copy ? <span className="msg-copy">{copy}</span> : <span className="cell-ro">—</span>}
                       </td>
@@ -624,8 +674,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   {show('rtb') && (
                     <td
                       className="rtb-cell"
-                      onClick={() => openReview(row.id)}
-                      title="Map proof to each claim in the messaging"
+                      title="The proof mapped to each claim in the messaging"
                     >
                       {(() => {
                         const map = messagingMap(row)
@@ -751,28 +800,47 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       writer with nothing and that is worth seeing. */}
                   {objectCols.map((oc) => {
                     const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
+                    const opts = optionsFor(oc.objKind)
+                    const settable = !!REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
+                    const value = mine.find((c) => c.refId)?.refId ?? ''
+                    // A kind can be reached by more than one card and the picker shows one. The rest are
+                    // named beside it, so the cell does not quietly under-report what is reaching the asset.
+                    const extra = mine.filter((c) => c.refId && c.refId !== value)
                     return (
                       <td key={oc.key} className="obj-cell">
-                        {mine.length === 0 ? (
-                          <span className="cell-ro">—</span>
-                        ) : (
-                          mine.map((c) => (
-                            <span key={c.id} className={`obj-chip${c.label ? '' : ' empty'}`} title={c.label || `${oc.label} card with nothing picked yet`}>
-                              {c.label || 'Nothing picked'}
-                            </span>
-                          ))
-                        )}
+                        <select
+                          className={`cell-select obj-select${value ? '' : ' unset'}`}
+                          value={value}
+                          disabled={!settable}
+                          title={
+                            settable
+                              ? `Which ${oc.label.toLowerCase()} this asset is written from`
+                              : `${oc.label} is set on the canvas, not per asset`
+                          }
+                          onChange={(e) => setRowRecord(row, oc.objKind, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">—</option>
+                          {/* A record reaching this row from a card that is not in the picker's list still has
+                              to be selectable, or opening the dropdown would silently change the answer. */}
+                          {value && !opts.some((o) => o.id === value) && (
+                            <option value={value}>{mine.find((c) => c.refId === value)?.label || 'Set on the canvas'}</option>
+                          )}
+                          {opts.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {extra.map((c) => (
+                          <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>
+                            {c.label}
+                          </span>
+                        ))}
                       </td>
                     )
                   })}
                   <td className="act-hover">
-                    <button
-                      className="btn ghost sm"
-                      title="Edit row"
-                      onClick={() => openReview(row.id)}
-                    >
-                      ✎
-                    </button>
                     <button
                       className="btn ghost sm"
                       title="Duplicate this asset onto another channel"

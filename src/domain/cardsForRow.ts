@@ -22,6 +22,8 @@ import { upstreamCardIds } from './boardResolve'
 export interface RowCard {
   id: string
   kind: CanvasObjectKind
+  /** The record this card names, when it names one. */
+  refId?: string
   label: string
 }
 
@@ -45,7 +47,7 @@ export function cardsForRow(
       // cards, and upstreamCardIds already returns those separately, so it contributes nothing here.
       const o = objectById.get(id)
       if (!o) continue
-      out.push({ id: o.id, kind: o.kind, label: nameFor(o) })
+      out.push({ id: o.id, kind: o.kind, refId: o.refId, label: nameFor(o) })
     }
   }
   return out
