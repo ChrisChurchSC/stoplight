@@ -1,13 +1,15 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
-import { messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
+import { STATUS_LABEL, STATUS_ORDER } from '../domain/assetBadge'
+import { filledFields, hasCopy, messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { mockAttio } from '../adapters/attio/mockAttio'
 import { assetRtbIds, rtbById } from '../domain/rtb'
 import { can } from '../domain/access'
+import { boardFor, deliverableKeyFor } from '../domain/flowBoard'
 import type { ChannelId, RowStatus, TrafficRow } from '../domain/types'
 import { isoToLocalInput, localInputToIso } from '../lib/format'
 import { rowInScope } from '../lib/scope'
@@ -20,7 +22,7 @@ import { CompletenessBar } from './CompletenessBar'
 import { Thumb } from './Thumb'
 import { proxiedMedia } from '../lib/media'
 
-const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
+
 
 // Named columns of the spreadsheet, in order, with a type glyph per column.
 const COLUMNS = [
@@ -51,9 +53,17 @@ const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
 
+/**
+ * `postedAt` is stamped only when the app itself publishes a row, so an INGESTED post — already live
+ * on the platform, carrying a publishedAt and its real metrics — read as never posted here while the
+ * canvas rendered the same asset with a live-metrics footer. Six other modules already read
+ * `publishedAt ?? postedAt`; this was the one that did not. One is an ISO string and the other a
+ * timestamp, which is why both go through Date.
+ */
 function postedLabel(row: TrafficRow): string {
-  if (!row.postedAt) return '—'
-  return new Date(row.postedAt).toLocaleString(undefined, {
+  const when = row.publishedAt ?? row.postedAt
+  if (!when) return '—'
+  return new Date(when).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -246,7 +256,9 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
 
   const totalRows = view.length
   const typeSet = view.filter((r) => isValidType(r.channel, r.assetType)).length
-  const messagingFilled = view.filter((r) => messagingAllText(r).trim()).length
+  // Through hasCopy, the same question the Messaging cell asks. These disagreed: this counted a
+  // row filled on any stored key while the cell showed "Add messaging…" for the same row.
+  const messagingFilled = view.filter((r) => hasCopy(r)).length
   const rtbSetN = view.filter((r) => assetRtbIds(r).length > 0).length
   const reviewableN = view.filter((r) => r.status !== 'posted' && r.status !== 'failed').length
   const onMessageN = view.filter((r) => rowVerdict(r) === 'on').length
@@ -279,13 +291,43 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   // the canvas shows, surfaced per row here so performance reads the same everywhere.
   const journeyPerf = journeyPerformance(scopedForBreaks)
   const connectionCleared = openBreakN === 0
+  /**
+   * WHAT THE HEADER BUTTONS ACT ON, so they act on what they counted.
+   *
+   * Only when the grid is pinned to a campaign or a brand — the case where the counts above are a
+   * subset and the actions were not. At the unpinned workbench the grid already IS the workspace, so
+   * it passes nothing and the actions keep the reach they were written with.
+   */
+  const scopeIds = scopeCampaign || scopeClient ? view.map((r) => r.id) : undefined
+  /**
+   * CHANNELS CUT OFF FROM THE BRIEF, as row ids.
+   *
+   * The connection gate above reads detectBreaks, which is handed rows and only rows: it has never
+   * seen the board, the wires, or which channels have been severed from the campaign. So cutting a
+   * channel on the canvas and switching to this tab produced "✓ Connected" — the grid asserting the
+   * exact word the canvas had just taken away, with nothing anywhere to say that six rows had
+   * stopped reading the brief.
+   *
+   * Being cut off is not a break and must not gate publish: it is a decision somebody made, and the
+   * assets still ship. It just has to be SAID, because it changes what gets written (see
+   * FlowBoard.detached: a cut channel's assets take neither the campaign's records nor its
+   * instructions). Only meaningful when the grid is scoped to one campaign, which is the only time
+   * there is a single board to read.
+   */
+  const flowBoards = useTrafficStore((s) => s.flowBoards)
+  const detachedRowIds = (() => {
+    if (!scopeCampaign) return new Set<string>()
+    const cut = boardFor(flowBoards, scopeCampaign).detached ?? []
+    if (!cut.length) return new Set<string>()
+    return new Set(view.filter((r) => cut.includes(deliverableKeyFor(r))).map((r) => r.id))
+  })()
   const allGatesCleared = gateCleared && trackingCleared && budgetCleared && connectionCleared
   const missingUtmN = reviewable.filter((r) => !r.utm).length
   const dirtyTrackingN = reviewable.filter((r) => r.utm && !isTrackingClean(r)).length
   const paidReviewable = reviewable.filter(isPaidRow)
   const missingBudgetN = paidReviewable.filter((r) => !hasBudget(r)).length
   const paidWithBudget = paidReviewable.some((r) => hasBudget(r))
-  const emptyMsgN = reviewable.filter((r) => !messagingAllText(r).trim()).length
+  const emptyMsgN = reviewable.filter((r) => !hasCopy(r)).length
   const hasPosted = view.some((r) => r.status === 'posted')
   const needsReplyN = view
     .flatMap((r) => commentMap[r.id] ?? [])
@@ -366,7 +408,16 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               <th />
               <th className="gate-conn">
                 {reviewable.length === 0 ? null : connectionCleared ? (
-                  <span className="cov-ok">✓ Connected</span>
+                  detachedRowIds.size ? (
+                    <span
+                      className="cov-cut"
+                      title={`${detachedRowIds.size} asset${detachedRowIds.size === 1 ? '' : 's'} sit under a channel cut off from the campaign brief, so ${detachedRowIds.size === 1 ? 'it takes' : 'they take'} none of the campaign's cards or instructions. Reconnect the channel on the Flow tab.`}
+                    >
+                      {detachedRowIds.size} cut off
+                    </span>
+                  ) : (
+                    <span className="cov-ok">✓ Connected</span>
+                  )
                 ) : (
                   <button
                     className="cov-btn warn"
@@ -382,7 +433,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   <button
                     className="cov-btn green"
                     disabled={!allGatesCleared || !canPublish}
-                    onClick={approveAll}
+                    onClick={() => void approveAll(scopeIds)}
                     title={
                       !canPublish
                         ? 'Publishing is owner / editor only'
@@ -402,11 +453,11 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                 {trackingCleared ? (
                   <span className="cov-ok">✓ Tracked</span>
                 ) : missingUtmN > 0 ? (
-                  <button className="cov-btn" onClick={generateTracking} title="Build UTMs for all rows">
+                  <button className="cov-btn" onClick={() => void generateTracking(scopeIds)} title="Build UTMs for every row in view">
                     Generate ({missingUtmN})
                   </button>
                 ) : dirtyTrackingN === 0 && reviewable.length > 0 ? (
-                  <button className="cov-btn green" onClick={acceptTracking}>
+                  <button className="cov-btn green" onClick={() => acceptTracking(scopeIds)}>
                     Accept
                   </button>
                 ) : null}
@@ -415,11 +466,11 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                 {paidReviewable.length === 0 ? null : budgetCleared ? (
                   <span className="cov-ok">✓ Set</span>
                 ) : missingBudgetN === 0 ? (
-                  <button className="cov-btn green" onClick={acceptBudget}>
+                  <button className="cov-btn green" onClick={() => acceptBudget(scopeIds)}>
                     Accept
                   </button>
                 ) : paidWithBudget ? (
-                  <button className="cov-btn" onClick={syncSpend} title="Pull actual spend">
+                  <button className="cov-btn" onClick={() => void syncSpend(scopeIds)} title="Pull actual spend">
                     ↻ Spend
                   </button>
                 ) : null}
@@ -429,7 +480,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               <th />
               <th>
                 {hasPosted ? (
-                  <button className="cov-btn" onClick={syncComments} title="Pull comments from posted assets">
+                  <button className="cov-btn" onClick={() => void syncComments(scopeIds)} title="Pull comments from the posted assets in view">
                     ↻ Sync{needsReplyN > 0 ? ` (${needsReplyN})` : ''}
                   </button>
                 ) : null}
@@ -541,6 +592,15 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                           </optgroup>
                         ))}
                       </select>
+                      {/* Cut off from the brief. The canvas says this by a missing line and the
+                          panel says it in words; here it has to be per row, because the grid is the
+                          one surface where a cut channel's assets sit interleaved with everything
+                          else and nothing distinguishes them. */}
+                      {detachedRowIds.has(row.id) && (
+                        <span className="ch-cut" title="This channel is cut off from the campaign brief, so its assets are written without the campaign's cards. Reconnect it on the Flow tab.">
+                          cut off
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -601,9 +661,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   >
                     {(() => {
                       const map = messagingMap(row)
-                      const filled = messagingFields(row.channel, row.assetType).filter(
-                        (fl) => (map[fl.key] ?? '').trim(),
-                      )
+                      const filled = filledFields(row)
                       const flagged = (key: string) =>
                         !!batchReview &&
                         batchReview.flags.some(
@@ -670,7 +728,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                           </div>
                         )
                       }
-                      return messagingAllText(row).trim() ? (
+                      return hasCopy(row) ? (
                         <span className="rtb-warn">unsupported</span>
                       ) : (
                         <span className="cell-ro">—</span>
@@ -686,7 +744,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       if (v === 'drift')
                         return <span className="icp-verdict drift">⚠ Drift {unresolvedFlags(row)}</span>
                       // Live / posted content: a heuristic ICP-fit grade.
-                      if (!messagingAllText(row).trim()) return <span className="cell-ro">—</span>
+                      if (!hasCopy(row)) return <span className="cell-ro">—</span>
                       const g = icpGrade(row)
                       return (
                         <span className={`icp-grade g-${g.letter}`} title={`ICP fit: ${g.reasons}`}>
@@ -713,9 +771,13 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       value={row.status}
                       onChange={(e) => onStatusChange(row, e.target.value as RowStatus)}
                     >
-                      {STATUSES.map((s) => (
+                      {/* All seven. This offered five, so a row the review drawer had just put
+                          into `in_review` or `rejected` matched no option and the cell rendered
+                          blank: the one column whose whole job is to say where a row is up to went
+                          empty exactly when it had something to say. */}
+                      {STATUS_ORDER.map((s) => (
                         <option key={s} value={s}>
-                          {s}
+                          {STATUS_LABEL[s]}
                         </option>
                       ))}
                     </select>

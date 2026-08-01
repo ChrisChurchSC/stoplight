@@ -9,6 +9,7 @@ import {
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
+import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -9024,7 +9025,16 @@ export function FlowsView() {
                           placeholder="0"
                           onBlur={(e) => {
                             const v = e.target.value.trim()
-                            void updateRow(selPost.id, { budget: v === '' ? undefined : { amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'lifetime' } })
+                            // SPREAD, and default to daily like everywhere else. This rebuilt the
+                            // budget from two fields, so editing the AMOUNT here silently deleted
+                            // the flight end date the review drawer sets, and plannedToDate then
+                            // fell back to start + 14 days and moved every planned figure. It also
+                            // defaulted the type to lifetime while the grid and the drawer default
+                            // to daily, and the two are different sums: daily multiplies by days
+                            // elapsed, lifetime by the fraction of the flight. The same number
+                            // typed on two surfaces flipped this row's own pace chip between
+                            // "Overspending" and "On track".
+                            void updateRow(selPost.id, { budget: v === '' ? undefined : { ...selPost.budget, amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'daily' } })
                           }}
                         />
                       </div>
@@ -9169,7 +9179,10 @@ export function FlowsView() {
                             <div className="flow-pitem-label">{r.assetName}</div>
                             <div className="flow-pitem-desc">
                               {r.scheduledAt ? new Date(r.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No date'}
-                              {` · ${r.status === 'in_review' ? 'In review' : r.status === 'approved' ? 'Approved' : 'Draft'}`}
+                              {/* Through assetBadge, which knows all seven. This tested two and
+                                  called everything else "Draft", so a posted asset read `posted`
+                                  in the grid and "Draft" in the panel beside it. */}
+                              {` · ${assetBadge(r).label}`}
                             </div>
                           </div>
                         </button>

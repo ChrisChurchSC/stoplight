@@ -211,6 +211,24 @@ export const messagingMap = (row: TrafficRow): Record<string, string> => row.mes
 export const messagingAllText = (row: TrafficRow): string =>
   Object.values(messagingMap(row)).join(' ')
 
+/**
+ * The components this row's FORMAT defines that actually carry text, and whether there are any.
+ *
+ * Distinct from messagingAllText, which joins EVERY stored key whether or not the current format
+ * has one. Both readings are right for something — a search should find copy sitting under a key
+ * the format dropped, and so should an ICP read — but "does this row have its copy yet" must be
+ * asked of the components the row is actually supposed to have.
+ *
+ * It was asked three ways at once. The Messaging cell filtered by schema and said "Add messaging…";
+ * the coverage bar above it and the ✦ Draft count joined every key and called the same row filled.
+ * So an imported post whose text sits under `caption` on a format that defines title/description
+ * read as empty in its own cell, counted as complete in the bar, and was never offered to Draft.
+ */
+export const filledFields = (row: TrafficRow) =>
+  messagingFields(row.channel, row.assetType).filter((f) => (messagingMap(row)[f.key] ?? '').trim())
+
+export const hasCopy = (row: TrafficRow): boolean => filledFields(row).length > 0
+
 /** First non-empty component (or the first field) — for the collapsed summary. */
 export function messagingSummary(row: TrafficRow): string {
   const fields = messagingFields(row.channel, row.assetType)

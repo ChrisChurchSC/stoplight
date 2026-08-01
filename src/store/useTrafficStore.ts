@@ -2388,7 +2388,16 @@ interface TrafficState {
   undo: () => Promise<void>
   /** Replace all rows with a snapshot — used by the flow canvas's own undo/redo timeline. */
   applyRowsSnapshot: (rows: TrafficRow[]) => Promise<void>
-  approveAll: () => Promise<void>
+  /**
+   * `ids` scopes the action to a row set — the grid passes what it is showing.
+   *
+   * Every one of these header buttons COUNTED what the grid had in view and then ACTED on the whole
+   * workspace: inside one campaign, "Approve 8" approved every draft in every campaign the workspace
+   * had, and the two Accepts refused unless rows the person could not see were also clean, so the
+   * button appeared and did nothing. Optional, and unscoped means everything, so the workbench-level
+   * callers keep the behaviour they were written for.
+   */
+  approveAll: (ids?: string[]) => Promise<void>
   publishRow: (id: string) => Promise<void>
   clearSheet: () => Promise<void>
   /** Replace the sheet with a curated sample dataset. */
@@ -2612,16 +2621,16 @@ interface TrafficState {
   trackingRan: boolean
   trackingCleared: boolean
   /** Build UTMs for every row (write back to the sheet) + run presence checks. */
-  generateTracking: () => Promise<void>
+  generateTracking: (ids?: string[]) => Promise<void>
   /** Build UTMs for a single asset (per-row generate from the Tracking column). */
   generateTrackingForRow: (id: string) => Promise<void>
-  acceptTracking: () => void
+  acceptTracking: (ids?: string[]) => void
 
   // budget gate (paid assets only — planning: a budget must be set)
   budgetCleared: boolean
   /** Daily sync: pull actual spend back for paid assets that have a budget. */
-  syncSpend: () => Promise<void>
-  acceptBudget: () => void
+  syncSpend: (ids?: string[]) => Promise<void>
+  acceptBudget: (ids?: string[]) => void
 
   // comment ingest (inbound — read-only)
   /** Comments pulled back per posted row. */
@@ -2630,7 +2639,7 @@ interface TrafficState {
   commentRowId: string | null
   openComments: (id: string | null) => void
   /** Pull comments for every published asset (read-only sync). */
-  syncComments: () => Promise<void>
+  syncComments: (ids?: string[]) => Promise<void>
   /** Route an intent-y commenter to Attio as a contact (closes the loop). */
   routeCommenterToAttio: (rowId: string, commentId: string) => Promise<void>
   /** Enrich an intent commenter via Clay (company / title / fit). */
@@ -5991,10 +6000,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await get().refresh()
   },
 
-  approveAll: async () => {
+  approveAll: async (ids) => {
     // All gates must clear: messaging on-ICP, tracking clean, budgets set.
     if (!get().gateCleared || !get().trackingCleared || !get().budgetCleared) return
-    const drafts = get().rows.filter((r) => r.status === 'draft')
+    const inScope = ids ? (r: TrafficRow) => ids.includes(r.id) : () => true
+    const drafts = get().rows.filter((r) => r.status === 'draft' && inScope(r))
     if (drafts.length === 0) return
     // Connection gate: don't ship a broken thread. Block if any open break sits in
     // a campaign whose drafts we're about to approve.
@@ -6091,8 +6101,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   openCommentInbox: () => set({ commentInboxOpen: true }),
   closeCommentInbox: () => set({ commentInboxOpen: false }),
 
-  syncComments: async () => {
-    const posted = get().rows.filter((r) => r.status === 'posted')
+  syncComments: async (ids) => {
+    const posted = get().rows.filter((r) => r.status === 'posted' && (!ids || ids.includes(r.id)))
     const prev = get().comments
     // Ingest VIA CLAUDE: the engine calls ingest_comments per channel. The mock
     // message store is the fallback when there's no Anthropic key. Either way the
@@ -7599,9 +7609,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     })
   },
 
-  generateTracking: async () => {
+  generateTracking: async (ids) => {
     // Build UTMs from each row's own metadata and persist to the sheet.
-    const rows = get().rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+    const rows = get().rows.filter((r) => r.status !== 'posted' && r.status !== 'failed' && (!ids || ids.includes(r.id)))
     for (const r of rows) {
       await sheet.update(r.id, { utm: buildUtm(r) })
     }
@@ -7617,28 +7627,28 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     await get().refresh()
   },
 
-  acceptTracking: () => {
-    // Only clearable once every trackable asset's tracking is clean.
+  acceptTracking: (ids) => {
+    // Only clearable once every trackable asset IN SCOPE has clean tracking.
     const dirty = get()
-      .rows.filter((r) => r.status !== 'posted' && r.status !== 'failed')
+      .rows.filter((r) => r.status !== 'posted' && r.status !== 'failed' && (!ids || ids.includes(r.id)))
       .some((r) => !isTrackingClean(r))
     if (dirty) return
     set({ trackingCleared: true })
   },
 
-  syncSpend: async () => {
+  syncSpend: async (ids) => {
     const now = Date.now()
-    const paid = get().rows.filter((r) => isPaidRow(r) && hasBudget(r))
+    const paid = get().rows.filter((r) => isPaidRow(r) && hasBudget(r) && (!ids || ids.includes(r.id)))
     for (const r of paid) {
       await sheet.update(r.id, { spend: { toDate: mockSpend(r, now), updatedAt: now } })
     }
     await get().refresh()
   },
 
-  acceptBudget: () => {
-    // Planning gate: every paid, to-be-trafficked asset needs a valid budget.
+  acceptBudget: (ids) => {
+    // Planning gate: every paid, to-be-trafficked asset IN SCOPE needs a valid budget.
     const missing = get()
-      .rows.filter((r) => isPaidRow(r) && r.status !== 'posted' && r.status !== 'failed')
+      .rows.filter((r) => isPaidRow(r) && r.status !== 'posted' && r.status !== 'failed' && (!ids || ids.includes(r.id)))
       .some((r) => !hasBudget(r))
     if (missing) return
     set({ budgetCleared: true })
