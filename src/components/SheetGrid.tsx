@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { CHANNELS, KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
+import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
 import { messagingAllText, messagingFields, messagingMap } from '../domain/messaging'
 import { isTrackingClean, trackingChecks, utmQuery } from '../domain/tracking'
@@ -511,10 +511,16 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
 
                   <td>
                     <div className="ch-cell">
+                      {/* The icon carries the brand colour, at 15px, in a shape people recognise
+                          faster than they read. The LABEL used to carry it too, which is the only
+                          place in the app that puts a brand hue on running text: #ff0000 YouTube and
+                          #e60023 Pinterest are more saturated than the app's own red, so the loudest
+                          thing in a row was the one cell that says nothing about its state, and a
+                          column of 28 different hues cannot be scanned for pattern, which is the job
+                          of a column. */}
                       <ChannelIcon channel={row.channel} size={15} />
                       <select
                         className="cell-select"
-                        style={{ color: CHANNELS[resolveChannelId(row.channel) ?? row.channel].color }}
                         value={resolveChannelId(row.channel) ?? row.channel}
                         onChange={(e) => {
                           const channel = e.target.value as ChannelId
@@ -824,7 +830,16 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       return (
                         <div className="perf" title={`Reached ${p.reach.toLocaleString()} · ${(p.rate * 100).toFixed(1)}% ${p.rateLabel}`}>
                           <span className="perf-reach">{formatReach(p.reach)}</span>
-                          <span className={`perf-rate${p.rate < 0.12 ? ' leak' : ''}`}>
+                          {/* NO LEAK FLAG. It painted anything under 12% in the same red as the
+                              delete button, and these numbers are simulated: a leaf's rate is its
+                              stage benchmark times a jitter of 0.8 to 1.2 (journeyPerf), and the
+                              first two benchmarks are 3% and 6%. So every awareness and
+                              consideration asset was flagged as underperforming every time, by
+                              construction, and a bottom-funnel one never could be. A threshold
+                              relative to the stage would be just as empty, because the number is
+                              generated FROM the stage. It can come back when the rates are real and
+                              there is a target to miss. */}
+                          <span className="perf-rate">
                             {(p.rate * 100).toFixed(0)}% {p.rateLabel}
                           </span>
                         </div>
