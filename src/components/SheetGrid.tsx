@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
 import { hasCopy, messagingFields, messagingMap } from '../domain/messaging'
@@ -147,6 +147,21 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   // defined audience, substantiated by proof, and resonant with that audience's
   // needs. A "Recheck with Claude" deepens it.
 
+  /**
+   * WHAT IS SELECTED: a row, a column, or one cell. A spreadsheet's most basic gesture, and this
+   * sheet had none of it — clicking anywhere opened the review drawer, so there was no way to point
+   * at a row without also leaving the sheet.
+   *
+   * Selecting is the single click now and opening is the double click, which is the convention every
+   * spreadsheet already taught everyone. The inline controls still take their own clicks first, so a
+   * status picker or a text cell behaves exactly as before.
+   *
+   * The column is identified by KEY rather than index: the column list changes with the data, and an
+   * index would quietly point at a different column the moment one appeared or dropped out.
+   */
+  const [pick, setPick] = useState<
+    { kind: 'row'; rowId: string } | { kind: 'col'; colKey: string } | { kind: 'cell'; rowId: string; colKey: string } | null
+  >(null)
   const [widthByKey, setWidthByKey] = useState<Record<string, number>>({})
 
   function startResize(idx: number, e: React.MouseEvent) {
@@ -352,6 +367,33 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
     return new Set(view.filter((r) => cut.includes(deliverableKeyFor(r))).map((r) => r.id))
   })()
 
+  /**
+   * The selected CELL is marked on the DOM node after render rather than through a class on the
+   * cell itself. The body cells are written out in order — a column key is not threaded through
+   * them — and adding one to all thirty would be thirty chances to get it wrong for a highlight.
+   * The row carries its id and the column carries its position, which is enough to find the one.
+   */
+  useEffect(() => {
+    document.querySelectorAll('.sheet td.cell-sel').forEach((e) => e.classList.remove('cell-sel'))
+    if (pick?.kind !== 'cell') return
+    const tr = document.querySelector(`.sheet tr[data-row-id="${CSS.escape(pick.rowId)}"]`)
+    const idx = cols.findIndex((c) => c.key === pick.colKey)
+    if (idx >= 0) tr?.children[idx + 1]?.classList.add('cell-sel')
+  })
+
+  /** Escape drops the selection, the same key that drops one on the canvas. */
+  useEffect(() => {
+    if (!pick) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const t = e.target
+      if (t instanceof Element && t.closest('input, textarea, select, [role="dialog"], .drawer')) return
+      setPick(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pick])
+
   const pad = Math.max(0, MIN_ROWS - view.length)
 
   return (
@@ -375,14 +417,24 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
         <table className="sheet" style={{ tableLayout: 'fixed', width: total, minWidth: total }}>
           <colgroup>
             {widths.map((w, i) => (
-              <col key={i} style={{ width: w }} />
+              <col
+                key={i}
+                className={i > 0 && pick?.kind === 'col' && pick.colKey === cols[i - 1]?.key ? 'sel' : undefined}
+                style={{ width: w }}
+              />
             ))}
           </colgroup>
           <thead>
             <tr className="letters">
               <th className="corner" />
               {cols.map((c, i) => (
-                <th key={c.key}>{colLetter(i)}</th>
+                <th
+                  key={c.key}
+                  className={pick?.kind === 'col' && pick.colKey === c.key ? 'sel' : undefined}
+                  onClick={() => setPick((p) => (p?.kind === 'col' && p.colKey === c.key ? null : { kind: 'col', colKey: c.key }))}
+                >
+                  {colLetter(i)}
+                </th>
               ))}
             </tr>
             <tr className="names">
@@ -402,13 +454,30 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               return (
                 <tr
                   key={row.id}
-                  className="data-row"
+                  data-row-id={row.id}
+                  className={`data-row${pick?.kind === 'row' && pick.rowId === row.id ? ' sel' : ''}`}
                   onClick={(e) => {
-                    // Open the editor for clicks on dead space, but let inline
-                    // controls (selects, inputs, buttons) handle their own clicks.
+                    // Inline controls take their own clicks, exactly as before.
                     const t = e.target as HTMLElement
-                    if (t.closest('input, select, textarea, button, code, a, .col-resizer'))
+                    if (t.closest('input, select, textarea, button, code, a, .col-resizer')) return
+                    const td = t.closest('td')
+                    if (!td) return
+                    // The gutter is the row's handle: clicking the number takes the whole row.
+                    if (td.cellIndex === 0) {
+                      setPick((p) => (p?.kind === 'row' && p.rowId === row.id ? null : { kind: 'row', rowId: row.id }))
                       return
+                    }
+                    const colKey = cols[td.cellIndex - 1]?.key
+                    if (!colKey) return
+                    setPick((p) =>
+                      p?.kind === 'cell' && p.rowId === row.id && p.colKey === colKey
+                        ? null
+                        : { kind: 'cell', rowId: row.id, colKey },
+                    )
+                  }}
+                  onDoubleClick={(e) => {
+                    const t = e.target as HTMLElement
+                    if (t.closest('input, select, textarea, button, code, a, .col-resizer')) return
                     openReview(row.id)
                   }}
                 >

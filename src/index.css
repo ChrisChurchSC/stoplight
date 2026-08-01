@@ -1262,6 +1262,32 @@ button {
    back read as an unstyled blank cell in the one column whose job is to say where it is up to. */
 /* Cut off from the brief: a fact, not a failure. Quiet, because the assets still ship — it is only
    saying they are written without the campaign's cards. Same word the canvas and the panel use. */
+/* SELECTION: a row, a column, or one cell — the gesture a spreadsheet is expected to have.
+   The column highlight rides on <col>, the only element that spans a column; cell backgrounds paint
+   over it, so the cells themselves stay transparent for it to show through. */
+.sheet col.sel {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.sheet .letters th.sel,
+.sheet tr.data-row.sel .gutter {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+.sheet tr.data-row.sel td {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* One cell. An inset ring rather than a fill, so the copy inside stays as readable as its neighbours
+   and the selection reads as a cursor rather than as a state the row is in. */
+.sheet td.cell-sel {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.sheet .letters th {
+  cursor: pointer;
+}
+.sheet .gutter {
+  cursor: pointer;
+}
+
 /* WHAT AN ASSET IS WRITTEN FROM. One chip per card reaching the row, quiet by default: this column
    answers "where did these words come from", which you read after the words, not instead of them. */
 .obj-cell {
