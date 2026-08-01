@@ -5,6 +5,7 @@ import { messagingFields, messagingMap } from '../domain/messaging'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
+import { newAudience } from '../domain/audiences'
 import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
@@ -48,6 +49,14 @@ const COLUMNS: { key: string; label: string; icon: string; width: number; always
   { key: 'delete', label: '', icon: '', width: 64, always: true },
 ]
 const GUTTER_W = 40
+
+/**
+ * Kinds a cell can MAKE a record for. Proof and data sets are absent deliberately: a proof point is
+ * a claim with a number and a source behind it, and a data set is a table. Minting either from a
+ * name produces something that looks established and says nothing — worse than an empty picker that
+ * sends you to build it properly. The canvas takes the same line about data sets.
+ */
+const CREATABLE = new Set<CanvasObjectKind>(['brand', 'product', 'audience', 'message', 'voice', 'concept', 'season', 'company', 'person', 'trigger'])
 const MIN_COL = 60
 const MIN_ROWS = 20
 const colLetter = (i: number) => String.fromCharCode(65 + i)
@@ -281,6 +290,16 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const brandObjects = useTrafficStore((s) => s.brandObjects)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
+  const addBrandObject = useTrafficStore((s) => s.addBrandObject)
+  const addProduct = useTrafficStore((s) => s.addProduct)
+  const addMessage = useTrafficStore((s) => s.addMessage)
+  const addVoice = useTrafficStore((s) => s.addVoice)
+  const addConcept = useTrafficStore((s) => s.addConcept)
+  const addSeason = useTrafficStore((s) => s.addSeason)
+  const addCompany = useTrafficStore((s) => s.addCompany)
+  const addPerson = useTrafficStore((s) => s.addPerson)
+  const addTrigger = useTrafficStore((s) => s.addTrigger)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
 
   const nameFor = (o: CanvasObject): string => {
     if (o.smartObjectId) {
@@ -330,6 +349,52 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   }
 
   /**
+   * MAKE THE RECORD FROM THE CELL THAT WANTS IT.
+   *
+   * A picker over an empty library is a dead end — "—" and nothing else — and the answer everywhere
+   * else in this app is to let you make one from where you noticed it was missing. The canvas cards
+   * already do exactly this with their own "+ New …" option; this is the same move in the grid.
+   *
+   * What gets made is a labelled PLACEHOLDER: the name you typed and nothing invented around it. The
+   * record's own library is where it gets filled in, and until it is, it carries a name and no
+   * claims — which is the honest state for something created in the middle of doing something else.
+   */
+  const createRecord = (kind: CanvasObjectKind, rawName: string): string | null => {
+    const name = rawName.trim()
+    if (!name) return null
+    const brand = clientFilter === 'all' ? undefined : clientFilter
+    switch (kind) {
+      case 'brand': return addBrandObject({ name })
+      case 'product': return addProduct({ name, brand })
+      case 'message': return addMessage({ name, brand })
+      case 'voice': return addVoice({ name, brand })
+      case 'concept': return addConcept({ name, brand })
+      case 'season': return addSeason({ name, brand })
+      case 'company': return addCompany({ name, brand })
+      case 'person': return addPerson({ name, brand })
+      case 'trigger': return addTrigger({ name, brand })
+      case 'audience': {
+        if (!brand) return null
+        // Through the factory, so a new audience has the full shape every reader expects rather
+        // than an id and a name that the next consumer trips over.
+        const a = newAudience({ name })
+        setClientAudiences(brand, [...(clientAudiences[brand] ?? []), a])
+        return a.id
+      }
+      /**
+       * Proof and data sets are NOT created here, deliberately, and the canvas takes the same line
+       * about data sets: a proof point is a claim with a number and a source behind it, and a data
+       * set is a table. Minting either from a name produces something that looks established and
+       * says nothing, which is worse than an empty picker that sends you to build it properly.
+       */
+      default: return null
+    }
+  }
+  /** The cell currently being named: which row, which kind. */
+  const [creating, setCreating] = useState<{ rowId: string; kind: CanvasObjectKind } | null>(null)
+  const [creatingName, setCreatingName] = useState('')
+
+  /**
    * SETTING ONE KIND MUST NOT DROP THE OTHERS.
    *
    * `row.references`, when it has anything in it, REPLACES the campaign's records wholesale for that
@@ -341,7 +406,13 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    * replaced. Clearing a kind removes just that entry; clearing the last one drops back to the
    * campaign's records rather than pinning the row to nothing.
    */
-  const setRowRecord = (row: TrafficRow, kind: CanvasObjectKind, refId: string) => {
+  /**
+   * `label` is passed in by the create path. Without it this looks the name up in optionsFor, which
+   * closes over the render that STARTED the creation and so cannot contain the record that creation
+   * just made: the lookup missed, `picked` came back undefined, and the branch that adds the entry
+   * fell through to the one that removes it. Created, then silently unselected.
+   */
+  const setRowRecord = (row: TrafficRow, kind: CanvasObjectKind, refId: string, label?: string) => {
     /**
      * BRAND IS NOT A REFERENCE and is not per row: it is the campaign's OWNER, which is why it
      * carries no FlowRefType and binds through bindCampaignBrand instead. So its picker does what
@@ -364,8 +435,8 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               return t && c.refId ? [{ type: t, id: c.refId, label: c.label }] : []
             })
     const rest = current.filter((r) => r.type !== type)
-    const picked = optionsFor(kind).find((o) => o.id === refId)
-    const next = refId && picked ? [...rest, { type, id: refId, label: picked.label }] : rest
+    const name = label ?? optionsFor(kind).find((o) => o.id === refId)?.label
+    const next = refId && name ? [...rest, { type, id: refId, label: name }] : rest
     void updateRow(row.id, { references: next.length ? next : undefined })
   }
 
@@ -701,6 +772,27 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                             {OBJECT_META[oc.objKind].icon}
                           </svg>
                         </span>
+                        {creating && creating.rowId === row.id && creating.kind === oc.objKind ? (
+                          <input
+                            className="cell-input obj-new"
+                            autoFocus
+                            value={creatingName}
+                            placeholder={`New ${oc.label.toLowerCase()} name…`}
+                            onChange={(e) => setCreatingName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') { setCreating(null); return }
+                              if (e.key !== 'Enter') return
+                              const name = creatingName.trim()
+                              const id = createRecord(oc.objKind, name)
+                              if (id) setRowRecord(row, oc.objKind, id, name)
+                              setCreating(null)
+                            }}
+                            // Leaving without pressing Enter is a cancel: a half-typed name is not a
+                            // record, and creating one on blur would litter the library with them.
+                            onBlur={() => setCreating(null)}
+                          />
+                        ) : (
                         <select
                           className={`cell-select obj-select${value ? '' : ' unset'}`}
                           value={value}
@@ -710,7 +802,14 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                               ? `Which ${oc.label.toLowerCase()} this asset is written from`
                               : `${oc.label} is set on the canvas, not per asset`
                           }
-                          onChange={(e) => setRowRecord(row, oc.objKind, e.target.value)}
+                          onChange={(e) => {
+                          if (e.target.value === '__new__') {
+                            setCreatingName('')
+                            setCreating({ rowId: row.id, kind: oc.objKind })
+                            return
+                          }
+                          setRowRecord(row, oc.objKind, e.target.value)
+                        }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <option value="">—</option>
@@ -724,7 +823,12 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                               {o.label}
                             </option>
                           ))}
+                          {/* Make one from here. A picker over an empty library is otherwise a dead end, which
+                              on a fresh brand is most of this row. Proof and data sets are absent on purpose:
+                              see createRecord. */}
+                          {CREATABLE.has(oc.objKind) && <option value="__new__">+ New {oc.label.toLowerCase()}…</option>}
                         </select>
+                        )}
                         </span>
                         {extra.map((c) => (
                           <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>
