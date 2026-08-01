@@ -280,6 +280,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
   const products = useTrafficStore((s) => s.products)
   const brandObjects = useTrafficStore((s) => s.brandObjects)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
+  const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
 
   const nameFor = (o: CanvasObject): string => {
     if (o.smartObjectId) {
@@ -341,6 +342,17 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    * campaign's records rather than pinning the row to nothing.
    */
   const setRowRecord = (row: TrafficRow, kind: CanvasObjectKind, refId: string) => {
+    /**
+     * BRAND IS NOT A REFERENCE and is not per row: it is the campaign's OWNER, which is why it
+     * carries no FlowRefType and binds through bindCampaignBrand instead. So its picker does what
+     * the Brand card on the canvas does — it rebinds the campaign — and every row in the campaign
+     * changes with it, because a campaign has one brand. The tooltip says so before you touch it.
+     */
+    if (kind === 'brand') {
+      if (!scopeCampaign) return
+      bindCampaignBrand(scopeCampaign, brandObjects.find((b) => b.id === refId)?.name ?? '')
+      return
+    }
     const type = REF_TYPE_FOR_OBJECT_KIND[kind]
     if (!type) return
     const current: FlowReference[] =
@@ -653,13 +665,20 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
                     const opts = optionsFor(oc.objKind)
                     const type = REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
-                    const settable = !!type
+                    const settable = !!type || (oc.objKind === 'brand' && !!scopeCampaign)
                     // THE ROW'S OWN PIN WINS, because that is the order the writer resolves in:
                     // row.references overrides what the board wires in. Reading only the board walk
                     // meant the picker wrote a value and then did not show it — the control and its
                     // own readout disagreeing about what had just happened.
                     const pinned = type ? (row.references ?? []).find((r) => r.type === type) : undefined
-                    const value = pinned?.id ?? mine.find((c) => c.refId)?.refId ?? ''
+                    // The brand's answer is the campaign's binding, so it is read from the row's own
+                    // client rather than from a card: a campaign bound with no Brand card on the
+                    // board still has a brand, and the cell has to say which.
+                    const brandId =
+                      oc.objKind === 'brand'
+                        ? (brandObjects.find((b) => b.name === (row.client ?? ''))?.id ?? '')
+                        : ''
+                    const value = brandId || pinned?.id || mine.find((c) => c.refId)?.refId || ''
                     // A kind can be reached by more than one card and the picker shows one. The rest are
                     // named beside it, so the cell does not quietly under-report what is reaching the asset.
                     const extra = mine.filter((c) => c.refId && c.refId !== value)

@@ -28,7 +28,7 @@ export type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
  * across campaigns has to know what a plain card contributes, and comparing contributions needs
  * only a type and an id, never a label.
  */
-export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset'>> = {
+export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger'>> = {
   audience: 'segment',
   'proof-point': 'proof',
   company: 'company',
@@ -46,6 +46,10 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
    * a table, and the table reached nothing.
    */
   'data-source': 'dataset',
+  // Both had a card, a library and a picker on the canvas while carrying no ref type, so the card
+  // drew, wired, lit up as connected and reached the writer with nothing.
+  product: 'product',
+  trigger: 'trigger',
 }
 
 export interface CanvasObject {

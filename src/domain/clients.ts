@@ -196,7 +196,17 @@ export interface ClientProfile {
 }
 
 /** A record from one of the Records pages that a flow references (and generation reads). */
-export type FlowRefType = 'company' | 'person' | 'segment' | 'channel' | 'proof' | 'media-mix' | 'message' | 'concept' | 'voice' | 'season' | 'dataset'
+/**
+ * `product` and `trigger` joined late. Both are records the campaign refers to in exactly the way a
+ * message or a voice is, and both had a card kind, a library and a picker on the canvas while
+ * carrying no ref type — so the card drew, wired and contributed nothing.
+ *
+ * `brand` is still deliberately absent. A brand is not something a campaign REFERENCES alongside a
+ * segment and a proof point, it is the campaign's owner, and putting it here would give every
+ * exhaustive map below a member that means something different from all the others. It binds through
+ * bindCampaignBrand instead.
+ */
+export type FlowRefType = 'company' | 'person' | 'segment' | 'channel' | 'proof' | 'media-mix' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger'
 export interface FlowReference {
   type: FlowRefType
   id: string

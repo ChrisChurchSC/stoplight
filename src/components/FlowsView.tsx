@@ -109,6 +109,10 @@ type TagOps = {
 // Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
 // Segments / Media mix), so a tag reads the same as the page it comes from.
 const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
+  // The box the Product card wears on the canvas, and the bolt the Trigger card wears, so a tag of
+  // either reads as the card it came from.
+  product: <><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z" /><path d="M3 8.5 12 13l9-4.5M12 13v7" /></>,
+  trigger: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
   // The same cylinder the Data source card wears on the canvas, so a data set tag reads as the card
   // it came from.
   dataset: (
