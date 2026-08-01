@@ -7301,15 +7301,26 @@ button {
   pointer-events: stroke;
   cursor: pointer;
 }
-/* Thicker as well as red on hover: at 2px the feedback was the colour alone, which is easy to miss
-   on a board with a lot of lines and no help at all if you are unsure WHICH line you are about to
-   act on. */
-.flow-edge-g:hover .flow-edge {
-  stroke: var(--red);
-  stroke-width: 3.2;
+/* Structural lines get a much narrower band. There is one from every channel to every post it
+   feeds, all running down the same corridor, and this stroke is screen pixels on an untransformed
+   svg: 30 stays 30 however far you zoom out, so a full-width band on each of them would carpet the
+   canvas at low zoom and swallow marquee-select and space-pan along with it. */
+.flow-edge-hit.thin {
+  stroke-width: 12;
 }
-.flow-edge-g:hover .flow-edge-dot {
-  fill: var(--red);
+/* Thicker as well as coloured on hover: at 2px the feedback was the colour alone, which is easy to
+   miss on a board with a lot of lines and no help at all if you are unsure WHICH line you are about
+   to act on.
+
+   It used to go RED, because clicking used to delete. Clicking selects now, so red would be a threat
+   the gesture does not carry out; the accent matches what selecting it will look like. Red moves to
+   the ✕ that appears on the selected line, which is the control that really does destroy something.
+
+   :not(.sel) because this rule is 0-2-1 and would otherwise beat .flow-edge.sel at 0-2-0, so putting
+   the cursor on the line you had just selected would un-highlight it. */
+.flow-edge-g:hover .flow-edge:not(.sel) {
+  stroke: var(--accent);
+  stroke-width: 2.4;
 }
 /* A connector that touches a card carrying media budget/spend: gold, so paid paths read at a
    glance apart from organic ones. */
@@ -7317,14 +7328,55 @@ button {
   stroke: #eab308;
   stroke-width: 1.4;
 }
+/* A SELECTED LINE GOES SOLID. Cards mark selection with a ring in the object's own hue plus a soft
+   glow; SVG has no box-shadow, and a line has no hue of its own, so the equivalents are the accent
+   and the one state change a card cannot make: the resting line is a chain of beads (a 1-4 dash with
+   round caps), and the selected one is continuous. That reads at any zoom and does not depend on
+   colour. After .paid, and .sel.paid after that, so selecting a paid path never hides that it is
+   paid: selection must not overwrite a signal that means something else. */
+.flow-edge.sel {
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-dasharray: none;
+}
+.flow-edge.sel.paid {
+  stroke: #eab308;
+}
 .flow-edge.drawing {
   stroke: var(--accent);
   stroke-dasharray: 5 4;
   pointer-events: none;
 }
-/* Deliverable -> post connectors are structural (drawn as SVG); not click-to-delete. */
+/* The VISIBLE structural line stays inert; its sibling hit path carries the interaction, exactly as
+   a stored line already works (that visible path is hit-testable too and simply sits under its own
+   hit path). Structural lines were entirely unclickable before, which made the lines holding the
+   board together the only ones you could not point at. */
 .flow-edge.implicit {
   pointer-events: none;
+}
+/* THE DELETE CONTROL ON THE SELECTED LINE. Only stored lines get one, and that is the point: a
+   derived line showing no ✕ answers "why will this not go away" by being looked at, rather than by
+   being pressed and doing nothing. */
+.flow-edge-del {
+  cursor: pointer;
+}
+.flow-edge-del circle {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.flow-edge-del path {
+  stroke: var(--text-muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  fill: none;
+}
+.flow-edge-del:hover circle {
+  fill: var(--red);
+  stroke: var(--red);
+}
+.flow-edge-del:hover path {
+  stroke: #fff;
 }
 /* Retire the old CSS branch lines in favor of the SVG connectors. */
 .flow-branch-list::before,

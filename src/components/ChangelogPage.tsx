@@ -23,8 +23,17 @@ const RELEASES: Release[] = [
     dateLabel: 'August 1, 2026',
     groups: [
       {
+        tag: 'Improved',
+        items: [
+          'Every connector line can be selected, the structural ones included. The lines from a campaign to its channels and from a channel to its posts used to be inert, so the lines holding the board together were the only ones you could not point at. Click any line to select it, Escape to drop it.',
+          'Clicking a line no longer deletes it. One unmodified click destroyed a connection and took the records it carried with it, with nothing but a tooltip to warn you. A selected line carries a ✕, and Delete does the same from the keyboard. A structural line has no ✕, because there is nothing stored behind it to remove, and pressing Delete on one now says so instead of doing nothing.',
+          'Channel and post cards lost the ✕ in the inspector. Clicking the canvas or another card already closes them.',
+        ],
+      },
+      {
         tag: 'Fixed',
         items: [
+          'Disconnecting a Brand card from a campaign that already has copy written no longer removes the line. That unbind is refused on purpose, so the line has to stay: it was vanishing anyway, leaving the campaign bound to a brand with nothing on the board saying so and no line to try again from.',
           'The toolbar stays put while you zoom. The readout runs from 10% to 200%, so the button holding it grew by a character between 50 and 100, and because the row is centred every control in it slid sideways as you turned the wheel. The number now sits in a slot wide enough for the longest value it can show.',
           '"Fit to board" is just "Fit".',
         ],

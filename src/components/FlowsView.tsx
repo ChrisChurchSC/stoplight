@@ -1622,6 +1622,26 @@ export function FlowsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowScreen, flowView])
   const [connectors, setConnectors] = useState<{ from: string; to: string }[]>([])
+  /**
+   * THE SELECTED CONNECTOR LINE. Its own slot rather than a member of `selected`, which is a set of
+   * DRAGGABLE NODE IDS and is read as one everywhere: startDrag looks up pos and nodeParent for every
+   * member, the marquee resolves out of the DOM by `.flow-node[data-node-id]`, and Cmd-G feeds the
+   * set into a smart object's members. A line has none of those, and the only verb it shares with a
+   * card is Delete. CanvasView reached the same answer with its own `selectedEdge`.
+   *
+   * Identified by the PAIR, not by an index into `connectors`: every other mutation renumbers that
+   * array (a delete, a prune, opening another campaign, a Gretel write), so an index selected now
+   * points at a different line a moment later.
+   *
+   * `kind` is load-bearing, not defensive. An implicit pair and a stored pair can be byte identical:
+   * channel cards carry outbound ports now, so a person can draw the same channel → post line the
+   * structure already implies, and Gretel can store campaign → channel.
+   */
+  const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
+  const selEdgeRef = useRef(selEdge)
+  selEdgeRef.current = selEdge
+  const isSelEdge = (from: string, to: string, kind: 'stored' | 'implicit') =>
+    !!selEdge && selEdge.from === from && selEdge.to === to && selEdge.kind === kind
   const [drawing, setDrawing] = useState<{ from: string; x: number; y: number } | null>(null)
   // The card an in-progress connection is currently over. Drawing a line used to give no feedback
   // about WHERE it would land, so you released and hoped. The target lights up instead.
@@ -1682,6 +1702,7 @@ export function FlowsView() {
     // Shift/Cmd-click is a multi-select toggle (handled on click) — don't reset the selection or
     // start a drag on that gesture.
     if (e.shiftKey || e.metaKey || e.ctrlKey) return
+    setSelEdge(null)
     const selIds = selected.has(id) && selected.size ? [...selected] : [id]
     if (!selected.has(id)) setSelected(new Set(selIds))
     const selSet = new Set(selIds)
@@ -1703,8 +1724,20 @@ export function FlowsView() {
   }
   // Click a card to select it; Shift/Cmd-click toggles it into a multi-selection (for group drag /
   // bulk moves). The first modifier-click folds in whatever was already singly selected.
+  /**
+   * Select a line, and only a line. A card and a line are never selected at once: Delete means one
+   * thing at a time, and a highlight on both would leave you guessing which the keystroke will take.
+   */
+  const selectEdge = (from: string, to: string, kind: 'stored' | 'implicit') => {
+    setSelEdge((cur) => (cur && cur.from === from && cur.to === to && cur.kind === kind ? null : { from, to, kind }))
+    setSel(null)
+    setSelected(new Set())
+    setPickAt(null)
+    setBriefCollapsed(false)
+  }
   const clickSelect = (e: ReactMouseEvent, id: string) => {
     e.stopPropagation()
+    setSelEdge(null)
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       setSelected((prev) => {
         const next = new Set(prev)
@@ -1786,6 +1819,20 @@ export function FlowsView() {
       // Delete / Backspace removes the selected card(s) — deliverable or freeform note. The campaign
       // brief is the board's root, so it's never deleted this way.
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        // A LINE FIRST, because a line and a card are never selected together. Through the ref, not
+        // the closure: this listener is registered once, so a captured `connectors` goes stale and
+        // the detach would work out what else supplies a record from an old board.
+        const ed = selEdgeRef.current
+        if (ed) {
+          e.preventDefault()
+          if (ed.kind === 'stored') deleteEdgeRef.current(ed.from, ed.to)
+          // A derived line has nothing stored behind it to remove: a post sits under its channel and
+          // a channel under its campaign because of what they ARE, not because of a wire somebody
+          // drew. Saying so out loud, because a key that silently does nothing is the defect this
+          // file already fixed once for Delete on a built channel.
+          else showToast('This line follows from where the post lives, so there is nothing to delete. Move or delete the card instead.')
+          return
+        }
         const ids = selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []
         if (ids.length) {
           e.preventDefault()
@@ -1841,6 +1888,13 @@ export function FlowsView() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault()
         convertSelectionRef.current()
+        return
+      }
+      // Escape drops a selected line. Before the smart-object arm, because it is the more recent
+      // thing you did: you cannot select a line without first clicking one.
+      if (e.key === 'Escape' && selEdgeRef.current) {
+        e.preventDefault()
+        setSelEdge(null)
         return
       }
       // Escape steps out of a smart object you're inside.
@@ -2577,22 +2631,29 @@ export function FlowsView() {
    * no brand", and it is the same refusal, unchanged, that a campaign with no Brand card has always
    * got.
    */
-  const unbindBrandFromCard = (nodeId: string, edges: { from: string; to: string }[]) => {
+  /**
+   * Returns whether the WIRE may now be removed. False only when the unbind was refused, which is
+   * the one case where taking the line away would leave the campaign bound to a brand with nothing
+   * on the board saying so, and no line left to try again from. Every other path returns true,
+   * including "this is not a Brand card at all".
+   */
+  const unbindBrandFromCard = (nodeId: string, edges: { from: string; to: string }[]): boolean => {
     const name = brandCardName(nodeId)
-    if (!name || viewName === null) return
+    if (!name || viewName === null) return true
     // Bound to some other brand: this card never made that binding, so removing it undoes nothing.
-    if (clientForCampaign(viewName) !== name) return
+    if (clientForCampaign(viewName) !== name) return true
     // A second card naming the same brand still states it, so the binding stands.
-    if (edges.some((e) => e.to === 'campaign' && e.from !== nodeId && brandCardName(e.from) === name)) return
+    if (edges.some((e) => e.to === 'campaign' && e.from !== nodeId && brandCardName(e.from) === name)) return true
     const written = writtenAssetCount()
     if (written) {
       useTrafficStore.getState().setBrandNotice(
         `"${viewName}" is still bound to ${name}: ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} already written in that voice, and taking the brand away would leave copy no brand answers for. Connect a different Brand card to move it, or clear those assets first.`,
       )
-      return
+      return false
     }
     bindCampaignBrand(viewName, '')
     showToast(`"${viewName}" is no longer bound to ${name}. Nothing had been written yet. Connect a Brand card before generating.`)
+    return true
   }
   /**
    * Connecting a card to the campaign tags its records on the campaign.
@@ -2627,17 +2688,18 @@ export function FlowsView() {
     return true
   }
   /** Detaching drops the card's refs, unless another attached card still contributes the same one. */
-  const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]) => {
+  /** Returns whether the wire may be removed; see unbindBrandFromCard. */
+  const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]): boolean => {
     // Before the refs early-return below, for the same reason attachToCampaign binds before it: a
     // Brand card carries no refs, so anything downstream of that guard never runs for one.
-    unbindBrandFromCard(nodeId, edges)
+    const mayRemove = unbindBrandFromCard(nodeId, edges)
     const mine = refsBehind(nodeId)
-    if (!mine.length) return
+    if (!mine.length) return mayRemove
     const stillAttached = edges
       .filter((e) => e.to === 'campaign' && e.from !== nodeId)
       .flatMap((e) => refsBehind(e.from))
     const drop = mine.filter((r) => !stillAttached.some((x) => x.type === r.type && x.id === r.id))
-    if (!drop.length) return
+    if (!drop.length) return mayRemove
     const base = (viewName !== null ? flowRefs : briefRefsEffective).filter(
       (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
     )
@@ -2647,9 +2709,34 @@ export function FlowsView() {
     } else {
       commitBriefRefs(base)
     }
+    return mayRemove
   }
   /** Is this a context card or a smart object, i.e. something that can INFORM an output? */
   const isContextNode = (id: string) => objects.some((n) => n.id === id) || placements.some((p) => p.id === id)
+  /**
+   * REMOVE A STORED CONNECTOR, with the record detachment that has to go with it.
+   *
+   * Deleting the line without detaching leaves the wire gone while the records it carried keep
+   * steering the copy, which is the worst of both: nothing on the board explains the words. So the
+   * detach runs first, against the PRE-deletion array, because both detach functions work out
+   * "is anything else still supplying this ref?" from the edges they are handed.
+   *
+   * Matched by pair rather than by index: see selEdge. Held in a ref as well, because the keydown
+   * listener is registered once and would otherwise close over a stale `connectors`.
+   */
+  const deleteEdge = (from: string, to: string) => {
+    if (!connectors.some((c) => c.from === from && c.to === to)) return
+    // A refused unbind keeps its wire. Unbinding a Brand card is refused while assets are already
+    // written in that voice, and removing the line anyway left the campaign bound to a brand with
+    // nothing on the board saying so, and no line to try again from: a notice explaining what to do
+    // next, next to a board that no longer offers it. Same rule as the drop handler, where a refused
+    // attach does not draw the wire either.
+    if (to === 'campaign') {
+      if (!detachFromCampaign(from, connectors)) return
+    } else if (isContextNode(from)) detachFromTarget(from, to, connectors)
+    setConnectors((c) => c.filter((x) => !(x.from === from && x.to === to)))
+    setSelEdge(null)
+  }
   /**
    * The assets behind a connector target: every asset of a deliverable, or the one asset of a post.
    * Empty for the campaign, which is handled by attachToCampaign instead.
@@ -4037,6 +4124,8 @@ export function FlowsView() {
   placementsRef.current = placements
   const releaseRef = useRef(releasePlacement)
   releaseRef.current = releasePlacement
+  const deleteEdgeRef = useRef(deleteEdge)
+  deleteEdgeRef.current = deleteEdge
   /** Drop a member out of an object without deleting the card. */
   const removeFromPlacement = (gid: string, noteId: string) =>
     setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
@@ -4368,6 +4457,7 @@ export function FlowsView() {
     // (The library OBJECTS survive: that is the point of them. Only "it is on this canvas" resets.)
     setPlacements([])
     setConnectors([])
+    setSelEdge(null)
     setOpenGroupId(null)
     // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
     saveFlowBoard({ key: BUILDER_BOARD_KEY, objects: [], placements: [], pos: {}, connectors: [] })
@@ -4417,6 +4507,9 @@ export function FlowsView() {
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
+    // The line you had selected belongs to the campaign you just left. Without this the next one
+    // opens with an unrelated line lit up, and Delete acts on a board that is no longer on screen.
+    setSelEdge(null)
     setPos((p) => ({ ...p, ...loaded.pos }))
     setViewName(n)
     setPickAt(null)
@@ -4554,6 +4647,18 @@ export function FlowsView() {
     }
     return r
   }
+
+  /**
+   * A SELECTION CANNOT OUTLIVE ITS LINE. Both render passes bail when either endpoint has no
+   * measured rect, so a line whose card was deleted, or whose channel key changed because its
+   * format or its branch did, stops being drawn while the selection still points at it. Delete would
+   * then act on something nobody can see. Validity is read from what actually rendered rather than
+   * from the connector list, because the implicit lines are not in any list.
+   */
+  useEffect(() => {
+    if (!selEdge) return
+    if (!rects[selEdge.from] || !rects[selEdge.to]) setSelEdge(null)
+  }, [selEdge, rects])
 
   /**
    * The campaign name a build lands on, for a given builder name. One function because three
@@ -7634,6 +7739,7 @@ export function FlowsView() {
             if (id && !selected.has(id)) {
               setSel(id)
               setSelected(new Set())
+              setSelEdge(null)
             }
             const cr = canvasRef.current?.getBoundingClientRect()
             e.preventDefault()
@@ -7665,6 +7771,7 @@ export function FlowsView() {
               setMarquee({ x0: x, y0: y, x1: x, y1: y })
               setSelected(new Set())
               setSel(null)
+              setSelEdge(null)
             }
           }}
           onMouseMove={(e) => {
@@ -7750,6 +7857,7 @@ export function FlowsView() {
                 }
               })
               setSelected(ids)
+              if (ids.size) setSelEdge(null)
               marqueeStart.current = null
               setMarquee(null)
             }
@@ -7783,35 +7891,89 @@ export function FlowsView() {
                 <circle cx="5" cy="5" r="3.5" fill="var(--text-faint)" />
               </marker>
             </defs>
+            {/* EVERY LINE IS SELECTABLE, structural ones included. They used to be inert: a bare
+                path with pointer-events off, so the lines holding the board together were the ones
+                you could not point at. Clicking one now says which line you mean, and the inspector
+                says what it is, which for a derived line is the whole answer.
+
+                Clicking used to DELETE a stored line outright, on one unmodified click, taking the
+                records with it. That is the edge this file already refused for smart objects: one
+                keystroke silently taking several things with it is too sharp. Click selects; the ✕
+                on the selected line deletes; Delete does the same from the keyboard. */}
             {implicitConnectors.map((cn) => {
               const a = connRect(cn.from)
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
-              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={edgePath(a, b, zoom / 100)} />
+              const on = isSelEdge(cn.from, cn.to, 'implicit')
+              const d = edgePath(a, b, zoom / 100)
+              return (
+                <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}`}>
+                  <path className={`flow-edge implicit${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
+                  {/* A NARROWER band than a stored line gets. These run down a 68px corridor between
+                      every channel and its posts, and the hit stroke is in screen pixels on an
+                      untransformed svg, so a 30px band on every one of them would carpet the canvas
+                      at low zoom and swallow the marquee. A stored line is drawn after this pass and
+                      so wins any overlap, which is the right precedence: the one you can act on. */}
+                  <path
+                    className="flow-edge-hit thin"
+                    d={d}
+                    onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
+                    onClick={() => selectEdge(cn.from, cn.to, 'implicit')}
+                  >
+                    <title>Click to select this connection</title>
+                  </path>
+                </g>
+              )
             })}
             {connectors.map((cn, i) => {
               const a = connRect(cn.from)
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
+              const on = isSelEdge(cn.from, cn.to, 'stored')
               const d = edgePath(a, b, zoom / 100)
               return (
-                <g key={`${cn.from}-${cn.to}-${i}`} className="flow-edge-g">
-                  <path className={`flow-edge${paid ? ' paid' : ''}`} d={d} />
-                  {/* Wide transparent hit path so the thin dotted edge is easy to click to delete. */}
-                  <path className="flow-edge-hit" d={d} onClick={() => {
-                    if (cn.to === 'campaign') detachFromCampaign(cn.from, connectors)
-                    // Deleting the edge to a deliverable or post takes its records off those assets
-                    // too, or the wire would be gone while its context kept steering the copy.
-                    else if (isContextNode(cn.from)) detachFromTarget(cn.from, cn.to, connectors)
-                    setConnectors((c) => c.filter((_, j) => j !== i))
-                  }}>
-                    <title>Click to delete this connection</title>
+                <g key={`${cn.from}-${cn.to}-${i}`} className={`flow-edge-g${on ? ' on' : ''}`}>
+                  <path className={`flow-edge${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
+                  {/* Wide transparent hit path so the thin dotted line is easy to point at. The
+                      mousedown guard stops the canvas underneath treating this as a click on the
+                      background, which clears the selection and opens a marquee under your cursor.
+                      Conditional, or the pan tool and space-pan stop working over any line. */}
+                  <path
+                    className="flow-edge-hit"
+                    d={d}
+                    onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
+                    onClick={() => selectEdge(cn.from, cn.to, 'stored')}
+                  >
+                    <title>Click to select this connection</title>
                   </path>
                 </g>
               )
             })}
+            {/* THE DELETE CONTROL, on the selected line only, and only when there is something to
+                delete. Its presence is the answer to "why will this line not go away": a derived
+                line never shows one, so you can see that before you press anything. */}
+            {(() => {
+              if (!selEdge || selEdge.kind !== 'stored') return null
+              const a = connRect(selEdge.from)
+              const b = connRect(selEdge.to)
+              if (!a || !b) return null
+              const { s, t } = anchorsFor(a, b)
+              const mx = (s.x + t.x) / 2
+              const my = (s.y + t.y) / 2
+              return (
+                <g
+                  className="flow-edge-del"
+                  onMouseDown={(ev) => ev.stopPropagation()}
+                  onClick={(ev) => { ev.stopPropagation(); deleteEdge(selEdge.from, selEdge.to) }}
+                >
+                  <title>Delete this connection</title>
+                  <circle cx={mx} cy={my} r={9} />
+                  <path d={`M${mx - 3.4} ${my - 3.4} L${mx + 3.4} ${my + 3.4} M${mx + 3.4} ${my - 3.4} L${mx - 3.4} ${my + 3.4}`} />
+                </g>
+              )
+            })()}
             {drawing &&
               connRect(drawing.from) &&
               (() => {
@@ -8604,9 +8766,6 @@ export function FlowsView() {
                 <div className="flow-panel-head">
                   <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} channel={selPost.channel as ChannelId} />
                   <span className="flow-panel-title">{selPost.assetName}</span>
-                  <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
-                    ✕
-                  </button>
                 </div>
                 <div className="flow-inspect">
                   <p className="flow-inspect-desc">
@@ -8860,9 +9019,6 @@ export function FlowsView() {
                 <div className="flow-panel-head">
                   <PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />
                   <span className="flow-panel-title">{selDeliv.label}</span>
-                  <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
-                    ✕
-                  </button>
                 </div>
                 <div className="flow-inspect">
                   <p className="flow-inspect-desc">
