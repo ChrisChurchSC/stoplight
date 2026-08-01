@@ -1257,6 +1257,15 @@ export default defineConfig(({ mode }) => {
     if (env[key] && !process.env[key]) process.env[key] = env[key]
   }
   return {
+    /**
+     * Test runs are about THIS checkout. `.claude/worktrees/` holds git worktrees of the same repo
+     * from other sessions, so vitest's default glob walked into them and ran their copies of every
+     * test: the suite reported 463 tests where this branch has 165, and a failure in someone else's
+     * half-finished branch would have read as a failure here.
+     */
+    test: {
+      exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
+    },
     // Don't let test/automation artifacts written into the repo (Playwright MCP
     // logs, screenshots, exported data snapshots) trigger a dev-server reload —
     // a reload resets the in-memory store (clientFilter/brandView) to defaults.
