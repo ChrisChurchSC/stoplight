@@ -392,10 +392,10 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
    */
   const objectCols = (Object.keys(OBJECT_META) as CanvasObjectKind[])
     .filter((k) => k !== 'note')
-    .map((k) => ({ key: `obj:${k}`, label: OBJECT_META[k].label, icon: '◈', width: 170, objKind: k }))
+    .map((k) => ({ key: `obj:${k}`, label: OBJECT_META[k].label, icon: '', width: 170, objKind: k, tone: OBJECT_META[k].tone }))
 
   const cols = (() => {
-    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string; objKind?: CanvasObjectKind }[] = []
+    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string; objKind?: CanvasObjectKind; tone?: string }[] = []
     // Campaign is the anchor the object columns sit behind, and it can drop out as empty, so the
     // fallback anchor is Type — the last column that is always present before the copy begins.
     const anchor = COLUMNS.some((c) => c.key === 'campaign' && (c.always || !columnEmpty('campaign'))) ? 'campaign' : 'type'
@@ -517,7 +517,18 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
               <th className="corner">#</th>
               {cols.map((c, i) => (
                 <th key={c.key}>
-                  {c.icon && <span className="col-ico">{c.icon}</span>}
+                  {/* An object column wears the same mark and hue its card wears on the canvas, so
+                      the two surfaces name the same thing the same way. The other columns keep their
+                      plain glyph: they are fields, not objects. */}
+                  {c.objKind ? (
+                    <span className="col-obj-ic" style={{ ['--note-tone' as string]: c.tone } as React.CSSProperties} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                        {OBJECT_META[c.objKind].icon}
+                      </svg>
+                    </span>
+                  ) : (
+                    c.icon && <span className="col-ico">{c.icon}</span>
+                  )}
                   {c.label}
                   <span className="col-resizer" onMouseDown={(e) => startResize(i + 1, e)} />
                 </th>
@@ -683,7 +694,13 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                     // named beside it, so the cell does not quietly under-report what is reaching the asset.
                     const extra = mine.filter((c) => c.refId && c.refId !== value)
                     return (
-                      <td key={oc.key} className="obj-cell">
+                      <td key={oc.key} className="obj-cell" style={{ ['--note-tone' as string]: oc.tone } as React.CSSProperties}>
+                        <span className="obj-row">
+                        <span className="obj-ic" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                            {OBJECT_META[oc.objKind].icon}
+                          </svg>
+                        </span>
                         <select
                           className={`cell-select obj-select${value ? '' : ' unset'}`}
                           value={value}
@@ -708,6 +725,7 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                             </option>
                           ))}
                         </select>
+                        </span>
                         {extra.map((c) => (
                           <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>
                             {c.label}

@@ -1288,10 +1288,41 @@ button {
   cursor: pointer;
 }
 
-/* WHAT AN ASSET IS WRITTEN FROM. One chip per card reaching the row, quiet by default: this column
-   answers "where did these words come from", which you read after the words, not instead of them. */
+/* AN OBJECT CELL IS THE CARD, SHRUNK TO A ROW.
+   Same mark, same hue, same order the card puts them in: the kind's icon, then the thing it names.
+   --note-tone is the card's own variable, set per column, so a Message cell is the Message card's
+   purple here exactly as it is there and the two surfaces cannot drift apart by hand-picked hexes. */
+/* NOT display:flex ON THE <td>. A table cell that is given another display value stops being a
+   table cell, so the browser drops it out of the row's column flow and every column past it shifts:
+   twelve pickers stacked inside one column while the copy slid two places left. The flex lives on an
+   inner wrapper, and the cell stays a cell. */
 .obj-cell {
   padding: 6px 9px;
+  /* The tone as a hairline down the leading edge, the way the card wears it as a border. */
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 55%, transparent);
+}
+.obj-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.obj-ic,
+.col-obj-ic {
+  color: var(--note-tone, var(--text-muted));
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.obj-ic svg {
+  width: 13px;
+  height: 13px;
+}
+.col-obj-ic svg {
+  width: 12px;
+  height: 12px;
+}
+.col-obj-ic {
+  margin-right: 5px;
+  vertical-align: -2px;
 }
 /* THE PICKER IN AN OBJECT CELL, and it has to LOOK like one.
    `.cell-select` is appearance:none over a transparent background with no border, which is right
@@ -1314,8 +1345,13 @@ button {
   cursor: pointer;
 }
 .obj-select:hover {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--note-tone, var(--border-strong)) 55%, var(--border));
   background-color: var(--surface-2);
+}
+/* Set: the kind's own hue, the same way the card's label carries it. */
+.obj-select:not(.unset) {
+  border-color: color-mix(in srgb, var(--note-tone, var(--border)) 35%, var(--border));
+  background-color: color-mix(in srgb, var(--note-tone, transparent) 8%, transparent);
 }
 /* Nothing picked. Faint, and still plainly a control. */
 .obj-select.unset {
