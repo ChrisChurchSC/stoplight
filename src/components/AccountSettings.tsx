@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js'
 import { useTrafficStore } from '../store/useTrafficStore'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { SKILL_LEVELS, MARKETER_ROLES } from '../domain/userPrefs'
+import { hasSavedAccount, loadAccount, saveAccount, type Account } from '../lib/account'
 
 /**
  * Account settings — a full-screen settings surface (left grouped nav + content pane),
@@ -31,27 +32,10 @@ const GROUPS: { group: string; items: Section[] }[] = [
 ]
 const ALL = GROUPS.flatMap((g) => g.items)
 
-// A lightweight personal profile, stored locally (no server profile yet). Blank when unset:
-// this file ships to every deployment, so a default name here would be one real person's name
-// sitting in everybody else's Settings. The signed-in account fills the gap instead.
-const ACCOUNT_KEY = 'stoplight.account.v1'
-type Account = { firstName: string; lastName: string; email: string }
-/** Whether this person has ever saved their profile, as opposed to simply having blank fields. */
-function hasSavedAccount(): boolean {
-  try {
-    return localStorage.getItem(ACCOUNT_KEY) !== null
-  } catch {
-    return false
-  }
-}
-function loadAccount(): Account {
-  try {
-    const raw = JSON.parse(localStorage.getItem(ACCOUNT_KEY) || '{}')
-    return { firstName: raw.firstName ?? '', lastName: raw.lastName ?? '', email: raw.email ?? '' }
-  } catch {
-    return { firstName: '', lastName: '', email: '' }
-  }
-}
+// The personal profile itself lives in lib/account.ts, because sign-up writes the same record —
+// a new account arrives here already filled in. Blank when unset: this file ships to every
+// deployment, so a default name here would be one real person's name sitting in everybody else's
+// Settings. The signed-in account fills the gap instead.
 
 function ProfileSection() {
   const [acct, setAcct] = useState<Account>(loadAccount)
@@ -84,7 +68,7 @@ function ProfileSection() {
   const save = (next: Account) => {
     savedOnce.current = true
     setAcct(next)
-    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next))
+    saveAccount(next)
   }
   const initials = ((acct.firstName[0] ?? '') + (acct.lastName[0] ?? '')).toUpperCase() || '?'
   return (

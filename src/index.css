@@ -12976,6 +12976,148 @@ button {
   color: var(--text);
 }
 
+/* ---- Sign up: the create-an-account page, on the same purple field as sign-in ---- */
+
+/* The sign-in card is three fields and always fits, so .auth-gate pins itself to the viewport and
+   hides the overflow. The sign-up form can be taller than the screen, and inside a 100vh box with
+   overflow hidden the bottom of it — the submit button — is simply unreachable. This lets the page
+   grow and the document scroll instead. */
+.auth-gate.roomy {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+.auth-gate.roomy .auth-center {
+  padding: 56px 16px 28px;
+}
+.signup-card {
+  width: min(460px, 92vw);
+  gap: 10px;
+}
+.signup-sub {
+  margin: -4px 0 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+/* Two fields on one line where they read as one answer (a name), collapsing on narrow screens. */
+.signup-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 420px) {
+  .signup-row {
+    grid-template-columns: 1fr;
+  }
+}
+/* Per-field errors are new here — the rest of the app disables the button and says nothing. On a
+   form somebody has to complete before they can get in, "the button is grey" is not an answer to
+   "why". The literal matches .auth-err rather than --red: there is no error colour token, and the
+   two error styles appearing on the same screen must not look like different kinds of problem. */
+.signup-err {
+  font-size: 12.5px;
+  color: #b42318;
+}
+/* Mark the field itself, not only the message. Chrome happens to outline a mismatched confirmation
+   on its own, which is worth having deliberately and in every browser rather than by accident. */
+.signup-card .library-input[aria-invalid='true'] {
+  border-color: #b42318;
+}
+.signup-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: -2px;
+}
+.signup-optional {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.signup-pw {
+  position: relative;
+  display: flex;
+}
+.signup-pw .library-input {
+  padding-right: 58px;
+}
+.signup-pw-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.signup-pw-toggle:hover {
+  color: var(--text);
+}
+/* Advisory, not a gate: anything past the minimum length is accepted, and this only says how
+   easily guessed it looks. */
+.signup-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -2px;
+}
+.signup-meter {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.signup-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.16s ease, background 0.16s ease;
+}
+.signup-meter.s1 span {
+  width: 25%;
+  background: var(--red);
+}
+.signup-meter.s2 span {
+  width: 50%;
+  background: var(--amber);
+}
+.signup-meter.s3 span {
+  width: 75%;
+  background: var(--blue);
+}
+.signup-meter.s4 span {
+  width: 100%;
+  background: var(--green);
+}
+.signup-strength-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-muted);
+  min-width: 42px;
+}
+/* Separates what the account needs from what only sets defaults. */
+.signup-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0 2px;
+}
+.signup-sent {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.signup-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
 /* Ask Claude palette */
 .ask-scrim {
   position: fixed;

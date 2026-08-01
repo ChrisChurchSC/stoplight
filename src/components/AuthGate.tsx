@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '../lib/supabase'
-import { getSession, onAuthChange, signInWithPassword, signUpWithPassword } from '../lib/session'
+import { getSession, onAuthChange, signInWithPassword } from '../lib/session'
 import { decodeShareToken } from '../lib/shareLink'
+import { AuthShell } from './AuthShell'
+import { SignUpPage } from './SignUpPage'
 
 // A valid ?share= link is a self-contained grant (client + role live in the token), so a
 // recipient needs no account — the store reads it on load and pins the shared role. Without
@@ -16,6 +18,32 @@ function hasValidShareLink(): boolean {
   }
 }
 
+const SIGNUP_PATH = '/signup'
+
+function atSignupPath(): boolean {
+  try {
+    return window.location.pathname.replace(/\/+$/, '') === SIGNUP_PATH
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Keep the address bar honest without pulling in a router: sign-up is a page people link to, so it
+ * needs a URL, but the app itself has only one (main.tsx special-cases /changelog the same way).
+ * replaceState rather than pushState — the two screens are one form with a toggle, and making Back
+ * walk through every switch would be a worse Back button than no history at all.
+ */
+function setPath(path: string): void {
+  try {
+    if (window.location.pathname.replace(/\/+$/, '') !== path.replace(/\/+$/, '')) {
+      window.history.replaceState(null, '', path + window.location.search)
+    }
+  } catch {
+    /* ignore — the URL is cosmetic, the state below is what decides what renders */
+  }
+}
+
 /**
  * Gates the app behind Supabase auth — but only when a backend is configured.
  * With no VITE_SUPABASE_* set, this is a pass-through and the app runs
@@ -26,7 +54,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined) // undefined = still loading
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
-  const [mode, setMode] = useState<'in' | 'up'>('in')
+  const [mode, setMode] = useState<'in' | 'up'>(() => (atSignupPath() ? 'up' : 'in'))
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -40,6 +68,22 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Once somebody is in, /signup is a stale address for the app they are now looking at.
+  useEffect(() => {
+    if (user) setPath('/')
+  }, [user])
+
+  const showSignUp = () => {
+    setErr('')
+    setMode('up')
+    setPath(SIGNUP_PATH)
+  }
+  const showSignIn = () => {
+    setErr('')
+    setMode('in')
+    setPath('/')
+  }
+
   // No backend configured → run as before, no auth.
   if (!isSupabaseConfigured) return <>{children}</>
   // A valid share link grants access without an account — don't wall it behind sign-in.
@@ -47,26 +91,25 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (user === undefined) return <div className="auth-loading">Connecting…</div>
   if (user) return <>{children}</>
 
+  if (mode === 'up') return <SignUpPage onSignIn={showSignIn} />
+
   const submit = async () => {
     if (!email.trim() || !pw) return
     setBusy(true)
     setErr('')
-    const fn = mode === 'in' ? signInWithPassword : signUpWithPassword
-    const e = await fn(email.trim(), pw)
+    const e = await signInWithPassword(email.trim(), pw)
     if (e) setErr(e)
-    if (mode === 'up' && !e) setErr('Check your email to confirm, then sign in.')
     setBusy(false)
   }
 
   return (
-    <div className="auth-gate">
-      <a className="auth-changelog" href="/changelog">What&rsquo;s new</a>
-      <div className="auth-center">
-        <div className="auth-card">
-        <div className="auth-title">{mode === 'in' ? 'Sign in' : 'Create your account'}</div>
+    <AuthShell>
+      <div className="auth-card">
+        <div className="auth-title">Sign in</div>
         <input
           className="auth-input"
           type="email"
+          autoComplete="email"
           placeholder="you@agency.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -74,6 +117,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <input
           className="auth-input"
           type="password"
+          autoComplete="current-password"
           placeholder="Password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
@@ -81,18 +125,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         />
         {err && <div className="auth-err">{err}</div>}
         <button className="btn primary auth-submit" disabled={busy} onClick={submit}>
-          {busy ? '…' : mode === 'in' ? 'Sign in' : 'Sign up'}
+          {busy ? '…' : 'Sign in'}
         </button>
-        <button className="auth-switch" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
-          {mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+        <button className="auth-switch" onClick={showSignUp}>
+          Need an account? Sign up
         </button>
-        </div>
       </div>
-      <div className="auth-footer">
-        <p className="auth-kicker">Marketing infrastructure<br />and automation platform</p>
-        <p className="auth-tagline">Leave a trail worth following. Breadcrumbs turns one brand strategy into personalized campaigns for every audience and channel.</p>
-        <img src="/login-logo.svg" className="auth-bottomlogo" alt="Breadcrumbs" />
-      </div>
-    </div>
+    </AuthShell>
   )
 }
