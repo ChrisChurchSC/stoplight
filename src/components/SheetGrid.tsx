@@ -384,15 +384,25 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
 
   const cols = (() => {
     const out: { key: string; label: string; icon: string; width: number; fieldKey?: string; objKind?: CanvasObjectKind }[] = []
+    // Campaign is the anchor the object columns sit behind, and it can drop out as empty, so the
+    // fallback anchor is Type — the last column that is always present before the copy begins.
+    const anchor = COLUMNS.some((c) => c.key === 'campaign' && (c.always || !columnEmpty('campaign'))) ? 'campaign' : 'type'
     for (const c of COLUMNS) {
       if (c.key === 'messaging') { out.push(...msgCols); continue }
       if (!c.always && columnEmpty(c.key)) continue
       out.push(c)
+      // THE OBJECT COLUMNS COME BEFORE THE COPY, not after it.
+      //
+      // They were after, on the reasoning that you read where the words came from once you have read
+      // the words. Measured, that reasoning put them 2,684px past the right-hand edge of a 1,382px
+      // viewport — nearly three screens of scrolling, behind eleven copy columns — so in practice
+      // nobody ever read them at all.
+      //
+      // In front they also make a better sentence: what this asset IS, what it is written FROM, then
+      // what it SAYS. The pickers are the part you come here to change; the copy is the part you come
+      // here to read, and reading survives a scroll better than setting does.
+      if (c.key === anchor) out.push(...objectCols)
     }
-    // The object columns sit after the copy and before the controls: they say where the words came
-    // from, which you read after the words themselves.
-    const at = out.findIndex((c) => c.key === 'actions')
-    out.splice(at < 0 ? out.length : at, 0, ...objectCols)
     return out
   })()
   /** Is this column on screen? The body cells are written in order, so they ask before rendering. */
@@ -639,6 +649,54 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                       />
                     </td>
                   )}
+                  {objectCols.map((oc) => {
+                    const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
+                    const opts = optionsFor(oc.objKind)
+                    const type = REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
+                    const settable = !!type
+                    // THE ROW'S OWN PIN WINS, because that is the order the writer resolves in:
+                    // row.references overrides what the board wires in. Reading only the board walk
+                    // meant the picker wrote a value and then did not show it — the control and its
+                    // own readout disagreeing about what had just happened.
+                    const pinned = type ? (row.references ?? []).find((r) => r.type === type) : undefined
+                    const value = pinned?.id ?? mine.find((c) => c.refId)?.refId ?? ''
+                    // A kind can be reached by more than one card and the picker shows one. The rest are
+                    // named beside it, so the cell does not quietly under-report what is reaching the asset.
+                    const extra = mine.filter((c) => c.refId && c.refId !== value)
+                    return (
+                      <td key={oc.key} className="obj-cell">
+                        <select
+                          className={`cell-select obj-select${value ? '' : ' unset'}`}
+                          value={value}
+                          disabled={!settable}
+                          title={
+                            settable
+                              ? `Which ${oc.label.toLowerCase()} this asset is written from`
+                              : `${oc.label} is set on the canvas, not per asset`
+                          }
+                          onChange={(e) => setRowRecord(row, oc.objKind, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">—</option>
+                          {/* A record reaching this row from a card that is not in the picker's list still has
+                              to be selectable, or opening the dropdown would silently change the answer. */}
+                          {value && !opts.some((o) => o.id === value) && (
+                            <option value={value}>{pinned?.label || mine.find((c) => c.refId === value)?.label || 'Set on the canvas'}</option>
+                          )}
+                          {opts.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {extra.map((c) => (
+                          <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>
+                            {c.label}
+                          </span>
+                        ))}
+                      </td>
+                    )
+                  })}
 
                   {show('audience') && (
                     <td>
@@ -748,54 +806,6 @@ export function SheetGrid({ liveScope = false, scopeClient, scopeCampaign }: { l
                   {/* WHAT THIS ASSET IS WRITTEN FROM, one cell per object kind. A card that reaches the row
                       with nothing picked still shows, greyed, because a connected empty card is reaching the
                       writer with nothing and that is worth seeing. */}
-                  {objectCols.map((oc) => {
-                    const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
-                    const opts = optionsFor(oc.objKind)
-                    const type = REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
-                    const settable = !!type
-                    // THE ROW'S OWN PIN WINS, because that is the order the writer resolves in:
-                    // row.references overrides what the board wires in. Reading only the board walk
-                    // meant the picker wrote a value and then did not show it — the control and its
-                    // own readout disagreeing about what had just happened.
-                    const pinned = type ? (row.references ?? []).find((r) => r.type === type) : undefined
-                    const value = pinned?.id ?? mine.find((c) => c.refId)?.refId ?? ''
-                    // A kind can be reached by more than one card and the picker shows one. The rest are
-                    // named beside it, so the cell does not quietly under-report what is reaching the asset.
-                    const extra = mine.filter((c) => c.refId && c.refId !== value)
-                    return (
-                      <td key={oc.key} className="obj-cell">
-                        <select
-                          className={`cell-select obj-select${value ? '' : ' unset'}`}
-                          value={value}
-                          disabled={!settable}
-                          title={
-                            settable
-                              ? `Which ${oc.label.toLowerCase()} this asset is written from`
-                              : `${oc.label} is set on the canvas, not per asset`
-                          }
-                          onChange={(e) => setRowRecord(row, oc.objKind, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <option value="">—</option>
-                          {/* A record reaching this row from a card that is not in the picker's list still has
-                              to be selectable, or opening the dropdown would silently change the answer. */}
-                          {value && !opts.some((o) => o.id === value) && (
-                            <option value={value}>{pinned?.label || mine.find((c) => c.refId === value)?.label || 'Set on the canvas'}</option>
-                          )}
-                          {opts.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        {extra.map((c) => (
-                          <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>
-                            {c.label}
-                          </span>
-                        ))}
-                      </td>
-                    )
-                  })}
                   <td className="act-hover">
                     <button
                       className="btn ghost sm"
