@@ -78,6 +78,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     setMode('up')
     setPath(SIGNUP_PATH)
   }
+  const goSignUp = (e: React.MouseEvent) => {
+    // Leave the deliberate ways of opening a link elsewhere alone — cmd/ctrl/shift click, or the
+    // middle button — and only take over the plain one.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+    e.preventDefault()
+    showSignUp()
+  }
   const showSignIn = () => {
     setErr('')
     setMode('in')
@@ -127,12 +134,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <button className="btn primary auth-submit" disabled={busy} onClick={submit}>
           {busy ? '…' : 'Sign in'}
         </button>
-        <div className="auth-or">
-          <span>new here?</span>
-        </div>
-        <button className="btn auth-create" type="button" onClick={showSignUp}>
-          Create an account
-        </button>
+        {/* A real href, so it reads and behaves as a link — hover target, status bar, middle-click
+            to a new tab — while the click handler keeps the switch in-app instead of reloading
+            the whole bundle to render a form that is already loaded. */}
+        <a className="auth-switch" href={SIGNUP_PATH} onClick={goSignUp}>
+          Need an account? Sign up
+        </a>
       </div>
     </AuthShell>
   )
