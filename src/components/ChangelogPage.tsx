@@ -54,6 +54,7 @@ const RELEASES: Release[] = [
           'Numbers that are modelled say so. Reach is projected from channel benchmarks until there is measured data for the brand, and reads "est." until then; the attribution total no longer prints "$0 won" when the truth is that nothing is connected.',
           'Disconnecting a Brand card from a campaign that already has copy written no longer removes the line. That unbind is refused on purpose, so the line has to stay: it was vanishing anyway, leaving the campaign bound to a brand with nothing on the board saying so and no line to try again from.',
           'The toolbar stays put while you zoom. The readout runs from 10% to 200%, so the button holding it grew by a character between 50 and 100, and because the row is centred every control in it slid sideways as you turned the wheel. The number now sits in a slot wide enough for the longest value it can show.',
+          'An open campaign tab says which folder it is in, and says its name once. The small line above the name was the brand, which read as a folder you would go looking for and never find, and the name under it repeated the brand anyway — campaign names are stored with their brand in front of them so two brands can each have a Q3 Launch. That line is now the folder the campaign is filed under, or Unfiled, and the name below it is what you typed. The tab strip is already scoped to one brand, so the brand was the one thing it did not need to say twice.',
           '"Fit to board" is just "Fit".',
         ],
       },

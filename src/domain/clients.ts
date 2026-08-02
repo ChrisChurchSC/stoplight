@@ -303,3 +303,13 @@ export function registerCampaign(name: string, client: string): void {
 
 export const clientForCampaign = (campaign?: string): string =>
   (campaign && (runtimeCampaignClients[campaign] ?? CAMPAIGN_CLIENTS[campaign])) || UNASSIGNED
+
+/**
+ * The campaign name as somebody typed it. Names are STORED brand-prefixed — "Big Buoy — Competitive
+ * Campaign" — so two brands can each own a "Q3 Launch" without colliding on the one key that flights,
+ * chats and open tabs all hang off. The prefix is plumbing, so every surface that shows a name to a
+ * human strips it back off; showing the stored name next to the brand reads as if the brand were said
+ * twice.
+ */
+export const campaignShortName = (name: string, client?: string): string =>
+  client && client !== UNASSIGNED ? name.replace(`${client} — `, '') : name
