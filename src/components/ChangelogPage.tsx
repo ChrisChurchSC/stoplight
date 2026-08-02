@@ -19,6 +19,21 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.16',
+    dateLabel: 'August 2, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A card can be filled in from a document. Upload a .md or .txt file onto an Audience, Person, Brand, Product, Message, Voice, Concept, Proof, Season or Trigger card, or drop one anywhere on the box, and its fields fill from what the file says. The material is usually already written — a positioning doc, a persona from research, a messaging house, the notes off a kickoff — and retyping that as one sentence in your own words threw away the specifics that made the card worth having.',
+          'Pasting a body of text into the describe box attaches it as a document instead of being read as a sentence. Anything longer than a paragraph becomes an attachment you can see, named "Pasted text", with its length on it. It used to go in as a description and get cut at 1200 characters by the server, which was a truncation nobody was told about.',
+          'A Company card can be filled in, from a document only. It was the one record card with no describe box, and that was deliberate: asked to describe a real account from a sentence, a model answers from whatever it absorbed about that account, and a card of confident half-remembered facts about a real company is the worst thing this could write. A document is a source you chose and can check, so the fields are reachable that way and not by description.',
+          'The fill says what it read. The note names the file and how many characters of it reached the model, and a file too long to send whole says which part it took. A fill you cannot see the extent of is a fill you cannot check.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.15',
     dateLabel: 'August 1, 2026',
     groups: [
