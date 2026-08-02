@@ -56,10 +56,53 @@ export async function signInWithPassword(email: string, password: string): Promi
   return error?.message ?? null
 }
 
-export async function signUpWithPassword(email: string, password: string): Promise<string | null> {
-  if (!supabase) return 'Backend not configured'
-  const { error } = await supabase.auth.signUp({ email, password })
-  return error?.message ?? null
+/** What sign-up knows about the person, beyond the two fields Supabase Auth stores itself. */
+export interface SignUpProfile {
+  fullName: string
+  firstName: string
+  lastName: string
+  /** Names the workspace created on first sign-in — see resolveWorkspaceId below. */
+  company: string
+}
+
+export interface SignUpResult {
+  error: string | null
+  /**
+   * The account was created but no session came back, which is Supabase telling us email
+   * confirmation is switched on. The caller has to say so, because otherwise a successful sign-up
+   * looks like nothing happened: no error, no error message, and the same form still on screen.
+   */
+  needsConfirmation: boolean
+}
+
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+  profile?: SignUpProfile,
+): Promise<SignUpResult> {
+  if (!supabase) return { error: 'Backend not configured', needsConfirmation: false }
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      // Stored on the account itself, so it survives a new device in a way the localStorage
+      // profile does not. firstNameOf() reads full_name for greetings; resolveWorkspaceId()
+      // reads company to name the workspace.
+      data: profile
+        ? {
+            full_name: profile.fullName,
+            first_name: profile.firstName,
+            last_name: profile.lastName,
+            company: profile.company,
+          }
+        : undefined,
+      // Where the confirmation link lands. Without this Supabase uses the project's Site URL,
+      // which is one fixed origin and so sends previews and localhost to production.
+      emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+    },
+  })
+  if (error) return { error: error.message, needsConfirmation: false }
+  return { error: null, needsConfirmation: !data.session }
 }
 
 export async function signOut(): Promise<void> {
@@ -110,8 +153,13 @@ async function resolveWorkspaceId(): Promise<string | null> {
     return workspaceId
   }
 
-  // First sign-in: create a workspace and join it as owner.
-  const name = (user.email ?? 'My workspace').split('@')[0] + "'s workspace"
+  // First sign-in: create a workspace and join it as owner. Sign-up asks for a company and puts it
+  // in user_metadata, so prefer that — "Initech" beats "chris's workspace" for a team, and this is
+  // the one moment the workspace gets named. Accounts made before that question existed, and any
+  // created outside the sign-up page, still fall back to the email's local part.
+  const meta = (user.user_metadata ?? {}) as { company?: string }
+  const company = (meta.company ?? '').trim()
+  const name = company || (user.email ?? 'My workspace').split('@')[0] + "'s workspace"
   const { data: ws, error: wsErr } = await supabase
     .from('workspaces')
     .insert({ name, created_by: user.id })

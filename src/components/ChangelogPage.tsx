@@ -19,6 +19,21 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.15',
+    dateLabel: 'August 1, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Signing up is its own page, and it asks enough to actually make an account. It used to be the sign in card with a different button on it, which meant the only things it knew about you were an email address and a password. It now asks your name, your company, and what you work on, and every answer lands somewhere: your name greets you and fills in Settings, your company names your workspace instead of it being called after the front of your email address, and the two questions about your work set what leads on each screen and how much of it shows. Both of those are optional and say so, because the answer can wait and the full interface is what you get if you skip them.',
+          'The password is asked for twice, and the form says what is wrong before it sends anything. A confirmation email goes out the moment an account is made, and the next thing you do is sign in with the password you set — so a typo in it is not a form error you can go back and fix, it is an account you cannot get into. Each field says what is wrong under itself once you leave it, rather than the button simply staying grey.',
+          'Need an account? Sign up, on the sign in screen, is a real link to the new page. It carries an address rather than only a click handler, so it can be hovered, copied, or opened in its own tab like any other link, and a plain click still moves straight to the form without reloading the app.',
+          'Sign up has an address you can link to. /signup opens it directly.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.14',
     dateLabel: 'July 31, 2026',
     groups: [
