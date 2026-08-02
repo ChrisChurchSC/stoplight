@@ -6,7 +6,7 @@
  * Unassigned-merge refusal, hierarchy inheritance, voice override, explicit sharing,
  * merge precedence, cycles, and draft brands.
  *
- * Run:  npx tsx ./scripts/regression-brand-isolation.mts
+ * Run:  npm run regression   # or: npx vite-node ./scripts/regression-brand-isolation.mts
  * (Pairs with the de-fished heuristic writer; together they close both contamination
  *  vectors — cross-brand asset bleed AND hardcoded industry copy.)
  */

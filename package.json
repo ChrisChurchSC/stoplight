@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Drag-and-drop media trafficking tool: ingest a batch of assets, propose a per-channel schedule, approve, and stage to a sheet for publishing.",
+  "description": "Marketing infrastructure and automation: turn one brand strategy into personalized campaigns for every audience and channel.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,7 +11,8 @@
     "typecheck": "tsc -b --noEmit",
     "changelog:check": "node scripts/changelog-check.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "regression": "for f in scripts/regression-*.mts; do echo \"— $f\"; vite-node \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

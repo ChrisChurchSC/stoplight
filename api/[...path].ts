@@ -1,13 +1,22 @@
 import { jsonRoute } from '../server/apiRoute.js'
 import { requireAuth } from '../server/apiAuth.js'
+import { lookupRoute } from '../server/apiManifest.js'
 
 /**
  * Single catch-all API router. Vercel's Hobby plan caps a deployment at 12 serverless functions, so
  * instead of one file per endpoint (which put us at 13), every /api/* route is served here: we parse
  * the endpoint from the path and dynamic-import the matching handler in server/. The client calls the
- * exact same /api/<name> paths, and the NO_KEY → 501 contract (via jsonRoute) is preserved so the
- * heuristic fallbacks still work. In local dev these endpoints are served by vite.config.ts middleware
- * instead; this file only runs in the Vercel/serverless deploy.
+ * exact same /api/<name> paths, and the NO_KEY -> 501 contract (via jsonRoute) is preserved so the
+ * heuristic fallbacks still work.
+ *
+ * The route table itself lives in server/apiManifest.ts, which vite.config.ts also mounts as dev
+ * middleware. It used to be duplicated here by hand, and the copies drifted: "describe this card and
+ * fill it in", "fill this in from the site" and the per-field suggestions all shipped with a dev
+ * middleware and no entry here, so they worked on localhost and 404'd on the pilot. One list means
+ * that class of bug needs a deliberate edit rather than a forgotten one.
+ *
+ * Routes below that are NOT in the manifest are the ones with no dev equivalent: plain GETs, the
+ * OAuth bounce, and the paste-a-key connect flow.
  */
 
 interface ApiReq {
@@ -22,42 +31,6 @@ interface ApiRes {
   end(chunk?: string): void
 }
 
-// endpoint name → loader for its POST handler (parsed body in, object out).
-const HANDLERS: Record<string, () => Promise<(body: unknown) => Promise<unknown>>> = {
-  'flow-agent': () => import('../server/flowAgentHandler.js').then((m) => m.runFlowAgent),
-  /**
-   * These three shipped with a dev middleware in vite.config and no entry here, so they worked on
-   * localhost and 404'd in production: "describe this card and fill it in", "fill this in from the
-   * site", and the per-field suggestions. Every card kind grew a prompt field on the assumption
-   * fill-card was reachable, and on the pilot none of them did anything.
-   */
-  'fill-card': () => import('../server/fillCardHandler.js').then((m) => m.runFillCard),
-  'scan-site': () => import('../server/scanSiteHandler.js').then((m) => m.runScanSite),
-  'suggest-options': () => import('../server/suggestOptionsHandler.js').then((m) => m.runSuggestOptions),
-  'compose-dataset': () => import('../server/composeDatasetHandler.js').then((m) => m.runComposeDataset),
-  aggregator: () => import('../server/aggregatorHandler.js').then((m) => m.runAggregator),
-  'records-agent': () => import('../server/recordsAgentHandler.js').then((m) => m.runRecordsAgent),
-  'claude-ask': () => import('../server/askHandler.js').then((m) => m.runAsk),
-  'claude-agent': () => import('../server/agentHandler.js').then((m) => m.runAgent),
-  'coherence-check': () => import('../server/coherenceHandler.js').then((m) => m.runCoherenceCheck),
-  'draft-cell': () => import('../server/draftCellHandler.js').then((m) => m.runDraftCell),
-  'draft-copy': () => import('../server/copyDraftHandler.js').then((m) => m.runCopyDraft),
-  'draft-proof': () => import('../server/draftProofHandler.js').then((m) => m.runDraftProof),
-  'draft-ctas': () => import('../server/draftCtaHandler.js').then((m) => m.runDraftCtas),
-  'draft-audiences': () => import('../server/draftAudienceHandler.js').then((m) => m.runDraftAudiences),
-  'draft-messages': () => import('../server/draftMessageHandler.js').then((m) => m.runDraftMessages),
-  'draft-voices': () => import('../server/draftVoiceHandler.js').then((m) => m.runDraftVoices),
-  'draft-brand-profile': () => import('../server/draftBrandProfileHandler.js').then((m) => m.runDraftBrandProfile),
-  'draft-objectives': () => import('../server/draftObjectiveHandler.js').then((m) => m.runDraftObjectives),
-  'draft-channels': () => import('../server/draftChannelHandler.js').then((m) => m.runDraftChannels),
-  'draft-angle': () => import('../server/draftAngleHandler.js').then((m) => m.runDraftAngle),
-  'ingest-site': () => import('../server/ingestSiteHandler.js').then((m) => m.runIngestSite),
-  'extract-copy': () => import('../server/extractCopyHandler.js').then((m) => m.runExtractCopy),
-  'icp-review': () => import('../server/icpReviewHandler.js').then((m) => m.runIcpReview),
-  'media-mix': () => import('../server/mediaMixHandler.js').then((m) => m.runMediaMix),
-  publish: () => import('../server/publishHandler.js').then((m) => m.runPublish as (body: unknown) => Promise<unknown>),
-  'publish-email': () => import('../server/resendHandler.js').then((m) => m.runPublishEmail as (body: unknown) => Promise<unknown>),
-}
 
 export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
   const path = (req.url ?? '').split('?')[0].replace(/^\/api\//, '').replace(/\/+$/, '')
@@ -195,7 +168,7 @@ export default async function router(req: ApiReq, res: ApiRes): Promise<void> {
     }
   }
 
-  const loader = HANDLERS[path]
+  const loader = lookupRoute(path)
   if (!loader) {
     res.statusCode = 404
     res.setHeader('content-type', 'application/json')

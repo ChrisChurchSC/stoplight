@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { makeModelClient } from './modelClient.js'
+import { makeModelClient, NoKeyError } from './modelClient.js'
 import { readLiveAds } from './adScraper.js'
 import { crawlSite } from './siteCrawler.js'
 import { readYouTube } from './youtube.js'
@@ -105,10 +105,6 @@ Extract:
 - messages: every distinct live message, value prop, claim, offer, or CTA worth mapping. For each: a short label, the headline (the actual line, verbatim or lightly tightened), optional body and cta, its type, the audience it speaks to (use one of the audience names above), the channel it lives on (pick from the allowed channel ids: a homepage hero is "website", a campaign page is "landing-page", a Meta ad is "meta-ads", etc.), and the source (page URL or "Meta ad").
 
 Ground everything in the provided copy. Quote their real words. Do not pad with generic marketing. Do not use em dashes. Return ONLY the structured object.`
-
-export class NoKeyError extends Error {
-  code = 'NO_KEY'
-}
 
 function brandFromUrl(url: string): string {
   try {
