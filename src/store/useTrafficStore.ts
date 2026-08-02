@@ -164,6 +164,7 @@ import {
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
 import { directionForRow, resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { contextGaps, type ContextGapKey } from '../domain/contextGaps'
 import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { normalizeFigure } from '../domain/coherenceChecks'
 import { freshCommentId, type CardComment } from '../domain/cardComments'
@@ -2495,6 +2496,18 @@ interface TrafficState {
    * and the agent bridge all call it without passing through a panel.
    */
   copyBlockerFor: (campaign: string) => string | null
+  /**
+   * WHAT THIS CAMPAIGN HAS NOT SAID YET, as gap keys — empty when it has said enough.
+   *
+   * The soft counterpart to copyBlockerFor: that one refuses, this one only reports. A campaign can
+   * clear both blockers and still be wired to nothing that pins the writer's pools, in which case
+   * the copy is drawn from the whole brand library and reads as though somebody chose it. See
+   * src/domain/contextGaps.ts for what counts and why.
+   *
+   * Returns keys, not a sentence, so the caller decides how loudly to say it: Generate has the toast
+   * to itself, a build has to share one with "Built · N drafts".
+   */
+  contextGapsFor: (campaign: string) => ContextGapKey[]
   /**
    * Draft copy into the given rows (or every empty in-scope row). Returns WHO WROTE, not whether
    * anything was written: `null` means only that no writer ran, and a campaign this refused is
@@ -6554,6 +6567,41 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return `Nothing is wired up on "${campaign || 'this campaign'}" yet. Draw a line from a card to the campaign brief, or to one deliverable, so there is something to write from.`
     }
     return null
+  },
+  contextGapsFor: (campaign) => {
+    const board = boardFor(get().flowBoards, campaign)
+    /**
+     * THE REFS THE WRITER WILL ACTUALLY SEE, resolved the same three ways draftCopy resolves them:
+     * a row's own override wins, a channel cut off from the brief takes nothing, and everything else
+     * inherits what is wired into the campaign. Reading the brief alone would have called a campaign
+     * well-supplied while every one of its deliverables overrode it with nothing.
+     *
+     * Unioned across the campaign rather than judged per row, because this feeds one toast about one
+     * campaign. "Somewhere in here there is an audience" is the honest granularity for that; a row
+     * that individually falls back is not something a single line in the corner can usefully say.
+     */
+    const briefRefs = wiredRefsFor(board, get().smartObjects, 'campaign')
+    const detachedKeys = board.detached ?? []
+    const refs: { type: string }[] = []
+    for (const r of get().rows.filter((r) => (r.campaign ?? '') === campaign)) {
+      const eff = r.references && r.references.length
+        ? r.references
+        : detachedKeys.includes(deliverableKeyFor(r))
+          ? []
+          : briefRefs
+      refs.push(...eff)
+    }
+    // A campaign with no assets yet (the builder, before Build) is judged on its brief alone.
+    if (!refs.length) refs.push(...briefRefs)
+    const resolved = resolveBoardDirection(board)
+    // Legacy campaign-wide direction counts with the cards': it predates the move onto the board and
+    // still reaches the writer, so a campaign carrying it has stated an angle.
+    const legacy = get().campaignList.find((c) => c.name === campaign)?.direction ?? []
+    const directionCount =
+      resolved.campaign.length +
+      [...resolved.byTarget.values()].reduce((n, list) => n + list.length, 0) +
+      legacy.length
+    return contextGaps({ refs, directionCount })
   },
   draftCopy: async (rowIds) => {
     const { rows, icp, filter, query, clientFilter, campaignFilter } = get()
