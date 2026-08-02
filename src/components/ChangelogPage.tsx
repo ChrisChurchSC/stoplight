@@ -41,8 +41,10 @@ export function ChangelogPage() {
         <div className="chlog-nav-side">
           <span className="chlog-nav-active">What&rsquo;s new</span>
         </div>
+        {/* The splash wordmark, not the flat one — this page is the first thing a logged-out
+            visitor sees after the sign-in field, so it should be wearing the same face. */}
         <a className="chlog-brand" href="/" aria-label="Breadcrumbs home">
-          <Wordmark height={20} />
+          <img className="chlog-brand-logo" src="/login-logo.svg" alt="Breadcrumbs" />
         </a>
         <div className="chlog-nav-side chlog-nav-right">
           <a className="chlog-open" href="/">

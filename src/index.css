@@ -21539,15 +21539,15 @@ table.aud-sheet td.stick .aud-cell {
 
 /* ============================================================================
    Public changelog page (/changelog) — standalone, unauthenticated "What's new".
-   Breadcrumbs brand: light surface with a warm orange wash, flat date-grouped
-   entries (date, tag chip, bullets). Self-contained; leans on the app tokens.
+   Breadcrumbs brand: flat date-grouped entries (date, tag chip, bullets).
+   Self-contained; leans on the app tokens.
    ============================================================================ */
+/* Plain field, no wash. There used to be a coral radial gradient bleeding down from
+   behind the nav; it sat directly under the wordmark and the two oranges fought. */
 .chlog {
   min-height: 100vh;
   color: var(--text);
-  background:
-    radial-gradient(880px 440px at 50% -10%, var(--accent-soft), transparent 62%),
-    var(--bg);
+  background: var(--bg);
 }
 
 /* ---- Nav ---- */
@@ -21581,12 +21581,21 @@ table.aud-sheet td.stick .aud-cell {
   padding: 6px 12px;
 }
 /* The wordmark is the brand, so it carries the brand colour rather than body ink —
-   in the header and again in the footer (see .chlog-foot > svg). */
+   in the footer (see .chlog-foot > svg). The header mark is the splash artwork, which
+   brings its own colours and ignores this. */
 .chlog-brand {
   display: inline-flex;
   justify-self: center;
   color: var(--accent);
   text-decoration: none;
+}
+/* Height-driven like every other placement of this file; width follows the 273×65
+   ratio. Taller than the flat wordmark it replaced (20px) because this one is drawn
+   rather than set, and its outlines close up into a smudge below ~26px. */
+.chlog-brand-logo {
+  display: block;
+  height: 28px;
+  width: auto;
 }
 .chlog-open {
   display: inline-flex;
