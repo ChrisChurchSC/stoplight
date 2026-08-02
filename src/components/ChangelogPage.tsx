@@ -7,6 +7,9 @@ import { Wordmark } from './Wordmark'
  * in (same idea as the anonymous ?share= viewer). Self-contained: only the wordmark and the
  * RELEASES data below, styled with the .chlog-* block in index.css. Dark, monospace-labelled,
  * flat entries: date, then a tag chip per kind of change, then the bullets.
+ *
+ * The dark is pinned by main.tsx (data-theme, before mount) rather than chosen here, because the
+ * only way in is the black splash and the page must not arrive white for a light-OS visitor.
  */
 
 type Tag = 'New' | 'Improved' | 'Fixed'

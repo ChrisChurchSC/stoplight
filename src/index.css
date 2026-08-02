@@ -21539,8 +21539,16 @@ table.aud-sheet td.stick .aud-cell {
 
 /* ============================================================================
    Public changelog page (/changelog) — standalone, unauthenticated "What's new".
-   Breadcrumbs brand: light surface with a warm orange wash, flat date-grouped
-   entries (date, tag chip, bullets). Self-contained; leans on the app tokens.
+   Flat date-grouped entries (date, tag chip, bullets) under a warm accent wash.
+
+   ALWAYS DARK, and not by writing a second palette here. main.tsx pins
+   data-theme='dark' for this route before React mounts, so the tokens below
+   resolve against the app's one dark palette (see the :root[data-theme='dark']
+   block up top) rather than against the visitor's OS. The reason is the same one
+   that pinned the splash to literal black: this page is reached from that splash
+   and nowhere else, and a white page one click behind a black one is the front
+   door changing colour on the way through. Tokens, not hex, so there is still
+   only one definition of what dark looks like.
    ============================================================================ */
 .chlog {
   min-height: 100vh;
