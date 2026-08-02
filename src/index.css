@@ -10304,6 +10304,14 @@ button {
   white-space: nowrap;
   max-width: 100%;
 }
+/* A campaign with no folder has nothing to put on this line, and most campaigns have no folder, so
+   it is left empty rather than reading "Unfiled" on every tab in the strip. It still has to occupy
+   its line: drop the line and the name rides up, and a tab beside a filed one sits at a different
+   height with its name off the shared baseline. A zero-width space holds the line box at whatever
+   the font metrics say, so there is no measured height here to drift out of date. */
+.cv-project-tab-client:empty::before {
+  content: '\200b';
+}
 .cv-project-tab.active .cv-project-tab-client {
   color: var(--accent);
 }

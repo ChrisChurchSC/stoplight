@@ -125,8 +125,12 @@ export function CanvasProjectTabs() {
                 not the brand, which the strip is already scoped to. Showing the brand here read as a
                 folder that didn't exist, and then said the brand a second time in the name below it,
                 because names are stored brand-prefixed. Nested folders show their last segment; the
-                tooltip carries the full path. */}
-            <span className="cv-project-tab-client">{p.folder ? folderName(p.folder) : 'Unfiled'}</span>
+                tooltip carries the full path.
+
+                An unfiled campaign leaves the line BLANK rather than saying "Unfiled": most tabs are
+                unfiled, and a word repeated across the whole strip is noise that says nothing. The
+                line still holds its space (see .cv-project-tab-client:empty) so names stay level. */}
+            <span className="cv-project-tab-client">{p.folder ? folderName(p.folder) : ''}</span>
             <span className="cv-project-tab-name">{p.short}</span>
           </span>
           <button className="cv-project-tab-x" title="Close this canvas" onClick={(e) => close(e, p.campaign)}>
