@@ -13292,10 +13292,14 @@ button {
   flex: 0 0 auto;
   padding: 0 32px 32px;
 }
+/* The one label on this page: uppercase, letterspaced, naming what the product is rather than
+   saying something. That is the Space Mono job everywhere else in the app, so it is that here too.
+   Weight drops to 700 because Space Mono has no 800 — asking for one gets a synthesised bold. */
 .auth-kicker {
   margin: 0 0 7px;
+  font-family: var(--font-label);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.5;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -13333,10 +13337,14 @@ button {
   color: var(--text);
   margin-bottom: 4px;
 }
+/* Form controls do not inherit font-family — the UA sheet hands them the system face — and there is
+   no global `input { font: inherit }` here, so without this line the two fields on the first screen
+   anyone sees were set in Arial while every word around them was Switzer. */
 .auth-input {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 9px 12px;
+  font-family: var(--font);
   font-size: 14px;
   color: var(--text);
 }
