@@ -15775,12 +15775,15 @@ button {
   border-radius: 0;
 }
 .cal-nav .btn + .btn {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-strong);
 }
+/* The count belongs to the title, not to the range control it used to sit against — it read as a
+   label for the segmented buttons rather than a fact about the month. Title + count on the left,
+   controls pushed right. */
 .cal-meta {
-  margin-left: auto;
   font-size: 12.5px;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 .cal-weekdays {
   display: grid;
@@ -15790,21 +15793,14 @@ button {
   background: var(--surface-2);
 }
 .cal-weekday {
-  padding: 7px 10px;
+  /* 7px left to sit on the same edge as the day numbers below (.cal-day--wk .cal-daynum). */
+  padding: 8px 7px;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   text-align: left;
-}
-.cal-grid {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(104px, 1fr);
-  overflow: auto;
 }
 .cal-day {
   border-right: 1px solid var(--border);
@@ -15818,15 +15814,21 @@ button {
 .cal-day:nth-child(7n) {
   border-right: none;
 }
+/* A day outside the month recedes toward the page, so --bg — the one token that is a step BELOW
+   --surface in both themes. This was #fbfcfd, a light-theme literal that turned every leading and
+   trailing week into a near-white block on the dark theme. */
 .cal-day.out {
-  background: #fbfcfd;
+  background: var(--bg);
 }
 .cal-day.out .cal-daynum {
   color: var(--text-faint);
   opacity: 0.7;
 }
+/* Today is marked by the pill on its number. The cell tint is a whisper on top of that, not a
+   second marker: --accent-soft is a 16% wash built for chips, and across a whole 1/7-width cell it
+   read as a filled state — a brown block on dark, a pink block on light. */
 .cal-day.today {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .cal-daynum {
   font-size: 12px;
@@ -15834,14 +15836,19 @@ button {
   color: var(--text-muted);
   align-self: flex-start;
   line-height: 22px;
-  min-width: 22px;
-  text-align: center;
+  /* Left-aligned, not centred in a 22px box: centring gave single-digit dates a ~5px indent that
+     double-digit dates did not have, so the column of numbers was ragged all month. */
+  font-variant-numeric: tabular-nums;
 }
 .cal-day.today .cal-daynum {
   background: var(--accent);
   color: #fff;
-  border-radius: 50%;
+  /* A pill, not a circle — a circle clipped two-digit dates, which is most of the month. */
+  border-radius: 11px;
   height: 22px;
+  min-width: 22px;
+  padding: 0 6px;
+  text-align: center;
 }
 
 /* month: weeks of cells with multi-day span bars overlaid */
@@ -15852,14 +15859,18 @@ button {
   display: flex;
   flex-direction: column;
 }
+/* The six weeks SHARE the height they are given rather than each claiming a fixed 104px, which
+   overflowed the card by about a row and left the last week sliced in half at the bottom edge —
+   with no scrollbar in sight to explain why. They still scroll if the card gets genuinely short. */
 .cal-week {
   position: relative;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  flex: 1 1 0;
 }
 .cal-day--wk {
   position: relative;
-  min-height: 104px;
+  min-height: 78px;
   padding-top: calc(28px + var(--bands, 0) * 18px);
 }
 .cal-day--wk .cal-daynum {
@@ -15911,12 +15922,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cal-events {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
 .cal-event {
   display: flex;
   align-items: center;
@@ -15946,7 +15951,9 @@ button {
    distinctly from dated-campaign events on the same month/week grid. */
 .cal-event-alwayson {
   border-left: 2px solid var(--accent);
-  padding-left: 5px;
+  /* 3 + the 2px rule = the 5px the other events pad by, so a stream's name starts on the same
+     edge as a dated event's instead of 2px right of it. */
+  padding-left: 3px;
 }
 .cal-event-alwayson .cal-event-dot {
   background: var(--accent) !important;
@@ -15961,12 +15968,57 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Reach is context on the asset, not the headline — at 800 it was outweighing the asset name it
+   describes. */
 .cal-event-reach {
   flex: none;
   font-size: 10px;
-  font-weight: 800;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+}
+
+/* Month, quiet days: name the assets. A day with one or two things on it has the room, and
+   "2 assets" over two anonymous channel bubbles answered "how many" while withholding "what" —
+   which is the question a campaign calendar exists to answer. Busy days keep the stack below. */
+.cal-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.cal-day-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  min-width: 0;
+}
+.cal-day-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.cal-day-item-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.cal-day-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Month: dense days show a logo stack + count instead of a list */
@@ -16001,7 +16053,6 @@ button {
   align-items: center;
   justify-content: center;
   margin-left: -6px;
-  box-shadow: 0 1px 1px rgba(16, 24, 40, 0.04);
 }
 .cal-logo:first-child {
   margin-left: 0;
@@ -16021,7 +16072,7 @@ button {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  margin-left: 12px;
+  margin-left: auto;
 }
 
 /* ---- Week / 3-day columns ---- */
@@ -16030,6 +16081,20 @@ button {
   min-height: 0;
   display: grid;
   overflow: auto;
+  /* Containing block for .cal-empty, which is out of flow and so never takes a column. */
+  position: relative;
+}
+/* One empty state for the range, replacing the "No posts" that used to be repeated under every
+   one of seven day headers — an empty column already says it is empty. */
+.cal-empty {
+  position: absolute;
+  top: 92px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  pointer-events: none;
 }
 .cal-col {
   border-right: 1px solid var(--border);
@@ -16050,8 +16115,14 @@ button {
   top: 0;
   background: var(--surface);
 }
+/* Same whisper as .cal-day.today — the accent is already carrying the date number. Painted as an
+   image over the inherited --surface fill, because this header is sticky: a translucent background
+   would let the events scroll through it. */
 .cal-col-head.today {
-  background: var(--accent-soft);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    color-mix(in srgb, var(--accent) 7%, transparent)
+  );
 }
 .cal-col-wd {
   font-size: 11px;
@@ -16075,6 +16146,11 @@ button {
   overflow-y: auto;
   flex: 1;
 }
+/* Reach is right-aligned so the numbers stack into a scannable column — but a 3-day column is wide
+   enough that, uncapped, it stranded "10k" a third of a screen away from the asset it belongs to. */
+.cal-col-events .cal-event {
+  max-width: 460px;
+}
 .cal-col-empty {
   color: var(--text-faint);
   font-size: 12px;
@@ -16082,13 +16158,18 @@ button {
 }
 
 /* ---- Quarter (3 mini months) ---- */
+/* The three months are capped and centred rather than stretched across the card. At 1fr on a wide
+   screen each column ran ~420px, so aspect-ratio:1 inflated every date into a ~60px tile — a month
+   the size of the month grid, made of mostly empty squares. */
 .cal-quarter {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  padding: 18px;
+  grid-template-columns: repeat(3, minmax(0, 252px));
+  justify-content: center;
+  align-content: start;
+  gap: 34px;
+  padding: 22px 18px;
   overflow: auto;
 }
 .cal-mini {
@@ -16140,19 +16221,22 @@ button {
 .cal-mini-day.has:hover {
   background: var(--surface-2);
 }
-.cal-mini-day.today {
+/* :not(.out) — a quarter draws three overlapping six-week grids, so today also appears as a
+   spillover date in the neighbouring month. Unqualified, this filled it solid there too and the
+   quarter showed "today" twice, in two different months. */
+.cal-mini-day.today:not(.out) {
   background: var(--accent);
   color: #fff;
 }
 .cal-mini-dot {
   position: absolute;
-  bottom: 3px;
+  bottom: 4px;
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: var(--accent);
 }
-.cal-mini-day.today .cal-mini-dot {
+.cal-mini-day.today:not(.out) .cal-mini-dot {
   background: #fff;
 }
 

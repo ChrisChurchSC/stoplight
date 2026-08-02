@@ -13,14 +13,20 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
+/**
+ * The stoplight palette, all of it through tokens. Four of these were literals — #9aa0aa, #c8881f,
+ * #b42318 — mixed in with var(--blue) and var(--green) beside them, so half the statuses tracked the
+ * theme and half stayed at their light-theme value. On dark, a 5px #b42318 dot is a dark red spot on
+ * a dark cell: the one status you most need to see is the one that disappears.
+ */
 const STATUS_COLOR: Record<RowStatus, string> = {
-  draft: '#9aa0aa',
-  in_review: '#c8881f',
+  draft: 'var(--text-faint)',
+  in_review: 'var(--amber)',
   scheduled: 'var(--blue)',
   approved: 'var(--blue)',
-  rejected: '#b42318',
+  rejected: 'var(--red)',
   posted: 'var(--green)',
-  failed: '#b42318',
+  failed: 'var(--red)',
 }
 
 const ymd = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
@@ -30,6 +36,9 @@ const addDays = (d: Date, n: number) => {
   return x
 }
 const startOfWeek = (d: Date) => addDays(d, -d.getDay())
+
+/** Assets a month cell will name outright before it collapses to a channel stack and a count. */
+const MONTH_NAMED_MAX = 2
 
 type Mode = 'month' | 'week' | '3day' | 'quarter'
 const MODES: { key: Mode; label: string }[] = [
@@ -117,6 +126,27 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
   const eventsOn = (d: Date) => [...pointsOn(d), ...spansOn(d)]
 
   const todayKey = ymd(now)
+
+  /**
+   * What the header counts is what the header is showing. It used to count every asset in scope
+   * regardless of the range on screen, which put "8 scheduled" beside a week holding none of them —
+   * a number and the view under it disagreeing, in the same line of type.
+   */
+  const [rangeFrom, rangeTo] = (() => {
+    if (mode === 'month')
+      return [new Date(cursor.getFullYear(), cursor.getMonth(), 1), new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)]
+    if (mode === 'quarter') {
+      const q = Math.floor(cursor.getMonth() / 3) * 3
+      return [new Date(cursor.getFullYear(), q, 1), new Date(cursor.getFullYear(), q + 3, 0)]
+    }
+    const s = mode === 'week' ? startOfWeek(cursor) : cursor
+    return [s, addDays(s, mode === 'week' ? 6 : 2)]
+  })()
+  // A span counts if any of its run lands in the range, not just its start date.
+  const inRange = view.filter((r) => {
+    const s = startOfDay(r.scheduledAt)
+    return (r.endsAt ? startOfDay(r.endsAt) : s) >= rangeFrom && s <= rangeTo
+  }).length
 
   const step = (dir: number) => {
     if (mode === 'month') setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1))
@@ -212,10 +242,38 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
                       onClick={onAddOnDay ? () => setDayKey(key) : undefined}
                     >
                       <div className="cal-daynum">{d.getDate()}</div>
-                      {evs.length > 0 && (
+                      {/* A quiet day names what is on it; a busy one falls back to the stack + count,
+                          which is the only thing that fits once a cell is carrying more than two. */}
+                      {evs.length > 0 && evs.length <= MONTH_NAMED_MAX && (
+                        <div className="cal-day-list">
+                          {evs.map((r) => (
+                            <button
+                              key={r.id}
+                              className="cal-day-item"
+                              onClick={(e) => {
+                                // The cell itself opens the day popover when it can add assets —
+                                // without this, clicking an asset would open the review AND the popover.
+                                e.stopPropagation()
+                                openReview(r.id)
+                              }}
+                              title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(
+                                r.scheduledAt,
+                              ).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} · ${r.status}`}
+                            >
+                              <span className="cal-day-item-dot" style={{ background: STATUS_COLOR[r.status] }} />
+                              <ChannelIcon channel={r.channel} size={11} />
+                              <span className="cal-day-item-name">{r.assetName}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {evs.length > MONTH_NAMED_MAX && (
                         <button
                           className="cal-day-summary"
-                          onClick={() => setDayKey(key)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDayKey(key)
+                          }}
                           title={`${evs.length} scheduled`}
                         >
                           <span className="cal-day-logos">
@@ -267,26 +325,27 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
     const start = mode === 'week' ? startOfWeek(cursor) : cursor
     const count = mode === 'week' ? 7 : 3
     const days = Array.from({ length: count }, (_, i) => addDays(start, i))
+    const total = days.reduce((n, d) => n + eventsOn(d).length, 0)
     return (
       <div className="cal-cols" style={{ gridTemplateColumns: `repeat(${count}, 1fr)` }}>
-        {days.map((d) => {
-          const evs = eventsOn(d)
-          return (
-            <div key={ymd(d)} className="cal-col">
-              <div className={`cal-col-head${ymd(d) === todayKey ? ' today' : ''}`}>
-                <span className="cal-col-wd">{WEEKDAYS[d.getDay()]}</span>
-                <span className="cal-col-num">{d.getDate()}</span>
-              </div>
-              <div className="cal-col-events">
-                {evs.length === 0 ? (
-                  <div className="cal-col-empty">No posts</div>
-                ) : (
-                  evs.map((r) => <Event key={r.id} r={r} />)
-                )}
-              </div>
+        {days.map((d) => (
+          <div key={ymd(d)} className="cal-col">
+            <div className={`cal-col-head${ymd(d) === todayKey ? ' today' : ''}`}>
+              <span className="cal-col-wd">{WEEKDAYS[d.getDay()]}</span>
+              <span className="cal-col-num">{d.getDate()}</span>
             </div>
-          )
-        })}
+            {/* No per-column "No posts": a column under a dated header with nothing in it is already
+                saying that, and seven of them said it seven times, in the loudest place on the view. */}
+            <div className="cal-col-events">
+              {eventsOn(d).map((r) => (
+                <Event key={r.id} r={r} />
+              ))}
+            </div>
+          </div>
+        ))}
+        {total === 0 && (
+          <div className="cal-empty">Nothing scheduled {mode === 'week' ? 'this week' : 'in these three days'}.</div>
+        )}
       </div>
     )
   }
@@ -405,7 +464,7 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
             <button className="btn ghost sm" onClick={() => step(1)} title="Next">›</button>
           </div>
           <h2 className="cal-title">{title}</h2>
-          <span className="cal-meta">{view.length} scheduled</span>
+          <span className="cal-meta">{inRange} scheduled</span>
           <div className="cal-modes" role="group" aria-label="Range">
             {MODES.map((m) => (
               <button
