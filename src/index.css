@@ -21692,6 +21692,14 @@ table.aud-sheet td.stick .aud-cell {
   background: var(--border-strong);
 }
 
+/* Shown in place of the feed when there are no releases yet (the array is empty). */
+.chlog-empty {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.58;
+  color: var(--text-muted);
+}
+
 /* ---- Footer ---- */
 .chlog-foot {
   max-width: 820px;
