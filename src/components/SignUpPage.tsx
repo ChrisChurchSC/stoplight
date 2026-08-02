@@ -92,7 +92,7 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
 
   if (sentTo) {
     return (
-      <AuthShell>
+      <AuthShell footer={false}>
         <div className="auth-card">
           <div className="auth-title">Check your email</div>
           <p className="signup-sent">
@@ -134,7 +134,7 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
   }
 
   return (
-    <AuthShell roomy>
+    <AuthShell roomy footer={false}>
       <form
         className="auth-card signup-card"
         noValidate
