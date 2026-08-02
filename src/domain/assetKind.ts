@@ -18,10 +18,6 @@ export function isLinkedExternal(r: Pick<TrafficRow, 'mediaType'>): boolean {
   return r.mediaType === 'video' || r.mediaType === 'image' || r.mediaType === 'link'
 }
 
-export function isEditableAsset(r: Pick<TrafficRow, 'mediaType'>): boolean {
-  return !isLinkedExternal(r)
-}
-
 /** Split a set of assets into the two re-check verbs: editable copy we can
  *  redraft vs produced/linked assets we can only flag for external rework. */
 export function splitByKind<T extends Pick<TrafficRow, 'mediaType'>>(rows: T[]): {

@@ -1,15 +1,3 @@
-/** Human-readable date+time for a schedule slot. */
-export function formatSlot(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
 /** Value for a <input type="datetime-local"> from an ISO string (local tz). */
 export function isoToLocalInput(iso: string): string {
   const d = new Date(iso)

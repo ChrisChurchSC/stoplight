@@ -40,11 +40,3 @@ export function setTheme(choice: ThemeChoice): void {
   }
   applyTheme(choice)
 }
-
-/** True when what is on screen right now is the dark palette, whichever route got it there. */
-export function isDarkNow(): boolean {
-  const attr = document.documentElement.getAttribute('data-theme')
-  if (attr === 'dark') return true
-  if (attr === 'light') return false
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
-}

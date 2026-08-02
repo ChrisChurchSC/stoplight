@@ -98,27 +98,6 @@ export interface CoherenceBreak {
   status: BreakStatus
 }
 
-/** A coherence flag pushed by the connected Claude app (it ran the check itself,
- *  rather than Hyperfocus spending its own API credits). The store turns each of
- *  these into a full CoherenceBreak against the named asset. `suggestion` is the
- *  one-line fix Claude proposes. */
-export interface ClaudeCoherenceFlag {
-  /** The asset the flag is about, matched by name within the current scope. */
-  assetName: string
-  /** Which messaging field the issue is in (defaults to the primary body). */
-  field?: string
-  axis?: BreakAxis
-  severity?: BreakSeverity
-  /** The problem, said in one sentence a CMO would say out loud. */
-  headline: string
-  /** Why it matters for this brand's audience / goal. */
-  why?: string
-  /** The exact phrase to underline in the copy, if any. */
-  highlight?: string
-  /** The simple suggested fix (a rewrite or a one-line instruction). */
-  suggestion: string
-}
-
 export type AuditAction = 'check' | 'apply-fix' | 'reassign-proof' | 'mark-intended' | 'send-to-review'
 
 export const AUDIT_LABEL: Record<AuditAction, string> = {
@@ -146,10 +125,6 @@ export const SEVERITY_RANK: Record<BreakSeverity, number> = { high: 0, medium: 1
 /** Breaks still open (the only ones that count against thread integrity). */
 export const openBreaks = (breaks: CoherenceBreak[]): CoherenceBreak[] =>
   breaks.filter((b) => b.status === 'open')
-
-/** Sort a break list for the queue: severity first, then axis. */
-export const sortBreaks = (breaks: CoherenceBreak[]): CoherenceBreak[] =>
-  [...breaks].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
 
 export interface ThreadHealth {
   /** Distinct assets in scope. */

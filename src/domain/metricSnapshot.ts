@@ -1,5 +1,4 @@
 import type { BrandActuals } from './actuals'
-import type { TrafficRow } from './types'
 
 /**
  * A single measured data point, append-only. The app's durable time-series: every metrics sync
@@ -42,26 +41,6 @@ export function snapshotsFromActuals(brand: string, data: BrandActuals, captured
     push(out, base, 'clicks', c.clicks)
     push(out, base, 'conversions', c.conversions)
     push(out, base, 'revenue', c.revenue)
-  }
-  return out
-}
-
-/** Asset-level snapshots from posted rows that carry measured metrics — the per-persona signal. */
-export function snapshotsFromAssets(brand: string, rows: TrafficRow[], capturedAt: string, source = 'reconcile'): MetricSnapshot[] {
-  const out: MetricSnapshot[] = []
-  for (const r of rows) {
-    const m = r.socialMetrics
-    if (!m) continue
-    const base = {
-      brand,
-      scope: 'asset' as const,
-      scopeId: r.id,
-      campaign: (r.campaign ?? '').trim() || undefined,
-      audience: (r.audience ?? '').trim() || undefined,
-      source,
-      capturedAt,
-    }
-    for (const [k, v] of Object.entries(m)) push(out, base, k, v)
   }
   return out
 }

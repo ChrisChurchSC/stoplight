@@ -99,12 +99,6 @@ export function freshSmartObjectId(): string {
  */
 export const scopeOf = (o: SmartObject): SmartObjectScope => o.scope ?? 'brand'
 
-/** Is this object reachable from a board? Brand objects always; a local one only on its own board. */
-export const visibleOnCampaign = (o: SmartObject, brand: string, campaign: string | null): boolean => {
-  if (o.brand && o.brand !== brand) return false
-  return scopeOf(o) === 'brand' ? true : !!campaign && o.campaign === campaign
-}
-
 /**
  * The object's kind, given its refs: the lead ref's type, preferring the first one present in a
  * deliberate order. A bundle built around a person reads as a person object even after you add

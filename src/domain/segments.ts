@@ -36,8 +36,6 @@ export const SEGMENT_FIELDS: RecordField[] = [
   { key: 'notes', label: 'Notes', kind: 'multiline' },
 ]
 
-export const SEGMENT_STATUSES: NonNullable<Segment['status']>[] = ['active', 'building', 'archived']
-
 export function freshSegmentId(): string {
   return freshRecordId('seg')
 }

@@ -6,8 +6,6 @@
 
 // ---- Client (the business) ----
 export const BUSINESS_MODELS = ['B2C', 'B2B', 'B2B2C', 'D2C', 'B2G', 'Marketplace'] as const
-export type BusinessModel = (typeof BUSINESS_MODELS)[number]
-
 export const INDUSTRIES = [
   'B2B SaaS',
   'Consumer SaaS',

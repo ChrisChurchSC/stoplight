@@ -1,4 +1,4 @@
-import { freshRecordId, type RecordColumn, type RecordField } from './records'
+import { freshRecordId, type RecordField } from './records'
 import { INDUSTRIES } from './taxonomy'
 
 /**
@@ -92,31 +92,6 @@ export function brandDifferentiatorText(rec: Pick<BrandRecord, 'differentiator' 
   return brandDifferentiators(rec).join('; ')
 }
 
-export const BRAND_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Brand', kind: 'name', width: 200, group: 'Overview' },
-  { key: 'descriptor', label: 'Descriptor', kind: 'text', width: 240, group: 'Overview' },
-  { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'Overview' },
-  { key: 'strategyOwner', label: 'Strategy owner', kind: 'text', width: 150, group: 'Overview' },
-  { key: 'reviewCycle', label: 'Review cadence', kind: 'text', width: 150, group: 'Overview', options: REVIEW_CADENCE_OPTIONS },
-  { key: 'industry', label: 'Industry', kind: 'text', width: 170, group: 'Overview', options: INDUSTRIES },
-  { key: 'website', label: 'Website', kind: 'url', width: 180, group: 'Overview' },
-  { key: 'businessObjective', label: 'Business objective', kind: 'text', width: 300, group: 'Strategic Foundation' },
-  { key: 'commsObjective', label: 'Comms objective', kind: 'text', width: 280, group: 'Strategic Foundation' },
-  { key: 'positioning', label: 'Positioning statement', kind: 'text', width: 300, group: 'Strategic Foundation' },
-  { key: 'primaryAudience', label: 'Primary audience', kind: 'text', width: 260, group: 'Strategic Foundation' },
-  { key: 'audienceInsight', label: 'Audience insight', kind: 'text', width: 260, group: 'Strategic Foundation' },
-  { key: 'competitiveContext', label: 'Competitive context', kind: 'text', width: 260, group: 'Strategic Foundation' },
-  { key: 'differentiator', label: 'Differentiators', kind: 'text', width: 240, group: 'Strategic Foundation' },
-  { key: 'keyMessage', label: 'Key message', kind: 'text', width: 280, group: 'Message Architecture' },
-  { key: 'supportingMessages', label: 'Supporting messages', kind: 'text', width: 280, group: 'Message Architecture' },
-  { key: 'proofPoints', label: 'Proof points (summary)', kind: 'text', width: 280, group: 'Message Architecture' },
-  { key: 'languageDos', label: "Language do's", kind: 'text', width: 200, group: 'Message Architecture' },
-  { key: 'languageDonts', label: "Language don'ts", kind: 'text', width: 200, group: 'Message Architecture' },
-  { key: 'contentPillars', label: 'Content pillars', kind: 'text', width: 220, group: 'Message Architecture' },
-  { key: 'reviewCadence', label: 'Review cadence', kind: 'text', width: 180, group: 'Governance', options: REVIEW_CADENCE_OPTIONS },
-  { key: 'risks', label: 'Risks & watch-outs', kind: 'text', width: 240, group: 'Governance' },
-]
-
 // The full Communications Strategy, grouped into sections (shown in the record drawer).
 export const BRAND_FIELDS: RecordField[] = [
   { key: 'name', label: 'Brand', kind: 'name', group: 'Overview' },
@@ -162,32 +137,3 @@ export function seedBrandRecords(
     status: 'active' as const,
   }))
 }
-
-/**
- * The first-run review of the drafted brand page (BrandDraftReview.tsx).
- *
- * The drafter's response schema marks all 26 fields required, so from one sentence of input it is
- * structurally obliged to answer questions it has no way to know. These two lists split what it
- * writes into "check this first" and "the rest", ranked by how far a wrong value travels rather
- * than by the order the sheet happens to show them in.
- *
- * Kept here beside BRAND_FIELDS so adding a field is one edit, not two files out of step.
- */
-export const REVIEW_PRIORITY_KEYS: (keyof BrandRecord)[] = [
-  'positioning',        // widest read surface, including askBrand
-  'businessObjective',  // drives the angle drafter's stage and outcome
-  'primaryAudience',    // reaches the campaign chat's brandFacts, so it gets repeated back as fact
-  'differentiator',     // the field most often invented as a product capability
-  'descriptor',         // one phrase, cheapest possible correction
-  'keyMessage',         // propagates into saved library items, so a wrong one is sticky
-  'competitiveContext', // nothing reads it, and it is the most confidently fabricated. Here to be emptied.
-]
-
-/** Also written by the draft, shown collapsed. Same provenance rules, lower blast radius. */
-export const REVIEW_SECONDARY_KEYS: (keyof BrandRecord)[] = [
-  'commsObjective', 'audienceInsight', 'supportingMessages', 'proofPoints',
-  'languageDos', 'languageDonts', 'contentPillars', 'reviewCadence', 'risks',
-]
-
-/** Every record field the brand draft can write, and therefore every one the review can correct. */
-export const REVIEW_RECORD_KEYS: (keyof BrandRecord)[] = [...REVIEW_PRIORITY_KEYS, ...REVIEW_SECONDARY_KEYS]

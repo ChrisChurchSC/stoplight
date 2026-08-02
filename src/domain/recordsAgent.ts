@@ -56,16 +56,6 @@ export interface RecordChatMsg {
   resolved?: 'applied' | 'discarded'
 }
 
-/** A saved records chat, kept in history per record type + brand. */
-export interface SavedRecordChat {
-  id: string
-  /** `${brand}·${recordType}` — the table this chat belongs to. */
-  scopeKey: string
-  title: string
-  messages: RecordChatMsg[]
-  createdAt: number
-}
-
 /** A short, human-readable description of a command, for the Apply/Discard suggestion list. */
 export function describeRecordCommand(cmd: RecordCommand, noun: string): string {
   switch (cmd.op) {

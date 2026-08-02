@@ -132,10 +132,3 @@ export interface OutputType {
 /** Turn a typed name into a stable, colon-free custom type value. */
 export const customTypeValue = (label: string): string =>
   `${CUSTOM_TYPE_PREFIX}${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'format'}`
-
-/** The channel's own types plus this brand's custom ones, for a picker. */
-export const typesForWithCustom = (channel: ChannelId, custom: OutputType[]): AssetType[] => [
-  ...(CHANNEL_TYPES[channel] ?? FALLBACK),
-  ...custom.filter((c) => c.channel === channel && !c.retiredAt).map((c) => t(c.value, c.label)),
-  OTHER_TYPE,
-]

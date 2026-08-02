@@ -53,15 +53,6 @@ export interface BrandActuals {
   subVideos?: { title: string; subscribers: number; views: number }[]
 }
 
-export interface ActualTotals {
-  reach: number
-  engagement: number
-  clicks: number
-  conversions: number
-  revenue: number
-  subscribers: number
-}
-
 /** Per-channel average reach per asset, keyed by channel id — used to calibrate
  *  projected reach to the brand's real history. Only channels with a measured
  *  per-asset average are included; every other channel keeps the generic plan model. */
@@ -72,20 +63,4 @@ export function reachByChannelFromActuals(a: BrandActuals | undefined | null): R
     if (c.reachPerAsset && c.reachPerAsset > 0) out[String(c.channel)] = c.reachPerAsset
   }
   return out
-}
-
-/** Sum the measurable metrics across channels. Reach mixes units (views +
- *  impressions + sessions), so it's a loose top-line, not a precise total. */
-export function actualTotals(a: BrandActuals | undefined | null): ActualTotals {
-  const t: ActualTotals = { reach: 0, engagement: 0, clicks: 0, conversions: 0, revenue: 0, subscribers: 0 }
-  if (!a) return t
-  for (const c of a.channels) {
-    t.reach += c.reach || 0
-    t.engagement += c.engagement || 0
-    t.clicks += c.clicks || 0
-    t.conversions += c.conversions || 0
-    t.revenue += c.revenue || 0
-    t.subscribers += c.subscribers || 0
-  }
-  return t
 }

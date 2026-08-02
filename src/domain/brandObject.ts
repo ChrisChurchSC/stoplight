@@ -44,8 +44,3 @@ export interface BrandObject {
 export function freshBrandObjectId(): string {
   return freshRecordId('bo')
 }
-
-/** No seed. An invented brand would be a claim about a business that does not exist. */
-export function seedBrandObjects(): BrandObject[] {
-  return []
-}

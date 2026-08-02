@@ -11,14 +11,8 @@
 
 /** How tightly the program personalizes to the account. */
 export type AccountTier = '1:1' | '1:few' | '1:many'
-export const ACCOUNT_TIERS: AccountTier[] = ['1:1', '1:few', '1:many']
-
 /** Where the account sits in the lead-gen funnel — the ABM pipeline, not the asset funnel. */
 export type AccountStatus = 'target' | 'engaged' | 'meeting' | 'pipeline' | 'won' | 'lost'
-export const ACCOUNT_STATUSES: AccountStatus[] = ['target', 'engaged', 'meeting', 'pipeline', 'won', 'lost']
-/** Pipeline order (won/lost are terminal); drives the dashboard's column order. */
-export const accountStatusRank = (s: AccountStatus): number => ACCOUNT_STATUSES.indexOf(s)
-
 /** A member of the account's buying committee — a role to speak to and the concern they
  *  weigh (e.g. Compliance → "regulatory exposure"). Drives committee-aware copy. */
 export interface CommitteeMember {
