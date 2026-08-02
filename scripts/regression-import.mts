@@ -2,7 +2,7 @@
  * Regression: importing real content into a canvas (the pure mapping). The stateful
  * dedup/import flow is verified end-to-end through the bridge.
  *
- * Run:  npx tsx ./scripts/regression-import.mts
+ * Run:  npm run regression   # or: npx vite-node ./scripts/regression-import.mts
  */
 import {
   platformToChannel,

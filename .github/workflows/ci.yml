@@ -1,0 +1,48 @@
+# The checks that were already in package.json but only ran when someone remembered.
+# typecheck and test gate the merge; changelog:check is warn-only by design (it exits 0
+# even when it has something to say), so it reports in the log without blocking.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a PR makes the in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # changelog:check walks history to find commits since ChangelogPage.tsx last
+          # changed, so it needs more than the default single-commit checkout.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # Six standalone checks over the pure domain logic. They document their own runner and were
+      # never wired to anything, so nothing ran them.
+      - name: Regression checks
+        run: npm run regression
+
+      - name: Build
+        run: npm run build
+
+      - name: Changelog drift (advisory)
+        run: npm run changelog:check

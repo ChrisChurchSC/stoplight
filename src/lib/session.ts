@@ -1,4 +1,4 @@
-import type { Session, User } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
 /**
@@ -41,13 +41,41 @@ export function firstNameOf(user: User | null): string {
   return local ? local.charAt(0).toUpperCase() + local.slice(1) : ''
 }
 
-export function onAuthChange(cb: (user: User | null) => void): () => void {
+/**
+ * The event is passed through as well as the user, because PASSWORD_RECOVERY is the only way to
+ * know a session arrived from a reset link rather than a sign-in. Following that link DOES create
+ * a real session, so without the event a gate keyed on "is there a user" would send someone
+ * straight into the app — past the password field they came to use.
+ */
+export function onAuthChange(cb: (user: User | null, event: AuthChangeEvent) => void): () => void {
   if (!supabase) return () => {}
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+  const { data } = supabase.auth.onAuthStateChange((event, session) => {
     workspaceId = null // re-resolve per user
-    cb(session?.user ?? null)
+    cb(session?.user ?? null, event)
   })
   return () => data.subscription.unsubscribe()
+}
+
+/**
+ * Send the "set a new password" link. redirectTo has to be listed in the Supabase project's
+ * allowed redirect URLs or the link bounces to the site root with no token on it.
+ *
+ * Errors are swallowed on purpose at the call site, not here: whether an address has an account is
+ * not something a signed-out form should be willing to reveal.
+ */
+export async function sendPasswordReset(email: string): Promise<string | null> {
+  if (!supabase) return 'Backend not configured'
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/`,
+  })
+  return error?.message ?? null
+}
+
+/** Set a new password for whoever the current session belongs to (the recovery session). */
+export async function updatePassword(password: string): Promise<string | null> {
+  if (!supabase) return 'Backend not configured'
+  const { error } = await supabase.auth.updateUser({ password })
+  return error?.message ?? null
 }
 
 export async function signInWithPassword(email: string, password: string): Promise<string | null> {

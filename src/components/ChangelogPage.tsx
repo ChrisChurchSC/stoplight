@@ -19,6 +19,21 @@ interface Release {
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 const RELEASES: Release[] = [
   {
+    version: 'v1.16',
+    dateLabel: 'August 2, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A card can be filled in from a document. Upload a .md or .txt file onto an Audience, Person, Brand, Product, Message, Voice, Concept, Proof, Season or Trigger card, or drop one anywhere on the box, and its fields fill from what the file says. The material is usually already written — a positioning doc, a persona from research, a messaging house, the notes off a kickoff — and retyping that as one sentence in your own words threw away the specifics that made the card worth having.',
+          'Pasting a body of text into the describe box attaches it as a document instead of being read as a sentence. Anything longer than a paragraph becomes an attachment you can see, named "Pasted text", with its length on it. It used to go in as a description and get cut at 1200 characters by the server, which was a truncation nobody was told about.',
+          'A Company card can be filled in, from a document only. It was the one record card with no describe box, and that was deliberate: asked to describe a real account from a sentence, a model answers from whatever it absorbed about that account, and a card of confident half-remembered facts about a real company is the worst thing this could write. A document is a source you chose and can check, so the fields are reachable that way and not by description.',
+          'The fill says what it read. The note names the file and how many characters of it reached the model, and a file too long to send whole says which part it took. A fill you cannot see the extent of is a fill you cannot check.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.15',
     dateLabel: 'August 1, 2026',
     groups: [
@@ -54,6 +69,7 @@ const RELEASES: Release[] = [
           'Numbers that are modelled say so. Reach is projected from channel benchmarks until there is measured data for the brand, and reads "est." until then; the attribution total no longer prints "$0 won" when the truth is that nothing is connected.',
           'Disconnecting a Brand card from a campaign that already has copy written no longer removes the line. That unbind is refused on purpose, so the line has to stay: it was vanishing anyway, leaving the campaign bound to a brand with nothing on the board saying so and no line to try again from.',
           'The toolbar stays put while you zoom. The readout runs from 10% to 200%, so the button holding it grew by a character between 50 and 100, and because the row is centred every control in it slid sideways as you turned the wheel. The number now sits in a slot wide enough for the longest value it can show.',
+          'An open campaign tab says which folder it is in, and says its name once. The small line above the name was the brand, which read as a folder you would go looking for and never find, and the name under it repeated the brand anyway — campaign names are stored with their brand in front of them so two brands can each have a Q3 Launch. That line is now the folder the campaign is filed under, and the name below it is what you typed. A campaign in no folder leaves the line empty rather than writing "Unfiled" across every tab in the strip; hover the tab and the tooltip still spells out the brand, the folder and the full name. The tab strip is already scoped to one brand, so the brand was the one thing it did not need to say twice.',
           '"Fit to board" is just "Fit".',
         ],
       },

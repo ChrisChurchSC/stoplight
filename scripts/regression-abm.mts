@@ -2,7 +2,7 @@
  * Regression: ABM target accounts — per-account personalization context + the
  * compliance break types (unsubstantiated financial claims, implied endorsements).
  *
- * Run:  npx tsx ./scripts/regression-abm.mts
+ * Run:  npm run regression   # or: npx vite-node ./scripts/regression-abm.mts
  */
 import { accountContext, newAccount } from '../src/domain/accounts'
 import { buildCoherenceVocab, detectStructuralBreaks } from '../src/domain/coherenceChecks'

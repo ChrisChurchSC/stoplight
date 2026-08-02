@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
-import { clientForCampaign } from '../domain/clients'
+import { folderName } from '../domain/campaignFolders'
+import { campaignShortName, clientForCampaign } from '../domain/clients'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
@@ -31,6 +32,14 @@ export function CanvasProjectTabs() {
   const openObjectTab = useTrafficStore((s) => s.openObjectTab)
   const closeObjectTab = useTrafficStore((s) => s.closeObjectTab)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+
+  // Where each campaign is filed, by name. A campaign the list has never heard of (one that exists
+  // only as a value on some rows) has no folder, which reads the same as unfiled — true enough.
+  const folderOf = useMemo(
+    () => new Map(campaignList.map((c) => [c.name, c.folder ?? ''])),
+    [campaignList],
+  )
 
   const assetCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -47,9 +56,18 @@ export function CanvasProjectTabs() {
   const projects = useMemo(
     () =>
       openProjects
-        .map((c) => ({ campaign: c, client: clientForCampaign(c), count: assetCounts.get(c) ?? 0 }))
+        .map((c) => {
+          const client = clientForCampaign(c)
+          return {
+            campaign: c,
+            client,
+            folder: folderOf.get(c) ?? '',
+            short: campaignShortName(c, client),
+            count: assetCounts.get(c) ?? 0,
+          }
+        })
         .filter((p) => clientFilter === 'all' || p.client === clientFilter),
-    [openProjects, assetCounts, clientFilter],
+    [openProjects, assetCounts, clientFilter, folderOf],
   )
 
   // Opening a campaign's canvas adds it to the drawer (assets or not).
@@ -97,14 +115,23 @@ export function CanvasProjectTabs() {
         <span
           key={p.campaign}
           className={`cv-project-tab${p.campaign === campaignFilter && page === 'flows' ? ' active' : ''}`}
-          title={`${p.client} · ${p.campaign} (${p.count} assets)`}
+          title={`${p.client} · ${p.folder || 'Unfiled'} · ${p.short} (${p.count} assets)`}
           role="button"
           tabIndex={0}
           onClick={() => switchTo(p.campaign)}
         >
           <span className="cv-project-tab-body">
-            <span className="cv-project-tab-client">{p.client}</span>
-            <span className="cv-project-tab-name">{p.campaign}</span>
+            {/* The eyebrow is WHERE this campaign lives, and within a brand that means its folder —
+                not the brand, which the strip is already scoped to. Showing the brand here read as a
+                folder that didn't exist, and then said the brand a second time in the name below it,
+                because names are stored brand-prefixed. Nested folders show their last segment; the
+                tooltip carries the full path.
+
+                An unfiled campaign leaves the line BLANK rather than saying "Unfiled": most tabs are
+                unfiled, and a word repeated across the whole strip is noise that says nothing. The
+                line still holds its space (see .cv-project-tab-client:empty) so names stay level. */}
+            <span className="cv-project-tab-client">{p.folder ? folderName(p.folder) : ''}</span>
+            <span className="cv-project-tab-name">{p.short}</span>
           </span>
           <button className="cv-project-tab-x" title="Close this canvas" onClick={(e) => close(e, p.campaign)}>
             ✕
