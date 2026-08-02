@@ -133,11 +133,9 @@ export function BrandRail({ children, iconsOnly = false }: { children?: React.Re
               ))}
             </div>
           </div>
-          <div className="hsb-ws-sep" />
-          <button className="hsb-ws-mi" role="menuitem" onClick={() => { window.open('/changelog', '_blank', 'noopener'); setAcctOpen(false) }}>
-            <span className="hsb-ws-mi-ic"><RailIco><path d="M12 3l2.2 5.4L20 9.3l-4 3.9 1 5.6L12 16.9 7 18.8l1-5.6-4-3.9 5.8-.9z" /></RailIco></span>
-            What&rsquo;s new
-          </button>
+          {/* No "What's new" here. The changelog is a pre-sign-in read: it belongs on the splash,
+              where someone deciding whether to sign in can see what changed. Inside the product it
+              was a second door to the same page, so the splash link at /changelog is the only one. */}
           <div className="hsb-ws-sep" />
           <button className="hsb-ws-mi" role="menuitem" onClick={() => { setAcctOpen(false); void signOut() }}>
             <span className="hsb-ws-mi-ic"><RailIco><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></RailIco></span>
