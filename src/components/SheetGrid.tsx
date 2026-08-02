@@ -125,12 +125,22 @@ export function SheetGrid({
   liveScope = false,
   scopeClient,
   scopeCampaign,
+  zoom = 100,
   onPickObject,
   onCreateObject,
 }: {
   liveScope?: boolean
   scopeClient?: string
   scopeCampaign?: string
+  /**
+   * A percentage, applied to the TABLE and nothing else — the same thing a spreadsheet's zoom does.
+   * Scaling the whole component would scale its scroller too, so zooming out would shrink the box
+   * the sheet lives in instead of fitting more sheet inside it; the wrap keeps its size and the
+   * table gets bigger or smaller within it. CSS `zoom` rather than a transform because a transform
+   * only paints differently — the scrollable area would stay the unzoomed size, so half the sheet
+   * would be unreachable at 200% and the sticky header would sit in the wrong place.
+   */
+  zoom?: number
   /**
    * Clicking an object cell hands the CARD BEHIND IT back to whoever rendered this grid, so they can
    * open their own inspector on it. The grid does not open one itself, deliberately: the inspector
@@ -530,7 +540,7 @@ export function SheetGrid({
             </button>
           </div>
         )}
-        <table className="sheet" style={{ tableLayout: 'fixed', width: total, minWidth: total }}>
+        <table className="sheet" style={{ tableLayout: 'fixed', width: total, minWidth: total, zoom: zoom === 100 ? undefined : zoom / 100 }}>
           <colgroup>
             {widths.map((w, i) => (
               <col

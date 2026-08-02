@@ -90,6 +90,16 @@ import { apiFetch } from '../lib/apiFetch'
 const MIN_ZOOM = 10
 const MAX_ZOOM = 200
 
+/**
+ * THE GRID'S ZOOM RANGE, which is a spreadsheet's rather than the canvas's. The board bottoms out at
+ * 10% because a card that small is still a legible shape — you are reading the layout, not the
+ * words. A cell at 10% is a smudge, so the sheet stops where its text stops being text.
+ */
+const GRID_MIN_ZOOM = 50
+const GRID_MAX_ZOOM = 200
+const GRID_ZOOMS = [200, 150, 125, 100, 90, 75, 50]
+const clampGridZoom = (z: number) => Math.min(GRID_MAX_ZOOM, Math.max(GRID_MIN_ZOOM, Math.round(z)))
+
 /** Drag payload for a smart object leaving the Assets panel for the canvas. */
 const SMART_OBJECT_DND = 'application/x-breadcrumbs-smart-object'
 const CAMPAIGN_TONE = '#ff6347'
@@ -1736,6 +1746,44 @@ export function FlowsView() {
    * relinks the cell to it. A cell with no card behind it gets a sentence instead.
    */
   const [gridPick, setGridPick] = useState<{ kind: CanvasObjectKind; cardId?: string; label: string } | null>(null)
+  /**
+   * THE GRID'S OWN ZOOM, separate from the canvas's. They are two surfaces, not two views of one:
+   * zooming the sheet out to read a long campaign should not leave the board at 50% when you switch
+   * back to it. The range is a spreadsheet's rather than the canvas's — the board goes down to 10%
+   * because a card is still a legible shape at that size, and a cell of text is not.
+   */
+  const [gridZoom, setGridZoom] = useState(100)
+  const [gridZoomOpen, setGridZoomOpen] = useState(false)
+  const gridViewRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * PINCH, OR CTRL/CMD + WHEEL, ZOOMS THE SHEET. It is the gesture every spreadsheet has trained
+   * people to reach for, and the one the browser would otherwise spend zooming the entire page —
+   * chrome, sidebar and all — which is never what you meant while looking at a grid. A plain wheel
+   * still scrolls, untouched.
+   *
+   * Registered by hand rather than as an onWheel prop because preventDefault is the whole point and
+   * React's wheel listener is passive: it cannot stop the browser from taking the gesture.
+   *
+   * Multiplied rather than added, so a notch moves the same PROPORTION at either end of the range.
+   * Adding a fixed step makes the last click from 60% to 50% feel like a cliff and the one from
+   * 190% to 200% do nothing.
+   */
+  useEffect(() => {
+    const el = gridViewRef.current
+    // The Calendar renders into the same container and has no zoom, so binding there would take the
+    // gesture away from the browser and give nothing back for it.
+    if (!el || flowView !== 'grid') return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      // deltaMode 0 is pixels (trackpads, most mice); anything else counts in lines or pages, which
+      // arrive as small numbers and would otherwise register as a barely-there nudge.
+      const d = e.deltaMode === 0 ? e.deltaY : e.deltaY * 16
+      setGridZoom((z) => clampGridZoom(z * Math.exp(-d * 0.002)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [flowView])
   const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
   /**
    * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
@@ -10445,7 +10493,7 @@ export function FlowsView() {
 
       {(flowView === 'grid' || flowView === 'calendar') && (
         <>
-        <div className={`flow-real${flowView === 'grid' ? ' has-tb' : ''}`}>
+        <div className="flow-real">
           <div className="flow-real-bar">
             {!hasBuiltRows ? (
               <div className="flow-real-hint">
@@ -10460,11 +10508,12 @@ export function FlowsView() {
               </button>
             )}
           </div>
-          <div className="flow-real-view">
+          <div className="flow-real-view" ref={gridViewRef}>
             {flowView === 'grid' ? (
               <SheetGrid
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
+                zoom={gridZoom}
                 onPickObject={(pick) => setGridPick(pick)}
                 /**
                  * ADDING ONE FROM A CELL IS ADDING A CARD. Same addObject the toolbar calls, wired
@@ -10524,17 +10573,55 @@ export function FlowsView() {
             )}
           </div>
         </div>
-        {/* THE CANVAS TOOLBAR, ON THE GRID. Same pill, same corner of the screen, minus everything
-            on it that was about the canvas rather than the campaign: the card palette (there is no
-            board here to drop a card onto), and zoom / pan / select / link / tidy (there is nothing
-            to pan and nothing to lay out — a sheet is already tidy). What is left is the pair the
-            Grid was already telling you to reach for: the model that writes, and Generate.
+        {/* THE CANVAS TOOLBAR, ON THE GRID. Same pill, same corner of the screen, floating over the
+            sheet rather than sitting in a strip of its own. Minus the card palette — there is no
+            board here to drop a card onto — and minus pan / select / link / tidy, which act on a
+            board that is not on this tab. Zoom stays, because a spreadsheet has one too and it
+            means the same thing: how much of this can I see at once.
 
             Sibling of .flow-real rather than a child of it, because .flow-real clips its overflow
             and this floats; it positions against .flow either way. */}
         {flowView === 'grid' && (
           <div className={`flow-toolbar flow-toolbar-grid${gridPick ? ' insp' : ''}`}>
-            <div className="flow-tb-row">{renderGenerateControls({ whole: true })}</div>
+            <div className="flow-tb-row">
+              <div className="flow-tb-zoom-wrap">
+                <button aria-label={`Zoom: ${gridZoom}%`} className="flow-tb-zoom" onClick={() => setGridZoomOpen((o) => !o)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" />
+                  </svg>
+                  {/* Same fixed-width slot as the canvas readout, for the same reason: the pill is
+                      centred, so a readout that resizes with its value drags every control in the
+                      row sideways while you are still turning the wheel. */}
+                  <span className="flow-tb-num">{gridZoom}%</span>
+                  <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {gridZoomOpen && (
+                  <>
+                    <div className="flow-tb-zoom-scrim" onClick={() => setGridZoomOpen(false)} />
+                    {/* No "Fit" at the top, unlike the canvas menu. Fit answers "where did my cards
+                        go" — a board is scattered over an unbounded plane and the zoom that shows
+                        all of it is a different number every time. A sheet starts at its top-left
+                        and every row is the same width; there is nothing to hunt for. */}
+                    <div className="flow-tb-zoom-menu">
+                      {GRID_ZOOMS.map((z) => (
+                        <button
+                          key={z}
+                          className={`flow-tb-zoom-item${gridZoom === z ? ' on' : ''}`}
+                          onClick={() => { setGridZoom(z); setGridZoomOpen(false) }}
+                        >
+                          {z}%
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <span className="flow-tb-divider" />
+              {renderGenerateControls({ whole: true })}
+            </div>
           </div>
         )}
         </>

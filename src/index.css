@@ -5888,13 +5888,6 @@ button {
   overflow: auto;
   padding: 14px 18px;
 }
-/* ROOM UNDER THE LAST ROW FOR THE FLOATING TOOLBAR. The pill is ~48px tall and sits 20px off the
-   bottom, so without this the final row of the sheet is behind it once you scroll to the end —
-   permanently, since there is nothing left to scroll. The canvas can live with the overlap because
-   you can pan the board out from under it; a sheet cannot. */
-.flow-real.has-tb .flow-real-view > *:first-child {
-  padding-bottom: 76px;
-}
 /* THE INSPECTOR, BESIDE THE GRID. Same .flow-panel the canvas uses — same component, same board —
    so this adds only where it sits and how it arrives. It slides rather than appears, because a
    360px column materialising next to a spreadsheet reads as the layout breaking. */
