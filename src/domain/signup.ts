@@ -49,6 +49,14 @@ export const MIN_PASSWORD = 8
 // shapes that are certainly wrong (no @, no dot in the domain, stray whitespace from a paste).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
+/**
+ * Exported because password reset asks the same question of the same kind of field, and two
+ * regexes for "is this an address" is how sign-up and reset end up disagreeing about one.
+ */
+export function isEmailShaped(email: string): boolean {
+  return EMAIL_RE.test(email)
+}
+
 export function validateSignUp(form: SignUpForm): SignUpErrors {
   const errors: SignUpErrors = {}
   const email = form.email.trim()
@@ -56,7 +64,7 @@ export function validateSignUp(form: SignUpForm): SignUpErrors {
   if (!form.firstName.trim()) errors.firstName = 'Tell us what to call you.'
 
   if (!email) errors.email = 'An email address is required.'
-  else if (!EMAIL_RE.test(email)) errors.email = 'That does not look like an email address.'
+  else if (!isEmailShaped(email)) errors.email = 'That does not look like an email address.'
 
   if (!form.password) errors.password = 'A password is required.'
   else if (form.password.length < MIN_PASSWORD) errors.password = `At least ${MIN_PASSWORD} characters.`
