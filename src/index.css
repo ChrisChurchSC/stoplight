@@ -1527,10 +1527,8 @@ button {
   justify-content: center;
   padding: 2px 0 14px;
 }
-/* The mark is the one piece of brand colour on the dark rail — the accent orange
-   carries it, and the white car glyph sits at 3.5:1 on it. */
 .global-brand .logo {
-  background: var(--accent);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .global-nav-items {
@@ -21257,10 +21255,12 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 999px;
   padding: 6px 12px;
 }
+/* The wordmark is the brand, so it carries the brand colour rather than body ink.
+   The footer mark stays --text-faint: it is a sign-off, not a second logo. */
 .chlog-brand {
   display: inline-flex;
   justify-self: center;
-  color: var(--text);
+  color: var(--accent);
   text-decoration: none;
 }
 .chlog-open {
