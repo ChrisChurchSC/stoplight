@@ -26,12 +26,6 @@ export interface Deliverable {
   brand?: boolean
 }
 
-export const RUNTIME_LABEL: Record<Runtime, string> = {
-  'always-on': 'monthly',
-  flight: 'for the flight',
-  'one-off': 'one-off',
-}
-
 const d = (
   label: string,
   channel: ChannelId,

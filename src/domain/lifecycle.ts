@@ -16,22 +16,11 @@ import { type CoherenceBreak, openBreaks } from './breaks'
 
 export type CampaignStatus = 'planning' | 'in-review' | 'active' | 'completed'
 
-/** Display order: the two headline states first, then the in-flow states. */
-export const CAMPAIGN_STATUSES: CampaignStatus[] = ['active', 'planning', 'in-review', 'completed']
-
 export const STATUS_LABEL: Record<CampaignStatus, string> = {
   active: 'Active',
   planning: 'Planning',
   'in-review': 'In Review',
   completed: 'Completed',
-}
-
-/** One-line "what this state is for", shown under each section heading. */
-export const STATUS_BLURB: Record<CampaignStatus, string> = {
-  active: 'Live now — what needs you.',
-  planning: "What's coming — get it to approved.",
-  'in-review': 'Waiting on the approval gate.',
-  completed: 'Finished — what worked feeds the next plan.',
 }
 
 export interface CampaignStats {

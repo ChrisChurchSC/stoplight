@@ -1,4 +1,4 @@
-import { freshRecordId, type RecordColumn, type RecordField } from './records'
+import { freshRecordId } from './records'
 
 /**
  * A Season record — Records › Message › Seasons. A moment worth writing to: a date, a period, or a
@@ -33,25 +33,5 @@ export interface Season {
   status?: 'draft' | 'approved' | 'retired' | ''
   notes?: string
 }
-
-export const SEASON_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Season', kind: 'name', width: 200, group: 'Season' },
-  { key: 'moment', label: 'The moment', kind: 'text', width: 250, group: 'Season' },
-  { key: 'window', label: 'When', kind: 'text', width: 180, group: 'Season' },
-  { key: 'permission', label: 'Permission', kind: 'text', width: 240, group: 'Fit' },
-  { key: 'audience', label: 'Audience', kind: 'ref', width: 160, group: 'Fit' },
-  { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'State' },
-]
-
-export const SEASON_FIELDS: RecordField[] = [
-  { key: 'name', label: 'Season', kind: 'name', group: 'Season' },
-  { key: 'moment', label: 'The moment', kind: 'multiline', group: 'Season' },
-  { key: 'window', label: 'When it runs', kind: 'text', group: 'Season' },
-  { key: 'permission', label: 'What it lets you say', kind: 'multiline', group: 'Fit' },
-  { key: 'mindset', label: 'Where their head is', kind: 'multiline', group: 'Fit' },
-  { key: 'audience', label: 'Audience', kind: 'ref', group: 'Fit' },
-  { key: 'status', label: 'Status', kind: 'status', group: 'State' },
-  { key: 'notes', label: 'Notes', kind: 'multiline', group: 'State' },
-]
 
 export const freshSeasonId = (): string => freshRecordId('ssn')

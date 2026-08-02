@@ -30,12 +30,6 @@ export const ANALYTICS_SOURCES: AnalyticsSource[] = [
 
 export const sourceLabel = (id: string): string => ANALYTICS_SOURCES.find((s) => s.id === id)?.label ?? id
 
-/** Known sources that aren't in the connected set — the "connect these to add them" list. */
-export const missingSources = (connected: string[] | undefined | null): AnalyticsSource[] => {
-  const set = new Set(connected ?? [])
-  return ANALYTICS_SOURCES.filter((s) => !set.has(s.id))
-}
-
 /** The sources that can measure a given KPI (by stem match). */
 export const sourcesForKpi = (kpi: string): AnalyticsSource[] => {
   const k = (kpi ?? '').toLowerCase().trim()

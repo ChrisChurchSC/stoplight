@@ -13,41 +13,6 @@ export type OnboardingStepId =
   | 'connect'
   | 'review'
 
-export interface OnboardingStep {
-  id: OnboardingStepId
-  /** The checklist line. */
-  title: string
-  /** One-line teach, shown under the title while the step is the current (first unfinished) one. */
-  hint: string
-}
-
-// Order matters: the first not-yet-complete step is highlighted as "what to do next".
-export const ONBOARDING_STEPS: OnboardingStep[] = [
-  { id: 'brand', title: 'Set up your brand', hint: 'Add your voice and one-liner so every draft sounds like you.' },
-  { id: 'connect', title: 'Connect Claude', hint: 'Connect Claude so drafts are written by AI, not the offline fallback.' },
-  { id: 'segments', title: 'Define your audiences', hint: 'Add the segments your campaigns speak to.' },
-  { id: 'proof', title: 'Add proof points', hint: 'The reasons-to-believe every asset leans on.' },
-  { id: 'flow', title: 'Create your first flow', hint: 'Start a campaign on the canvas.' },
-  { id: 'review', title: 'Review your calendar', hint: 'See the campaign as a schedule, then ship it.' },
-]
-
-// Per-role happy path: brand stays the shared foundation, then the discipline each role works in
-// leads. All six steps are always present (completion detection is id-keyed) — only the order, and
-// therefore which step is highlighted as "next", changes. Growth / null use the default order.
-const ROLE_STEP_ORDER: Record<import('./userPrefs').MarketerRole, OnboardingStepId[]> = {
-  email: ['brand', 'connect', 'flow', 'segments', 'proof', 'review'],
-  brand: ['brand', 'proof', 'segments', 'connect', 'flow', 'review'],
-  product: ['brand', 'segments', 'flow', 'proof', 'connect', 'review'],
-  growth: ['brand', 'connect', 'segments', 'proof', 'flow', 'review'],
-}
-
-export function stepsForRole(role: import('./userPrefs').MarketerRole | null): OnboardingStep[] {
-  const order = role ? ROLE_STEP_ORDER[role] : null
-  if (!order) return ONBOARDING_STEPS
-  const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]))
-  return order.map((id) => byId.get(id)).filter((s): s is OnboardingStep => !!s)
-}
-
 /** Persisted UI state for the checklist. */
 export interface OnboardingState {
   /** Collapsed to the compact pill. */

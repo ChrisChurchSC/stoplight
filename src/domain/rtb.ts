@@ -104,9 +104,6 @@ export function registerCampaignRtbs(campaign: string, rtbs: Rtb[]): void {
   if (campaign) runtimeRtbs.set(campaign, rtbs)
 }
 
-/** The proof points owned by one audience (foundation). */
-export const rtbsForAudience = (audience: { rtbs?: Rtb[] } | undefined): Rtb[] => audience?.rtbs ?? []
-
 /** Dedupe a set of audiences' RTBs by id — a campaign's available proof is the
  *  union of the proof owned by the audiences it draws on. */
 export function rtbsFromAudiences(audiences: { rtbs?: Rtb[] }[]): Rtb[] {

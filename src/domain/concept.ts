@@ -1,4 +1,4 @@
-import { freshRecordId, type RecordColumn, type RecordField } from './records'
+import { freshRecordId } from './records'
 
 /**
  * A Concept record — Records › Message › Concepts. The big idea a campaign is built on: the line it
@@ -27,24 +27,5 @@ export interface Concept {
   status?: 'draft' | 'approved' | 'retired' | ''
   notes?: string
 }
-
-export const CONCEPT_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Concept', kind: 'name', width: 220, group: 'Concept' },
-  { key: 'idea', label: 'The idea', kind: 'text', width: 260, group: 'Concept' },
-  { key: 'insight', label: 'Insight', kind: 'text', width: 220, group: 'Concept' },
-  { key: 'likeThis', label: 'Like this', kind: 'text', width: 200, group: 'Feel' },
-  { key: 'audience', label: 'Audience', kind: 'ref', width: 160, group: 'Fit' },
-  { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'State' },
-]
-
-export const CONCEPT_FIELDS: RecordField[] = [
-  { key: 'name', label: 'Concept', kind: 'name', group: 'Concept' },
-  { key: 'idea', label: 'The idea', kind: 'multiline', group: 'Concept' },
-  { key: 'insight', label: 'The insight under it', kind: 'multiline', group: 'Concept' },
-  { key: 'likeThis', label: 'Like this', kind: 'text', group: 'Feel' },
-  { key: 'audience', label: 'Audience', kind: 'ref', group: 'Fit' },
-  { key: 'status', label: 'Status', kind: 'status', group: 'State' },
-  { key: 'notes', label: 'Notes', kind: 'multiline', group: 'State' },
-]
 
 export const freshConceptId = (): string => freshRecordId('cpt')

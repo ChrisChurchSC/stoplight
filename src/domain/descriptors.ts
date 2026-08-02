@@ -26,15 +26,3 @@ export function newDescriptor(patch: Partial<Descriptor> = {}): Descriptor {
     note: patch.note,
   }
 }
-
-/** A small starter vocabulary surfaced when authoring an audience's voice. */
-export const DESCRIPTOR_LIBRARY: { label: string; note: string }[] = [
-  { label: 'Warm', note: 'Human and welcoming; talks with you, not at you.' },
-  { label: 'Bold', note: 'Confident and direct; takes a clear stance.' },
-  { label: 'Precise', note: 'Specific and substantiated; numbers over adjectives.' },
-  { label: 'Playful', note: 'Light, witty, a little irreverent.' },
-  { label: 'Expert', note: 'Authoritative and credible; earns trust with depth.' },
-  { label: 'Plainspoken', note: 'Simple, jargon-free, easy to follow.' },
-  { label: 'Urgent', note: 'Action-forward; a reason to move now.' },
-  { label: 'Aspirational', note: 'Paints the better future the buyer wants.' },
-]

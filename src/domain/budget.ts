@@ -65,22 +65,6 @@ export const PACE_LABEL: Record<PaceStatus, string> = {
   none: 'No spend yet',
 }
 
-/** Allocation rollup across the to-be-trafficked paid set, by channel. */
-export function allocation(rows: TrafficRow[]): {
-  total: number
-  byChannel: { channel: ChannelId; total: number }[]
-} {
-  const paid = rows.filter((r) => isPaidRow(r) && r.budget)
-  const map = new Map<ChannelId, number>()
-  for (const r of paid) {
-    map.set(r.channel, (map.get(r.channel) ?? 0) + (r.budget?.amount ?? 0))
-  }
-  return {
-    total: [...map.values()].reduce((a, b) => a + b, 0),
-    byChannel: [...map.entries()].map(([channel, total]) => ({ channel, total })),
-  }
-}
-
 /**
  * Mock spend source — stands in for a daily pull from each platform's ads API.
  * Deterministic per row (varies under/on-track/over) so pacing demos cleanly.

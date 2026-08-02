@@ -1,4 +1,4 @@
-import { freshRecordId, type RecordColumn, type RecordField } from './records'
+import { freshRecordId } from './records'
 
 /**
  * A PRODUCT: one thing the brand actually sells.
@@ -74,32 +74,6 @@ export const PRODUCT_STAGES = [
 
 export const PRODUCT_STATUSES: NonNullable<Product['status']>[] = ['active', 'sunset', 'concept']
 
-export const PRODUCT_COLUMNS: RecordColumn[] = [
-  { key: 'name', label: 'Product', kind: 'name', width: 200, group: 'Product' },
-  { key: 'kind', label: 'Kind', kind: 'text', width: 150, group: 'Product', options: PRODUCT_KINDS },
-  { key: 'summary', label: 'What it is', kind: 'text', width: 280, group: 'Product' },
-  { key: 'pricing', label: 'Pricing', kind: 'text', width: 140, group: 'Commercial', options: PRODUCT_PRICING },
-  { key: 'status', label: 'Status', kind: 'status', width: 120, group: 'State' },
-]
-
-export const PRODUCT_FIELDS: RecordField[] = [
-  { key: 'name', label: 'Product', kind: 'name', group: 'Product' },
-  { key: 'summary', label: 'What it is', kind: 'multiline', group: 'Product' },
-  { key: 'kind', label: 'Kind', kind: 'text', group: 'Product', options: PRODUCT_KINDS },
-  { key: 'forWho', label: 'Who it is for', kind: 'text', group: 'Product' },
-  { key: 'jobToBeDone', label: 'The job it does', kind: 'multiline', group: 'Product' },
-  { key: 'replaces', label: 'What it replaces', kind: 'text', group: 'Product' },
-  { key: 'pricing', label: 'Pricing', kind: 'text', group: 'Commercial', options: PRODUCT_PRICING },
-  { key: 'stage', label: 'Stage', kind: 'text', group: 'Commercial', options: PRODUCT_STAGES },
-  { key: 'status', label: 'Status', kind: 'status', group: 'State' },
-  { key: 'notes', label: 'Notes', kind: 'multiline', group: 'State' },
-]
-
 export function freshProductId(): string {
   return freshRecordId('prd')
-}
-
-/** No seed. A product list invented by the app would be a claim about what the brand sells. */
-export function seedProducts(): Product[] {
-  return []
 }

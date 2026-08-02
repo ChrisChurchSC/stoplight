@@ -90,11 +90,6 @@ export function setBrandCalibration(brand: string, reachByChannel: Record<string
   if (Object.keys(reachByChannel).length) BRAND_CALIBRATION.set(b, reachByChannel)
   else BRAND_CALIBRATION.delete(b)
 }
-/** True when a brand has any measured calibration (so surfaces can label projections). */
-export function isBrandCalibrated(brand: string | null | undefined): boolean {
-  return !!brand && BRAND_CALIBRATION.has(brand)
-}
-
 /** Entry reach for a root asset: the brand's measured per-asset reach for that channel
  *  when we have it, else the generic per-channel base, else the default. The channel is
  *  resolved first, so display-name channels ("YouTube", "LinkedIn") hit the right base
