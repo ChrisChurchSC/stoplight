@@ -4737,7 +4737,50 @@ button {
   min-height: 76px;
 }
 .flow-fill-input::placeholder { color: var(--text-faint); }
-.flow-fill-foot { display: flex; align-items: center; gap: 9px; margin-top: 6px; }
+/* A FILE IS BEING DRAGGED OVER IT. The whole box is the drop target, not just the button, so the
+   whole box is what has to answer. A dashed border rather than a fill: the box already sits on a
+   tinted panel and a second tint on top of it reads as disabled rather than as ready. */
+.flow-fillbox.dropping {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+/* THE ATTACHED DOCUMENT. Above the textarea, because it is the stronger source and it is what the
+   Fill button will read: putting it under the box would have it read as a result rather than an
+   input. */
+.flow-fill-doc {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 6px;
+  padding: 4px 5px 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 7px;
+  background: var(--panel);
+}
+.flow-fill-doc-ic { display: flex; color: var(--accent); }
+.flow-fill-doc-ic svg { width: 13px; height: 13px; }
+.flow-fill-doc-name {
+  flex: 1; min-width: 0;
+  font-size: 11.5px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.flow-fill-doc-x {
+  flex: none;
+  border: none; background: none; cursor: pointer; padding: 2px;
+  display: flex; color: var(--text-faint); border-radius: 5px;
+}
+.flow-fill-doc-x svg { width: 11px; height: 11px; }
+.flow-fill-doc-x:hover { color: var(--text); background: color-mix(in srgb, var(--text-faint) 16%, transparent); }
+.flow-fill-foot { display: flex; align-items: center; gap: 9px; margin-top: 6px; flex-wrap: wrap; }
+/* The second route to the same button, so it is quiet where Fill is solid: same size and the same
+   row, and nothing but the weight says which one is the primary. */
+.flow-fill-upload {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: none; color: var(--accent); cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  padding: 4px 9px; border-radius: 7px;
+}
+.flow-fill-upload:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.flow-fill-upload:disabled { color: var(--text-faint); border-color: var(--border); cursor: default; background: none; }
 .flow-fill-go {
   border: none; cursor: pointer;
   background: var(--accent); color: #fff;

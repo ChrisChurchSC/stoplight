@@ -41,6 +41,7 @@ import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
+import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, describeDoc, docFromPaste, isDocFile, readCardDoc, type CardDoc } from '../lib/cardDoc'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
@@ -760,7 +761,36 @@ export function FlowsView() {
       { key: 'signal', brief: 'the event or condition that fires it' },
       { key: 'response', brief: 'the one action it drives' },
     ],
+    /**
+     * A COMPANY, from a document only. See DOC_ONLY_FILL: the fields are here so a document can
+     * fill them, and the box refuses to run on a typed sentence alone.
+     *
+     * Only the five a document about an account actually states. Where they sit with you and which
+     * audience they belong to are both facts about YOUR relationship rather than about them, so no
+     * research doc contains either and a model asked for them would be guessing at your CRM.
+     */
+    company: [
+      { key: 'name', brief: 'the company name' },
+      { key: 'description', brief: 'one line on what the business does' },
+      { key: 'segment', brief: 'the industry it operates in', options: [...INDUSTRIES] },
+      { key: 'employees', brief: 'how many people work there', options: [...TAXONOMY_COMPANY_SIZES] },
+      { key: 'country', brief: 'where it is headquartered', options: [...REGIONS] },
+    ],
   }
+  /**
+   * KINDS THAT MAY BE FILLED FROM A DOCUMENT AND NOT FROM A TYPED SENTENCE.
+   *
+   * A Company is a named, real organisation, and the whole fill prompt is built on the opposite
+   * assumption: "you are not researching a real company", "never invent a claim about a real
+   * organisation". That is why the card had a record form and no describe box, and it was right.
+   *
+   * A document changes the argument rather than dodging it. Asked to describe Acme Corp from a
+   * sentence, the model answers from whatever it absorbed about Acme Corp, and a card of confident
+   * half-remembered facts about a real account is the single worst thing this app could write. Given
+   * the account brief, it is reading a source the user chose and can check. So the fields exist and
+   * the route to them is the document.
+   */
+  const DOC_ONLY_FILL = new Set<CanvasObjectKind>(['company'])
   /** Written per kind, because "describe it" is useless without an example of what to say. */
   const FILL_PLACEHOLDER: Partial<Record<CanvasObjectKind, string>> = {
     brand: 'A family dental practice that only does emergencies, open Saturdays',
@@ -779,8 +809,45 @@ export function FlowsView() {
   /** Keyed by card: a note left over from the last card you filled would read as this card's. */
   const [fillNote, setFillNote] = useState<Record<string, string>>({})
   /**
-   * Fill a card from a typed description. Empty fields only, same rule as the site scan: the person
-   * who typed a value is a better source than a sentence typed thirty seconds later.
+   * THE DOCUMENT ATTACHED TO A CARD: an uploaded .md, or a paste long enough to be one.
+   *
+   * Kept by card and only in this component's state, never persisted. A document is a SOURCE, not a
+   * record: what survives is the fields it filled, which the user can then see and correct. Keeping
+   * the file around would mean a card carrying evidence nobody can read back, and a second answer to
+   * "where did this value come from" that disagrees with the first.
+   */
+  const [fillDoc, setFillDoc] = useState<Record<string, CardDoc>>({})
+  /** The card being dragged over right now, so only that box lights up. */
+  const [docDropOn, setDocDropOn] = useState<string | null>(null)
+  /**
+   * ONE hidden picker for every card, same as the Data source card's: the card that asked is held in
+   * a ref, since mounting an input per card puts dozens in the tree for a control used once.
+   */
+  const docFileRef = useRef<HTMLInputElement | null>(null)
+  const docTargetRef = useRef<string | null>(null)
+  const setDoc = (cardId: string, doc: CardDoc | null) => {
+    setFillDoc((m) => {
+      if (!doc) { const { [cardId]: _drop, ...rest } = m; return rest }
+      return { ...m, [cardId]: doc }
+    })
+    // The old note described the last fill, which the new source has just made untrue.
+    setFillNote((m) => { const { [cardId]: _drop, ...rest } = m; return rest })
+  }
+  /** Read a picked or dropped file onto a card, saying why in the note when it will not read. */
+  const attachDocFile = async (cardId: string, file: File) => {
+    try {
+      setDoc(cardId, await readCardDoc(file))
+    } catch (e) {
+      setDoc(cardId, null)
+      setFillNote((m) => ({ ...m, [cardId]: (e as Error)?.message ?? 'Could not read that file.' }))
+    }
+  }
+  /**
+   * Fill a card from what it has been given: a typed description, an attached document, or both.
+   *
+   * EMPTY FIELDS ONLY, the same rule as the site scan and for the same reason: the person who typed
+   * a value is a better source than a file dropped on it thirty seconds later. A document is the
+   * strongest source this has and it still does not get to overwrite a person.
    */
   const fillCardFromPrompt = async (
     nt: CanvasObject,
@@ -788,8 +855,11 @@ export function FlowsView() {
     apply: (patch: Record<string, unknown>) => void,
   ) => {
     const said = (prompting[nt.id] ?? '').trim()
+    const doc = fillDoc[nt.id]
     const fields = FILLABLE[nt.kind]
-    if (!said || !fields) return
+    if ((!said && !doc) || !fields) return
+    // Enforced here as well as on the button, because the textarea's Enter reaches this directly.
+    if (!doc && DOC_ONLY_FILL.has(nt.kind)) return
     setFilling(nt.id)
     setFillNote((m) => { const { [nt.id]: _drop, ...rest } = m; return rest })
     try {
@@ -800,12 +870,13 @@ export function FlowsView() {
         body: JSON.stringify({
           kind: nt.kind,
           prompt: said,
+          document: doc ? { name: doc.name, text: doc.text } : undefined,
           fields,
           brandContext: { name: brand, oneLiner: profile?.oneLiner, differentiators: profile?.differentiators },
         }),
       })
       if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `fill ${res.status}`)
-      const data = (await res.json()) as { fields?: Record<string, unknown> }
+      const data = (await res.json()) as { fields?: Record<string, unknown>; readChars?: number }
       const patch: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(data.fields ?? {})) {
         const has = Array.isArray(current[k]) ? (current[k] as unknown[]).length > 0 : String(current[k] ?? '').trim()
@@ -813,7 +884,18 @@ export function FlowsView() {
       }
       const n = Object.keys(patch).length
       if (n) apply(patch)
-      setFillNote((m) => ({ ...m, [nt.id]: n ? `Filled ${n} empty field${n === 1 ? '' : 's'}. Check them.` : 'Nothing new to fill.' }))
+      // Names the file it read and how much of it, because a fill from a document you cannot see the
+      // extent of is a fill you cannot check. The empty case says WHY: from a document, "nothing new"
+      // usually means the fields were already written rather than that the file said nothing.
+      const from = doc ? ` from ${doc.name}${data.readChars ? ` (${data.readChars.toLocaleString()} characters read)` : ''}` : ''
+      setFillNote((m) => ({
+        ...m,
+        [nt.id]: n
+          ? `Filled ${n} empty field${n === 1 ? '' : 's'}${from}. Check them.`
+          : doc
+            ? `Nothing new to fill${from}: every field it supports is already written.`
+            : 'Nothing new to fill.',
+      }))
     } catch (e) {
       setFillNote((m) => ({ ...m, [nt.id]: (e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not fill this in.' }))
     } finally {
@@ -6130,6 +6212,10 @@ export function FlowsView() {
                     },
                   }
                 }
+                case 'company': {
+                  const co = (nt.refId ? allCompanies.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
+                  return { current: co as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateCompany(ensureCompanyFor(nt), p as Partial<Company>) } }
+                }
                 case 'audience': {
                   const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
                   return { current: au as unknown as Record<string, unknown>, apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
@@ -6140,27 +6226,106 @@ export function FlowsView() {
             const target = recordFor()
             if (!target) return null
             const busy = filling === nt.id
+            const doc = fillDoc[nt.id]
+            const kindLabel = (OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()
+            const docOnly = DOC_ONLY_FILL.has(nt.kind)
             return (
-              <div className="flow-fillbox">
+              <div
+                className={`flow-fillbox${docDropOn === nt.id ? ' dropping' : ''}`}
+                /**
+                 * DROP A FILE ANYWHERE ON THE BOX, not just on the button. dropEffect has to be set
+                 * on EVERY dragover or the browser refuses the drop, and preventDefault on both is
+                 * what stops the page navigating to the file instead of reading it.
+                 */
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes('Files')) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'copy'
+                  setDocDropOn(nt.id)
+                }}
+                onDragLeave={() => setDocDropOn((v) => (v === nt.id ? null : v))}
+                onDrop={(e) => {
+                  if (!e.dataTransfer.types.includes('Files')) return
+                  e.preventDefault()
+                  setDocDropOn(null)
+                  // The first file it can actually read, so dropping a folder's worth of mixed
+                  // files finds the brief rather than refusing on whatever happens to be first.
+                  const file = [...e.dataTransfer.files].find(isDocFile) ?? e.dataTransfer.files[0]
+                  if (file) void attachDocFile(nt.id, file)
+                }}
+              >
                 {/* The box used to be a bare textarea whose only explanation was a placeholder, and
                     a placeholder is gone the moment you type. What it does, what it costs you, and
                     that you stay in charge afterwards are all things you need BEFORE you use it. */}
                 <div className="flow-fill-head">
                   <span className="flow-fill-title">
-                    Describe this {(OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()}
+                    {docOnly ? `Fill this ${kindLabel} in from a document` : `Describe this ${kindLabel}, or hand it a document`}
                   </span>
                   <span className="flow-fill-help">
-                    One sentence in your own words fills the fields below. Everything it writes is a
-                    draft you can change, and nothing here reaches the copy until this card is
-                    connected.
+                    {docOnly ? (
+                      <>
+                        Upload a .md or .txt file, or paste one in, and the fields below fill from
+                        what it says. This is the only route for a {kindLabel}: it is a real
+                        organisation, so its facts have to come from something you can point at
+                        rather than from a description. Everything it writes is a draft you can
+                        change, and it only ever fills fields that are still empty.
+                      </>
+                    ) : (
+                      <>
+                        A sentence in your own words fills the fields below, and so does a .md or
+                        .txt file you upload or a body of text you paste. Everything it writes is a
+                        draft you can change, it only ever fills fields that are still empty, and
+                        nothing here reaches the copy until this card is connected.
+                      </>
+                    )}
                   </span>
                 </div>
+                {/* THE ATTACHED DOCUMENT, shown as what it is: a named source of a stated size, with
+                    the one control that matters on it. A file that fills a card invisibly is a file
+                    you cannot argue with. */}
+                {doc && (
+                  <div className="flow-fill-doc">
+                    <span className="flow-fill-doc-ic" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
+                        <path d="M14 3v4h4" />
+                      </svg>
+                    </span>
+                    <span className="flow-fill-doc-name">{describeDoc(doc)}</span>
+                    <button
+                      className="flow-fill-doc-x"
+                      title="Remove this document"
+                      aria-label="Remove this document"
+                      onClick={() => setDoc(nt.id, null)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  </div>
+                )}
                 <textarea
                   className="flow-fill-input"
                   rows={4}
                   value={prompting[nt.id] ?? ''}
-                  placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and the fields fill in'}
+                  placeholder={
+                    doc
+                      ? `Optional: which part of ${doc.name} this ${kindLabel} is`
+                      : docOnly
+                        ? 'Optional: which part of the document to read. Upload one to fill this in'
+                        : FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and the fields fill in'
+                  }
                   onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
+                  /**
+                   * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted table
+                   * makes on a Data source card. Left in the textarea it would be read as a
+                   * description and cut at 1200 characters by the server, which is a truncation
+                   * nobody was told about. As an attachment it arrives whole and says so.
+                   */
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData('text/plain')
+                    if (text.trim().length < PASTE_AS_DOC_CHARS) return
+                    e.preventDefault()
+                    setDoc(nt.id, docFromPaste(text))
+                  }}
                   onKeyDown={(e) => {
                     // Enter fills; shift-Enter is a newline, since a description can run to two lines.
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
@@ -6169,10 +6334,19 @@ export function FlowsView() {
                 <div className="flow-fill-foot">
                   <button
                     className="flow-fill-go"
-                    disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                    disabled={busy || !(doc || (!docOnly && (prompting[nt.id] ?? '').trim()))}
                     onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
                   >
-                    {busy ? 'Filling…' : 'Fill this in'}
+                    {busy ? 'Filling…' : doc ? 'Fill this in from the document' : 'Fill this in'}
+                  </button>
+                  {/* Upload sits beside Fill rather than above the box: it is the second route to
+                      the same button, not a separate feature. */}
+                  <button
+                    className="flow-fill-upload"
+                    disabled={busy}
+                    onClick={() => { docTargetRef.current = nt.id; docFileRef.current?.click() }}
+                  >
+                    {doc ? 'Choose another file' : 'Upload a .md file'}
                   </button>
                   {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                 </div>
@@ -10317,6 +10491,27 @@ export function FlowsView() {
           </div>
         </div>
       )}
+
+      {/* ONE hidden picker for the document a card fills from, held in a ref by the card that asked
+          — mounting an input per card would put dozens in the tree for a control used once.
+
+          OUTSIDE the flowView === 'flow' branch, unlike the Data source card's, because the same
+          inspector renders on the Grid tab: an input mounted inside the canvas is not in the tree
+          when the grid is showing, so the button beside it would click a null ref and do nothing. */}
+      <input
+        ref={docFileRef}
+        type="file"
+        accept={DOC_ACCEPT}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          const target = docTargetRef.current
+          // Reset first: picking the same file twice in a row fires no change event otherwise.
+          e.target.value = ''
+          docTargetRef.current = null
+          if (f && target) void attachDocFile(target, f)
+        }}
+      />
 
       {pickerOpen && (
         <>
