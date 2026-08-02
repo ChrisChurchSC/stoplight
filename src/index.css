@@ -21255,10 +21255,12 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 999px;
   padding: 6px 12px;
 }
+/* The wordmark is the brand, so it carries the brand colour rather than body ink —
+   in the header and again in the footer (see .chlog-foot > svg). */
 .chlog-brand {
   display: inline-flex;
   justify-self: center;
-  color: var(--text);
+  color: var(--accent);
   text-decoration: none;
 }
 .chlog-open {
@@ -21386,7 +21388,7 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-muted);
 }
 .chlog-foot > svg {
-  color: var(--text-faint);
+  color: var(--accent);
 }
 .chlog-foot-tag {
   font-size: 14px;
