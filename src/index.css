@@ -3964,6 +3964,33 @@ button {
 .flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar { max-width: calc(100% - 372px); }
 .flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar { max-width: calc(100% - 420px); }
 .flow.chat-collapsed.brief-collapsed .flow-toolbar { max-width: calc(100% - 60px); }
+/* THE SAME PILL ON THE GRID, where none of the arithmetic above applies. Gretel and the campaign
+   inspector are canvas furniture — they are not rendered on this tab — but their classes still sit
+   on .flow, so those four rules would go on shoving the Grid's toolbar sideways by the width of
+   panels that are not on screen. Restated here rather than scoped away, because the selectors have
+   to match theirs to outrank them. */
+.flow .flow-toolbar-grid,
+.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar-grid,
+.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar-grid,
+.flow.chat-collapsed.brief-collapsed .flow-toolbar-grid {
+  left: 50%;
+  max-width: calc(100% - 40px);
+  /* The Grid's own inspector slides in over 0.16s; the toolbar re-centres with it rather than
+     jumping to its new place ahead of the column that moved it. */
+  transition: left 0.16s ease-out;
+}
+/* The one panel this tab DOES have: the Grid's inspector, a 360px column on the right. The sheet's
+   centre moves left by half of it, so the toolbar does too. */
+.flow .flow-toolbar-grid.insp,
+.flow.chat-collapsed:not(.brief-collapsed) .flow-toolbar-grid.insp,
+.flow.brief-collapsed:not(.chat-collapsed) .flow-toolbar-grid.insp,
+.flow.chat-collapsed.brief-collapsed .flow-toolbar-grid.insp {
+  left: calc(50% - 180px);
+  max-width: calc(100% - 400px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-toolbar-grid { transition: none; }
+}
 .flow-canvas {
   flex: 1;
   min-width: 0;
@@ -5860,6 +5887,13 @@ button {
   min-width: 0;
   overflow: auto;
   padding: 14px 18px;
+}
+/* ROOM UNDER THE LAST ROW FOR THE FLOATING TOOLBAR. The pill is ~48px tall and sits 20px off the
+   bottom, so without this the final row of the sheet is behind it once you scroll to the end —
+   permanently, since there is nothing left to scroll. The canvas can live with the overlap because
+   you can pan the board out from under it; a sheet cannot. */
+.flow-real.has-tb .flow-real-view > *:first-child {
+  padding-bottom: 76px;
 }
 /* THE INSPECTOR, BESIDE THE GRID. Same .flow-panel the canvas uses — same component, same board —
    so this adds only where it sits and how it arrives. It slides rather than appears, because a
