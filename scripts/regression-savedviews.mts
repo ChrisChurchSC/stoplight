@@ -2,7 +2,7 @@
  * Regression: saved-view / asset-query filter resolution (the pure layer). CRUD + live
  * resolution is verified end-to-end through the bridge.
  *
- * Run:  npx tsx ./scripts/regression-savedviews.mts
+ * Run:  npm run regression   # or: npx vite-node ./scripts/regression-savedviews.mts
  */
 import { assetMatchesFilter, assetDate, groupKeyFor, newSavedView, resolveWindow } from '../src/domain/savedViews'
 

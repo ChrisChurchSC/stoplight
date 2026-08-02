@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { makeModelClient } from './modelClient.js'
-import { NoKeyError } from './siteMapHandler.js'
+import { makeModelClient, NoKeyError } from './modelClient.js'
 
 /**
  * Ingest a brand's OWNED content straight from their Sanity CMS. Unlike the

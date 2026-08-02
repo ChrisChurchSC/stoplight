@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { makeModelClient } from './modelClient.js'
-import { NoKeyError } from './siteMapHandler.js'
+import { makeModelClient, NoKeyError } from './modelClient.js'
 
 /**
  * Ingest a brand's LIVE Google Ads copy via the Google Ads API. Exchanges a

@@ -12,7 +12,7 @@
  * This mirrors exactly what SheetGrid / CalendarView now do:
  *   scoped ? 'all' : <storeFilter>   (and scoped bypasses inTimeRange)
  *
- * Run:  npx tsx ./scripts/regression-folder-view.mts
+ * Run:  npm run regression   # or: npx vite-node ./scripts/regression-folder-view.mts
  */
 import { registerCampaign, clientForCampaign } from '../src/domain/clients'
 import { rowInScope, type CardFilter } from '../src/lib/scope'

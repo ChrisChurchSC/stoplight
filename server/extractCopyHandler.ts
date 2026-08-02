@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { makeModelClient } from './modelClient.js'
-import { NoKeyError } from './siteMapHandler.js'
+import { makeModelClient, NoKeyError } from './modelClient.js'
 
 /**
  * Read the copy baked INTO a single creative on demand. Given an image URL, fetch

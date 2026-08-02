@@ -1,89 +1,95 @@
-# Stoplight
+# Breadcrumbs
 
-Drag-and-drop media trafficking, as a spreadsheet. Drop a batch of marketing
-assets, Stoplight proposes a per-channel schedule, you review/edit/approve inline,
-and rows stage to the sheet for publishing. Nothing posts without explicit
-approval.
+Marketing infrastructure and automation. Breadcrumbs turns one brand strategy into
+personalized campaigns for every audience and channel — you set the strategy once, and
+the work downstream of it stays consistent with it.
 
-The whole app is a single Clay-style workspace: a left sidebar of channels, a
-toolbar, and a full-page editable grid that is the source of truth.
+> The repository is named `stoplight` for historical reasons; the product is Breadcrumbs.
 
-## How it works
-
-1. **Ingest** — drag assets anywhere (or **+ Add assets**): images, video,
-   markdown/text, or a link. A tray appears to assign channel(s) + copy per asset.
-2. **Add to sheet** — each (asset × channel) becomes a draft row, scheduled at the
-   channel's best-time default.
-3. **Edit inline** — every cell is editable: channel, campaign, audience, caption,
-   time, status. Columns are drag-resizable; text cells grow to fit.
-4. **Approve** — bulk-approve drafts (or set status per row). Approval stages rows;
-   it never auto-posts.
-5. **Publish** — an explicit per-row action routed to the channel's publisher.
-
-## Channels
-
-24 channels grouped by **kind** (`paid` / `organic` / `owned`) and `platform`,
-each with a brand logo, accepted media types, and best-time defaults
-(`src/domain/channels.ts`). Paid social + Google search, the organic social set,
-and owned lifecycle (email, SMS, push, blog, landing page, lead magnet).
-
-## Architecture (v1 = mock-first, swappable seams)
-
-Designed to **post directly** to platforms, but v1 runs on mock/stub backends so
-it works with zero credentials. Two seams, wired in `useTrafficStore.ts`:
-
-- **Sheet** — `SheetAdapter` (`src/adapters/sheet/`). `MockSheetAdapter` persists
-  to `localStorage`. Swap for a Clay / Google Sheets / Airtable adapter.
-- **Publishers** — `Publisher` per channel (`src/adapters/publishers/`). A
-  `registry` routes owned/lifecycle channels to `HubSpotPublisher` (the CRM is the
-  send/host engine) and everything else to `MockPublisher`. Swap in Buffer/Sprout
-  for organic and the ad-platform clients for paid.
-
-The UI/store don't change when real adapters land — only the registry + adapters.
-
-### CRM hooks
-
-Rows carry `campaign` (attribution: content → campaign → contact → pipeline) and
-`audience` (CRM-synced segment for paid targeting). `HubSpotPublisher` maps a row
-to the right HubSpot object (marketing email / landing page / form / SMS) with the
-real API call as one injectable `transport` seam.
-
-### Layout
-
-```
-src/
-  domain/        types.ts (schema), channels.ts (24 channels), sampleData.ts
-  scheduling/    propose.ts (best-time slot assignment)
-  adapters/
-    sheet/       SheetAdapter + MockSheetAdapter (localStorage)
-    publishers/  Publisher + mock + HubSpotPublisher + registry
-  store/         useTrafficStore.ts (Zustand — seam wiring)
-  components/    Workbench, Sidebar, Toolbar, IngestTray, SheetGrid,
-                 ChannelIcon, Thumb
-  lib/           files.ts (ingest), format.ts, csv.ts (export)
-```
-
-### Sheet schema (`TrafficRow`)
-
-`id · assetId · assetName · mediaType · channel · caption · campaign · audience ·
-scheduledAt · status · mediaRef · error · createdAt · approvedAt · postedAt`
-
-## Develop
+## Running it
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
+```
+
+It runs with no credentials at all. Every AI feature has a deterministic fallback, so
+without a model key you get the heuristic result rather than an error, and without
+Supabase the app keeps its data in `localStorage`. Add keys to turn each part on —
+`.env.example` lists them and says what each one unlocks.
+
+```bash
+npm run typecheck  # tsc -b --noEmit
+npm test           # vitest
 npm run build      # typecheck + production build
 ```
 
-Stack: React 19 + Vite + TypeScript, Zustand, simple-icons. No backend in v1
-(localStorage mock sheet). Click **Load sample** for a seeded board.
+## How the app is put together
 
-## Not in v1
+The workspace is a brand and the work hanging off it. `Workbench` is the shell; the
+views inside it (flows, canvas, records, calendar, library, insights) all read one
+Zustand store, `src/store/useTrafficStore.ts`, which is also where the adapter seams are
+wired.
 
-- Real platform integrations (OAuth, media upload, rate limits) — phase 2.
-- Auto-posting on approval — approval only stages; publish is explicit.
-- Predictive best-time modeling — sensible per-channel defaults for now.
-- Placements/formats (Reels vs Stories) and post-launch optimization — phase 2.
+```
+src/
+  domain/      types, channels, taxonomy, and the pure logic (scoring, breaks, signals)
+  adapters/    one folder per seam — copy, records, metrics, publishers, setup, ...
+  store/       useTrafficStore.ts — state plus the seam wiring
+  components/  the views
+  lib/         supabase, session, sharing, file/media handling
+server/        the /api handlers (model calls, ingestion, publishing)
+api/           [...path].ts — the single serverless function that serves them in production
 ```
 
+Anything that talks to a model or a third party lives behind an adapter, so the UI does
+not change when a real integration replaces a heuristic one.
+
+## The /api layer
+
+Handlers live in `server/` and are environment-agnostic: parsed body in, JSON out. What
+differs is who calls them.
+
+- **Production** — `api/[...path].ts`, one Vercel function serving every route. Vercel's
+  Hobby plan caps a deployment at 12 functions, so a catch-all rather than a file each.
+- **Dev** — middleware in `vite.config.ts`, mounted on the same paths.
+
+Both read the same route table, **`server/apiManifest.ts`**. That is deliberate: the two
+lists used to be maintained separately and drifted, which shipped real bugs — three
+endpoints that worked on localhost and 404'd on the pilot, and one that shipped as its
+own unauthenticated function and answered the model account's balance to anyone who
+asked. `server/__tests__/apiManifest.test.ts` now fails the build if they stop agreeing,
+if a route the client calls has no handler, or if the browser-automation graph reaches
+the deployed bundle.
+
+Routes that genuinely cannot deploy live in `server/devApiManifest.ts`, which the
+serverless function never imports. They drive a real browser (Playwright) or stream SSE:
+`setup`, `map-site`, `map-site-stream`, `ingest-channel`, the CRM ingests, and
+`connect/*`. Their callers degrade gracefully when they 404 in production. `DEPLOY.md`
+covers what is live and what is not.
+
+Errors carry a contract: `NO_KEY` (and an exhausted budget) become **501**, which every
+client adapter reads as "the model is unavailable, use the fallback". A 500 would surface
+as a crash and skip the fallback.
+
+## Models
+
+`server/modelClient.ts` is the one client. Handlers build requests in Anthropic's
+Messages shape; the client runs them against **OpenRouter** (default, when
+`OPENROUTER_API_KEY` is set) or **Anthropic directly** (`ANTHROPIC_API_KEY`), translating
+in both directions so handlers never know which answered.
+
+## Data
+
+Supabase provides auth and sync; `supabase/schema.sql` plus `supabase/migrations/` define
+the schema, and RLS scopes every row to a workspace. With Supabase unconfigured the app
+falls back to `localStorage`, which is also how share links work — a `?share=` token is a
+self-contained grant that needs no account.
+
+## Also here
+
+- `mcp/breadcrumbs-server.mjs` — MCP server letting Claude Desktop drive a dev tab
+  (`docs/claude-desktop-mcp.md`).
+- `scripts/regression-*.mts` — standalone regression checks over the pure domain logic.
+- `docs/` — setup briefs and per-feature plans.
+- `DEPLOY.md` — deploying to Vercel, and what works in production versus locally.

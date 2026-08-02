@@ -1,25 +1,17 @@
-# Vercel Hobby caps a deployment at 12 serverless functions. Every /api/* endpoint is served by the
-# single catch-all api/[...path].ts, so the individual per-endpoint files are excluded from the deploy.
+# api/ holds exactly one file — the catch-all router — so there is nothing here to exclude.
 #
-# EVERY endpoint file must be listed here, and the dev middleware must import from server/ rather
-# than from api/. api/ai-credits.ts was missing from this list, so it shipped as its own function
-# that never passed through jsonRoute and answered the account balance to anyone who asked. It was
-# also the only file vite.config imported out of api/, which is what hid the omission: a file listed
-# here is deleted before the build, so such an import compiles locally and fails the deploy.
-api/ai-credits.ts
-api/ai-status.ts
-api/claude-agent.ts
-api/claude-ask.ts
-api/coherence-check.ts
-api/draft-cell.ts
-api/draft-copy.ts
-api/extract-copy.ts
-api/flow-agent.ts
-api/icp-review.ts
-api/media-mix.ts
-api/publish-email.ts
-api/publish.ts
-api/records-agent.ts
+# It used to hold a per-endpoint file as well, and each would otherwise deploy as its own serverless
+# function (Vercel's Hobby plan caps a deployment at 12). Every one had to be listed here, and
+# api/ai-credits.ts was the one that got missed: it shipped as its own function, never passed
+# through jsonRoute, and answered the model account's balance to anyone who asked.
+#
+# That list is gone because the files are — they were four-line re-exports of handlers the catch-all
+# already serves. The rule is now simply that anything in api/ deploys, and
+# server/__tests__/apiManifest.test.ts fails the build if a second file appears there.
+
+# A standalone terminal agent kept alongside the app. Nothing imports it and it is never built,
+# but without this line it was uploaded on every deploy.
+openrouter-agent
 
 # Never bundle local secrets into a deploy — env vars are configured in the Vercel project.
 .env

@@ -2,7 +2,7 @@
  * Regression: asset lifecycle invariants (the pure-domain ones — the stateful
  * edit/approve/delete flow is verified end-to-end through the bridge).
  *
- * Run:  npx tsx ./scripts/regression-lifecycle.mts
+ * Run:  npm run regression   # or: npx vite-node ./scripts/regression-lifecycle.mts
  */
 import { rowInScope } from '../src/lib/scope'
 import type { RowStatus } from '../src/domain/types'
