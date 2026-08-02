@@ -38,8 +38,16 @@ export function ChangelogPage() {
   return (
     <div className="chlog">
       <header className="chlog-nav">
+        {/* The left slot used to hold a "What's new" pill, which named the page you were already
+            looking at — the <h1> below says that, and says it louder. A way back to the sign-in
+            field is the thing this page actually lacked. */}
         <div className="chlog-nav-side">
-          <span className="chlog-nav-active">What&rsquo;s new</span>
+          <a className="chlog-back" href="/" aria-label="Back to login">
+            <span className="chlog-back-arrow" aria-hidden="true">
+              &larr;
+            </span>
+            <span className="chlog-back-label">Back to login</span>
+          </a>
         </div>
         {/* The splash wordmark, not the flat one — this page is the first thing a logged-out
             visitor sees after the sign-in field, so it should be wearing the same face. */}

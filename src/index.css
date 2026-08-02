@@ -21570,15 +21570,32 @@ table.aud-sheet td.stick .aud-cell {
 .chlog-nav-right {
   justify-content: flex-end;
 }
-.chlog-nav-active {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+/* Deliberately not a pill. The filled coral pill it replaced was a "you are here" badge, and a
+   second filled coral pill on the left would have squared up against .chlog-open on the right
+   with the wordmark caught between them. This is the quiet half of that pair: body ink, warming
+   to the brand on hover. */
+.chlog-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 6px 2px;
+  transition: color 0.14s ease;
+}
+.chlog-back:hover {
   color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 6px 12px;
+}
+/* The arrow leads on hover so the link reads as motion rather than a label that changed colour. */
+.chlog-back-arrow {
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.14s ease;
+}
+.chlog-back:hover .chlog-back-arrow {
+  transform: translateX(-2px);
 }
 /* The wordmark is the brand, so it carries the brand colour rather than body ink —
    in the footer (see .chlog-foot > svg). The header mark is the splash artwork, which
@@ -21747,11 +21764,14 @@ table.aud-sheet td.stick .aud-cell {
   text-decoration: underline;
 }
 @media (max-width: 560px) {
-  .chlog-nav {
-    grid-template-columns: auto 1fr;
-  }
-  .chlog-nav-side:first-child {
+  /* The left slot used to be dropped here, back when it held a badge naming the current page.
+     It holds the way out now, so it keeps its column and sheds its label instead — the arrow
+     alone is the affordance, and the anchor's aria-label carries the name. */
+  .chlog-back-label {
     display: none;
+  }
+  .chlog-back-arrow {
+    font-size: 19px;
   }
   .chlog-foot-link {
     margin-left: 0;
