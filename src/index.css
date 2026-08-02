@@ -7416,24 +7416,28 @@ button {
 .flow-canvas.connecting { cursor: crosshair; user-select: none; }
 .flow-canvas.connecting .flow-node { cursor: crosshair; }
 /* Primary "regenerate copy" action, living in the canvas toolbar (viewing a built flow). */
+/* Sized down to sit in the same row as the zoom and model controls rather than over them. It was
+   two steps larger than everything beside it, which made the toolbar read as a strip of small
+   readouts with a button dropped on top. The accent fill and the heavier weight are what mark it as
+   the primary action; it does not also need the extra height. */
 .flow-tb-regen {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   border: 0;
   background: var(--accent);
   color: #fff;
   font: inherit;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 7px 12px;
-  border-radius: 9px;
+  padding: 6px 10px;
+  border-radius: 8px;
   cursor: pointer;
   transition: filter 0.12s ease;
 }
 .flow-tb-regen svg {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
 }
 .flow-tb-regen:hover:not(:disabled) {
   filter: brightness(1.06);
