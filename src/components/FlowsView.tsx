@@ -13,6 +13,7 @@ import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
+import { contextGapMessage, type ContextGapKey } from '../domain/contextGaps'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { COMPANY_STATUSES, type Company } from '../domain/companies'
 import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
@@ -318,6 +319,18 @@ const INPUT_FAMILIES: { family: ObjectFamily; label: string }[] = [
 ]
 /** Brand has its own button on the bar, so it must not also appear inside a family caret. */
 const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand', 'product'])
+/**
+ * The card that CLOSES each gap — what the suggestion toast offers to drop on the canvas.
+ *
+ * One card per gap, and the plainest one: a missing angle could be answered by a Message or a
+ * Concept card, and offering a choice in a toast is a menu in the corner of the screen. Message,
+ * because it is the kind whose whole job is to state what the copy argues.
+ */
+const CARD_FOR_GAP: Record<ContextGapKey, CanvasObjectKind> = {
+  audience: 'audience',
+  proof: 'proof-point',
+  angle: 'message',
+}
 const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
   (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter(
     (k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family && !STANDALONE_KINDS.has(k),
@@ -3174,6 +3187,14 @@ export function FlowsView() {
     try {
       await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
       await draftCopy(targetIds)
+      /**
+       * AFTER the copy, not before. This is a report on what just happened — "that was written from
+       * the whole brand library" — and said beforehand it would read as a warning about a generation
+       * that had not run yet, which is copyBlockerFor's job and copyBlockerFor refuses.
+       *
+       * Generate has the toast slot to itself here, unlike the build path, so no prefix.
+       */
+      suggestContext(viewName)
     } finally {
       setRegenerating(false)
       setRefsDirty(false)
@@ -3303,6 +3324,49 @@ export function FlowsView() {
     // Returned so a caller that needs to link or wire the new card can do it without hunting for
     // the last object added, which is a race as soon as anything else touches the board.
     return id
+  }
+  /**
+   * SAY WHAT THE CAMPAIGN DID NOT SAY, once the copy is back.
+   *
+   * The blocker refuses a canvas with no brand or no wires. Everything past that generates, including
+   * a campaign wired to one Note card — and the writer's pools fall back to the brand's whole library
+   * when nothing pins them, so what comes back is fluent, plausible and written to nobody. Nothing on
+   * screen said so: the copy looked exactly like copy written from a brief.
+   *
+   * A toast rather than a refusal, because a thin campaign is a real campaign and it is not this
+   * code's place to stop one. It reports what generating just did and offers the card that would
+   * change it. See src/domain/contextGaps.ts for what counts as thin.
+   *
+   * `prefix` lets the build share its one toast ("Built · 6 drafts.") instead of firing a second one
+   * that would replace it — there is a single toast slot, so two messages means the first is never read.
+   */
+  const suggestContext = (campaign: string, prefix?: string) => {
+    const gaps = useTrafficStore.getState().contextGapsFor(campaign)
+    const msg = contextGapMessage(gaps, prefix ? undefined : campaign)
+    if (!msg) return false
+    const kind = CARD_FOR_GAP[gaps[0]]
+    showToastAction(prefix ? `${prefix} ${msg}` : msg, `Add ${OBJECT_META[kind].label}`, () => {
+      /**
+       * The board on screen is the one these setters write to, and a toast outlives the click that
+       * raised it: nine seconds is long enough to open another campaign. Dropping the card onto
+       * whatever canvas happens to be open would be a card nobody asked for on a board nobody was
+       * looking at.
+       */
+      if (viewNameRef.current !== campaign) {
+        showToast(`Open "${campaign}" to add that card — you have moved to another canvas.`)
+        return
+      }
+      /**
+       * WIRED, not just dropped. An unwired card reaches nothing, so adding one and leaving it loose
+       * would answer "no audience is wired" with an audience that is still not wired. attachToCampaign
+       * first, in the order the drag gesture and the chat both use it; it no-ops on a card that names
+       * no record yet, and picking one on the card pushes it through from there.
+       */
+      const id = addObject(kind)
+      attachToCampaign(id)
+      setConnectors((cs) => (cs.some((x) => x.from === id && x.to === 'campaign') ? cs : [...cs, { from: id, to: 'campaign' }]))
+    })
+    return true
   }
   const deleteObject = (id: string) => {
     // If it was attached to the campaign, its records go with it (unless another attached card
@@ -4249,6 +4313,10 @@ export function FlowsView() {
   deleteEdgeRef.current = deleteEdge
   const canDetachRef = useRef(canDetach)
   canDetachRef.current = canDetach
+  /** The campaign open RIGHT NOW, for a callback that outlives the render that made it: a toast
+   *  action can be clicked several seconds and one navigation later. See suggestContext. */
+  const viewNameRef = useRef(viewName)
+  viewNameRef.current = viewName
   const setChannelDetachedRef = useRef(setChannelDetached)
   setChannelDetachedRef.current = setChannelDetached
   /** Drop a member out of an object without deleting the card. */
@@ -5049,8 +5117,18 @@ export function FlowsView() {
       setFlowView('flow')
       // No action on the toast: you are already looking at the campaign, so "Open campaign" would
       // be a button that does nothing. It reports, it does not navigate.
+      //
+      // The gap suggestion RIDES ON THIS ONE. There is a single toast slot, so raising a second here
+      // would replace "Built · N drafts" with a sentence about wiring before anyone had read it —
+      // suggestContext takes the built message as its prefix and shows one toast saying both.
+      //
+      // Only when copy was actually written. Its sentence describes what the writer DID with a thin
+      // brief, so on a refusal (nothing written, and the blocker is the bigger thing to fix first) or
+      // a build that deliberately skipped the copy, it would be describing writing that never
+      // happened.
+      const wrote = !copyBlocked && writeCopy && allNewIds.length > 0
       if (copyBlocked) showToastAction(msg, 'Why', () => useTrafficStore.getState().setBrandNotice(copyBlocked), 'warn')
-      else showToast(msg)
+      else if (!(wrote && suggestContext(campaignName, msg))) showToast(msg)
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
