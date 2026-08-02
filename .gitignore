@@ -13,3 +13,4 @@ dist-ssr
 # Saved logged-in browser sessions (storageState) for channel gathering
 .rushhour/
 .vercel
+.claude/worktrees/

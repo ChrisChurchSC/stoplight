@@ -9,6 +9,7 @@ import {
 } from '../domain/flowBoard'
 import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
+import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -108,6 +109,10 @@ type TagOps = {
 // Icon per Records type, matching each page's sidebar-nav icon (Companies / People /
 // Segments / Media mix), so a tag reads the same as the page it comes from.
 const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
+  // The box the Product card wears on the canvas, and the bolt the Trigger card wears, so a tag of
+  // either reads as the card it came from.
+  product: <><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z" /><path d="M3 8.5 12 13l9-4.5M12 13v7" /></>,
+  trigger: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
   // The same cylinder the Data source card wears on the canvas, so a data set tag reads as the card
   // it came from.
   dataset: (
@@ -1622,6 +1627,43 @@ export function FlowsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowScreen, flowView])
   const [connectors, setConnectors] = useState<{ from: string; to: string }[]>([])
+  /**
+   * THE SELECTED CONNECTOR LINE. Its own slot rather than a member of `selected`, which is a set of
+   * DRAGGABLE NODE IDS and is read as one everywhere: startDrag looks up pos and nodeParent for every
+   * member, the marquee resolves out of the DOM by `.flow-node[data-node-id]`, and Cmd-G feeds the
+   * set into a smart object's members. A line has none of those, and the only verb it shares with a
+   * card is Delete. CanvasView reached the same answer with its own `selectedEdge`.
+   *
+   * Identified by the PAIR, not by an index into `connectors`: every other mutation renumbers that
+   * array (a delete, a prune, opening another campaign, a Gretel write), so an index selected now
+   * points at a different line a moment later.
+   *
+   * `kind` is load-bearing, not defensive. An implicit pair and a stored pair can be byte identical:
+   * channel cards carry outbound ports now, so a person can draw the same channel → post line the
+   * structure already implies, and Gretel can store campaign → channel.
+   */
+  /**
+   * THE OBJECT CELL PICKED IN THE GRID, so the Grid tab can open THE inspector rather than one of
+   * its own. It can, without a line of it moving, because the grid is rendered from inside this
+   * component: renderObjectInspector is already in scope where <SheetGrid> is mounted, and the panel
+   * it fills is the same <aside className="flow-panel"> the canvas uses.
+   *
+   * This holds a CARD ID, never a synthesised card. Every record form writes through ensure*For,
+   * whose "already linked" guard resolves refId against the BRAND-FILTERED record list — so handing
+   * it a card that is not on the board does not fail loudly, it mints a duplicate blank record and
+   * relinks the cell to it. A cell with no card behind it gets a sentence instead.
+   */
+  const [gridPick, setGridPick] = useState<{ kind: CanvasObjectKind; cardId?: string; label: string } | null>(null)
+  const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
+  /**
+   * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
+   * campaign to a channel is derived rather than drawn, so severing it is recorded as an absence.
+   */
+  const [detached, setDetached] = useState<string[]>([])
+  const selEdgeRef = useRef(selEdge)
+  selEdgeRef.current = selEdge
+  const isSelEdge = (from: string, to: string, kind: 'stored' | 'implicit') =>
+    !!selEdge && selEdge.from === from && selEdge.to === to && selEdge.kind === kind
   const [drawing, setDrawing] = useState<{ from: string; x: number; y: number } | null>(null)
   // The card an in-progress connection is currently over. Drawing a line used to give no feedback
   // about WHERE it would land, so you released and hoped. The target lights up instead.
@@ -1682,6 +1724,7 @@ export function FlowsView() {
     // Shift/Cmd-click is a multi-select toggle (handled on click) — don't reset the selection or
     // start a drag on that gesture.
     if (e.shiftKey || e.metaKey || e.ctrlKey) return
+    setSelEdge(null)
     const selIds = selected.has(id) && selected.size ? [...selected] : [id]
     if (!selected.has(id)) setSelected(new Set(selIds))
     const selSet = new Set(selIds)
@@ -1703,8 +1746,20 @@ export function FlowsView() {
   }
   // Click a card to select it; Shift/Cmd-click toggles it into a multi-selection (for group drag /
   // bulk moves). The first modifier-click folds in whatever was already singly selected.
+  /**
+   * Select a line, and only a line. A card and a line are never selected at once: Delete means one
+   * thing at a time, and a highlight on both would leave you guessing which the keystroke will take.
+   */
+  const selectEdge = (from: string, to: string, kind: 'stored' | 'implicit') => {
+    setSelEdge((cur) => (cur && cur.from === from && cur.to === to && cur.kind === kind ? null : { from, to, kind }))
+    setSel(null)
+    setSelected(new Set())
+    setPickAt(null)
+    setBriefCollapsed(false)
+  }
   const clickSelect = (e: ReactMouseEvent, id: string) => {
     e.stopPropagation()
+    setSelEdge(null)
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       setSelected((prev) => {
         const next = new Set(prev)
@@ -1786,6 +1841,22 @@ export function FlowsView() {
       // Delete / Backspace removes the selected card(s) — deliverable or freeform note. The campaign
       // brief is the board's root, so it's never deleted this way.
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        // A LINE FIRST, because a line and a card are never selected together. Through the ref, not
+        // the closure: this listener is registered once, so a captured `connectors` goes stale and
+        // the detach would work out what else supplies a record from an old board.
+        const ed = selEdgeRef.current
+        if (ed) {
+          e.preventDefault()
+          if (ed.kind === 'stored') deleteEdgeRef.current(ed.from, ed.to)
+          // Campaign → channel is a decision, so cutting it detaches rather than deletes: the channel
+          // and its assets stay, and stop taking anything from the brief.
+          else if (canDetachRef.current(ed.from, ed.to)) setChannelDetachedRef.current(ed.to, true)
+          // The rest are not decisions. A post sits under its channel because of what it IS. Saying
+          // so out loud, because a key that silently does nothing is the defect this file already
+          // fixed once for Delete on a built channel.
+          else showToast('This line follows from where the post lives, so there is nothing to cut. Move or delete the card instead.')
+          return
+        }
         const ids = selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []
         if (ids.length) {
           e.preventDefault()
@@ -1841,6 +1912,13 @@ export function FlowsView() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault()
         convertSelectionRef.current()
+        return
+      }
+      // Escape drops a selected line. Before the smart-object arm, because it is the more recent
+      // thing you did: you cannot select a line without first clicking one.
+      if (e.key === 'Escape' && selEdgeRef.current) {
+        e.preventDefault()
+        setSelEdge(null)
         return
       }
       // Escape steps out of a smart object you're inside.
@@ -2577,22 +2655,29 @@ export function FlowsView() {
    * no brand", and it is the same refusal, unchanged, that a campaign with no Brand card has always
    * got.
    */
-  const unbindBrandFromCard = (nodeId: string, edges: { from: string; to: string }[]) => {
+  /**
+   * Returns whether the WIRE may now be removed. False only when the unbind was refused, which is
+   * the one case where taking the line away would leave the campaign bound to a brand with nothing
+   * on the board saying so, and no line left to try again from. Every other path returns true,
+   * including "this is not a Brand card at all".
+   */
+  const unbindBrandFromCard = (nodeId: string, edges: { from: string; to: string }[]): boolean => {
     const name = brandCardName(nodeId)
-    if (!name || viewName === null) return
+    if (!name || viewName === null) return true
     // Bound to some other brand: this card never made that binding, so removing it undoes nothing.
-    if (clientForCampaign(viewName) !== name) return
+    if (clientForCampaign(viewName) !== name) return true
     // A second card naming the same brand still states it, so the binding stands.
-    if (edges.some((e) => e.to === 'campaign' && e.from !== nodeId && brandCardName(e.from) === name)) return
+    if (edges.some((e) => e.to === 'campaign' && e.from !== nodeId && brandCardName(e.from) === name)) return true
     const written = writtenAssetCount()
     if (written) {
       useTrafficStore.getState().setBrandNotice(
         `"${viewName}" is still bound to ${name}: ${written} asset${written === 1 ? '' : 's'} ${written === 1 ? 'is' : 'are'} already written in that voice, and taking the brand away would leave copy no brand answers for. Connect a different Brand card to move it, or clear those assets first.`,
       )
-      return
+      return false
     }
     bindCampaignBrand(viewName, '')
     showToast(`"${viewName}" is no longer bound to ${name}. Nothing had been written yet. Connect a Brand card before generating.`)
+    return true
   }
   /**
    * Connecting a card to the campaign tags its records on the campaign.
@@ -2627,17 +2712,18 @@ export function FlowsView() {
     return true
   }
   /** Detaching drops the card's refs, unless another attached card still contributes the same one. */
-  const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]) => {
+  /** Returns whether the wire may be removed; see unbindBrandFromCard. */
+  const detachFromCampaign = (nodeId: string, edges: { from: string; to: string }[]): boolean => {
     // Before the refs early-return below, for the same reason attachToCampaign binds before it: a
     // Brand card carries no refs, so anything downstream of that guard never runs for one.
-    unbindBrandFromCard(nodeId, edges)
+    const mayRemove = unbindBrandFromCard(nodeId, edges)
     const mine = refsBehind(nodeId)
-    if (!mine.length) return
+    if (!mine.length) return mayRemove
     const stillAttached = edges
       .filter((e) => e.to === 'campaign' && e.from !== nodeId)
       .flatMap((e) => refsBehind(e.from))
     const drop = mine.filter((r) => !stillAttached.some((x) => x.type === r.type && x.id === r.id))
-    if (!drop.length) return
+    if (!drop.length) return mayRemove
     const base = (viewName !== null ? flowRefs : briefRefsEffective).filter(
       (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
     )
@@ -2647,9 +2733,49 @@ export function FlowsView() {
     } else {
       commitBriefRefs(base)
     }
+    return mayRemove
   }
   /** Is this a context card or a smart object, i.e. something that can INFORM an output? */
   const isContextNode = (id: string) => objects.some((n) => n.id === id) || placements.some((p) => p.id === id)
+  /**
+   * REMOVE A STORED CONNECTOR, with the record detachment that has to go with it.
+   *
+   * Deleting the line without detaching leaves the wire gone while the records it carried keep
+   * steering the copy, which is the worst of both: nothing on the board explains the words. So the
+   * detach runs first, against the PRE-deletion array, because both detach functions work out
+   * "is anything else still supplying this ref?" from the edges they are handed.
+   *
+   * Matched by pair rather than by index: see selEdge. Held in a ref as well, because the keydown
+   * listener is registered once and would otherwise close over a stale `connectors`.
+   */
+  /**
+   * Can this derived line be cut? Only campaign → channel. That one is the person's decision to make:
+   * a channel taking the campaign's cards is the default, not a law, and cutting it leaves the
+   * channel and every asset under it exactly where they are. The others are not decisions at all. A
+   * post sits under its channel because of what it IS, and a channel branched off an asset is
+   * describing a journey that asset's own field records; there is nothing to cut without deleting or
+   * moving the card itself.
+   */
+  const canDetach = (from: string, to: string) => viewName !== null && from === 'campaign' && viewDelivs.some((d) => d.key === to)
+  /** Cut a channel off from the brief, or restore it. */
+  const setChannelDetached = (key: string, off: boolean) => {
+    recordHistory(true)
+    setDetached((cur) => (off ? (cur.includes(key) ? cur : [...cur, key]) : cur.filter((k) => k !== key)))
+    setSelEdge(null)
+  }
+  const deleteEdge = (from: string, to: string) => {
+    if (!connectors.some((c) => c.from === from && c.to === to)) return
+    // A refused unbind keeps its wire. Unbinding a Brand card is refused while assets are already
+    // written in that voice, and removing the line anyway left the campaign bound to a brand with
+    // nothing on the board saying so, and no line to try again from: a notice explaining what to do
+    // next, next to a board that no longer offers it. Same rule as the drop handler, where a refused
+    // attach does not draw the wire either.
+    if (to === 'campaign') {
+      if (!detachFromCampaign(from, connectors)) return
+    } else if (isContextNode(from)) detachFromTarget(from, to, connectors)
+    setConnectors((c) => c.filter((x) => !(x.from === from && x.to === to)))
+    setSelEdge(null)
+  }
   /**
    * The assets behind a connector target: every asset of a deliverable, or the one asset of a post.
    * Empty for the campaign, which is handled by attachToCampaign instead.
@@ -3004,7 +3130,7 @@ export function FlowsView() {
     // A budget needs to be assigned to paid assets. Flag it if there's nowhere to put it, or if
     // it isn't fully assigned across the paid groups yet.
     if (n && n > 0) {
-      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this flow has no paid media to spend it on — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
+      if (!viewPaidRows.length) showToast(`$${n.toLocaleString()} budget set, but this campaign has no paid media to spend it on — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
       else if (assignedBudget < n) showToast(`$${n.toLocaleString()} budget set — assign it across your paid assets so it's fully allocated.`)
     }
   }
@@ -4037,6 +4163,12 @@ export function FlowsView() {
   placementsRef.current = placements
   const releaseRef = useRef(releasePlacement)
   releaseRef.current = releasePlacement
+  const deleteEdgeRef = useRef(deleteEdge)
+  deleteEdgeRef.current = deleteEdge
+  const canDetachRef = useRef(canDetach)
+  canDetachRef.current = canDetach
+  const setChannelDetachedRef = useRef(setChannelDetached)
+  setChannelDetachedRef.current = setChannelDetached
   /** Drop a member out of an object without deleting the card. */
   const removeFromPlacement = (gid: string, noteId: string) =>
     setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
@@ -4368,6 +4500,8 @@ export function FlowsView() {
     // (The library OBJECTS survive: that is the point of them. Only "it is on this canvas" resets.)
     setPlacements([])
     setConnectors([])
+    setDetached([])
+    setSelEdge(null)
     setOpenGroupId(null)
     // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
     saveFlowBoard({ key: BUILDER_BOARD_KEY, objects: [], placements: [], pos: {}, connectors: [] })
@@ -4417,6 +4551,10 @@ export function FlowsView() {
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
+    setDetached(loaded.detached ?? [])
+    // The line you had selected belongs to the campaign you just left. Without this the next one
+    // opens with an unrelated line lit up, and Delete acts on a board that is no longer on screen.
+    setSelEdge(null)
     setPos((p) => ({ ...p, ...loaded.pos }))
     setViewName(n)
     setPickAt(null)
@@ -4486,7 +4624,9 @@ export function FlowsView() {
         // carry the campaign name, which is what put it in viewDelivs. The line states a fact.
         const branchSrc = d.rows.find((r) => r.branchOf)?.branchOf
         const srcRow = branchSrc ? viewRows.find((r) => r.assetName === branchSrc) : undefined
-        out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
+        // A channel cut off from the brief draws no line to it, and takes nothing from it: the store
+        // reads the same list when it assembles what each asset is written from.
+        if (!(srcRow === undefined && detached.includes(d.key))) out.push({ from: srcRow ? srcRow.id : 'campaign', to: d.key })
         for (const r of d.rows) out.push({ from: d.key, to: r.id })
       }
       return out
@@ -4499,7 +4639,7 @@ export function FlowsView() {
       for (let bi = 0; bi < slots; bi++) out.push({ from: n.id, to: `${n.id}:${bi}` })
     }
     return out
-  }, [nodes, viewName, viewDelivs, viewRows])
+  }, [nodes, viewName, viewDelivs, viewRows, detached])
 
   // Card ids (posts, deliverables, build sub-cards) that carry media budget/spend. Connectors
   // touching one of these are tinted gold so a paid path stands out from organic on the canvas.
@@ -4556,6 +4696,18 @@ export function FlowsView() {
   }
 
   /**
+   * A SELECTION CANNOT OUTLIVE ITS LINE. Both render passes bail when either endpoint has no
+   * measured rect, so a line whose card was deleted, or whose channel key changed because its
+   * format or its branch did, stops being drawn while the selection still points at it. Delete would
+   * then act on something nobody can see. Validity is read from what actually rendered rather than
+   * from the connector list, because the implicit lines are not in any list.
+   */
+  useEffect(() => {
+    if (!selEdge) return
+    if (!rects[selEdge.from] || !rects[selEdge.to]) setSelEdge(null)
+  }, [selEdge, rects])
+
+  /**
    * The campaign name a build lands on, for a given builder name. One function because three
    * places have to agree on it: the Grid / Calendar scope below, buildFlow itself, and the chat's
    * "already built" guard. They were three copies of the same template string.
@@ -4584,7 +4736,9 @@ export function FlowsView() {
     const ids = new Set([...objects.map((o) => o.id), ...placements.map((p) => p.id), 'campaign'])
     const boardPos: Record<string, { x: number; y: number }> = {}
     for (const [k, v] of Object.entries(pos)) if (ids.has(k)) boardPos[k] = v
-    return { key, objects, placements, pos: boardPos, connectors }
+    // `detached` is omitted when empty so a board that has never had a line cut carries no field at
+    // all, which is what lets every board saved before this existed load with its old meaning.
+    return { key, objects, placements, pos: boardPos, connectors, ...(detached.length ? { detached } : {}) }
   }
   const boardSaveTimer = useRef<number | null>(null)
   useEffect(() => {
@@ -4596,7 +4750,10 @@ export function FlowsView() {
       if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardKey, objects, placements, connectors, pos])
+    // `detached` belongs here for the same reason `connectors` does: it is part of what the board
+    // says about itself. Left out, a cut line vanished on screen and came back on the next load,
+    // because the save never fired for it.
+  }, [boardKey, objects, placements, connectors, pos, detached])
 
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
   // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's
@@ -7400,11 +7557,25 @@ export function FlowsView() {
           )}
         </div>
         <div className="flow-top-right">
+          {/* WHAT IS LEFT TO SPEND, in the header rather than on the canvas toolbar. The balance is
+              a property of the workspace, not of the board you happen to be looking at, and the
+              toolbar it used to sit on is a row of things you DO to the canvas. Reads the provider
+              account rather than an app ledger, because there is no app ledger. Hidden entirely
+              while unknown: a balance nobody can read is not zero. Turns warning-toned under $1,
+              which is roughly a couple of full campaign generations. */}
+          {aiCredits && (
+            <span
+              className={`flow-top-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
+              title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
+            >
+              {aiCredits.remainingCredits.toLocaleString()} credits
+            </span>
+          )}
           {can(role, 'share') && (
             <button
               className="flow-share-btn"
               onClick={() => openShareDialog(viewName ?? undefined)}
-              title={viewName ? 'Share just this flow (view-only)' : 'Share this workspace'}
+              title={viewName ? 'Share just this campaign (view-only)' : 'Share this workspace'}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />
@@ -7634,6 +7805,7 @@ export function FlowsView() {
             if (id && !selected.has(id)) {
               setSel(id)
               setSelected(new Set())
+              setSelEdge(null)
             }
             const cr = canvasRef.current?.getBoundingClientRect()
             e.preventDefault()
@@ -7665,6 +7837,7 @@ export function FlowsView() {
               setMarquee({ x0: x, y0: y, x1: x, y1: y })
               setSelected(new Set())
               setSel(null)
+              setSelEdge(null)
             }
           }}
           onMouseMove={(e) => {
@@ -7717,6 +7890,16 @@ export function FlowsView() {
               // campaign onto a card is the same statement backwards, so accept it and store it
               // the right way round rather than making the user guess which end to start from.
               const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
+              // RECONNECTING A CUT CHANNEL restores the derived line rather than storing a second
+              // one beside it. Otherwise the board would carry a real connector saying exactly what
+              // the absent one said, and the next cut would have two things to remove.
+              if (pair && pair.from === 'campaign' && detached.includes(pair.to)) {
+                setChannelDetached(pair.to, false)
+                drawingFrom.current = null
+                setDrawing(null)
+                setConnectOver(null)
+                return
+              }
               if (pair && pair.from !== pair.to) {
                 // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
                 // already bound to a different brand is refused (attachToCampaign says why), and a
@@ -7750,6 +7933,7 @@ export function FlowsView() {
                 }
               })
               setSelected(ids)
+              if (ids.size) setSelEdge(null)
               marqueeStart.current = null
               setMarquee(null)
             }
@@ -7783,35 +7967,95 @@ export function FlowsView() {
                 <circle cx="5" cy="5" r="3.5" fill="var(--text-faint)" />
               </marker>
             </defs>
+            {/* EVERY LINE IS SELECTABLE, structural ones included. They used to be inert: a bare
+                path with pointer-events off, so the lines holding the board together were the ones
+                you could not point at. Clicking one now says which line you mean, and the inspector
+                says what it is, which for a derived line is the whole answer.
+
+                Clicking used to DELETE a stored line outright, on one unmodified click, taking the
+                records with it. That is the edge this file already refused for smart objects: one
+                keystroke silently taking several things with it is too sharp. Click selects; the ✕
+                on the selected line deletes; Delete does the same from the keyboard. */}
             {implicitConnectors.map((cn) => {
               const a = connRect(cn.from)
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
-              return <path key={`imp-${cn.from}-${cn.to}`} className={`flow-edge implicit${paid ? ' paid' : ''}`} d={edgePath(a, b, zoom / 100)} />
+              const on = isSelEdge(cn.from, cn.to, 'implicit')
+              const d = edgePath(a, b, zoom / 100)
+              return (
+                <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}`}>
+                  <path className={`flow-edge implicit${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
+                  {/* THE SAME BAND EVERY OTHER LINE GETS. It was narrower at first, on the theory
+                      that these are numerous (one from every channel to every post) and would carpet
+                      the canvas at low zoom. In use the narrow band was simply hard to hit, which is
+                      the complaint that matters: a line you cannot point at may as well still be
+                      inert. A stored line is drawn after this pass and so wins any overlap, which is
+                      the right precedence — the one that deletes something stays reachable. */}
+                  <path
+                    className="flow-edge-hit"
+                    d={d}
+                    onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
+                    onClick={() => selectEdge(cn.from, cn.to, 'implicit')}
+                  >
+                    <title>Click to select this connection</title>
+                  </path>
+                </g>
+              )
             })}
             {connectors.map((cn, i) => {
               const a = connRect(cn.from)
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
+              const on = isSelEdge(cn.from, cn.to, 'stored')
               const d = edgePath(a, b, zoom / 100)
               return (
-                <g key={`${cn.from}-${cn.to}-${i}`} className="flow-edge-g">
-                  <path className={`flow-edge${paid ? ' paid' : ''}`} d={d} />
-                  {/* Wide transparent hit path so the thin dotted edge is easy to click to delete. */}
-                  <path className="flow-edge-hit" d={d} onClick={() => {
-                    if (cn.to === 'campaign') detachFromCampaign(cn.from, connectors)
-                    // Deleting the edge to a deliverable or post takes its records off those assets
-                    // too, or the wire would be gone while its context kept steering the copy.
-                    else if (isContextNode(cn.from)) detachFromTarget(cn.from, cn.to, connectors)
-                    setConnectors((c) => c.filter((_, j) => j !== i))
-                  }}>
-                    <title>Click to delete this connection</title>
+                <g key={`${cn.from}-${cn.to}-${i}`} className={`flow-edge-g${on ? ' on' : ''}`}>
+                  <path className={`flow-edge${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
+                  {/* Wide transparent hit path so the thin dotted line is easy to point at. The
+                      mousedown guard stops the canvas underneath treating this as a click on the
+                      background, which clears the selection and opens a marquee under your cursor.
+                      Conditional, or the pan tool and space-pan stop working over any line. */}
+                  <path
+                    className="flow-edge-hit"
+                    d={d}
+                    onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
+                    onClick={() => selectEdge(cn.from, cn.to, 'stored')}
+                  >
+                    <title>Click to select this connection</title>
                   </path>
                 </g>
               )
             })}
+            {/* THE DELETE CONTROL, on the selected line only, and only when there is something to
+                delete. Its presence is the answer to "why will this line not go away": a derived
+                line never shows one, so you can see that before you press anything. */}
+            {(() => {
+              if (!selEdge) return null
+              if (selEdge.kind !== 'stored' && !canDetach(selEdge.from, selEdge.to)) return null
+              const a = connRect(selEdge.from)
+              const b = connRect(selEdge.to)
+              if (!a || !b) return null
+              const { s, t } = anchorsFor(a, b)
+              const mx = (s.x + t.x) / 2
+              const my = (s.y + t.y) / 2
+              return (
+                <g
+                  className="flow-edge-del"
+                  onMouseDown={(ev) => ev.stopPropagation()}
+                  onClick={(ev) => {
+                    ev.stopPropagation()
+                    if (selEdge.kind === 'stored') deleteEdge(selEdge.from, selEdge.to)
+                    else setChannelDetached(selEdge.to, true)
+                  }}
+                >
+                  <title>{selEdge.kind === 'stored' ? 'Delete this connection' : 'Cut this channel off from the brief'}</title>
+                  <circle cx={mx} cy={my} r={9} />
+                  <path d={`M${mx - 3.4} ${my - 3.4} L${mx + 3.4} ${my + 3.4} M${mx + 3.4} ${my - 3.4} L${mx - 3.4} ${my + 3.4}`} />
+                </g>
+              )
+            })()}
             {drawing &&
               connRect(drawing.from) &&
               (() => {
@@ -8604,9 +8848,6 @@ export function FlowsView() {
                 <div className="flow-panel-head">
                   <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} channel={selPost.channel as ChannelId} />
                   <span className="flow-panel-title">{selPost.assetName}</span>
-                  <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
-                    ✕
-                  </button>
                 </div>
                 <div className="flow-inspect">
                   <p className="flow-inspect-desc">
@@ -8800,7 +9041,16 @@ export function FlowsView() {
                           placeholder="0"
                           onBlur={(e) => {
                             const v = e.target.value.trim()
-                            void updateRow(selPost.id, { budget: v === '' ? undefined : { amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'lifetime' } })
+                            // SPREAD, and default to daily like everywhere else. This rebuilt the
+                            // budget from two fields, so editing the AMOUNT here silently deleted
+                            // the flight end date the review drawer sets, and plannedToDate then
+                            // fell back to start + 14 days and moved every planned figure. It also
+                            // defaulted the type to lifetime while the grid and the drawer default
+                            // to daily, and the two are different sums: daily multiplies by days
+                            // elapsed, lifetime by the fraction of the flight. The same number
+                            // typed on two surfaces flipped this row's own pace chip between
+                            // "Overspending" and "On track".
+                            void updateRow(selPost.id, { budget: v === '' ? undefined : { ...selPost.budget, amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'daily' } })
                           }}
                         />
                       </div>
@@ -8860,14 +9110,26 @@ export function FlowsView() {
                 <div className="flow-panel-head">
                   <PresetTile tone={selDeliv.tone} channel={selDeliv.channel} />
                   <span className="flow-panel-title">{selDeliv.label}</span>
-                  <button className="flow-back flow-close" onClick={() => setSel('campaign')}>
-                    ✕
-                  </button>
                 </div>
                 <div className="flow-inspect">
                   <p className="flow-inspect-desc">
                     {CHANNELS[selDeliv.channel as ChannelId]?.label ?? selDeliv.channel} · {typeLabel(selDeliv.channel as ChannelId, selDeliv.assetType) || selDeliv.assetType}
                   </p>
+                  {/* CUT OFF FROM THE BRIEF. The missing line says it on the canvas, but a missing
+                      thing is a poor way to state a fact: you have to know it used to be there. The
+                      panel says it in words, and offers the way back, because reconnecting by drawing
+                      a line to a card with no line on it is the one gesture that is not obvious. */}
+                  {detached.includes(selDeliv.key) && (
+                    <>
+                      <p className="flow-inspect-note">
+                        Cut off from the campaign brief. Its assets keep everything they have, and are
+                        written without the cards wired to the campaign.
+                      </p>
+                      <button className="flow-reset-link" onClick={() => setChannelDetached(selDeliv.key, false)}>
+                        Connect it to the brief again
+                      </button>
+                    </>
+                  )}
                   <label className="flow-inspect-label">Assets</label>
                   {/* The count is TYPEABLE, not just steppable. Getting from 4 to 16 was twelve
                       clicks, and the number was the one thing on this panel you could see but not
@@ -8933,7 +9195,10 @@ export function FlowsView() {
                             <div className="flow-pitem-label">{r.assetName}</div>
                             <div className="flow-pitem-desc">
                               {r.scheduledAt ? new Date(r.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No date'}
-                              {` · ${r.status === 'in_review' ? 'In review' : r.status === 'approved' ? 'Approved' : 'Draft'}`}
+                              {/* Through assetBadge, which knows all seven. This tested two and
+                                  called everything else "Draft", so a posted asset read `posted`
+                                  in the grid and "Draft" in the panel beside it. */}
+                              {` · ${assetBadge(r).label}`}
                             </div>
                           </div>
                         </button>
@@ -9107,7 +9372,7 @@ export function FlowsView() {
                       </div>
                       {campaignBudget > 0 && (viewPaidRows.length === 0 ? (
                         <div className="flow-budget-warn">
-                          No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                          No paid media to spend this budget on. Add a paid channel (Meta, LinkedIn Ads, …) to allocate it.
                         </div>
                       ) : assignedBudget < campaignBudget ? (
                         <div className="flow-budget-warn">
@@ -9247,13 +9512,13 @@ export function FlowsView() {
                         onChange={(e) => setBudget(e.target.value)}
                         onBlur={() => {
                           const n = Math.max(0, +budget || 0)
-                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this flow — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
+                          if (n > 0 && !hasPaidBuild) showToast(`$${n.toLocaleString()} budget set, but no paid media in this campaign — add a paid channel (Meta, LinkedIn Ads, …) to allocate it.`)
                         }}
                       />
                     </div>
                     {(+budget || 0) > 0 && !hasPaidBuild && (
                       <div className="flow-budget-warn">
-                        No paid media to spend this budget on. Add a paid deliverable (Meta, LinkedIn Ads, …) to allocate it.
+                        No paid media to spend this budget on. Add a paid channel (Meta, LinkedIn Ads, …) to allocate it.
                       </div>
                     )}
                   </div>
@@ -9348,7 +9613,7 @@ export function FlowsView() {
                       </div>
                     )}
                     <button className="flow-inspect-regen" onClick={() => void genPreview(node)} disabled={!writeCopy}>
-                      ↻ Redraft this deliverable
+                      ↻ Redraft this channel
                     </button>
                     <div className="flow-inspect-note" style={{ marginTop: 12 }}>
                       {CHANNELS[p.channel as ChannelId]?.label ?? p.channel} · {typeLabel(p.channel as ChannelId, p.assetType) || p.assetType}
@@ -9589,7 +9854,7 @@ export function FlowsView() {
                   onClick={() => { close(); void (onDeliv ? removeRows(onDeliv.rows.map((r) => r.id)) : removeRow(onPost!.id)) }}
                 >
                   {onDeliv
-                    ? `Delete deliverable and its ${onDeliv.rows.length} post${onDeliv.rows.length === 1 ? '' : 's'}`
+                    ? `Delete channel and its ${onDeliv.rows.length} post${onDeliv.rows.length === 1 ? '' : 's'}`
                     : 'Delete post'}
                   <span className="flow-ctx-kbd">⌫</span>
                 </button>
@@ -9800,7 +10065,10 @@ export function FlowsView() {
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.5-3.5" />
             </svg>
-            {Math.round(zoom)}%
+            {/* The readout sits in a slot wide enough for the longest value it can hold, because
+                the toolbar is centred: 50% and 100% are one character apart, so zooming resized this
+                button and shifted every control in the row sideways as you did it. */}
+            <span className="flow-tb-num">{Math.round(zoom)}%</span>
             <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m6 9 6 6 6-6" />
             </svg>
@@ -9815,7 +10083,7 @@ export function FlowsView() {
                   className="flow-tb-zoom-item"
                   onClick={() => { fitToContent(); setZoomOpen(false) }}
                 >
-                  Fit to board
+                  Fit
                 </button>
                 <div className="flow-tb-zoom-sep" />
                 {[150, 125, 100, 75, 50, 25, 10].map((z) => (
@@ -9917,18 +10185,6 @@ export function FlowsView() {
                 </div>
               )
             })()}
-            {/* WHAT IS LEFT TO SPEND. Reads the provider account, not an app ledger, because there
-                is no app ledger — so it is shown in dollars rather than dressed up as a credit
-                count. Hidden entirely while unknown: a balance nobody can read is not zero. Turns
-                warning-toned under $1, which is roughly a couple of full campaign generations. */}
-            {aiCredits && (
-              <span
-                className={`flow-tb-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
-                title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
-              >
-                {aiCredits.remainingCredits.toLocaleString()} credits
-              </span>
-            )}
             <div className="flow-tb-brand-wrap">
             <button
               className="flow-tb-regen"
@@ -9985,22 +10241,78 @@ export function FlowsView() {
           <div className="flow-real-bar">
             {!hasBuiltRows ? (
               <div className="flow-real-hint">
-                This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}, it shows built assets. Click "Build & write copy" to populate it, or add one yourself.
+                This is the campaign's {flowView === 'grid' ? 'Grid' : 'Calendar'}. It shows built assets. Press Generate to populate it, or add one yourself.
               </div>
             ) : (
               <span />
             )}
             {!flowShareLock && (
-              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this flow">
+              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this campaign">
                 ＋ Add asset
               </button>
             )}
           </div>
           <div className="flow-real-view">
             {flowView === 'grid' ? (
-              <SheetGrid scopeClient={brand || undefined} scopeCampaign={flowCampaign} />
+              <SheetGrid
+                scopeClient={brand || undefined}
+                scopeCampaign={flowCampaign}
+                onPickObject={(pick) => setGridPick(pick)}
+                /**
+                 * ADDING ONE FROM A CELL IS ADDING A CARD. Same addObject the toolbar calls, wired
+                 * straight to the asset whose cell you used, and then its own inspector opens on it
+                 * — which is the whole gesture on the canvas, minus having to find the canvas.
+                 *
+                 * A real card rather than a bare record, because the card is what carries it: the
+                 * cell reads its value by walking the board, so a record with no card behind it
+                 * would be filled in and then not appear in the cell that asked for it. The wire is
+                 * to the ROW, not the campaign, because that is the cell you clicked — this voice is
+                 * for this asset until you say otherwise.
+                 */
+                onCreateObject={({ kind, rowId }) => {
+                  const id = addObject(kind)
+                  setConnectors((c) => (c.some((x) => x.from === id && x.to === rowId) ? c : [...c, { from: id, to: rowId }]))
+                  setGridPick({ kind, cardId: id, label: OBJECT_META[kind].label })
+                }}
+              />
             ) : (
               <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)} />
+            )}
+            {/* THE SAME INSPECTOR, on the same board, editing the same objects array the canvas
+                edits — because this is the canvas's own component. Nothing is duplicated and nothing
+                can drift, which is the whole reason it is rendered here rather than built in the
+                grid. */}
+            {gridPick && (
+              <aside className="flow-panel flow-panel-grid" role="complementary" aria-label={`${gridPick.label} details`}>
+                <button className="flow-panel-collapse" title="Close" aria-label="Close" onClick={() => setGridPick(null)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                {(() => {
+                  const card = gridPick.cardId ? objects.find((o) => o.id === gridPick.cardId) : undefined
+                  if (card) return renderObjectInspector(card)
+                  /* No card behind this cell: it was pinned on the row, or it is the campaign's
+                     brand. Saying so beats inventing a card to satisfy the panel — see gridPick. */
+                  return (
+                    <>
+                      <div className="flow-panel-head">
+                        <span className="flow-note-ic flow-insp-ic" style={{ color: OBJECT_META[gridPick.kind].tone }} aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[gridPick.kind].icon}</svg>
+                        </span>
+                        <span className="flow-panel-title">{gridPick.label}</span>
+                      </div>
+                      <div className="flow-inspect">
+                        <p className="flow-inspect-note">
+                          {gridPick.kind === 'brand'
+                            ? 'The brand is bound to the campaign, not to this asset. Open it from the Brand card on the Flow tab.'
+                            : 'This is pinned on the asset itself rather than coming from a card, so there is no card to open. Add one on the Flow tab and wire it in to edit it here.'}
+                        </p>
+                      </div>
+                    </>
+                  )
+                })()}
+              </aside>
             )}
           </div>
         </div>

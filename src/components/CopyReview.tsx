@@ -3,6 +3,7 @@ import { CopyFields } from './CopyFields'
 import { useEffect, useState } from 'react'
 import { CHANNELS, KIND_ORDER, channelsByKind } from '../domain/channels'
 import { isValidType, typeLabel, typesFor } from '../domain/channelAssetTypes'
+import { STATUS_LABEL, STATUS_ORDER } from '../domain/assetBadge'
 import { messagingFields, messagingMap } from '../domain/messaging'
 import { applyBreakStatus, detectBreaks } from '../domain/breaks'
 import { rtbsForCampaign } from '../domain/rtb'
@@ -18,7 +19,6 @@ import { ChannelPreview } from './ChannelPreview'
 import { Thumb } from './Thumb'
 import { proxiedMedia } from '../lib/media'
 
-const STATUSES: RowStatus[] = ['draft', 'approved', 'scheduled', 'posted', 'failed']
 const UTM_PARTS: { key: keyof Utm; label: string }[] = [
   { key: 'source', label: 'Source' },
   { key: 'medium', label: 'Medium' },
@@ -318,9 +318,12 @@ export function CopyReview() {
                   })
                 }}
               >
-                {STATUSES.map((s) => (
+                {/* All seven, from the shared list. This drawer WRITES in_review and rejected
+                    (its own Undo and Send back below), and then offered neither, so the picker
+                    could not show you the state you had just put the row into. */}
+                {STATUS_ORDER.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {STATUS_LABEL[s]}
                   </option>
                 ))}
               </select>

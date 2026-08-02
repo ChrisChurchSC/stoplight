@@ -52,7 +52,7 @@ export function CommentDrawer() {
             <div className="copy-hint" style={{ textAlign: 'center', padding: '24px 0' }}>
               No comments pulled yet.
               <div style={{ marginTop: 10 }}>
-                <button className="btn sm" onClick={syncComments}>
+                <button className="btn sm" onClick={() => void syncComments()}>
                   ↻ Sync comments
                 </button>
               </div>

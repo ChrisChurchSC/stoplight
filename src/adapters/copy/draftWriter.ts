@@ -157,6 +157,27 @@ export interface DraftRequest {
     permission?: string
     mindset?: string
   }[]
+  /**
+   * The PRODUCT this campaign sells, from a wired Product card. Keyed on the job it does rather than
+   * its name: the writer already knows the brand, and a name on its own earns nothing.
+   */
+  products?: {
+    name?: string
+    kind?: string
+    summary?: string
+    forWho?: string
+    jobToBeDone?: string
+  }[]
+  /**
+   * The TRIGGER that starts it, from a wired Trigger card. The signal is the useful half — it is
+   * what lets the copy open with "you just…" instead of a standing pitch.
+   */
+  triggers?: {
+    name?: string
+    type?: string
+    signal?: string
+    response?: string
+  }[]
   /** Strings already used in this campaign that a (re)generation must not reuse. */
   /**
    * FIGURES the app computed from the data sets wired to this campaign, each traceable to a cell.

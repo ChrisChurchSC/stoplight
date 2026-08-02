@@ -31,6 +31,32 @@ const RELEASES: Release[] = [
           'Sign up has an address you can link to. /signup opens it directly.',
         ],
       },
+      {
+        tag: 'Improved',
+        items: [
+          'Every connector line can be selected, the structural ones included. The lines from a campaign to its channels and from a channel to its posts used to be inert, so the lines holding the board together were the only ones you could not point at. Click any line to select it, Escape to drop it. They all take the same generous click band, so a line is easy to hit at any zoom.',
+          'A channel can be cut off from the campaign brief. That line is derived, not drawn, so there was no connector to remove and no way to say "write this channel without the campaign\u2019s cards". Cut it and the channel keeps every asset it has and stops taking the campaign\u2019s cards and instructions, which reaches the writing and not only the picture. The panel says so and offers the way back, or draw the line again.',
+          'Clicking a line no longer deletes it. One unmodified click destroyed a connection and took the records it carried with it, with nothing but a tooltip to warn you. A selected line carries a ✕, and Delete does the same from the keyboard. A structural line has no ✕, because there is nothing stored behind it to remove, and pressing Delete on one now says so instead of doing nothing.',
+          'Channel and post cards lost the ✕ in the inspector. Clicking the canvas or another card already closes them.',
+          'The credit balance moved to the header, next to Share. It is a property of the workspace, and the canvas toolbar it sat on is a row of things you do to the board. The model picker and Generate stay where they were.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'The grid and the canvas agree about what a row is. The status picker offered five of the seven statuses, so an asset the review drawer had just sent back matched no option and the cell went blank; the channel panel called four of them "Draft", so a posted asset read one thing in the grid and another in the panel beside it. One list now, everywhere.',
+          'Editing a paid asset\u2019s budget on the canvas no longer deletes its flight end date, and no longer disagrees with the grid about what the number means. Daily and lifetime are different sums, and the canvas defaulted to one while the grid and the review drawer defaulted to the other, so the same figure typed in two places flipped the row between "Overspending" and "On track".',
+          'One answer to whether a row has its copy yet. The Messaging cell, the coverage bar above it and the \u2726 Draft count each asked differently, so an imported post could read as empty in its own cell, complete in the bar, and never be offered to Draft.',
+          'The Posted column shows ingested posts as posted. It read only the timestamp this app writes when it publishes something itself, so a post already live on its platform, with its real numbers attached, read as never posted.',
+          'The grid stops saying "Connected" about a channel the canvas has cut off. It now says how many assets are cut off, and marks them, in the same words the canvas uses. It does not block publishing: being cut off is a decision, not a fault.',
+          'The header buttons act on what they counted. Inside a campaign, Approve approved every draft in every campaign in the workspace, and the two Accept buttons refused unless assets you could not see were also clean, so the button appeared and did nothing.',
+          'Typing in the Campaign cell no longer makes the row disappear mid-word. It is fixed inside a campaign, where the answer is already known, and commits when you leave the cell everywhere else.',
+          'Numbers that are modelled say so. Reach is projected from channel benchmarks until there is measured data for the brand, and reads "est." until then; the attribution total no longer prints "$0 won" when the truth is that nothing is connected.',
+          'Disconnecting a Brand card from a campaign that already has copy written no longer removes the line. That unbind is refused on purpose, so the line has to stay: it was vanishing anyway, leaving the campaign bound to a brand with nothing on the board saying so and no line to try again from.',
+          'The toolbar stays put while you zoom. The readout runs from 10% to 200%, so the button holding it grew by a character between 50 and 100, and because the row is centred every control in it slid sideways as you turned the wheel. The number now sits in a slot wide enough for the longest value it can show.',
+          '"Fit to board" is just "Fit".',
+        ],
+      },
     ],
   },
   {

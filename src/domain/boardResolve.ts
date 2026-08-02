@@ -325,11 +325,23 @@ export function directionForRow(
   deliverableKey: string,
   rowId: string,
   legacy: ResolvedDirection[] = [],
+  /**
+   * Channels cut off from the brief, by deliverable key: see FlowBoard.detached. A channel hangs off
+   * the campaign by derivation rather than by a drawn wire, so cutting that line is recorded as an
+   * absence, and this is where the absence has to bite. Without it the line would be gone from the
+   * canvas while every instruction on the campaign kept reaching the copy, which is the one thing a
+   * board must never do: the picture and the writing have to agree.
+   *
+   * Legacy campaign direction is cut with it. It is campaign-wide by definition, so a channel that
+   * is no longer taking the campaign's instructions is not taking those either.
+   */
+  detached: readonly string[] = [],
 ): ResolvedDirection[] {
+  const cut = detached.includes(deliverableKey)
   return [
     ...(resolved.byTarget.get(deliverableKey) ?? []),
     ...(resolved.byTarget.get(rowId) ?? []),
-    ...resolved.campaign,
-    ...legacy,
+    ...(cut ? [] : resolved.campaign),
+    ...(cut ? [] : legacy),
   ]
 }

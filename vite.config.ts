@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 import { agentBridgeApi } from './server/agentBridge'
+import { mainCheckoutRoot } from './server/worktreeEnv'
 
 /**
  * Dev-server endpoint for the real ICP review. Keeps the Anthropic key
@@ -1252,11 +1253,28 @@ function aiStatusApi(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  const cwd = process.cwd()
+  const env = loadEnv(mode, cwd, '')
+  // A worktree under `.claude/worktrees/` has no `.env` of its own — it is gitignored, so it never
+  // gets copied across — and a dev server there reported "No model key set." for every AI feature.
+  // Fall back to the main checkout's `.env` for the server secrets. `??` not `||`: a key the
+  // worktree defines as blank stays blank, which is how this repo turns a feature off locally.
+  const root = mainCheckoutRoot(cwd)
+  const shared = root ? loadEnv(mode, root, '') : {}
   for (const key of SERVER_SECRETS) {
-    if (env[key] && !process.env[key]) process.env[key] = env[key]
+    const value = env[key] ?? shared[key]
+    if (value && !process.env[key]) process.env[key] = value
   }
   return {
+    /**
+     * Test runs are about THIS checkout. `.claude/worktrees/` holds git worktrees of the same repo
+     * from other sessions, so vitest's default glob walked into them and ran their copies of every
+     * test: the suite reported 463 tests where this branch has 165, and a failure in someone else's
+     * half-finished branch would have read as a failure here.
+     */
+    test: {
+      exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
+    },
     // Don't let test/automation artifacts written into the repo (Playwright MCP
     // logs, screenshots, exported data snapshots) trigger a dev-server reload —
     // a reload resets the in-memory store (clientFilter/brandView) to defaults.

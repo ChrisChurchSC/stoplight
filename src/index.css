@@ -46,6 +46,34 @@
   --green: #30a46c;
   --blue: #6fb3ff;
 
+  /**
+   * STATUS CHIPS: ink, tint, line. Three values per status, because a chip is text ON a wash INSIDE
+   * a hairline and the three cannot be derived from one colour — --amber on a 14% wash of itself is
+   * 1.8:1, unreadable, so "just use the status token" is not a fix.
+   *
+   * These exist because the sheet had the whole family hardcoded: #1a7a47 on #e3f4ea, #9a6a00 on
+   * #fdf2dd and so on. Those were not stale leftovers, they were RIGHT — for the light theme, which
+   * is a real theme with a control in the rail. What they never had was a dark counterpart, so on
+   * dark they were cream and mint patches on a black table, and in three places (the row hover, the
+   * focused cell, a completeness chip) light-on-light at about 1.1:1: text you cannot read at all.
+   *
+   * The light values below are byte-identical to what the sheet already had, so light is unchanged.
+   * Contrast of ink on tint, measured both ways: 4.3:1 to 5.8:1 light, 4.7:1 to 7.0:1 dark. Red's
+   * tint is 10% rather than 16% because 16% lands just under AA.
+   */
+  --ok-ink: #1a7a47;
+  --ok-tint: #e3f4ea;
+  --ok-line: #bfe6cd;
+  --warn-ink: #9a6a00;
+  --warn-tint: #fdf2dd;
+  --warn-line: #f0d9a8;
+  --bad-ink: #b42318;
+  --bad-tint: #fde7e7;
+  --bad-line: #f0c8c2;
+  --info-ink: #1d4ed8;
+  --info-tint: #e7effe;
+  --info-line: #cbd9fb;
+
   /* Translucent chrome that sits over blurred content (the canvas tab strip). Needs a real value
      per theme: a white veil on a dark page is a light patch, not a subtle one. */
   --veil: rgba(244, 246, 250, 0.78);
@@ -111,6 +139,21 @@
     --green: #3fb883;
     --blue: #7cbcff;
 
+    /* Status chips: see the light block. Tints are alpha rather than solid so a chip sits on
+       whatever surface it lands on without a seam. */
+    --ok-ink: #3fb883;
+    --ok-tint: rgba(63, 184, 131, 0.16);
+    --ok-line: rgba(63, 184, 131, 0.32);
+    --warn-ink: #f5b544;
+    --warn-tint: rgba(245, 181, 68, 0.16);
+    --warn-line: rgba(245, 181, 68, 0.32);
+    --bad-ink: #f2555a;
+    --bad-tint: rgba(242, 85, 90, 0.10);
+    --bad-line: rgba(242, 85, 90, 0.34);
+    --info-ink: #7cbcff;
+    --info-tint: rgba(124, 188, 255, 0.16);
+    --info-line: rgba(124, 188, 255, 0.32);
+
     --veil: rgba(28, 32, 40, 0.74);
     --veil-strong: rgba(34, 39, 48, 0.93);
     --veil: rgba(28, 32, 40, 0.74);
@@ -139,6 +182,21 @@
   --amber: #f5b544;
   --green: #3fb883;
   --blue: #7cbcff;
+
+  /* Status chips: see the light block. Tints are alpha rather than solid so a chip sits on
+     whatever surface it lands on without a seam. */
+  --ok-ink: #3fb883;
+  --ok-tint: rgba(63, 184, 131, 0.16);
+  --ok-line: rgba(63, 184, 131, 0.32);
+  --warn-ink: #f5b544;
+  --warn-tint: rgba(245, 181, 68, 0.16);
+  --warn-line: rgba(245, 181, 68, 0.32);
+  --bad-ink: #f2555a;
+  --bad-tint: rgba(242, 85, 90, 0.10);
+  --bad-line: rgba(242, 85, 90, 0.34);
+  --info-ink: #7cbcff;
+  --info-tint: rgba(124, 188, 255, 0.16);
+  --info-line: rgba(124, 188, 255, 0.32);
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.34);
   --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.44), 0 8px 20px -6px rgba(0, 0, 0, 0.56);
@@ -787,14 +845,14 @@ button {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #1a7f37;
+  background: var(--ok-ink);
 }
 .cat-review {
   flex: none;
   font-size: 12px;
   line-height: 1;
   cursor: help;
-  color: #d9a300;
+  color: var(--warn-ink);
 }
 
 /* ---------- Drive import picker ---------- */
@@ -974,10 +1032,25 @@ button {
   padding: 0;
   text-align: left;
 }
+/**
+ * A STICKY HEADER IN A COLLAPSED-BORDER TABLE LEAVES A HAIRLINE, and it read as a 1px gap above the
+ * column letters.
+ *
+ * Two things stacked. `.sheet-wrap` carries a 1px top border, and a sticky cell sticks to the top of
+ * the scrollPORT — inside that border — so a strip of the container always sat above the letters
+ * row. And with `border-collapse: collapse` the header's own edges are painted at the collapsed
+ * boundary, which lands on a half pixel and rounds visibly.
+ *
+ * The cell reaches up by its own border width and repaints that strip in its own background, so the
+ * header meets the container edge with nothing between them. -1px rather than 0 because the gap IS
+ * the border: covering it is the fix, and moving the whole table would take the left border with it.
+ */
 .sheet thead th {
   background: var(--surface-2);
   position: sticky;
   z-index: 3;
+  /* Repaint the strip the container's border leaves above a sticky header. */
+  box-shadow: 0 -1px 0 var(--surface-2);
 }
 .sheet thead .letters th {
   text-align: center;
@@ -1041,15 +1114,17 @@ button {
 .cov-btn.green {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  /* White read 3.2:1 on the light green and 2.5:1 on the dark one. The page background is the
+     darkest thing available in either theme, so the label uses it: 6.0:1 and 7.6:1. */
+  color: var(--bg);
 }
 .cov-btn.warn {
-  background: #fbeae8;
-  border-color: #f0c8c2;
-  color: #b42318;
+  background: var(--bad-tint);
+  border-color: var(--bad-line);
+  color: var(--bad-ink);
 }
 .cov-btn.warn:hover:not(:disabled) {
-  border-color: #b42318;
+  border-color: var(--bad-ink);
 }
 .cov-ok {
   font-size: 11.5px;
@@ -1066,7 +1141,8 @@ button {
 .cov-bar {
   flex: 1;
   height: 6px;
-  background: #e3e6eb;
+  /* Ambient context, not a call to action: the track was a pale grey bar glowing in a dark header. */
+  background: var(--surface-2);
   border-radius: 3px;
   overflow: hidden;
   max-width: 90px;
@@ -1107,8 +1183,12 @@ button {
   font-family: var(--mono);
   font-size: 11px;
 }
+/* Row hover. This was #fafbff, a near-white wash written for the light sheet, which on dark put
+   #e9ecf1 text on it at about 1.15:1 — hovering a row erased it, and the whole table is
+   cursor:pointer, so it fired on every read. A tint of the text colour lifts the row by the same
+   amount whichever way the theme is pointing. */
 .sheet tbody tr:hover td {
-  background: #fafbff;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 .sheet tbody tr:hover .gutter {
   background: var(--surface-2);
@@ -1132,7 +1212,8 @@ button {
 .cell-select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-  background: #fff;
+  /* Was #fff: typing into a cell on the dark theme gave white text on white. */
+  background: var(--surface);
 }
 .cell-select {
   cursor: pointer;
@@ -1176,21 +1257,227 @@ button {
 
 /* conditional formatting on the status cell */
 .cell-select.st-draft {
-  color: #9a6a00;
-  background: #fdf2dd;
+  color: var(--warn-ink);
+  background: var(--warn-tint);
 }
 .cell-select.st-approved,
 .cell-select.st-scheduled {
-  color: #1d4ed8;
-  background: #e7effe;
+  color: var(--info-ink);
+  background: var(--info-tint);
 }
 .cell-select.st-posted {
-  color: #1a7a47;
-  background: #e3f4ea;
+  color: var(--ok-ink);
+  background: var(--ok-tint);
 }
 .cell-select.st-failed {
-  color: #b42318;
-  background: #fde7e7;
+  color: var(--bad-ink);
+  background: var(--bad-tint);
+}
+/* The two the picker never offered, and so had no styling either: a row the review drawer sent
+   back read as an unstyled blank cell in the one column whose job is to say where it is up to. */
+/* Cut off from the brief: a fact, not a failure. Quiet, because the assets still ship — it is only
+   saying they are written without the campaign's cards. Same word the canvas and the panel use. */
+/* SELECTION: a row, a column, or one cell — the gesture a spreadsheet is expected to have.
+   The column highlight rides on <col>, the only element that spans a column; cell backgrounds paint
+   over it, so the cells themselves stay transparent for it to show through. */
+.sheet col.sel {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.sheet .letters th.sel,
+.sheet tr.data-row.sel .gutter {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+.sheet tr.data-row.sel td {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* One cell. An inset ring rather than a fill, so the copy inside stays as readable as its neighbours
+   and the selection reads as a cursor rather than as a state the row is in. */
+.sheet td.cell-sel {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.sheet .letters th {
+  cursor: pointer;
+}
+.sheet .gutter {
+  cursor: pointer;
+}
+
+/* AN OBJECT CELL IS THE CARD, SHRUNK TO A ROW.
+   Same mark, same hue, same order the card puts them in: the kind's icon, then the thing it names.
+   --note-tone is the card's own variable, set per column, so a Message cell is the Message card's
+   purple here exactly as it is there and the two surfaces cannot drift apart by hand-picked hexes. */
+/* NOT display:flex ON THE <td>. A table cell that is given another display value stops being a
+   table cell, so the browser drops it out of the row's column flow and every column past it shifts:
+   twelve pickers stacked inside one column while the copy slid two places left. The flex lives on an
+   inner wrapper, and the cell stays a cell. */
+/* `.sheet td` sets padding: 0 at (0,1,1), so a bare `.obj-cell` at (0,1,0) lost and the padding
+   below silently did nothing at all. Qualified, it wins. */
+.sheet td.obj-cell {
+  /* Room to breathe. These inherited 0 from the base cell rule and then set 6px/9px on an inner
+     element, and a picker is a taller object than a line of text: the field's own border sat almost
+     on the row line above it and the icon was pressed against the leading edge. */
+  padding: 9px 12px;
+  vertical-align: top;
+  /* The tone as a hairline down the leading edge, the way the card wears it as a border. Softer than
+     it was at 55%: twelve of these side by side read as a barcode. */
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 38%, transparent);
+}
+.obj-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/**
+ * A SELECTED OBJECT CELL CARRIES BOTH MARKS.
+ *
+ * box-shadow does not stack across rules — the last one to win the cascade replaces the others
+ * outright — and `.sheet td.obj-cell` sits after `.sheet td.cell-sel` at the same specificity. So
+ * clicking an object cell showed its tone edge and no selection ring whatsoever: the one cell in the
+ * sheet that also opens a panel was the one cell that never looked selected.
+ *
+ * Declared together, after both, so neither is lost. The tint is here rather than on .cell-sel
+ * because this cell is doing more than being selected: the inspector on the right is showing it, and
+ * it should be obvious which of thirty cells that panel belongs to.
+ */
+.sheet td.obj-cell.cell-sel {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* Its picker follows, so the whole cell reads as one selected thing rather than a ring drawn around
+   an unchanged control. */
+.sheet td.obj-cell.cell-sel .obj-select {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.obj-ic,
+.col-obj-ic {
+  color: var(--note-tone, var(--text-muted));
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.obj-ic svg {
+  width: 13px;
+  height: 13px;
+}
+.col-obj-ic svg {
+  width: 12px;
+  height: 12px;
+}
+.col-obj-ic {
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+/* THE PICKER IN AN OBJECT CELL, and it has to LOOK like one.
+   `.cell-select` is appearance:none over a transparent background with no border, which is right
+   for the cells whose value reads as data — a channel, a type. These are different: their whole
+   point is that you can set something that is currently unset, and an empty one rendered as bare
+   text is indistinguishable from an empty cell. So it carries a field and a caret. Quiet at rest,
+   because a column of twelve of them per row should not shout. */
+.obj-select {
+  width: 100%;
+  font-size: 11.5px;
+  /* Was 5px/8px, which put the caret hard against the value on a narrow column. */
+  padding: 6px 22px 6px 9px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+  background-position: calc(100% - 11px) calc(50% + 1px), calc(100% - 7px) calc(50% + 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.obj-select:hover {
+  border-color: color-mix(in srgb, var(--note-tone, var(--border-strong)) 55%, var(--border));
+  background-color: var(--surface-2);
+}
+/* Set: the kind's own hue, the same way the card's label carries it. */
+.obj-select:not(.unset) {
+  border-color: color-mix(in srgb, var(--note-tone, var(--border)) 35%, var(--border));
+  background-color: color-mix(in srgb, var(--note-tone, transparent) 8%, transparent);
+}
+/* Nothing picked. Faint, and still plainly a control. */
+/* Naming a new one, in the cell that wanted it. Same footprint as the picker it replaces, so the
+   row does not jump while you type. */
+.obj-new {
+  width: 100%;
+  font-size: 11.5px;
+  padding: 6px 9px;
+  line-height: 1.4;
+  border: 1px solid var(--note-tone, var(--accent));
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+.obj-select.unset {
+  color: var(--text-faint);
+  border-style: dashed;
+}
+/* Set elsewhere: no caret, no hover, because pressing it does nothing. */
+.obj-select:disabled {
+  opacity: 1;
+  cursor: default;
+  color: var(--text-muted);
+  border-color: transparent;
+  background-image: none;
+}
+.obj-chip {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 7px;
+  margin-right: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+}
+/* Connected and holding nothing. It reaches the writer either way, so it shows either way. */
+.obj-chip.empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+/* The connection gate can carry two independent things at once: a break to resolve, and a count of
+   channels deliberately cut off. They are not alternatives, so they need room from each other. */
+.sheet th.gate-conn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* "est." beside a modelled figure. Faint, because it is a qualifier on the number, not news. */
+.perf-est {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.ch-cut,
+.cov-cut {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--warn-ink);
+  background: var(--warn-tint);
+  border: 1px solid var(--warn-line);
+  border-radius: 20px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.cell-select.st-in_review {
+  color: var(--warn-ink);
+  background: var(--warn-tint);
+}
+.cell-select.st-rejected {
+  color: var(--bad-ink);
+  background: var(--bad-tint);
 }
 
 .sheet .act {
@@ -5519,8 +5806,39 @@ button {
 .flow-real-view {
   flex: 1;
   min-height: 0;
+  /* A row, so the inspector can sit beside the sheet rather than over it. The sheet keeps its own
+     scrolling; the container must not scroll, or the panel would scroll away with the grid. */
+  display: flex;
+  overflow: hidden;
+}
+/* The sheet takes the room the panel is not using. */
+.flow-real-view > *:first-child {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 14px 18px;
+}
+/* THE INSPECTOR, BESIDE THE GRID. Same .flow-panel the canvas uses — same component, same board —
+   so this adds only where it sits and how it arrives. It slides rather than appears, because a
+   360px column materialising next to a spreadsheet reads as the layout breaking. */
+.flow-panel-grid {
+  position: relative;
+  animation: flow-panel-in 0.16s ease-out;
+}
+@keyframes flow-panel-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-panel-grid {
+    animation: none;
+  }
 }
 /* ---- Flows landing page (all flows), one card per campaign ---- */
 .flow-home {
@@ -6745,6 +7063,17 @@ button {
   border-radius: 9px;
   cursor: pointer;
 }
+/* A NUMBER THAT CHANGES MUST NOT CHANGE THE LAYOUT. The zoom readout runs from "10%" to "200%", one
+   character of difference, and this row is centre-aligned, so every control in the toolbar slid
+   sideways as you zoomed. Tabular figures keep the digits the same width as each other; the slot
+   keeps the whole string the same width as itself. Sized for the longest value the control can show,
+   which is 200%: three figures and a sign. */
+.flow-tb-num {
+  display: inline-block;
+  min-width: 4.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .flow-tb-zoom:hover {
   background: var(--surface-2);
 }
@@ -6823,17 +7152,22 @@ button {
 .flow-tb-model-item.on .flow-tb-model-note { color: var(--accent); opacity: 0.75; }
 /* The model-account balance, beside Generate. Quiet by default: it is a thing to glance at, not a
    thing to read, right up until it is nearly gone. */
-.flow-tb-credits {
+/* THE BALANCE, in the header beside Share. It sat on the canvas toolbar, which is a row of things
+   you DO to the board; what is left to spend is a property of the workspace and belongs where the
+   workspace-level controls are. Sized to sit quietly next to Share rather than compete with it: this
+   is a number you glance at, not one you act on. Tabular figures so it does not jitter as it spends
+   down, which matters more here than it did at 9.5px. */
+.flow-top-credits {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  font-size: 9.5px;
+  padding: 0 4px;
+  font-size: 11.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   white-space: nowrap;
 }
-.flow-tb-credits.low { color: var(--amber); }
+.flow-top-credits.low { color: var(--amber); }
 .flow-tb-tools {
   display: flex;
   gap: 2px;
@@ -7290,15 +7624,23 @@ button {
   pointer-events: stroke;
   cursor: pointer;
 }
-/* Thicker as well as red on hover: at 2px the feedback was the colour alone, which is easy to miss
-   on a board with a lot of lines and no help at all if you are unsure WHICH line you are about to
-   act on. */
-.flow-edge-g:hover .flow-edge {
-  stroke: var(--red);
-  stroke-width: 3.2;
-}
-.flow-edge-g:hover .flow-edge-dot {
-  fill: var(--red);
+/* Every line gets the same band, structural ones included: a narrower one for the derived lines was
+   tried and was simply hard to hit, and a line you cannot point at may as well still be inert. Note
+   this is a presentation-beating CSS rule, so a strokeWidth attribute in the markup would lose to
+   it — set the width here or not at all. */
+/* Thicker as well as coloured on hover: at 2px the feedback was the colour alone, which is easy to
+   miss on a board with a lot of lines and no help at all if you are unsure WHICH line you are about
+   to act on.
+
+   It used to go RED, because clicking used to delete. Clicking selects now, so red would be a threat
+   the gesture does not carry out; the accent matches what selecting it will look like. Red moves to
+   the ✕ that appears on the selected line, which is the control that really does destroy something.
+
+   :not(.sel) because this rule is 0-2-1 and would otherwise beat .flow-edge.sel at 0-2-0, so putting
+   the cursor on the line you had just selected would un-highlight it. */
+.flow-edge-g:hover .flow-edge:not(.sel) {
+  stroke: var(--accent);
+  stroke-width: 2.4;
 }
 /* A connector that touches a card carrying media budget/spend: gold, so paid paths read at a
    glance apart from organic ones. */
@@ -7306,14 +7648,55 @@ button {
   stroke: #eab308;
   stroke-width: 1.4;
 }
+/* A SELECTED LINE GOES SOLID. Cards mark selection with a ring in the object's own hue plus a soft
+   glow; SVG has no box-shadow, and a line has no hue of its own, so the equivalents are the accent
+   and the one state change a card cannot make: the resting line is a chain of beads (a 1-4 dash with
+   round caps), and the selected one is continuous. That reads at any zoom and does not depend on
+   colour. After .paid, and .sel.paid after that, so selecting a paid path never hides that it is
+   paid: selection must not overwrite a signal that means something else. */
+.flow-edge.sel {
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-dasharray: none;
+}
+.flow-edge.sel.paid {
+  stroke: #eab308;
+}
 .flow-edge.drawing {
   stroke: var(--accent);
   stroke-dasharray: 5 4;
   pointer-events: none;
 }
-/* Deliverable -> post connectors are structural (drawn as SVG); not click-to-delete. */
+/* The VISIBLE structural line stays inert; its sibling hit path carries the interaction, exactly as
+   a stored line already works (that visible path is hit-testable too and simply sits under its own
+   hit path). Structural lines were entirely unclickable before, which made the lines holding the
+   board together the only ones you could not point at. */
 .flow-edge.implicit {
   pointer-events: none;
+}
+/* THE DELETE CONTROL ON THE SELECTED LINE. Only stored lines get one, and that is the point: a
+   derived line showing no ✕ answers "why will this not go away" by being looked at, rather than by
+   being pressed and doing nothing. */
+.flow-edge-del {
+  cursor: pointer;
+}
+.flow-edge-del circle {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.flow-edge-del path {
+  stroke: var(--text-muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  fill: none;
+}
+.flow-edge-del:hover circle {
+  fill: var(--red);
+  stroke: var(--red);
+}
+.flow-edge-del:hover path {
+  stroke: #fff;
 }
 /* Retire the old CSS branch lines in favor of the SVG connectors. */
 .flow-branch-list::before,
@@ -9160,6 +9543,9 @@ button {
   align-items: center;
   gap: 7px;
   padding: 6px 9px;
+  /* The cut-off chip drops to its own line rather than squeezing the channel name, which is the
+     thing you are actually scanning this column for. */
+  flex-wrap: wrap;
 }
 .ch-cell .cell-select {
   padding: 0;
@@ -9221,10 +9607,12 @@ button {
   color: var(--text-faint);
   background: var(--surface-2);
 }
+/* Sets --text explicitly against what was a hardcoded light tint, so on dark it was #e9ecf1 on
+   #e3f4ea: 1.04:1, the least readable thing in the grid, and it sits at the top of every load. */
 .slot-chip.has {
   color: var(--text);
-  background: #e3f4ea;
-  border-color: #bfe6cd;
+  background: var(--ok-tint);
+  border-color: var(--ok-line);
 }
 .slot-chip .slot-mark {
   font-weight: 700;
@@ -12945,12 +13333,17 @@ button {
 .auth-tagline {
   flex: none;
 }
-/* Light on black, inverted with the field. These were dark ink tuned for the lilac; left alone on
+/* The one label on this page: uppercase, letterspaced, naming what the product is rather than
+   saying something. That is the Space Mono job everywhere else in the app, so it is that here too.
+   Weight drops to 700 because Space Mono has no 800 — asking for one gets a synthesised bold.
+
+   Light on black, inverted with the field. These were dark ink tuned for the lilac; left alone on
    black they would have been near-invisible rather than merely low-contrast. */
 .auth-kicker {
   margin: 0 0 7px;
+  font-family: var(--font-label);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.5;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -13024,13 +13417,17 @@ button {
 }
 /* RECESSED, not raised. Against the lifted card the old #1d2129 fill was 1.06:1 — a field you
    could only locate by its border. Going darker than the card instead of lighter reads as a well,
-   and it takes the placeholder from 4.39:1 to 5.06:1 without touching the placeholder's colour. */
+   and it takes the placeholder from 4.39:1 to 5.06:1 without touching the placeholder's colour.
+
+   Form controls do not inherit font-family — the UA sheet hands them the system face — and there is
+   no global `input { font: inherit }` here, so without this line the two fields on the first screen
+   anyone sees were set in Arial while every word around them was Switzer. */
 .auth-input {
   background: #0f1319;
   border: 1px solid #39404d;
   border-radius: 8px;
-  padding: 10px 12px;
-  font: inherit;
+  padding: 9px 12px;
+  font-family: var(--font);
   font-size: 14px;
   color: #e9ecf1;
 }
@@ -14612,16 +15009,16 @@ button {
   white-space: nowrap;
 }
 .icp-verdict.on {
-  color: #1a7a47;
-  background: #e3f4ea;
+  color: var(--ok-ink);
+  background: var(--ok-tint);
 }
 .icp-verdict.drift {
-  color: #9a6a00;
-  background: #fdf2dd;
+  color: var(--warn-ink);
+  background: var(--warn-tint);
 }
 .icp-verdict.off {
-  color: #b42318;
-  background: #fde7e7;
+  color: var(--bad-ink);
+  background: var(--bad-tint);
 }
 /* ICP-fit grade (A–D) for live/posted content */
 .icp-grade {
@@ -14635,10 +15032,10 @@ button {
   font-weight: 800;
   cursor: default;
 }
-.icp-grade.g-A { color: #1a7a47; background: #e3f4ea; }
-.icp-grade.g-B { color: #2563c9; background: #e8f0fe; }
-.icp-grade.g-C { color: #9a6a00; background: #fdf2dd; }
-.icp-grade.g-D { color: #b42318; background: #fde7e7; }
+.icp-grade.g-A { color: var(--ok-ink); background: var(--ok-tint); }
+.icp-grade.g-B { color: var(--info-ink); background: var(--info-tint); }
+.icp-grade.g-C { color: var(--warn-ink); background: var(--warn-tint); }
+.icp-grade.g-D { color: var(--bad-ink); background: var(--bad-tint); }
 
 .icp-review {
   padding: 12px 14px;
@@ -14716,7 +15113,7 @@ button {
   vertical-align: top;
 }
 .msg-cell:hover {
-  background: #fafbff;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .msg-empty {
@@ -14816,12 +15213,12 @@ button {
   width: fit-content;
 }
 .trk.ok {
-  background: #e3f4ea;
-  color: #1a7a47;
+  background: var(--ok-tint);
+  color: var(--ok-ink);
 }
 .trk.bad {
-  background: #fde7e7;
-  color: #b42318;
+  background: var(--bad-tint);
+  color: var(--bad-ink);
 }
 .trk-utm {
   font-family: var(--mono);
@@ -14851,7 +15248,7 @@ button {
 .bud-flag {
   font-size: 11px;
   font-weight: 600;
-  color: #9a6a00;
+  color: var(--warn-ink);
 }
 .bud-cur {
   color: var(--text-faint);
@@ -14880,10 +15277,10 @@ button {
   padding: 1px 8px;
   width: fit-content;
 }
-.pace-on-track { background: #e3f4ea; color: #1a7a47; }
-.pace-under { background: #e7effe; color: #1d4ed8; }
-.pace-over { background: #fde7e7; color: #b42318; }
-.pace-cap { background: #fdf2dd; color: #9a6a00; }
+.pace-on-track { background: var(--ok-tint); color: var(--ok-ink); }
+.pace-under { background: var(--info-tint); color: var(--info-ink); }
+.pace-over { background: var(--bad-tint); color: var(--bad-ink); }
+.pace-cap { background: var(--warn-tint); color: var(--warn-ink); }
 .pace-none { background: var(--surface-2); color: var(--text-faint); }
 
 /* ---- attribution column + ICP grounding ---- */
@@ -14898,7 +15295,7 @@ button {
 }
 .attr-rev {
   font-weight: 700;
-  color: #1a7a47;
+  color: var(--ok-ink);
 }
 .attr-leads {
   font-size: 11.5px;
@@ -14923,7 +15320,7 @@ button {
   color: var(--text-muted);
 }
 .perf-rate.leak {
-  color: #b42318;
+  color: var(--bad-ink);
   font-weight: 600;
 }
 
@@ -15036,8 +15433,8 @@ button {
 .rtb-warn {
   font-size: 10.5px;
   font-weight: 700;
-  color: #9a6a00;
-  background: #fdf2dd;
+  color: var(--warn-ink);
+  background: var(--warn-tint);
   border-radius: 20px;
   padding: 1px 8px;
 }
@@ -15059,15 +15456,20 @@ button {
   cursor: pointer;
 }
 .rtb-cell:hover {
-  background: #fafbff;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .rtb-mini {
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid #d7dafc;
+  /* Reference material, not a state. This wore the accent — the colour that means "selected" and
+     "primary action" everywhere else, including the campaign tab strip directly above this grid —
+     on every proof point on every row, which is how an attention colour stops meaning attention.
+     Quiet, matching .msg-pill beside it. The old border was #d7dafc, a periwinkle left over from
+     the indigo accent this app had before coral: wrong in both themes, not just on dark. */
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 1px 8px;
 }
@@ -15138,12 +15540,12 @@ button {
   white-space: nowrap;
 }
 .msg-pill.flagged {
-  color: #9a6a00;
-  background: #fdf2dd;
-  border-color: #f0d9a8;
+  color: var(--warn-ink);
+  background: var(--warn-tint);
+  border-color: var(--warn-line);
 }
 .msg-pill.flagged .msg-pill-key {
-  color: #b07d10;
+  color: var(--warn-ink);
 }
 
 /* ---- Grid / Calendar view toggle ---- */
@@ -15733,9 +16135,9 @@ button {
 .comments-badge {
   font-size: 11px;
   font-weight: 600;
-  color: #b42318;
-  background: #fdecea;
-  border: 1px solid #f6c9c2;
+  color: var(--bad-ink);
+  background: var(--bad-tint);
+  border: 1px solid var(--bad-line);
   border-radius: 20px;
   padding: 0 7px;
   text-decoration: none;
@@ -21127,10 +21529,12 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 999px;
   padding: 6px 12px;
 }
+/* The wordmark is the brand, so it carries the brand colour rather than body ink —
+   in the header and again in the footer (see .chlog-foot > svg). */
 .chlog-brand {
   display: inline-flex;
   justify-self: center;
-  color: var(--text);
+  color: var(--accent);
   text-decoration: none;
 }
 .chlog-open {
@@ -21258,7 +21662,7 @@ table.aud-sheet td.stick .aud-cell {
   color: var(--text-muted);
 }
 .chlog-foot > svg {
-  color: var(--text-faint);
+  color: var(--accent);
 }
 .chlog-foot-tag {
   font-size: 14px;
@@ -21687,7 +22091,7 @@ table.aud-sheet td.stick .aud-cell {
 
 /* Numbers you compare rather than read: zoom, the credit balance, counts. */
 .flow-tb-zoom,
-.flow-tb-credits,
+.flow-top-credits,
 .flow-outline-row .flow-tile,
 .flow-home-card-meta {
   font-family: var(--font-label);
