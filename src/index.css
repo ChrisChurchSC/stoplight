@@ -1527,8 +1527,10 @@ button {
   justify-content: center;
   padding: 2px 0 14px;
 }
+/* The mark is the one piece of brand colour on the dark rail — the accent orange
+   carries it, and the white car glyph sits at 3.5:1 on it. */
 .global-brand .logo {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--accent);
 }
 
 .global-nav-items {
