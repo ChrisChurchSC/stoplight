@@ -1,4 +1,4 @@
-import type { MarketerRole, SkillLevel } from './userPrefs'
+import type { MarketerRole } from './userPrefs'
 
 /**
  * The sign-up form: what has to be true before an account can be created, kept as pure functions so
@@ -11,8 +11,9 @@ import type { MarketerRole, SkillLevel } from './userPrefs'
  * sign-in with a password the person never meant to set.
  *
  * Required: first name, email, password (twice), company. Optional by design: last name (not
- * everyone has one), and both prefs — null means the neutral, full UI, so a skipped question is
- * never worse than an unasked one (see userPrefs.ts).
+ * everyone has one), and role — null means the neutral, full UI, so a skipped question is never
+ * worse than an unasked one (see userPrefs.ts). Skill level is not asked here at all; it is a
+ * question about a UI nobody has seen yet, so it waits for Settings.
  */
 
 export interface SignUpForm {
@@ -24,7 +25,6 @@ export interface SignUpForm {
   /** Names the workspace created on first sign-in, instead of the email's local part. */
   company: string
   role: MarketerRole | null
-  skillLevel: SkillLevel | null
 }
 
 export const EMPTY_SIGNUP_FORM: SignUpForm = {
@@ -35,7 +35,6 @@ export const EMPTY_SIGNUP_FORM: SignUpForm = {
   confirm: '',
   company: '',
   role: null,
-  skillLevel: null,
 }
 
 /** Only the fields that can fail. Optional ones are absent on purpose. */

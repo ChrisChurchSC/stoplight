@@ -13,6 +13,7 @@ import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
+import { contextGapMessage, type ContextGapKey } from '../domain/contextGaps'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { COMPANY_STATUSES, type Company } from '../domain/companies'
 import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
@@ -318,6 +319,18 @@ const INPUT_FAMILIES: { family: ObjectFamily; label: string }[] = [
 ]
 /** Brand has its own button on the bar, so it must not also appear inside a family caret. */
 const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand', 'product'])
+/**
+ * The card that CLOSES each gap — what the suggestion toast offers to drop on the canvas.
+ *
+ * One card per gap, and the plainest one: a missing angle could be answered by a Message or a
+ * Concept card, and offering a choice in a toast is a menu in the corner of the screen. Message,
+ * because it is the kind whose whole job is to state what the copy argues.
+ */
+const CARD_FOR_GAP: Record<ContextGapKey, CanvasObjectKind> = {
+  audience: 'audience',
+  proof: 'proof-point',
+  angle: 'message',
+}
 const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
   (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter(
     (k) => OBJECT_META[k].role === 'input' && OBJECT_META[k].family === family && !STANDALONE_KINDS.has(k),
@@ -3174,6 +3187,14 @@ export function FlowsView() {
     try {
       await Promise.all(targetIds.map((id) => updateRow(id, { messaging: {} })))
       await draftCopy(targetIds)
+      /**
+       * AFTER the copy, not before. This is a report on what just happened — "that was written from
+       * the whole brand library" — and said beforehand it would read as a warning about a generation
+       * that had not run yet, which is copyBlockerFor's job and copyBlockerFor refuses.
+       *
+       * Generate has the toast slot to itself here, unlike the build path, so no prefix.
+       */
+      suggestContext(viewName)
     } finally {
       setRegenerating(false)
       setRefsDirty(false)
@@ -3303,6 +3324,49 @@ export function FlowsView() {
     // Returned so a caller that needs to link or wire the new card can do it without hunting for
     // the last object added, which is a race as soon as anything else touches the board.
     return id
+  }
+  /**
+   * SAY WHAT THE CAMPAIGN DID NOT SAY, once the copy is back.
+   *
+   * The blocker refuses a canvas with no brand or no wires. Everything past that generates, including
+   * a campaign wired to one Note card — and the writer's pools fall back to the brand's whole library
+   * when nothing pins them, so what comes back is fluent, plausible and written to nobody. Nothing on
+   * screen said so: the copy looked exactly like copy written from a brief.
+   *
+   * A toast rather than a refusal, because a thin campaign is a real campaign and it is not this
+   * code's place to stop one. It reports what generating just did and offers the card that would
+   * change it. See src/domain/contextGaps.ts for what counts as thin.
+   *
+   * `prefix` lets the build share its one toast ("Built · 6 drafts.") instead of firing a second one
+   * that would replace it — there is a single toast slot, so two messages means the first is never read.
+   */
+  const suggestContext = (campaign: string, prefix?: string) => {
+    const gaps = useTrafficStore.getState().contextGapsFor(campaign)
+    const msg = contextGapMessage(gaps, prefix ? undefined : campaign)
+    if (!msg) return false
+    const kind = CARD_FOR_GAP[gaps[0]]
+    showToastAction(prefix ? `${prefix} ${msg}` : msg, `Add ${OBJECT_META[kind].label}`, () => {
+      /**
+       * The board on screen is the one these setters write to, and a toast outlives the click that
+       * raised it: nine seconds is long enough to open another campaign. Dropping the card onto
+       * whatever canvas happens to be open would be a card nobody asked for on a board nobody was
+       * looking at.
+       */
+      if (viewNameRef.current !== campaign) {
+        showToast(`Open "${campaign}" to add that card — you have moved to another canvas.`)
+        return
+      }
+      /**
+       * WIRED, not just dropped. An unwired card reaches nothing, so adding one and leaving it loose
+       * would answer "no audience is wired" with an audience that is still not wired. attachToCampaign
+       * first, in the order the drag gesture and the chat both use it; it no-ops on a card that names
+       * no record yet, and picking one on the card pushes it through from there.
+       */
+      const id = addObject(kind)
+      attachToCampaign(id)
+      setConnectors((cs) => (cs.some((x) => x.from === id && x.to === 'campaign') ? cs : [...cs, { from: id, to: 'campaign' }]))
+    })
+    return true
   }
   const deleteObject = (id: string) => {
     // If it was attached to the campaign, its records go with it (unless another attached card
@@ -4249,6 +4313,10 @@ export function FlowsView() {
   deleteEdgeRef.current = deleteEdge
   const canDetachRef = useRef(canDetach)
   canDetachRef.current = canDetach
+  /** The campaign open RIGHT NOW, for a callback that outlives the render that made it: a toast
+   *  action can be clicked several seconds and one navigation later. See suggestContext. */
+  const viewNameRef = useRef(viewName)
+  viewNameRef.current = viewName
   const setChannelDetachedRef = useRef(setChannelDetached)
   setChannelDetachedRef.current = setChannelDetached
   /** Drop a member out of an object without deleting the card. */
@@ -5049,8 +5117,18 @@ export function FlowsView() {
       setFlowView('flow')
       // No action on the toast: you are already looking at the campaign, so "Open campaign" would
       // be a button that does nothing. It reports, it does not navigate.
+      //
+      // The gap suggestion RIDES ON THIS ONE. There is a single toast slot, so raising a second here
+      // would replace "Built · N drafts" with a sentence about wiring before anyone had read it —
+      // suggestContext takes the built message as its prefix and shows one toast saying both.
+      //
+      // Only when copy was actually written. Its sentence describes what the writer DID with a thin
+      // brief, so on a refusal (nothing written, and the blocker is the bigger thing to fix first) or
+      // a build that deliberately skipped the copy, it would be describing writing that never
+      // happened.
+      const wrote = !copyBlocked && writeCopy && allNewIds.length > 0
       if (copyBlocked) showToastAction(msg, 'Why', () => useTrafficStore.getState().setBrandNotice(copyBlocked), 'warn')
-      else showToast(msg)
+      else if (!(wrote && suggestContext(campaignName, msg))) showToast(msg)
       // Point the workspace scope at the just-built flow so the standalone Grid, Calendar,
       // and brand views show its assets right away — no need to match the rail by hand.
       // (setClientFilter also clears any stale channel/proof/audience narrowing.)
@@ -7612,6 +7690,126 @@ export function FlowsView() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[kind].icon}</svg>
     </button>
   )
+
+  /**
+   * WHICH MODEL WRITES, AND THE BUTTON THAT MAKES IT WRITE. Lifted out of the canvas toolbar
+   * because the Grid needs exactly these two and nothing else around them: they act on the
+   * CAMPAIGN, not on the board, so they mean the same thing on either tab. The Grid was already
+   * telling people to "press Generate to populate it" on a tab that had no Generate on it.
+   *
+   * `hint` is canvas-only. The onboarding walkthrough is a tour of the board, so anchoring one of
+   * its steps to a button on the Grid would point at a step you cannot be standing on.
+   *
+   * `whole` is what makes the button worth having on the Grid. Generate acts on the SELECTION, and
+   * a selection is a card you clicked on the board — so on the Grid, where there are no cards, it
+   * would arrive permanently disabled. The sheet is the whole campaign laid out at once, so with
+   * nothing picked it means every row on it, which is the same act as selecting the campaign card
+   * on the canvas. A pick made on the board still wins, so switching tabs mid-thought keeps it.
+   */
+  const renderGenerateControls = (opts?: { hint?: boolean; whole?: boolean }) => {
+    const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? buildModel ?? 'auto')) ?? AI_MODELS[0]
+    const targets = genIds.length || !opts?.whole ? genIds : viewRows.map((r) => r.id)
+    return (
+      <>
+        <div className="flow-tb-zoom-wrap">
+          <button
+            className="flow-tb-zoom flow-tb-model"
+            onClick={() => setModelOpen((o) => !o)}
+            title={`Generating with ${cur.label} · ${cur.note}`}
+            aria-label={`Model: ${cur.label}`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
+            </svg>
+            {/* Wrapped so it can truncate. A bare text node cannot take text-overflow, and
+                the longer model names wrapped the button onto two lines. */}
+            <span className="flow-tb-model-label">{cur.label}</span>
+            <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {modelOpen && (
+            <>
+              <div className="flow-tb-zoom-scrim" onClick={() => setModelOpen(false)} />
+              <div className="flow-tb-zoom-menu flow-tb-model-menu">
+                {AI_MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    className={`flow-tb-zoom-item flow-tb-model-item${m.id === cur.id ? ' on' : ''}`}
+                    onClick={() => {
+                      if (viewName) patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
+                      else setBuildModel(m.id === 'auto' ? undefined : m.id)
+                      setModelOpen(false)
+                    }}
+                  >
+                    <span className="flow-tb-model-name">{m.label}</span>
+                    <span className="flow-tb-model-note">{m.note}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flow-tb-brand-wrap">
+          <button
+            className="flow-tb-regen"
+            // A flow with assets regenerates their copy (from the current selection, as before).
+            // An empty flow has nothing to regenerate yet, so Generate seeds its first assets the
+            // same way "Add channel" / the AI build does — this keeps AI-built and from-scratch
+            // flows behaving identically instead of hiding the control on empty flows.
+            // Three modes, one button. On a built campaign it regenerates the selection, as
+            // before. In the builder it does what the panel's build button does, because those
+            // being different actions on the same screen is how you get two ways to make a
+            // campaign that behave differently. With nothing to act on either way, it opens the
+            // deliverable picker rather than sitting there dead.
+            onClick={() => {
+              if (!viewing) return nodes.length || channelTagPresets.length ? build() : openAddDeliverable()
+              return viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(targets)
+            }}
+            disabled={regenerating || building || (viewing && viewRows.length > 0 && targets.length === 0)}
+            aria-label={
+              !viewing
+                ? 'Build this campaign and write its copy'
+                : viewRows.length === 0
+                  ? 'Pick a channel to generate its first copy'
+                  : genIds.length
+                    ? 'Generate copy for the selected cards'
+                    : targets.length
+                      ? 'Generate copy for every asset in this campaign'
+                      : 'Select a card to generate its copy'
+            }
+            // Says what it will act on BEFORE you press it. On the Grid with nothing picked that
+            // is every row on the sheet, and a button that quietly rewrites the whole campaign is
+            // not one you should have to press to find out about.
+            title={
+              viewing && viewRows.length > 0 && !genIds.length && targets.length
+                ? `Generate copy for all ${targets.length} assets in this campaign`
+                : undefined
+            }
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+            </svg>
+            {regenerating || building ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
+          </button>
+          {opts?.hint && (
+            <Hint
+              key={`generate-${hintNonce}`}
+              show={hintStep === 'generate'}
+              storageKey="stoplight.hint.generate.v1"
+              title="Generate the copy"
+              placement="above"
+              align="center"
+              body={[
+                'Everything you connected is what it reads from: the brand, the audiences, the proof, the figures.',
+                'Every asset keeps a record of what it was written from, so anything it could not stand behind is flagged rather than quietly smoothed over.',
+              ]}
+            />
+          )}
+        </div>
+      </>
+    )
+  }
 
   /**
    * The inspector's RESTING state: everything on the board, grouped by what each card does.
@@ -10314,96 +10512,9 @@ export function FlowsView() {
             {/* WHICH MODEL GENERATE USES, next to the button that uses it. It was only on the
                 campaign brief, which meant choosing it was a trip to another panel and the choice
                 was invisible at the moment you pressed Generate. Same store field either way, so
-                the brief and this stay in step. */}
-            {(() => {
-              const cur = AI_MODELS.find((m) => m.id === (viewCampaign?.aiModel ?? buildModel ?? 'auto')) ?? AI_MODELS[0]
-              return (
-                <div className="flow-tb-zoom-wrap">
-                  <button
-                    className="flow-tb-zoom flow-tb-model"
-                    onClick={() => setModelOpen((o) => !o)}
-                    title={`Generating with ${cur.label} · ${cur.note}`}
-                    aria-label={`Model: ${cur.label}`}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" />
-                    </svg>
-                    {/* Wrapped so it can truncate. A bare text node cannot take text-overflow, and
-                        the longer model names wrapped the button onto two lines. */}
-                    <span className="flow-tb-model-label">{cur.label}</span>
-                    <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </button>
-                  {modelOpen && (
-                    <>
-                      <div className="flow-tb-zoom-scrim" onClick={() => setModelOpen(false)} />
-                      <div className="flow-tb-zoom-menu flow-tb-model-menu">
-                        {AI_MODELS.map((m) => (
-                          <button
-                            key={m.id}
-                            className={`flow-tb-zoom-item flow-tb-model-item${m.id === cur.id ? ' on' : ''}`}
-                            onClick={() => {
-                              if (viewName) patchCampaign(viewName, { aiModel: m.id === 'auto' ? undefined : m.id })
-                              else setBuildModel(m.id === 'auto' ? undefined : m.id)
-                              setModelOpen(false)
-                            }}
-                          >
-                            <span className="flow-tb-model-name">{m.label}</span>
-                            <span className="flow-tb-model-note">{m.note}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )
-            })()}
-            <div className="flow-tb-brand-wrap">
-            <button
-              className="flow-tb-regen"
-              // A flow with assets regenerates their copy (from the current selection, as before).
-              // An empty flow has nothing to regenerate yet, so Generate seeds its first assets the
-              // same way "Add channel" / the AI build does — this keeps AI-built and from-scratch
-              // flows behaving identically instead of hiding the control on empty flows.
-              // Three modes, one button. On a built campaign it regenerates the selection, as
-              // before. In the builder it does what the panel's build button does, because those
-              // being different actions on the same screen is how you get two ways to make a
-              // campaign that behave differently. With nothing to act on either way, it opens the
-              // deliverable picker rather than sitting there dead.
-              onClick={() => {
-                if (!viewing) return nodes.length || channelTagPresets.length ? build() : openAddDeliverable()
-                return viewRows.length === 0 ? openAddDeliverable() : regenerateFlow(genIds)
-              }}
-              disabled={regenerating || building || (viewing && viewRows.length > 0 && genIds.length === 0)}
-              aria-label={
-                !viewing
-                  ? 'Build this campaign and write its copy'
-                  : viewRows.length === 0
-                    ? 'Pick a channel to generate its first copy'
-                    : genIds.length
-                      ? 'Generate copy for the selected cards'
-                      : 'Select a card to generate its copy'
-              }
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
-              </svg>
-              {regenerating || building ? 'Generating…' : refsDirty ? 'Generate with the new context' : 'Generate'}
-            </button>
-            <Hint
-              key={`generate-${hintNonce}`}
-              show={hintStep === 'generate'}
-              storageKey="stoplight.hint.generate.v1"
-              title="Generate the copy"
-              placement="above"
-              align="center"
-              body={[
-                'Everything you connected is what it reads from: the brand, the audiences, the proof, the figures.',
-                'Every asset keeps a record of what it was written from, so anything it could not stand behind is flagged rather than quietly smoothed over.',
-              ]}
-            />
-            </div>
+                the brief and this stay in step. Shared with the Grid's toolbar — same helper, so
+                the two tabs cannot drift into offering different models or a different Generate. */}
+            {renderGenerateControls({ hint: true })}
         </>
         </div>
       </div>
@@ -10411,7 +10522,8 @@ export function FlowsView() {
       )}
 
       {(flowView === 'grid' || flowView === 'calendar') && (
-        <div className="flow-real">
+        <>
+        <div className={`flow-real${flowView === 'grid' ? ' has-tb' : ''}`}>
           <div className="flow-real-bar">
             {!hasBuiltRows ? (
               <div className="flow-real-hint">
@@ -10490,6 +10602,20 @@ export function FlowsView() {
             )}
           </div>
         </div>
+        {/* THE CANVAS TOOLBAR, ON THE GRID. Same pill, same corner of the screen, minus everything
+            on it that was about the canvas rather than the campaign: the card palette (there is no
+            board here to drop a card onto), and zoom / pan / select / link / tidy (there is nothing
+            to pan and nothing to lay out — a sheet is already tidy). What is left is the pair the
+            Grid was already telling you to reach for: the model that writes, and Generate.
+
+            Sibling of .flow-real rather than a child of it, because .flow-real clips its overflow
+            and this floats; it positions against .flow either way. */}
+        {flowView === 'grid' && (
+          <div className={`flow-toolbar flow-toolbar-grid${gridPick ? ' insp' : ''}`}>
+            <div className="flow-tb-row">{renderGenerateControls({ whole: true })}</div>
+          </div>
+        )}
+        </>
       )}
 
       {/* ONE hidden picker for the document a card fills from, held in a ref by the card that asked

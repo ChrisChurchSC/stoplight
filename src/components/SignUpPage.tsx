@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from 'react'
 import { AuthShell } from './AuthShell'
-import { MARKETER_ROLES, SKILL_LEVELS } from '../domain/userPrefs'
+import { MARKETER_ROLES } from '../domain/userPrefs'
 import {
   EMPTY_SIGNUP_FORM,
   MIN_PASSWORD,
@@ -30,11 +30,14 @@ import { useTrafficStore } from '../store/useTrafficStore'
  *   password  → the account, asked twice because a typo here is unrecoverable
  *   company   → names the workspace created on first sign-in
  *   role      → userPrefs.marketerRole — which objects and vocabulary lead
- *   level     → userPrefs.skillLevel — how much of each screen shows
  *
- * The last two are optional and say so. Null means the full UI, so skipping them costs nothing,
- * and a form that demands an answer to a question about yourself before it will let you in is a
- * worse first impression than one that admits the answer can wait.
+ * Role is optional and says so. Null means the full UI, so skipping it costs nothing, and a form
+ * that demands an answer to a question about yourself before it will let you in is a worse first
+ * impression than one that admits the answer can wait.
+ *
+ * Detail level used to be asked here too. It is a setting about a UI nobody has seen yet, which is
+ * the hardest possible moment to answer it — so it lives in Settings only, and starts at the full
+ * UI like every other unanswered pref.
  */
 export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
   const [form, setForm] = useState<SignUpForm>(EMPTY_SIGNUP_FORM)
@@ -77,12 +80,7 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
     // than on first render of the app because with email confirmation on, "first render of the
     // app" is a different session days later, and possibly never.
     saveAccount({ firstName: form.firstName.trim(), lastName: form.lastName.trim(), email })
-    if (form.role || form.skillLevel) {
-      useTrafficStore.getState().setUserPrefs({
-        ...(form.role ? { marketerRole: form.role } : {}),
-        ...(form.skillLevel ? { skillLevel: form.skillLevel } : {}),
-      })
-    }
+    if (form.role) useTrafficStore.getState().setUserPrefs({ marketerRole: form.role })
 
     // With confirmation off, a session already exists and AuthGate has swapped this page for the
     // app — there is nothing left to say. With it on, this screen is all the person gets.
@@ -277,29 +275,6 @@ export function SignUpPage({ onSignIn }: { onSignIn: () => void }) {
           <div className="signup-hint">
             {MARKETER_ROLES.find((r) => r.value === form.role)?.hint ??
               'Sets what leads on each screen. Nothing is ever hidden, and you can change it in Settings.'}
-          </div>
-        </div>
-
-        <div className="library-field">
-          <span className="library-field-label">
-            How much detail? <span className="signup-optional">optional</span>
-          </span>
-          <div className="acct-seg">
-            {SKILL_LEVELS.map((s) => (
-              <button
-                key={s.value}
-                type="button"
-                className={`acct-seg-btn${form.skillLevel === s.value ? ' on' : ''}`}
-                title={s.hint}
-                onClick={() => patch({ skillLevel: form.skillLevel === s.value ? null : s.value })}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div className="signup-hint">
-            {SKILL_LEVELS.find((s) => s.value === form.skillLevel)?.hint ??
-              'Simple starts calmer, Advanced shows every control. Everything stays one click away.'}
           </div>
         </div>
 
