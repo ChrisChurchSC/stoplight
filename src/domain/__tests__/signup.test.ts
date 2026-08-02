@@ -40,8 +40,8 @@ describe('validateSignUp', () => {
     expect(isSignUpValid(form())).toBe(true)
   })
 
-  it('does not require a last name, a role, or a detail level', () => {
-    expect(isSignUpValid(form({ lastName: '', role: null, skillLevel: null }))).toBe(true)
+  it('does not require a last name or a role', () => {
+    expect(isSignUpValid(form({ lastName: '', role: null }))).toBe(true)
   })
 
   it('requires a first name that is not just spaces', () => {

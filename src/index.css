@@ -21539,15 +21539,15 @@ table.aud-sheet td.stick .aud-cell {
 
 /* ============================================================================
    Public changelog page (/changelog) — standalone, unauthenticated "What's new".
-   Breadcrumbs brand: light surface with a warm orange wash, flat date-grouped
-   entries (date, tag chip, bullets). Self-contained; leans on the app tokens.
+   Breadcrumbs brand: flat date-grouped entries (date, tag chip, bullets).
+   Self-contained; leans on the app tokens.
    ============================================================================ */
+/* Plain field, no wash. There used to be a coral radial gradient bleeding down from
+   behind the nav; it sat directly under the wordmark and the two oranges fought. */
 .chlog {
   min-height: 100vh;
   color: var(--text);
-  background:
-    radial-gradient(880px 440px at 50% -10%, var(--accent-soft), transparent 62%),
-    var(--bg);
+  background: var(--bg);
 }
 
 /* ---- Nav ---- */
@@ -21570,23 +21570,49 @@ table.aud-sheet td.stick .aud-cell {
 .chlog-nav-right {
   justify-content: flex-end;
 }
-.chlog-nav-active {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+/* Deliberately not a pill. The filled coral pill it replaced was a "you are here" badge, and a
+   second filled coral pill on the left would have squared up against .chlog-open on the right
+   with the wordmark caught between them. This is the quiet half of that pair: body ink, warming
+   to the brand on hover. */
+.chlog-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 6px 2px;
+  transition: color 0.14s ease;
+}
+.chlog-back:hover {
   color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 6px 12px;
+}
+/* The arrow leads on hover so the link reads as motion rather than a label that changed colour. */
+.chlog-back-arrow {
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.14s ease;
+}
+.chlog-back:hover .chlog-back-arrow {
+  transform: translateX(-2px);
 }
 /* The wordmark is the brand, so it carries the brand colour rather than body ink —
-   in the header and again in the footer (see .chlog-foot > svg). */
+   in the footer (see .chlog-foot > svg). The header mark is the splash artwork, which
+   brings its own colours and ignores this. */
 .chlog-brand {
   display: inline-flex;
   justify-self: center;
   color: var(--accent);
   text-decoration: none;
+}
+/* Height-driven like every other placement of this file; width follows the 273×65
+   ratio. Taller than the flat wordmark it replaced (20px) because this one is drawn
+   rather than set, and its outlines close up into a smudge below ~26px. */
+.chlog-brand-logo {
+  display: block;
+  height: 28px;
+  width: auto;
 }
 .chlog-open {
   display: inline-flex;
@@ -21738,11 +21764,14 @@ table.aud-sheet td.stick .aud-cell {
   text-decoration: underline;
 }
 @media (max-width: 560px) {
-  .chlog-nav {
-    grid-template-columns: auto 1fr;
-  }
-  .chlog-nav-side:first-child {
+  /* The left slot used to be dropped here, back when it held a badge naming the current page.
+     It holds the way out now, so it keeps its column and sheds its label instead — the arrow
+     alone is the affordance, and the anchor's aria-label carries the name. */
+  .chlog-back-label {
     display: none;
+  }
+  .chlog-back-arrow {
+    font-size: 19px;
   }
   .chlog-foot-link {
     margin-left: 0;
