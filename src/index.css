@@ -15941,6 +15941,16 @@ button {
 .cal-event:hover {
   background: var(--surface-2);
 }
+/* THE ASSET THE INSPECTOR IS OPEN ON. Inside a campaign the panel stays docked beside the
+   calendar, so without this the calendar gave no sign of which of forty assets it is reading —
+   the same problem the grid solves by outlining the selected cell. */
+.cal-event.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.cal-span.on {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent);
+}
 .cal-event-dot {
   flex: none;
   width: 6px;

@@ -48,7 +48,31 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'quarter', label: 'Quarter' },
 ]
 
-export function CalendarView({ allClients = false, liveScope = false, scopeClient, scopeCampaign, onAddOnDay }: { allClients?: boolean; liveScope?: boolean; scopeClient?: string; scopeCampaign?: string; onAddOnDay?: (iso: string) => void }) {
+export function CalendarView({
+  allClients = false,
+  liveScope = false,
+  scopeClient,
+  scopeCampaign,
+  onAddOnDay,
+  onPickRow,
+  selectedRowId,
+}: {
+  allClients?: boolean
+  liveScope?: boolean
+  scopeClient?: string
+  scopeCampaign?: string
+  onAddOnDay?: (iso: string) => void
+  /**
+   * WHAT CLICKING AN ASSET DOES, when the surface around the calendar has somewhere better to put
+   * it. Inside a campaign that is the docked inspector — the same panel the Flow and the Grid open
+   * on the same asset — so the calendar hands the row up rather than opening a panel of its own.
+   * Left out, an asset opens the review drawer, which is still the right answer on the calendars
+   * that stand alone.
+   */
+  onPickRow?: (rowId: string) => void
+  /** The asset that panel is currently open on, so the calendar can mark which one you are reading. */
+  selectedRowId?: string
+}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
   const proofFilter = useTrafficStore((s) => s.proofFilter)
@@ -68,6 +92,12 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
   // scopeCampaign pins the view to a single campaign (the Flows calendar).
   const campaignFilter = scopeCampaign ?? (scopeClient ? 'all' : campaignFilterStore)
   const openReview = useTrafficStore((s) => s.openReview)
+  /**
+   * ONE DOOR for every asset on this calendar — the month spans, the week and 3-day events, and the
+   * day popover all used to call openReview individually, which is three places to forget when the
+   * answer changes. It changes here now, once.
+   */
+  const openAsset = (id: string) => (onPickRow ? onPickRow(id) : openReview(id))
 
   const now = new Date()
   const [mode, setMode] = useState<Mode>('month')
@@ -169,8 +199,8 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
     const alwaysOn = alwaysOnCampaigns.has(r.campaign ?? '')
     return (
       <button
-        className={`cal-event${alwaysOn ? ' cal-event-alwayson' : ''}`}
-        onClick={() => openReview(r.id)}
+        className={`cal-event${alwaysOn ? ' cal-event-alwayson' : ''}${r.id === selectedRowId ? ' on' : ''}`}
+        onClick={() => openAsset(r.id)}
         title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
           undefined,
           { hour: 'numeric', minute: '2-digit' },
@@ -299,9 +329,9 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
                     {placed.map((h) => (
                       <button
                         key={h.r.id}
-                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}${alwaysOnCampaigns.has(h.r.campaign ?? '') ? ' cal-span-alwayson' : ''}`}
+                        className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}${alwaysOnCampaigns.has(h.r.campaign ?? '') ? ' cal-span-alwayson' : ''}${h.r.id === selectedRowId ? ' on' : ''}`}
                         style={{ gridColumn: `${h.startCol + 1} / ${h.endCol + 2}`, gridRow: h.lane + 1 }}
-                        onClick={() => openReview(h.r.id)}
+                        onClick={() => openAsset(h.r.id)}
                         title={`${CHANNELS[h.r.channel].label} · ${h.r.assetName} · runs to ${new Date(
                           h.r.endsAt!,
                         ).toLocaleDateString()}`}
@@ -412,9 +442,9 @@ export function CalendarView({ allClients = false, liveScope = false, scopeClien
             {evs.map((r) => (
               <button
                 key={r.id}
-                className="cal-event"
+                className={`cal-event${r.id === selectedRowId ? ' on' : ''}`}
                 onClick={() => {
-                  openReview(r.id)
+                  openAsset(r.id)
                   setDayKey(null)
                 }}
               >

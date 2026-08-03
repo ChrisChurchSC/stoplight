@@ -1738,17 +1738,26 @@ export function FlowsView() {
    * structure already implies, and Gretel can store campaign → channel.
    */
   /**
-   * THE OBJECT CELL PICKED IN THE GRID, so the Grid tab can open THE inspector rather than one of
-   * its own. It can, without a line of it moving, because the grid is rendered from inside this
-   * component: renderObjectInspector is already in scope where <SheetGrid> is mounted, and the panel
-   * it fills is the same <aside className="flow-panel"> the canvas uses.
+   * WHAT THE GRID / CALENDAR PANEL IS OPEN ON, so those two tabs can open THE inspector rather than
+   * one of their own. They can, without a line of it moving, because both are rendered from inside
+   * this component: renderObjectInspector and renderPostInspector are already in scope where
+   * <SheetGrid> and <CalendarView> are mounted, and the panel they fill is the same
+   * <aside className="flow-panel"> the canvas uses.
    *
-   * This holds a CARD ID, never a synthesised card. Every record form writes through ensure*For,
-   * whose "already linked" guard resolves refId against the BRAND-FILTERED record list — so handing
-   * it a card that is not on the board does not fail loudly, it mints a duplicate blank record and
-   * relinks the cell to it. A cell with no card behind it gets a sentence instead.
+   * Two things are pickable, and one state holds both so the panel cannot end up open on two.
+   *
+   * An OBJECT CELL holds a CARD ID, never a synthesised card. Every record form writes through
+   * ensure*For, whose "already linked" guard resolves refId against the BRAND-FILTERED record list —
+   * so handing it a card that is not on the board does not fail loudly, it mints a duplicate blank
+   * record and relinks the cell to it. A cell with no card behind it gets a sentence instead.
+   *
+   * An ASSET holds a ROW ID and nothing else, because the row is the truth and it is edited from
+   * three surfaces at once; caching a copy of it here would be a fourth that goes stale.
+   * 'asset' is not a CanvasObjectKind, which is what makes it a discriminant.
    */
-  const [gridPick, setGridPick] = useState<{ kind: CanvasObjectKind; cardId?: string; label: string } | null>(null)
+  const [gridPick, setGridPick] = useState<
+    { kind: CanvasObjectKind; cardId?: string; label: string } | { kind: 'asset'; rowId: string } | null
+  >(null)
   const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
   /**
    * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
@@ -7812,6 +7821,276 @@ export function FlowsView() {
   }
 
   /**
+   * THE ASSET INSPECTOR: one built asset — its copy, what wrote it, what it costs, what pattern
+   * it follows. Lifted out of the canvas panel so the Grid and the Calendar can open THE SAME
+   * panel on the same asset rather than each growing a version of it. Takes the row rather than
+   * reading `sel`, because on those two surfaces the selection is not the canvas selection.
+   */
+  const renderPostInspector = (selPost: TrafficRow) => (
+    <>
+      <div className="flow-panel-head">
+        <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} channel={selPost.channel as ChannelId} />
+        <span className="flow-panel-title">{selPost.assetName}</span>
+      </div>
+      <div className="flow-inspect">
+        <p className="flow-inspect-desc">
+          {CHANNELS[selPost.channel as ChannelId]?.label ?? selPost.channel}
+          {selPost.audience ? ` · ${selPost.audience}` : ''}
+          {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
+        </p>
+        {/* THE COPY, EDITABLE, AND EVERY COMPONENT OF IT.
+            This was read-only text at the bottom of the panel with empty components
+            filtered out, so a post with no copy showed nothing at all and changing one
+            word meant leaving the canvas for the review page. Same editor as the review
+            page now, rather than a second one that drifts. */}
+        {(() => {
+          const flds = messagingFields(selPost.channel, selPost.assetType)
+          const m = (selPost.messaging ?? {}) as Record<string, string>
+          const known = new Set(flds.map((f) => f.key))
+          const strays = Object.entries(m).filter(([k, v]) => !known.has(k) && v?.trim())
+          return (
+            <>
+              {/* No heading. The fields are the first thing in the panel and they are
+                  labelled, so a "Copy" label over them named what was already obvious. */}
+              <CopyFields
+                fields={flds}
+                values={m}
+                stopKeys
+                setField={(key, value) => void updateRow(selPost.id, { messaging: { ...m, [key]: value } })}
+              />
+              {/* Copy on the row under a key this format does not have. clampToLimit is a
+                  no-op on these (fieldByKey.get returns undefined), so nothing has checked
+                  their length, and saying so is more useful than rendering them as peers. */}
+              {strays.length > 0 && (
+                <>
+                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>Not part of this format</label>
+                  <p className="flow-inspect-note">
+                    This copy is on the asset but it is not one of this format's components. Nothing checked its length.
+                  </p>
+                  {strays.map(([k, v]) => (
+                    <div key={k} className="flow-post-field">
+                      <label className="flow-inspect-label">{k}</label>
+                      <div className="flow-post-value">{v}</div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          )
+        })()}
+
+        {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
+            board flush, the wipe and the phase 1 refusal, rather than growing a second path
+            that could miss one of the three. */}
+
+        {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
+            This asked the wrong question and answered it confidently. It read only the
+            DIRECTION channel: the typed instruction fields on a card. A card can be
+            connected and reach this post through two other channels entirely, and both
+            were reported as nothing. A Brand card carries no direction and no reference at
+            all, because a brand OWNS the campaign rather than being referred to by it, so
+            a board whose only wire was a Brand card into the brief printed "Nothing is
+            wired to this post", while that very wire decided which brand every word was
+            written as.
+            Now it lists the CARDS upstream of this post, which is the question a person
+            asks when they look at a board, and the instructions underneath as a second
+            group. A card with nothing typed into it still shows, and says so. */}
+        {(() => {
+          const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
+          const resolved = resolveBoardDirection(liveBoard)
+          const mine = directionForRow(resolved, deliverableKeyFor(selPost), selPost.id, [])
+          const kept = buildDirection(mine)
+          const dropped = mine.length - kept.length
+          // Three routes reach a post, in the same order the resolver walks them: wired
+          // straight in, through its channel, or through the campaign every asset inherits.
+          // Deduped, because one card can arrive by more than one of them.
+          const seen = new Set<string>()
+          const cards = [
+            ...contextRowsFor(selPost.id),
+            ...contextRowsFor(deliverableKeyFor(selPost)),
+            ...contextRowsFor('campaign'),
+          ].filter((r) => {
+            if (seen.has(r.id)) return false
+            seen.add(r.id)
+            return true
+          })
+          return (
+            <>
+              <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+                Connected to{cards.length ? ` · ${cards.length}` : ''}
+              </label>
+              {cards.length === 0 ? (
+                <p className="flow-inspect-note">
+                  Nothing is connected to this post, to its channel, or to the campaign, so it is written from the brief alone.
+                </p>
+              ) : (
+                <div className="flow-ctxlist">{cards.map((r) => renderContextRow(r))}</div>
+              )}
+              {kept.length > 0 && (
+                <div className="flow-insp-send" style={{ marginTop: 10 }}>
+                  {kept.map((d) => (
+                    <div key={`${d.key}:${d.value}`} className="flow-send-row">
+                      <span className="flow-send-val">{DIRECTION_FIELD[d.key as DirectionKey]?.label ?? d.key}</span>
+                      <span className="flow-send-lab">{d.value}</span>
+                    </div>
+                  ))}
+                  {/* An asset carries one instruction per kind, so a second card naming the
+                      same thing loses. Saying how many were dropped is the difference
+                      between a rule and a surprise. */}
+                  {dropped > 0 && (
+                    <span className="flow-send-foot">
+                      {`${dropped} more instruction${dropped === 1 ? '' : 's'} reached here and ${dropped === 1 ? 'was' : 'were'} dropped: a post carries one instruction per kind.`}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Wiring a card straight to a post materialises references onto the row,
+                  which silently stops it using the campaign's. */}
+              {selPost.references && selPost.references.length > 0 && (
+                <>
+                  <p className="flow-inspect-note">
+                    Wiring a card straight to this post pins it to those records only. It stops using the campaign's.
+                  </p>
+                  <button
+                    className="flow-reset-link"
+                    onClick={() => { void updateRow(selPost.id, { references: undefined }); setRefsDirty(true) }}
+                  >
+                    Go back to the campaign's
+                  </button>
+                </>
+              )}
+            </>
+          )
+        })()}
+
+        {/* THE TEAM THREAD. Named Discussion, not Comments: the store already has a
+            comments slice on the same row id holding ingested platform comments, and one
+            word for two features on one card is how somebody replies in the wrong place. */}
+        {renderCardComments(selPost.id)}
+
+        {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
+            Same list, same rules: what it holds reaches the writer for this one asset. */}
+        {/* WHICH FIGURES ACTUALLY LANDED, matched against the copy rather than reported by
+            the model. Absent when the asset predates this, empty when it was checked and
+            nothing was found, and those are different sentences. */}
+        {selPost.figuresUsed !== undefined &&
+          (() => {
+            const all = brandDatasets.flatMap((d) => citableFigures(d).map((f) => ({ f, d })))
+            const used = selPost.figuresUsed
+              .map((id) => all.find((x) => x.f.id === id))
+              .filter((x): x is { f: (typeof all)[number]['f']; d: BrandDataset } => !!x)
+            if (!used.length) {
+              return <span className="flow-send-none">None of the figures from the wired tables made it into this one.</span>
+            }
+            return (
+              <>
+                <label className="flow-inspect-label">Figures it uses · {used.length}</label>
+                {used.map(({ f, d }) => (
+                  <div key={f.id} className="flow-send-row">
+                    <span className="flow-send-val">{f.value}</span>
+                    <span className="flow-send-lab">
+                      {f.label}, from {d.name}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )
+          })()}
+        {(() => {
+          const wired = contextRowsFor(selPost.id)
+          if (!wired.length) return null
+          return (
+            <>
+              <label className="flow-inspect-label">Wired to this post only · {wired.length}</label>
+              {renderContextRows(wired, (id) => {
+                setConnectors((c) => c.filter((x) => !(x.from === id && x.to === selPost.id)))
+                detachFromTarget(id, selPost.id, connectors)
+              })}
+            </>
+          )
+        })()}
+        {CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' && (
+          <>
+            <label className="flow-inspect-label">Budget for this asset</label>
+            <div className="flow-budget">
+              <span className="flow-budget-cur">$</span>
+              <input
+                key={selPost.id}
+                className="flow-budget-input"
+                type="number"
+                min={0}
+                step={500}
+                defaultValue={selPost.budget?.amount || ''}
+                placeholder="0"
+                onBlur={(e) => {
+                  const v = e.target.value.trim()
+                  // SPREAD, and default to daily like everywhere else. This rebuilt the
+                  // budget from two fields, so editing the AMOUNT here silently deleted
+                  // the flight end date the review drawer sets, and plannedToDate then
+                  // fell back to start + 14 days and moved every planned figure. It also
+                  // defaulted the type to lifetime while the grid and the drawer default
+                  // to daily, and the two are different sums: daily multiplies by days
+                  // elapsed, lifetime by the fraction of the flight. The same number
+                  // typed on two surfaces flipped this row's own pace chip between
+                  // "Overspending" and "On track".
+                  void updateRow(selPost.id, { budget: v === '' ? undefined : { ...selPost.budget, amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'daily' } })
+                }}
+              />
+            </div>
+            <div className="flow-inspect-note" style={{ marginTop: 6 }}>Its share of the campaign budget. Assign the full budget across your paid assets.</div>
+          </>
+        )}
+        {(() => {
+          const s = stepFromLineage(selPost.lineage)
+          if (!s) return null
+          const levers = s.step.levers.filter((l) => l !== 'none')
+          return (
+            <div className="flow-bp-emailstep">
+              <div className="flow-bp-emailstep-top">
+                <span className="flow-bp-emailstep-name">{s.step.label}</span>
+                <span className="flow-bp-emailstep-bp">{s.blueprint.name} · {s.step.timing}</span>
+              </div>
+              {s.step.subjectFormula !== '—' && <div className="flow-bp-emailstep-subj">Subject formula: “{s.step.subjectFormula}”</div>}
+              <div className="flow-bp-emailstep-meta">
+                <span className="flow-bp-tag">{s.step.framework}</span>
+                <span className="flow-bp-tag flow-bp-tag-cta">{s.step.cta}</span>
+                {levers.map((l) => (
+                  <span key={l} className="flow-bp-tag flow-bp-tag-lever">{l.replace('-', ' ')}</span>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+        {(() => {
+          // Alternatives come from the pattern the asset is USING (its blueprint's
+          // channel), so a post keeps its pattern family even if its row channel drifted.
+          const curBp = stepFromLineage(selPost.lineage)?.blueprint
+          const chan = (curBp?.channel ?? selPost.channel) as ChannelId
+          const bps = blueprintsFor(chan, curBp?.assetType ?? selPost.assetType)
+          // Changing the pattern rewrites the copy, so only for generated posts — an
+          // ingested (live) post keeps its real copy until you Replace it.
+          if (bps.length < 2 || isIngestedPost(selPost)) return null
+          const cur = curBp?.key
+          return (
+            <div className="flow-bp" style={{ marginTop: 12 }}>
+              <div className="flow-cfg-h">Pattern</div>
+              <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>Change the copy pattern for just this asset. This rewrites its copy.</div>
+              {bps.map((bp) => (
+                <button key={bp.key} className={`flow-bp-pick${cur === bp.key ? ' on' : ''}`} disabled={patternBusy} onClick={() => void applyPatternToPost(selPost, bp)}>
+                  <span className="flow-bp-pick-name">{bp.name}</span>
+                  <span className="flow-bp-pick-cadence">{patternBusy ? 'Applying…' : cur === bp.key ? 'Current' : bp.cadence}</span>
+                  <span className="flow-bp-pick-sum">{bp.summary}</span>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+
+      </div>
+    </>
+  )
+
+  /**
    * The inspector's RESTING state: everything on the board, grouped by what each card does.
    * Shown whenever nothing is selected, in BOTH build and view mode. It used to be build-mode
    * only, with view mode falling through to the campaign brief form, so the panel showed one
@@ -9216,267 +9495,7 @@ export function FlowsView() {
                 </div>
               </>
             ) : selPost ? (
-              <>
-                <div className="flow-panel-head">
-                  <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} channel={selPost.channel as ChannelId} />
-                  <span className="flow-panel-title">{selPost.assetName}</span>
-                </div>
-                <div className="flow-inspect">
-                  <p className="flow-inspect-desc">
-                    {CHANNELS[selPost.channel as ChannelId]?.label ?? selPost.channel}
-                    {selPost.audience ? ` · ${selPost.audience}` : ''}
-                    {selPost.scheduledAt ? ` · ${new Date(selPost.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
-                  </p>
-                  {/* THE COPY, EDITABLE, AND EVERY COMPONENT OF IT.
-                      This was read-only text at the bottom of the panel with empty components
-                      filtered out, so a post with no copy showed nothing at all and changing one
-                      word meant leaving the canvas for the review page. Same editor as the review
-                      page now, rather than a second one that drifts. */}
-                  {(() => {
-                    const flds = messagingFields(selPost.channel, selPost.assetType)
-                    const m = (selPost.messaging ?? {}) as Record<string, string>
-                    const known = new Set(flds.map((f) => f.key))
-                    const strays = Object.entries(m).filter(([k, v]) => !known.has(k) && v?.trim())
-                    return (
-                      <>
-                        {/* No heading. The fields are the first thing in the panel and they are
-                            labelled, so a "Copy" label over them named what was already obvious. */}
-                        <CopyFields
-                          fields={flds}
-                          values={m}
-                          stopKeys
-                          setField={(key, value) => void updateRow(selPost.id, { messaging: { ...m, [key]: value } })}
-                        />
-                        {/* Copy on the row under a key this format does not have. clampToLimit is a
-                            no-op on these (fieldByKey.get returns undefined), so nothing has checked
-                            their length, and saying so is more useful than rendering them as peers. */}
-                        {strays.length > 0 && (
-                          <>
-                            <label className="flow-inspect-label" style={{ marginTop: 14 }}>Not part of this format</label>
-                            <p className="flow-inspect-note">
-                              This copy is on the asset but it is not one of this format's components. Nothing checked its length.
-                            </p>
-                            {strays.map(([k, v]) => (
-                              <div key={k} className="flow-post-field">
-                                <label className="flow-inspect-label">{k}</label>
-                                <div className="flow-post-value">{v}</div>
-                              </div>
-                            ))}
-                          </>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
-                      board flush, the wipe and the phase 1 refusal, rather than growing a second path
-                      that could miss one of the three. */}
-
-                  {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
-                      This asked the wrong question and answered it confidently. It read only the
-                      DIRECTION channel: the typed instruction fields on a card. A card can be
-                      connected and reach this post through two other channels entirely, and both
-                      were reported as nothing. A Brand card carries no direction and no reference at
-                      all, because a brand OWNS the campaign rather than being referred to by it, so
-                      a board whose only wire was a Brand card into the brief printed "Nothing is
-                      wired to this post", while that very wire decided which brand every word was
-                      written as.
-                      Now it lists the CARDS upstream of this post, which is the question a person
-                      asks when they look at a board, and the instructions underneath as a second
-                      group. A card with nothing typed into it still shows, and says so. */}
-                  {(() => {
-                    const liveBoard: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
-                    const resolved = resolveBoardDirection(liveBoard)
-                    const mine = directionForRow(resolved, deliverableKeyFor(selPost), selPost.id, [])
-                    const kept = buildDirection(mine)
-                    const dropped = mine.length - kept.length
-                    // Three routes reach a post, in the same order the resolver walks them: wired
-                    // straight in, through its channel, or through the campaign every asset inherits.
-                    // Deduped, because one card can arrive by more than one of them.
-                    const seen = new Set<string>()
-                    const cards = [
-                      ...contextRowsFor(selPost.id),
-                      ...contextRowsFor(deliverableKeyFor(selPost)),
-                      ...contextRowsFor('campaign'),
-                    ].filter((r) => {
-                      if (seen.has(r.id)) return false
-                      seen.add(r.id)
-                      return true
-                    })
-                    return (
-                      <>
-                        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
-                          Connected to{cards.length ? ` · ${cards.length}` : ''}
-                        </label>
-                        {cards.length === 0 ? (
-                          <p className="flow-inspect-note">
-                            Nothing is connected to this post, to its channel, or to the campaign, so it is written from the brief alone.
-                          </p>
-                        ) : (
-                          <div className="flow-ctxlist">{cards.map((r) => renderContextRow(r))}</div>
-                        )}
-                        {kept.length > 0 && (
-                          <div className="flow-insp-send" style={{ marginTop: 10 }}>
-                            {kept.map((d) => (
-                              <div key={`${d.key}:${d.value}`} className="flow-send-row">
-                                <span className="flow-send-val">{DIRECTION_FIELD[d.key as DirectionKey]?.label ?? d.key}</span>
-                                <span className="flow-send-lab">{d.value}</span>
-                              </div>
-                            ))}
-                            {/* An asset carries one instruction per kind, so a second card naming the
-                                same thing loses. Saying how many were dropped is the difference
-                                between a rule and a surprise. */}
-                            {dropped > 0 && (
-                              <span className="flow-send-foot">
-                                {`${dropped} more instruction${dropped === 1 ? '' : 's'} reached here and ${dropped === 1 ? 'was' : 'were'} dropped: a post carries one instruction per kind.`}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {/* Wiring a card straight to a post materialises references onto the row,
-                            which silently stops it using the campaign's. */}
-                        {selPost.references && selPost.references.length > 0 && (
-                          <>
-                            <p className="flow-inspect-note">
-                              Wiring a card straight to this post pins it to those records only. It stops using the campaign's.
-                            </p>
-                            <button
-                              className="flow-reset-link"
-                              onClick={() => { void updateRow(selPost.id, { references: undefined }); setRefsDirty(true) }}
-                            >
-                              Go back to the campaign's
-                            </button>
-                          </>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  {/* THE TEAM THREAD. Named Discussion, not Comments: the store already has a
-                      comments slice on the same row id holding ingested platform comments, and one
-                      word for two features on one card is how somebody replies in the wrong place. */}
-                  {renderCardComments(selPost.id)}
-
-                  {/* A card can be wired to a single POST, not just to the campaign or a deliverable.
-                      Same list, same rules: what it holds reaches the writer for this one asset. */}
-                  {/* WHICH FIGURES ACTUALLY LANDED, matched against the copy rather than reported by
-                      the model. Absent when the asset predates this, empty when it was checked and
-                      nothing was found, and those are different sentences. */}
-                  {selPost.figuresUsed !== undefined &&
-                    (() => {
-                      const all = brandDatasets.flatMap((d) => citableFigures(d).map((f) => ({ f, d })))
-                      const used = selPost.figuresUsed
-                        .map((id) => all.find((x) => x.f.id === id))
-                        .filter((x): x is { f: (typeof all)[number]['f']; d: BrandDataset } => !!x)
-                      if (!used.length) {
-                        return <span className="flow-send-none">None of the figures from the wired tables made it into this one.</span>
-                      }
-                      return (
-                        <>
-                          <label className="flow-inspect-label">Figures it uses · {used.length}</label>
-                          {used.map(({ f, d }) => (
-                            <div key={f.id} className="flow-send-row">
-                              <span className="flow-send-val">{f.value}</span>
-                              <span className="flow-send-lab">
-                                {f.label}, from {d.name}
-                              </span>
-                            </div>
-                          ))}
-                        </>
-                      )
-                    })()}
-                  {(() => {
-                    const wired = contextRowsFor(selPost.id)
-                    if (!wired.length) return null
-                    return (
-                      <>
-                        <label className="flow-inspect-label">Wired to this post only · {wired.length}</label>
-                        {renderContextRows(wired, (id) => {
-                          setConnectors((c) => c.filter((x) => !(x.from === id && x.to === selPost.id)))
-                          detachFromTarget(id, selPost.id, connectors)
-                        })}
-                      </>
-                    )
-                  })()}
-                  {CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' && (
-                    <>
-                      <label className="flow-inspect-label">Budget for this asset</label>
-                      <div className="flow-budget">
-                        <span className="flow-budget-cur">$</span>
-                        <input
-                          key={selPost.id}
-                          className="flow-budget-input"
-                          type="number"
-                          min={0}
-                          step={500}
-                          defaultValue={selPost.budget?.amount || ''}
-                          placeholder="0"
-                          onBlur={(e) => {
-                            const v = e.target.value.trim()
-                            // SPREAD, and default to daily like everywhere else. This rebuilt the
-                            // budget from two fields, so editing the AMOUNT here silently deleted
-                            // the flight end date the review drawer sets, and plannedToDate then
-                            // fell back to start + 14 days and moved every planned figure. It also
-                            // defaulted the type to lifetime while the grid and the drawer default
-                            // to daily, and the two are different sums: daily multiplies by days
-                            // elapsed, lifetime by the fraction of the flight. The same number
-                            // typed on two surfaces flipped this row's own pace chip between
-                            // "Overspending" and "On track".
-                            void updateRow(selPost.id, { budget: v === '' ? undefined : { ...selPost.budget, amount: Math.max(0, +v || 0), type: selPost.budget?.type ?? 'daily' } })
-                          }}
-                        />
-                      </div>
-                      <div className="flow-inspect-note" style={{ marginTop: 6 }}>Its share of the campaign budget. Assign the full budget across your paid assets.</div>
-                    </>
-                  )}
-                  {(() => {
-                    const s = stepFromLineage(selPost.lineage)
-                    if (!s) return null
-                    const levers = s.step.levers.filter((l) => l !== 'none')
-                    return (
-                      <div className="flow-bp-emailstep">
-                        <div className="flow-bp-emailstep-top">
-                          <span className="flow-bp-emailstep-name">{s.step.label}</span>
-                          <span className="flow-bp-emailstep-bp">{s.blueprint.name} · {s.step.timing}</span>
-                        </div>
-                        {s.step.subjectFormula !== '—' && <div className="flow-bp-emailstep-subj">Subject formula: “{s.step.subjectFormula}”</div>}
-                        <div className="flow-bp-emailstep-meta">
-                          <span className="flow-bp-tag">{s.step.framework}</span>
-                          <span className="flow-bp-tag flow-bp-tag-cta">{s.step.cta}</span>
-                          {levers.map((l) => (
-                            <span key={l} className="flow-bp-tag flow-bp-tag-lever">{l.replace('-', ' ')}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })()}
-                  {(() => {
-                    // Alternatives come from the pattern the asset is USING (its blueprint's
-                    // channel), so a post keeps its pattern family even if its row channel drifted.
-                    const curBp = stepFromLineage(selPost.lineage)?.blueprint
-                    const chan = (curBp?.channel ?? selPost.channel) as ChannelId
-                    const bps = blueprintsFor(chan, curBp?.assetType ?? selPost.assetType)
-                    // Changing the pattern rewrites the copy, so only for generated posts — an
-                    // ingested (live) post keeps its real copy until you Replace it.
-                    if (bps.length < 2 || isIngestedPost(selPost)) return null
-                    const cur = curBp?.key
-                    return (
-                      <div className="flow-bp" style={{ marginTop: 12 }}>
-                        <div className="flow-cfg-h">Pattern</div>
-                        <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>Change the copy pattern for just this asset. This rewrites its copy.</div>
-                        {bps.map((bp) => (
-                          <button key={bp.key} className={`flow-bp-pick${cur === bp.key ? ' on' : ''}`} disabled={patternBusy} onClick={() => void applyPatternToPost(selPost, bp)}>
-                            <span className="flow-bp-pick-name">{bp.name}</span>
-                            <span className="flow-bp-pick-cadence">{patternBusy ? 'Applying…' : cur === bp.key ? 'Current' : bp.cadence}</span>
-                            <span className="flow-bp-pick-sum">{bp.summary}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  })()}
-
-                </div>
-              </>
+              renderPostInspector(selPost)
             ) : selDeliv ? (
               <>
                 <div className="flow-panel-head">
@@ -10562,20 +10581,60 @@ export function FlowsView() {
                 }}
               />
             ) : (
-              <CalendarView scopeClient={brand || undefined} scopeCampaign={flowCampaign} onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)} />
+              <CalendarView
+                scopeClient={brand || undefined}
+                scopeCampaign={flowCampaign}
+                onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)}
+                /**
+                 * CLICKING AN ASSET OPENS THE ASSET, not a second reading of it. Everywhere else in
+                 * the campaign an asset opens the docked inspector — the copy you can edit, the
+                 * cards that wrote it, its budget, its pattern — and the calendar sent you to the
+                 * review drawer instead, a different panel with different controls reached by the
+                 * same click. Same inspector now, same component, on the same row.
+                 *
+                 * Still openReview on the calendars OUTSIDE a campaign (Live, the brand folder,
+                 * the workbench): there is no board in scope there to inspect an asset against, so
+                 * the drawer remains the right and only answer.
+                 */
+                onPickRow={(rowId) => setGridPick({ kind: 'asset', rowId })}
+                selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}
+              />
             )}
             {/* THE SAME INSPECTOR, on the same board, editing the same objects array the canvas
                 edits — because this is the canvas's own component. Nothing is duplicated and nothing
                 can drift, which is the whole reason it is rendered here rather than built in the
                 grid. */}
             {gridPick && (
-              <aside className="flow-panel flow-panel-grid" role="complementary" aria-label={`${gridPick.label} details`}>
+              <aside
+                className="flow-panel flow-panel-grid"
+                role="complementary"
+                aria-label={gridPick.kind === 'asset' ? 'Asset details' : `${gridPick.label} details`}
+              >
                 <button className="flow-panel-collapse" title="Close" aria-label="Close" onClick={() => setGridPick(null)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
                 {(() => {
+                  if (gridPick.kind === 'asset') {
+                    const row = viewRows.find((r) => r.id === gridPick.rowId)
+                    /* Deleted, archived, or moved out of scope while the panel sat open on it. The
+                       calendar re-renders without it either way, so the panel says what happened
+                       rather than emptying itself. */
+                    if (!row) {
+                      return (
+                        <>
+                          <div className="flow-panel-head">
+                            <span className="flow-panel-title">Asset</span>
+                          </div>
+                          <div className="flow-inspect">
+                            <p className="flow-inspect-note">That asset is no longer in this campaign.</p>
+                          </div>
+                        </>
+                      )
+                    }
+                    return renderPostInspector(row)
+                  }
                   const card = gridPick.cardId ? objects.find((o) => o.id === gridPick.cardId) : undefined
                   if (card) return renderObjectInspector(card)
                   /* No card behind this cell: it was pinned on the row, or it is the campaign's
