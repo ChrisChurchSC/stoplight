@@ -8063,7 +8063,44 @@ export function FlowsView() {
 
         {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
             board flush, the wipe and the phase 1 refusal, rather than growing a second path
-            that could miss one of the three. */}
+            that could miss one of the three.
+
+            The comment outlived the control it describes: the button went and the reasoning stayed,
+            so the panel that edits one asset's copy had no way to ask for that copy, and the
+            smallest unit anything could be written at was the whole campaign. Every caller that
+            rewrites already passes row ids — regenerateFlow(ids), draftCopy(rowIds) — so the one
+            that rewrites ONE asset was the only one not wired up. */}
+        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
+        {(() => {
+          const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
+          return (
+            <>
+              <button
+                className="flow-insp-open"
+                disabled={regenerating}
+                onClick={() => void regenerateFlow([selPost.id])}
+              >
+                {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
+              </button>
+              {/* What it costs you, before you press it rather than after. A rewrite is a wipe and
+                  a write, and anything you typed into these fields goes with it. */}
+              <p className="flow-inspect-note">
+                {hasCopy
+                  ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
+                  : 'Writes this post from the campaign brief and everything wired to it.'}
+              </p>
+              {/* Which writer produced what is on the row now, so a silent fall back to the offline
+                  templates is visible on the asset it happened to. */}
+              {selPost.copySource && (
+                <p className="flow-inspect-note">
+                  {selPost.copySource === 'heuristic'
+                    ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
+                    : 'Written by the model.'}
+                </p>
+              )}
+            </>
+          )
+        })()}
 
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the
@@ -10717,6 +10754,13 @@ export function FlowsView() {
                   setConnectors((c) => (c.some((x) => x.from === id && x.to === rowId) ? c : [...c, { from: id, to: rowId }]))
                   setGridPick({ kind, cardId: id, label: OBJECT_META[kind].label })
                 }}
+                /**
+                 * The same pick the calendar hands back, into the same panel, opening the same
+                 * inspector — so an asset reads and edits identically whichever of the campaign's
+                 * three views you found it in. The grid was the one that could not.
+                 */
+                onPickRow={(rowId) => setGridPick({ kind: 'asset', rowId })}
+                selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}
               />
             ) : (
               <CalendarView

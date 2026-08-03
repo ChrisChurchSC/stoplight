@@ -1209,6 +1209,11 @@ button {
   position: sticky;
   left: 0;
   box-shadow: 1px 0 0 var(--border);
+  /* The row number is a HANDLE, not text. Single-click takes the row and double-click opens it, and
+     a double click on anything selectable highlights the word under it — so the gesture that opens
+     an asset left the number sitting there selected in accent blue behind the panel it opened. The
+     column letters are the same control turned on its side. */
+  user-select: none;
 }
 /* Above the body cells that slide under it, below the header that slides over it. */
 .sheet .gutter {
@@ -1341,8 +1346,32 @@ button {
 .sheet td.cell-sel {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+
+/* THE ROW THE INSPECTOR IS OPEN ON, which is not the same fact as the row you have selected and must
+   not wear the same mark. Selection is a cursor you move with a click; this is a panel standing open
+   beside the sheet, and it outlives the next click somewhere else. So it is a solid bar on the
+   gutter — the row's own handle — rather than another wash across the cells, which would fight the
+   selection tint for the same surface and win about half the time. */
+.sheet tr.data-row.on .gutter {
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--text);
+}
+.sheet tr.data-row.on td {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+/* The cells that OPEN the asset say so with the cursor, the way the copy columns beside them already
+   did. The asset name is the row's identity and the copy is what you came to fix; both are one
+   click, and the pointer is what tells you before you spend it. */
+.sheet td.asset-cell.open {
+  cursor: pointer;
+}
+.sheet td.asset-cell.open:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
 .sheet .letters th {
   cursor: pointer;
+  user-select: none;
 }
 .sheet .gutter {
   cursor: pointer;

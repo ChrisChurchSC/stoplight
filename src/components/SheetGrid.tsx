@@ -128,6 +128,8 @@ export function SheetGrid({
   zoom = 100,
   onPickObject,
   onCreateObject,
+  onPickRow,
+  selectedRowId,
 }: {
   liveScope?: boolean
   scopeClient?: string
@@ -156,6 +158,26 @@ export function SheetGrid({
    * whoever rendered this.
    */
   onCreateObject?: (req: { kind: CanvasObjectKind; rowId: string }) => void
+  /**
+   * CLICKING AN ASSET OPENS THE ASSET — the same inspector the canvas and the calendar open, on the
+   * same row. The grid was the last surface in a campaign that could not reach it.
+   *
+   * That is not a missing button, it is a gap left by two decisions that were each right on their
+   * own. The row drawer went when every object cell became a picker, and the object cells were given
+   * the canvas's inspector in its place. The ASSET cells were not, so the copy columns — the reason
+   * you open a sheet — became read-only text with nothing behind them: no way to fix a word, and no
+   * way to ask for the copy again.
+   *
+   * The grid still does not build a panel of its own, for the same reason it does not build one for
+   * objects: the inspector that matters already exists, and a second one here would be a second
+   * answer to the same question. It hands back the row id and whoever rendered it opens it.
+   *
+   * Absent outside a campaign (the brand folder, Live), where there is no board in scope to inspect
+   * an asset against — the same line CalendarView draws.
+   */
+  onPickRow?: (rowId: string) => void
+  /** The row the caller's inspector is currently open on, so the sheet can mark it. */
+  selectedRowId?: string
 } = {}) {
   const rows = useTrafficStore((s) => s.rows)
   const filter = useTrafficStore((s) => s.filter)
@@ -595,7 +617,25 @@ export function SheetGrid({
                 <tr
                   key={row.id}
                   data-row-id={row.id}
-                  className={`data-row${pick?.kind === 'row' && pick.rowId === row.id ? ' sel' : ''}`}
+                  className={`data-row${pick?.kind === 'row' && pick.rowId === row.id ? ' sel' : ''}${
+                    row.id === selectedRowId ? ' on' : ''
+                  }`}
+                  /**
+                   * OPENING IS THE DOUBLE CLICK, which is what this sheet has claimed since selection
+                   * arrived and has never done, because until now there was nothing to open. Every
+                   * column answers to it, so the convention holds wherever you land — including the
+                   * columns whose own cells do nothing else.
+                   *
+                   * The inline controls are skipped by the same test the single click uses: a picker
+                   * or a text cell is where you edit that field, and opening a panel over the second
+                   * click of a double-click in a textarea would take the cursor away mid-word.
+                   */
+                  onDoubleClick={(e) => {
+                    if (!onPickRow) return
+                    const t = e.target as HTMLElement
+                    if (t.closest('input, select, textarea, button, code, a, .col-resizer')) return
+                    onPickRow(row.id)
+                  }}
                   onClick={(e) => {
                     // Inline controls take their own clicks, exactly as before.
                     const t = e.target as HTMLElement
@@ -618,13 +658,20 @@ export function SheetGrid({
                 >
                   <td className="gutter">{i + 1}</td>
 
-                  <td>
+                  {/* The asset's NAME is the row itself, so it opens on the first click rather than
+                      the second — the same gesture an object cell already answers to, and the same
+                      one the calendar answers to on an event. The double click stays for the columns
+                      that have a control in them and cannot spare a single. */}
+                  <td
+                    className={onPickRow ? 'asset-cell open' : 'asset-cell'}
+                    onClick={() => onPickRow?.(row.id)}
+                  >
                     {/* No thumbnail. It reserved a 200px slot on every row for a picture most
                         assets do not have, so the column was mostly an upload arrow repeated down
                         the page — and the canvas, which is where you look at creative, has no
                         thumbnails either. The name is what you scan this column for. */}
                     <div className="sheet-asset">
-                      <span className="nm" title={row.assetName}>
+                      <span className="nm" title={onPickRow ? `${row.assetName} — open this asset` : row.assetName}>
                         {row.assetName}
                       </span>
                     </div>
@@ -828,11 +875,29 @@ export function SheetGrid({
                       batchReview.flags.some(
                         (f) => f.rowId === row.id && f.field?.key === mc.fieldKey && !flagResolved(f, row, pains),
                       )
+                    /**
+                     * THE COPY COLUMNS OPEN THE ASSET, on one click like the object cells beside
+                     * them. These are the columns the sheet exists for and they were the only ones
+                     * with nothing behind them: read-only text you could not fix a word of and could
+                     * not ask to be written again. The cursor already said pointer and the cell
+                     * already lit on hover, so it has been promising this click for three releases.
+                     *
+                     * An EMPTY one opens too, and says so. A dash in a copy column is the state you
+                     * most want to act on, and a cell that only responds once it already has
+                     * something in it answers every row except the ones that need answering.
+                     */
                     return (
                       <td
                         key={mc.key}
-                        className={`msg-cell${isFlagged ? ' flagged' : ''}`}
-                        title={copy || undefined}
+                        className={`msg-cell${isFlagged ? ' flagged' : ''}${onPickRow ? ' open' : ''}`}
+                        title={
+                          onPickRow
+                            ? copy
+                              ? `${copy}\n\nOpen the asset to edit this or write it again.`
+                              : `No ${mc.label.toLowerCase()} yet. Open the asset to write it.`
+                            : copy || undefined
+                        }
+                        onClick={() => onPickRow?.(row.id)}
                       >
                         {copy ? <span className="msg-copy">{copy}</span> : <span className="cell-ro">—</span>}
                       </td>
