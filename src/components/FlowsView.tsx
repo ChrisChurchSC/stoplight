@@ -1074,13 +1074,40 @@ export function FlowsView() {
   const openReview = useTrafficStore((s) => s.openReview)
   // A single-flow share locks the recipient to that one flow: no back-to-list, no flow switching.
   const flowShareLock = useTrafficStore((s) => !!s.sharedSession?.campaign)
-  // Add a blank draft asset to the open flow (from Grid/Calendar) and open it to fill in. Calendar
-  // passes the clicked day so the asset lands there, and its own opener: on the Calendar a new asset
-  // opens the docked inspector beside it, because nothing on the calendar opens the review drawer
-  // any more — clicking an existing asset there hasn't since the inspector arrived.
-  const addFlowAsset = async (scheduledAt?: string, open?: (id: string) => void) => {
-    const id = await addBlankAsset(flowCampaign, scheduledAt ? { scheduledAt } : undefined)
-    if (id) (open ?? openReview)(id)
+  /**
+   * ADD ASSET ON THE GRID / CALENDAR ASKS THE CHANNEL FIRST.
+   *
+   * It used to drop a blank Blog article on you and open the drawer with "Pick a channel and type
+   * below" — an asset IS a channel and a type, so answering that in a form field after the fact is
+   * the wrong order, and on the Calendar it also meant the thing that landed on the day you clicked
+   * was never the thing you meant to put there. So the button opens the Flow tab's own channels
+   * inspector instead: same presets, same list, same rows — see the `pickAt` arm of .flow-panel.
+   *
+   * `scheduledAt` is set when the picker was opened from a day, so the asset lands on that day
+   * rather than now.
+   */
+  const [assetPick, setAssetPick] = useState<{ scheduledAt?: string } | null>(null)
+  const [addingAsset, setAddingAsset] = useState(false)
+  const addFlowAsset = async (p: DeliverablePreset, scheduledAt?: string) => {
+    if (addingAsset) return
+    setAddingAsset(true)
+    try {
+      const id = await addBlankAsset(flowCampaign, {
+        channel: p.channel,
+        assetType: p.assetType,
+        mediaType: p.media,
+        assetName: p.label,
+        scheduledAt,
+      })
+      setAssetPick(null)
+      // WHERE IT OPENS depends on which view asked for it. On the Calendar the new asset opens the
+      // docked inspector beside the month, because nothing on the calendar opens the review drawer
+      // any more — an existing asset there hasn't since the inspector arrived, and the asset you
+      // just made is the same asset. The Grid still opens the drawer on it.
+      if (id) (flowView === 'calendar' ? pickAsset : openReview)(id)
+    } finally {
+      setAddingAsset(false)
+    }
   }
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
   const flowChats = useTrafficStore((s) => s.flowChats)
@@ -2011,14 +2038,118 @@ export function FlowsView() {
     undoStackRef.current.push({ pos: { ...posRef.current }, rows: entry.rows ? snapRows() : null })
     await restoreSnap(entry)
   }
-  // "Tidy layout": drop every manual offset so the column and the auto-placed branches re-derive
-  // into a clean arrangement. Cards animate back into place via the card transition.
+  /**
+   * TIDY: the structural column re-derives, and the loose cards lay out LEFT TO RIGHT.
+   *
+   * Dropping every manual offset is the whole job for the campaign / deliverable / post cards: they
+   * sit in the normal flow and `pos` only nudges them off it. It is exactly the wrong job for an
+   * OBJECT card. Those are `position: absolute` at the stack's origin and carry no flow position at
+   * all, so clearing their offset dropped every one of them onto the same pixel — Tidy's answer to a
+   * scattered board was a pile of cards in the top-left corner.
+   *
+   * So Tidy PLACES them now: a band of rows above the structure, filled left to right, cards of a
+   * kind together. In two commits, because the band needs the heights of the cards going into it and
+   * the top of the structure it sits above, and neither is measurable until the reset has laid out.
+   */
+  const tidyPhase = useRef<0 | 1 | 2>(0)
   const organizeCards = () => {
     recordHistory(false)
     placedRef.current = new Set()
+    // The corrective-pass counter latches a branch after 8 passes. Left standing, a branch that had
+    // latched would count as settled the instant the reset re-ran it, and never move again.
+    placePassRef.current = new Map()
     setPos({})
     setSelected(new Set())
+    tidyPhase.current = 1
   }
+  /**
+   * Where each object card goes in the tidied band, in stack coordinates — which is exactly what
+   * `pos` means for an absolutely positioned card, so there is no offset arithmetic to get wrong.
+   * Measured from the live DOM (as fitToContent and freeSlot are) rather than from `rects`, which is
+   * written by a layout effect and so is a commit behind whatever just changed.
+   */
+  const tidyObjectLayout = (): Record<string, { x: number; y: number }> | null => {
+    const cv = canvasRef.current
+    const stack = cv?.querySelector('.flow-stack')
+    if (!cv || !stack) return null
+    const sRect = stack.getBoundingClientRect()
+    const s = zoomRef.current / 100
+    const kindOrder = Object.keys(OBJECT_META)
+    const cards: { id: string; w: number; h: number; rank: number }[] = []
+    // The structure the band sits above: every node that is NOT one of these floating cards.
+    let structLeft = Infinity
+    let structTop = Infinity
+    let structRight = -Infinity
+    cv.querySelectorAll('.flow-node[data-node-id]').forEach((el) => {
+      const id = (el as HTMLElement).dataset.nodeId
+      if (!id) return
+      const r = el.getBoundingClientRect()
+      if (el.classList.contains('flow-note')) {
+        // Like with like, left to right: smart objects lead (a bundle of context is the largest
+        // thing on the band), then each kind in the palette's own declaration order.
+        const kind = objects.find((n) => n.id === id)?.kind
+        cards.push({ id, w: r.width / s, h: r.height / s, rank: kind ? kindOrder.indexOf(kind) + 1 : 0 })
+      } else {
+        structLeft = Math.min(structLeft, (r.left - sRect.left) / s)
+        structTop = Math.min(structTop, (r.top - sRect.top) / s)
+        structRight = Math.max(structRight, (r.right - sRect.left) / s)
+      }
+    })
+    if (!cards.length) return null
+    // Ties broken by id, not left to chance: the DOM order these arrive in is render order, and two
+    // Tidies in a row that shuffled same-kind cards would read as the button doing something else.
+    cards.sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
+    const GAP_X = 28
+    const GAP_Y = 28
+    // One pitch for every column, so the band reads as columns rather than as a ragged run.
+    const pitch = Math.max(...cards.map((c) => c.w)) + GAP_X
+    // A board with nothing built on it has no structure to sit above, so the band starts where the
+    // stack's own padding does and runs downward from there.
+    const bare = structTop === Infinity
+    const left = bare ? 16 : structLeft
+    // As many columns as the wider of the structure and the visible canvas will take, and never
+    // fewer than three: one column is the pile this replaced, only taller.
+    const room = Math.max(bare ? 0 : structRight - structLeft, cv.clientWidth / s - 80)
+    const cols = Math.max(3, Math.min(cards.length, Math.floor((room + GAP_X) / pitch)))
+    const rows: { id: string; h: number }[][] = []
+    cards.forEach((c, i) => {
+      const r = Math.floor(i / cols)
+      ;(rows[r] ??= []).push(c)
+    })
+    // Each row is as tall as its tallest card: an audience card carrying a record form is several
+    // times the height of a note, and a fixed row height would either overlap or leave a gulf.
+    const rowH = rows.map((r) => Math.max(...r.map((c) => c.h)))
+    const total = rowH.reduce((a, b) => a + b, 0) + GAP_Y * Math.max(0, rows.length - 1)
+    // Above the structure, so the cards feeding the campaign sit upstream of it on the board.
+    const top = bare ? 48 : structTop - 88 - total
+    const next: Record<string, { x: number; y: number }> = {}
+    let y = top
+    rows.forEach((row, ri) => {
+      row.forEach((c, ci) => {
+        next[c.id] = { x: left + ci * pitch, y }
+      })
+      y += rowH[ri] + GAP_Y
+    })
+    return next
+  }
+  /**
+   * Tidy's second and third acts. A LAYOUT effect, so the pile the reset leaves behind is measured
+   * and replaced before the browser paints it — the flash of every card on one pixel is the very
+   * thing being fixed. Then fit, because a band laid above the board would otherwise be laid above
+   * the top of the viewport, and Tidy would look like it had deleted the cards.
+   */
+  useLayoutEffect(() => {
+    if (tidyPhase.current === 1) {
+      tidyPhase.current = 2
+      const next = tidyObjectLayout()
+      if (next) setPos((prev) => ({ ...prev, ...next }))
+      else tidyPhase.current = 0
+    } else if (tidyPhase.current === 2) {
+      tidyPhase.current = 0
+      fitToContent()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos])
 
   // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
   useEffect(() => {
@@ -3238,7 +3369,7 @@ export function FlowsView() {
       <>
         <div className="flow-inspect-label" style={{ marginTop: 16 }}>
           Informing the messaging{rows.length ? ` · ${rows.length}` : ''}
-          <InfoTip term="linkedRecords" />
+          <InfoTip term="wiredContext" />
         </div>
         {rows.length === 0 ? (
           <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
@@ -3716,8 +3847,8 @@ export function FlowsView() {
           {onRemove && (
             <button
               className="flow-ctxrow-del"
-              title="Unwire it (the card stays on the board)"
-              aria-label={`Unwire ${r.label || r.kindLabel}`}
+              title="Disconnect from this post (the card stays on the board)"
+              aria-label={`Disconnect ${r.label || r.kindLabel} from this post`}
               onClick={() => onRemove(r.id)}
             >
               ✕
@@ -4974,8 +5105,20 @@ export function FlowsView() {
    * The campaign name a build lands on, for a given builder name. One function because three
    * places have to agree on it: the Grid / Calendar scope below, buildFlow itself, and the chat's
    * "already built" guard. They were three copies of the same template string.
+   *
+   * UNASSIGNED IS NOT A BRAND, so it must never become a prefix. It is the answer
+   * clientForCampaign gives for a campaign nobody has filed yet, and `brand` falls back to the
+   * first brand in the workspace — which an empty workspace does not have. So the first asset
+   * added to an unbuilt campaign filed itself under "New campaign", that row's canvas resolved to
+   * the Unassigned client, "Unassigned" became the first (only) brand, and this function renamed
+   * the campaign to "Unassigned — New campaign" underneath the asset that had just been written
+   * against the old name. The Grid and Calendar scope to `flowCampaign`, so the asset you had just
+   * added vanished the instant it arrived, and Add asset read as a dead button.
+   *
+   * campaignShortName already treats UNASSIGNED as no prefix when it shows a name; this is the
+   * other half of that rule, applied where the name is made.
    */
-  const campaignNameFor = (n: string) => `${brand ? `${brand} — ` : ''}${n.trim() || 'New campaign'}`
+  const campaignNameFor = (n: string) => `${brand && brand !== UNASSIGNED ? `${brand} — ` : ''}${n.trim() || 'New campaign'}`
   // The campaign name this flow builds into, used to scope the real Grid / Calendar to just
   // this flow's assets.
   const flowCampaign = viewName ?? campaignNameFor(name)
@@ -7481,11 +7624,13 @@ export function FlowsView() {
               </>
             )
           })()}
-          {/* APPLIED TO: what this card feeds, and the one action that follows from it.
-              A readout, not a control: wires are drawn and cut on the canvas, and a second place to
-              edit them would be a second thing to keep in step with the first. Naming the targets is
-              what it is for, since a card three hops upstream reaches deliverables you cannot see
-              from it. */}
+          {/* APPLIED TO: what this card feeds. A readout, not a control: wires are drawn and cut on
+              the canvas, and a second place to edit them would be a second thing to keep in step
+              with the first. Naming the targets is what it is for, since a card three hops upstream
+              reaches deliverables you cannot see from it.
+              It used to carry a "Rewrite the N assets this applies to" button as well. Rewriting is
+              a campaign-level act with a campaign-level cost, and it belongs where the rest of
+              generation lives rather than under a readout of what a single card touches. */}
           {(() => {
             const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
             const targets = downstreamTargets(board, nt.id)
@@ -7500,13 +7645,6 @@ export function FlowsView() {
               if (r) return { id: t, label: r.assetName, sub: 'one post', tone: POST_TONE, channel: r.channel as ChannelId }
               return { id: t, label: t, sub: '', tone: POST_TONE, channel: undefined as ChannelId | undefined }
             })
-            // Every asset this card reaches, for the rewrite below.
-            const rowIds = targets.flatMap((t) =>
-              t === 'campaign'
-                ? viewRows.map((r) => r.id)
-                : viewDelivs.find((x) => x.key === t)?.rows.map((r) => r.id) ?? (viewRows.some((r) => r.id === t) ? [t] : []),
-            )
-            const unique = [...new Set(rowIds)]
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
@@ -7529,17 +7667,6 @@ export function FlowsView() {
                     </button>
                   ))}
                 </div>
-                {viewing && unique.length > 0 && (
-                  <button
-                    className="flow-insp-open subtle"
-                    disabled={regenerating}
-                    onClick={() => void regenerateFlow(unique)}
-                  >
-                    {regenerating
-                      ? 'Rewriting…'
-                      : `Rewrite the ${unique.length} asset${unique.length === 1 ? '' : 's'} this applies to`}
-                  </button>
-                )}
               </>
             )
           })()}
@@ -8067,7 +8194,44 @@ export function FlowsView() {
 
         {/* GENERATE, ON THE THING IT WRITES. Delegates to regenerateFlow so it inherits the
             board flush, the wipe and the phase 1 refusal, rather than growing a second path
-            that could miss one of the three. */}
+            that could miss one of the three.
+
+            The comment outlived the control it describes: the button went and the reasoning stayed,
+            so the panel that edits one asset's copy had no way to ask for that copy, and the
+            smallest unit anything could be written at was the whole campaign. Every caller that
+            rewrites already passes row ids — regenerateFlow(ids), draftCopy(rowIds) — so the one
+            that rewrites ONE asset was the only one not wired up. */}
+        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
+        {(() => {
+          const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
+          return (
+            <>
+              <button
+                className="flow-insp-open"
+                disabled={regenerating}
+                onClick={() => void regenerateFlow([selPost.id])}
+              >
+                {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
+              </button>
+              {/* What it costs you, before you press it rather than after. A rewrite is a wipe and
+                  a write, and anything you typed into these fields goes with it. */}
+              <p className="flow-inspect-note">
+                {hasCopy
+                  ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
+                  : 'Writes this post from the campaign brief and everything wired to it.'}
+              </p>
+              {/* Which writer produced what is on the row now, so a silent fall back to the offline
+                  templates is visible on the asset it happened to. */}
+              {selPost.copySource && (
+                <p className="flow-inspect-note">
+                  {selPost.copySource === 'heuristic'
+                    ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
+                    : 'Written by the model.'}
+                </p>
+              )}
+            </>
+          )
+        })()}
 
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the
@@ -9484,7 +9648,7 @@ export function FlowsView() {
 
                           </div>
                           {slots === 0 && renderCopy(n.id, 0)}
-                          <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, n.id)} />
+                          <span className="flow-conn-port" title="Draw a connection" onMouseDown={(e) => startConnect(e, n.id)} />
                         </div>
                         {slots > 0 && (
                           <div className="flow-branch-list">
@@ -9533,7 +9697,7 @@ export function FlowsView() {
                                     </div>
                                   </div>
                                   {renderCopy(n.id, bi)}
-                                  <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, `${n.id}:${bi}`)} />
+                                  <span className="flow-conn-port" title="Draw a connection" onMouseDown={(e) => startConnect(e, `${n.id}:${bi}`)} />
                                 </div>
                               </div>
                             ))}
@@ -10695,8 +10859,8 @@ export function FlowsView() {
             {!flowShareLock && (
               <button
                 className="flow-share-btn"
-                onClick={() => void addFlowAsset(undefined, flowView === 'calendar' ? pickAsset : undefined)}
-                title="Add a draft asset to this campaign"
+                onClick={() => { setGridPick(null); setAssetPick({}) }}
+                title="Add an asset to this campaign — pick its channel"
               >
                 ＋ Add asset
               </button>
@@ -10708,7 +10872,7 @@ export function FlowsView() {
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
                 zoom={zoom}
-                onPickObject={(pick) => setGridPick(pick)}
+                onPickObject={(pick) => { setAssetPick(null); setGridPick(pick) }}
                 /**
                  * ADDING ONE FROM A CELL IS ADDING A CARD. Same addObject the toolbar calls, wired
                  * straight to the asset whose cell you used, and then its own inspector opens on it
@@ -10723,14 +10887,22 @@ export function FlowsView() {
                 onCreateObject={({ kind, rowId }) => {
                   const id = addObject(kind)
                   setConnectors((c) => (c.some((x) => x.from === id && x.to === rowId) ? c : [...c, { from: id, to: rowId }]))
+                  setAssetPick(null)
                   setGridPick({ kind, cardId: id, label: OBJECT_META[kind].label })
                 }}
+                /**
+                 * The same pick the calendar hands back, into the same panel, opening the same
+                 * inspector — so an asset reads and edits identically whichever of the campaign's
+                 * three views you found it in. The grid was the one that could not.
+                 */
+                onPickRow={(rowId) => setGridPick({ kind: 'asset', rowId })}
+                selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}
               />
             ) : (
               <CalendarView
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
-                onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso, pickAsset)}
+                onAddOnDay={flowShareLock ? undefined : (iso) => { setGridPick(null); setAssetPick({ scheduledAt: iso }) }}
                 /**
                  * CLICKING AN ASSET OPENS THE ASSET, not a second reading of it. Everywhere else in
                  * the campaign an asset opens the docked inspector — the copy you can edit, the
@@ -10743,15 +10915,61 @@ export function FlowsView() {
                  * with the drawer either: a calendar is for reading the schedule, and the editor
                  * lives on the Grid and the canvas. There, an asset is a mark on a day.
                  */
-                onPickRow={(rowId) => setGridPick({ kind: 'asset', rowId })}
+                onPickRow={(rowId) => { setAssetPick(null); setGridPick({ kind: 'asset', rowId }) }}
                 selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}
               />
+            )}
+            {/* THE CHANNELS INSPECTOR THE FLOW TAB USES, in the slot the grid's inspector uses.
+                Same presets, same rows, same list the canvas's `pickAt` arm renders — a channel is
+                a channel wherever you are asked for one, so this asks in the same words and in the
+                same place the answer will appear. It picks ONE asset rather than seeding a
+                deliverable's whole cadence: the button says Add asset, and on a day you clicked it
+                means that day. */}
+            {assetPick && (
+              <aside className="flow-panel flow-panel-grid" role="complementary" aria-label="Add channel">
+                <button className="flow-panel-collapse" title="Close" aria-label="Close" onClick={() => setAssetPick(null)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                <div className="flow-panel-head">
+                  <span className="flow-panel-title">Add channel</span>
+                </div>
+                <div className="flow-picker-list">
+                  <div className="flow-inspect-desc">
+                    {assetPick.scheduledAt
+                      ? `One asset, on ${new Date(assetPick.scheduledAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}. Pick the channel it goes out on.`
+                      : 'One asset in this campaign. Pick the channel it goes out on.'}
+                  </div>
+                  {grouped.map(([group, presets]) => (
+                    <div key={group} className="flow-pgroup">
+                      <div className="flow-pgroup-h">{group}</div>
+                      {presets.map((p) => (
+                        <button
+                          key={p.key}
+                          className="flow-pitem"
+                          disabled={addingAsset}
+                          onClick={() => void addFlowAsset(p, assetPick.scheduledAt)}
+                        >
+                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                          <div className="flow-pitem-text">
+                            <div className="flow-pitem-label">{p.label}</div>
+                            <div className="flow-pitem-desc">
+                              {addingAsset ? 'Adding…' : typeLabel(p.channel, p.assetType) || CHANNELS[p.channel]?.label || p.channel}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </aside>
             )}
             {/* THE SAME INSPECTOR, on the same board, editing the same objects array the canvas
                 edits — because this is the canvas's own component. Nothing is duplicated and nothing
                 can drift, which is the whole reason it is rendered here rather than built in the
                 grid. */}
-            {gridPick && (
+            {!assetPick && gridPick && (
               <aside
                 className="flow-panel flow-panel-grid"
                 role="complementary"
@@ -10764,7 +10982,15 @@ export function FlowsView() {
                 </button>
                 {(() => {
                   if (gridPick.kind === 'asset') {
-                    const row = viewRows.find((r) => r.id === gridPick.rowId)
+                    /* viewRows is empty until a campaign has been BUILT (viewCanvas is keyed on
+                       viewName), so on a campaign you are still assembling it could not find the
+                       asset you had just clicked and every asset answered "no longer in this
+                       campaign". Fall back to this campaign's own rows, which is the same set the
+                       Calendar drew the asset from. Nothing changes for a built campaign — viewRows
+                       already answers there. */
+                    const row =
+                      viewRows.find((r) => r.id === gridPick.rowId) ??
+                      canvases.find((c) => c.name === flowCampaign)?.rows.find((r) => r.id === gridPick.rowId && !r.archivedAt)
                     /* Deleted, archived, or moved out of scope while the panel sat open on it. The
                        calendar re-renders without it either way, so the panel says what happened
                        rather than emptying itself. */
