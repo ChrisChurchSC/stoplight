@@ -1136,7 +1136,10 @@ button {
   text-align: center;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-faint);
+  /* Same lift, same reason as the row numbers below — see .sheet .gutter. A, B, C were failing
+     contrast on exactly the same ground, and fixing one strip and not the other would leave the
+     sheet's two axes labelled in two different greys. */
+  color: var(--text-muted);
   font-family: var(--mono);
   height: 20px;
   line-height: 20px;
@@ -1252,8 +1255,17 @@ button {
 .pad-row td {
   height: 33px;
 }
-.pad-row .gutter {
+/* This rule used to restate the gutter's own colour and therefore did nothing. Now that the real
+   rows have lifted to --text-muted it starts carrying its weight: the empty rows below the last
+   asset keep the old faint grey, so the number column says where the sheet's content stops rather
+   than running an unbroken ladder of digits past the end of the work.
+
+   Qualified with .sheet because the gutter's own colour is set further down this file at the same
+   specificity, and at (0,2,0) against (0,2,0) the later rule wins — which is exactly how this one
+   came to be a no-op in the first place. */
+.sheet .pad-row .gutter {
   color: var(--text-faint);
+  font-weight: 400;
 }
 /**
  * THE ROW NUMBERS ARE FROZEN, the way the header rows already are. The sheet is ~6,160px of columns
@@ -1267,10 +1279,28 @@ button {
  * not travel with a cell that has detached — the column sliding underneath would run straight into
  * the numbers with no line between them. Same fix, and the same reason, as .rec-td-name.
  */
+/**
+ * THE NUMBERS WERE PAINTED IN THE COLOUR RESERVED FOR THINGS YOU ARE NOT MEANT TO READ.
+ *
+ * --text-faint on --surface-2 measures 2.3:1 in light and 3.4:1 in dark, against the 4.5:1 that
+ * 11px text has to clear. At that ratio the whole left edge of the sheet reads as a smudge — you
+ * cannot count rows, and "row 14" in a comment points at nothing you can find by eye. --text-muted
+ * is 6.2:1 dark and 4.3:1 light on the same ground.
+ *
+ * Light still lands a hair under AA, and it stops here on purpose: --text-muted is what the
+ * column-name header beside it is already set in, on the same surface at the same size. Going
+ * darker for the numbers alone would print them louder than the labels they sit under, and the
+ * fix for the remaining 0.2 is to re-tone the frozen header system as a whole — a bigger decision
+ * than this one, and one that should move both strips together.
+ *
+ * 600 to match .letters th. The gutter and the letters are one control turned through 90°, they are
+ * both 11px --mono, and at that size weight buys more legibility than another notch of colour would.
+ */
 .sheet .corner,
 .sheet .gutter {
   background: var(--surface-2);
-  color: var(--text-faint);
+  color: var(--text-muted);
+  font-weight: 600;
   text-align: center;
   font-family: var(--mono);
   font-size: 11px;
@@ -1327,7 +1357,10 @@ button {
  */
 .sheet tbody tr:hover .gutter {
   background: color-mix(in srgb, var(--text) 9%, var(--surface-2));
-  color: var(--text-muted);
+  /* Was --text-muted, which is where the resting number now sits — so the colour half of this
+     hover had quietly become a no-op. One more step up, to the colour the row's own copy is set
+     in, keeps the number answering the pointer rather than only its background doing it. */
+  color: var(--text);
 }
 
 .cell-ro {
@@ -1427,6 +1460,11 @@ button {
 .sheet tr.data-row.sel .gutter {
   background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
   color: var(--text);
+  /* The fill said "picked" and the digit on top of it did not: --text at 400 on 11px --mono is a
+     thin glyph, and it read as the same weight as the numbers above and below it while the cell
+     under it had visibly changed colour. The pick is a state the number is in, so the number wears
+     it too. */
+  font-weight: 700;
 }
 .sheet tr.data-row.sel td {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
