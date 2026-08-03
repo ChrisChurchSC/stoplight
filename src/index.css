@@ -219,6 +219,14 @@ body,
   height: 100%;
 }
 
+/* Stop a horizontal two-finger scroll from triggering browser back/forward navigation (the canvas
+   and the sheet both consume horizontal scroll). This has to sit on <html>, not <body>: the
+   property only takes effect on a scroll container, and body never scrolls here — html/body/#root
+   are all height:100% and every pane owns its own overflow. On body it was a no-op. */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -227,9 +235,6 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  /* Stop a horizontal two-finger scroll from triggering browser back/forward
-     navigation (the canvas consumes horizontal scroll to pan). */
-  overscroll-behavior: none;
 }
 
 button {
@@ -1015,6 +1020,9 @@ button {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* The sheet is wider than the pane, so a two-finger scroll that drifts sideways at scrollLeft 0
+     would otherwise chain out to the viewport and read as a browser back-swipe. */
+  overscroll-behavior-x: contain;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
@@ -14731,7 +14739,7 @@ button {
 /* Outcome map — attributes → outcomes by audience */
 /* Journeys-by-audience-over-time table (Insights). */
 .jl-empty { font-size: 13px; color: var(--text-muted); padding: 12px 2px; }
-.jl-scroll { overflow-x: auto; }
+.jl-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
 .jl-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 .jl-table th, .jl-table td {
   border: 1px solid var(--border);
@@ -16466,7 +16474,7 @@ button {
 .cpv--ig .cpv-body b { font-weight: 600; }
 /* carousel */
 .cpv-carousel { padding: 0 0 8px; }
-.cpv-track { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px; }
+.cpv-track { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; padding: 0 12px; }
 .cpv-card { flex: 0 0 70%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .cpv-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #f0f2f5; padding: 7px 9px; }
 .cpv-card-title { font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -16949,7 +16957,7 @@ button {
 
 .mtx-empty { border: 2px dashed var(--border-strong); border-radius: var(--radius); padding: 34px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 14px; }
 
-.mtx-grid-wrap { overflow-x: auto; }
+.mtx-grid-wrap { overflow-x: auto; overscroll-behavior-x: contain; }
 .mtx-grid { display: grid; gap: 8px; min-width: 920px; align-items: stretch; }
 .mtx-corner { font-size: 11px; color: var(--text-faint); align-self: end; padding: 0 0 6px 2px; }
 .mtx-colhead { padding: 0 4px 6px; }
@@ -19815,6 +19823,7 @@ textarea.library-input {
 }
 .lmap-scroll {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -22233,7 +22242,7 @@ table.aud-sheet td.stick .aud-cell {
   border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
 }
 .bds-del:hover { border-color: var(--danger, #dc2626); color: var(--danger, #dc2626); }
-.bds-grid-wrap { max-width: 100%; overflow-x: auto; }
+.bds-grid-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .bds-grid { border-collapse: collapse; font-size: 13px; }
 .bds-grid th, .bds-grid td { border: 1px solid var(--border); padding: 0; }
 .bds-corner, .bds-rownum {
