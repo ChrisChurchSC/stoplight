@@ -1100,7 +1100,11 @@ export function FlowsView() {
         scheduledAt,
       })
       setAssetPick(null)
-      if (id) openReview(id)
+      // WHERE IT OPENS depends on which view asked for it. On the Calendar the new asset opens the
+      // docked inspector beside the month, because nothing on the calendar opens the review drawer
+      // any more — an existing asset there hasn't since the inspector arrived, and the asset you
+      // just made is the same asset. The Grid still opens the drawer on it.
+      if (id) (flowView === 'calendar' ? pickAsset : openReview)(id)
     } finally {
       setAddingAsset(false)
     }
@@ -1883,6 +1887,8 @@ export function FlowsView() {
   const [gridPick, setGridPick] = useState<
     { kind: CanvasObjectKind; cardId?: string; label: string } | { kind: 'asset'; rowId: string } | null
   >(null)
+  /** Open the docked inspector on an asset — the panel the Grid, the Calendar and the canvas share. */
+  const pickAsset = (rowId: string) => setGridPick({ kind: 'asset', rowId })
   const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
   /**
    * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
@@ -10904,9 +10910,10 @@ export function FlowsView() {
                  * review drawer instead, a different panel with different controls reached by the
                  * same click. Same inspector now, same component, on the same row.
                  *
-                 * Still openReview on the calendars OUTSIDE a campaign (Live, the brand folder,
-                 * the workbench): there is no board in scope there to inspect an asset against, so
-                 * the drawer remains the right and only answer.
+                 * The calendars OUTSIDE a campaign (Live, the brand folder, the workbench) have no
+                 * board in scope to inspect an asset against, and they no longer answer the click
+                 * with the drawer either: a calendar is for reading the schedule, and the editor
+                 * lives on the Grid and the canvas. There, an asset is a mark on a day.
                  */
                 onPickRow={(rowId) => { setAssetPick(null); setGridPick({ kind: 'asset', rowId }) }}
                 selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}
