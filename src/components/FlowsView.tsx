@@ -1719,6 +1719,69 @@ export function FlowsView() {
     const z = Math.floor(((wrap.clientWidth - 2) / natural) * 100)
     setZoom(Math.max(10, Math.min(150, z)))
   }
+
+  /**
+   * WHERE THE SHEET'S SCROLLBARS GO once it has re-rendered at a new zoom. Written by the wheel
+   * handler below and spent by the layout effect after it, because the anchoring has to happen in
+   * two halves: the cell under the cursor can only be worked out BEFORE the table changes size,
+   * and the scroll position can only be set AFTER.
+   */
+  const sheetAnchorRef = useRef<{ x: number; y: number } | null>(null)
+
+  /**
+   * CMD-SCROLL AND PINCH, ON THE SHEET. The canvas has had this gesture since it existed and the
+   * Grid did not, so the pill was the only way in — and worse, an unhandled Cmd-scroll fell through
+   * to the browser and zoomed the whole page, chrome and all.
+   *
+   * Bound to the sheet's own scroll box rather than to the stage around it, and it returns without
+   * touching a plain wheel event: scrolling a spreadsheet is what a scroll wheel is FOR here, unlike
+   * on the canvas where a plain scroll pans. Only the zoom gesture is intercepted.
+   */
+  useEffect(() => {
+    if (flowView !== 'grid') return
+    const wrap = gridViewRef.current?.querySelector('.sheet-wrap')
+    if (!(wrap instanceof HTMLElement)) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const d = Math.max(-100, Math.min(100, e.deltaY))
+      const s0 = zoomRef.current / 100
+      // Same curve and the same two step sizes as the canvas — pinch deltas are tiny, so they get
+      // the stronger one. Clamped to the range the presets offer.
+      const next = Math.max(10, Math.min(150, zoomRef.current * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.006))))
+      if (next === zoomRef.current) return
+      // Keep the cell under the cursor under the cursor: read the pointer as a position in the
+      // unzoomed table now, and leave the resulting scroll offsets for the layout effect.
+      const r = wrap.getBoundingClientRect()
+      const px = e.clientX - r.left
+      const py = e.clientY - r.top
+      const s1 = next / 100
+      sheetAnchorRef.current = {
+        x: ((wrap.scrollLeft + px) / s0) * s1 - px,
+        y: ((wrap.scrollTop + py) / s0) * s1 - py,
+      }
+      // Mirrored into the ref immediately so a fast pinch reads its own latest value rather than
+      // the one from the render it has outrun — the same reason zoomAt does it on the canvas.
+      zoomRef.current = next
+      setZoom(next)
+    }
+    wrap.addEventListener('wheel', onWheel, { passive: false })
+    return () => wrap.removeEventListener('wheel', onWheel)
+    // Re-bind when the sheet is replaced under us: a different campaign mounts a different node,
+    // and the listener would otherwise be sitting on one that is no longer in the document.
+  }, [flowView, flowScreen, viewName])
+
+  /** The second half of the anchoring above: the table has its new size, so place the scrollbars. */
+  useLayoutEffect(() => {
+    const a = sheetAnchorRef.current
+    if (!a) return
+    sheetAnchorRef.current = null
+    const wrap = gridViewRef.current?.querySelector('.sheet-wrap')
+    if (!(wrap instanceof HTMLElement)) return
+    wrap.scrollLeft = Math.max(0, a.x)
+    wrap.scrollTop = Math.max(0, a.y)
+  }, [zoom])
+
   // Native, non-passive wheel handler (React's onWheel is passive, so it can't
   // preventDefault). This matches how Attio's canvas zooms: pinch (ctrlKey) or Cmd+scroll
   // zooms toward the cursor, and we suppress the browser's own page zoom / back-swipe.
