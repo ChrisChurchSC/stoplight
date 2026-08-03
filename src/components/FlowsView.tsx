@@ -1075,10 +1075,12 @@ export function FlowsView() {
   // A single-flow share locks the recipient to that one flow: no back-to-list, no flow switching.
   const flowShareLock = useTrafficStore((s) => !!s.sharedSession?.campaign)
   // Add a blank draft asset to the open flow (from Grid/Calendar) and open it to fill in. Calendar
-  // passes the clicked day so the asset lands there.
-  const addFlowAsset = async (scheduledAt?: string) => {
+  // passes the clicked day so the asset lands there, and its own opener: on the Calendar a new asset
+  // opens the docked inspector beside it, because nothing on the calendar opens the review drawer
+  // any more — clicking an existing asset there hasn't since the inspector arrived.
+  const addFlowAsset = async (scheduledAt?: string, open?: (id: string) => void) => {
     const id = await addBlankAsset(flowCampaign, scheduledAt ? { scheduledAt } : undefined)
-    if (id) openReview(id)
+    if (id) (open ?? openReview)(id)
   }
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
   const flowChats = useTrafficStore((s) => s.flowChats)
@@ -1858,6 +1860,8 @@ export function FlowsView() {
   const [gridPick, setGridPick] = useState<
     { kind: CanvasObjectKind; cardId?: string; label: string } | { kind: 'asset'; rowId: string } | null
   >(null)
+  /** Open the docked inspector on an asset — the panel the Grid, the Calendar and the canvas share. */
+  const pickAsset = (rowId: string) => setGridPick({ kind: 'asset', rowId })
   const [selEdge, setSelEdge] = useState<{ from: string; to: string; kind: 'stored' | 'implicit' } | null>(null)
   /**
    * Channels cut off from the brief, by deliverable key. See FlowBoard.detached: the line from a
@@ -10689,7 +10693,11 @@ export function FlowsView() {
               <span />
             )}
             {!flowShareLock && (
-              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this campaign">
+              <button
+                className="flow-share-btn"
+                onClick={() => void addFlowAsset(undefined, flowView === 'calendar' ? pickAsset : undefined)}
+                title="Add a draft asset to this campaign"
+              >
                 ＋ Add asset
               </button>
             )}
@@ -10722,7 +10730,7 @@ export function FlowsView() {
               <CalendarView
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
-                onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)}
+                onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso, pickAsset)}
                 /**
                  * CLICKING AN ASSET OPENS THE ASSET, not a second reading of it. Everywhere else in
                  * the campaign an asset opens the docked inspector — the copy you can edit, the
@@ -10730,9 +10738,10 @@ export function FlowsView() {
                  * review drawer instead, a different panel with different controls reached by the
                  * same click. Same inspector now, same component, on the same row.
                  *
-                 * Still openReview on the calendars OUTSIDE a campaign (Live, the brand folder,
-                 * the workbench): there is no board in scope there to inspect an asset against, so
-                 * the drawer remains the right and only answer.
+                 * The calendars OUTSIDE a campaign (Live, the brand folder, the workbench) have no
+                 * board in scope to inspect an asset against, and they no longer answer the click
+                 * with the drawer either: a calendar is for reading the schedule, and the editor
+                 * lives on the Grid and the canvas. There, an asset is a mark on a day.
                  */
                 onPickRow={(rowId) => setGridPick({ kind: 'asset', rowId })}
                 selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}

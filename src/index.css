@@ -15953,7 +15953,6 @@ button {
   padding: 0 7px;
   border: none;
   border-radius: 8px;
-  cursor: pointer;
   background: var(--accent);
   color: #fff;
   font-size: 11px;
@@ -15961,7 +15960,15 @@ button {
   overflow: hidden;
   white-space: nowrap;
 }
-.cal-span:hover {
+/* THE AFFORDANCE BELONGS TO THE CLICK, so it is scoped to the element that has one. An asset on the
+   calendar is a button only inside a campaign, where the docked inspector is beside it to open; on
+   the calendars that stand alone it is a div, because the click there used to open the Edit-row
+   drawer over the schedule and no longer opens anything. Pointer and hover on the bare class would
+   promise a control that isn't there. Same reason under .cal-event and .cal-day-item. */
+button.cal-span {
+  cursor: pointer;
+}
+button.cal-span:hover {
   filter: brightness(1.08);
 }
 .cal-span.cont-l {
@@ -15989,10 +15996,12 @@ button {
   font: inherit;
   font-size: 11.5px;
   color: var(--text);
-  cursor: pointer;
   min-width: 0;
 }
-.cal-event:hover {
+button.cal-event {
+  cursor: pointer;
+}
+button.cal-event:hover {
   background: var(--surface-2);
 }
 /* THE ASSET THE INSPECTOR IS OPEN ON. Inside a campaign the panel stays docked beside the
@@ -16064,10 +16073,12 @@ button {
   font: inherit;
   font-size: 11px;
   color: var(--text-muted);
-  cursor: pointer;
   min-width: 0;
 }
-.cal-day-item:hover {
+button.cal-day-item {
+  cursor: pointer;
+}
+button.cal-day-item:hover {
   background: var(--surface-2);
   color: var(--text);
 }

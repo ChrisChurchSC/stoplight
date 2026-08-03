@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { CHANNELS } from '../domain/channels'
 import type { RowStatus, TrafficRow } from '../domain/types'
 import { rowInScope } from '../lib/scope'
@@ -91,13 +91,55 @@ export function CalendarView({
   const clientFilter = scopeClient ?? clientFilterStore
   // scopeCampaign pins the view to a single campaign (the Flows calendar).
   const campaignFilter = scopeCampaign ?? (scopeClient ? 'all' : campaignFilterStore)
-  const openReview = useTrafficStore((s) => s.openReview)
   /**
-   * ONE DOOR for every asset on this calendar — the month spans, the week and 3-day events, and the
-   * day popover all used to call openReview individually, which is three places to forget when the
-   * answer changes. It changes here now, once.
+   * ONE DOOR for every asset on this calendar — the month spans, the named assets in a quiet month
+   * cell, the week and 3-day events, and the day popover all used to open the asset individually,
+   * which is four places to forget when the answer changes. It changes here now, once.
+   *
+   * The door only exists where there is a room behind it: inside a campaign, where the docked
+   * inspector sits beside this view. The calendars that stand alone (Live, the brand folder, the
+   * workbench) used to answer the same click with the Edit-row drawer — a whole editor thrown over
+   * the schedule you came here to read, and the only panel on the calendar that was not the panel
+   * every other surface opens. It is gone from the calendar. An asset here is a mark on a day; you
+   * edit it on the Grid or the canvas, where the editor already lives.
    */
-  const openAsset = (id: string) => (onPickRow ? onPickRow(id) : openReview(id))
+  const openAsset = onPickRow
+
+  /**
+   * An asset, as a mark on the calendar. A button only where openAsset has somewhere to go — no
+   * pointer, no hover lift, and nothing announced as a control where the click would lead nowhere.
+   * The tooltip carries the same detail either way.
+   */
+  const Mark = ({
+    rowId,
+    stop,
+    after,
+    children,
+    ...rest
+  }: {
+    rowId: string
+    /** The month cell opens the day popover; an asset inside it must not open both. */
+    stop?: boolean
+    after?: () => void
+    children: ReactNode
+    className: string
+    title?: string
+    style?: CSSProperties
+  }) =>
+    openAsset ? (
+      <button
+        {...rest}
+        onClick={(e) => {
+          if (stop) e.stopPropagation()
+          openAsset(rowId)
+          after?.()
+        }}
+      >
+        {children}
+      </button>
+    ) : (
+      <div {...rest}>{children}</div>
+    )
 
   const now = new Date()
   const [mode, setMode] = useState<Mode>('month')
@@ -198,9 +240,9 @@ export function CalendarView({
     const reach = reachOf(r)
     const alwaysOn = alwaysOnCampaigns.has(r.campaign ?? '')
     return (
-      <button
+      <Mark
+        rowId={r.id}
         className={`cal-event${alwaysOn ? ' cal-event-alwayson' : ''}${r.id === selectedRowId ? ' on' : ''}`}
-        onClick={() => openAsset(r.id)}
         title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(r.scheduledAt).toLocaleString(
           undefined,
           { hour: 'numeric', minute: '2-digit' },
@@ -210,7 +252,7 @@ export function CalendarView({
         <ChannelIcon channel={r.channel} size={12} />
         <span className="cal-event-name">{r.assetName}</span>
         {reach > 0 && <span className="cal-event-reach">{formatReach(reach)}</span>}
-      </button>
+      </Mark>
     )
   }
 
@@ -277,20 +319,12 @@ export function CalendarView({
                       {evs.length > 0 && evs.length <= MONTH_NAMED_MAX && (
                         <div className="cal-day-list">
                           {evs.map((r) => (
-                            <button
+                            // THROUGH THE ONE DOOR, like every other asset on this calendar.
+                            <Mark
                               key={r.id}
+                              rowId={r.id}
+                              stop
                               className={`cal-day-item${r.id === selectedRowId ? ' on' : ''}`}
-                              onClick={(e) => {
-                                // The cell itself opens the day popover when it can add assets —
-                                // without this, clicking an asset would open the review AND the popover.
-                                e.stopPropagation()
-                                // THROUGH THE ONE DOOR, like every other asset on this calendar.
-                                // This called openReview directly, so the named assets in a quiet
-                                // month cell — the default view, and the ones you click most — opened
-                                // the review drawer while the same asset opened the inspector from
-                                // the week columns, the spans, and the day popover beside them.
-                                openAsset(r.id)
-                              }}
                               title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(
                                 r.scheduledAt,
                               ).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} · ${r.status}`}
@@ -298,7 +332,7 @@ export function CalendarView({
                               <span className="cal-day-item-dot" style={{ background: STATUS_COLOR[r.status] }} />
                               <ChannelIcon channel={r.channel} size={11} />
                               <span className="cal-day-item-name">{r.assetName}</span>
-                            </button>
+                            </Mark>
                           ))}
                         </div>
                       )}
@@ -332,18 +366,18 @@ export function CalendarView({
                 {placed.length > 0 && (
                   <div className="cal-week-spans">
                     {placed.map((h) => (
-                      <button
+                      <Mark
                         key={h.r.id}
+                        rowId={h.r.id}
                         className={`cal-span${h.contL ? ' cont-l' : ''}${h.contR ? ' cont-r' : ''}${alwaysOnCampaigns.has(h.r.campaign ?? '') ? ' cal-span-alwayson' : ''}${h.r.id === selectedRowId ? ' on' : ''}`}
                         style={{ gridColumn: `${h.startCol + 1} / ${h.endCol + 2}`, gridRow: h.lane + 1 }}
-                        onClick={() => openAsset(h.r.id)}
                         title={`${CHANNELS[h.r.channel].label} · ${h.r.assetName} · runs to ${new Date(
                           h.r.endsAt!,
                         ).toLocaleDateString()}`}
                       >
                         <ChannelIcon channel={h.r.channel} size={11} color="#fff" />
                         {!h.contL && <span className="cal-span-name">{h.r.assetName}</span>}
-                      </button>
+                      </Mark>
                     ))}
                   </div>
                 )}
@@ -445,13 +479,11 @@ export function CalendarView({
           </div>
           <div className="cal-pop-list">
             {evs.map((r) => (
-              <button
+              <Mark
                 key={r.id}
+                rowId={r.id}
+                after={() => setDayKey(null)}
                 className={`cal-event${r.id === selectedRowId ? ' on' : ''}`}
-                onClick={() => {
-                  openAsset(r.id)
-                  setDayKey(null)
-                }}
               >
                 <span className="cal-event-dot" style={{ background: STATUS_COLOR[r.status] }} />
                 <ChannelIcon channel={r.channel} size={12} />
@@ -459,7 +491,7 @@ export function CalendarView({
                 <span className="cal-pop-time">
                   {new Date(r.scheduledAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
                 </span>
-              </button>
+              </Mark>
             ))}
             {evs.length === 0 && <div className="cal-col-empty">No posts yet</div>}
           </div>
