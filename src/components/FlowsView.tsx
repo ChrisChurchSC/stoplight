@@ -1701,23 +1701,35 @@ export function FlowsView() {
   }
 
   /**
-   * FIT, ON A SHEET: the zoom at which the whole width of the table fits the window it scrolls in.
-   * The sheet's own answer to "how wide am I" is read off the DOM rather than recomputed here —
-   * the column widths belong to SheetGrid, and a second copy of that arithmetic living in the
-   * toolbar would be a second answer, free to drift from the first.
+   * THE ZOOM THAT PUTS THE WHOLE SHEET ON SCREEN — every column AND every row. It is both what Fit
+   * jumps to and the point past which zooming out is refused, because those are the same number:
+   * once nothing is off screen there is nothing further out to find, and carrying on only shrinks
+   * the sheet into a corner of its own window.
+   *
+   * Measured against NATURAL size, not the size on screen right now. The rendered box stops growing
+   * once it fits, so a scrollWidth read below the fit point reports the window back to itself and
+   * the floor would follow the zoom down forever instead of holding still.
+   *
+   *   width  — the authored inline width, which is written in unzoomed px and never moves.
+   *   height — the rendered height over the scale the DOM is ACTUALLY painted at, read off the
+   *            element rather than from `zoom`: a fast pinch updates the ref before React has
+   *            re-rendered, and dividing a stale height by the new scale invents a natural size.
+   *
+   * Never above 100%, or a sheet small enough to fit whole would have a floor over its own natural
+   * size and could not be zoomed out at all. Never below 10%, which stays the hard limit.
    */
-  const fitSheetToWidth = () => {
+  const sheetFitZoom = () => {
     const wrap = gridViewRef.current?.querySelector('.sheet-wrap')
     const table = wrap?.querySelector('table.sheet')
-    if (!(wrap instanceof HTMLElement) || !(table instanceof HTMLElement)) return
-    // The AUTHORED width, off the inline style — getComputedStyle would hand back a figure already
-    // scaled by whatever zoom is on the table right now, so Fit would chase its own tail.
-    const natural = parseFloat(table.style.width)
-    if (!natural) return
-    // Floor, so it lands just inside the window rather than a hairline over it and keeps a
-    // scrollbar for one pixel. Clamped to the same range the presets offer.
-    const z = Math.floor(((wrap.clientWidth - 2) / natural) * 100)
-    setZoom(Math.max(10, Math.min(150, z)))
+    if (!(wrap instanceof HTMLElement) || !(table instanceof HTMLElement)) return null
+    const naturalW = parseFloat(table.style.width)
+    const domScale = parseFloat(table.style.zoom) || 1
+    const naturalH = table.getBoundingClientRect().height / domScale
+    if (!naturalW || !naturalH) return null
+    // -2 for the sheet's own border, and floored, so it lands just inside the window rather than a
+    // hairline over it and keeps a scrollbar for one pixel.
+    const z = Math.min((wrap.clientWidth - 2) / naturalW, (wrap.clientHeight - 2) / naturalH) * 100
+    return Math.max(10, Math.min(100, Math.floor(z)))
   }
 
   /**
@@ -1747,8 +1759,11 @@ export function FlowsView() {
       const d = Math.max(-100, Math.min(100, e.deltaY))
       const s0 = zoomRef.current / 100
       // Same curve and the same two step sizes as the canvas — pinch deltas are tiny, so they get
-      // the stronger one. Clamped to the range the presets offer.
-      const next = Math.max(10, Math.min(150, zoomRef.current * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.006))))
+      // the stronger one. The floor is where the sheet runs out rather than a fixed percentage:
+      // past it there are no more rows or columns to uncover and the gesture would just be
+      // shrinking the sheet away from its own window.
+      const floor = sheetFitZoom() ?? 10
+      const next = Math.max(floor, Math.min(150, zoomRef.current * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.006))))
       if (next === zoomRef.current) return
       // Keep the cell under the cursor under the cursor: read the pointer as a position in the
       // unzoomed table now, and leave the resulting scroll offsets for the layout effect.
@@ -7801,7 +7816,15 @@ export function FlowsView() {
    *     so it just takes the number.
    *   - Fit fits the BOARD's content on the canvas, and the sheet's full column width here.
    */
-  const renderZoomControl = (opts?: { grid?: boolean }) => (
+  const renderZoomControl = (opts?: { grid?: boolean }) => {
+    /**
+     * On the Grid, anything below the fit is offered but not live: the menu keeps its full ladder
+     * so the control reads the same on both tabs, and the steps that would do nothing are shown
+     * spent rather than quietly redirecting you to a percentage you did not press. Measured only
+     * while the menu is open, since it costs a layout read.
+     */
+    const floor = opts?.grid && zoomOpen ? sheetFitZoom() : null
+    return (
     <div className="flow-tb-zoom-wrap">
       <button aria-label="Zoom" className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -7825,8 +7848,10 @@ export function FlowsView() {
             <button
               className="flow-tb-zoom-item"
               onClick={() => {
-                if (opts?.grid) fitSheetToWidth()
-                else fitToContent()
+                if (opts?.grid) {
+                  const z = sheetFitZoom()
+                  if (z) setZoom(z)
+                } else fitToContent()
                 setZoomOpen(false)
               }}
             >
@@ -7837,6 +7862,8 @@ export function FlowsView() {
               <button
                 key={z}
                 className={`flow-tb-zoom-item${Math.round(zoom) === z ? ' on' : ''}`}
+                disabled={floor != null && z < floor}
+                title={floor != null && z < floor ? 'The whole sheet already fits — use Fit' : undefined}
                 onClick={() => {
                   // Anchor a preset to the canvas center so it zooms about the middle.
                   const r = opts?.grid ? null : canvasRef.current?.getBoundingClientRect()
@@ -7852,7 +7879,8 @@ export function FlowsView() {
         </>
       )}
     </div>
-  )
+    )
+  }
 
   /**
    * WHICH MODEL WRITES, AND THE BUTTON THAT MAKES IT WRITE. Lifted out of the canvas toolbar
