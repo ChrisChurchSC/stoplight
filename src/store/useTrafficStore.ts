@@ -2,6 +2,15 @@ import { create } from 'zustand'
 import { MockSheetAdapter } from '../adapters/sheet/mockSheetAdapter'
 import { SupabaseSheetAdapter } from '../adapters/sheet/supabaseSheetAdapter'
 import { SupabaseRecordAdapter } from '../adapters/records/supabaseRecordAdapter'
+import {
+  appendAuditEntry,
+  appendCampaignVersion,
+  listAuditLog,
+  listCampaignVersions,
+  loadAuditLogLocal,
+  loadVersionsLocal,
+  removeVersionsForClient,
+} from '../adapters/history/historyStore'
 import { persistState, hydrateState, flushPersistedState } from '../adapters/state/workspaceState'
 import { RECORD_GROUPING_KEY } from '../domain/recordGrouping'
 import { isSupabaseConfigured } from '../lib/supabase'
@@ -723,14 +732,17 @@ function loadOutputTypes(): OutputType[] {
     return []
   }
 }
-/** Returns whether the write landed, so a caller can roll back rather than show a format that is gone on reload. */
+/**
+ * Returns whether the write landed, so a caller can roll back rather than show a format that is
+ * gone on reload.
+ *
+ * Goes through persistState, not a bare setItem: hydrateRecords has always READ outputTypes back
+ * out of workspace_state, but nothing ever wrote it there, so the mirror was one-directional and
+ * the "a teammate can see this format" claim in STATE_SLICES was not true. persistState still
+ * writes localStorage synchronously, so the return value means the same thing it did before.
+ */
 function saveOutputTypes(list: OutputType[]): boolean {
-  try {
-    localStorage.setItem(OUTPUT_TYPES_KEY, JSON.stringify(list))
-    return true
-  } catch {
-    return false
-  }
+  return persistState(OUTPUT_TYPES_KEY, list)
 }
 
 function saveBrandDatasets(list: BrandDataset[]): boolean {
@@ -915,7 +927,12 @@ function saveRecordList<T extends { id: string }>(key: string, list: T[]): void 
   const table = RECORD_TABLES[key]
   if (table && isSupabaseConfigured) {
     const adapter = (recordAdapterCache[table] ??= new SupabaseRecordAdapter(table))
-    void adapter.replaceAll(list as unknown as { id: string; name?: string }[])
+    // Still fire-and-forget — a record save must not block the edit that caused it — but the
+    // rejection is now caught and reported. It used to be a bare `void`, which meant a write to a
+    // table that did not exist was indistinguishable from a write that landed.
+    void adapter.replaceAll(list as unknown as { id: string; name?: string }[]).catch((e) => {
+      console.warn(`[records] ${key} not persisted:`, (e as Error)?.message ?? e)
+    })
   }
 }
 const MESSAGES_KEY = 'stoplight.messages.v1'
@@ -1229,22 +1246,10 @@ function saveCoherenceCheck(c: PersistedCoherence): void {
   }
 }
 const INITIAL_COHERENCE = loadCoherenceCheck()
-const AUDIT_LOG_KEY = 'stoplight.auditLog.v1'
-function loadAuditLog(): AuditEntry[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(AUDIT_LOG_KEY) || '[]')
-    return Array.isArray(v) ? v : []
-  } catch {
-    return []
-  }
-}
-function saveAuditLog(list: AuditEntry[]): void {
-  try {
-    localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(list))
-  } catch {
-    /* ignore */
-  }
-}
+// The audit trail and version history are workspace-backed (append-only tables), with localStorage
+// as the offline/no-backend cache — see src/adapters/history/historyStore.ts. The load* helpers read
+// that cache for the initial render; hydrateRecords replaces it with the workspace's copy.
+const loadAuditLog = loadAuditLogLocal
 
 // Share links the owner has handed out, persisted. The grant is also self-encoded
 // in each link's token; this list is the owner's management view (revoke).
@@ -1265,23 +1270,9 @@ function saveShares(list: ShareGrant[]): void {
   }
 }
 
-// Campaign version history (copy save-points), persisted per client.
-const VERSIONS_KEY = 'stoplight.versions.v1'
-function loadVersions(): CampaignVersion[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(VERSIONS_KEY) || '[]')
-    return Array.isArray(v) ? v : []
-  } catch {
-    return []
-  }
-}
-function saveVersions(list: CampaignVersion[]): void {
-  try {
-    localStorage.setItem(VERSIONS_KEY, JSON.stringify(list))
-  } catch {
-    /* ignore */
-  }
-}
+// Campaign version history (copy save-points), persisted per client. Workspace-backed; see the
+// note on loadAuditLog above.
+const loadVersions = loadVersionsLocal
 /** Attribute a version to the same identity multiplayer presence uses. */
 function currentAuthor(): string {
   try {
@@ -2686,7 +2677,9 @@ function pushAudit(
 ): void {
   const entry: AuditEntry = { id: freshAuditId(), at: Date.now(), actor: 'You', ...e }
   const auditLog = [entry, ...get().auditLog]
-  saveAuditLog(auditLog)
+  // One insert for the new entry, not a rewrite of the whole trail: two people acting at once would
+  // otherwise each replace the log with their own view of it and drop the other's entries.
+  void appendAuditEntry(entry, auditLog)
   set({ auditLog })
 }
 
@@ -2814,7 +2807,10 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
   saveArtboards(artboards)
   saveReports(reports)
   savePinned(pinnedInsights)
-  saveVersions(versions)
+  // The one non-append path on version history: a deleted brand takes its save points with it. The
+  // server delete matters as much as the local one — an orphan left behind would hydrate the
+  // deleted brand's history back on the next fresh device, which is what this purge exists to stop.
+  void removeVersionsForClient(name, versions)
   saveMediaMixes(mediaMixes)
   saveFlights(flights)
   saveFlowChats(flowChats)
@@ -4046,7 +4042,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       summary,
     }
     const next = [version, ...versions]
-    saveVersions(next)
+    void appendCampaignVersion(version, next)
     set({ versions: next })
   },
   restoreVersion: async (id) => {
@@ -5424,8 +5420,24 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // A share viewer's records are the seeded snapshot (localStorage); don't overwrite with the
     // backend (which it has no session for anyway).
     if (!isSupabaseConfigured || shareViewMode) return
-    const from = <T extends { id: string; name?: string }>(table: string) => new SupabaseRecordAdapter<T>(table).list()
-    const [companies, people, channelRecords, segments, objectives, messages, voices, patterns, triggers, brandRecords, libraryFolders] = await Promise.all([
+    /**
+     * Read one record table into its store slice.
+     *
+     * Resolves to `undefined` — meaning "leave the slice alone" — when the read fails, which is the
+     * whole point of the wrapper. list() now throws on a failed request rather than answering []
+     * (see SupabaseRecordAdapter), because the two used to be indistinguishable: `library_folders`
+     * had no table, every read errored, and the resulting empty list was patched straight over the
+     * folders the user had already made. A failed read must never look like an empty workspace.
+     */
+    const from = async <T extends { id: string; name?: string }>(table: string): Promise<T[] | undefined> => {
+      try {
+        return await new SupabaseRecordAdapter<T>(table).list()
+      } catch (e) {
+        console.warn(`[records] ${table} not hydrated:`, (e as Error)?.message ?? e)
+        return undefined
+      }
+    }
+    const [companies, people, channelRecords, segments, objectives, messages, voices, patterns, triggers, brandRecords, libraryFolders, products, brandObjects, concepts, seasons] = await Promise.all([
       from<Company>('companies'),
       from<Person>('people'),
       from<ChannelRecord>('channels'),
@@ -5437,8 +5449,21 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       from<Trigger>('triggers'),
       from<BrandRecord>('brands'),
       from<LibraryFolder>('library_folders'),
+      // These four were written by saveRecordList but never read back. With a backend configured
+      // their slices initialise to [] (see localDataMode), so the UI showed nothing and the first
+      // edit called replaceAll — a delete-then-insert — wiping whatever the workspace actually had.
+      from<Product>('products'),
+      from<BrandObject>('brand_objects'),
+      from<Concept>('concept_records'),
+      from<Season>('season_records'),
     ])
-    const patch: Record<string, unknown> = { companies, people, channelRecords, segments, objectives, messages, voices, patterns, triggers, brandRecords, libraryFolders }
+    const patch: Record<string, unknown> = {}
+    // Only slices whose read actually succeeded. An undefined entry keeps what's already in the store.
+    const hydrated: Record<string, unknown[] | undefined> = {
+      companies, people, channelRecords, segments, objectives, messages, voices, patterns,
+      triggers, brandRecords, libraryFolders, products, brandObjects, concepts, seasons,
+    }
+    for (const [slice, value] of Object.entries(hydrated)) if (value) patch[slice] = value
     // Non-record state (brand system, client list, campaign metadata, …) from the KV table, mapped
     // back onto its store slice by the localStorage key it was saved under.
     const STATE_SLICES: Record<string, string> = {
@@ -5468,6 +5493,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
     // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights gate.
     patch.flightsHydrated = true
+    // The audit trail and version history come from their own append-only tables, not
+    // workspace_state: they're written one row at a time, so replacing a whole jsonb blob on every
+    // entry would be both wasteful and lossy across devices. Their own reads already fall back to
+    // the local cache, so a failure here leaves the user with what this browser had.
+    const [auditLog, versions] = await Promise.all([listAuditLog(), listCampaignVersions()])
+    patch.auditLog = auditLog
+    patch.versions = versions
     // Interface preferences (skill level + role) live in localStorage, not a store slice, but do sync
     // through workspace_state — restore the workspace's copy on a fresh device, merged with defaults
     // so a newer field (e.g. focusDismissed) is never dropped by an older saved blob.
@@ -5492,14 +5524,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     // Tasks live in localStorage (TasksView owns them, not a store slice); restore the workspace's
     // copy so a fresh device shows the right tasks. Notify listeners (sidebar badge, home agenda).
-    if (TASKS_KEY in state) {
+    //
+    // ASSET_DONE_KEY rides along for the same reason and was the other half of the same feature:
+    // it was already being SENT via persistState but was never in this map, so ticking an asset
+    // task off went to the workspace and never came back. One 'stoplight:tasks' event covers both.
+    // The literal, not the ASSET_DONE_KEY const: lib/assetTasks imports this store, so importing
+    // back from it would close a cycle. Same reason RECORD_TABLES spells its keys out.
+    let taskStateChanged = false
+    for (const key of [TASKS_KEY, 'stoplight.assetTaskDone.v1']) {
+      if (!(key in state)) continue
       try {
-        localStorage.setItem(TASKS_KEY, JSON.stringify(state[TASKS_KEY]))
-        window.dispatchEvent(new Event('stoplight:tasks'))
+        localStorage.setItem(key, JSON.stringify(state[key]))
+        taskStateChanged = true
       } catch {
         /* storage unavailable — tasks fall back to whatever's local */
       }
     }
+    if (taskStateChanged) window.dispatchEvent(new Event('stoplight:tasks'))
     set(patch as Partial<TrafficState>)
   },
 
@@ -5507,17 +5548,12 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (!isSupabaseConfigured) return { ok: false, error: 'No backend configured' }
     try {
       // Record lists → their per-row tables (whole array replaced).
-      const RECORD_MIGRATIONS: [string, string][] = [
-        ['stoplight.companies.v1', 'companies'],
-        ['stoplight.people.v1', 'people'],
-        ['stoplight.channelRecords.v1', 'channels'],
-        ['stoplight.segments.v1', 'segments'],
-        ['stoplight.objectives.v1', 'objectives'],
-        ['stoplight.messages.v1', 'message_records'],
-        ['stoplight.brandRecords.v1', 'brands'],
-        [LIBRARY_FOLDERS_KEY, 'library_folders'],
-      ]
-      for (const [key, table] of RECORD_MIGRATIONS) {
+      //
+      // Driven straight off RECORD_TABLES rather than a hand-kept copy of it. The copy had fallen
+      // seven kinds behind — voices, patterns, triggers, products, brand objects, concepts and
+      // seasons were all absent, so "migrate my local data" moved most of it and silently left
+      // those on the device. One list means adding a record kind cannot half-wire it.
+      for (const [key, table] of Object.entries(RECORD_TABLES)) {
         const arr = loadRecordList<{ id: string; name?: string }>(key)
         if (arr.length) await new SupabaseRecordAdapter(table).replaceAll(arr)
       }
