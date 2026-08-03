@@ -232,6 +232,15 @@ export function SheetGrid({
   const removeRow = useTrafficStore((s) => s.removeRow)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
+  /**
+   * WHAT IS BEING WRITTEN RIGHT NOW. Both already existed and drove the canvas: `regenIds` is the
+   * set of assets Claude is drafting, `drafting` is whether a run is out at all. The sheet read
+   * neither, so pressing Generate on the Grid tab changed the button's label and nothing else —
+   * thirty rows of unchanged copy for as long as the run took, with no way to tell whether it had
+   * started, which rows it was touching, or whether what you were reading was about to be replaced.
+   */
+  const regenIds = useTrafficStore((s) => s.regenIds)
+  const drafting = useTrafficStore((s) => s.drafting)
   const icp = useTrafficStore((s) => s.icp)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
@@ -346,6 +355,31 @@ export function SheetGrid({
       }
     }
     return [...seen].map(([key, label]) => ({ key: `msg:${key}`, label, icon: '¶', width: 280, fieldKey: key }))
+  })()
+
+  /**
+   * THE COPY COLUMNS MUST NOT VANISH WHILE THE COPY IS BEING WRITTEN.
+   *
+   * A column exists here because some row in view carries that component. Generating empties the
+   * components first and fills them a moment later, so measured on a three-asset campaign the Caption
+   * column disappeared the instant Generate was pressed and eight columns appeared when the run
+   * landed: the sheet lost a column, every column right of it slid left, and the skeleton meant to
+   * say "this is being written" had no cell to be written in.
+   *
+   * While a run is out, the set only grows: what was there stays, and anything the new copy brings
+   * with it is added. It settles back to the plain answer the moment the run ends.
+   *
+   * The remembered set is the last NON-EMPTY one, not the last one, and that is the whole trick.
+   * The copy is wiped a render BEFORE `drafting` is set — measured: msg=0 with the flag still
+   * false — so remembering unconditionally remembered the empty set and had nothing to restore.
+   */
+  const lastMsgCols = useRef(msgCols)
+  if (msgCols.length) lastMsgCols.current = msgCols
+  const shownMsgCols = (() => {
+    if (!drafting && !regenIds.size) return msgCols
+    const merged = new Map(lastMsgCols.current.map((c) => [c.key, c]))
+    for (const c of msgCols) merged.set(c.key, c)
+    return [...merged.values()]
   })()
 
   /** Empty on every row in view? Only asked of columns that are allowed to disappear. */
@@ -535,7 +569,7 @@ export function SheetGrid({
     // fallback anchor is Type — the last column that is always present before the copy begins.
     const anchor = COLUMNS.some((c) => c.key === 'campaign' && (c.always || !columnEmpty('campaign'))) ? 'campaign' : 'type'
     for (const c of COLUMNS) {
-      if (c.key === 'messaging') { out.push(...msgCols); continue }
+      if (c.key === 'messaging') { out.push(...shownMsgCols); continue }
       if (!c.always && columnEmpty(c.key)) continue
       out.push(c)
       // MADE FROM COMES BEFORE THE COPY, not after it.
@@ -623,22 +657,48 @@ export function SheetGrid({
 
   const pad = Math.max(0, MIN_ROWS - view.length)
 
+  /** Rows on screen that are being written. */
+  const writing = view.filter((r) => regenIds.has(r.id)).length
+
   return (
     <div className="sheet-grid">
+      {/**
+        * A RUN IS OUT, said once at the top of the sheet.
+        *
+        * The per-row marks below say which assets, but only for the rows you can see, and only once
+        * they exist. Generate from an empty campaign builds the assets before it writes them, so for
+        * the first stretch there is nothing on the sheet to mark at all — and the Generate button
+        * that says "Generating…" is at the far bottom of the screen, outside where anyone is looking.
+        * The count is here because the button cannot give it: it is what is left, not what was asked.
+        */}
+      {drafting && (
+        <div className="sheet-writing-bar" role="status">
+          <span className="flow-node-status-spin" aria-hidden="true" />
+          {writing ? `Writing ${writing} asset${writing === 1 ? '' : 's'}…` : 'Writing…'}
+        </div>
+      )}
       <CompletenessBar />
       <div className="sheet-wrap">
         {rows.length === 0 && (
           <div className="sheet-hint">
-            <div>
-              Add an asset to start the sheet.
-            </div>
-            <button
-              className="btn sm"
-              style={{ marginTop: 12, pointerEvents: 'auto' }}
-              onClick={loadSampleHint}
-            >
-              Load sample data
-            </button>
+            {/* An empty sheet with a run out is not an empty sheet, it is a sheet whose assets have
+                not landed yet, and "Add an asset to start" is the one thing you should not do to it. */}
+            {drafting ? (
+              <div>Writing the first assets…</div>
+            ) : (
+              <>
+                <div>
+                  Add an asset to start the sheet.
+                </div>
+                <button
+                  className="btn sm"
+                  style={{ marginTop: 12, pointerEvents: 'auto' }}
+                  onClick={loadSampleHint}
+                >
+                  Load sample data
+                </button>
+              </>
+            )}
           </div>
         )}
         <table
@@ -691,7 +751,7 @@ export function SheetGrid({
                   data-row-id={row.id}
                   className={`data-row${pick?.kind === 'row' && pick.rowId === row.id ? ' sel' : ''}${
                     row.id === selectedRowId ? ' on' : ''
-                  }`}
+                  }${regenIds.has(row.id) ? ' generating' : ''}`}
                   /**
                    * OPENING IS THE DOUBLE CLICK, which is what this sheet has claimed since selection
                    * arrived and has never done, because until now there was nothing to open. Every
@@ -746,6 +806,16 @@ export function SheetGrid({
                       <span className="nm" title={onPickRow ? `${row.assetName} — open this asset` : row.assetName}>
                         {row.assetName}
                       </span>
+                      {/* WHICH ROWS ARE BEING WRITTEN, said on the row itself. The canvas says this
+                          with a pill above the card; the sheet says it beside the name, which is the
+                          one cell you scan down. The spinner is the canvas's own, so the two surfaces
+                          are not inventing separate ways to say the same thing. */}
+                      {regenIds.has(row.id) && (
+                        <span className="sheet-writing" title="Claude is writing this asset's copy">
+                          <span className="flow-node-status-spin" aria-hidden="true" />
+                          Writing
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -994,7 +1064,7 @@ export function SheetGrid({
                     })()}
                   </td>
 
-                  {msgCols.map((mc) => {
+                  {shownMsgCols.map((mc) => {
                     const copy = (messagingMap(row)[mc.fieldKey] ?? '').trim()
                     const isFlagged =
                       !!batchReview &&
@@ -1025,7 +1095,22 @@ export function SheetGrid({
                         }
                         onClick={() => onPickRow?.(row.id)}
                       >
-                        {copy ? <span className="msg-copy">{copy}</span> : <span className="cell-ro">—</span>}
+                        {/* NOT THE OLD COPY WHILE THE NEW COPY IS BEING WRITTEN. The canvas takes the
+                            same line on its cards, for the same reason: reading a sentence that is
+                            about to be replaced is worse than reading nothing, because you cannot
+                            tell which version you are looking at. Same skeleton, so the wait looks
+                            the same on both surfaces. */}
+                        {regenIds.has(row.id) ? (
+                          <div className="flow-copy-skel" aria-label="Writing copy">
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        ) : copy ? (
+                          <span className="msg-copy">{copy}</span>
+                        ) : (
+                          <span className="cell-ro">—</span>
+                        )}
                       </td>
                     )
                   })}

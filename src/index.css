@@ -1385,6 +1385,54 @@ button {
   cursor: pointer;
 }
 
+/* BEING WRITTEN, in the sheet.
+   The canvas already had this language — a spinner pill, an accent border, and a shimmering skeleton
+   where the copy will land — so the sheet borrows the spinner and the skeleton outright rather than
+   inventing a second way to say "wait". What is different here is the scale: a card is one asset and
+   a row is one of thirty, so the row marks itself down its whole length instead of glowing. */
+.sheet-writing-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+/* The row being written: a tint down the whole row and the accent edge on its number, which is the
+   one column that is always on screen however far the sheet is scrolled sideways. */
+.sheet tr.data-row.generating td {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.sheet tr.data-row.generating .gutter {
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--accent);
+}
+/* Beside the asset's name. Small, because it repeats down as many rows as the run touches. */
+.sheet-writing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 7px 2px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* The copy skeleton is the canvas's own, dropped into a cell that already carries the padding the
+   text it replaces was getting. Held to the height of a line of that text so a row does not jump
+   when the copy lands. */
+.sheet .msg-cell .flow-copy-skel {
+  min-height: 19px;
+  justify-content: center;
+}
+
 /* MADE FROM: THE CARDS AN ASSET IS WRITTEN FROM, as chips in one cell.
    Twelve columns of pickers became one column of chips — see MADE_FROM_COL in SheetGrid. A chip is
    the card shrunk to a word: the kind's own mark, the kind's own hue through --note-tone (the card's
