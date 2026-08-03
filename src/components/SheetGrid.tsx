@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KIND_ORDER, channelsByKind, resolveChannelId } from '../domain/channels'
 import { isValidType, primaryTypeKey, typesFor } from '../domain/channelAssetTypes'
-import { messagingFields, messagingMap } from '../domain/messaging'
+import { filledFields, hasCopy, messagingFields, messagingMap } from '../domain/messaging'
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
@@ -334,18 +334,27 @@ export function SheetGrid({
    */
 
   /**
-   * ONE COLUMN PER COPY COMPONENT the rows in view actually carry, in the order the formats declare
-   * them. A campaign of YouTube posts gets Title, Description and Pinned comment; a mixed one gets
-   * the union, and a component nobody has filled in does not get a column at all.
+   * HOW WIDE THE COMPONENT LABELS ARE, in characters, for the whole Messaging column at once.
+   *
+   * Sizing the label column per cell — which is what CSS does on its own — lines the labels up
+   * INSIDE a cell and nowhere else: a row of Title and Description sets a narrower column than the
+   * row under it carrying Pinned comment, so the copy starts at a different x on every row and the
+   * column reads as ragged down the page. Sizing it to the longest label in the SCHEMA instead
+   * spends 92px on whitespace for the four-fifths of formats whose labels are one short word.
+   *
+   * So it is measured from what is actually on screen: the longest label any row in view renders,
+   * which is the narrowest width that lines them all up. Capped at 16 characters because the schema
+   * declares some long ones — "Problem / solution / use-case copy" is 34 — and past the cap they
+   * wrap onto a second line rather than taking a third of the cell. A floor of 5 so a column of
+   * nothing but CTA does not collapse to a sliver.
+   *
+   * In ch, resolved against .msg-key's own monospace face where the property is used, so the number
+   * is characters of the font it is actually measuring — see the width there.
    */
-  const msgCols = (() => {
-    const seen = new Map<string, string>()
-    for (const r of view) {
-      for (const f of messagingFields(r.channel, r.assetType)) {
-        if (!seen.has(f.key) && (messagingMap(r)[f.key] ?? '').trim()) seen.set(f.key, f.label)
-      }
-    }
-    return [...seen].map(([key, label]) => ({ key: `msg:${key}`, label, icon: '¶', width: 280, fieldKey: key }))
+  const msgKeyCh = (() => {
+    let n = 0
+    for (const r of view) for (const f of filledFields(r)) n = Math.max(n, f.label.length)
+    return Math.min(Math.max(n, 5), 16)
   })()
 
   /** Empty on every row in view? Only asked of columns that are allowed to disappear. */
@@ -359,6 +368,10 @@ export function SheetGrid({
       case 'campaign': return none((r) => (r.campaign ?? '').trim())
       case 'scheduled': return none((r) => r.scheduledAt)
       case 'budget': return none((r) => r.budget?.amount)
+      // Nothing written anywhere in view. Asked through hasCopy — the schema-filtered reading — so
+      // the column disappears on exactly the rows whose own cells would have said "Add messaging…",
+      // and not on a row whose text is sitting under a key its format no longer defines.
+      case 'messaging': return !view.some(hasCopy)
       default: return false
     }
   }
@@ -535,7 +548,6 @@ export function SheetGrid({
     // fallback anchor is Type — the last column that is always present before the copy begins.
     const anchor = COLUMNS.some((c) => c.key === 'campaign' && (c.always || !columnEmpty('campaign'))) ? 'campaign' : 'type'
     for (const c of COLUMNS) {
-      if (c.key === 'messaging') { out.push(...msgCols); continue }
       if (!c.always && columnEmpty(c.key)) continue
       out.push(c)
       // MADE FROM COMES BEFORE THE COPY, not after it.
@@ -643,7 +655,14 @@ export function SheetGrid({
         )}
         <table
           className="sheet"
-          style={{ tableLayout: 'fixed', width: total, minWidth: total, ...(zoom === 100 ? null : { zoom: zoom / 100 }) }}
+          style={{
+            tableLayout: 'fixed',
+            width: total,
+            minWidth: total,
+            // One width for every component label in the Messaging column — see msgKeyCh.
+            ['--msg-key-w' as string]: `${msgKeyCh}ch`,
+            ...(zoom === 100 ? null : { zoom: zoom / 100 }),
+          } as React.CSSProperties}
         >
           <colgroup>
             {widths.map((w, i) => (
@@ -994,41 +1013,105 @@ export function SheetGrid({
                     })()}
                   </td>
 
-                  {msgCols.map((mc) => {
-                    const copy = (messagingMap(row)[mc.fieldKey] ?? '').trim()
-                    const isFlagged =
-                      !!batchReview &&
-                      batchReview.flags.some(
-                        (f) => f.rowId === row.id && f.field?.key === mc.fieldKey && !flagResolved(f, row, pains),
-                      )
-                    /**
-                     * THE COPY COLUMNS OPEN THE ASSET, on one click like the object cells beside
-                     * them. These are the columns the sheet exists for and they were the only ones
-                     * with nothing behind them: read-only text you could not fix a word of and could
-                     * not ask to be written again. The cursor already said pointer and the cell
-                     * already lit on hover, so it has been promising this click for three releases.
-                     *
-                     * An EMPTY one opens too, and says so. A dash in a copy column is the state you
-                     * most want to act on, and a cell that only responds once it already has
-                     * something in it answers every row except the ones that need answering.
-                     */
-                    return (
-                      <td
-                        key={mc.key}
-                        className={`msg-cell${isFlagged ? ' flagged' : ''}${onPickRow ? ' open' : ''}`}
-                        title={
-                          onPickRow
-                            ? copy
-                              ? `${copy}\n\nOpen the asset to edit this or write it again.`
-                              : `No ${mc.label.toLowerCase()} yet. Open the asset to write it.`
-                            : copy || undefined
+                  {/**
+                    * WHAT THIS ASSET SAYS, in one cell: a line per copy component it carries.
+                    *
+                    * The same move Made from just made beside it, for the same reason. It was a
+                    * column per component — Title, Description, Primary text, Headline, CTA, Subject
+                    * line, Pinned comment, whatever the formats in view declared between them — at
+                    * 280px each, against 320px for the one column here. One channel's worth is three
+                    * or four; a grid spanning several takes the union of all of them, and the schema
+                    * declares 47 distinct components across its formats, so the count grows with
+                    * every channel on screen while each row still fills three or four.
+                    *
+                    * The cost of a column is paid by every row whether or not that row has the
+                    * component. A YouTube Short does not have a Subject line, so the Subject line
+                    * column was a dash down the whole sheet wherever email was not — the per-format
+                    * schema is exactly the thing a fixed grid of columns cannot express, and the
+                    * sheet was spending its width to say "not applicable" over and over.
+                    *
+                    * One column, and each row lists its OWN components: the format decides what is
+                    * in the cell, which is what the format was always for.
+                    */}
+                  {show('messaging') && (
+                    <td
+                      className={`msg-cell${onPickRow ? ' open' : ''}`}
+                      /**
+                       * THE COPY OPENS THE ASSET, on one click like the object cells beside it.
+                       * These are the columns the sheet exists for and they were the only ones with
+                       * nothing behind them: read-only text you could not fix a word of and could
+                       * not ask to be written again.
+                       *
+                       * An EMPTY cell opens too, and says so. Nothing written is the state you most
+                       * want to act on, and a cell that only responds once it already has something
+                       * in it answers every row except the ones that need answering.
+                       */
+                      onClick={() => onPickRow?.(row.id)}
+                    >
+                      {(() => {
+                        const declared = messagingFields(row.channel, row.assetType)
+                        const map = messagingMap(row)
+                        const filled = declared.filter((f) => (map[f.key] ?? '').trim())
+                        const missing = declared.filter((f) => !(map[f.key] ?? '').trim())
+                        if (!filled.length) {
+                          return (
+                            <span className="msg-empty" title={onPickRow ? 'Open the asset to write its copy.' : undefined}>
+                              Add messaging…
+                            </span>
+                          )
                         }
-                        onClick={() => onPickRow?.(row.id)}
-                      >
-                        {copy ? <span className="msg-copy">{copy}</span> : <span className="cell-ro">—</span>}
-                      </td>
-                    )
-                  })}
+                        return (
+                          // The flex lives on a wrapper, never on the <td>, for the reason .mf-wrap
+                          // gives: a table cell given another display value stops being a table cell
+                          // and every column past it shifts.
+                          <div className="msg-wrap">
+                            {filled.map((f) => {
+                              const copy = (map[f.key] ?? '').trim()
+                              /* The component-level ICP flag, which the split columns carried on the
+                                 whole cell and which had no style behind it — so a flagged component
+                                 has been invisible here since the columns split. It rides the line it
+                                 belongs to now, which is the only place it was ever specific enough
+                                 to be worth showing. */
+                              const isFlagged =
+                                !!batchReview &&
+                                batchReview.flags.some(
+                                  (fl) => fl.rowId === row.id && fl.field?.key === f.key && !flagResolved(fl, row, pains),
+                                )
+                              return (
+                                <div
+                                  key={f.key}
+                                  className={`msg-field${isFlagged ? ' flagged' : ''}`}
+                                  title={
+                                    onPickRow
+                                      ? `${f.label}\n${copy}\n\nOpen the asset to edit this or write it again.`
+                                      : `${f.label}\n${copy}`
+                                  }
+                                >
+                                  <span className="msg-key">{f.label}</span>
+                                  <span className="msg-val">{copy}</span>
+                                </div>
+                              )
+                            })}
+                            {/* WHAT THE FORMAT ASKED FOR AND DID NOT GET, named once at the end
+                                rather than once per line. This is the finding the per-component
+                                columns existed to make visible — a Short with no description is the
+                                row you came here for — and dropping it was the real cost of
+                                collapsing. A list rather than a line each because Made from settled
+                                that argument for this sheet already: every extra line here is a row
+                                taller across the whole table, and these are labels, not copy. */}
+                            {missing.length > 0 && (
+                              <div
+                                className="msg-missing"
+                                title={onPickRow ? 'Open the asset to write these.' : undefined}
+                              >
+                                Not written: {missing.map((f) => f.label).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </td>
+                  )}
 
 
                   {show('scheduled') && (
