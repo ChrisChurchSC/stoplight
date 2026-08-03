@@ -144,11 +144,11 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     short:
       "The chat for the record type you are viewing. In Build it adds, edits, and cleans up your records (you approve each change); in Analyze it answers questions without changing anything.",
   },
-  linkedRecords: {
-    term: 'Pinned directly',
-    short:
-      "A record the campaign draws on with no card on the board behind it — added from the picker or by the assistant rather than by wiring a card to the campaign. It steers the copy exactly as a connected card would, which is why it is listed rather than hidden. Audiences and Proof shape the wording; Companies, People, and Channels are for targeting and structure.",
-    seeAlso: ['canvasOutput', 'canvasInput'],
+  wiredContext: {
+    term: 'Informing the messaging',
+    short: 'The cards wired to the campaign on the board. What they hold is read every time copy is written.',
+    more: 'Audiences and Proof shape the wording; Companies, People, and Channels shape who it targets. A record reaches the campaign only through a card wired to it, so this list is everything the writer sees.',
+    seeAlso: ['canvasInput', 'object'],
   },
   object: {
     term: 'Object',
@@ -176,6 +176,6 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "Objects that carry the context a campaign is written from: audiences, messages, proof, voice, channels, and your own notes on the idea. They sit flat on the board so they never look like something you ship.",
     more:
       'An object names a record and adds an instruction about this campaign: which pain to lean on, which objection to beat, the claim to assert. That instruction is sent to the writer for every deliverable the object is wired to. The free-text note on an object is for your team and is never sent.',
-    seeAlso: ['canvasOutput', 'linkedRecords'],
+    seeAlso: ['canvasOutput', 'wiredContext'],
   },
 }

@@ -258,7 +258,7 @@ export function CampaignCalendar() {
           <button
             className={`ccal-pubtoggle${showPublished ? ' on' : ''}`}
             onClick={() => setShowPublished((v) => !v)}
-            title="Show your already-published content as a read-only band on the timeline"
+            title="Show published content as a read-only band"
           >
             <span aria-hidden="true">✓</span> Published
           </button>
@@ -338,7 +338,7 @@ export function CampaignCalendar() {
                     {!openEnded && !isPublished && c.bars.some((b) => b.id) && (
                       <button
                         className="ccal-rerun"
-                        title="Re-run: add another flight of this campaign (clones its assets into a new window)"
+                        title="Re-run: add a flight, cloning the latest one's assets into a new window"
                         aria-label="Add a flight"
                         onClick={(e) => {
                           e.stopPropagation()
@@ -353,11 +353,10 @@ export function CampaignCalendar() {
                     {openEnded && (
                       <button
                         className="ccal-rerun ccal-rotate"
-                        title={
-                          c.refreshWeeks
-                            ? `Rotate creative (every ${c.refreshWeeks} weeks) — pulls this stream's live content back to draft for a refresh`
-                            : "Rotate creative — pulls this stream's live content back to draft for a refresh"
-                        }
+                        // Says what rotating actually does: rotateAlwaysOn moves EVERY asset on by
+                        // the refresh cadence AND returns it to draft. The old copy named only the
+                        // draft half, so the reschedule landed as a surprise.
+                        title={`Rotate creative: every asset moves ${c.refreshWeeks ?? 4} weeks on, back to draft`}
                         aria-label="Rotate creative"
                         onClick={(e) => {
                           e.stopPropagation()
@@ -374,8 +373,8 @@ export function CampaignCalendar() {
                         className={`ccal-rerun ccal-extend${runningLow ? ' low' : ''}`}
                         title={
                           runningLow
-                            ? "This stream's scheduled content runs out soon. Extend the horizon: clone the latest content forward to keep it going."
-                            : 'Extend the horizon: clone the latest content into a new future window to keep the stream going.'
+                            ? 'Running low: clone the latest content forward to keep this stream going'
+                            : 'Extend the horizon: clone the latest content into a new window'
                         }
                         aria-label="Extend horizon"
                         onClick={(e) => {
@@ -392,7 +391,7 @@ export function CampaignCalendar() {
                     {!isPublished && (
                       <button
                         className={`ccal-rerun ccal-timing-toggle${openEnded ? ' on' : ''}`}
-                        title={openEnded ? 'Always-on stream (evergreen, no end date) — click to make it a dated campaign' : 'Make this an always-on stream (evergreen, no end date)'}
+                        title={openEnded ? 'Always-on stream, no end date. Click to make it a dated campaign.' : 'Make this an always-on stream: evergreen, no end date'}
                         aria-label={openEnded ? 'Make dated campaign' : 'Make always-on'}
                         onClick={(e) => {
                           e.stopPropagation()
