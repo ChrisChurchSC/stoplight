@@ -1707,20 +1707,10 @@ button.mf-open:focus-visible,
   text-align: center;
 }
 .sheet .act-publish,
-.sheet .act-hover,
 .sheet .act-delete {
   padding: 5px 8px;
   white-space: nowrap;
   text-align: center;
-}
-/* Edit / duplicate stay hidden until the row is hovered. */
-.sheet .act-hover {
-  opacity: 0;
-  transition: opacity 0.1s ease;
-}
-.sheet tbody tr.data-row:hover .act-hover,
-.sheet .act-hover:focus-within {
-  opacity: 1;
 }
 
 /* ============ Clay-style workspace shell ============ */
@@ -21611,8 +21601,11 @@ table.aud-sheet td.stick .aud-cell {
   display: flex; flex-direction: column; gap: 1px;
 }
 /* The shelf menu is opened from a SCROLLING panel, so it positions against the viewport rather than
-   against the .flow root the canvas menu uses. */
+   against the .flow root the canvas menu uses. The grid's row menu does the same, and takes the
+   scrim with it: .sheet-grid is not a positioned box, so an absolute scrim inside it would size
+   itself against whatever ancestor happened to be one and leave part of the app clickable. */
 .flow-ctx.flow-ctx-fixed { position: fixed; }
+.flow-ctx-scrim.flow-ctx-fixed { position: fixed; }
 .flow-ctx-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
   border: 0; background: none; cursor: pointer; text-align: left;
@@ -23240,7 +23233,6 @@ table.aud-sheet td.stick .aud-cell {
    --hover-t-grid rather than --hover-t. See the token: a row tint follows a pointer down a table
    and has to keep up with it, where a button is a single target that can afford to settle. */
 :where(
-    .act-hover,
     .col-resizer,
     .cov-btn,
     .gutter,
