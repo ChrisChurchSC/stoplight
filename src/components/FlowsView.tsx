@@ -2007,14 +2007,118 @@ export function FlowsView() {
     undoStackRef.current.push({ pos: { ...posRef.current }, rows: entry.rows ? snapRows() : null })
     await restoreSnap(entry)
   }
-  // "Tidy layout": drop every manual offset so the column and the auto-placed branches re-derive
-  // into a clean arrangement. Cards animate back into place via the card transition.
+  /**
+   * TIDY: the structural column re-derives, and the loose cards lay out LEFT TO RIGHT.
+   *
+   * Dropping every manual offset is the whole job for the campaign / deliverable / post cards: they
+   * sit in the normal flow and `pos` only nudges them off it. It is exactly the wrong job for an
+   * OBJECT card. Those are `position: absolute` at the stack's origin and carry no flow position at
+   * all, so clearing their offset dropped every one of them onto the same pixel — Tidy's answer to a
+   * scattered board was a pile of cards in the top-left corner.
+   *
+   * So Tidy PLACES them now: a band of rows above the structure, filled left to right, cards of a
+   * kind together. In two commits, because the band needs the heights of the cards going into it and
+   * the top of the structure it sits above, and neither is measurable until the reset has laid out.
+   */
+  const tidyPhase = useRef<0 | 1 | 2>(0)
   const organizeCards = () => {
     recordHistory(false)
     placedRef.current = new Set()
+    // The corrective-pass counter latches a branch after 8 passes. Left standing, a branch that had
+    // latched would count as settled the instant the reset re-ran it, and never move again.
+    placePassRef.current = new Map()
     setPos({})
     setSelected(new Set())
+    tidyPhase.current = 1
   }
+  /**
+   * Where each object card goes in the tidied band, in stack coordinates — which is exactly what
+   * `pos` means for an absolutely positioned card, so there is no offset arithmetic to get wrong.
+   * Measured from the live DOM (as fitToContent and freeSlot are) rather than from `rects`, which is
+   * written by a layout effect and so is a commit behind whatever just changed.
+   */
+  const tidyObjectLayout = (): Record<string, { x: number; y: number }> | null => {
+    const cv = canvasRef.current
+    const stack = cv?.querySelector('.flow-stack')
+    if (!cv || !stack) return null
+    const sRect = stack.getBoundingClientRect()
+    const s = zoomRef.current / 100
+    const kindOrder = Object.keys(OBJECT_META)
+    const cards: { id: string; w: number; h: number; rank: number }[] = []
+    // The structure the band sits above: every node that is NOT one of these floating cards.
+    let structLeft = Infinity
+    let structTop = Infinity
+    let structRight = -Infinity
+    cv.querySelectorAll('.flow-node[data-node-id]').forEach((el) => {
+      const id = (el as HTMLElement).dataset.nodeId
+      if (!id) return
+      const r = el.getBoundingClientRect()
+      if (el.classList.contains('flow-note')) {
+        // Like with like, left to right: smart objects lead (a bundle of context is the largest
+        // thing on the band), then each kind in the palette's own declaration order.
+        const kind = objects.find((n) => n.id === id)?.kind
+        cards.push({ id, w: r.width / s, h: r.height / s, rank: kind ? kindOrder.indexOf(kind) + 1 : 0 })
+      } else {
+        structLeft = Math.min(structLeft, (r.left - sRect.left) / s)
+        structTop = Math.min(structTop, (r.top - sRect.top) / s)
+        structRight = Math.max(structRight, (r.right - sRect.left) / s)
+      }
+    })
+    if (!cards.length) return null
+    // Ties broken by id, not left to chance: the DOM order these arrive in is render order, and two
+    // Tidies in a row that shuffled same-kind cards would read as the button doing something else.
+    cards.sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
+    const GAP_X = 28
+    const GAP_Y = 28
+    // One pitch for every column, so the band reads as columns rather than as a ragged run.
+    const pitch = Math.max(...cards.map((c) => c.w)) + GAP_X
+    // A board with nothing built on it has no structure to sit above, so the band starts where the
+    // stack's own padding does and runs downward from there.
+    const bare = structTop === Infinity
+    const left = bare ? 16 : structLeft
+    // As many columns as the wider of the structure and the visible canvas will take, and never
+    // fewer than three: one column is the pile this replaced, only taller.
+    const room = Math.max(bare ? 0 : structRight - structLeft, cv.clientWidth / s - 80)
+    const cols = Math.max(3, Math.min(cards.length, Math.floor((room + GAP_X) / pitch)))
+    const rows: { id: string; h: number }[][] = []
+    cards.forEach((c, i) => {
+      const r = Math.floor(i / cols)
+      ;(rows[r] ??= []).push(c)
+    })
+    // Each row is as tall as its tallest card: an audience card carrying a record form is several
+    // times the height of a note, and a fixed row height would either overlap or leave a gulf.
+    const rowH = rows.map((r) => Math.max(...r.map((c) => c.h)))
+    const total = rowH.reduce((a, b) => a + b, 0) + GAP_Y * Math.max(0, rows.length - 1)
+    // Above the structure, so the cards feeding the campaign sit upstream of it on the board.
+    const top = bare ? 48 : structTop - 88 - total
+    const next: Record<string, { x: number; y: number }> = {}
+    let y = top
+    rows.forEach((row, ri) => {
+      row.forEach((c, ci) => {
+        next[c.id] = { x: left + ci * pitch, y }
+      })
+      y += rowH[ri] + GAP_Y
+    })
+    return next
+  }
+  /**
+   * Tidy's second and third acts. A LAYOUT effect, so the pile the reset leaves behind is measured
+   * and replaced before the browser paints it — the flash of every card on one pixel is the very
+   * thing being fixed. Then fit, because a band laid above the board would otherwise be laid above
+   * the top of the viewport, and Tidy would look like it had deleted the cards.
+   */
+  useLayoutEffect(() => {
+    if (tidyPhase.current === 1) {
+      tidyPhase.current = 2
+      const next = tidyObjectLayout()
+      if (next) setPos((prev) => ({ ...prev, ...next }))
+      else tidyPhase.current = 0
+    } else if (tidyPhase.current === 2) {
+      tidyPhase.current = 0
+      fitToContent()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos])
 
   // "B" opens the deliverable picker; holding Space temporarily pans (like Figma).
   useEffect(() => {
@@ -7477,11 +7581,13 @@ export function FlowsView() {
               </>
             )
           })()}
-          {/* APPLIED TO: what this card feeds, and the one action that follows from it.
-              A readout, not a control: wires are drawn and cut on the canvas, and a second place to
-              edit them would be a second thing to keep in step with the first. Naming the targets is
-              what it is for, since a card three hops upstream reaches deliverables you cannot see
-              from it. */}
+          {/* APPLIED TO: what this card feeds. A readout, not a control: wires are drawn and cut on
+              the canvas, and a second place to edit them would be a second thing to keep in step
+              with the first. Naming the targets is what it is for, since a card three hops upstream
+              reaches deliverables you cannot see from it.
+              It used to carry a "Rewrite the N assets this applies to" button as well. Rewriting is
+              a campaign-level act with a campaign-level cost, and it belongs where the rest of
+              generation lives rather than under a readout of what a single card touches. */}
           {(() => {
             const board: FlowBoard = { key: boardKey, objects, placements, pos: {}, connectors }
             const targets = downstreamTargets(board, nt.id)
@@ -7496,13 +7602,6 @@ export function FlowsView() {
               if (r) return { id: t, label: r.assetName, sub: 'one post', tone: POST_TONE, channel: r.channel as ChannelId }
               return { id: t, label: t, sub: '', tone: POST_TONE, channel: undefined as ChannelId | undefined }
             })
-            // Every asset this card reaches, for the rewrite below.
-            const rowIds = targets.flatMap((t) =>
-              t === 'campaign'
-                ? viewRows.map((r) => r.id)
-                : viewDelivs.find((x) => x.key === t)?.rows.map((r) => r.id) ?? (viewRows.some((r) => r.id === t) ? [t] : []),
-            )
-            const unique = [...new Set(rowIds)]
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>
@@ -7525,17 +7624,6 @@ export function FlowsView() {
                     </button>
                   ))}
                 </div>
-                {viewing && unique.length > 0 && (
-                  <button
-                    className="flow-insp-open subtle"
-                    disabled={regenerating}
-                    onClick={() => void regenerateFlow(unique)}
-                  >
-                    {regenerating
-                      ? 'Rewriting…'
-                      : `Rewrite the ${unique.length} asset${unique.length === 1 ? '' : 's'} this applies to`}
-                  </button>
-                )}
               </>
             )
           })()}
