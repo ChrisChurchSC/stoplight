@@ -2290,8 +2290,13 @@ interface TrafficState {
     deliverables: Deliverable[],
     opts?: { mediaBudget?: number; flightWeeks?: number; endDate?: string; audiences?: string[] },
   ) => Promise<void>
-  /** Add one blank draft asset to a campaign (from the flow Grid/Calendar), returns its row id. */
-  addBlankAsset: (campaign: string, opts?: { channel?: ChannelId; scheduledAt?: string }) => Promise<string>
+  /** Add one blank draft asset to a campaign (from the flow Grid/Calendar), returns its row id.
+   *  The Grid/Calendar picks a channel preset first, so it passes that preset's type, media and
+   *  label through rather than letting the row default to a Blog article and correcting it after. */
+  addBlankAsset: (
+    campaign: string,
+    opts?: { channel?: ChannelId; scheduledAt?: string; assetType?: string; mediaType?: MediaType; assetName?: string },
+  ) => Promise<string>
   setFilter: (filter: ChannelId | 'all') => void
   setProofFilter: (proofFilter: string) => void
   setCtaFilter: (ctaFilter: string) => void
@@ -5391,15 +5396,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   addBlankAsset: async (campaign, opts) => {
     // A generic content draft the user fills in (channel is theirs to change via the grid dropdown).
+    // A caller that already asked which channel — the Grid/Calendar channel picker — passes the
+    // preset's own type, media and label, so the asset arrives as the thing that was picked.
     const channel: ChannelId = opts?.channel ?? 'blog'
-    const media: MediaType = CHANNELS[channel]?.kind === 'paid' ? 'image' : 'text'
+    const media: MediaType = opts?.mediaType ?? (CHANNELS[channel]?.kind === 'paid' ? 'image' : 'text')
     const row: TrafficRow = {
       id: freshRowId(),
       assetId: '',
-      assetName: 'New asset',
+      assetName: opts?.assetName?.trim() || 'New asset',
       mediaType: media,
       channel,
-      assetType: primaryTypeKey(channel),
+      assetType: opts?.assetType ?? primaryTypeKey(channel),
       messaging: {},
       campaign,
       audience: '',
