@@ -279,12 +279,17 @@ export function CalendarView({
                           {evs.map((r) => (
                             <button
                               key={r.id}
-                              className="cal-day-item"
+                              className={`cal-day-item${r.id === selectedRowId ? ' on' : ''}`}
                               onClick={(e) => {
                                 // The cell itself opens the day popover when it can add assets —
                                 // without this, clicking an asset would open the review AND the popover.
                                 e.stopPropagation()
-                                openReview(r.id)
+                                // THROUGH THE ONE DOOR, like every other asset on this calendar.
+                                // This called openReview directly, so the named assets in a quiet
+                                // month cell — the default view, and the ones you click most — opened
+                                // the review drawer while the same asset opened the inspector from
+                                // the week columns, the spans, and the day popover beside them.
+                                openAsset(r.id)
                               }}
                               title={`${CHANNELS[r.channel].label} · ${r.assetName} · ${new Date(
                                 r.scheduledAt,
