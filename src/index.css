@@ -79,12 +79,54 @@
   --veil: rgba(244, 246, 250, 0.78);
   --veil-strong: rgba(255, 255, 255, 0.95);
 
+  /**
+   * THE HOVER WASH, and the two tokens that were being asked for but never written.
+   *
+   * `var(--hover)` appears eight times in this file and `var(--danger)` eleven, and neither was
+   * ever defined. Five of the eight carry no fallback — `background: var(--hover)` on the library
+   * folder rows, the agenda's flow rows and the chat's template chips — and an undefined custom
+   * property makes the whole declaration invalid at computed-value time, so background fell back to
+   * transparent: those hovers did nothing at all, and `.lib-folder-item.active` had no active
+   * background either. The three with a fallback got `#eef2f3`, a light-theme grey that sat as a
+   * pale patch on the dark page.
+   *
+   * A tint of the text colour rather than a fixed grey, for the reason the sheet's row hover already
+   * gives: it lifts a surface by the same amount whichever way the theme is pointing, and it
+   * composites over whatever it lands on instead of needing to match it. One definition covers both
+   * themes — the nested var(--text) resolves on the element that uses it, not here.
+   */
+  --hover: color-mix(in srgb, var(--text) 5%, transparent);
+  /* Destructive red, which had drifted into three: #d3543f in ten fallbacks, #dc2626 in two, and
+     --red everywhere the stoplight palette was used properly. An alias, so the colour a delete
+     wears is the colour this app already means by red — and so it follows the theme, which a
+     hardcoded fallback never did. */
+  --danger: var(--red);
+
+  /**
+   * HOW LONG A HOVER TAKES. Of 397 hover rules in this file, 316 sat on something with no transition
+   * at all — they changed colour between two consecutive frames. These tokens are the whole motion
+   * vocabulary for hover, so the speed is one decision rather than 110.
+   *
+   * The curve leaves quickly and settles slowly, which is what makes a hover feel answered rather
+   * than switched. Reduced motion collapses both to nothing — see the media query below the themes.
+   */
+  --hover-t: 120ms;
+  --hover-e: cubic-bezier(0.2, 0, 0.1, 1);
+  /* The grid is faster on purpose. A row tint is not a control lighting up, it is a cursor tracking
+     down a table, and at 120ms scanning rows smears — the highlight is still catching up with the
+     pointer two rows later. Discrete controls settle; the sheet keeps up. */
+  --hover-t-grid: 70ms;
+
   --radius: 10px;
   --radius-sm: 7px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.06);
   /* Lifted a step above --shadow. Carries "this card is a thing you ship" on the campaign
      canvas: outputs and the Brief are raised, context cards sit flat on the board. */
   --shadow-raise: 0 2px 4px rgba(16, 24, 40, 0.05), 0 8px 20px -6px rgba(16, 24, 40, 0.12);
+  /* The lift a card takes under the pointer. Needs a theme of its own for the same reason --shadow
+     does: the campaign cards were raising themselves with a hardcoded rgba(16, 24, 40, 0.08), which
+     is a grey shadow on a white page and nothing whatsoever on a black one. */
+  --shadow-hover: 0 4px 14px rgba(16, 24, 40, 0.09);
 
   --font: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
@@ -156,10 +198,9 @@
 
     --veil: rgba(28, 32, 40, 0.74);
     --veil-strong: rgba(34, 39, 48, 0.93);
-    --veil: rgba(28, 32, 40, 0.74);
-  --veil-strong: rgba(34, 39, 48, 0.93);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.34);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.34);
     --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.44), 0 8px 20px -6px rgba(0, 0, 0, 0.56);
+    --shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
   }
 }
 :root[data-theme='dark'] {
@@ -200,6 +241,25 @@
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.34);
   --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.44), 0 8px 20px -6px rgba(0, 0, 0, 0.56);
+  --shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+/**
+ * REDUCED MOTION, as a token swap — the same move the themes make one block up.
+ *
+ * Every hover transition in the three views below is timed by --hover-t or --hover-t-grid, so
+ * collapsing the two tokens here disarms all of them at once and any that get written later come
+ * pre-disarmed. Zeroed rather than removed: a transition of 0.01ms still fires transitionend, so
+ * anything that ever waits on one keeps working.
+ *
+ * The six @media (prefers-reduced-motion) blocks further down this file each turn off one specific
+ * animation and stay as they are; this only covers hover.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --hover-t: 0.01ms;
+    --hover-t-grid: 0.01ms;
+  }
 }
 
 /* Tell the browser which way the page leans, so form controls, scrollbars and the caret follow. */
@@ -1244,8 +1304,30 @@ button {
 .sheet tbody tr:hover td {
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
+/**
+ * THE ROW NUMBER IS THE ONE THING ON A HOVERED ROW THAT ANSWERS, not the one thing that doesn't.
+ *
+ * This rule was `background: var(--surface-2)`, which is what .sheet .gutter is painted already —
+ * a no-op, and readable as one only if you know the gutter's own colour by heart. It was there to
+ * hold the tint above OFF the frozen cell, and it did: the row lit up and the number beside it sat
+ * dead. But the number is the row's HANDLE. It carries cursor:pointer, one click selects the row
+ * and the selection lands here in accent; it is the single most clickable thing on the row, and it
+ * was the only cell that did not react to the pointer being on it.
+ *
+ * So it still opts out of the row's wash and takes a stronger one of its own — twice the row's lift,
+ * because it is a 28px target rather than a 1,400px band, and 4% across something that small is not
+ * a state anyone sees. Mixed into --surface-2 rather than over transparent, for the reason the
+ * selected gutter gives below: this cell is frozen against the horizontal scroll, and a frozen cell
+ * with a see-through background is a window onto the columns sliding under it.
+ *
+ * Neutral, not accent. That is the split the whole sheet keeps: a wash of the text colour means the
+ * pointer is here and leaves with it, accent means selected and outlives the next move. Selection
+ * already outranks this on specificity (.sel adds a class), so a selected row keeps its accent while
+ * you hover it.
+ */
 .sheet tbody tr:hover .gutter {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--text) 9%, var(--surface-2));
+  color: var(--text-muted);
 }
 
 .cell-ro {
@@ -1380,6 +1462,22 @@ button {
 .sheet .letters th {
   cursor: pointer;
   user-select: none;
+}
+/**
+ * THE COLUMN LETTER SAID IT WAS CLICKABLE WITH THE CURSOR AND NOTHING ELSE.
+ *
+ * A, B, C each carry an onClick that selects the whole column — and .sheet col.sel plus
+ * .sheet .letters th.sel are both styled for the result — but there was no hover between the two:
+ * the pointer changed shape and the header stayed exactly as it was. The letters are the same
+ * control as the row numbers turned on its side, so they answer the same way and by the same
+ * amount, mixed into --surface-2 for the same reason (sticky against the vertical scroll).
+ *
+ * :not(.sel) so hovering the column you already have selected does not undo the accent to preview
+ * a state it is past.
+ */
+.sheet .letters th:hover:not(.sel) {
+  background: color-mix(in srgb, var(--text) 9%, var(--surface-2));
+  color: var(--text-muted);
 }
 .sheet .gutter {
   cursor: pointer;
@@ -6185,11 +6283,27 @@ button.mf-open:focus-visible,
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 12px;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--hover-t) var(--hover-e), box-shadow var(--hover-t) var(--hover-e),
+    transform var(--hover-t) var(--hover-e);
 }
+/**
+ * A CAMPAIGN CARD PICKS ITSELF UP UNDER THE POINTER.
+ *
+ * The shadow here was rgba(16, 24, 40, 0.08) — a grey wash tuned for a white page, and on the dark
+ * theme a dark blur on a darker background, which is nothing. The card lifted on light and only
+ * changed its border on dark. --shadow-hover carries a real value per theme, the way --shadow and
+ * --shadow-raise already do.
+ *
+ * The 1px rise is what makes the shadow read as elevation rather than as a smudge appearing under
+ * the card: a shadow with nothing moving above it is a texture, and the two together are a lift.
+ * Safe to spend the transform slot — this card is dragged with HTML5 drag-and-drop, which paints its
+ * own drag image and leaves the element's own transform alone (see .flow-home-card.dragging, which
+ * fades rather than moves).
+ */
 .flow-home-card:hover {
   border-color: var(--text-faint);
-  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.08);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
 }
 .flow-home-card-open {
   display: block;
@@ -23075,4 +23189,198 @@ table.aud-sheet td.stick .aud-cell {
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-faint);
+}
+
+/* ============================================================================
+   HOVER: THE THREE VIEWS SETTLE AT ONE SPEED
+
+   Every hover state in this file was already correct about WHAT it changes — the right border goes
+   accent, the right row lifts, the right action appears. What almost none of them said is how long
+   it takes. 397 hover rules; 316 of them sit on an element with no transition on it. Those cut
+   between two colours on consecutive frames, which is not a fast animation, it is no animation: the
+   control is one colour and then it is another, and nothing connects the two. Under a pointer moving
+   across a toolbar that reads as flicker rather than as response.
+
+   So this is one contract, applied to the flow canvas, the grid and the campaign home. The speed is
+   not a new opinion: --hover-t is 120ms because 56 of the 77 transitions this file already writes
+   are 0.12s, including the one connector port (.flow-conn-port) that was done properly. The rest of
+   the canvas now matches the port instead of the port being the exception.
+
+   The 110 selectors below are the ones in these three views that had nothing. The other views —
+   Library, the home agenda, Portfolio — are left alone deliberately; they are not what was asked
+   for, and the tokens are here for them when they are.
+
+   FIVE PROPERTIES, and deliberately not seven. Tint, line, ink, reveal and brightness are the whole
+   vocabulary these hovers use, and all five are safe to animate on anything. `transform` and
+   `box-shadow` are NOT in the blanket list and are spent one element at a time further down: the
+   canvas positions its nodes and its four port variants with transform, so a blanket transform
+   transition would put a 120ms lag on dragging a card and on the ports finding their own edges.
+
+   :where(), so this whole block has zero specificity. It cannot outrank anything — an element that
+   already had a considered transition keeps it, the reduced-motion tokens still land, and a rule
+   added below this one wins without having to know this one is here. Nothing in the list has a
+   transition today (that is how the list was built); :where() is what keeps that true tomorrow.
+   ============================================================================ */
+
+/* ---- Campaign home: the cards screen ---- */
+:where(
+    .flow-home-flightpick-item,
+    .flow-home-folder-del,
+    .flow-home-folder-new,
+    .flow-home-folder-toggle,
+    .flow-home-new,
+    .flow-home-umb-toggle
+  ) {
+  transition: background-color var(--hover-t) var(--hover-e),
+    border-color var(--hover-t) var(--hover-e), color var(--hover-t) var(--hover-e),
+    opacity var(--hover-t) var(--hover-e);
+}
+
+/* ---- Grid: the sheet, its frozen edges and its cell controls ----
+   --hover-t-grid rather than --hover-t. See the token: a row tint follows a pointer down a table
+   and has to keep up with it, where a button is a single target that can afford to settle. */
+:where(
+    .act-hover,
+    .col-resizer,
+    .cov-btn,
+    .gutter,
+    .mf-add,
+    .mf-swap,
+    .mini-upload,
+    .sheet-drop-item,
+    .sheet-group,
+    .sheet-tab,
+    .sheet .letters th,
+    .sheet tbody tr.data-row td
+  ) {
+  transition: background-color var(--hover-t-grid) var(--hover-e),
+    border-color var(--hover-t-grid) var(--hover-e), color var(--hover-t-grid) var(--hover-e),
+    opacity var(--hover-t-grid) var(--hover-e);
+}
+
+/* ---- Flow: the canvas, its toolbar, its panels and the chat rail ---- */
+:where(
+    .fchat-card,
+    .fchat-hbtn,
+    .fchat-hist-del,
+    .fchat-hist-open,
+    .fchat-modal-cancel,
+    .fchat-modal-go,
+    .fchat-rail-btn,
+    .fchat-sugg,
+    .fchat-sugg-apply,
+    .fchat-sugg-discard,
+    .fchat-tmpl-chip,
+    .flow-add,
+    .flow-addmenu-item,
+    .flow-agg-row,
+    .flow-applybar-flag,
+    .flow-applybar-go,
+    .flow-aud-btn,
+    .flow-aud-item,
+    .flow-audience-add,
+    .flow-audience-sel,
+    .flow-audmenu-item,
+    .flow-back,
+    .flow-bp-clear,
+    .flow-bp-pick,
+    .flow-brief-build,
+    .flow-brief-node,
+    .flow-brief-port,
+    .flow-budget-assign,
+    .flow-card,
+    .flow-card-link,
+    .flow-chip-add,
+    .flow-chip-x,
+    .flow-cmt-act,
+    .flow-crumb-home,
+    .flow-crumb-obj,
+    .flow-ctx-item,
+    .flow-ctxrow-del,
+    .flow-ctxrow-open,
+    .flow-fill-doc-x,
+    .flow-fill-go,
+    .flow-fill-upload,
+    .flow-goal-tag,
+    .flow-insert,
+    .flow-insp-del,
+    .flow-insp-open,
+    .flow-inspect-del,
+    .flow-inspect-regen,
+    .flow-lib-folder-head,
+    .flow-lib-newbrand,
+    .flow-lib-object,
+    .flow-library-close,
+    .flow-library-item,
+    .flow-node-regen,
+    .flow-node-tag,
+    .flow-note-port,
+    .flow-note-sel,
+    .flow-obj-row-out,
+    .flow-offline-x,
+    .flow-out-port,
+    .flow-outline-row,
+    .flow-ov-item,
+    .flow-panel-collapse,
+    .flow-panel-rail-btn,
+    .flow-pitem,
+    .flow-plus,
+    .flow-preset-chip,
+    .flow-recdrawer-grouphead,
+    .flow-recdrawer-item,
+    .flow-recdrawer-x,
+    .flow-regen,
+    .flow-reset-link,
+    .flow-scan-btn,
+    .flow-src-opt,
+    .flow-step-apply,
+    .flow-switch-item,
+    .flow-switcher,
+    .flow-switcher-flat,
+    .flow-tagpick-item,
+    .flow-tagrow-del,
+    .flow-tb-pal,
+    .flow-tb-palcaret,
+    .flow-tb-palitem,
+    .flow-tb-tool,
+    .flow-tb-zoom,
+    .flow-tb-zoom-item,
+    .flow-top-build,
+    .flow-viewtab,
+    .flow-chips .pk-field
+  ) {
+  transition: background-color var(--hover-t) var(--hover-e),
+    border-color var(--hover-t) var(--hover-e), color var(--hover-t) var(--hover-e),
+    opacity var(--hover-t) var(--hover-e), filter var(--hover-t) var(--hover-e);
+}
+
+/**
+ * THE PORTS FADE, THEY DO NOT SCALE.
+ *
+ * The handles on a card's four edges go opacity 0 to 1 the moment the pointer crosses the card, and
+ * a card has up to four of them: popping, they read as the card sprouting rather than as handles
+ * being offered. The blanket rule above fades them, which is the whole fix.
+ *
+ * A scale-in would be the obvious next step and it is not taken, because the transform slot on these
+ * is spent: .flow-note-port.side-top and friends centre themselves on the card's edge with
+ * translateX/translateY, so animating scale means animating a compound transform per side, four
+ * variants deep, to add a flourish to something that is already answered by the fade.
+ */
+
+/* The connector lines under the pointer. Kept out of the blanket rule because stroke and
+   stroke-width belong to SVG and to nothing else in the list, and because these are the one hover on
+   the canvas that can be running on many elements at once — the band from a channel to each of its
+   posts. Colour and weight only; the dash pattern stays put, or the beads crawl along the path. */
+:where(.flow-edge) {
+  transition: stroke var(--hover-t) var(--hover-e), stroke-width var(--hover-t) var(--hover-e);
+}
+:where(.flow-edge-del circle, .flow-edge-del path) {
+  transition: fill var(--hover-t) var(--hover-e), stroke var(--hover-t) var(--hover-e);
+}
+
+/* The one hover on the canvas that already moved rather than recoloured. It scaled instantly, which
+   on a 12px glyph is a twitch; given the same 120ms it becomes a nudge. Its own rule because
+   transform stays out of the blanket list. */
+:where(.flow-card-break) {
+  transition: transform var(--hover-t) var(--hover-e);
 }
