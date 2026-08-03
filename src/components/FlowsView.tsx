@@ -3234,7 +3234,7 @@ export function FlowsView() {
       <>
         <div className="flow-inspect-label" style={{ marginTop: 16 }}>
           Informing the messaging{rows.length ? ` · ${rows.length}` : ''}
-          <InfoTip term="linkedRecords" />
+          <InfoTip term="wiredContext" />
         </div>
         {rows.length === 0 ? (
           <div className="flow-inspect-note" style={{ margin: '2px 0 0' }}>
@@ -3712,8 +3712,8 @@ export function FlowsView() {
           {onRemove && (
             <button
               className="flow-ctxrow-del"
-              title="Unwire it (the card stays on the board)"
-              aria-label={`Unwire ${r.label || r.kindLabel}`}
+              title="Disconnect from this post (the card stays on the board)"
+              aria-label={`Disconnect ${r.label || r.kindLabel} from this post`}
               onClick={() => onRemove(r.id)}
             >
               ✕
@@ -9480,7 +9480,7 @@ export function FlowsView() {
 
                           </div>
                           {slots === 0 && renderCopy(n.id, 0)}
-                          <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, n.id)} />
+                          <span className="flow-conn-port" title="Draw a connection" onMouseDown={(e) => startConnect(e, n.id)} />
                         </div>
                         {slots > 0 && (
                           <div className="flow-branch-list">
@@ -9529,7 +9529,7 @@ export function FlowsView() {
                                     </div>
                                   </div>
                                   {renderCopy(n.id, bi)}
-                                  <span className="flow-conn-port" title="Drag to connect" onMouseDown={(e) => startConnect(e, `${n.id}:${bi}`)} />
+                                  <span className="flow-conn-port" title="Draw a connection" onMouseDown={(e) => startConnect(e, `${n.id}:${bi}`)} />
                                 </div>
                               </div>
                             ))}

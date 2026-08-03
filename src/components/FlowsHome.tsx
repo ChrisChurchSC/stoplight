@@ -272,7 +272,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
                 <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
               </svg>
             </button>
-            <button className="flow-home-del" title="Delete flow" aria-label="Delete flow" onClick={() => setConfirmDelete(c.name)}>
+            <button className="flow-home-del" title="Delete campaign" aria-label="Delete campaign" onClick={() => setConfirmDelete(c.name)}>
               ✕
             </button>
           </div>
@@ -439,7 +439,11 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               </button>
               <button
                 className="flow-home-folder-del"
-                title={node.children.length ? 'Delete this folder and the folders inside it' : 'Delete folder (its campaigns become unfiled)'}
+                title={
+                  node.children.length
+                    ? 'Delete this folder and its subfolders (campaigns become unfiled)'
+                    : 'Delete folder (its campaigns become unfiled)'
+                }
                 aria-label={`Delete ${node.name}`}
                 onClick={() => {
                   // Deleting an empty leaf is not worth a modal; anything holding campaigns or
@@ -545,9 +549,9 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       {confirmDelete && (
         <>
           <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
-          <div className="confirm-modal" role="dialog" aria-label="Delete flow">
+          <div className="confirm-modal" role="dialog" aria-label="Delete campaign">
             <strong className="confirm-title">Delete {confirmDelete.replace(`${brand} — `, '')}?</strong>
-            <p className="confirm-text">This archives the flow and all its assets. It won't show here anymore.</p>
+            <p className="confirm-text">This archives the campaign and all its assets. It won't show here anymore.</p>
             <div className="confirm-foot">
               <button className="btn sm" onClick={() => setConfirmDelete(null)}>
                 Cancel
@@ -560,7 +564,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
                   setConfirmDelete(null)
                 }}
               >
-                Delete flow
+                Delete campaign
               </button>
             </div>
           </div>
