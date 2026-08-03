@@ -1049,8 +1049,20 @@ button {
   background: var(--surface-2);
   position: sticky;
   z-index: 3;
-  /* Repaint the strip the container's border leaves above a sticky header. */
-  box-shadow: 0 -1px 0 var(--surface-2);
+  /**
+   * Repaint the strip the container's border leaves above a sticky header.
+   *
+   * 20px, not the 1px this needs, because the repaint is authored INSIDE the table and the table
+   * now carries a `zoom` (see SheetGrid's zoom prop). Lengths in here are scaled by it, so a 1px
+   * cover paints 0.5px at 50% and 0.1px at the 10% floor — under a container border that is not
+   * scaled, because it belongs to .sheet-wrap outside the table. The hairline came back, and the
+   * rows scrolling under the header showed through it.
+   *
+   * Overshooting is free: the shadow is drawn upward from a cell pinned to the top of the
+   * scrollPORT, so everything above it is outside .sheet-wrap's overflow and clipped away. 20px
+   * still covers at 10%, and at 150% the surplus is thrown away rather than drawn.
+   */
+  box-shadow: 0 -20px 0 var(--surface-2);
 }
 .sheet thead .letters th {
   text-align: center;
@@ -1175,6 +1187,18 @@ button {
 .pad-row .gutter {
   color: var(--text-faint);
 }
+/**
+ * THE ROW NUMBERS ARE FROZEN, the way the header rows already are. The sheet is ~6,160px of columns
+ * in a ~1,420px window, so scrolling sideways to read column R took the row's number off the left
+ * edge with it: the numbers were pinned against the vertical axis and free on the horizontal one,
+ * which is the half of the gesture where they matter. You are furthest from knowing which row you
+ * are on exactly when you have scrolled away from its name.
+ *
+ * The divider is a box-shadow rather than the cell's own right border. With border-collapse the
+ * edges are painted at the collapsed boundary and belong to the table, not to the cell, so they do
+ * not travel with a cell that has detached — the column sliding underneath would run straight into
+ * the numbers with no line between them. Same fix, and the same reason, as .rec-td-name.
+ */
 .sheet .corner,
 .sheet .gutter {
   background: var(--surface-2);
@@ -1182,6 +1206,23 @@ button {
   text-align: center;
   font-family: var(--mono);
   font-size: 11px;
+  position: sticky;
+  left: 0;
+  box-shadow: 1px 0 0 var(--border);
+}
+/* Above the body cells that slide under it, below the header that slides over it. */
+.sheet .gutter {
+  z-index: 2;
+}
+/**
+ * The frozen corner, sticky in both axes at once: it has to outrank the header row it sits in (3),
+ * because that row scrolls horizontally underneath it, AND the body gutter (2), which scrolls
+ * vertically underneath it. It carries the header's own top-strip repaint as well as the divider —
+ * a second shadow rather than a replacement, or the hairline above the column letters comes back.
+ */
+.sheet thead .corner {
+  z-index: 4;
+  box-shadow: 0 -20px 0 var(--surface-2), 1px 0 0 var(--border);
 }
 /* Row hover. This was #fafbff, a near-white wash written for the light sheet, which on dark put
    #e9ecf1 text on it at about 1.15:1 — hovering a row erased it, and the whole table is
@@ -1283,9 +1324,13 @@ button {
 .sheet col.sel {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
+/* Mixed into --surface-2 rather than into transparent. Both of these are frozen cells — the letters
+   against the vertical scroll, the gutter now against the horizontal one — and a frozen cell with a
+   see-through background is a window onto whatever is sliding beneath it. Identical colour, since
+   --surface-2 is what they were being laid over anyway. */
 .sheet .letters th.sel,
 .sheet tr.data-row.sel .gutter {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
   color: var(--text);
 }
 .sheet tr.data-row.sel td {
@@ -7201,6 +7246,15 @@ button {
 }
 .flow-tb-zoom-item.on {
   color: var(--accent);
+}
+/* A step further out than the sheet goes. Shown rather than dropped, so the ladder reads the same
+   on both tabs and it is the rung that looks spent, not the menu that looks shorter. */
+.flow-tb-zoom-item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+.flow-tb-zoom-item:disabled:hover {
+  background: none;
 }
 /* The model picker reuses the zoom control's shape (same toolbar, same gesture) but its rows carry
    a second line: the model name is the choice, the note is why you would pick it. */

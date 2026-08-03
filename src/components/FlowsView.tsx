@@ -1619,6 +1619,8 @@ export function FlowsView() {
   const [dragDelta, setDragDelta] = useState<{ ids: string[]; dx: number; dy: number } | null>(null)
   // Connectors between nodes, plus the in-progress drag and measured node rects.
   const canvasRef = useRef<HTMLDivElement>(null)
+  /** The Grid/Calendar stage, so Fit can measure the sheet inside it without a global selector. */
+  const gridViewRef = useRef<HTMLDivElement>(null)
   // Zoom + pan mirrored into refs so the wheel handler reads the latest values without a
   // re-render lag between rapid events (cursor-anchored zoom needs both at once).
   const zoomRef = useRef(zoom)
@@ -1697,6 +1699,104 @@ export function FlowsView() {
     setZoom(z)
     setOffset(no)
   }
+
+  /**
+   * THE ZOOM AT WHICH THE COLUMNS EXACTLY FILL THE WINDOW — what Fit jumps to, and the point past
+   * which zooming out is refused.
+   *
+   * WIDTH ONLY, and deliberately. Fitting the height as well sounds more complete and looks wrong:
+   * a sheet is wide and short, so the height fits at a smaller zoom than the width does (19% against
+   * 23% here), and taking the smaller of the two carries on shrinking after the columns have already
+   * landed — leaving the table 1,171px wide in a 1,424px window with 252px of nothing beside it,
+   * detached from its own right edge. Rows continuing below the fold is not the same defect: a
+   * spreadsheet scrolls vertically, that is the ordinary way to read one, and no amount of zooming
+   * out is the answer to having a lot of rows.
+   *
+   * Measured against NATURAL width, not the width on screen right now: the rendered box stops
+   * growing once it fits, so a scrollWidth read below the fit point reports the window back to
+   * itself and the floor would follow the zoom down forever instead of holding still. The authored
+   * inline width is written in unzoomed px and never moves, so it is the one to ask.
+   *
+   * Never above 100%, or a sheet narrower than its window would have a floor over its own natural
+   * size and could not be zoomed out at all. Never below 10%, which stays the hard limit.
+   */
+  const sheetFitZoom = () => {
+    const wrap = gridViewRef.current?.querySelector('.sheet-wrap')
+    const table = wrap?.querySelector('table.sheet')
+    if (!(wrap instanceof HTMLElement) || !(table instanceof HTMLElement)) return null
+    const naturalW = parseFloat(table.style.width)
+    if (!naturalW) return null
+    // -2 for the sheet's own border, and floored, so it lands just inside the window rather than a
+    // hairline over it and keeps a scrollbar for one pixel.
+    const z = ((wrap.clientWidth - 2) / naturalW) * 100
+    return Math.max(10, Math.min(100, Math.floor(z)))
+  }
+
+  /**
+   * WHERE THE SHEET'S SCROLLBARS GO once it has re-rendered at a new zoom. Written by the wheel
+   * handler below and spent by the layout effect after it, because the anchoring has to happen in
+   * two halves: the cell under the cursor can only be worked out BEFORE the table changes size,
+   * and the scroll position can only be set AFTER.
+   */
+  const sheetAnchorRef = useRef<{ x: number; y: number } | null>(null)
+
+  /**
+   * CMD-SCROLL AND PINCH, ON THE SHEET. The canvas has had this gesture since it existed and the
+   * Grid did not, so the pill was the only way in — and worse, an unhandled Cmd-scroll fell through
+   * to the browser and zoomed the whole page, chrome and all.
+   *
+   * Bound to the sheet's own scroll box rather than to the stage around it, and it returns without
+   * touching a plain wheel event: scrolling a spreadsheet is what a scroll wheel is FOR here, unlike
+   * on the canvas where a plain scroll pans. Only the zoom gesture is intercepted.
+   */
+  useEffect(() => {
+    if (flowView !== 'grid') return
+    const wrap = gridViewRef.current?.querySelector('.sheet-wrap')
+    if (!(wrap instanceof HTMLElement)) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const d = Math.max(-100, Math.min(100, e.deltaY))
+      const s0 = zoomRef.current / 100
+      // Same curve and the same two step sizes as the canvas — pinch deltas are tiny, so they get
+      // the stronger one. The floor is where the sheet runs out rather than a fixed percentage:
+      // past it every column is already on screen and the gesture would only be pulling the sheet
+      // away from its own right edge.
+      const floor = sheetFitZoom() ?? 10
+      const next = Math.max(floor, Math.min(150, zoomRef.current * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.006))))
+      if (next === zoomRef.current) return
+      // Keep the cell under the cursor under the cursor: read the pointer as a position in the
+      // unzoomed table now, and leave the resulting scroll offsets for the layout effect.
+      const r = wrap.getBoundingClientRect()
+      const px = e.clientX - r.left
+      const py = e.clientY - r.top
+      const s1 = next / 100
+      sheetAnchorRef.current = {
+        x: ((wrap.scrollLeft + px) / s0) * s1 - px,
+        y: ((wrap.scrollTop + py) / s0) * s1 - py,
+      }
+      // Mirrored into the ref immediately so a fast pinch reads its own latest value rather than
+      // the one from the render it has outrun — the same reason zoomAt does it on the canvas.
+      zoomRef.current = next
+      setZoom(next)
+    }
+    wrap.addEventListener('wheel', onWheel, { passive: false })
+    return () => wrap.removeEventListener('wheel', onWheel)
+    // Re-bind when the sheet is replaced under us: a different campaign mounts a different node,
+    // and the listener would otherwise be sitting on one that is no longer in the document.
+  }, [flowView, flowScreen, viewName])
+
+  /** The second half of the anchoring above: the table has its new size, so place the scrollbars. */
+  useLayoutEffect(() => {
+    const a = sheetAnchorRef.current
+    if (!a) return
+    sheetAnchorRef.current = null
+    const wrap = gridViewRef.current?.querySelector('.sheet-wrap')
+    if (!(wrap instanceof HTMLElement)) return
+    wrap.scrollLeft = Math.max(0, a.x)
+    wrap.scrollTop = Math.max(0, a.y)
+  }, [zoom])
+
   // Native, non-passive wheel handler (React's onWheel is passive, so it can't
   // preventDefault). This matches how Attio's canvas zooms: pinch (ctrlKey) or Cmd+scroll
   // zooms toward the cursor, and we suppress the browser's own page zoom / back-swipe.
@@ -7701,6 +7801,88 @@ export function FlowsView() {
   )
 
   /**
+   * ZOOM, ON EITHER TAB, AS ONE CONTROL AND ONE NUMBER. Lifted out of the canvas toolbar for the
+   * same reason Generate was: it is the same question on both tabs. #189 dropped zoom from the Grid
+   * on the grounds that "a sheet is already laid out" — true of the CANVAS zoom, which scales a
+   * board you pan around, and not true of what a sheet needs. This campaign's grid is ~6,160px of
+   * columns in a ~1,420px window: at 100% you are reading a quarter of the sheet through a slot.
+   *
+   * It reads and writes the SAME `zoom` the canvas uses, so a percentage set on one tab is the
+   * percentage you find on the other. Two independent zooms would mean the readout in this pill
+   * changed meaning depending on which tab you were standing on, which is worse than not having it.
+   *
+   * `grid` changes only the two things that cannot mean the same thing on a sheet:
+   *   - a preset anchors to the canvas centre on the board; a sheet has no centre to zoom about,
+   *     so it just takes the number.
+   *   - Fit fits the BOARD's content on the canvas, and the sheet's full column width here.
+   */
+  const renderZoomControl = (opts?: { grid?: boolean }) => {
+    /**
+     * On the Grid, anything below the fit is offered but not live: the menu keeps its full ladder
+     * so the control reads the same on both tabs, and the steps that would do nothing are shown
+     * spent rather than quietly redirecting you to a percentage you did not press. Measured only
+     * while the menu is open, since it costs a layout read.
+     */
+    const floor = opts?.grid && zoomOpen ? sheetFitZoom() : null
+    return (
+    <div className="flow-tb-zoom-wrap">
+      <button aria-label="Zoom" className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+        {/* The readout sits in a slot wide enough for the longest value it can hold, because
+            the toolbar is centred: 50% and 100% are one character apart, so zooming resized this
+            button and shifted every control in the row sideways as you did it. */}
+        <span className="flow-tb-num">{Math.round(zoom)}%</span>
+        <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {zoomOpen && (
+        <>
+          <div className="flow-tb-zoom-scrim" onClick={() => setZoomOpen(false)} />
+          <div className="flow-tb-zoom-menu">
+            {/* Fit first, because it is the answer most of the time: the zoom that shows a whole
+                campaign is a different number on every board — and on every sheet. */}
+            <button
+              className="flow-tb-zoom-item"
+              onClick={() => {
+                if (opts?.grid) {
+                  const z = sheetFitZoom()
+                  if (z) setZoom(z)
+                } else fitToContent()
+                setZoomOpen(false)
+              }}
+            >
+              Fit
+            </button>
+            <div className="flow-tb-zoom-sep" />
+            {[150, 125, 100, 75, 50, 25, 10].map((z) => (
+              <button
+                key={z}
+                className={`flow-tb-zoom-item${Math.round(zoom) === z ? ' on' : ''}`}
+                disabled={floor != null && z < floor}
+                title={floor != null && z < floor ? 'The whole sheet already fits — use Fit' : undefined}
+                onClick={() => {
+                  // Anchor a preset to the canvas center so it zooms about the middle.
+                  const r = opts?.grid ? null : canvasRef.current?.getBoundingClientRect()
+                  if (r) zoomAt(z, r.left + r.width / 2, r.top + r.height / 2)
+                  else setZoom(z)
+                  setZoomOpen(false)
+                }}
+              >
+                {z}%
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+    )
+  }
+
+  /**
    * WHICH MODEL WRITES, AND THE BUTTON THAT MAKES IT WRITE. Lifted out of the canvas toolbar
    * because the Grid needs exactly these two and nothing else around them: they act on the
    * CAMPAIGN, not on the board, so they mean the same thing on either tab. The Grid was already
@@ -10450,52 +10632,7 @@ export function FlowsView() {
           {palBtn('note')}
         </div>
         <div className="flow-tb-row">
-        <div className="flow-tb-zoom-wrap">
-          <button aria-label="Zoom" className="flow-tb-zoom" onClick={() => setZoomOpen((o) => !o)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
-            {/* The readout sits in a slot wide enough for the longest value it can hold, because
-                the toolbar is centred: 50% and 100% are one character apart, so zooming resized this
-                button and shifted every control in the row sideways as you did it. */}
-            <span className="flow-tb-num">{Math.round(zoom)}%</span>
-            <svg className="flow-tb-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-          {zoomOpen && (
-            <>
-              <div className="flow-tb-zoom-scrim" onClick={() => setZoomOpen(false)} />
-              <div className="flow-tb-zoom-menu">
-                {/* Fit first, because it is the answer most of the time: the zoom that shows a whole
-                    campaign is a different number on every board. */}
-                <button
-                  className="flow-tb-zoom-item"
-                  onClick={() => { fitToContent(); setZoomOpen(false) }}
-                >
-                  Fit
-                </button>
-                <div className="flow-tb-zoom-sep" />
-                {[150, 125, 100, 75, 50, 25, 10].map((z) => (
-                  <button
-                    key={z}
-                    className={`flow-tb-zoom-item${Math.round(zoom) === z ? ' on' : ''}`}
-                    onClick={() => {
-                      // Anchor a preset to the canvas center so it zooms about the middle.
-                      const r = canvasRef.current?.getBoundingClientRect()
-                      if (r) zoomAt(z, r.left + r.width / 2, r.top + r.height / 2)
-                      else setZoom(z)
-                      setZoomOpen(false)
-                    }}
-                  >
-                    {z}%
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {renderZoomControl()}
         <div className="flow-tb-tools">
           <button className={`flow-tb-tool${tool === 'pan' ? ' on' : ''}`} onClick={() => setTool('pan')} aria-label="Pan">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -10557,11 +10694,12 @@ export function FlowsView() {
               </button>
             )}
           </div>
-          <div className="flow-real-view">
+          <div className="flow-real-view" ref={gridViewRef}>
             {flowView === 'grid' ? (
               <SheetGrid
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
+                zoom={zoom}
                 onPickObject={(pick) => setGridPick(pick)}
                 /**
                  * ADDING ONE FROM A CELL IS ADDING A CARD. Same addObject the toolbar calls, wired
@@ -10661,17 +10799,26 @@ export function FlowsView() {
             )}
           </div>
         </div>
-        {/* THE CANVAS TOOLBAR, ON THE GRID. Same pill, same corner of the screen, minus everything
-            on it that was about the canvas rather than the campaign: the card palette (there is no
-            board here to drop a card onto), and zoom / pan / select / link / tidy (there is nothing
-            to pan and nothing to lay out — a sheet is already tidy). What is left is the pair the
-            Grid was already telling you to reach for: the model that writes, and Generate.
+        {/* THE CANVAS TOOLBAR, ON THE GRID. Same pill, same corner of the screen, minus what was
+            about the canvas rather than the campaign: the card palette (there is no board here to
+            drop a card onto) and pan / select / link / tidy (nothing to pan, nothing to lay out —
+            a sheet is already tidy). What is left is what means the same thing on either tab: the
+            model that writes, Generate, and zoom.
+
+            Zoom was dropped here too at first, filed alongside pan and tidy as board furniture.
+            That was one word doing two jobs. Canvas zoom scales a board you pan around, and a sheet
+            has no such thing; SHEET zoom decides how much of a very wide table you can see at once,
+            and this grid is ~6,160px of columns arriving in a ~1,420px window. It is the same
+            control and the same number as the canvas — see renderZoomControl.
 
             Sibling of .flow-real rather than a child of it, because .flow-real clips its overflow
             and this floats; it positions against .flow either way. */}
         {flowView === 'grid' && (
           <div className={`flow-toolbar flow-toolbar-grid${gridPick ? ' insp' : ''}`}>
-            <div className="flow-tb-row">{renderGenerateControls({ whole: true })}</div>
+            <div className="flow-tb-row">
+              {renderZoomControl({ grid: true })}
+              {renderGenerateControls({ whole: true })}
+            </div>
           </div>
         )}
         </>
