@@ -29,6 +29,23 @@ const TAG_CLASS: Record<Tag, string> = {
   Fixed: 'chlog-tag-fixed',
 }
 
+/**
+ * Every way out of this page goes to "/", and each one used to PUSH a history entry — which left
+ * the changelog sitting directly behind the app. The app is one document with no routing of its
+ * own, so that made the changelog the target of any stray back gesture: a two-finger scroll with a
+ * little sideways drift on the Grid or a flow would blow the whole session away and hard-load this
+ * page. Replacing the entry instead means leaving here is a return, not a step deeper, and nothing
+ * in the app has the changelog behind it.
+ *
+ * Modified clicks (cmd/ctrl/shift/alt, middle button) are left alone so "open in a new tab" still
+ * works, and the href stays real so the links remain links to the browser and to assistive tech.
+ */
+function leaveToApp(e: React.MouseEvent<HTMLAnchorElement>) {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  e.preventDefault()
+  window.location.replace('/')
+}
+
 export function ChangelogPage() {
   useEffect(() => {
     const prev = document.title
@@ -45,7 +62,7 @@ export function ChangelogPage() {
             looking at — the <h1> below says that, and says it louder. A way back to the sign-in
             field is the thing this page actually lacked. */}
         <div className="chlog-nav-side">
-          <a className="chlog-back" href="/" aria-label="Back to login">
+          <a className="chlog-back" href="/" aria-label="Back to login" onClick={leaveToApp}>
             <span className="chlog-back-arrow" aria-hidden="true">
               &larr;
             </span>
@@ -54,11 +71,11 @@ export function ChangelogPage() {
         </div>
         {/* The splash wordmark, not the flat one — this page is the first thing a logged-out
             visitor sees after the sign-in field, so it should be wearing the same face. */}
-        <a className="chlog-brand" href="/" aria-label="Breadcrumbs home">
+        <a className="chlog-brand" href="/" aria-label="Breadcrumbs home" onClick={leaveToApp}>
           <img className="chlog-brand-logo" src="/login-logo.svg" alt="Breadcrumbs" />
         </a>
         <div className="chlog-nav-side chlog-nav-right">
-          <a className="chlog-open" href="/">
+          <a className="chlog-open" href="/" onClick={leaveToApp}>
             Open app
           </a>
         </div>
@@ -98,7 +115,7 @@ export function ChangelogPage() {
       <footer className="chlog-foot">
         <Wordmark height={16} />
         <span className="chlog-foot-tag">Leave a trail worth following.</span>
-        <a className="chlog-foot-link" href="/">
+        <a className="chlog-foot-link" href="/" onClick={leaveToApp}>
           Open Breadcrumbs
         </a>
       </footer>
