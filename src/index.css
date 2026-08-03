@@ -7989,6 +7989,29 @@ button.mf-open:focus-visible,
 .flow-edge.sel.paid {
   stroke: #eab308;
 }
+/* A PAID PATH WITH NO BUDGET ON IT. Gold says money is on this path; it was being painted from the
+   channel being paid, so a Google search ad sitting at $0 — an ad that cannot run — looked exactly
+   like a funded one. This is the state that needs its own colour, and red is the honest one: the
+   asset requires a budget and does not have it.
+
+   Amber was the obvious pick and is unusable here. At #f5a623 against gold #eab308 the two are the
+   same line at any real zoom, which is the opposite of the distinction being drawn. --bad-ink is
+   also the token the rest of the app already spends on "this is blocked", and it carries a dark
+   counterpart, which a literal would not.
+
+   Both selectors, and after .sel.paid: equal-specificity rules are decided by source order, and
+   selecting a line must not paper over what is wrong with it — the same reason .sel.paid exists. */
+.flow-edge.paid.needs-budget,
+.flow-edge.sel.paid.needs-budget {
+  stroke: var(--bad-ink);
+}
+/* Sparser beads on top of the hue, so the state still reads on a zoomed-out board and for anyone who
+   cannot separate red from gold — the argument the selected line already makes for going solid.
+   :not(.sel) because the selected line's continuous stroke is a stronger signal and outranks this;
+   without the guard this 0-3-0 rule would beat .flow-edge.sel at 0-2-0 and re-dash it. */
+.flow-edge.paid.needs-budget:not(.sel) {
+  stroke-dasharray: 1 7;
+}
 .flow-edge.drawing {
   stroke: var(--accent);
   stroke-dasharray: 5 4;

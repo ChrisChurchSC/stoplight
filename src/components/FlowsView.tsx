@@ -26,6 +26,7 @@ import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, ca
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
+import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
 import { resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
@@ -391,6 +392,8 @@ const ingestedMetricsText = (r: TrafficRow): string => {
 // A post has media spend if it carries a paid budget or logged spend, or sits on a paid channel.
 const hasMediaSpend = (r: TrafficRow): boolean =>
   (r.budget?.amount ?? 0) > 0 || (r.spend?.toDate ?? 0) > 0 || CHANNELS[r.channel as ChannelId]?.kind === 'paid'
+// hasAssignedBudget / needsMediaBudget live in domain/budget.ts, alongside isPaidRow and hasBudget:
+// "does this placement have money on it" is a question about the row, not about this canvas.
 const usdShort = (n: number): string => '$' + n.toLocaleString()
 // Compact label of a post's media budget / spend, for the chip on paid posts.
 const spendLabel = (r: TrafficRow): string => {
@@ -399,7 +402,7 @@ const spendLabel = (r: TrafficRow): string => {
   return 'Paid'
 }
 const spendTitle = (r: TrafficRow): string =>
-  (r.spend?.toDate ?? 0) > 0 ? `Media spend: ${usdShort(r.spend!.toDate)}` : (r.budget?.amount ?? 0) > 0 ? `Media budget: ${usdShort(r.budget!.amount)}` : 'Paid media placement'
+  (r.spend?.toDate ?? 0) > 0 ? `Media spend: ${usdShort(r.spend!.toDate)}` : (r.budget?.amount ?? 0) > 0 ? `Media budget: ${usdShort(r.budget!.amount)}` : 'Paid media placement — no budget assigned to this asset yet'
 
 // The lead line + a body preview for a viewed asset, pulled from whatever fields its
 // channel actually uses (subject/headline/title lead; body/caption/etc. as the body), so
@@ -5057,6 +5060,27 @@ export function FlowsView() {
     return s
   }, [viewName, viewDelivs, nodes])
 
+  // Card ids whose paid placement has NO budget on it. Gold means money is on this path; it used to
+  // be painted from the channel being paid, so a Google search ad with nothing assigned looked
+  // exactly like a funded one. These get their own connector colour instead, which is the whole
+  // point: the line has to separate "budget set" from "budget required and missing".
+  //
+  // Campaign view only. The plan canvas has no rows to carry a budget, so every paid node there
+  // would flag at once — a wall of alarm with nothing to act on, which is not a signal.
+  const needsBudgetCardIds = useMemo(() => {
+    const s = new Set<string>()
+    if (viewName === null) return s
+    for (const d of viewDelivs) {
+      const unfunded = d.rows.filter(needsMediaBudget)
+      for (const r of unfunded) s.add(r.id)
+      // The deliverable flags only when NOTHING under it is funded. One unfunded card inside a
+      // funded group is that card's problem and its own line already says so; reddening the trunk
+      // as well would overstate how much of the group is missing money.
+      if (unfunded.length && !d.rows.some(hasAssignedBudget)) s.add(d.key)
+    }
+    return s
+  }, [viewName, viewDelivs])
+
   // Which node's transform CARRIES each nested child. Post cards render inside their deliverable's
   // translated container (and build sub-cards inside their deliverable's), so a child's on-screen
   // position already includes its parent's pos. Dragging a parent moves the child for free — the
@@ -8982,11 +9006,14 @@ export function FlowsView() {
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
+              // Either end missing its budget colours the whole line: the line points AT the thing
+              // that cannot run, so it should not read as funded just because its other end is.
+              const needsBudget = needsBudgetCardIds.has(cn.to) || needsBudgetCardIds.has(cn.from)
               const on = isSelEdge(cn.from, cn.to, 'implicit')
               const d = edgePath(a, b, zoom / 100)
               return (
                 <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}`}>
-                  <path className={`flow-edge implicit${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
+                  <path className={`flow-edge implicit${paid ? ' paid' : ''}${needsBudget ? ' needs-budget' : ''}${on ? ' sel' : ''}`} d={d} />
                   {/* THE SAME BAND EVERY OTHER LINE GETS. It was narrower at first, on the theory
                       that these are numerous (one from every channel to every post) and would carpet
                       the canvas at low zoom. In use the narrow band was simply hard to hit, which is
@@ -8999,7 +9026,7 @@ export function FlowsView() {
                     onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
                     onClick={() => selectEdge(cn.from, cn.to, 'implicit')}
                   >
-                    <title>Click to select this connection</title>
+                    <title>{needsBudget ? 'Paid placement with no media budget assigned — click to select this connection' : 'Click to select this connection'}</title>
                   </path>
                 </g>
               )
@@ -9009,11 +9036,12 @@ export function FlowsView() {
               const b = connRect(cn.to)
               if (!a || !b) return null
               const paid = paidCardIds.has(cn.to) || paidCardIds.has(cn.from)
+              const needsBudget = needsBudgetCardIds.has(cn.to) || needsBudgetCardIds.has(cn.from)
               const on = isSelEdge(cn.from, cn.to, 'stored')
               const d = edgePath(a, b, zoom / 100)
               return (
                 <g key={`${cn.from}-${cn.to}-${i}`} className={`flow-edge-g${on ? ' on' : ''}`}>
-                  <path className={`flow-edge${paid ? ' paid' : ''}${on ? ' sel' : ''}`} d={d} />
+                  <path className={`flow-edge${paid ? ' paid' : ''}${needsBudget ? ' needs-budget' : ''}${on ? ' sel' : ''}`} d={d} />
                   {/* Wide transparent hit path so the thin dotted line is easy to point at. The
                       mousedown guard stops the canvas underneath treating this as a click on the
                       background, which clears the selection and opens a marquee under your cursor.
@@ -9024,7 +9052,7 @@ export function FlowsView() {
                     onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
                     onClick={() => selectEdge(cn.from, cn.to, 'stored')}
                   >
-                    <title>Click to select this connection</title>
+                    <title>{needsBudget ? 'Paid placement with no media budget assigned — click to select this connection' : 'Click to select this connection'}</title>
                   </path>
                 </g>
               )
@@ -9552,7 +9580,11 @@ export function FlowsView() {
                                       {(() => {
                                         const explicit = spendLabel(r)
                                         if (explicit !== 'Paid') return `Media spend · ${explicit}`
-                                        return paidSpendEach > 0 ? `Paid media · ${usdShort(paidSpendEach)}` : 'Paid media'
+                                        // Nothing is assigned to this asset; the figure is the
+                                        // campaign pool split evenly. Say "est." — the card and the
+                                        // connector now disagree otherwise, one showing a dollar
+                                        // amount while the other says the budget is missing.
+                                        return paidSpendEach > 0 ? `Paid media · ${usdShort(paidSpendEach)} est.` : 'Paid media'
                                       })()}
                                     </div>
                                   ) : null}
