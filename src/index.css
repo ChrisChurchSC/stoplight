@@ -1385,56 +1385,149 @@ button {
   cursor: pointer;
 }
 
-/* AN OBJECT CELL IS THE CARD, SHRUNK TO A ROW.
-   Same mark, same hue, same order the card puts them in: the kind's icon, then the thing it names.
-   --note-tone is the card's own variable, set per column, so a Message cell is the Message card's
-   purple here exactly as it is there and the two surfaces cannot drift apart by hand-picked hexes. */
-/* NOT display:flex ON THE <td>. A table cell that is given another display value stops being a
-   table cell, so the browser drops it out of the row's column flow and every column past it shifts:
-   twelve pickers stacked inside one column while the copy slid two places left. The flex lives on an
-   inner wrapper, and the cell stays a cell. */
-/* `.sheet td` sets padding: 0 at (0,1,1), so a bare `.obj-cell` at (0,1,0) lost and the padding
-   below silently did nothing at all. Qualified, it wins. */
-.sheet td.obj-cell {
-  /* Room to breathe. These inherited 0 from the base cell rule and then set 6px/9px on an inner
-     element, and a picker is a taller object than a line of text: the field's own border sat almost
-     on the row line above it and the icon was pressed against the leading edge. */
-  padding: 9px 12px;
+/* MADE FROM: THE CARDS AN ASSET IS WRITTEN FROM, as chips in one cell.
+   Twelve columns of pickers became one column of chips — see MADE_FROM_COL in SheetGrid. A chip is
+   the card shrunk to a word: the kind's own mark, the kind's own hue through --note-tone (the card's
+   own variable, so a Message chip is the Message card's purple exactly as it is there and the two
+   surfaces cannot drift apart by hand-picked hexes), and the record it names.
+   NOT display:flex ON THE <td>. A table cell that is given another display value stops being a table
+   cell, so the browser drops it out of the row's column flow and every column past it shifts. The
+   flex lives on .mf-wrap and the cell stays a cell.
+   `.sheet td` sets padding: 0 at (0,1,1), so a bare `.mf-cell` at (0,1,0) would lose and the padding
+   below would silently do nothing. Qualified, it wins. */
+.sheet td.mf-cell {
+  padding: 7px 9px;
   vertical-align: top;
-  /* The tone as a hairline down the leading edge, the way the card wears it as a border. Softer than
-     it was at 55%: twelve of these side by side read as a barcode. */
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 38%, transparent);
 }
-.obj-row {
+.mf-wrap {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  /* Tight, because every one of these gaps is a row taller across the whole sheet: an asset made
+     from five cards wraps to four lines however the chips are packed. */
+  gap: 4px;
 }
-/**
- * A SELECTED OBJECT CELL CARRIES BOTH MARKS.
- *
- * box-shadow does not stack across rules — the last one to win the cascade replaces the others
- * outright — and `.sheet td.obj-cell` sits after `.sheet td.cell-sel` at the same specificity. So
- * clicking an object cell showed its tone edge and no selection ring whatsoever: the one cell in the
- * sheet that also opens a panel was the one cell that never looked selected.
- *
- * Declared together, after both, so neither is lost. The tint is here rather than on .cell-sel
- * because this cell is doing more than being selected: the inspector on the right is showing it, and
- * it should be obvious which of thirty cells that panel belongs to.
- */
-.sheet td.obj-cell.cell-sel {
-  box-shadow:
-    inset 0 0 0 2px var(--accent),
-    inset 2px 0 0 color-mix(in srgb, var(--note-tone, transparent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+.mf-chip {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--note-tone, var(--border)) 35%, var(--border));
+  background: color-mix(in srgb, var(--note-tone, transparent) 8%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
 }
-/* Its picker follows, so the whole cell reads as one selected thing rather than a ring drawn around
-   an unchanged control. */
-.sheet td.obj-cell.cell-sel .obj-select {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+/* Wired and holding nothing. It reaches the writer either way, so it shows either way — dashed,
+   because what is missing is the record, not the card. */
+.mf-chip.unset {
+  border-style: dashed;
+  background: transparent;
 }
-.obj-ic,
-.col-obj-ic {
+.mf-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+/* The same face with nothing behind it: rendered as a span where no inspector is listening, so it
+   must not offer the pointer that promises one. */
+span.mf-open {
+  cursor: default;
+}
+button.mf-open:hover {
+  background: color-mix(in srgb, var(--note-tone, var(--text)) 14%, transparent);
+}
+.mf-name {
+  /* The whole chain has to be able to shrink or the ellipsis never fires: a flex item's floor is
+     its content, so without min-width:0 on the button and this the name is clipped mid-word instead
+     of trailing off, which reads as a rendering fault rather than as a name too long for the cell. */
+  min-width: 0;
+  /* A CHIP IS A TAG, NOT A FIELD. Records get long names — "Built for the worst week of the year" is
+     230px of a 320px column — and one of those per line turns a five-card asset into a five-line row
+     down the whole sheet. Capped, two chips share a line, the row halves in height, and the full name
+     is a hover (and the inspector) away. */
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mf-chip.unset .mf-name {
+  color: var(--text-faint);
+  font-style: italic;
+}
+/* The caret IS the picker: the <select> sits invisibly over it rather than over the whole chip, so
+   the two things a chip does — open the card, change the record — stay separately pointable. The
+   caret itself is drawn the way the sheet's other pickers draw theirs, in two gradients. */
+.mf-swap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 18px;
+  border-left: 1px solid color-mix(in srgb, var(--note-tone, var(--border)) 30%, var(--border));
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+  background-position: calc(50% - 2px) calc(50% + 1px), calc(50% + 2px) calc(50% + 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.mf-swap:hover {
+  background-color: color-mix(in srgb, var(--note-tone, var(--text)) 14%, transparent);
+}
+.mf-pick {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  opacity: 0;
+  cursor: pointer;
+}
+/* An invisible control still has to show where the keyboard is. The ring goes on the thing you can
+   see — the chip, the button — rather than on the select that has been hidden under it. */
+.mf-chip:focus-within,
+.mf-add:focus-within,
+button.mf-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Add: a chip's shape, dashed and quiet, because it is the cell's empty state as much as it is a
+   control — an asset written from nothing is a row showing only this. Which is also why it says its
+   name only when the cell is empty: beside a full cell it is a ＋ that tucks in at the end of the
+   last line of chips, where spelling out "Add" would push it onto a line of its own and cost every
+   row in the sheet the height of one. */
+.mf-add {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mf-add.compact {
+  padding: 4px 6px;
+}
+.mf-add:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.obj-ic {
   color: var(--note-tone, var(--text-muted));
   display: inline-flex;
   flex: 0 0 auto;
@@ -1442,92 +1535,6 @@ button {
 .obj-ic svg {
   width: 13px;
   height: 13px;
-}
-.col-obj-ic svg {
-  width: 12px;
-  height: 12px;
-}
-.col-obj-ic {
-  margin-right: 5px;
-  vertical-align: -2px;
-}
-/* THE PICKER IN AN OBJECT CELL, and it has to LOOK like one.
-   `.cell-select` is appearance:none over a transparent background with no border, which is right
-   for the cells whose value reads as data — a channel, a type. These are different: their whole
-   point is that you can set something that is currently unset, and an empty one rendered as bare
-   text is indistinguishable from an empty cell. So it carries a field and a caret. Quiet at rest,
-   because a column of twelve of them per row should not shout. */
-.obj-select {
-  width: 100%;
-  font-size: 11.5px;
-  /* Was 5px/8px, which put the caret hard against the value on a narrow column. */
-  padding: 6px 22px 6px 9px;
-  line-height: 1.4;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
-    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
-  background-position: calc(100% - 11px) calc(50% + 1px), calc(100% - 7px) calc(50% + 1px);
-  background-size: 4px 4px, 4px 4px;
-  background-repeat: no-repeat;
-  cursor: pointer;
-}
-.obj-select:hover {
-  border-color: color-mix(in srgb, var(--note-tone, var(--border-strong)) 55%, var(--border));
-  background-color: var(--surface-2);
-}
-/* Set: the kind's own hue, the same way the card's label carries it. */
-.obj-select:not(.unset) {
-  border-color: color-mix(in srgb, var(--note-tone, var(--border)) 35%, var(--border));
-  background-color: color-mix(in srgb, var(--note-tone, transparent) 8%, transparent);
-}
-/* Nothing picked. Faint, and still plainly a control. */
-/* Naming a new one, in the cell that wanted it. Same footprint as the picker it replaces, so the
-   row does not jump while you type. */
-.obj-new {
-  width: 100%;
-  font-size: 11.5px;
-  padding: 6px 9px;
-  line-height: 1.4;
-  border: 1px solid var(--note-tone, var(--accent));
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  outline: none;
-}
-.obj-select.unset {
-  color: var(--text-faint);
-  border-style: dashed;
-}
-/* Set elsewhere: no caret, no hover, because pressing it does nothing. */
-.obj-select:disabled {
-  opacity: 1;
-  cursor: default;
-  color: var(--text-muted);
-  border-color: transparent;
-  background-image: none;
-}
-.obj-chip {
-  display: inline-block;
-  margin-top: 5px;
-  font-size: 11px;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px 7px;
-  margin-right: 4px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: top;
-}
-/* Connected and holding nothing. It reaches the writer either way, so it shows either way. */
-.obj-chip.empty {
-  color: var(--text-faint);
-  font-style: italic;
 }
 /* The connection gate can carry two independent things at once: a break to resolve, and a count of
    channels deliberately cut off. They are not alternatives, so they need room from each other. */
