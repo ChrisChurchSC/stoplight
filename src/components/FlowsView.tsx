@@ -1701,21 +1701,23 @@ export function FlowsView() {
   }
 
   /**
-   * THE ZOOM THAT PUTS THE WHOLE SHEET ON SCREEN — every column AND every row. It is both what Fit
-   * jumps to and the point past which zooming out is refused, because those are the same number:
-   * once nothing is off screen there is nothing further out to find, and carrying on only shrinks
-   * the sheet into a corner of its own window.
+   * THE ZOOM AT WHICH THE COLUMNS EXACTLY FILL THE WINDOW — what Fit jumps to, and the point past
+   * which zooming out is refused.
    *
-   * Measured against NATURAL size, not the size on screen right now. The rendered box stops growing
-   * once it fits, so a scrollWidth read below the fit point reports the window back to itself and
-   * the floor would follow the zoom down forever instead of holding still.
+   * WIDTH ONLY, and deliberately. Fitting the height as well sounds more complete and looks wrong:
+   * a sheet is wide and short, so the height fits at a smaller zoom than the width does (19% against
+   * 23% here), and taking the smaller of the two carries on shrinking after the columns have already
+   * landed — leaving the table 1,171px wide in a 1,424px window with 252px of nothing beside it,
+   * detached from its own right edge. Rows continuing below the fold is not the same defect: a
+   * spreadsheet scrolls vertically, that is the ordinary way to read one, and no amount of zooming
+   * out is the answer to having a lot of rows.
    *
-   *   width  — the authored inline width, which is written in unzoomed px and never moves.
-   *   height — the rendered height over the scale the DOM is ACTUALLY painted at, read off the
-   *            element rather than from `zoom`: a fast pinch updates the ref before React has
-   *            re-rendered, and dividing a stale height by the new scale invents a natural size.
+   * Measured against NATURAL width, not the width on screen right now: the rendered box stops
+   * growing once it fits, so a scrollWidth read below the fit point reports the window back to
+   * itself and the floor would follow the zoom down forever instead of holding still. The authored
+   * inline width is written in unzoomed px and never moves, so it is the one to ask.
    *
-   * Never above 100%, or a sheet small enough to fit whole would have a floor over its own natural
+   * Never above 100%, or a sheet narrower than its window would have a floor over its own natural
    * size and could not be zoomed out at all. Never below 10%, which stays the hard limit.
    */
   const sheetFitZoom = () => {
@@ -1723,12 +1725,10 @@ export function FlowsView() {
     const table = wrap?.querySelector('table.sheet')
     if (!(wrap instanceof HTMLElement) || !(table instanceof HTMLElement)) return null
     const naturalW = parseFloat(table.style.width)
-    const domScale = parseFloat(table.style.zoom) || 1
-    const naturalH = table.getBoundingClientRect().height / domScale
-    if (!naturalW || !naturalH) return null
+    if (!naturalW) return null
     // -2 for the sheet's own border, and floored, so it lands just inside the window rather than a
     // hairline over it and keeps a scrollbar for one pixel.
-    const z = Math.min((wrap.clientWidth - 2) / naturalW, (wrap.clientHeight - 2) / naturalH) * 100
+    const z = ((wrap.clientWidth - 2) / naturalW) * 100
     return Math.max(10, Math.min(100, Math.floor(z)))
   }
 
@@ -1760,8 +1760,8 @@ export function FlowsView() {
       const s0 = zoomRef.current / 100
       // Same curve and the same two step sizes as the canvas — pinch deltas are tiny, so they get
       // the stronger one. The floor is where the sheet runs out rather than a fixed percentage:
-      // past it there are no more rows or columns to uncover and the gesture would just be
-      // shrinking the sheet away from its own window.
+      // past it every column is already on screen and the gesture would only be pulling the sheet
+      // away from its own right edge.
       const floor = sheetFitZoom() ?? 10
       const next = Math.max(floor, Math.min(150, zoomRef.current * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.006))))
       if (next === zoomRef.current) return
