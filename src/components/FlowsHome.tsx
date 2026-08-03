@@ -477,8 +477,12 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
             Campaigns
             <InfoTip term="campaign" />
           </h1>
+          {/* Campaigns only. The folder count used to sit here too, and it counted the STORED
+              folder list — every implied ancestor, and every folder left behind by a campaign that
+              was archived or deleted. So it read a number the page didn't show and nobody could
+              account for. The folders are on screen; they don't need a tally. */}
           <p className="flow-home-sub">
-            {cards.length} campaign{cards.length === 1 ? '' : 's'} · {knownFolders.size} folder{knownFolders.size === 1 ? '' : 's'} for {brand || 'this brand'}
+            {cards.length} campaign{cards.length === 1 ? '' : 's'}
           </p>
         </div>
         <div className="flow-home-actions">
