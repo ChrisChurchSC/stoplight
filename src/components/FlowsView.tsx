@@ -1074,11 +1074,36 @@ export function FlowsView() {
   const openReview = useTrafficStore((s) => s.openReview)
   // A single-flow share locks the recipient to that one flow: no back-to-list, no flow switching.
   const flowShareLock = useTrafficStore((s) => !!s.sharedSession?.campaign)
-  // Add a blank draft asset to the open flow (from Grid/Calendar) and open it to fill in. Calendar
-  // passes the clicked day so the asset lands there.
-  const addFlowAsset = async (scheduledAt?: string) => {
-    const id = await addBlankAsset(flowCampaign, scheduledAt ? { scheduledAt } : undefined)
-    if (id) openReview(id)
+  /**
+   * ADD ASSET ON THE GRID / CALENDAR ASKS THE CHANNEL FIRST.
+   *
+   * It used to drop a blank Blog article on you and open the drawer with "Pick a channel and type
+   * below" — an asset IS a channel and a type, so answering that in a form field after the fact is
+   * the wrong order, and on the Calendar it also meant the thing that landed on the day you clicked
+   * was never the thing you meant to put there. So the button opens the Flow tab's own channels
+   * inspector instead: same presets, same list, same rows — see the `pickAt` arm of .flow-panel.
+   *
+   * `scheduledAt` is set when the picker was opened from a day, so the asset lands on that day
+   * rather than now.
+   */
+  const [assetPick, setAssetPick] = useState<{ scheduledAt?: string } | null>(null)
+  const [addingAsset, setAddingAsset] = useState(false)
+  const addFlowAsset = async (p: DeliverablePreset, scheduledAt?: string) => {
+    if (addingAsset) return
+    setAddingAsset(true)
+    try {
+      const id = await addBlankAsset(flowCampaign, {
+        channel: p.channel,
+        assetType: p.assetType,
+        mediaType: p.media,
+        assetName: p.label,
+        scheduledAt,
+      })
+      setAssetPick(null)
+      if (id) openReview(id)
+    } finally {
+      setAddingAsset(false)
+    }
   }
   const setFlowCanvasOpen = useTrafficStore((s) => s.setFlowCanvasOpen)
   const flowChats = useTrafficStore((s) => s.flowChats)
@@ -5074,8 +5099,20 @@ export function FlowsView() {
    * The campaign name a build lands on, for a given builder name. One function because three
    * places have to agree on it: the Grid / Calendar scope below, buildFlow itself, and the chat's
    * "already built" guard. They were three copies of the same template string.
+   *
+   * UNASSIGNED IS NOT A BRAND, so it must never become a prefix. It is the answer
+   * clientForCampaign gives for a campaign nobody has filed yet, and `brand` falls back to the
+   * first brand in the workspace — which an empty workspace does not have. So the first asset
+   * added to an unbuilt campaign filed itself under "New campaign", that row's canvas resolved to
+   * the Unassigned client, "Unassigned" became the first (only) brand, and this function renamed
+   * the campaign to "Unassigned — New campaign" underneath the asset that had just been written
+   * against the old name. The Grid and Calendar scope to `flowCampaign`, so the asset you had just
+   * added vanished the instant it arrived, and Add asset read as a dead button.
+   *
+   * campaignShortName already treats UNASSIGNED as no prefix when it shows a name; this is the
+   * other half of that rule, applied where the name is made.
    */
-  const campaignNameFor = (n: string) => `${brand ? `${brand} — ` : ''}${n.trim() || 'New campaign'}`
+  const campaignNameFor = (n: string) => `${brand && brand !== UNASSIGNED ? `${brand} — ` : ''}${n.trim() || 'New campaign'}`
   // The campaign name this flow builds into, used to scope the real Grid / Calendar to just
   // this flow's assets.
   const flowCampaign = viewName ?? campaignNameFor(name)
@@ -10814,7 +10851,11 @@ export function FlowsView() {
               <span />
             )}
             {!flowShareLock && (
-              <button className="flow-share-btn" onClick={() => void addFlowAsset()} title="Add a draft asset to this campaign">
+              <button
+                className="flow-share-btn"
+                onClick={() => { setGridPick(null); setAssetPick({}) }}
+                title="Add an asset to this campaign — pick its channel"
+              >
                 ＋ Add asset
               </button>
             )}
@@ -10825,7 +10866,7 @@ export function FlowsView() {
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
                 zoom={zoom}
-                onPickObject={(pick) => setGridPick(pick)}
+                onPickObject={(pick) => { setAssetPick(null); setGridPick(pick) }}
                 /**
                  * ADDING ONE FROM A CELL IS ADDING A CARD. Same addObject the toolbar calls, wired
                  * straight to the asset whose cell you used, and then its own inspector opens on it
@@ -10840,6 +10881,7 @@ export function FlowsView() {
                 onCreateObject={({ kind, rowId }) => {
                   const id = addObject(kind)
                   setConnectors((c) => (c.some((x) => x.from === id && x.to === rowId) ? c : [...c, { from: id, to: rowId }]))
+                  setAssetPick(null)
                   setGridPick({ kind, cardId: id, label: OBJECT_META[kind].label })
                 }}
                 /**
@@ -10854,7 +10896,7 @@ export function FlowsView() {
               <CalendarView
                 scopeClient={brand || undefined}
                 scopeCampaign={flowCampaign}
-                onAddOnDay={flowShareLock ? undefined : (iso) => void addFlowAsset(iso)}
+                onAddOnDay={flowShareLock ? undefined : (iso) => { setGridPick(null); setAssetPick({ scheduledAt: iso }) }}
                 /**
                  * CLICKING AN ASSET OPENS THE ASSET, not a second reading of it. Everywhere else in
                  * the campaign an asset opens the docked inspector — the copy you can edit, the
@@ -10866,15 +10908,61 @@ export function FlowsView() {
                  * the workbench): there is no board in scope there to inspect an asset against, so
                  * the drawer remains the right and only answer.
                  */
-                onPickRow={(rowId) => setGridPick({ kind: 'asset', rowId })}
+                onPickRow={(rowId) => { setAssetPick(null); setGridPick({ kind: 'asset', rowId }) }}
                 selectedRowId={gridPick?.kind === 'asset' ? gridPick.rowId : undefined}
               />
+            )}
+            {/* THE CHANNELS INSPECTOR THE FLOW TAB USES, in the slot the grid's inspector uses.
+                Same presets, same rows, same list the canvas's `pickAt` arm renders — a channel is
+                a channel wherever you are asked for one, so this asks in the same words and in the
+                same place the answer will appear. It picks ONE asset rather than seeding a
+                deliverable's whole cadence: the button says Add asset, and on a day you clicked it
+                means that day. */}
+            {assetPick && (
+              <aside className="flow-panel flow-panel-grid" role="complementary" aria-label="Add channel">
+                <button className="flow-panel-collapse" title="Close" aria-label="Close" onClick={() => setAssetPick(null)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                <div className="flow-panel-head">
+                  <span className="flow-panel-title">Add channel</span>
+                </div>
+                <div className="flow-picker-list">
+                  <div className="flow-inspect-desc">
+                    {assetPick.scheduledAt
+                      ? `One asset, on ${new Date(assetPick.scheduledAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}. Pick the channel it goes out on.`
+                      : 'One asset in this campaign. Pick the channel it goes out on.'}
+                  </div>
+                  {grouped.map(([group, presets]) => (
+                    <div key={group} className="flow-pgroup">
+                      <div className="flow-pgroup-h">{group}</div>
+                      {presets.map((p) => (
+                        <button
+                          key={p.key}
+                          className="flow-pitem"
+                          disabled={addingAsset}
+                          onClick={() => void addFlowAsset(p, assetPick.scheduledAt)}
+                        >
+                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                          <div className="flow-pitem-text">
+                            <div className="flow-pitem-label">{p.label}</div>
+                            <div className="flow-pitem-desc">
+                              {addingAsset ? 'Adding…' : typeLabel(p.channel, p.assetType) || CHANNELS[p.channel]?.label || p.channel}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </aside>
             )}
             {/* THE SAME INSPECTOR, on the same board, editing the same objects array the canvas
                 edits — because this is the canvas's own component. Nothing is duplicated and nothing
                 can drift, which is the whole reason it is rendered here rather than built in the
                 grid. */}
-            {gridPick && (
+            {!assetPick && gridPick && (
               <aside
                 className="flow-panel flow-panel-grid"
                 role="complementary"
@@ -10887,7 +10975,15 @@ export function FlowsView() {
                 </button>
                 {(() => {
                   if (gridPick.kind === 'asset') {
-                    const row = viewRows.find((r) => r.id === gridPick.rowId)
+                    /* viewRows is empty until a campaign has been BUILT (viewCanvas is keyed on
+                       viewName), so on a campaign you are still assembling it could not find the
+                       asset you had just clicked and every asset answered "no longer in this
+                       campaign". Fall back to this campaign's own rows, which is the same set the
+                       Calendar drew the asset from. Nothing changes for a built campaign — viewRows
+                       already answers there. */
+                    const row =
+                      viewRows.find((r) => r.id === gridPick.rowId) ??
+                      canvases.find((c) => c.name === flowCampaign)?.rows.find((r) => r.id === gridPick.rowId && !r.archivedAt)
                     /* Deleted, archived, or moved out of scope while the panel sat open on it. The
                        calendar re-renders without it either way, so the panel says what happened
                        rather than emptying itself. */

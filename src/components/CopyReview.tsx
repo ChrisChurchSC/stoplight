@@ -165,9 +165,13 @@ export function CopyReview() {
         </div>
 
         <div className="drawer-body">
+          {/* It used to say "Pick a channel and type below". The Grid and Calendar now ask that
+              BEFORE the asset exists — you pick the channel out of the campaign's own channel list
+              — so an asset arriving here has already been told what it is, and an instruction to go
+              and choose it read as if the choice had been thrown away. */}
           {fresh && (
             <div className="drawer-newhint">
-              New asset. Pick a <strong>channel</strong> and <strong>type</strong> below, then write the copy. The go-live checks and tracking fill in as you go.
+              New asset, on <strong>{CHANNELS[row.channel].label}</strong>. Change the channel or type below if that is not it, then write the copy. The go-live checks and tracking fill in as you go.
             </div>
           )}
 
