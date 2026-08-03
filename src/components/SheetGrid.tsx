@@ -125,12 +125,22 @@ export function SheetGrid({
   liveScope = false,
   scopeClient,
   scopeCampaign,
+  zoom = 100,
   onPickObject,
   onCreateObject,
 }: {
   liveScope?: boolean
   scopeClient?: string
   scopeCampaign?: string
+  /**
+   * Percent, and the SAME number the campaign canvas zooms by — the toolbar that sets it is shared,
+   * so a sheet at 50% and a board at 50% are one setting rather than two that happen to agree.
+   *
+   * It rides on the table rather than on the scrolling wrapper around it, which is the whole point:
+   * shrinking the CONTENT inside a window whose width does not move is what puts more columns on
+   * screen. Scaling the window too would just draw the same slice of sheet, smaller.
+   */
+  zoom?: number
   /**
    * Clicking an object cell hands the CARD BEHIND IT back to whoever rendered this grid, so they can
    * open their own inspector on it. The grid does not open one itself, deliberately: the inspector
@@ -530,7 +540,10 @@ export function SheetGrid({
             </button>
           </div>
         )}
-        <table className="sheet" style={{ tableLayout: 'fixed', width: total, minWidth: total }}>
+        <table
+          className="sheet"
+          style={{ tableLayout: 'fixed', width: total, minWidth: total, ...(zoom === 100 ? null : { zoom: zoom / 100 }) }}
+        >
           <colgroup>
             {widths.map((w, i) => (
               <col
