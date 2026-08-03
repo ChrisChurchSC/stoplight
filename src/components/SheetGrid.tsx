@@ -55,7 +55,12 @@ const COLUMNS: { key: string; label: string; icon: string; width: number; always
   { key: 'messaging', label: 'Messaging', icon: '¶', width: 320 },
   { key: 'scheduled', label: 'Scheduled', icon: '◷', width: 184 },
   { key: 'budget', label: 'Budget', icon: '◧', width: 200 },
-  { key: 'actions', label: '', icon: '', width: 84, always: true },
+  /**
+   * NO DUPLICATE COLUMN. It was 84px down the whole sheet holding one ⎘ per row, invisible until
+   * the row was hovered — a permanent lane for an occasional gesture, parked next to the delete
+   * control where a mis-aimed click is expensive. It lives on the row's right-click menu now,
+   * which is where a spreadsheet already keeps its per-row actions and costs no width at all.
+   */
   { key: 'delete', label: '', icon: '', width: 64, always: true },
 ]
 const GUTTER_W = 40
@@ -90,6 +95,13 @@ const MADE_FROM_COL = { key: 'madeFrom', label: 'Made from', icon: '◈', width:
 const CREATABLE = new Set<CanvasObjectKind>(['brand', 'product', 'audience', 'message', 'voice', 'concept', 'season', 'company', 'person', 'trigger'])
 const MIN_COL = 60
 const MIN_ROWS = 20
+/**
+ * The row menu's own size, only so it can be kept on screen. It is what .flow-ctx is drawn at —
+ * its min-width, and its padding around one hint line and one item — rather than a measurement,
+ * which would mean rendering the menu somewhere it can be measured before knowing where to put it.
+ */
+const ROW_MENU_W = 216
+const ROW_MENU_H = 76
 const colLetter = (i: number) => String.fromCharCode(65 + i)
 
 /**
@@ -259,6 +271,13 @@ export function SheetGrid({
   const [pick, setPick] = useState<
     { kind: 'row'; rowId: string } | { kind: 'col'; colKey: string } | { kind: 'cell'; rowId: string; colKey: string } | null
   >(null)
+  /**
+   * THE ROW'S RIGHT-CLICK MENU, at the point it was opened from. It holds what used to be the
+   * duplicate column: an action you reach for now and then, which does not deserve a lane of the
+   * sheet's width forever. Positioned against the VIEWPORT, because the sheet scrolls in both
+   * directions under it and a menu that scrolls away from the pointer is a menu you re-open.
+   */
+  const [rowMenu, setRowMenu] = useState<{ rowId: string; x: number; y: number } | null>(null)
   const [widthByKey, setWidthByKey] = useState<Record<string, number>>({})
   /**
    * The asset whose "Made from" drawer is open, by row id, and what is typed in its search.
@@ -618,6 +637,28 @@ export function SheetGrid({
   }, [pick])
 
   /**
+   * ANYTHING THAT MOVES THE SHEET CLOSES THE ROW MENU. It is pinned to the viewport at the point
+   * you right-clicked, so a scroll or a resize leaves it hanging over a different row than the one
+   * it acts on — which is the one way a menu like this can do real damage. Scroll is captured
+   * because the sheet scrolls in its own wrapper, not on the window.
+   */
+  useEffect(() => {
+    if (!rowMenu) return
+    const close = () => setRowMenu(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [rowMenu])
+
+  /**
    * Escape closes the Made from drawer, from inside it as well as out.
    *
    * Its own listener rather than the one above, which deliberately ignores keys pressed inside a
@@ -726,6 +767,22 @@ export function SheetGrid({
                     const t = e.target as HTMLElement
                     if (t.closest('input, select, textarea, button, code, a, .col-resizer')) return
                     onPickRow(row.id)
+                  }}
+                  /**
+                   * RIGHT-CLICK IS THE ROW'S OWN MENU, and it takes the row as it opens: a menu
+                   * that acts on something has to say which something, and the selection is the
+                   * sheet's existing way of saying it.
+                   *
+                   * A field keeps the BROWSER's menu. Right-clicking inside a text cell is how you
+                   * paste into it, and trading cut/paste/spellcheck for one duplicate command would
+                   * be a bad swap in the one place people type.
+                   */
+                  onContextMenu={(e) => {
+                    const t = e.target as HTMLElement
+                    if (t.closest('input, select, textarea')) return
+                    e.preventDefault()
+                    setPick({ kind: 'row', rowId: row.id })
+                    setRowMenu({ rowId: row.id, x: e.clientX, y: e.clientY })
                   }}
                   onClick={(e) => {
                     // Inline controls take their own clicks, exactly as before.
@@ -1189,16 +1246,6 @@ export function SheetGrid({
                     </td>
                   )}
 
-                  <td className="act-hover">
-                    <button
-                      className="btn ghost sm"
-                      title="Duplicate this asset onto another channel"
-                      onClick={() => duplicateRow(row.id)}
-                    >
-                      ⎘
-                    </button>
-                  </td>
-
                   <td className="act-delete">
                     <button
                       className="btn ghost sm"
@@ -1223,6 +1270,51 @@ export function SheetGrid({
           </tbody>
         </table>
       </div>
+
+      {/**
+        * THE ROW MENU. It wears the canvas's right-click menu — same frame, same items, same scrim —
+        * because it IS the same gesture on the same records, and a second look for it would only be
+        * two menus to keep in step.
+        *
+        * It names the asset above the command. The menu opens at the pointer, which by then is a
+        * long way from the row's own name in a sheet this wide, and duplicating the wrong asset is
+        * a mistake you only find later.
+        */}
+      {rowMenu && (() => {
+        const row = view.find((r) => r.id === rowMenu.rowId)
+        // Filtered out from under the menu (an edit elsewhere, a changed scope): nothing to act on.
+        if (!row) return null
+        const close = () => setRowMenu(null)
+        // Held inside the viewport. Right-clicking near the right-hand edge of a sheet that is
+        // wider than the screen is normal here, and a menu half off it cannot be read or clicked.
+        const x = Math.min(rowMenu.x, Math.max(8, window.innerWidth - ROW_MENU_W - 8))
+        const y = Math.min(rowMenu.y, Math.max(8, window.innerHeight - ROW_MENU_H - 8))
+        return (
+          <>
+            <div
+              className="flow-ctx-scrim flow-ctx-fixed"
+              onMouseDown={close}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                close()
+              }}
+            />
+            <div className="flow-ctx flow-ctx-fixed" style={{ left: x, top: y }} role="menu">
+              <div className="flow-ctx-hint">{row.assetName || 'Untitled asset'}</div>
+              <button
+                className="flow-ctx-item"
+                role="menuitem"
+                onClick={() => {
+                  close()
+                  void duplicateRow(row.id)
+                }}
+              >
+                Duplicate onto another channel
+              </button>
+            </div>
+          </>
+        )
+      })()}
 
       {/**
         * WHAT THIS ASSET IS MADE FROM, and what else it could be, in the drawer the canvas already
