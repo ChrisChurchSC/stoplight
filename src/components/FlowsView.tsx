@@ -8224,38 +8224,34 @@ export function FlowsView() {
             so the panel that edits one asset's copy had no way to ask for that copy, and the
             smallest unit anything could be written at was the whole campaign. Every caller that
             rewrites already passes row ids — regenerateFlow(ids), draftCopy(rowIds) — so the one
-            that rewrites ONE asset was the only one not wired up. */}
-        <label className="flow-inspect-label" style={{ marginTop: 16 }}>Generate</label>
-        {(() => {
-          const hasCopy = Object.values(selPost.messaging ?? {}).some((v) => (v ?? '').trim())
-          return (
-            <>
-              <button
-                className="flow-insp-open"
-                disabled={regenerating}
-                onClick={() => void regenerateFlow([selPost.id])}
-              >
-                {regenerating ? 'Writing…' : hasCopy ? 'Write this post again' : 'Write this post'}
-              </button>
-              {/* What it costs you, before you press it rather than after. A rewrite is a wipe and
-                  a write, and anything you typed into these fields goes with it. */}
-              <p className="flow-inspect-note">
-                {hasCopy
-                  ? 'This clears what is here, including anything you typed, and writes it again. Undo puts it back until you reload.'
-                  : 'Writes this post from the campaign brief and everything wired to it.'}
-              </p>
-              {/* Which writer produced what is on the row now, so a silent fall back to the offline
-                  templates is visible on the asset it happened to. */}
-              {selPost.copySource && (
-                <p className="flow-inspect-note">
-                  {selPost.copySource === 'heuristic'
-                    ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
-                    : 'Written by the model.'}
-                </p>
-              )}
-            </>
-          )
-        })()}
+            that rewrites ONE asset was the only one not wired up.
+
+            And it is the TOOLBAR'S button, aimed at one asset: same accent fill, same mark, same
+            word, so pressing Generate means one thing wherever you find it. It arrived as a
+            labelled section with its own verb ("Write this post again") over a paragraph about what
+            a rewrite costs — three pieces of furniture for what the toolbar states in one, and a
+            second name for Generate on the screen Generate already lives on. Undo is the answer to
+            the paragraph, and it is the answer everywhere else too. */}
+        <button
+          className="flow-tb-regen flow-insp-regen"
+          disabled={regenerating}
+          onClick={() => void regenerateFlow([selPost.id])}
+          aria-label="Generate the copy for this post"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+          </svg>
+          {regenerating ? 'Generating…' : 'Generate'}
+        </button>
+        {/* Which writer produced what is on the row now, so a silent fall back to the offline
+            templates is visible on the asset it happened to. */}
+        {selPost.copySource && (
+          <p className="flow-inspect-note">
+            {selPost.copySource === 'heuristic'
+              ? 'This copy came from the offline writer, built from your own brand and audience. Generate again to try the model.'
+              : 'Written by the model.'}
+          </p>
+        )}
 
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the
