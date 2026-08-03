@@ -7,6 +7,7 @@ import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
 import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
+import { madeFrom } from '../domain/madeFrom'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -48,6 +49,27 @@ const COLUMNS: { key: string; label: string; icon: string; width: number; always
   { key: 'delete', label: '', icon: '', width: 64, always: true },
 ]
 const GUTTER_W = 40
+
+/**
+ * MADE FROM: one column for every card an asset is written from, not one column per KIND.
+ *
+ * It was a column each — Brand, Product, Audience, Data source, Message, Proof point, Trigger,
+ * Voice, Company, Person, Concept, Season — twelve columns, 170px apiece, sat in front of the copy.
+ * The argument for that was that an empty Voice column is itself a finding: nothing is shaping the
+ * voice. What it produced in practice was 2,040px of mostly "Select voice" between an asset's name
+ * and its first line of copy, a horizontal scroll to read one row, and a grid whose widest thing by
+ * far was the part that is usually empty.
+ *
+ * One column, holding the cards this asset actually has, in registry order. A row that is written
+ * from a brand and a message says so in two chips; a row written from nothing says so in a cell
+ * offering to add one. The per-kind gap is no longer visible at a glance across the sheet — that is
+ * what collapsing costs, and it is paid for by the copy being on screen at all.
+ *
+ * Note cards are left out: a note is markup on the board, deliberately never sent to the writer, so
+ * it says nothing about how anything was written.
+ */
+const MADE_FROM_KINDS = (Object.keys(OBJECT_META) as CanvasObjectKind[]).filter((k) => k !== 'note')
+const MADE_FROM_COL = { key: 'madeFrom', label: 'Made from', icon: '◈', width: 320 }
 
 /**
  * Kinds a cell can MAKE a record for. Proof and data sets are absent deliberately: a proof point is
@@ -429,23 +451,21 @@ export function SheetGrid({
     return out
   })()
 
+  /** The records you can pick, resolved once per render rather than once per row per kind. */
+  const optionsByKind = new Map<CanvasObjectKind, { id: string; label: string }[]>(
+    MADE_FROM_KINDS.map((k) => [k, optionsFor(k)]),
+  )
+  const optsFor = (kind: CanvasObjectKind) => optionsByKind.get(kind) ?? []
+
   /**
-   * A COLUMN FOR EVERY OBJECT TYPE, whether or not anything is wired to one.
-   *
-   * This is the exception to the empty-column rule, and it is the whole point of these columns. An
-   * empty Voice column does not mean "nothing to show here", it means NOTHING IS SHAPING THE VOICE —
-   * which is exactly what the canvas says by having no line, and exactly the gap a person opens the
-   * sheet to find. Hiding it would hide the finding.
-   *
-   * Note cards are left out: a note is markup on the board, deliberately never sent to the writer,
-   * so a column of them would say nothing about how anything was written.
+   * CAN THIS CELL SET THIS KIND? Everything with a FlowRefType is pinned on the asset itself. Brand
+   * is not a reference — it is the campaign's owner — so it is settable only where there is a
+   * campaign to rebind, and is read-only anywhere the grid spans more than one.
    */
-  const objectCols = (Object.keys(OBJECT_META) as CanvasObjectKind[])
-    .filter((k) => k !== 'note')
-    .map((k) => ({ key: `obj:${k}`, label: OBJECT_META[k].label, icon: '', width: 170, objKind: k, tone: OBJECT_META[k].tone }))
+  const settable = (kind: CanvasObjectKind) => !!REF_TYPE_FOR_OBJECT_KIND[kind] || (kind === 'brand' && !!scopeCampaign)
 
   const cols = (() => {
-    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string; objKind?: CanvasObjectKind; tone?: string }[] = []
+    const out: { key: string; label: string; icon: string; width: number; fieldKey?: string }[] = []
     // Campaign is the anchor the object columns sit behind, and it can drop out as empty, so the
     // fallback anchor is Type — the last column that is always present before the copy begins.
     const anchor = COLUMNS.some((c) => c.key === 'campaign' && (c.always || !columnEmpty('campaign'))) ? 'campaign' : 'type'
@@ -453,17 +473,17 @@ export function SheetGrid({
       if (c.key === 'messaging') { out.push(...msgCols); continue }
       if (!c.always && columnEmpty(c.key)) continue
       out.push(c)
-      // THE OBJECT COLUMNS COME BEFORE THE COPY, not after it.
+      // MADE FROM COMES BEFORE THE COPY, not after it.
       //
-      // They were after, on the reasoning that you read where the words came from once you have read
-      // the words. Measured, that reasoning put them 2,684px past the right-hand edge of a 1,382px
+      // It was after, on the reasoning that you read where the words came from once you have read
+      // the words. Measured, that reasoning put it 2,684px past the right-hand edge of a 1,382px
       // viewport — nearly three screens of scrolling, behind eleven copy columns — so in practice
-      // nobody ever read them at all.
+      // nobody ever read it at all.
       //
-      // In front they also make a better sentence: what this asset IS, what it is written FROM, then
-      // what it SAYS. The pickers are the part you come here to change; the copy is the part you come
-      // here to read, and reading survives a scroll better than setting does.
-      if (c.key === anchor) out.push(...objectCols)
+      // In front it also makes a better sentence: what this asset IS, what it is made FROM, then what
+      // it SAYS. The pickers are the part you come here to change; the copy is the part you come here
+      // to read, and reading survives a scroll better than setting does.
+      if (c.key === anchor) out.push(MADE_FROM_COL)
     }
     return out
   })()
@@ -570,18 +590,11 @@ export function SheetGrid({
               <th className="corner">#</th>
               {cols.map((c, i) => (
                 <th key={c.key}>
-                  {/* An object column wears the same mark and hue its card wears on the canvas, so
-                      the two surfaces name the same thing the same way. The other columns keep their
-                      plain glyph: they are fields, not objects. */}
-                  {c.objKind ? (
-                    <span className="col-obj-ic" style={{ ['--note-tone' as string]: c.tone } as React.CSSProperties} aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                        {OBJECT_META[c.objKind].icon}
-                      </svg>
-                    </span>
-                  ) : (
-                    c.icon && <span className="col-ico">{c.icon}</span>
-                  )}
+                  {/* The kind's own mark and hue used to ride in the header, one per column, so the
+                      sheet and the canvas named the same thing the same way. With every kind in one
+                      column there is no single mark to wear, and the marks moved down into the cells
+                      where the cards are. The header keeps a plain glyph like every other column. */}
+                  {c.icon && <span className="col-ico">{c.icon}</span>}
                   {c.label}
                   <span className="col-resizer" onMouseDown={(e) => startResize(i + 1, e)} />
                 </th>
@@ -725,90 +738,173 @@ export function SheetGrid({
                       />
                     </td>
                   )}
-                  {objectCols.map((oc) => {
-                    const mine = (cardsByRow.get(row.id) ?? []).filter((c) => c.kind === oc.objKind)
-                    const opts = optionsFor(oc.objKind)
-                    const type = REF_TYPE_FOR_OBJECT_KIND[oc.objKind]
-                    const settable = !!type || (oc.objKind === 'brand' && !!scopeCampaign)
-                    // THE ROW'S OWN PIN WINS, because that is the order the writer resolves in:
-                    // row.references overrides what the board wires in. Reading only the board walk
-                    // meant the picker wrote a value and then did not show it — the control and its
-                    // own readout disagreeing about what had just happened.
-                    const pinned = type ? (row.references ?? []).find((r) => r.type === type) : undefined
-                    // The brand's answer is the campaign's binding, so it is read from the row's own
-                    // client rather than from a card: a campaign bound with no Brand card on the
-                    // board still has a brand, and the cell has to say which.
-                    const brandId =
-                      oc.objKind === 'brand'
-                        ? (brandObjects.find((b) => b.name === (row.client ?? ''))?.id ?? '')
-                        : ''
-                    const value = brandId || pinned?.id || mine.find((c) => c.refId)?.refId || ''
-                    // A kind can be reached by more than one card and the picker shows one. The rest are
-                    // named beside it, so the cell does not quietly under-report what is reaching the asset.
-                    const extra = mine.filter((c) => c.refId && c.refId !== value)
-                    return (
-                      <td
-                        key={oc.key}
-                        className="obj-cell"
-                        style={{ ['--note-tone' as string]: oc.tone } as React.CSSProperties}
-                        // The picker stops its own clicks, so this fires on the rest of the cell:
-                        // pointing at the cell asks what it names, using the picker changes it.
-                        onClick={() => onPickObject?.({ kind: oc.objKind, cardId: mine.find((c) => c.refId === value)?.id, label: oc.label })}
-                      >
-                        <span className="obj-row">
-                        <span className="obj-ic" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                            {OBJECT_META[oc.objKind].icon}
-                          </svg>
-                        </span>
-                        <select
-                          className={`cell-select obj-select${value ? '' : ' unset'}`}
-                          value={value}
-                          disabled={!settable}
-                          title={
-                            settable
-                              ? `Which ${oc.label.toLowerCase()} this asset is written from`
-                              : `${oc.label} is set on the canvas, not per asset`
-                          }
-                          onChange={(e) => {
-                          if (e.target.value === '__new__') {
-                            onCreateObject?.({ kind: oc.objKind, rowId: row.id })
-                            return
-                          }
-                          setRowRecord(row, oc.objKind, e.target.value)
-                        }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {/* Named, not a dash. An empty cell in this column is not missing data, it
-                              is a question nobody has answered yet, and "Select voice" says both
-                              what the column is and what pressing it will do. A dash says neither,
-                              and in a row of twelve identical dashes it does not even say which
-                              column you are looking at. */}
-                          <option value="">Select {oc.label.toLowerCase()}</option>
-                          {/* A record reaching this row from a card that is not in the picker's list still has
-                              to be selectable, or opening the dropdown would silently change the answer. */}
-                          {value && !opts.some((o) => o.id === value) && (
-                            <option value={value}>{pinned?.label || mine.find((c) => c.refId === value)?.label || 'Set on the canvas'}</option>
+                  {/**
+                    * WHAT THIS ASSET IS MADE FROM, in one cell: a chip per card reaching it.
+                    *
+                    * The chip is the card, shrunk to a word — the same mark and the same hue it wears
+                    * on the canvas, so the two surfaces name the same thing the same way. Pressing it
+                    * opens that card; the caret beside it changes which record the card names; the
+                    * dashed "Add" at the end lands a new one on this asset.
+                    */}
+                  <td className="mf-cell">
+                    {(() => {
+                      const entries = madeFrom({
+                        kinds: MADE_FROM_KINDS,
+                        cards: cardsByRow.get(row.id) ?? [],
+                        references: row.references,
+                        // The brand's answer is the campaign's binding, so it is read from the row's
+                        // own client rather than from a card: a campaign bound with no Brand card on
+                        // the board still has a brand, and the cell has to say which.
+                        brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
+                        nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
+                      })
+                      const present = new Set(entries.map((e) => e.kind))
+                      // Only kinds that could actually land on this asset: settable here, not already
+                      // on it, and with something to pick or a way to make one. An optgroup holding
+                      // nothing is a dead end wearing a menu's clothes.
+                      const addable = MADE_FROM_KINDS.filter(
+                        (k) =>
+                          settable(k) &&
+                          !present.has(k) &&
+                          (optsFor(k).length > 0 || (CREATABLE.has(k) && !!onCreateObject)),
+                      )
+                      return (
+                        // The flex lives on a wrapper, never on the <td>: a table cell given another
+                        // display value stops being a table cell, and every column past it shifts.
+                        <div className="mf-wrap">
+                          {entries.map((e) => {
+                            const meta = OBJECT_META[e.kind]
+                            const opts = optsFor(e.kind)
+                            const name = e.label || `No ${meta.label.toLowerCase()} picked`
+                            const face = (
+                              <>
+                                <span className="obj-ic" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                                    {meta.icon}
+                                  </svg>
+                                </span>
+                                <span className="mf-name">{name}</span>
+                              </>
+                            )
+                            const title = e.primary
+                              ? `${meta.label}: ${e.label || 'nothing picked yet'}`
+                              : `Also reaching this asset: ${e.label}`
+                            return (
+                              <span
+                                key={`${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`}
+                                className={`mf-chip${e.label ? '' : ' unset'}`}
+                                style={{ ['--note-tone' as string]: meta.tone } as React.CSSProperties}
+                              >
+                                {/* Pressing the chip opens the card, which is the gesture the canvas
+                                    already taught. Where nobody is listening for it — the workbench
+                                    grid renders no inspector — it is plain text rather than a button
+                                    that does nothing when pressed. */}
+                                {onPickObject ? (
+                                  <button
+                                    type="button"
+                                    className="mf-open"
+                                    title={`${title} — open it`}
+                                    onClick={(ev) => {
+                                      ev.stopPropagation()
+                                      onPickObject({ kind: e.kind, cardId: e.cardId, label: meta.label })
+                                    }}
+                                  >
+                                    {face}
+                                  </button>
+                                ) : (
+                                  <span className="mf-open" title={title}>
+                                    {face}
+                                  </span>
+                                )}
+                                {/* THE PICKER SETS THE KIND'S PRIMARY, so only the primary carries one.
+                                    A second card of the same kind is listed and read-only: a caret on it
+                                    would look like it set that card and would quietly set the other. */}
+                                {e.primary && settable(e.kind) && (
+                                  <span className="mf-swap">
+                                    <select
+                                      className="mf-pick"
+                                      value={e.refId ?? ''}
+                                      title={`Which ${meta.label.toLowerCase()} this asset is made from`}
+                                      aria-label={`Which ${meta.label.toLowerCase()} this asset is made from`}
+                                      onClick={(ev) => ev.stopPropagation()}
+                                      onChange={(ev) => {
+                                        if (ev.target.value === '__new__') {
+                                          onCreateObject?.({ kind: e.kind, rowId: row.id })
+                                          return
+                                        }
+                                        setRowRecord(row, e.kind, ev.target.value)
+                                      }}
+                                    >
+                                      {/* Also how you take one off: choosing it writes no record, which
+                                          drops the pin and hands the question back to the campaign. */}
+                                      <option value="">Select {meta.label.toLowerCase()}</option>
+                                      {/* A record reaching this row from a card that is not in the picker's
+                                          list still has to be selectable, or opening the dropdown would
+                                          silently change the answer. */}
+                                      {e.refId && !opts.some((o) => o.id === e.refId) && (
+                                        <option value={e.refId}>{e.label || 'Set on the canvas'}</option>
+                                      )}
+                                      {opts.map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                          {o.label}
+                                        </option>
+                                      ))}
+                                      {CREATABLE.has(e.kind) && onCreateObject && (
+                                        <option value="__new__">+ New {meta.label.toLowerCase()}…</option>
+                                      )}
+                                    </select>
+                                  </span>
+                                )}
+                              </span>
+                            )
+                          })}
+                          {/* One menu, grouped by kind, rather than twelve columns each asking their own
+                              question. Picking a record binds it in a single gesture; "+ New" makes the
+                              card and opens its form, exactly as the cell's own picker does. */}
+                          {addable.length > 0 && (
+                            <span className={`mf-add${entries.length ? ' compact' : ''}`}>
+                              <span aria-hidden="true">＋</span>
+                              {!entries.length && ' Add'}
+                              <select
+                                className="mf-pick"
+                                value=""
+                                title="Add what this asset is made from"
+                                aria-label="Add what this asset is made from"
+                                onClick={(ev) => ev.stopPropagation()}
+                                onChange={(ev) => {
+                                  const [kind, id] = ev.target.value.split('::')
+                                  if (!kind || !id) return
+                                  if (id === '__new__') {
+                                    onCreateObject?.({ kind: kind as CanvasObjectKind, rowId: row.id })
+                                    return
+                                  }
+                                  setRowRecord(row, kind as CanvasObjectKind, id)
+                                }}
+                              >
+                                <option value="">Add a card…</option>
+                                {addable.map((k) => (
+                                  <optgroup key={k} label={OBJECT_META[k].label}>
+                                    {optsFor(k).map((o) => (
+                                      <option key={o.id} value={`${k}::${o.id}`}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                    {/* Make one from here. A picker over an empty library is otherwise a
+                                        dead end, which on a fresh brand is most of this menu. Proof and
+                                        data sets are absent on purpose: see CREATABLE. */}
+                                    {CREATABLE.has(k) && onCreateObject && (
+                                      <option value={`${k}::__new__`}>+ New {OBJECT_META[k].label.toLowerCase()}…</option>
+                                    )}
+                                  </optgroup>
+                                ))}
+                              </select>
+                            </span>
                           )}
-                          {opts.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.label}
-                            </option>
-                          ))}
-                          {/* Make one from here. A picker over an empty library is otherwise a dead end, which
-                              on a fresh brand is most of this row. Proof and data sets are absent on purpose:
-                              see createRecord. */}
-                          {CREATABLE.has(oc.objKind) && <option value="__new__">+ New {oc.label.toLowerCase()}…</option>}
-                        </select>
-                        </span>
-                        {extra.map((c) => (
-                          <span key={c.id} className="obj-chip" title={`Also reaching this asset: ${c.label}`}>
-                            {c.label}
-                          </span>
-                        ))}
-                      </td>
-                    )
-                  })}
+                          {!entries.length && !addable.length && <span className="cell-ro">—</span>}
+                        </div>
+                      )
+                    })()}
+                  </td>
 
                   {show('audience') && (
                     <td>
@@ -915,9 +1011,6 @@ export function SheetGrid({
                     </td>
                   )}
 
-                  {/* WHAT THIS ASSET IS WRITTEN FROM, one cell per object kind. A card that reaches the row
-                      with nothing picked still shows, greyed, because a connected empty card is reaching the
-                      writer with nothing and that is worth seeing. */}
                   <td className="act-hover">
                     <button
                       className="btn ghost sm"
