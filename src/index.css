@@ -15441,18 +15441,119 @@ button.mf-open:focus-visible,
   padding-top: 4px;
 }
 
-/* ---- Messaging column (collapsed cell) ---- */
+/* MESSAGING: WHAT AN ASSET SAYS, as a line per copy component in one cell.
+   A column each — Title, Description, Primary text, Headline, CTA, Subject line, whatever the
+   formats in view declared between them — became one, the same move Made from made and for the same
+   reason. See the cell in SheetGrid.
+   Qualified `.sheet td.msg-cell` for the reason .mf-cell gives: `.sheet td` sets padding: 0 at
+   (0,1,1), so a bare `.msg-cell` at (0,1,0) would lose and the padding here would do nothing. */
 .sheet td.msg-cell {
-  cursor: pointer;
-  padding: 10px 12px;
+  padding: 7px 9px;
   vertical-align: top;
 }
-.msg-cell:hover {
-  background: color-mix(in srgb, var(--text) 4%, transparent);
+/* Only where an inspector is listening. The workbench grid renders none, and a cell that offers the
+   pointer and then does nothing is worse than one that never offered. */
+.sheet td.msg-cell.open {
+  cursor: pointer;
 }
-
+/**
+ * THE LABEL SITS BESIDE THE COPY, NOT ABOVE IT, and the labels line up down the cell.
+ *
+ * Above reads a little better and costs a line per component — eight lines for a four-component row,
+ * down every row in the table. Beside, in a column, is nearly as legible and half the height.
+ *
+ * THE GRID IS ON THE WRAPPER, not on each line, which is what makes the labels align: two children
+ * per component, so every label in the cell shares one column and one width.
+ *
+ * The width itself comes from the data — --msg-key-w is set on the table from the longest label any
+ * row in view renders, so the labels line up down the whole COLUMN rather than only inside each
+ * cell. Letting CSS size it (fit-content, max-content) lines them up per cell and leaves the copy
+ * starting at a different x on every row; a fixed width big enough for the schema's longest label
+ * spends 92px on whitespace for the formats whose labels are one short word. See msgKeyCh.
+ */
+.msg-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  /* Tighter than it looks like it wants to be: every gap here is a row taller across the whole
+     sheet, and an asset with four components is four of them. */
+  row-gap: 3px;
+  align-items: baseline;
+}
+/* The line is a wrapper for the flag class and nothing else — its two children have to be the grid's
+   own children or each line would size its label independently and none of them would line up. */
+.msg-field {
+  display: contents;
+}
+.msg-key {
+  /* The sheet's own column-name voice, which is what this label used to be. */
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  /* THE ONE WIDTH, HELD HERE rather than in the grid template above, because the unit only means
+     what it says on this element: `ch` is the advance of "0" in the element's own font, and the
+     template resolves against the wrapper's 13px Switzer while these labels are 9px Space Mono.
+     Measured where it is measured. The fallback covers a render before the table sets it.
+     The 1.07 is the tracking. `ch` counts the glyph and not the 0.04em of letter-spacing after it,
+     which is another 6.7% of the advance — without it a 14-character label is handed 13 characters
+     of room and "PINNED COMMENT" wraps in a column sized for exactly it. */
+  width: calc(var(--msg-key-w, 11ch) * 1.07);
+  /* Wrap rather than ellipse. A truncated label reads as a rendering fault, and unlike the copy
+     beside it there is no inspector to go and read the rest of it in — the label IS the whole
+     value. `anywhere` so a single unbroken word still gives way instead of widening the column. */
+  overflow-wrap: anywhere;
+}
+/* THE COPY IS THE THING YOU CAME TO READ, so it wraps rather than trailing off — the opposite call
+   from .mf-name beside it, and deliberately. A record's name is a tag stood in for the card; a line
+   of copy is the work. Two lines, because past that one row's caption starts setting the height of
+   the table, and the rest is a hover and the inspector away. */
+.msg-val {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+/* A component the ICP read flagged. The split columns put this class on the whole cell and nothing
+   ever styled it, so a flagged component has been invisible in the grid since the columns split.
+   Amber through the status tokens, which is the same warning the drawer's own field wears. */
+.msg-field.flagged .msg-val {
+  color: var(--warn-ink);
+  background: var(--warn-tint);
+  box-shadow: inset 0 0 0 1px var(--warn-line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.msg-field.flagged .msg-key {
+  color: var(--warn-ink);
+}
+/* What the format asked for and did not get. Dashed and quiet, the same shape .mf-add wears at the
+   end of a row of chips and for the same job: it is the finding, and it is also the thing to press. */
+.msg-missing {
+  /* Under both columns, not in the copy one: it is about the whole cell, not about a component. */
+  grid-column: 1 / -1;
+  margin-top: 1px;
+  justify-self: start;
+  max-width: 100%;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+/* Nothing written at all. The cell's empty state is a sentence rather than a dash, because a dash in
+   a copy column names no action and this is the row the whole screen is about. */
 .msg-empty {
-  flex: 1;
+  font-size: 12px;
+  font-style: italic;
   color: var(--text-faint);
 }
 
@@ -15800,7 +15901,7 @@ button.mf-open:focus-visible,
   /* Reference material, not a state. This wore the accent — the colour that means "selected" and
      "primary action" everywhere else, including the campaign tab strip directly above this grid —
      on every proof point on every row, which is how an attention colour stops meaning attention.
-     Quiet, matching .msg-pill beside it. The old border was #d7dafc, a periwinkle left over from
+     Quiet, matching the messaging cell beside it. The old border was #d7dafc, a periwinkle from
      the indigo accent this app had before coral: wrong in both themes, not just on dark. */
   color: var(--text-muted);
   background: var(--surface-2);
@@ -15839,49 +15940,11 @@ button.mf-open:focus-visible,
   gap: 4px;
 }
 
-/* ---- Messaging cell as per-component pills ---- */
-.msg-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
-.msg-pill {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  max-width: 100%;
-  font-size: 11px;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 1px 9px;
-  min-width: 0;
-}
-.msg-pill-key {
-  flex: none;
-  font-weight: 600;
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.msg-pill-copy {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.msg-pill.flagged {
-  color: var(--warn-ink);
-  background: var(--warn-tint);
-  border-color: var(--warn-line);
-}
-.msg-pill.flagged .msg-pill-key {
-  color: var(--warn-ink);
-}
+/* .msg-pills / .msg-pill / .msg-pill-key / .msg-pill-copy / .msg-pill.flagged lived here: a
+   per-component pill for the Messaging cell, orphaned when that cell became a column per component
+   and rendered by nothing since. The cell is one column again and the idiom is back, as .msg-field
+   up beside .msg-cell — beside its own cell rather than four hundred lines away, and wrapping the
+   copy instead of ellipsing it, which is the one thing a pill could not do. */
 
 /* ---- Grid / Calendar view toggle ---- */
 .view-bar {
