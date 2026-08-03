@@ -1459,8 +1459,8 @@ button.mf-open:hover {
 /* An invisible control still has to show where the keyboard is. The ring goes on the thing you can
    see — the chip, the button — rather than on the select that has been hidden under it. */
 .mf-chip:focus-within,
-.mf-add:focus-within,
-button.mf-open:focus-visible {
+button.mf-open:focus-visible,
+.mf-add:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -1470,13 +1470,16 @@ button.mf-open:focus-visible {
    last line of chips, where spelling out "Add" would push it onto a line of its own and cost every
    row in the sheet the height of one. */
 .mf-add {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 7px;
+  /* A real <button> now — it opens the drawer rather than wearing a hidden <select> — so it has a
+     browser font and background to put back. */
+  font: inherit;
   font-size: 11.5px;
   line-height: 1.4;
+  background: none;
   color: var(--text-faint);
   border: 1px dashed var(--border);
   border-radius: 6px;
@@ -1499,6 +1502,37 @@ button.mf-open:focus-visible {
   width: 13px;
   height: 13px;
 }
+
+/* THE MADE FROM DRAWER: the record drawer's frame, and inside it the canvas's own object row —
+   .flow-ctxrow, mark and kind in the object's hue, the name, and the line saying what it
+   contributes. Reused rather than restyled, so an object looks the same wherever you meet it.
+   Qualified with .flow-recdrawer-list because that rule sets its own padding further down the file
+   and would otherwise win on source order. */
+.flow-recdrawer-list.mf-objlist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 14px 24px;
+}
+/* "On this asset" / "Add an object". Quiet: they separate two lists that already look different
+   from each other, they are not headings you read. */
+.mf-objsec {
+  padding: 12px 2px 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mf-objsec:first-child {
+  padding-top: 2px;
+}
+/* The row's own hit area rounds on the left because the ✕ slot rounds the right. With no ✕ — every
+   row in the add list — it has the whole corner to itself. */
+.mf-objrow .flow-ctxrow-open:only-child {
+  border-radius: 9px;
+}
+
 /* The connection gate can carry two independent things at once: a break to resolve, and a count of
    channels deliberately cut off. They are not alternatives, so they need room from each other. */
 .sheet th.gate-conn {
