@@ -250,6 +250,16 @@ export function SheetGrid({
     { kind: 'row'; rowId: string } | { kind: 'col'; colKey: string } | { kind: 'cell'; rowId: string; colKey: string } | null
   >(null)
   const [widthByKey, setWidthByKey] = useState<Record<string, number>>({})
+  /**
+   * The asset whose "Made from" drawer is open, by row id, and what is typed in its search.
+   *
+   * By ROW rather than by a boolean plus a remembered row, because the row is what the drawer is
+   * about: a row that leaves the view while its drawer is open (the filter moves, the campaign
+   * changes) resolves to nothing and the drawer closes with it, instead of staying up and writing
+   * to an asset that is no longer on screen.
+   */
+  const [addFor, setAddFor] = useState<string | null>(null)
+  const [addQuery, setAddQuery] = useState('')
 
   function startResize(idx: number, e: React.MouseEvent) {
     e.preventDefault()
@@ -395,20 +405,31 @@ export function SheetGrid({
    * THE RECORDS YOU CAN PICK for each object kind. The same lists the canvas card's own dropdown
    * offers, so the two surfaces are choosing from one library rather than two.
    */
-  const optionsFor = (kind: CanvasObjectKind): { id: string; label: string }[] => {
-    const named = (l: { id: string; name?: string }[]) => l.map((x) => ({ id: x.id, label: x.name || 'Untitled' }))
+  /**
+   * `detail` is the object's own one line — what a Message argues, what a Product is, what fires a
+   * Trigger. The drawer shows it under the name, because a list of thirty names is a list of thirty
+   * things you have to already know; it is absent for the kinds whose records carry no such line,
+   * rather than padded with something invented to fill the row.
+   */
+  const optionsFor = (kind: CanvasObjectKind): { id: string; label: string; detail?: string }[] => {
+    const named = <T extends { id: string; name?: string }>(l: T[], detail?: (x: T) => string | undefined) =>
+      l.map((x) => ({ id: x.id, label: x.name || 'Untitled', detail: detail?.(x)?.trim() || undefined }))
     switch (kind) {
-      case 'brand': return named(brandObjects)
-      case 'product': return named(products)
-      case 'audience': return named(clientAudiences[clientFilter] ?? [])
-      case 'message': return named(messages)
-      case 'voice': return named(voices)
-      case 'concept': return named(concepts)
-      case 'season': return named(seasons)
-      case 'company': return named(companies)
-      case 'person': return named(people)
-      case 'trigger': return named(triggers)
-      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set' }))
+      case 'brand': return named(brandObjects, (b) => b.oneLiner)
+      case 'product': return named(products, (p) => p.summary)
+      case 'audience': return named(clientAudiences[clientFilter] ?? [], (a) => a.role)
+      case 'message': return named(messages, (m) => m.angle)
+      case 'voice': return named(voices, (v) => v.summary || v.tone)
+      case 'concept': return named(concepts, (c) => c.idea)
+      case 'season': return named(seasons, (s) => s.moment)
+      case 'company': return named(companies, (c) => c.description || c.segment)
+      case 'person': return named(people, (p) => p.title)
+      case 'trigger': return named(triggers, (t) => t.signal)
+      case 'data-source': return brandDatasets.map((d) => ({
+        id: d.id,
+        label: d.name || 'Untitled data set',
+        detail: d.columns?.length ? `${d.rows?.length ?? 0} rows · ${d.columns.join(', ')}` : undefined,
+      }))
       // Proof lives per campaign rather than per brand, which is why it is fetched differently
       // from every other kind here.
       case 'proof-point': return rtbsForCampaign(scopeCampaign).map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
@@ -474,7 +495,7 @@ export function SheetGrid({
   })()
 
   /** The records you can pick, resolved once per render rather than once per row per kind. */
-  const optionsByKind = new Map<CanvasObjectKind, { id: string; label: string }[]>(
+  const optionsByKind = new Map<CanvasObjectKind, { id: string; label: string; detail?: string }[]>(
     MADE_FROM_KINDS.map((k) => [k, optionsFor(k)]),
   )
   const optsFor = (kind: CanvasObjectKind) => optionsByKind.get(kind) ?? []
@@ -561,6 +582,22 @@ export function SheetGrid({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [pick])
+
+  /**
+   * Escape closes the Made from drawer, from inside it as well as out.
+   *
+   * Its own listener rather than the one above, which deliberately ignores keys pressed inside a
+   * dialog or a field — and the drawer is a dialog whose search field takes focus the moment it
+   * opens, so the one key everybody presses to get out of it would have been the one it ignored.
+   */
+  useEffect(() => {
+    if (!addFor) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAddFor(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [addFor])
 
   const pad = Math.max(0, MIN_ROWS - view.length)
 
@@ -905,47 +942,29 @@ export function SheetGrid({
                               </span>
                             )
                           })}
-                          {/* One menu, grouped by kind, rather than twelve columns each asking their own
-                              question. Picking a record binds it in a single gesture; "+ New" makes the
-                              card and opens its form, exactly as the cell's own picker does. */}
+                          {/* THE ＋ OPENS THE DRAWER, it does not drop a menu.
+                              A native menu over twelve kinds is a single scrolling list with no search
+                              and no room to say what a record IS beyond its name, and on a real brand
+                              it is hundreds of options long. The drawer is the surface the canvas
+                              already uses to pick a record — searchable, grouped, ticking what the
+                              asset already has — so this is one picker in two places rather than two
+                              pickers. */}
                           {addable.length > 0 && (
-                            <span className={`mf-add${entries.length ? ' compact' : ''}`}>
+                            <button
+                              type="button"
+                              className={`mf-add${entries.length ? ' compact' : ''}`}
+                              title="Choose what this asset is made from"
+                              aria-label="Choose what this asset is made from"
+                              aria-haspopup="dialog"
+                              onClick={(ev) => {
+                                ev.stopPropagation()
+                                setAddFor(row.id)
+                                setAddQuery('')
+                              }}
+                            >
                               <span aria-hidden="true">＋</span>
                               {!entries.length && ' Add'}
-                              <select
-                                className="mf-pick"
-                                value=""
-                                title="Add what this asset is made from"
-                                aria-label="Add what this asset is made from"
-                                onClick={(ev) => ev.stopPropagation()}
-                                onChange={(ev) => {
-                                  const [kind, id] = ev.target.value.split('::')
-                                  if (!kind || !id) return
-                                  if (id === '__new__') {
-                                    onCreateObject?.({ kind: kind as CanvasObjectKind, rowId: row.id })
-                                    return
-                                  }
-                                  setRowRecord(row, kind as CanvasObjectKind, id)
-                                }}
-                              >
-                                <option value="">Add a card…</option>
-                                {addable.map((k) => (
-                                  <optgroup key={k} label={OBJECT_META[k].label}>
-                                    {optsFor(k).map((o) => (
-                                      <option key={o.id} value={`${k}::${o.id}`}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                    {/* Make one from here. A picker over an empty library is otherwise a
-                                        dead end, which on a fresh brand is most of this menu. Proof and
-                                        data sets are absent on purpose: see CREATABLE. */}
-                                    {CREATABLE.has(k) && onCreateObject && (
-                                      <option value={`${k}::__new__`}>+ New {OBJECT_META[k].label.toLowerCase()}…</option>
-                                    )}
-                                  </optgroup>
-                                ))}
-                              </select>
-                            </span>
+                            </button>
                           )}
                           {!entries.length && !addable.length && <span className="cell-ro">—</span>}
                         </div>
@@ -1110,6 +1129,185 @@ export function SheetGrid({
           </tbody>
         </table>
       </div>
+
+      {/**
+        * WHAT THIS ASSET IS MADE FROM, and what else it could be, in the drawer the canvas already
+        * slides out to pick with.
+        *
+        * The ＋ used to drop a native menu of every record under every kind. That is a single
+        * scrolling list with no search, no room to say what an object IS beyond its name, and on a
+        * real brand it is hundreds of lines long. This borrows the record drawer's frame and the
+        * canvas's own object row — the kind in its own hue, the name, and the one line the object
+        * carries — so an object looks the same wherever you meet it.
+        *
+        * Two sections, in the order the question is asked. What is on the asset now, including the
+        * cards wired to it holding nothing, because a connected empty card is the finding. Then what
+        * you could add, which is every object not already on it.
+        *
+        * It stays open after a pick: assets are made from several things, and closing it is the
+        * gesture that says you are done.
+        */}
+      {addFor && (() => {
+        const row = view.find((r) => r.id === addFor)
+        if (!row) return null
+        const q = addQuery.trim().toLowerCase()
+        const entries = madeFrom({
+          kinds: MADE_FROM_KINDS,
+          cards: cardsByRow.get(row.id) ?? [],
+          references: row.references,
+          brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
+          nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
+        })
+        const on = new Set(entries.filter((e) => e.refId).map((e) => `${e.kind}:${e.refId}`))
+        /**
+         * One row, in the shape the canvas states an object in: mark and kind in the object's own
+         * hue, its name, and the line under it saying what it contributes. `sub` is deliberately
+         * "Contributes nothing yet" when there is nothing behind it — the same words the canvas uses
+         * for the same state, because it is the same state.
+         */
+        const objRow = (o: {
+          key: string
+          kind: CanvasObjectKind
+          name: string
+          sub?: string
+          empty?: boolean
+          onOpen?: () => void
+          onOff?: () => void
+          title: string
+        }) => {
+          const meta = OBJECT_META[o.kind]
+          return (
+            <div key={o.key} className="flow-ctxrow mf-objrow">
+              <button className="flow-ctxrow-open" title={o.title} onClick={o.onOpen}>
+                <span className="flow-ctxrow-ic" style={{ color: meta.tone }} aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    {meta.icon}
+                  </svg>
+                </span>
+                <span className="flow-ctxrow-txt">
+                  <span className="flow-ctxrow-kind" style={{ color: meta.tone }}>{meta.label}</span>
+                  <span className="flow-ctxrow-name">{o.empty ? <em>{o.name}</em> : o.name}</span>
+                  {o.sub && <span className="flow-ctxrow-sub">{o.sub}</span>}
+                </span>
+              </button>
+              {o.onOff && (
+                <button
+                  className="flow-ctxrow-del"
+                  title="Take this off the asset"
+                  aria-label={`Take ${o.name} off this asset`}
+                  onClick={o.onOff}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )
+        }
+        // Everything not already on the asset, in registry order. Each row says its own kind, so
+        // there are no group headings above them to say it a second time.
+        const addable = MADE_FROM_KINDS.filter(settable).flatMap((kind) =>
+          optsFor(kind)
+            .filter(
+              (o) =>
+                !on.has(`${kind}:${o.id}`) &&
+                (!q || o.label.toLowerCase().includes(q) || (o.detail ?? '').toLowerCase().includes(q)),
+            )
+            .map((o) => ({ kind, id: o.id, label: o.label, detail: o.detail })),
+        )
+        /**
+         * Making one, kept to the foot rather than sitting beside the kind it makes.
+         *
+         * Ten kinds can be made, so inline they were ten actions dealt through the objects — "New
+         * brand…", one product, "New product…", "New audience…" — and the list stopped reading as a
+         * list of things and started reading as a menu. Down here they are one row of the same
+         * shape, and on a fresh brand with nothing in the library they are the whole drawer, which
+         * is exactly right: there is nothing to pick and everything to make.
+         *
+         * Absent while searching: with a query on screen, "New voice…" reads as a result.
+         */
+        const makeable = q || !onCreateObject ? [] : MADE_FROM_KINDS.filter((k) => settable(k) && CREATABLE.has(k))
+        return (
+          <>
+            <div className="flow-recdrawer-scrim" onClick={() => setAddFor(null)} />
+            <aside className="flow-recdrawer" role="dialog" aria-label={`What ${row.assetName} is made from`}>
+              <header className="flow-recdrawer-head">
+                <span className="flow-recdrawer-title">Made from · {row.assetName}</span>
+                <button className="flow-recdrawer-x" onClick={() => setAddFor(null)} aria-label="Close">
+                  ✕
+                </button>
+              </header>
+              <input
+                className="flow-recdrawer-search"
+                placeholder="Search objects…"
+                value={addQuery}
+                onChange={(e) => setAddQuery(e.target.value)}
+                autoFocus
+              />
+              <div className="flow-recdrawer-list mf-objlist">
+                {/* Hidden while searching: a search is a question about what to add, and the answer
+                    to it is below rather than up here. */}
+                {!q && !!entries.length && (
+                  <>
+                    <div className="mf-objsec">On this asset</div>
+                    {entries.map((e) =>
+                      objRow({
+                        key: `on:${e.kind}:${e.cardId ?? e.refId}`,
+                        kind: e.kind,
+                        name: e.label || 'Nothing picked yet',
+                        empty: !e.label,
+                        sub: e.label
+                          ? optsFor(e.kind).find((o) => o.id === e.refId)?.detail ||
+                            (e.kind === 'brand' ? 'Sets the brand this is written as' : undefined)
+                          : 'Contributes nothing yet',
+                        title: onPickObject ? `Open this ${OBJECT_META[e.kind].label.toLowerCase()}` : OBJECT_META[e.kind].label,
+                        onOpen: onPickObject
+                          ? () => onPickObject({ kind: e.kind, cardId: e.cardId, label: OBJECT_META[e.kind].label })
+                          : undefined,
+                        // Brand is the campaign's owner rather than something pinned on the asset, so
+                        // there is nothing here to take off it — unbinding a campaign's brand is a
+                        // decision for the Brand card, not for one of its thirty assets.
+                        onOff:
+                          e.primary && e.kind !== 'brand' && settable(e.kind)
+                            ? () => setRowRecord(row, e.kind, '')
+                            : undefined,
+                      }),
+                    )}
+                  </>
+                )}
+                {(!!addable.length || !makeable.length) && (
+                  <div className="mf-objsec">{q ? 'Objects' : 'Add an object'}</div>
+                )}
+                {!addable.length && !makeable.length && <div className="flow-recdrawer-empty">No objects match.</div>}
+                {addable.map((a) =>
+                  objRow({
+                    key: `add:${a.kind}:${a.id}`,
+                    kind: a.kind,
+                    name: a.label,
+                    sub: a.detail,
+                    title: `Make this asset from ${a.label}`,
+                    onOpen: () => setRowRecord(row, a.kind, a.id, a.label),
+                  }),
+                )}
+                {!!makeable.length && <div className="mf-objsec">Make a new object</div>}
+                {makeable.map((kind) =>
+                  objRow({
+                    key: `new:${kind}`,
+                    kind,
+                    name: `New ${OBJECT_META[kind].label.toLowerCase()}…`,
+                    empty: true,
+                    sub: 'Adds the card to this asset and opens its form',
+                    title: `Make a ${OBJECT_META[kind].label.toLowerCase()} for this asset`,
+                    onOpen: () => {
+                      setAddFor(null)
+                      onCreateObject?.({ kind, rowId: row.id })
+                    },
+                  }),
+                )}
+              </div>
+            </aside>
+          </>
+        )
+      })()}
     </div>
   )
 }
