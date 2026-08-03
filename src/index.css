@@ -7716,6 +7716,18 @@ button.mf-open:focus-visible,
   opacity: 0.6;
   cursor: default;
 }
+/* The same Generate, in the inspector, on one asset. It inherits .flow-tb-regen rather than
+   restating it so the two cannot drift apart in fill, weight or mark — a second button that says
+   Generate and looks like something else is a second feature as far as anyone reading it knows.
+   This only makes it a panel-width block instead of a chip in a row of toolbar readouts. */
+.flow-insp-regen {
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 9px 12px;
+  font-size: 12px;
+}
 /* Canvas "add" menu: a floating block picker at the end of a connector line. */
 .flow-addmenu-scrim {
   position: absolute;
