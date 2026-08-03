@@ -1,9 +1,26 @@
 import { CHANNELS } from './channels'
 import type { ChannelId, TrafficRow } from './types'
 
-export const isPaidChannel = (c: ChannelId): boolean => CHANNELS[c].kind === 'paid'
+// Optional chaining because a row can carry a channel the catalog does not know — an imported or
+// hand-typed id — and an unknown channel is simply not paid. Without the guard that is a crash on
+// .kind of undefined, in a predicate the canvas calls for every row it draws.
+export const isPaidChannel = (c: ChannelId): boolean => CHANNELS[c]?.kind === 'paid'
 export const isPaidRow = (r: TrafficRow): boolean => isPaidChannel(r.channel)
 export const hasBudget = (r: TrafficRow): boolean => !!r.budget && r.budget.amount > 0
+/**
+ * Money actually ON this asset: a budget assigned to it, or spend already logged against it.
+ *
+ * A campaign pool split evenly across the paid placements is deliberately NOT this. That figure is
+ * an estimate a card can show; nothing has been allocated, and the campaign still asks you to
+ * assign it.
+ */
+export const hasAssignedBudget = (r: TrafficRow): boolean => hasBudget(r) || (r.spend?.toDate ?? 0) > 0
+/**
+ * A paid placement REQUIRES media budget — a Google search ad at $0 cannot run — so an asset on a
+ * paid channel with nothing assigned is incomplete, not merely unfunded so far. Organic assets
+ * never qualify: there is no budget for them to be missing.
+ */
+export const needsMediaBudget = (r: TrafficRow): boolean => isPaidRow(r) && !hasAssignedBudget(r)
 
 export function money(n: number): string {
   return `$${Math.round(n).toLocaleString()}`
