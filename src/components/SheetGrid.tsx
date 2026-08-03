@@ -41,7 +41,17 @@ const COLUMNS: { key: string; label: string; icon: string; width: number; always
   { key: 'channel', label: 'Channel', icon: '◉', width: 140, always: true },
   { key: 'type', label: 'Type', icon: '◆', width: 160, always: true },
   { key: 'campaign', label: 'Campaign', icon: '◇', width: 150 },
-  { key: 'audience', label: 'Audience', icon: '◎', width: 150 },
+  /**
+   * NO AUDIENCE COLUMN. An audience is an OBJECT, not a field on the asset, and it is already stated
+   * as one in Made from — with its mark, its hue, the segment it names and a way to open it. A text
+   * column beside that was the same answer written twice in two different alphabets: a free-typed
+   * string here, a picked record there, and nothing keeping them honest with each other.
+   *
+   * The string itself is not gone — the writer still targets by it, the sidebar still filters on it,
+   * and the asset's own drawer still edits it. What is gone is a second place to set it that could
+   * disagree with the object. Picking an Audience object writes the name through (see setRowRecord),
+   * so the one gesture answers both.
+   */
   { key: 'messaging', label: 'Messaging', icon: '¶', width: 320 },
   { key: 'scheduled', label: 'Scheduled', icon: '◷', width: 184 },
   { key: 'budget', label: 'Budget', icon: '◧', width: 200 },
@@ -347,7 +357,6 @@ export function SheetGrid({
       })
     switch (key) {
       case 'campaign': return none((r) => (r.campaign ?? '').trim())
-      case 'audience': return none((r) => (r.audience ?? '').trim())
       case 'scheduled': return none((r) => r.scheduledAt)
       case 'budget': return none((r) => r.budget?.amount)
       default: return false
@@ -481,7 +490,20 @@ export function SheetGrid({
     const rest = current.filter((r) => r.type !== type)
     const name = label ?? optionsFor(kind).find((o) => o.id === refId)?.label
     const next = refId && name ? [...rest, { type, id: refId, label: name }] : rest
-    void updateRow(row.id, { references: next.length ? next : undefined })
+    /**
+     * THE AUDIENCE OBJECT WRITES THE ASSET'S AUDIENCE THROUGH.
+     *
+     * `row.audience` is a plain string and half the app reads it: the writer targets by it, the
+     * sidebar filters on it, the canvas branches on it. It used to have its own column in this
+     * sheet, typed by hand next to the object that says the same thing — two answers to one
+     * question with nothing keeping them level. The column is gone (see COLUMNS) and this is the
+     * other half of that: picking the segment sets the name, clearing it clears the name.
+     *
+     * Only for audience, and only from this cell. No other kind has a mirror field on the row.
+     */
+    const patch: Partial<TrafficRow> = { references: next.length ? next : undefined }
+    if (kind === 'audience') patch.audience = refId && name ? name : ''
+    void updateRow(row.id, patch)
   }
 
   /** Cards reaching each row, by row id. One board walk per row, only when a board exists. */
@@ -971,17 +993,6 @@ export function SheetGrid({
                       )
                     })()}
                   </td>
-
-                  {show('audience') && (
-                    <td>
-                      <GrowCell
-                        value={row.audience ?? ''}
-                        placeholder="—"
-                        dep={total}
-                        onChange={(v) => updateRow(row.id, { audience: v })}
-                      />
-                    </td>
-                  )}
 
                   {msgCols.map((mc) => {
                     const copy = (messagingMap(row)[mc.fieldKey] ?? '').trim()
