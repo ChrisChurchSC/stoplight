@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type ReactElement } from 'react'
 import { CHANNELS } from '../domain/channels'
 import { campaignInIndexScope } from '../domain/brand'
-import { clientForCampaign } from '../domain/clients'
+import { campaignShortName, clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import type { ChannelId } from '../domain/types'
@@ -89,7 +89,13 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   const [renameValue, setRenameValue] = useState('')
   // Escape cancels a rename; guards against the input's onBlur firing a stray commit right after.
   const renameSkipRef = useRef(false)
-  const brandPrefix = `${brand} — `
+  /**
+   * The brand prefix, ONLY when there is a brand. Campaign names are stored brand-prefixed
+   * ("World Within — Holiday Campaign"), and this used to be built unconditionally — so with no
+   * brand chosen it became the bare separator " — ", and stripping that from a name gave
+   * "World WithinHoliday Campaign". Reading a name is not worth a guess: no brand, no prefix.
+   */
+  const brandPrefix = brand ? `${brand} — ` : ''
   const startRename = (kind: 'campaign' | 'folder', key: string, current: string) => {
     renameSkipRef.current = false
     setRenaming({ kind, key })
@@ -108,7 +114,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       if (renaming.kind === 'folder') {
         renameCampaignFolder(brand, renaming.key, v)
       } else {
-        const nextFull = renaming.key.startsWith(brandPrefix) ? brandPrefix + v : v
+        const nextFull = brandPrefix && renaming.key.startsWith(brandPrefix) ? brandPrefix + v : v
         void renameCampaign(renaming.key, nextFull)
       }
     }
@@ -271,7 +277,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
 
   const renderCard = (c: FlowCard) => {
     const isRenaming = renaming?.kind === 'campaign' && renaming.key === c.name
-    const short = c.name.replace(brandPrefix, '')
+    const short = campaignShortName(c.name, brand)
     return (
       <div
         key={c.name}
@@ -306,7 +312,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         <button className="flow-home-card-open" onClick={() => onOpen(c.name)}>
           <div className="flow-home-card-name">
             <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
-            <span className="flow-home-card-title-text">{c.name.replace(`${brand} — `, '')}</span>
+            <span className="flow-home-card-title-text">{campaignShortName(c.name, brand)}</span>
             {c.personalizedTo && (
               <span className="flow-home-persona" title={`Personalized to ${c.personalizedTo}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -344,7 +350,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
     const totalAssets = kids.reduce((n, k) => n + k.assetCount, 0)
     const chans = [...new Set(kids.flatMap((k) => k.channels))]
     const isRenaming = renaming?.kind === 'campaign' && renaming.key === c.name
-    const short = c.name.replace(brandPrefix, '')
+    const short = campaignShortName(c.name, brand)
     return (
       <div key={c.name} className="flow-home-umbrella">
         <div className="flow-home-umb-head">
@@ -559,8 +565,19 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           const drop = sectionDrop(undefined)
           return (
             <section className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
+              {/* ALWAYS DRAFTS. This bucket used to rename itself to "All campaigns" whenever the
+                  brand happened to have no folders, which made the one heading on the page mean two
+                  different things depending on a condition nobody can see: in one workspace Drafts
+                  was the unfiled corner of a filed system, in another it was everything you own.
+                  It also disagreed with the tab strip and the gallery, which have always called an
+                  unfiled thing Drafts unconditionally — and with the constant itself, whose whole
+                  job is to be the one name this bucket answers to everywhere it is shown.
+
+                  Drafts is also the truer word. Work starts here and gets filed later, so an empty
+                  folder list means everything is still a draft, not that the bucket has stopped
+                  being one. */}
               <div className="flow-home-group-h">
-                {knownFolders.size ? DRAFTS : 'All campaigns'}
+                {DRAFTS}
                 <span className="flow-home-group-n">{unfiled.length}</span>
               </div>
               {unfiled.length === 0 ? (
@@ -577,7 +594,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         <>
           <div className="drawer-scrim" onClick={() => setConfirmDelete(null)} />
           <div className="confirm-modal" role="dialog" aria-label="Delete campaign">
-            <strong className="confirm-title">Delete {confirmDelete.replace(`${brand} — `, '')}?</strong>
+            <strong className="confirm-title">Delete {campaignShortName(confirmDelete, brand)}?</strong>
             <p className="confirm-text">This archives the campaign and all its assets. It won't show here anymore.</p>
             <div className="confirm-foot">
               <button className="btn sm" onClick={() => setConfirmDelete(null)}>
