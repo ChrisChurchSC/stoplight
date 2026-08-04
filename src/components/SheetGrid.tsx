@@ -5,7 +5,7 @@ import { filledFields, hasCopy, messagingFields, messagingMap } from '../domain/
 import { PACE_LABEL, hasBudget, isPaidRow, money, pacing } from '../domain/budget'
 import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
-import { boardFor, deliverableKeyFor, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
+import { boardFor, deliverableKeyFor, objectName, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { madeFrom } from '../domain/madeFrom'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
@@ -421,6 +421,10 @@ export function SheetGrid({
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
 
   const nameFor = (o: CanvasObject): string => {
+    // WHAT YOU CALLED THE CARD comes first, ahead of the smart object and ahead of the record, for
+    // the same reason it does on the canvas: the grid's object columns are how you check what a row
+    // is written from, and they should answer in the words on the board. See objectName.
+    if (o.name?.trim()) return o.name.trim()
     if (o.smartObjectId) {
       const so = smartObjects.find((x) => x.id === o.smartObjectId)
       if (so) return so.name
@@ -439,7 +443,7 @@ export function SheetGrid({
       : o.kind === 'trigger' ? byId(triggers)
       : o.kind === 'audience' ? byId(clientAudiences[clientFilter] ?? [])
       : undefined
-    return named ?? o.text.trim().split('\n')[0] ?? ''
+    return objectName(o, named)
   }
 
   /**

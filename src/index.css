@@ -7650,6 +7650,10 @@ button.mf-open:focus-visible,
 .flow-note-note .flow-note-ic { color: #9a7b16; }
 .flow-note-note .flow-note-text { color: #5f4d12; }
 .flow-note-note .flow-note-text::placeholder { color: #b39a4e; }
+/* The sticky's name is ink on the same paper, so it takes the paper's colours rather than the
+   board's. Without this the one card with its own palette would show a name in canvas grey. */
+.flow-note-note .flow-note-name { color: #5f4d12; }
+.flow-note-note .flow-note-name::placeholder { color: #b39a4e; }
 .flow-note-note.sel { border-color: #d9a520; box-shadow: 0 0 0 2px color-mix(in srgb, #d9a520 45%, transparent), 0 6px 16px -5px rgba(150, 120, 20, 0.34); }
 .flow-note.sel { border-color: var(--note-tone, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent), var(--shadow); }
 .flow-note-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px; }
@@ -7678,6 +7682,18 @@ button.mf-open:focus-visible,
 }
 .flow-note-sel:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
 .flow-note-sel:hover { border-color: var(--border-strong); }
+/* THE CARD'S NAME, under the kind caption and above whatever it points at.
+   Plain text rather than a bordered box: every card carries one now, and eleven framed inputs on a
+   board would out-shout the record pickers underneath them, which are the controls that do the work.
+   Same material as .flow-obj-name, which a smart object has had all along — one field, two places,
+   so naming a card and naming a bundle look like the same act. */
+.flow-note-name {
+  margin: 0 10px 5px; width: calc(100% - 20px); box-sizing: border-box;
+  border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
+  padding: 0; cursor: text;
+}
+.flow-note-name:focus { outline: none; }
+.flow-note-name::placeholder { color: var(--text-faint); font-weight: 550; }
 /* A Data source card previews its linked data set as a mini spreadsheet (double-click to open). */
 .flow-note-mini { margin: 0 10px 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
 .flow-note-mini .bds-mini { height: 50px; border-radius: 5px; }
@@ -21612,6 +21628,8 @@ table.aud-sheet td.stick .aud-cell {
 .flow-note[data-role='input'] .flow-note-head { padding: 7px 9px 3px; }
 .flow-note[data-role='input'] .flow-note-text { padding: 0 9px 9px; color: var(--text-muted); }
 .flow-note[data-role='input'] .flow-note-sel { margin: 0 9px 6px; width: calc(100% - 18px); background: var(--surface); }
+/* These cards reset .flow-node's padding to 0, so every child carries the 9px inset itself. */
+.flow-note[data-role='input'] .flow-note-name { margin: 0 9px 5px; width: calc(100% - 18px); }
 .flow-note[data-role='input'] .flow-note-mini { margin: 0 9px 6px; }
 /* Hue survives on the glyph only. The uppercase caption goes muted, which also
    neutralizes two exact tone collisions in NOTE_META: Audience and Company are
@@ -21691,6 +21709,7 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-note[data-role='markup'] .flow-note-head { padding: 7px 9px 3px; }
 .flow-note[data-role='markup'] .flow-note-text { padding: 0 9px 9px; }
+.flow-note[data-role='markup'] .flow-note-name { margin: 0 9px 4px; width: calc(100% - 18px); }
 .flow-note[data-role='markup'].sel {
   border-color: #d9a520;
   box-shadow: 0 0 0 2px color-mix(in srgb, #d9a520 45%, transparent), 0 6px 16px -5px rgba(150, 120, 20, 0.34);
