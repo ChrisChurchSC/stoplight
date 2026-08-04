@@ -65,6 +65,28 @@ export function isDraftBrand(brand: string, meta: BrandMetaMap): boolean {
   return !!meta[brand]?.draft
 }
 
+/**
+ * WHICH BRAND A CANVAS SCOPES ITS RECORD LISTS TO, given the workspace filter.
+ *
+ * Every picker on a campaign board — audiences, proof, messages, products, people, data sets — is
+ * filtered to one brand, so this decides what an agency is offered while writing for a client. A
+ * filter naming a brand is the answer. 'all' means no brand is bound: the builder board, or a
+ * campaign whose Brand card was unwired.
+ *
+ * THE UNBOUND CASE MUST RESOLVE TO NOTHING, NOT TO A GUESS. Falling through to the first brand in
+ * the workspace put one client's audiences and proof in the pickers of another client's campaign,
+ * with nothing on screen to say the board had reached outside itself — the leak the whole scope
+ * resolver above exists to make impossible.
+ *
+ * A workspace holding exactly one brand is the one safe shortcut: there is nothing to choose
+ * between, and no second brand for anything to leak from. Two or more and the answer is none,
+ * leaving the user to name one with a Brand card.
+ */
+export function canvasBrandScope(clientFilter: string, brandNames: string[]): string {
+  if (clientFilter && clientFilter !== 'all') return clientFilter
+  return brandNames.length === 1 ? brandNames[0] ?? '' : ''
+}
+
 export function parentOf(brand: string, meta: BrandMetaMap): string | undefined {
   const p = meta[brand]?.parent?.trim()
   return p && p !== brand ? p : undefined

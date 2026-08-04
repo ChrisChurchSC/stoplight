@@ -1,3 +1,4 @@
+import { canvasBrandScope } from '../domain/brand'
 import { CHANNEL_LIST } from '../domain/channels'
 import { PATTERN_COLUMNS, PATTERN_FIELDS, PATTERN_STATUSES } from '../domain/pattern'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -21,7 +22,9 @@ export function PatternsView() {
   // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
   const { brands } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's records here and filed anything added under it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const scoped = patterns.filter((p) => !p.brand || p.brand === brand)
 
   return (

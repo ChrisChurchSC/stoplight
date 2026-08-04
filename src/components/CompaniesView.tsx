@@ -1,3 +1,4 @@
+import { canvasBrandScope } from '../domain/brand'
 import { type Company, COMPANY_COLUMNS, COMPANY_FIELDS, COMPANY_STATUSES } from '../domain/companies'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -27,7 +28,9 @@ export function CompaniesView() {
   const { brands } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's records here and filed anything added under it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const segmentNames = (clientAudiences[brand] ?? []).map((a) => a.name).filter(Boolean)
   // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
   const scoped = companies.filter((c) => !c.brand || c.brand === brand)
