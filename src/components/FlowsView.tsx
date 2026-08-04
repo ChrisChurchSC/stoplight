@@ -6659,11 +6659,15 @@ export function FlowsView() {
             const kindLabel = (OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()
             return (
               <div
-                className={`flow-fillbox${docDropOn === nt.id ? ' dropping' : ''}`}
+                className="flow-context"
                 /**
-                 * DROP A FILE ANYWHERE ON THE BOX, not just on the button. dropEffect has to be set
-                 * on EVERY dragover or the browser refuses the drop, and preventDefault on both is
-                 * what stops the page navigating to the file instead of reading it.
+                 * DROP A FILE ANYWHERE ON EITHER PART, not just on the button. dropEffect has to be
+                 * set on EVERY dragover or the browser refuses the drop, and preventDefault on both
+                 * is what stops the page navigating to the file instead of reading it.
+                 *
+                 * On the wrapper rather than on the document section alone: a file dragged at this
+                 * panel is aimed at the card, and someone who lets go over the prompt box has not
+                 * made a mistake worth punishing with nothing happening.
                  */
                 onDragOver={(e) => {
                   if (!e.dataTransfer.types.includes('Files')) return
@@ -6682,30 +6686,97 @@ export function FlowsView() {
                   if (file) void attachDocFile(nt.id, file)
                 }}
               >
-                {/* Two facts you cannot see anywhere, and nothing you can. Generating will not
-                    overwrite what is already written, and none of this counts until the card is
-                    connected — everything else the controls say for themselves. */}
-                <div className="flow-fill-head">
-                  <span className="flow-fill-title">
-                    {canGenerate ? `Give this ${kindLabel} its context` : `Hand this ${kindLabel} its document`}
-                  </span>
-                  <span className="flow-fill-help">
-                    {canGenerate ? (
-                      <>
-                        Generate it from a sentence, or upload the document that already says it.
-                        Generating fills only what is still empty, and nothing on this card reaches
-                        the copy until it is connected.
-                      </>
-                    ) : (
-                      <>
-                        A {kindLabel} is a real organisation, so its context has to come from a
-                        document rather than from a description: a generated account is a page of
-                        confident guesses about somebody real. Nothing here reaches the copy until
-                        this card is connected.
-                      </>
-                    )}
-                  </span>
-                </div>
+                {/* THE PROMPT, AND ONLY THE PROMPT.
+                    The document and its upload button used to sit inside this box, which made the
+                    box mean two different things: a thing you write in, and a thing that holds a
+                    file you did not write. Worse, an attached document appeared ABOVE the textarea
+                    inside it, so the box you type in opened with somebody else's prose in it. The
+                    document is its own object now and it lives underneath, where it reads as what it
+                    is — a second, separate answer to the same question. */}
+                {canGenerate && target && (
+                  <div className="flow-fillbox">
+                    {/* Two facts you cannot see anywhere, and nothing you can. Generating will not
+                        overwrite what is already written, and none of this counts until the card is
+                        connected — everything else the controls say for themselves. */}
+                    <div className="flow-fill-head">
+                      <span className="flow-fill-title">Describe this {kindLabel}</span>
+                      <span className="flow-fill-help">
+                        A sentence is enough. Generating fills only what is still empty, and nothing
+                        on this card reaches the copy until it is connected.
+                      </span>
+                    </div>
+                    <textarea
+                      className="flow-fill-input"
+                      rows={4}
+                      value={prompting[nt.id] ?? ''}
+                      placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and it fills itself in'}
+                      onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
+                      /**
+                       * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted
+                       * table makes on a Data source card. Left in the textarea it would be read as
+                       * a description and cut at 1200 characters by the server, which is a
+                       * truncation nobody was told about. As the card's document it arrives whole,
+                       * says so, and now visibly lands in the section below rather than rearranging
+                       * the box under the cursor.
+                       */
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData('text/plain')
+                        if (text.trim().length < PASTE_AS_DOC_CHARS) return
+                        e.preventDefault()
+                        const pasted = docFromPaste(text)
+                        setCardReference(nt.id, makeObjectReference(pasted.name, pasted.text, Date.now()))
+                      }}
+                      onKeyDown={(e) => {
+                        // Enter generates; shift-Enter is a newline, since a description can run to two lines.
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
+                      }}
+                    />
+                    <div className="flow-fill-foot">
+                      <button
+                        className="flow-fill-go"
+                        disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                        onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
+                      >
+                        {busy ? 'Generating…' : 'Generate'}
+                      </button>
+                      {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
+                    </div>
+                  </div>
+                )}
+                {/* THE OTHER WAY TO ANSWER THE CARD, under the first and separated from it.
+                    The two are alternatives, not a control and its fallback, so the word between
+                    them is doing real work — and on a Company card, where there is nothing to
+                    generate, there is no "or" and this is simply the only way in. */}
+                <div className={`flow-doc${docDropOn === nt.id ? ' dropping' : ''}`}>
+                  {canGenerate && <span className="flow-doc-or">or</span>}
+                  <div className="flow-doc-lead">
+                    <span className="flow-doc-title">
+                      {canGenerate ? 'Hand it the document that already says it' : `Hand this ${kindLabel} its document`}
+                    </span>
+                    <span className="flow-doc-help">
+                      {canGenerate ? (
+                        <>A .md, kept whole and read by the copy writer as what this card is.</>
+                      ) : (
+                        <>
+                          A {kindLabel} is a real organisation, so its context has to come from a
+                          document rather than from a description: a generated account is a page of
+                          confident guesses about somebody real. Nothing here reaches the copy until
+                          this card is connected.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    className="flow-fill-upload"
+                    disabled={busy}
+                    onClick={() => { docTargetRef.current = nt.id; docFileRef.current?.click() }}
+                  >
+                    {ref ? 'Replace the document' : 'Upload a .md'}
+                  </button>
+                  {/* The note belongs to whichever control last did something, and with the prompt
+                      box gone on a Company card this is the only place a refusal ("that has to be a
+                      .md") could be said at all. */}
+                  {!canGenerate && fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                 {/* THE ATTACHED DOCUMENT, shown as what it is: a named source of a stated size, with
                     the one control that matters on it. It is the card's context rather than a thing
                     that filled the card in, so it stays here, and it goes to the writer whole. */}
@@ -6758,55 +6829,6 @@ export function FlowsView() {
                     and the panel is a column, so the box takes a screenful and the rest is a scroll
                     away; nothing is hidden, it is only further down. */}
                 {ref && <div className="flow-fill-doc-body">{ref.text}</div>}
-                {canGenerate && target && (
-                  <textarea
-                    className="flow-fill-input"
-                    rows={4}
-                    value={prompting[nt.id] ?? ''}
-                    placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and it fills itself in'}
-                    onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
-                    /**
-                     * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted table
-                     * makes on a Data source card. Left in the textarea it would be read as a
-                     * description and cut at 1200 characters by the server, which is a truncation
-                     * nobody was told about. As the card's document it arrives whole and says so.
-                     */
-                    onPaste={(e) => {
-                      const text = e.clipboardData.getData('text/plain')
-                      if (text.trim().length < PASTE_AS_DOC_CHARS) return
-                      e.preventDefault()
-                      const pasted = docFromPaste(text)
-                      setCardReference(nt.id, makeObjectReference(pasted.name, pasted.text, Date.now()))
-                    }}
-                    onKeyDown={(e) => {
-                      // Enter generates; shift-Enter is a newline, since a description can run to two lines.
-                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
-                    }}
-                  />
-                )}
-                <div className="flow-fill-foot">
-                  {canGenerate && target && (
-                    <>
-                      <button
-                        className="flow-fill-go"
-                        disabled={busy || !(prompting[nt.id] ?? '').trim()}
-                        onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
-                      >
-                        {busy ? 'Generating…' : 'Generate'}
-                      </button>
-                      {/* The two routes are alternatives, not a button and its fallback, and the
-                          word between them is the cheapest way to say so. */}
-                      <span className="flow-fill-or">or</span>
-                    </>
-                  )}
-                  <button
-                    className="flow-fill-upload"
-                    disabled={busy}
-                    onClick={() => { docTargetRef.current = nt.id; docFileRef.current?.click() }}
-                  >
-                    {ref ? 'Replace the document' : 'Upload a .md'}
-                  </button>
-                  {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                 </div>
               </div>
             )

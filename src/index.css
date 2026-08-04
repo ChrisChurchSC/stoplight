@@ -5052,9 +5052,11 @@ button.mf-open:focus-visible,
    the action rather than the furniture. */
 /* The Name field now sits directly above this on an object card, and 2px of air read as the two
    controls being one thing. */
-.flow-inspect-input + .flow-fillbox { margin-top: 14px; }
+.flow-inspect-input + .flow-context { margin-top: 14px; }
+/* THE TWO WAYS TO ANSWER A CARD, as one region: the prompt, then the document under it. The wrapper
+   owns the outer spacing and the file drop, so neither half has to know about the other. */
+.flow-context { margin: 2px 0 16px; }
 .flow-fillbox {
-  margin: 2px 0 16px;
   padding: 9px 10px 8px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -5070,17 +5072,33 @@ button.mf-open:focus-visible,
   min-height: 76px;
 }
 .flow-fill-input::placeholder { color: var(--text-faint); }
-/* A FILE IS BEING DRAGGED OVER IT. The whole box is the drop target, not just the button, so the
-   whole box is what has to answer. A dashed border rather than a fill: the box already sits on a
-   tinted panel and a second tint on top of it reads as disabled rather than as ready. */
-.flow-fillbox.dropping {
-  border-style: dashed;
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
+/* THE OTHER WAY IN, under the prompt rather than inside it. Both of these used to live in the box
+   above, which made that box mean two things at once — somewhere to write, and somewhere holding a
+   file you did not write — and put an attached document above the textarea, so the box you type in
+   opened with somebody else's prose in it. */
+.flow-doc { margin-top: 12px; }
+/* The classic divider, because these are alternatives and not a control with a fallback. Rules
+   either side so it separates rather than labelling what follows. */
+.flow-doc-or {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 10px;
+  font-size: 11px; color: var(--text-faint);
 }
-/* THE ATTACHED DOCUMENT. Above the textarea, because it is the stronger source and it is what the
-   Fill button will read: putting it under the box would have it read as a result rather than an
-   input. */
+.flow-doc-or::before, .flow-doc-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.flow-doc-lead { display: block; margin-bottom: 7px; }
+.flow-doc-title { display: block; font-size: 12px; font-weight: 650; color: var(--text); }
+.flow-doc-help { display: block; margin-top: 2px; font-size: 11px; line-height: 1.45; color: var(--text-faint); }
+.flow-doc .flow-fill-note { display: block; margin-top: 7px; }
+/* A FILE IS BEING DRAGGED OVER. The whole region is the drop target, not just the button, so the
+   whole region answers — but as an OUTLINE, which costs no layout: a border appearing mid-drag
+   would shift the thing you are aiming at out from under the cursor. */
+.flow-doc.dropping {
+  outline: 1px dashed var(--accent);
+  outline-offset: 5px;
+  border-radius: 8px;
+}
+/* THE ATTACHED DOCUMENT, under the button that puts it there: it is what that button produced, and
+   it is the card's context rather than an input the prompt above will read. */
 .flow-fill-doc {
   display: flex; align-items: center; gap: 6px;
   margin: 0 0 6px;
@@ -5117,6 +5135,8 @@ button.mf-open:focus-visible,
    nothing; --surface is the one that means "a page", which is what a document should look like
    sitting on the box's tint.) */
 .flow-fill-doc-head {
+  /* Under the button that produced it. */
+  margin-top: 9px;
   margin-bottom: 0;
   background: var(--surface);
   border-bottom-color: transparent;
@@ -5154,11 +5174,8 @@ button.mf-open:focus-visible,
 }
 .flow-fill-doc-body::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 .flow-fill-foot { display: flex; align-items: center; gap: 9px; margin-top: 6px; flex-wrap: wrap; }
-/* The two routes are alternatives, so the word between them carries the whole distinction and is
-   set to be read once and then ignored. */
-.flow-fill-or { font-size: 11px; color: var(--text-faint); }
-/* The OTHER way to answer the card, so it is quiet where Generate is solid: same size and the same
-   row, and nothing but the weight says which one leads. */
+/* The OTHER way to answer the card. Quiet where Generate is solid: nothing but the weight says
+   which one leads, because on a Company card this button is the only one there is. */
 .flow-fill-upload {
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
   background: none; color: var(--accent); cursor: pointer;
