@@ -55,15 +55,3 @@ export function makeObjectReference(name: string, raw: string, at: number): Obje
   // saved. A document written as one long block has no break to find and is cut flat.
   return { name, text: brk > REFERENCE_LIMIT / 2 ? head.slice(0, brk) : head, addedAt: at, truncated: true }
 }
-
-/**
- * "brief.md · 12,400 characters" — what is attached and how much of it there is.
- *
- * The size is here because it is the only way to tell a brief from an empty file you picked by
- * mistake. Whether it was CUT is said separately by whoever renders this, next to the truncated
- * flag, rather than being folded into the same sentence: one line carrying both facts reads as one
- * fact, and the cut is the one that changes what you should believe about the writing.
- */
-export function describeReference(ref: ObjectReference): string {
-  return `${ref.name} · ${ref.text.length.toLocaleString()} characters`
-}
