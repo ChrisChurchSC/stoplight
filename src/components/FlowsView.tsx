@@ -798,19 +798,17 @@ export function FlowsView() {
    * generate a kind FILLABLE does not describe, so nothing here can be got round by a later caller.
    */
   const TAKES_CONTEXT = new Set<CanvasObjectKind>([...(Object.keys(FILLABLE) as CanvasObjectKind[]), 'company'])
-  /** Written per kind, because "describe it" is useless without an example of what to say. */
-  const FILL_PLACEHOLDER: Partial<Record<CanvasObjectKind, string>> = {
-    brand: 'A family dental practice that only does emergencies, open Saturdays',
-    product: 'A £9 a month app that tells you if tonight is worth fishing',
-    audience: 'Parents booking a first orthodontic appointment, nervous about cost',
-    person: 'A 40 year old electrician who fishes most weekends and coaches his kid',
-    trigger: 'Their old kit broke a week before the season opens',
-    message: 'One system instead of five, so a small team ships like a big one',
-    concept: 'Your marketing stack is five tools doing one job badly',
-    voice: 'Dry and technical, like an engineer explaining it to another engineer',
-    'proof-point': 'Teams using it ship about twice the content with the same headcount',
-    season: 'The fortnight before the new tax year, when finance teams are already rebuilding budgets',
-  }
+  /**
+   * NO EXAMPLE SENTENCE IN THE BOX. There was one per kind — "A 40 year old electrician who fishes
+   * most weekends", "Parents booking a first orthodontic appointment" — on the argument that
+   * "describe it" is useless without a model of what to say.
+   *
+   * An example that specific is not a model, it is an answer, and it is somebody else's. It sets the
+   * register (a demo brand, a demo persona), it sets the length, and the thing you were about to
+   * type gets measured against it before you have typed it. The people using this know their own
+   * audience far better than the sample does; what they needed was permission to say it plainly,
+   * which is what the line above the box now does in four words.
+   */
   const [prompting, setPrompting] = useState<Record<string, string>>({})
   const [filling, setFilling] = useState<string | null>(null)
   /** Keyed by card: a note left over from the last card you filled would read as this card's. */
@@ -6709,7 +6707,8 @@ export function FlowsView() {
                       className="flow-fill-input"
                       rows={4}
                       value={prompting[nt.id] ?? ''}
-                      placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and it fills itself in'}
+                      /* No placeholder: the heading above it already says what the box is for, and
+                         what used to sit here was an example (see FILL_PLACEHOLDER). */
                       onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
                       /**
                        * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted
