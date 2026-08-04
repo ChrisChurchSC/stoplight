@@ -179,8 +179,10 @@ export function SheetGrid({
   scopeClient?: string
   scopeCampaign?: string
   /**
-   * Percent, and the SAME number the campaign canvas zooms by — the toolbar that sets it is shared,
-   * so a sheet at 50% and a board at 50% are one setting rather than two that happen to agree.
+   * Percent, and the SHEET'S OWN number — not the campaign canvas's. The pill that sets it looks
+   * identical on both tabs and is rendered on each of them, but a sheet and a board do not share a
+   * range, a floor or a thing to anchor about, so they no longer share the value either (see
+   * gridZoom in FlowsView for what they did to each other when they did).
    *
    * It rides on the table rather than on the scrolling wrapper around it, which is the whole point:
    * shrinking the CONTENT inside a window whose width does not move is what puts more columns on
