@@ -20,7 +20,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
-import { UNASSIGNED, registerCampaign, clientForCampaign, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
+import { UNASSIGNED, registerCampaign, clientForCampaign, liveCampaignNames, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
 import { FOLDER_SEP, buildFolderPath, folderName, folderParent, isDescendantFolder, sanitizeSegment, withAncestors } from '../domain/campaignFolders'
 import { newFlight, flightForRow, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
@@ -2017,6 +2017,12 @@ interface TrafficState {
   openProjects: string[]
   openProject: (campaign: string) => void
   closeProject: (campaign: string) => void
+  /**
+   * Close any open tab whose campaign no longer exists, once — see pruneOpenProjects. The flag is
+   * the "once": the tab strip calls this from an effect, and an effect re-runs.
+   */
+  openProjectsPruned: boolean
+  pruneOpenProjects: () => void
   /** Brands opened as canvas tabs (alongside campaigns), so a brand's page is a closeable tab. */
   openBrandTabs: string[]
   openBrandTab: (brand: string) => void
@@ -3034,6 +3040,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   artboards: loadArtboards(),
   activeCanvas: loadActiveCanvas(),
   openProjects: loadOpenProjects(),
+  openProjectsPruned: false,
   openBrandTabs: [],
   openDatasetTabs: [],
   activeDatasetId: null,
@@ -4327,6 +4334,45 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     saveOpenProjects(openProjects)
     set({ openProjects })
   },
+  pruneOpenProjects: () =>
+    set((s) => {
+      /**
+       * A TAB CANNOT OUTLIVE ITS CAMPAIGN.
+       *
+       * The open tabs are persisted on their own (stoplight.openProjects.v1) while the campaigns are
+       * rebuilt from the workspace on every load, and until now nothing reconciled the two. Deleting
+       * a campaign in the app prunes its tab, which is why this stayed hidden — but any other way a
+       * campaign can go (a workspace that loads empty or different, a delete in another session)
+       * left the tab behind. It read "DRAFTS · <name>", because a campaign the list has never heard
+       * of reports no folder and no folder reads as unfiled, and clicking it opened nothing while
+       * the Campaigns page said there was nothing there.
+       *
+       * GATED ON THE READ HAVING SUCCEEDED, which is what flightsHydrated actually means:
+       * campaignList arrives in the same workspace_state read that sets it, and that flag is raised
+       * only when the read happened. NOT boardsHydrated, which is deliberately raised on the
+       * ATTEMPT — a failed read returns no keys and is indistinguishable from an empty workspace, so
+       * pruning behind that gate would close every tab you had open and write the emptiness to disk.
+       * A failed load already leaves you on this device's copy; it must not also tidy it away.
+       *
+       * ONCE PER SESSION, deliberately. Everything a campaign is created BY — build, import, the
+       * wizard — opens its tab and registers it in its own order, and re-running this on every rows
+       * change would race whichever of those lands second and close the tab it had just opened. The
+       * bug being fixed is a tab inherited from a previous session, so the check belongs where that
+       * arrives: once, after the load settles.
+       */
+      if (!s.flightsHydrated || s.openProjectsPruned) return {}
+      const live = liveCampaignNames(s.rows, s.campaignList)
+      const openProjects = s.openProjects.filter((c) => live.has(c))
+      if (openProjects.length === s.openProjects.length) return { openProjectsPruned: true }
+      saveOpenProjects(openProjects)
+      return {
+        openProjects,
+        openProjectsPruned: true,
+        // Never leave the app pointed at a campaign that is gone. deleteCampaign does the same, and
+        // for the same reason: the filter drives which tab is lit and what the canvas scopes to.
+        campaignFilter: openProjects.includes(s.campaignFilter) ? s.campaignFilter : 'all',
+      }
+    }),
   openBrandTab: (brand) =>
     set((s) => (s.openBrandTabs.includes(brand) ? {} : { openBrandTabs: [...s.openBrandTabs, brand] })),
   closeBrandTab: (brand) =>

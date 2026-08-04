@@ -44,6 +44,10 @@ export function CanvasProjectTabs() {
   const closeObjectTab = useTrafficStore((s) => s.closeObjectTab)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
   const campaignList = useTrafficStore((s) => s.campaignList)
+  // The workspace-read-succeeded flag the prune waits on; see pruneOpenProjects for why it is this
+  // one and not boardsHydrated.
+  const flightsHydrated = useTrafficStore((s) => s.flightsHydrated)
+  const pruneOpenProjects = useTrafficStore((s) => s.pruneOpenProjects)
 
   // Where each campaign is filed, by name. A campaign the list has never heard of (one that exists
   // only as a value on some rows) has no folder, which reads the same as unfiled — true enough.
@@ -85,6 +89,16 @@ export function CanvasProjectTabs() {
   useEffect(() => {
     if (campaignFilter !== 'all') openProject(campaignFilter)
   }, [campaignFilter, openProject])
+
+  /**
+   * And drop the tabs whose campaigns are gone. The drawer is persisted on its own, so it can come
+   * back from a previous session naming campaigns this workspace no longer has; the store decides
+   * when that is safe to act on (it waits for the workspace to load, and only does it once), so this
+   * can simply ask on every render that matters.
+   */
+  useEffect(() => {
+    pruneOpenProjects()
+  }, [pruneOpenProjects, flightsHydrated, rows, campaignList])
 
   // A tab opens its campaign as a flow (not the legacy canvas).
   const switchTo = (campaign: string) => {
