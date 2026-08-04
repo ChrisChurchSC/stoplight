@@ -83,6 +83,72 @@ export interface SmartObject {
    * promise nobody kept — and it means filing the last object out of a folder removes the folder.
    */
   folder?: string
+  /**
+   * A DOCUMENT this object is described by: an uploaded .md or .txt saying what the object is, in
+   * the author's own words, which the copy writer then reads as the authority ON THIS OBJECT.
+   *
+   * WHY IT OUTRANKS THE CARDS INSIDE. `contents` says what the object is MADE OF — a contact, two
+   * proof points, a message — and a list of parts is not a description. Somebody writing a brief for
+   * "the RevOps buyer" knows things about them that no record on the board carries, and until this
+   * field existed there was nowhere for that to go: an uploaded file reached the Body of a single
+   * asset and stopped there, because the writer's context is assembled entirely from typed records
+   * and a document is not one of the thirteen.
+   *
+   * IT LEADS THE RECORDS, IT DOES NOT REPLACE THEM. The records carry approved proof with metrics,
+   * source lines and the pool ids the writer is required to cite by, so an object that swapped them
+   * for prose would lose the provenance the whole prompt is built to defend. The document says what
+   * the object IS; the records stay the vetted material inside it.
+   *
+   * SCOPED TO THIS OBJECT, which is the whole reason it can be this authoritative. It is not a
+   * campaign brief and it sits nowhere on the campaign's precedence ladder: it cannot overrule the
+   * brand guide, the campaign theme or an audience's antiMessage, because it is only ever answering
+   * "what is this one thing".
+   */
+  reference?: ObjectReference
+}
+
+/** An uploaded document standing as the description of a smart object. See SmartObject.reference. */
+export interface ObjectReference {
+  /** The uploaded file's name, kept so both the writer and the UI can say where this came from. */
+  name: string
+  /**
+   * The document's full text, MARKDOWN LEFT AS WRITTEN. The headings are the structure, so stripping
+   * them to plain text would throw away the one thing that makes a brief readable to the model —
+   * and there is nothing to gain by it, since the writer reads markdown perfectly well.
+   */
+  text: string
+  addedAt: number
+  /** Set when `text` was cut to REFERENCE_LIMIT, so the UI can say so rather than quietly shipping
+   *  two thirds of a brief and letting it read as the whole of one. */
+  truncated?: boolean
+}
+
+/**
+ * How much of a reference document travels to the writer.
+ *
+ * The draft request is BATCHED (see draftWriter's chunking) and every batch re-sends the whole
+ * campaign context, so a document costs once per batch rather than once per generation. Several long
+ * files wired across a big campaign is the difference between a request and an incident.
+ *
+ * 20k characters is roughly five thousand tokens: longer than any brief anybody actually writes,
+ * short enough that a few together stay affordable. An overrun is cut and FLAGGED, never silently
+ * dropped — a truncation nobody is told about is how a writer ends up confidently missing half.
+ */
+export const REFERENCE_LIMIT = 20_000
+
+/**
+ * Build a reference from an uploaded file's text, trimming to the budget at a paragraph break so the
+ * document ends on a whole thought. Cutting mid-sentence reads to the writer as a fact that trails
+ * off, which is worse than stopping a paragraph early.
+ */
+export function makeObjectReference(name: string, raw: string, at: number): ObjectReference {
+  const text = raw.trim()
+  if (text.length <= REFERENCE_LIMIT) return { name, text, addedAt: at }
+  const head = text.slice(0, REFERENCE_LIMIT)
+  const brk = head.lastIndexOf('\n\n')
+  // Only honour the break if it is not so early that obeying it would throw away more than the limit
+  // saved. A document written as one long block has no break to find and is cut flat.
+  return { name, text: brk > REFERENCE_LIMIT / 2 ? head.slice(0, brk) : head, addedAt: at, truncated: true }
 }
 
 /** How deep nested objects resolve before the walk stops. Bounds the cycle the picker also blocks. */

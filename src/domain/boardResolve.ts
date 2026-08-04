@@ -243,6 +243,40 @@ export function wiredRefsFor(board: FlowBoard, smartObjects: SmartObject[], targ
 }
 
 /**
+ * The smart OBJECTS wired into a target, kept as objects rather than dissolved into their records.
+ *
+ * wiredRefsFor answers "which records reach this", which is what the pools need, and flattening an
+ * object into its refs is the right answer to that question. It is also exactly why a document
+ * attached to an object had no route to the writer: by the time that walk finishes, the object the
+ * document belongs to no longer exists as a thing in the result, only its parts do.
+ *
+ * SHARES upstreamCardIds WITH wiredRefsFor, deliberately. Two walks that could disagree about what
+ * is wired would eventually put a document in front of the writer describing an object whose records
+ * never arrived, or the reverse — and the disagreement would be invisible, because each function
+ * would look correct on its own.
+ */
+export function wiredObjectsFor(board: FlowBoard, smartObjects: SmartObject[], target: string): SmartObject[] {
+  const byId = new Map(smartObjects.map((o) => [o.id, o]))
+  const objectById = new Map(board.objects.map((o) => [o.id, o]))
+  const placementById = new Map(board.placements.map((p) => [p.id, p]))
+  /** The library object a node stands for, by either of the two ways a board can name one. */
+  const objectIdOf = (id: string): string | undefined =>
+    placementById.get(id)?.smartObjectId ?? objectById.get(id)?.smartObjectId
+  const out: SmartObject[] = []
+  const seen = new Set<string>()
+  for (const id of upstreamCardIds(board, target)) {
+    const oid = objectIdOf(id)
+    // Deduped by OBJECT, not by node: the same library object placed twice on a board is one object
+    // with one document, and sending it twice would read as two briefs that happen to agree.
+    if (!oid || seen.has(oid)) continue
+    seen.add(oid)
+    const o = byId.get(oid)
+    if (o) out.push(o)
+  }
+  return out
+}
+
+/**
  * Does this board connect anything to an OUTPUT? The gate on generating from nothing.
  *
  * An output is the brief, a deliverable or a post — anything that is not another card. So a
