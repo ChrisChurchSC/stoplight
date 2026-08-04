@@ -10694,11 +10694,11 @@ button.mf-open:focus-visible,
   white-space: nowrap;
   max-width: 100%;
 }
-/* A campaign with no folder has nothing to put on this line, and most campaigns have no folder, so
-   it is left empty rather than reading "Unfiled" on every tab in the strip. It still has to occupy
-   its line: drop the line and the name rides up, and a tab beside a filed one sits at a different
-   height with its name off the shared baseline. A zero-width space holds the line box at whatever
-   the font metrics say, so there is no measured height here to drift out of date. */
+/* Every tab now names a folder — the ones in none say "Drafts" — so this line should never be empty.
+   It is kept as a guard, because the failure is quiet and ugly: an empty span collapses its line box,
+   the name below rides up, and that one tab sits at a different height with its name off the baseline
+   its neighbours share. A zero-width space holds the box at whatever the font metrics say, so there
+   is no measured height here to drift out of date. */
 .cv-project-tab-client:empty::before {
   content: '\200b';
 }
@@ -22605,11 +22605,6 @@ table.aud-sheet td.stick .aud-cell {
 }
 .dataset-page-name:hover { background: var(--surface-2); }
 .dataset-page-name:focus { outline: none; background: var(--surface); border-color: var(--accent); }
-
-/* Non-campaign canvas tabs: a small leading glyph for data-set tabs. */
-.cv-project-tab-ic { display: inline-flex; align-items: center; color: var(--text-muted); margin-right: 5px; }
-.cv-dataset-tab.active .cv-project-tab-ic, .cv-dataset-tab:hover .cv-project-tab-ic { color: var(--accent); }
-.cv-object-tab.active .cv-project-tab-ic, .cv-object-tab:hover .cv-project-tab-ic { color: var(--accent); }
 
 /* THE OBJECT PAGE: a smart object as its own tab. Shares the data-set page's frame, so the two
    full-page tab surfaces read as siblings rather than as two unrelated screens. */

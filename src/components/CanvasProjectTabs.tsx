@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { folderName } from '../domain/campaignFolders'
+import { DRAFTS, folderName } from '../domain/campaignFolders'
 import { campaignShortName, clientForCampaign } from '../domain/clients'
 import { useTrafficStore } from '../store/useTrafficStore'
 
@@ -7,6 +7,17 @@ import { useTrafficStore } from '../store/useTrafficStore'
  * The project drawer: what you have open across the very top of the canvas, as folder tabs. Holds
  * three kinds of tab — campaigns (a flow), brands (a brand page), and data sets (a full-page
  * spreadsheet) — each a closeable browser-style tab. Opening any of them adds its tab.
+ *
+ * EVERY TAB SAYS THE SAME TWO THINGS: the folder it is filed in, then its name. That is the whole
+ * label, and the tabs used to disagree about it — one showed the brand, one showed the word "Brand",
+ * one showed a sentence ("Only on this campaign"), and two carried a glyph the other two did not. So
+ * the eyebrow meant a different KIND of thing on each tab and the strip could not be read straight
+ * across. A folder and a file name is the one pair every tab can answer, and the things that are in
+ * no folder answer DRAFTS rather than going blank.
+ *
+ * The glyphs are gone with it. They distinguished data sets and objects from campaigns, but a tab is
+ * identified by what it says, and two of four tabs wearing an icon read as a status the other two
+ * had failed to earn rather than as a type.
  */
 export function CanvasProjectTabs() {
   const rows = useTrafficStore((s) => s.rows)
@@ -115,7 +126,7 @@ export function CanvasProjectTabs() {
         <span
           key={p.campaign}
           className={`cv-project-tab${p.campaign === campaignFilter && page === 'flows' ? ' active' : ''}`}
-          title={`${p.client} · ${p.folder || 'Unfiled'} · ${p.short} (${p.count} assets)`}
+          title={`${p.client} · ${p.folder || DRAFTS} · ${p.short} (${p.count} assets)`}
           role="button"
           tabIndex={0}
           onClick={() => switchTo(p.campaign)}
@@ -125,12 +136,8 @@ export function CanvasProjectTabs() {
                 not the brand, which the strip is already scoped to. Showing the brand here read as a
                 folder that didn't exist, and then said the brand a second time in the name below it,
                 because names are stored brand-prefixed. Nested folders show their last segment; the
-                tooltip carries the full path.
-
-                An unfiled campaign leaves the line BLANK rather than saying "Unfiled": most tabs are
-                unfiled, and a word repeated across the whole strip is noise that says nothing. The
-                line still holds its space (see .cv-project-tab-client:empty) so names stay level. */}
-            <span className="cv-project-tab-client">{p.folder ? folderName(p.folder) : ''}</span>
+                tooltip carries the full path. */}
+            <span className="cv-project-tab-client">{p.folder ? folderName(p.folder) : DRAFTS}</span>
             <span className="cv-project-tab-name">{p.short}</span>
           </span>
           <button className="cv-project-tab-x" title="Close this canvas" onClick={(e) => close(e, p.campaign)}>
@@ -148,6 +155,11 @@ export function CanvasProjectTabs() {
           onClick={() => openBrand(b)}
         >
           <span className="cv-project-tab-body">
+            {/* The one tab with no folder to name and no business claiming one. A brand is the top of
+                the tree, so it is in no folder the way a drive is in no drive — and it is emphatically
+                not in Drafts, which would read as a brand somebody had yet to finish. The eyebrow says
+                what this tab IS instead. The name has to carry the brand because brand tabs, unlike
+                flow tabs, are not filtered to the brand in scope: several can sit in the strip. */}
             <span className="cv-project-tab-client">Brand</span>
             <span className="cv-project-tab-name">{b}</span>
           </span>
@@ -163,16 +175,17 @@ export function CanvasProjectTabs() {
           <span
             key={`ds:${id}`}
             className={`cv-project-tab cv-dataset-tab${page === 'dataset' && activeDatasetId === id ? ' active' : ''}`}
-            title={`${ds.brand} · ${ds.name || 'Untitled data set'}`}
+            title={`${DRAFTS} · ${ds.name || 'Untitled data set'}`}
             role="button"
             tabIndex={0}
             onClick={() => openDatasetTab(id)}
           >
-            <span className="cv-project-tab-ic" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></svg>
-            </span>
             <span className="cv-project-tab-body">
-              <span className="cv-project-tab-client">{ds.brand}</span>
+              {/* A data set has a brand but no folder — nothing files them yet — so they are all in
+                  Drafts, and the line says the same thing for every one of them until they can be
+                  filed. It used to say the brand, which was the brand a second time on a strip
+                  already scoped to one, dressed as the folder it was standing in for. */}
+              <span className="cv-project-tab-client">{DRAFTS}</span>
               <span className="cv-project-tab-name">{ds.name || 'Untitled data set'}</span>
             </span>
             <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeDs(e, id)}>
@@ -186,23 +199,25 @@ export function CanvasProjectTabs() {
         // The guard matters: deleting an object with its tab still open would otherwise crash the
         // whole strip rather than dropping one tab.
         if (!o) return null
-        const where = o.scope === 'campaign' ? 'Only on this campaign' : o.brand ?? 'Brand library'
+        // An object's folder is a path inside its brand's library, so the eyebrow shows the last
+        // segment and the tooltip carries the whole path — same rule the campaign tabs follow.
+        //
+        // This line used to carry the object's SCOPE ("Only on this campaign" / the brand library),
+        // which is a different question: where it can be SEEN, not where it is filed. Worth knowing,
+        // and not worth a tab's one label — a sentence in a 9px eyebrow truncated to "ONLY ON THIS…"
+        // on any tab with a real name beside it. Scope belongs on the object page, which states it.
+        const folder = o.folder ? folderName(o.folder) : DRAFTS
         return (
           <span
             key={`obj:${id}`}
             className={`cv-project-tab cv-object-tab${page === 'object' && activeObjectId === id ? ' active' : ''}`}
-            title={`${where} · ${o.name || 'Untitled smart object'}`}
+            title={`${o.folder || DRAFTS} · ${o.name || 'Untitled smart object'}`}
             role="button"
             tabIndex={0}
             onClick={() => openObjectTab(id)}
           >
-            <span className="cv-project-tab-ic" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" /><path d="M4 16.5L12 21l8-4.5" />
-              </svg>
-            </span>
             <span className="cv-project-tab-body">
-              <span className="cv-project-tab-client">{where}</span>
+              <span className="cv-project-tab-client">{folder}</span>
               <span className="cv-project-tab-name">{o.name || 'Untitled smart object'}</span>
             </span>
             <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => closeObj(e, id)}>

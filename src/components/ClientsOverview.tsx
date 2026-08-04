@@ -1,5 +1,5 @@
 import { type DragEvent as ReactDragEvent, useEffect, useMemo, useState } from 'react'
-import { folderDepth, folderName, withAncestors } from '../domain/campaignFolders'
+import { DRAFTS, folderDepth, folderName, withAncestors } from '../domain/campaignFolders'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { useHomeCanvases, type CanvasCard } from '../lib/useHomeCanvases'
 import { DRAFTS_SPACE, useTrafficStore } from '../store/useTrafficStore'
@@ -420,7 +420,7 @@ export function ClientsOverview() {
                             }
                           }}
                         >
-                          {folder ? folderName(folder) : 'Unfiled'} <span className="folder-group-count">{cards.length}</span>
+                          {folder ? folderName(folder) : DRAFTS} <span className="folder-group-count">{cards.length}</span>
                         </button>
                       )}
                       {folder && (
@@ -430,7 +430,7 @@ export function ClientsOverview() {
                           </button>
                           <button
                             className={`folder-act${confirmDelFolder === folder ? ' danger' : ''}`}
-                            title={confirmDelFolder === folder ? 'Click again to delete (campaigns move to Unfiled)' : 'Delete folder'}
+                            title={confirmDelFolder === folder ? `Click again to delete (campaigns move to ${DRAFTS})` : 'Delete folder'}
                             onClick={() => {
                               if (confirmDelFolder === folder) {
                                 deleteCampaignFolder(brandFolder, folder)

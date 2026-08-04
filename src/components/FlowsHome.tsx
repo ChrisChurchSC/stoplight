@@ -5,6 +5,7 @@ import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
 import type { ChannelId } from '../domain/types'
 import {
+  DRAFTS,
   MAX_FOLDER_DEPTH,
   buildFolderTree,
   canNestUnder,
@@ -537,7 +538,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
           return (
             <section className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
               <div className="flow-home-group-h">
-                {knownFolders.size ? 'Unfiled' : 'All campaigns'}
+                {knownFolders.size ? DRAFTS : 'All campaigns'}
                 <span className="flow-home-group-n">{unfiled.length}</span>
               </div>
               {unfiled.length === 0 ? (
