@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent, type ReactElement } from 'react'
 import { CHANNELS } from '../domain/channels'
-import { campaignInBrandScope } from '../domain/brand'
+import { campaignInIndexScope } from '../domain/brand'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
@@ -51,6 +51,12 @@ const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1,
 
 export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (name: string) => void; onNew: () => void }) {
   const rows = useTrafficStore((s) => s.rows)
+  /**
+   * Whether a brand has been CHOSEN, read straight from the workspace filter rather than inferred
+   * from `brand` — which canvasBrandScope may have resolved on its own for a single-brand workspace.
+   * That inference is right for a picker and wrong for an index. See campaignInIndexScope.
+   */
+  const brandChosen = useTrafficStore((s) => s.clientFilter !== 'all')
   const campaignList = useTrafficStore((s) => s.campaignList)
   const campaignFolders = useTrafficStore((s) => s.campaignFolders)
   const createCampaignFolder = useTrafficStore((s) => s.createCampaignFolder)
@@ -177,20 +183,22 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
 
   const folders = campaignFolders[brand] ?? []
   /**
-   * This brand's campaigns AND the brandless ones, which land in the DRAFTS bucket below.
+   * EVERY CAMPAIGN UNTIL YOU PICK A BRAND; after that, this brand's plus the brandless ones, which
+   * land in the DRAFTS bucket below. See campaignInIndexScope.
    *
-   * Scoping strictly to `brand` made the page lie. clientFilter resets to 'all' on every load, and
-   * canvasBrandScope answers a single-brand workspace with that brand — so a workspace holding one
-   * brand and eleven campaigns filed as Unassigned opened on "0 campaigns" with a folder tree above
-   * it. Nothing was lost; the campaigns had simply never been filed under the brand they were being
-   * looked for under. Opening any one of them set the filter to its own client, and coming back
-   * showed all eleven, which is a confusing way to find out nothing was missing.
+   * Resolving a brand and having one CHOSEN are different things, and this page kept confusing them.
+   * clientFilter resets to 'all' on every load, so after a refresh nothing has been chosen — and a
+   * single-brand workspace still resolved to its one brand, while a multi-brand one resolved to ''.
+   * Filtering by either emptied the page: campaigns filed under any other client, or under nobody,
+   * were simply not shown. Opening a campaign set the filter to its own client, so on the way back
+   * they reappeared, and the next refresh took them away again.
    *
-   * Another brand's campaigns are still never in scope — see campaignInBrandScope. Brandless is not
-   * another brand, it is nobody's, so no client's work reaches another client's page.
+   * Another brand's campaigns are still never in scope ONCE A BRAND IS CHOSEN, which is the leak
+   * that matters. With none chosen this is a workspace index, and an index that hides most of the
+   * workspace is the bug it was reporting.
    */
-  const brandRows = rows.filter((r) => !r.archivedAt && campaignInBrandScope(clientForCampaign(r.campaign), brand))
-  const forBrand = campaignList.filter((c) => !c.archivedAt && campaignInBrandScope(c.client, brand))
+  const brandRows = rows.filter((r) => !r.archivedAt && campaignInIndexScope(clientForCampaign(r.campaign), brand, brandChosen))
+  const forBrand = campaignList.filter((c) => !c.archivedAt && campaignInIndexScope(c.client, brand, brandChosen))
   const meta = new Map(forBrand.map((c) => [c.name, c] as const))
   const names = [
     ...new Set([
