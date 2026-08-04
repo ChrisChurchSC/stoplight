@@ -6621,25 +6621,46 @@ export function FlowsView() {
    */
   const renderObjectInspector = (nt: CanvasObject) => {
     const meta = OBJECT_META[nt.kind]
+    const title = cardLabel(nt, meta.label)
     return (
       <>
         <div className="flow-panel-head">
           <span className="flow-note-ic flow-insp-ic" style={{ color: meta.tone }} aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
           </span>
-          {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards on
-              a board, four panels headed "Audience" gave you no way to tell from the panel which one
-              you had selected. */}
-          <span className="flow-panel-title">{cardLabel(nt, meta.label)}</span>
-          {/* SAY THAT THIS ONE IS NOT FINISHED.
-              The card acquires, reads and cites a table, and the parts that are missing (connecting
-              LinkedIn or Instagram, reading an .xlsx, comparing two periods) are invisible from here:
-              somebody meeting it for the first time cannot tell a gap from a thing they have failed
-              to find. A tag is cheaper than that confusion, and it comes off in one line. */}
-          {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
+          {/* WHAT THE KIND IS, in the header under the card's own name rather than as the first
+              paragraph of the body. It is a definition of the panel you are looking at, so it
+              belongs to the panel's title; below the rule it was the third muted paragraph in a
+              row (this, then the fill box's help, then the fields' own placeholders) and the body
+              opened on explanation instead of on the card. */}
+          <span className="flow-panel-heading">
+            <span className="flow-panel-titlerow">
+              {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards
+                  on a board, four panels headed "Audience" gave you no way to tell from the panel
+                  which one you had selected. */}
+              <span className="flow-panel-title">{title}</span>
+              {/* SAY THAT THIS ONE IS NOT FINISHED.
+                  The card acquires, reads and cites a table, and the parts that are missing
+                  (connecting LinkedIn or Instagram, reading an .xlsx, comparing two periods) are
+                  invisible from here: somebody meeting it for the first time cannot tell a gap from
+                  a thing they have failed to find. A tag is cheaper than that confusion, and it
+                  comes off in one line.
+
+                  On the title's own line, not the header's: as a sibling of the whole heading it
+                  took a third of the width off the definition underneath and wrapped it to three
+                  lines. It qualifies the card's name, so it belongs beside the name. */}
+              {nt.kind === 'data-source' && <span className="flow-panel-wip">Work in progress</span>}
+            </span>
+            {/* Once the title is the card's NAME, the header stops saying what kind of card it is —
+                the glyph is the only thing left carrying that, and a colour is not a word. So the
+                kind rejoins its own definition here, and drops out again when the title already IS
+                the kind and printing it twice would say nothing. */}
+            <span className="flow-panel-sub">
+              {title === meta.label ? meta.menuDesc : `${meta.label} · ${meta.menuDesc}`}
+            </span>
+          </span>
         </div>
         <div className="flow-inspect">
-          <p className="flow-inspect-desc">{meta.menuDesc}</p>
           {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
               the answer to "which card am I looking at" — which you need before anything below is
               worth reading. The fill box is still the first thing here that DOES anything.
@@ -6766,7 +6787,13 @@ export function FlowsView() {
               >
                 {/* The box used to be a bare textarea whose only explanation was a placeholder, and
                     a placeholder is gone the moment you type. What it does, what it costs you, and
-                    that you stay in charge afterwards are all things you need BEFORE you use it. */}
+                    that you stay in charge afterwards are all things you need BEFORE you use it.
+
+                    Said in two lines rather than five. The long version restated things the control
+                    already shows you — that you can upload a file (there is a button that says so),
+                    that a sentence works (the placeholder is a sentence) — and buried the two facts
+                    you cannot see anywhere: it will not overwrite you, and none of it counts until
+                    the card is connected. Those are what is left. */}
                 <div className="flow-fill-head">
                   <span className="flow-fill-title">
                     {docOnly ? `Fill this ${kindLabel} in from a document` : `Describe this ${kindLabel}, or hand it a document`}
@@ -6774,18 +6801,14 @@ export function FlowsView() {
                   <span className="flow-fill-help">
                     {docOnly ? (
                       <>
-                        Upload a .md or .txt file, or paste one in, and the fields below fill from
-                        what it says. This is the only route for a {kindLabel}: it is a real
-                        organisation, so its facts have to come from something you can point at
-                        rather than from a description. Everything it writes is a draft you can
-                        change, and it only ever fills fields that are still empty.
+                        A {kindLabel} is a real organisation, so its facts have to come from a
+                        document rather than a description. Only empty fields get filled, and
+                        everything it writes is a draft you can change.
                       </>
                     ) : (
                       <>
-                        A sentence in your own words fills the fields below, and so does a .md or
-                        .txt file you upload or a body of text you paste. Everything it writes is a
-                        draft you can change, it only ever fills fields that are still empty, and
-                        nothing here reaches the copy until this card is connected.
+                        Only empty fields get filled, and everything it writes is a draft you can
+                        change. Nothing on this card reaches the copy until it is connected.
                       </>
                     )}
                   </span>
