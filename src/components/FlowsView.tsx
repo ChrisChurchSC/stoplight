@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import { CHANNELS, CHANNEL_LIST } from '../domain/channels'
+import { CHANNELS } from '../domain/channels'
 // The board's types live in the domain because a persisted slice must be typed outside the
 // component that renders it. OBJECT_META stays here: it carries JSX icons.
 import {
@@ -15,11 +15,9 @@ import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { contextGapMessage, type ContextGapKey } from '../domain/contextGaps'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
-import { COMPANY_STATUSES, type Company } from '../domain/companies'
-import { TRIGGER_STATUSES, TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
-import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, PRODUCT_STATUSES, type Product } from '../domain/product'
+import { TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
+import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, type Product } from '../domain/product'
 import { type BrandObject } from '../domain/brandObject'
-import { directionPresets, type DirectionPresetSources } from '../domain/directionPresets'
 import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
@@ -30,10 +28,11 @@ import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
 import { canvasBrandScope, resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
-import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
-import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, GOAL_GROUPS, HOBBIES, INDUSTRIES, OBJECTION_GROUPS, OCCUPATIONS, PAIN_GROUPS, REGIONS, SENIORITIES, TRIGGER_GROUPS } from '../domain/taxonomy'
+import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
+import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENIORITIES } from '../domain/taxonomy'
 import { BufferedInput } from './BufferedInput'
-import { RecordCombo, RecordMulti, ZipField, type OptionGroup } from './RecordPickers'
+// Only the campaign brief picks from a list now — the object cards' own forms are gone.
+import { RecordCombo } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
 import { type Rtb } from '../domain/rtb'
 import { blueprintsFor, blueprintByKey, stepLineage, stepFromLineage, blueprintBriefs, type EmailBlueprint } from '../domain/emailPatterns'
@@ -43,7 +42,9 @@ import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
-import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, describeDoc, docFromPaste, isDocFile, readCardDoc, type CardDoc } from '../lib/cardDoc'
+import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
+import { describeReference, makeObjectReference, type ObjectReference } from '../domain/objectReference'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
 import { citableFigures, datasetProvenance } from '../domain/datasetRead'
@@ -67,7 +68,7 @@ import type { CopySource } from '../adapters/copy/draftWriter'
 import type { Deliverable } from '../domain/strategyAssets'
 import type { ChannelId, TrafficRow } from '../domain/types'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
-import { useTrafficStore } from '../store/useTrafficStore'
+import { FLOW_BOARDS_KEY, useTrafficStore } from '../store/useTrafficStore'
 import { SheetGrid } from './SheetGrid'
 import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
@@ -343,23 +344,6 @@ const articleFor = (noun: string): string => (/^[aeiou]/.test(noun) ? 'an' : 'a'
 const pluralOf = (noun: string): string =>
   noun === 'person' ? 'people' : noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`
 
-/**
- * A RECORD KEPT IN A BRAND'S OWN BUCKET CANNOT BE AUTHORED BEFORE THERE IS A BRAND.
- *
- * Audiences and proof are stored per brand, so with none bound ensureAudienceRef and ensureProofRef
- * both refuse — correctly, since neither will write an empty-brand bucket — and every field on the
- * card commits into nothing. That refusal used to be unreachable because the canvas fell back to the
- * first brand in the workspace, and writing into whichever brand happens to be first is worse than
- * refusing: it edits a record belonging to another client. Now that it refuses, it has to SAY so,
- * next to the fields, before the typing rather than after it is lost.
- */
-const BrandlessNotice = ({ noun }: { noun: string }) => (
-  <span className="flow-fill-help" style={{ display: 'block', marginTop: 6 }}>
-    Nothing typed here will save yet: {articleFor(noun)} {noun} belongs to a brand, and this campaign
-    has not named one. Connect a Brand card to the brief first.
-  </span>
-)
-
 /** Everything on the board: context objects plus the deliverables that get made. */
 export type BoardObject = CanvasObject | FlowDeliverable
 
@@ -620,7 +604,6 @@ export function FlowsView() {
   const boardsHydrated = useTrafficStore((s) => s.boardsHydrated)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
-  const updateCompany = useTrafficStore((s) => s.updateCompany)
   const updateTrigger = useTrafficStore((s) => s.updateTrigger)
   const allBrandObjects = useTrafficStore((s) => s.brandObjects)
   const addBrandObject = useTrafficStore((s) => s.addBrandObject)
@@ -796,35 +779,25 @@ export function FlowsView() {
       { key: 'response', brief: 'the one action it drives' },
     ],
     /**
-     * A COMPANY, from a document only. See DOC_ONLY_FILL: the fields are here so a document can
-     * fill them, and the box refuses to run on a typed sentence alone.
-     *
-     * Only the five a document about an account actually states. Where they sit with you and which
-     * audience they belong to are both facts about YOUR relationship rather than about them, so no
-     * research doc contains either and a model asked for them would be guessing at your CRM.
+     * NO COMPANY ENTRY, on purpose. See TAKES_CONTEXT: an account is the one kind whose facts may
+     * not be generated at all, so its card takes a document and nothing else.
      */
-    company: [
-      { key: 'name', brief: 'the company name' },
-      { key: 'description', brief: 'one line on what the business does' },
-      { key: 'segment', brief: 'the industry it operates in', options: [...INDUSTRIES] },
-      { key: 'employees', brief: 'how many people work there', options: [...TAXONOMY_COMPANY_SIZES] },
-      { key: 'country', brief: 'where it is headquartered', options: [...REGIONS] },
-    ],
   }
   /**
-   * KINDS THAT MAY BE FILLED FROM A DOCUMENT AND NOT FROM A TYPED SENTENCE.
+   * WHICH KINDS SHOW THE CONTEXT BOX AT ALL: everything Generate can fill, plus Company.
    *
-   * A Company is a named, real organisation, and the whole fill prompt is built on the opposite
+   * A Company is a named, real organisation, and the fill prompt is built on the opposite
    * assumption: "you are not researching a real company", "never invent a claim about a real
-   * organisation". That is why the card had a record form and no describe box, and it was right.
+   * organisation". Asked to describe Acme Corp from a sentence, the model answers from whatever it
+   * absorbed about Acme Corp, and a card of confident half-remembered facts about a real account is
+   * the single worst thing this app could write. So a Company card has no entry in FILLABLE and no
+   * Generate button — its context comes from a document you chose and can check, which is the whole
+   * reason a card takes a document.
    *
-   * A document changes the argument rather than dodging it. Asked to describe Acme Corp from a
-   * sentence, the model answers from whatever it absorbed about Acme Corp, and a card of confident
-   * half-remembered facts about a real account is the single worst thing this app could write. Given
-   * the account brief, it is reading a source the user chose and can check. So the fields exist and
-   * the route to them is the document.
+   * Absence is the enforcement, rather than a second set listing the exceptions: there is no way to
+   * generate a kind FILLABLE does not describe, so nothing here can be got round by a later caller.
    */
-  const DOC_ONLY_FILL = new Set<CanvasObjectKind>(['company'])
+  const TAKES_CONTEXT = new Set<CanvasObjectKind>([...(Object.keys(FILLABLE) as CanvasObjectKind[]), 'company'])
   /** Written per kind, because "describe it" is useless without an example of what to say. */
   const FILL_PLACEHOLDER: Partial<Record<CanvasObjectKind, string>> = {
     brand: 'A family dental practice that only does emergencies, open Saturdays',
@@ -842,15 +815,6 @@ export function FlowsView() {
   const [filling, setFilling] = useState<string | null>(null)
   /** Keyed by card: a note left over from the last card you filled would read as this card's. */
   const [fillNote, setFillNote] = useState<Record<string, string>>({})
-  /**
-   * THE DOCUMENT ATTACHED TO A CARD: an uploaded .md, or a paste long enough to be one.
-   *
-   * Kept by card and only in this component's state, never persisted. A document is a SOURCE, not a
-   * record: what survives is the fields it filled, which the user can then see and correct. Keeping
-   * the file around would mean a card carrying evidence nobody can read back, and a second answer to
-   * "where did this value come from" that disagrees with the first.
-   */
-  const [fillDoc, setFillDoc] = useState<Record<string, CardDoc>>({})
   /** The card being dragged over right now, so only that box lights up. */
   const [docDropOn, setDocDropOn] = useState<string | null>(null)
   /**
@@ -859,29 +823,89 @@ export function FlowsView() {
    */
   const docFileRef = useRef<HTMLInputElement | null>(null)
   const docTargetRef = useRef<string | null>(null)
-  const setDoc = (cardId: string, doc: CardDoc | null) => {
-    setFillDoc((m) => {
-      if (!doc) { const { [cardId]: _drop, ...rest } = m; return rest }
-      return { ...m, [cardId]: doc }
-    })
-    // The old note described the last fill, which the new source has just made untrue.
+  /**
+   * A record field's key as a readable word: householdIncome -> "household income". Good enough for
+   * a receipt, and derived rather than a hand-written map of forty keys that would go stale the
+   * first time a field was added to FILLABLE.
+   */
+  const fieldWord = (key: string): string =>
+    key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toLowerCase())
+  /**
+   * ATTACH A DOCUMENT TO A CARD, or take it off. It is stored ON the card and persists with the
+   * board, which is the difference between this and the version that only fed a prompt: the file is
+   * the card's context now, so it has to be there when somebody opens the campaign next week and
+   * asks where a line came from.
+   *
+   * Clamped by makeObjectReference to the same budget a smart object's reference gets, and flagged
+   * when it had to be cut, so the chip can say so rather than showing two thirds of a brief as
+   * though it were the whole one.
+   */
+  const setCardReference = (cardId: string, ref: ObjectReference | null) => {
+    const next = objectsRef.current.map((x) => (x.id === cardId ? { ...x, reference: ref ?? undefined } : x))
+    objectsRef.current = next
+    setObjects(next)
+    // A card's document changes what every asset it feeds is written from, exactly as editing its
+    // record does, so it raises the same Save bar.
+    markCardDirty(cardId)
+    // The old note described the last thing that happened here, which the new document has just
+    // made untrue.
     setFillNote((m) => { const { [cardId]: _drop, ...rest } = m; return rest })
+    if (!ref || !boardsHydrated) return
+    /**
+     * DID IT ACTUALLY LAND? The same check attachObjectReference makes on a smart object, for the
+     * same reason and against the same failure.
+     *
+     * persistState swallows a localStorage quota error by design — every other write through it is
+     * small enough for that to be the right trade — and the board is now the second thing written
+     * through it big enough to blow the budget on its own. Swallowing it here would ship the exact
+     * bug the object version was reported as: a file that looks attached, reads back fine from
+     * memory, and is gone on reload.
+     *
+     * FLUSHED rather than left to the 600ms autosave, because a check has to run after the write it
+     * is checking. Only worth saying when there is no backend — with one configured the workspace
+     * mirror carries the board whatever the local cache managed to keep.
+     */
+    saveFlowBoard({ ...boardSnapshot(boardKey), objects: next })
+    if (isSupabaseConfigured) return
+    try {
+      const saved = localStorage.getItem(FLOW_BOARDS_KEY)
+      const kept = saved
+        ? (JSON.parse(saved) as FlowBoard[])
+            .find((b) => b.key === boardKey)
+            ?.objects.find((o) => o.id === cardId)?.reference?.text.length
+        : undefined
+      if (kept !== ref.text.length) {
+        const back = objectsRef.current.map((x) => (x.id === cardId ? { ...x, reference: undefined } : x))
+        objectsRef.current = back
+        setObjects(back)
+        setFillNote((m) => ({
+          ...m,
+          [cardId]: 'That document is too large for this browser to store. Shorten it, or sign in to a workspace so it saves to the backend.',
+        }))
+      }
+    } catch {
+      /* A read-back that itself fails says nothing either way; leave the attach alone. */
+    }
   }
   /** Read a picked or dropped file onto a card, saying why in the note when it will not read. */
   const attachDocFile = async (cardId: string, file: File) => {
     try {
-      setDoc(cardId, await readCardDoc(file))
+      const doc = await readCardDoc(file)
+      setCardReference(cardId, makeObjectReference(doc.name, doc.text, Date.now()))
     } catch (e) {
-      setDoc(cardId, null)
       setFillNote((m) => ({ ...m, [cardId]: (e as Error)?.message ?? 'Could not read that file.' }))
     }
   }
   /**
-   * Fill a card from what it has been given: a typed description, an attached document, or both.
+   * Fill a card's record from a typed description.
    *
    * EMPTY FIELDS ONLY, the same rule as the site scan and for the same reason: the person who typed
-   * a value is a better source than a file dropped on it thirty seconds later. A document is the
-   * strongest source this has and it still does not get to overwrite a person.
+   * a value is a better source than a sentence typed thirty seconds later.
+   *
+   * A DOCUMENT DOES NOT COME THROUGH HERE. It used to, and it filled the fields the panel then
+   * showed you. The panel no longer shows them, so a document parsed into fields would be a file
+   * with invisible effects — and the point of handing a card a brief was never to have it minced
+   * into a dozen boxes. An attached .md goes to the writer whole instead (see setCardReference).
    */
   const fillCardFromPrompt = async (
     nt: CanvasObject,
@@ -889,11 +913,10 @@ export function FlowsView() {
     apply: (patch: Record<string, unknown>) => void,
   ) => {
     const said = (prompting[nt.id] ?? '').trim()
-    const doc = fillDoc[nt.id]
     const fields = FILLABLE[nt.kind]
-    if ((!said && !doc) || !fields) return
-    // Enforced here as well as on the button, because the textarea's Enter reaches this directly.
-    if (!doc && DOC_ONLY_FILL.has(nt.kind)) return
+    // A kind with no FILLABLE entry cannot be generated at all, and the check is here as well as on
+    // the button because the textarea's Enter reaches this directly.
+    if (!said || !fields) return
     setFilling(nt.id)
     setFillNote((m) => { const { [nt.id]: _drop, ...rest } = m; return rest })
     try {
@@ -904,13 +927,12 @@ export function FlowsView() {
         body: JSON.stringify({
           kind: nt.kind,
           prompt: said,
-          document: doc ? { name: doc.name, text: doc.text } : undefined,
           fields,
           brandContext: { name: brand, oneLiner: profile?.oneLiner, differentiators: profile?.differentiators },
         }),
       })
       if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `fill ${res.status}`)
-      const data = (await res.json()) as { fields?: Record<string, unknown>; readChars?: number }
+      const data = (await res.json()) as { fields?: Record<string, unknown> }
       const patch: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(data.fields ?? {})) {
         const has = Array.isArray(current[k]) ? (current[k] as unknown[]).length > 0 : String(current[k] ?? '').trim()
@@ -918,100 +940,24 @@ export function FlowsView() {
       }
       const n = Object.keys(patch).length
       if (n) apply(patch)
-      // Names the file it read and how much of it, because a fill from a document you cannot see the
-      // extent of is a fill you cannot check. The empty case says WHY: from a document, "nothing new"
-      // usually means the fields were already written rather than that the file said nothing.
-      const from = doc ? ` from ${doc.name}${data.readChars ? ` (${data.readChars.toLocaleString()} characters read)` : ''}` : ''
+      /**
+       * SAY WHAT IT WROTE, in a panel that no longer shows the fields.
+       *
+       * The count used to be a pointer at the boxes underneath — "check them" meant look down. There
+       * is nothing to look down at now, so the note names the fields it filled: it is the only
+       * account of what a generation did, and "filled 6 fields" with nothing on screen is a receipt
+       * for something you cannot see.
+       */
+      const wrote = Object.keys(patch).map(fieldWord).join(', ')
       setFillNote((m) => ({
         ...m,
-        [nt.id]: n
-          ? `Filled ${n} empty field${n === 1 ? '' : 's'}${from}. Check them.`
-          : doc
-            ? `Nothing new to fill${from}: every field it supports is already written.`
-            : 'Nothing new to fill.',
+        [nt.id]: n ? `Wrote ${wrote}.` : 'Nothing new to write: this card is already filled in.',
       }))
     } catch (e) {
       setFillNote((m) => ({ ...m, [nt.id]: (e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not fill this in.' }))
     } finally {
       setFilling(null)
     }
-  }
-  const [scanning, setScanning] = useState<string | null>(null)
-  const [scanNote, setScanNote] = useState<Record<string, string>>({})
-  /**
-   * Read a site and fill in the card from it.
-   *
-   * Fills only EMPTY fields. A scan must never overwrite something somebody wrote: the site is one
-   * source and the person at the keyboard is a better one, and silently replacing their sentence
-   * with the homepage's is the kind of thing you notice three campaigns later.
-   */
-  const scanSiteInto = async (
-    nodeId: string,
-    url: string,
-    kind: 'brand' | 'product',
-    current: Record<string, unknown>,
-    apply: (patch: Record<string, unknown>) => void,
-  ) => {
-    if (!url.trim()) return
-    setScanning(nodeId)
-    setScanNote((m) => { const { [nodeId]: _drop, ...rest } = m; return rest })
-    try {
-      const res = await apiFetch('/api/scan-site', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url, kind }),
-      })
-      if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `scan ${res.status}`)
-      const data = (await res.json()) as Record<string, unknown> & { confidence?: string; pagesRead?: number; readFrom?: string[] }
-      const patch: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(data)) {
-        if (['confidence', 'pagesRead', 'readFrom'].includes(k)) continue
-        const has = Array.isArray(current[k]) ? (current[k] as unknown[]).length > 0 : String(current[k] ?? '').trim()
-        if (has) continue
-        if (Array.isArray(v) ? v.length : String(v ?? '').trim()) patch[k] = v
-      }
-      const filled = Object.keys(patch).length
-      if (filled) apply(patch)
-      // Says what it did and how sure it is, because a form that fills itself silently is a form you
-      // stop reading.
-      setScanNote((m) => ({
-        ...m,
-        [nodeId]: filled
-          ? `Filled ${filled} empty field${filled === 1 ? '' : 's'} from ${data.pagesRead ?? 1} page${data.pagesRead === 1 ? '' : 's'}. Confidence ${data.confidence ?? 'unknown'}. Check them.`
-          : 'Nothing new to fill: every field it could support is already written.',
-      }))
-    } catch (e) {
-      setScanNote((m) => ({ ...m, [nodeId]: (e as Error)?.message === 'NO_KEY' ? 'No model key set.' : 'Could not read that site.' }))
-    } finally {
-      setScanning(null)
-    }
-  }
-  const suggestFor = async (field: string, already: string[], aud?: { name?: string; role?: string }): Promise<string[]> => {
-    const profile = brand ? clientProfiles[brand] : undefined
-    const res = await apiFetch('/api/suggest-options', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        field,
-        brand,
-        // `positioning` on a profile is the positioning-MAP object (axes and a coordinate), not prose.
-        // Passing it as a string rendered "[object Object]" into the prompt. The wedge is the
-        // sentence that field is actually the picture of.
-        oneLiner: profile?.oneLiner,
-        positioning: profile?.wedge,
-        mission: profile?.mission,
-        products: profile?.products,
-        industry: profile?.industry,
-        differentiators: profile?.differentiators,
-        voice: profile?.voice,
-        audienceName: aud?.name,
-        audienceRole: aud?.role,
-        already,
-      }),
-    })
-    if (!res.ok) throw new Error(res.status === 501 ? 'NO_KEY' : `suggest ${res.status}`)
-    const data = (await res.json()) as { options?: string[] }
-    return data.options ?? []
   }
   /**
    * Patch one audience in the brand's list. The store takes the whole list, so the read-modify-write
@@ -2732,61 +2678,6 @@ export function FlowsView() {
   const brandMixesForRefs = useMemo(() => mediaMixes.filter((m) => m.brand === brand), [mediaMixes, brand])
   // The brand's proof points (RTBs), resolved up the brand tree like generation reads them.
   const brandProof = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.rtbs : []), [brand, brandSystems, brandMeta])
-  /** The brand's own CTAs, resolved up the brand tree exactly as generation reads them. */
-  const brandCtas = useMemo(() => (brand ? resolveBrandScope(brand, brandSystems, brandMeta).library.ctas : []), [brand, brandSystems, brandMeta])
-  /**
-   * The brand material a card's instruction suggestions are drawn from: the audience it names (when
-   * it names one), the brand's differentiators and voice, its hooks, its proof pool and its message
-   * records. Everything here is something the user already wrote; see directionPresets, which
-   * invents nothing.
-   */
-  const presetSourcesFor = (nt: CanvasObject): DirectionPresetSources => {
-    // A Data source card's own figures, so "The figure" offers what the table actually says.
-    const cardFigures =
-      nt.kind === 'data-source' && nt.refId
-        ? (() => {
-            const ds = allBrandDatasets.find((d) => d.id === nt.refId)
-            return ds ? citableFigures(ds).map((f) => ({ value: f.value, label: f.label })) : undefined
-          })()
-        : undefined
-    const aud = nt.kind === 'audience' && nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined
-    const per = nt.kind === 'person' && nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined
-    const profile = brand ? clientProfiles[brand] : undefined
-    const sys = brand ? resolveBrandScope(brand, brandSystems, brandMeta).library : undefined
-    /**
-     * WITH NO RECORD LINKED, fall back to the brand's whole audience set rather than to nothing.
-     *
-     * This used to return undefined, so an unlinked card offered no suggestions and quietly degraded
-     * to a blank box — which is exactly the state a card is in when you first drop it, and so the
-     * state most in need of a starting point. The brand's other audiences are still the brand's own
-     * writing, so nothing is invented by pooling them; the only thing lost is the certainty that a
-     * given pain belongs to THIS audience, and there is no this-audience yet to be wrong about.
-     */
-    const pooled = aud
-      ? undefined
-      : {
-          pains: asList(brandSegments.flatMap((a) => asList(a.pains))),
-          objections: brandSegments.map((a) => a.objections ?? '').filter(Boolean).join('\n'),
-          antiMessage: brandSegments.map((a) => a.antiMessage ?? '').filter(Boolean).join('\n'),
-          goals: brandSegments.map((a) => a.goals ?? '').filter(Boolean).join('\n'),
-          messageAngle: brandSegments.map((a) => a.messageAngle ?? '').filter(Boolean).join('\n'),
-        }
-    return {
-      audience: aud
-        ? { pains: aud.pains, objections: aud.objections, antiMessage: aud.antiMessage, goals: aud.goals, messageAngle: aud.messageAngle }
-        : pooled,
-      audienceFrom: aud ? undefined : 'your audiences',
-      differentiators: profile?.differentiators,
-      voice: profile?.voice,
-      hooks: (sys?.hooks ?? []).map((h) => h.text).filter(Boolean),
-      proof: brandProof.map((p) => ({ label: p.label, metric: p.metric })),
-      figures: cardFigures,
-      messages: messages.map((m) => ({ angle: m.angle })),
-      persona: per
-        ? { optimizingFor: per.optimizingFor, saysLike: per.saysLike, usesNow: per.usesNow, hobbies: per.hobbies }
-        : undefined,
-    }
-  }
   // Every Records page, as selectable tag groups: Companies / People / Segments / Channels /
   // Proof points / Media mix. Segments ARE the brand's audiences (from clientAudiences).
   const recordGroups = useMemo(
@@ -2904,8 +2795,16 @@ export function FlowsView() {
    */
   // Moved to the domain: the store needs the same map to propagate a smart-object edit.
   const REF_TYPE_FOR_KIND = REF_TYPE_FOR_OBJECT_KIND
-  /** Kinds that render a full record form, and so need no direction fields under it. */
-  const HAS_RECORD_FORM = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger', 'brand', 'product'])
+  /**
+   * KINDS THAT SPEAK THROUGH THEIR RECORD, and so ask for no direction underneath.
+   *
+   * Named for the record rather than for the form that used to render it: the form is gone (see the
+   * inspector), the reason it excluded these kinds from direction is not. A Person's record already
+   * says what that reader cares about, so a "They care about" box under it is a second, thinner
+   * answer to a question that has one — and two answers on one card is how a writer ends up handed
+   * both.
+   */
+  const RECORD_LED = new Set<CanvasObjectKind>(['person', 'audience', 'company', 'trigger', 'brand', 'product'])
   /** The ref a card would contribute, or null if it carries nothing the campaign can hold. */
   const refForObject = (nt: CanvasObject): FlowReference | null => {
     const type = REF_TYPE_FOR_KIND[nt.kind]
@@ -4659,15 +4558,6 @@ export function FlowsView() {
     const already = mintedRecordRef.current.get(nt.id)
     if (already) return already
     const id = addPerson({ name: '', brand: brand || undefined })
-    mintedRecordRef.current.set(nt.id, id)
-    setObjectRef(nt.id, id)
-    return id
-  }
-  const ensureCompanyFor = (nt: CanvasObject): string => {
-    if (nt.refId && allCompanies.some((c) => c.id === nt.refId)) return nt.refId
-    const already = mintedRecordRef.current.get(nt.id)
-    if (already) return already
-    const id = addCompany({ name: '', brand: brand || undefined })
     mintedRecordRef.current.set(nt.id, id)
     setObjectRef(nt.id, id)
     return id
@@ -6680,12 +6570,21 @@ export function FlowsView() {
               compares one period against another.
             </p>
           )}
-          {/* DESCRIBE IT AND HAVE IT FILLED IN. First thing on the panel, because it is the fastest
-              way past a dozen empty dropdowns and a blank card is the state this is for.
+          {/* THE WHOLE PANEL, now. A card is given its context in one of two ways — describe it and
+              have it generated, or hand it the document that already says all of this — and this box
+              is both of them.
 
-              The record it writes to is whichever the card names, so the same box works whether the
-              card is brand new or half filled: it only ever fills fields that are still empty. */}
-          {FILLABLE[nt.kind] && (() => {
+              WHAT WAS HERE BEFORE: under this box sat a record form per kind, twenty-five pick-lists
+              and a dozen text fields between them, and answering a card meant working down a taxonomy
+              somebody else chose. The pick-lists were there for a real reason — four audiences typed
+              four slightly different ways is four vocabularies and no way to see they are the same
+              thing — but that reason serves the library, not the person in front of the card, and it
+              was being charged to them at the worst possible moment: the moment the card is blank.
+
+              So the fields are gone from here. They still exist and are still filled: Generate writes
+              them, and they are edited where records are edited. What a card asks you for now is the
+              thing only you can give it, in the form you already have it in. */}
+          {TAKES_CONTEXT.has(nt.kind) && (() => {
             const recordFor = (): { current: Record<string, unknown>; apply: (p: Record<string, unknown>) => void } | null => {
               switch (nt.kind) {
                 case 'brand': {
@@ -6743,23 +6642,21 @@ export function FlowsView() {
                     },
                   }
                 }
-                case 'company': {
-                  const co = (nt.refId ? allCompanies.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
-                  return { current: co as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateCompany(ensureCompanyFor(nt), p as Partial<Company>) } }
-                }
                 case 'audience': {
                   const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
                   return { current: au as unknown as Record<string, unknown>, apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
                 }
+                // No company case: an account's facts are not generated, so nothing here writes one.
                 default: return null
               }
             }
             const target = recordFor()
-            if (!target) return null
+            const fields = FILLABLE[nt.kind]
+            /** A Company reaches this box for the upload alone — there is nothing for it to generate. */
+            const canGenerate = !!fields && !!target
             const busy = filling === nt.id
-            const doc = fillDoc[nt.id]
+            const ref = nt.reference
             const kindLabel = (OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()
-            const docOnly = DOC_ONLY_FILL.has(nt.kind)
             return (
               <div
                 className={`flow-fillbox${docDropOn === nt.id ? ' dropping' : ''}`}
@@ -6785,38 +6682,34 @@ export function FlowsView() {
                   if (file) void attachDocFile(nt.id, file)
                 }}
               >
-                {/* The box used to be a bare textarea whose only explanation was a placeholder, and
-                    a placeholder is gone the moment you type. What it does, what it costs you, and
-                    that you stay in charge afterwards are all things you need BEFORE you use it.
-
-                    Said in two lines rather than five. The long version restated things the control
-                    already shows you — that you can upload a file (there is a button that says so),
-                    that a sentence works (the placeholder is a sentence) — and buried the two facts
-                    you cannot see anywhere: it will not overwrite you, and none of it counts until
-                    the card is connected. Those are what is left. */}
+                {/* Two facts you cannot see anywhere, and nothing you can. Generating will not
+                    overwrite what is already written, and none of this counts until the card is
+                    connected — everything else the controls say for themselves. */}
                 <div className="flow-fill-head">
                   <span className="flow-fill-title">
-                    {docOnly ? `Fill this ${kindLabel} in from a document` : `Describe this ${kindLabel}, or hand it a document`}
+                    {canGenerate ? `Give this ${kindLabel} its context` : `Hand this ${kindLabel} its document`}
                   </span>
                   <span className="flow-fill-help">
-                    {docOnly ? (
+                    {canGenerate ? (
                       <>
-                        A {kindLabel} is a real organisation, so its facts have to come from a
-                        document rather than a description. Only empty fields get filled, and
-                        everything it writes is a draft you can change.
+                        Generate it from a sentence, or upload the document that already says it.
+                        Generating fills only what is still empty, and nothing on this card reaches
+                        the copy until it is connected.
                       </>
                     ) : (
                       <>
-                        Only empty fields get filled, and everything it writes is a draft you can
-                        change. Nothing on this card reaches the copy until it is connected.
+                        A {kindLabel} is a real organisation, so its context has to come from a
+                        document rather than from a description: a generated account is a page of
+                        confident guesses about somebody real. Nothing here reaches the copy until
+                        this card is connected.
                       </>
                     )}
                   </span>
                 </div>
                 {/* THE ATTACHED DOCUMENT, shown as what it is: a named source of a stated size, with
-                    the one control that matters on it. A file that fills a card invisibly is a file
-                    you cannot argue with. */}
-                {doc && (
+                    the one control that matters on it. It is the card's context rather than a thing
+                    that filled the card in, so it stays here, and it goes to the writer whole. */}
+                {ref && (
                   <div className="flow-fill-doc">
                     <span className="flow-fill-doc-ic" aria-hidden="true">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -6824,62 +6717,69 @@ export function FlowsView() {
                         <path d="M14 3v4h4" />
                       </svg>
                     </span>
-                    <span className="flow-fill-doc-name">{describeDoc(doc)}</span>
+                    <span className="flow-fill-doc-name">
+                      {describeReference(ref)}
+                      {/* A cut brief that does not say it was cut reads as a whole one, to the
+                          person and to the writer. */}
+                      {ref.truncated && <em className="flow-fill-doc-cut"> · cut to fit the writer</em>}
+                    </span>
                     <button
                       className="flow-fill-doc-x"
                       title="Remove this document"
                       aria-label="Remove this document"
-                      onClick={() => setDoc(nt.id, null)}
+                      onClick={() => setCardReference(nt.id, null)}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
                   </div>
                 )}
-                <textarea
-                  className="flow-fill-input"
-                  rows={4}
-                  value={prompting[nt.id] ?? ''}
-                  placeholder={
-                    doc
-                      ? `Optional: which part of ${doc.name} this ${kindLabel} is`
-                      : docOnly
-                        ? 'Optional: which part of the document to read. Upload one to fill this in'
-                        : FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and the fields fill in'
-                  }
-                  onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
-                  /**
-                   * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted table
-                   * makes on a Data source card. Left in the textarea it would be read as a
-                   * description and cut at 1200 characters by the server, which is a truncation
-                   * nobody was told about. As an attachment it arrives whole and says so.
-                   */
-                  onPaste={(e) => {
-                    const text = e.clipboardData.getData('text/plain')
-                    if (text.trim().length < PASTE_AS_DOC_CHARS) return
-                    e.preventDefault()
-                    setDoc(nt.id, docFromPaste(text))
-                  }}
-                  onKeyDown={(e) => {
-                    // Enter fills; shift-Enter is a newline, since a description can run to two lines.
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
-                  }}
-                />
+                {canGenerate && target && (
+                  <textarea
+                    className="flow-fill-input"
+                    rows={4}
+                    value={prompting[nt.id] ?? ''}
+                    placeholder={FILL_PLACEHOLDER[nt.kind] ?? 'Describe it and it fills itself in'}
+                    onChange={(e) => setPrompting((m) => ({ ...m, [nt.id]: e.target.value }))}
+                    /**
+                     * A PASTE LONG ENOUGH TO BE A DOCUMENT BECOMES ONE, the same move a pasted table
+                     * makes on a Data source card. Left in the textarea it would be read as a
+                     * description and cut at 1200 characters by the server, which is a truncation
+                     * nobody was told about. As the card's document it arrives whole and says so.
+                     */
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData('text/plain')
+                      if (text.trim().length < PASTE_AS_DOC_CHARS) return
+                      e.preventDefault()
+                      const pasted = docFromPaste(text)
+                      setCardReference(nt.id, makeObjectReference(pasted.name, pasted.text, Date.now()))
+                    }}
+                    onKeyDown={(e) => {
+                      // Enter generates; shift-Enter is a newline, since a description can run to two lines.
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void fillCardFromPrompt(nt, target.current, target.apply) }
+                    }}
+                  />
+                )}
                 <div className="flow-fill-foot">
-                  <button
-                    className="flow-fill-go"
-                    disabled={busy || !(doc || (!docOnly && (prompting[nt.id] ?? '').trim()))}
-                    onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
-                  >
-                    {busy ? 'Filling…' : doc ? 'Fill this in from the document' : 'Fill this in'}
-                  </button>
-                  {/* Upload sits beside Fill rather than above the box: it is the second route to
-                      the same button, not a separate feature. */}
+                  {canGenerate && target && (
+                    <>
+                      <button
+                        className="flow-fill-go"
+                        disabled={busy || !(prompting[nt.id] ?? '').trim()}
+                        onClick={() => void fillCardFromPrompt(nt, target.current, target.apply)}
+                      >
+                        {busy ? 'Generating…' : 'Generate'}
+                      </button>
+                      {/* The two routes are alternatives, not a button and its fallback, and the
+                          word between them is the cheapest way to say so. */}
+                      <span className="flow-fill-or">or</span>
+                    </>
+                  )}
                   <button
                     className="flow-fill-upload"
                     disabled={busy}
                     onClick={() => { docTargetRef.current = nt.id; docFileRef.current?.click() }}
                   >
-                    {doc ? 'Choose another file' : 'Upload a .md file'}
+                    {ref ? 'Replace the document' : 'Upload a .md'}
                   </button>
                   {fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                 </div>
@@ -6887,362 +6787,30 @@ export function FlowsView() {
             )
           })()}
 
-          {/* OBJECTS, not raw records. A Person card offers person objects: this campaign's own
-              first, then the brand library. The object is the reusable unit ("the RevOps buyer",
-              carrying the contact plus the proof and message that go with them); the record is
-              just its contents. Picking one pulls everything inside it into the campaign when the
-              card is attached. */}
-          {/* NO PICKERS ON A CARD. It carried a smart-object picker and, under that, a
-              single-record picker: two ways to answer the same question, on the card that is itself
-              the answer. A card now says what it INSTRUCTS, and ⌘G (or the right-click menu) is how
-              it becomes a smart object — one gesture, on the board, rather than a dropdown that
-              quietly swapped what the card meant.
+          {/* NO RECORD FORMS. Eleven of them stood here — person, audience, company, trigger, brand,
+              season, proof point, voice, concept, message, product — and between them twenty-five
+              pick-lists, three chip fields and a dozen inputs. They are gone, and this is the note
+              that says so rather than a hole where a panel used to be.
 
-              The linked object's contents, its promote and its delete moved with it. They belong on
-              the smart object's own inspector, which is where selecting one already takes you. */}
-          {/* A CARD POINTS AT A SMART OBJECT, or it carries direction. There is no third option.
-              The "Or just one audience" picker is gone from every kind that HAS a smart-object
-              picker: it offered the same thing one rung lower, so the panel asked the same question
-              twice and a card could end up naming a record its linked object was going to ignore.
+              WHY THEY WENT. Each one asked its questions well; together they asked far too many, and
+              they asked them at the moment a card is emptiest. Opening a fresh Audience card put a
+              dozen dropdowns in front of somebody whose actual position is "I know who this is, I
+              just have not told you yet" — and the two things that could tell you fastest, a
+              sentence and the document already on their disk, were a footnote above all of it.
 
-              Kept on the kinds with NO smart-object picker (message, voice, trigger, season, concept,
-              data source), where it is the only way to point the card at anything. */}
-          {/* NO RECORD PICKER EITHER, on any kind. A card is what it INSTRUCTS: the fields below are
-              the whole of it. The picker was the last place the panel asked "which stored thing is
-              this" instead of "what should the copy do", and keeping it on the handful of kinds that
-              had no smart object made those kinds behave differently for no reason a user could see.
+              WHAT WAS GIVEN UP, said plainly. The pick-lists existed to keep one brand's vocabulary
+              from forking four ways (see RecordPickers), and typed prose does fork. That reason is
+              real and it is a reason for the LIBRARY, where records are edited and compared, not for
+              the card you are still deciding the shape of. The brand's site scan sat inside the
+              Brand form and went with it; the fields it filled are still filled by Generate.
 
-              A Data source card still reaches its data set: double-clicking one opens it, creating it
-              if it does not exist yet (openDataCard). */}
-          {/* THE PERSON a card names, edited here.
-              Name, age, income, location, occupation, hobbies — the six that decide who this is —
-              then the fields that decide how to write to them. Each field gets the control its
-              content deserves rather than one control repeated ten times: a band is a dropdown, a
-              ZIP is five digits with the state echoed back, an occupation is a long list you should
-              be able to type past, and hobbies are tags because a persona is compared to other
-              personas and free text makes that impossible. */}
-          {nt.kind === 'person' && (() => {
-            // Blank stand-in when the card has not named anyone yet, so the fields are all present
-            // and the first edit is what creates the record. See ensurePersonFor.
-            // Resolve by id against the FULL list so a linked record always renders; suggest only
-            // from this brand's, so a picker never shows another client's wording.
-            const per = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
-            const others = people.filter((o) => o.id !== per.id)
-            const own = (key: keyof Person): string[] => others.map((o) => String(o[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Person>) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const pick = (label: string, key: keyof Person, options: readonly string[]) =>
-              field(label, (
-                <RecordCombo
-                  value={String(per[key] ?? '')}
-                  groups={[{ label: 'Choose one', options: [...options] }]}
-                  placeholder="Choose"
-                  allowCreate={false}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            return (
-              <>
-                {/* No heading. The panel already says Person at the top and the fields say what they
-                    are; a section label above the first of them was naming the panel twice. */}
-                <div className="flow-recform">
-                  {/* NAME is an input, never a pick-list: it is the one field whose whole job is to be
-                      new. Everything else on this card is chosen; this is what you are choosing it for. */}
-                  {field('Name', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={per.name}
-                      placeholder="Name this person"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {pick('Age', 'age', AGE_BANDS)}
-                  {pick('Household income', 'householdIncome', INCOME_BANDS)}
-                  {field('Location', <ZipField value={per.location ?? ''} onCommit={(v) => set({ location: v })} />)}
-                  {/* OCCUPATION is a combo, not a hard pick-list: sixty jobs cover a lot and will
-                      never cover a brand's actual customers, and the wrong job is worse than a typed one. */}
-                  {field('Occupation', (
-                    <RecordCombo
-                      value={per.occupation ?? ''}
-                      groups={[
-                        { label: 'From your other people', options: own('occupation') },
-                        { label: 'Common jobs', options: [...OCCUPATIONS] },
-                      ]}
-                      placeholder="What they do for a living"
-                      onCommit={(v) => set({ occupation: v })}
-                    />
-                  ))}
-                  {field('Hobbies and interests', (
-                    <RecordMulti
-                      values={splitLines(per.hobbies)}
-                      groups={[
-                        { label: 'From your other people', options: others.flatMap((o) => splitLines(o.hobbies)) },
-                        { label: 'Common interests', options: [...HOBBIES] },
-                      ]}
-                      addLabel="Add an interest"
-                      onCommit={(v) => set({ hobbies: v.join('\n') })}
-                    />
-                  ))}
-                </div>
-                {/* The rest of the persona: not who they are, but how to write to them. Kept apart
-                    because the six above are answered once and these are what actually move the copy
-                    — saysLike more than any other field on the record. */}
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>How to write to them</label>
-                <div className="flow-recform">
-                  {pick('How much they know', 'expertise', EXPERTISE_LEVELS)}
-                  {pick('What they want', 'optimizingFor', MOTIVES)}
-                  {pick('When they would read this', 'readsWhen', READING_MOMENTS)}
-                  {pick('Who else decides', 'decidesWith', DECIDERS)}
-                  {field('What they use today', (
-                    <RecordCombo
-                      value={per.usesNow ?? ''}
-                      groups={[{ label: 'From your other people', options: own('usesNow') }]}
-                      placeholder="What they reach for instead"
-                      onCommit={(v) => set({ usesNow: v })}
-                    />
-                  ))}
-                  {field('How they talk', (
-                    <RecordCombo
-                      value={per.saysLike ?? ''}
-                      groups={[{ label: 'From your other people', options: own('saysLike') }]}
-                      placeholder="Their own words and phrases"
-                      onCommit={(v) => set({ saysLike: v })}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          {/* THE AUDIENCE this card names, PICKED rather than typed.
-              Every field is a dropdown; typing is an option inside each one rather than the default.
-              Four audiences whose pains are the same thought worded four ways are four vocabularies
-              and no way to see they agree, and that is what free text produces.
+              WHAT REMAINS TRUE. The records themselves are untouched: Generate still writes them,
+              they still reach the copy writer through the wires, and every one of them is still
+              editable in Records. This panel simply stopped being a second place to do that.
 
-              The suggestions are the brand's OWN values for the field first, taken from its other
-              audiences, then the shared library. Nothing is generated: a suggestion is either
-              something this user wrote or a hand-written library entry, because anything invented
-              here would reach the copy writer as though they had asserted it. */}
-          {nt.kind === 'audience' && (() => {
-            // Same as the person form: every field is present from the moment the card exists, and
-            // the first edit is what mints the audience record.
-            const aud = (nt.refId ? brandSegments.find((a) => a.id === nt.refId) : undefined) ?? newAudience()
-            // What this brand has already said, gathered off its OTHER audiences.
-            const others = brandSegments.filter((a) => a.id !== aud.id)
-            const own = (pick: (a: AudienceType) => unknown): string[] =>
-              others.flatMap((a) => { const v = pick(a); return Array.isArray(v) ? asList(v) : splitLines(String(v ?? '')) })
-            const groups = (mine: string[], lib: { label: string; options: string[] }[]): OptionGroup[] => [
-              { label: 'From your other audiences', options: mine },
-              ...lib,
-            ]
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const who = { name: aud.name, role: aud.role }
-            const combo = (label: string, value: string, g: OptionGroup[], placeholder: string, key: keyof AudienceType, sug?: string) =>
-              field(label, (
-                <RecordCombo
-                  value={value}
-                  groups={g}
-                  placeholder={placeholder}
-                  onSuggest={sug ? () => suggestFor(sug, g.flatMap((x) => x.options), who) : undefined}
-                  onCommit={(v) => patchCardAudience(nt, { [key]: v })}
-                />
-              ))
-            const multi = (label: string, values: string[], g: OptionGroup[], addLabel: string, key: keyof AudienceType, sug?: string) =>
-              field(label, (
-                <RecordMulti
-                  values={values}
-                  groups={g}
-                  addLabel={addLabel}
-                  onSuggest={sug ? () => suggestFor(sug, values, who) : undefined}
-                  onCommit={(v) => patchCardAudience(nt, { [key]: v })}
-                />
-              ))
-            const select = (label: string, value: string, options: readonly string[], key: keyof AudienceType) =>
-              field(label, (
-                <RecordCombo
-                  value={value ? value.charAt(0).toUpperCase() + value.slice(1) : ''}
-                  groups={[{ label: 'Choose one', options: options.map((o) => o.charAt(0).toUpperCase() + o.slice(1)) }]}
-                  placeholder="Choose"
-                  allowCreate={false}
-                  // funnelStage is stored lowercase to match every other reader of it; only the
-                  // label carries the capital, so the picker hands back the stored form.
-                  onCommit={(v) => patchCardAudience(nt, { [key]: options.find((o) => o.toLowerCase() === v.toLowerCase()) ?? v })}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>{aud.name || 'Untitled audience'}</label>
-                {!brand && <BrandlessNotice noun="audience" />}
-                <div className="flow-recform">
-                  {combo('Who exactly', aud.definition ?? '', [
-                    { label: 'From your other audiences', options: own((a) => a.definition) },
-                    { label: 'Their roles', options: others.map((a) => a.role).filter(Boolean) },
-                    // Nothing generic can define a brand's own sub-segment, so this one legitimately
-                    // starts empty. The picker still takes a typed value in the same box.
-                  ], 'Sharper than the role. One line.', 'definition', 'definition')}
-                  {multi('What is wrong today', asList(aud.pains), groups(own((a) => a.pains), PAIN_GROUPS), 'Add a pain', 'pains', 'pains')}
-                  {multi('What good looks like', asList(aud.goalTags), groups(own((a) => a.goalTags), GOAL_GROUPS), 'Add a want', 'goalTags', 'goals')}
-                  {multi('Why now', asList(aud.triggers), groups(own((a) => a.triggers), TRIGGER_GROUPS), 'Add a trigger', 'triggers', 'triggers')}
-                  {/* These drew ONLY from the brand's other audiences, so a brand's first audience
-                      showed an empty dropdown — the same empty-box failure the starter libraries
-                      exist to prevent. The libraries were wired into the direction field and never
-                      into the record form that replaced it. */}
-                  {combo('What they believe against you', aud.objections ?? '', [
-                    { label: 'From your other audiences', options: own((a) => a.objections) },
-                    ...OBJECTION_GROUPS,
-                  ], 'The copy has to answer this', 'objections', 'objections')}
-                  {combo('Never say', aud.antiMessage ?? '', [
-                    { label: 'From your other audiences', options: own((a) => a.antiMessage) },
-                    // An anti-message is the inverse of an objection: the thing that confirms it.
-                    ...OBJECTION_GROUPS.map((g) => ({ label: `Do not confirm: ${g.label.toLowerCase()}`, options: g.options })),
-                  ], 'The sentence that loses them', 'antiMessage', 'antiMessage')}
-                  {combo('The angle', aud.messageAngle ?? '', [
-                    { label: 'From your other audiences', options: own((a) => a.messageAngle) },
-                    { label: 'Your message records', options: messages.map((m) => m.angle ?? '').filter(Boolean) },
-                    { label: "Your brand's differentiators", options: (brand ? clientProfiles[brand]?.differentiators ?? [] : []).filter(Boolean) },
-                  ], 'How the promise is framed for them', 'messageAngle', 'messageAngle')}
-                  {select('Seniority', aud.seniority ?? '', SENIORITIES, 'seniority')}
-                  {select('Company size', aud.companySize ?? '', TAXONOMY_COMPANY_SIZES, 'companySize')}
-                  {select('Industry', aud.industry ?? '', INDUSTRIES, 'industry')}
-                  {select('Stage', aud.funnelStage ?? '', FUNNEL_STAGE_OPTIONS, 'funnelStage')}
-                </div>
-              </>
-            )
-          })()}
-          {/* THE COMPANY a card names, on the same terms as Person and Audience: every field
-              present from the moment the card exists, the first edit mints the record, and each
-              field gets the control its content deserves.
-
-              An account is mostly categorical — size, country, industry, where it sits with you —
-              so it takes more pick-lists than either of the others. Name and website are typed
-              because they are the two things that are unique to this company by definition. */}
-          {nt.kind === 'company' && (() => {
-            const co = (nt.refId ? allCompanies.find((c) => c.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
-            const others = companies.filter((c) => c.id !== co.id)
-            const own = (key: keyof Company): string[] => others.map((c) => String(c[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Company>) => { markCardDirty(nt.id); updateCompany(ensureCompanyFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const pick = (label: string, key: keyof Company, options: readonly string[]) =>
-              field(label, (
-                <RecordCombo
-                  value={String(co[key] ?? '')}
-                  groups={[{ label: 'Choose one', options: options.map((o) => o.charAt(0).toUpperCase() + o.slice(1)) }]}
-                  placeholder="Choose"
-                  allowCreate={false}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            const typed = (label: string, key: keyof Company, placeholder: string) =>
-              field(label, (
-                <BufferedInput
-                  className="flow-recform-input"
-                  value={String(co[key] ?? '')}
-                  placeholder={placeholder}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Who they are</label>
-                <div className="flow-recform">
-                  {typed('Name', 'name', 'Name this company')}
-                  {typed('Website', 'website', 'example.com')}
-                  {pick('Industry', 'segment', INDUSTRIES)}
-                  {pick('Employees', 'employees', TAXONOMY_COMPANY_SIZES)}
-                  {pick('Country / HQ', 'country', REGIONS)}
-                  {pick('Where they sit with you', 'status', COMPANY_STATUSES)}
-                  {/* The audience this account belongs to, picked from the brand's own segments —
-                      the join that lets an account inherit an audience's pains and anti-message. */}
-                  {field('Audience they belong to', (
-                    <RecordCombo
-                      value={co.audienceSegment ?? ''}
-                      groups={[{ label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) }]}
-                      placeholder="Which audience"
-                      onCommit={(v) => set({ audienceSegment: v })}
-                    />
-                  ))}
-                  {field('What they do', (
-                    <RecordCombo
-                      value={co.description ?? ''}
-                      groups={[{ label: 'From your other companies', options: own('description') }]}
-                      placeholder="One line on the business"
-                      onCommit={(v) => set({ description: v })}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          {/* THE TRIGGER a card names: why NOW, and what to do about it.
-              The two direction fields this replaces were already the record said twice — "They just
-              did" IS the signal, and "The ask" IS the action the response implies. */}
-          {nt.kind === 'trigger' && (() => {
-            const trg = (nt.refId ? triggers.find((t) => t.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
-            const others = triggers.filter((t) => t.id !== trg.id)
-            const set = (patch: Partial<Trigger>) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const combo = (label: string, value: string, groups: OptionGroup[], placeholder: string, key: keyof Trigger) =>
-              field(label, <RecordCombo value={value} groups={groups} placeholder={placeholder} onCommit={(v) => set({ [key]: v })} />)
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Why now</label>
-                <div className="flow-recform">
-                  {field('Name', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={trg.name}
-                      placeholder="Name this trigger"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {combo('Type', trg.type ?? '', [{ label: 'Choose one', options: [...TRIGGER_TYPE_OPTIONS] }], 'What kind of trigger', 'type')}
-                  {/* The highest-value field: the writer must not re-explain something the reader has
-                      already done. Sourced from this brand's own triggers and its audiences' before
-                      the starter lists. */}
-                  {combo('What fires it', trg.signal ?? '', [
-                    { label: 'From your other triggers', options: others.map((t) => t.signal ?? '').filter(Boolean) },
-                    { label: "From your audiences", options: brandSegments.flatMap((a) => asList(a.triggers)) },
-                    ...TRIGGER_GROUPS,
-                  ], 'The event or condition', 'signal')}
-                  {/* The ask comes from the brand's OWN CTA list, verbatim, rather than being invented
-                      here — same rule the copy writer works under. */}
-                  {combo('The ask', trg.response ?? '', [
-                    { label: 'Your brand CTAs', options: brandCtas.map((c) => c.label).filter(Boolean) },
-                    { label: 'From your other triggers', options: others.map((t) => t.response ?? '').filter(Boolean) },
-                  ], 'The one action it drives', 'response')}
-                  {combo('Channel', trg.channel ?? '', [
-                    { label: 'Channels', options: CHANNEL_LIST.map((c) => c.label) },
-                  ], 'Where it acts', 'channel')}
-                  {combo('Audience', trg.audience ?? '', [
-                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
-                  ], 'Who it targets', 'audience')}
-                  {combo('Status', trg.status ?? '', [{ label: 'Choose one', options: [...TRIGGER_STATUSES] }], 'Active, paused or draft', 'status')}
-                </div>
-              </>
-            )
-          })()}
-          {/* SAVE UPDATES. The fields themselves persist as you touch them, which is right: an edit
-              you have to remember to commit is an edit you lose. What is NOT automatic is pushing the
-              change into copy that was already written, so that is what this button does rather than
+              SAVE UPDATES. The card persists as you touch it, which is right: an edit you have to
+              remember to commit is an edit you lose. What is NOT automatic is pushing the change
+              into copy that was already written, so that is what this button does rather than
               pretending to be the thing that saved it.
 
               It appears on any change, even when nothing is wired yet, because "did that take?" is a
@@ -7267,562 +6835,6 @@ export function FlowsView() {
                   </button>
                 )}
               </div>
-            )
-          })()}
-          {/* A BRAND AS AN OBJECT, authored on this canvas like any other card.
-              NOT the workspace client: that is a name string threaded through the whole account and
-              binds a canvas to a voice, so a text field here must not touch it. This is the other
-              thing people mean by brand — something you describe in a campaign to shape what gets
-              written. Several can sit on one board (a co-brand, a partner, a sub-brand), and one
-              travels to another campaign the same way every card does: group it into a smart object
-              and file it under the brand's assets. */}
-          {nt.kind === 'brand' && (() => {
-            const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
-            const others = brandObjects.filter((x) => x.id !== bo.id)
-            const own = (key: keyof BrandObject): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<BrandObject>) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const combo = (label: string, key: keyof BrandObject, placeholder: string, extra: OptionGroup[] = [], sug?: string) =>
-              field(label, (
-                <RecordCombo
-                  value={String(bo[key] ?? '')}
-                  groups={[{ label: 'From your other brands', options: own(key) }, ...extra]}
-                  placeholder={placeholder}
-                  onSuggest={sug ? () => suggestFor(sug, own(key)) : undefined}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            const multi = (label: string, key: 'products' | 'differentiators', addLabel: string, sug?: string) =>
-              field(label, (
-                <RecordMulti
-                  values={bo[key] ?? []}
-                  groups={[{ label: 'From your other brands', options: others.flatMap((x) => x[key] ?? []) }]}
-                  addLabel={addLabel}
-                  onSuggest={sug ? () => suggestFor(sug, bo[key] ?? []) : undefined}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>Who this is</label>
-                <div className="flow-recform">
-                  {/* Freely editable, because this record's identity is its id. Renaming it renames
-                      one record and nothing else, which is exactly what the workspace client cannot
-                      do. */}
-                  {field('Name', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={bo.name}
-                      placeholder="Name this brand"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {/* THE SITE, and the button that reads it. Directly under the name, because it is
-                      the fastest way to fill the rest of this card in and it should be the second
-                      thing you reach. */}
-                  {field('Website', (
-                    <>
-                      <BufferedInput
-                        className="flow-recform-input"
-                        value={bo.website ?? ''}
-                        placeholder="example.com"
-                        onCommit={(v) => set({ website: v })}
-                      />
-                      {bo.website?.trim() && (
-                        <button
-                          className="flow-scan-btn"
-                          disabled={scanning === nt.id}
-                          onClick={() => void scanSiteInto(nt.id, bo.website ?? '', 'brand', bo as unknown as Record<string, unknown>, (patch) => set(patch as Partial<BrandObject>))}
-                        >
-                          {scanning === nt.id ? 'Reading the site…' : 'Fill this in from the site'}
-                        </button>
-                      )}
-                      {scanNote[nt.id] && scanning !== nt.id && <span className="flow-zip-echo">{scanNote[nt.id]}</span>}
-                    </>
-                  ))}
-                  {combo('What it does', 'oneLiner', 'One line on what it does', [], 'oneLiner')}
-                  {multi('What it sells', 'products', 'Add a product or service', 'products')}
-                  {multi('What makes it different', 'differentiators', 'Add a differentiator', 'differentiators')}
-                  {combo('The position it owns', 'wedge', 'The one sentence no competitor can say', [], 'wedge')}
-                  {combo('Mission', 'mission', 'In their words')}
-                  {combo('Industry', 'industry', 'Choose', [{ label: 'Industries', options: [...INDUSTRIES] }])}
-                  {/* NO VOICE HERE. Voice is its own record and its own card, carrying a tone, do's,
-                      don'ts and a sample — far more than the one line this row held. Two places to
-                      say how a brand sounds is one place too many, and the card is the one the
-                      writer actually reads. */}
-                </div>
-                <div className="flow-inspect-note" style={{ marginTop: 10 }}>
-                  Authored on this campaign. To use it elsewhere, group it into a smart object and file
-                  it under the brand&apos;s assets.
-                </div>
-              </>
-            )
-          })()}
-          {/* THE MESSAGE A CARD ARGUES, edited on the card like every other record-linked kind.
-              A Message card could already NAME a message and could carry direction (claim, notThis),
-              but it was the one record-linked kind with no form: you picked a message, then went to
-              Records to say what it actually was. Audience, Person, Company, Trigger, Brand and
-              Product all edit in place, and this was the gap in that set. */}
-          {/* A MOMENT WORTH WRITING TO. A season is not a trigger: a trigger fires per person from a
-              signal about THEM, so it starts a journey; a season is on the calendar and the same for
-              everyone, so it opens a window and gives you permission to say something you would
-              otherwise be interrupting with. The card's direction always said as much — moment +
-              permission, against the trigger's justDid + ask. */}
-          {nt.kind === 'season' && (() => {
-            const sn = (nt.refId ? allSeasons.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Season)
-            const others = seasons.filter((x) => x.id !== sn.id)
-            const own = (key: keyof Season): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Season>) => { markCardDirty(nt.id); updateSeason(ensureSeasonFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const area = (label: string, key: keyof Season, placeholder: string) =>
-              field(label, (
-                <textarea
-                  className="flow-recform-area"
-                  rows={2}
-                  value={String(sn[key] ?? '')}
-                  placeholder={placeholder}
-                  onChange={(e) => set({ [key]: e.target.value } as Partial<Season>)}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>The moment</label>
-                <div className="flow-recform">
-                  {field('Season', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={sn.name}
-                      placeholder="Name this moment"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {area('The moment', 'moment', 'What is happening, in one line')}
-                  {/* Prose, not dates. A season is "the fortnight before the season opens" far more
-                      often than it is a pair of timestamps, and a real date range belongs on the
-                      flight, which already has one. */}
-                  {field('When it runs', (
-                    <RecordCombo
-                      value={sn.window ?? ''}
-                      groups={[{ label: 'From your other seasons', options: own('window') }]}
-                      placeholder="The fortnight before it opens"
-                      onCommit={(v) => set({ window: v })}
-                    />
-                  ))}
-                  {/* The field that earns the card. A moment you cannot say anything new because of
-                      is just a date. */}
-                  {area('What it lets you say', 'permission', 'Why this moment gives you permission')}
-                  {area('Where their head is', 'mindset', 'What they are already doing or feeling then')}
-                  {field('Who it is for', (
-                    <RecordCombo
-                      value={sn.audience ?? ''}
-                      groups={[
-                        { label: 'From your other seasons', options: own('audience') },
-                        { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
-                      ]}
-                      placeholder="Which audience"
-                      onCommit={(v) => set({ audience: v })}
-                    />
-                  ))}
-                  {field('Status', (
-                    <RecordCombo
-                      value={sn.status ? sn.status.charAt(0).toUpperCase() + sn.status.slice(1) : ''}
-                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
-                      placeholder="Choose"
-                      allowCreate={false}
-                      onCommit={(v) => set({ status: v.toLowerCase() as Season['status'] })}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          {/* WHAT MAKES IT BELIEVABLE. A proof point was already a reference and already reached the
-              writer through the proof pool, but it was the one record-linked kind you could create
-              from a card and then not edit there: the metric and the source, which are the whole
-              difference between proof and a claim, could only be filled in the Library. */}
-          {nt.kind === 'proof-point' && (() => {
-            const pf = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)
-            const set = (patch: Partial<Rtb>) => {
-              markCardDirty(nt.id)
-              const id = ensureProofFor(nt)
-              if (id && brand) updateBrandProof(brand, id, patch)
-            }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What makes it believable</label>
-                {!brand && <BrandlessNotice noun="proof point" />}
-                <div className="flow-recform">
-                  {field('Proof point', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={pf.label}
-                      placeholder="The claim this proves"
-                      onCommit={(v) => set({ label: v })}
-                    />
-                  ))}
-                  {/* The two that turn a claim into proof. A figure with no source is an assertion,
-                      and a source with no figure is a citation for nothing. */}
-                  {field('The figure', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={pf.metric ?? ''}
-                      placeholder="40% faster onboarding"
-                      onCommit={(v) => set({ metric: v })}
-                    />
-                  ))}
-                  {field('Where it comes from', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={pf.source ?? ''}
-                      placeholder="The case study, benchmark or survey behind it"
-                      onCommit={(v) => set({ source: v })}
-                    />
-                  ))}
-                  {field('In full', (
-                    <textarea
-                      className="flow-recform-area"
-                      rows={2}
-                      value={pf.detail ?? ''}
-                      placeholder="The proof stated properly, for someone who has to defend it"
-                      onChange={(e) => set({ detail: e.target.value })}
-                    />
-                  ))}
-                </div>
-                {/* Governance, stated rather than hidden: proof authored on a canvas is a draft
-                    until someone blesses it in the Library, and the writer is told which it is. */}
-                {pf.id && pf.approved === false && (
-                  <div className="flow-inspect-note" style={{ marginTop: 10 }}>
-                    An unvetted draft. Approve it in the brand&apos;s library to make it a master
-                    other campaigns can pull with confidence.
-                  </div>
-                )}
-              </>
-            )
-          })()}
-          {/* HOW IT SHOULD SOUND. A Voice card names one of the brand's voices, and until now that
-              record reached nothing: the brand guide set the register for every campaign and a Voice
-              card could only nudge it through its own likeThis / avoidSay direction. The record
-              carries the tone, the do's and don'ts and a sample, which is what the writer actually
-              needs to hold a register. */}
-          {nt.kind === 'voice' && (() => {
-            const vc = (nt.refId ? allVoices.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Voice)
-            const others = voices.filter((x) => x.id !== vc.id)
-            const own = (key: keyof Voice): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Voice>) => { markCardDirty(nt.id); updateVoice(ensureVoiceFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const area = (label: string, key: keyof Voice, placeholder: string) =>
-              field(label, (
-                <textarea
-                  className="flow-recform-area"
-                  rows={2}
-                  value={String(vc[key] ?? '')}
-                  placeholder={placeholder}
-                  onChange={(e) => set({ [key]: e.target.value } as Partial<Voice>)}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>How this sounds</label>
-                <div className="flow-recform">
-                  {field('Voice', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={vc.name}
-                      placeholder="Name this voice"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {field('Tone', (
-                    <RecordCombo
-                      value={vc.tone ?? ''}
-                      groups={[
-                        { label: 'From your other voices', options: own('tone') },
-                        { label: 'Common voices', options: [...BRAND_VOICES] },
-                      ]}
-                      placeholder="How it sounds"
-                      onCommit={(v) => set({ tone: v })}
-                    />
-                  ))}
-                  {/* Do's, don'ts and a sample are what a register actually IS to a writer. The
-                      don'ts matter most, being the half a model will otherwise drift out of. */}
-                  {area("Do's", 'dos', 'What it always does, one per line')}
-                  {area("Don'ts", 'donts', 'What it never does, one per line')}
-                  {area('Sample', 'sample', 'A line that sounds exactly right')}
-                  {field('Use for', (
-                    <RecordCombo
-                      value={vc.useFor ?? ''}
-                      groups={[{ label: 'From your other voices', options: own('useFor') }]}
-                      placeholder="Where this voice belongs"
-                      onCommit={(v) => set({ useFor: v })}
-                    />
-                  ))}
-                  {field('Status', (
-                    <RecordCombo
-                      value={vc.status ? vc.status.charAt(0).toUpperCase() + vc.status.slice(1) : ''}
-                      groups={[{ label: 'Choose one', options: ['Active', 'Draft', 'Archived'] }]}
-                      placeholder="Choose"
-                      allowCreate={false}
-                      onCommit={(v) => set({ status: v.toLowerCase() as Voice['status'] })}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          {/* THE BIG IDEA the work is built from. A Concept is not a Message: a message is the CLAIM
-              you make to an audience, a concept is the idea the claim comes out of, which usually
-              outlives any one claim and carries the tone. That is why a Concept card's direction was
-              always claim + likeThis while a Message card's was claim + notThis. */}
-          {nt.kind === 'concept' && (() => {
-            const cpt = (nt.refId ? allConcepts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Concept)
-            const others = concepts.filter((x) => x.id !== cpt.id)
-            const own = (key: keyof Concept): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Concept>) => { markCardDirty(nt.id); updateConcept(ensureConceptFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const combo = (label: string, key: keyof Concept, placeholder: string, extra: OptionGroup[] = []) =>
-              field(label, (
-                <RecordCombo
-                  value={String(cpt[key] ?? '')}
-                  groups={[{ label: 'From your other concepts', options: own(key) }, ...extra]}
-                  placeholder={placeholder}
-                  onCommit={(v) => set({ [key]: v } as Partial<Concept>)}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>The idea</label>
-                <div className="flow-recform">
-                  {field('Concept', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={cpt.name}
-                      placeholder="Name this concept"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {/* Two textareas, and they are the whole card: the idea is what it IS and the
-                      insight is why anyone should care that it is true. Both are written, not
-                      chosen, so neither is a picker. */}
-                  {field('The idea', (
-                    <textarea
-                      className="flow-recform-area"
-                      rows={2}
-                      value={cpt.idea ?? ''}
-                      placeholder="The big idea, in one line"
-                      onChange={(e) => set({ idea: e.target.value })}
-                    />
-                  ))}
-                  {field('The insight under it', (
-                    <textarea
-                      className="flow-recform-area"
-                      rows={2}
-                      value={cpt.insight ?? ''}
-                      placeholder="Why anyone should care that it is true"
-                      onChange={(e) => set({ insight: e.target.value })}
-                    />
-                  ))}
-                  {combo('Like this', 'likeThis', 'The reference to write toward')}
-                  {combo('Who it is for', 'audience', 'Which audience', [
-                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
-                  ])}
-                  {field('Status', (
-                    <RecordCombo
-                      value={cpt.status ? cpt.status.charAt(0).toUpperCase() + cpt.status.slice(1) : ''}
-                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
-                      placeholder="Choose"
-                      allowCreate={false}
-                      onCommit={(v) => set({ status: v.toLowerCase() as Concept['status'] })}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          {nt.kind === 'message' && (() => {
-            const msg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
-            const others = messages.filter((x) => x.id !== msg.id)
-            const own = (key: keyof Message): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Message>) => { markCardDirty(nt.id); updateMessage(ensureMessageFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const combo = (label: string, key: keyof Message, placeholder: string, extra: OptionGroup[] = []) =>
-              field(label, (
-                <RecordCombo
-                  value={String(msg[key] ?? '')}
-                  groups={[{ label: 'From your other messages', options: own(key) }, ...extra]}
-                  placeholder={placeholder}
-                  onCommit={(v) => set({ [key]: v } as Partial<Message>)}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What this says</label>
-                <div className="flow-recform">
-                  {field('Message', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={msg.name}
-                      placeholder="Name this message"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {/* The angle is the sentence the copy argues, so it is the one field here worth a
-                      textarea: it is written, not chosen. */}
-                  {field('Angle', (
-                    <textarea
-                      className="flow-recform-area"
-                      rows={2}
-                      value={msg.angle ?? ''}
-                      placeholder="The line this message makes"
-                      onChange={(e) => set({ angle: e.target.value })}
-                    />
-                  ))}
-                  {combo('Proof behind it', 'proof', 'What makes it believable', [
-                    { label: "This brand's proof points", options: brandProof.map((r) => r.label).filter(Boolean) },
-                  ])}
-                  {/* Loosely joined to the brand's audiences by name, the same way a Product card's
-                      "Who it is for" is, so a message and an audience card can agree without a second
-                      reference to keep in step. */}
-                  {combo('Who it lands with', 'audience', 'Which audience', [
-                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
-                  ])}
-                  {combo('Pillar', 'pillar', 'The theme it belongs to')}
-                  {field('Funnel stage', (
-                    <RecordCombo
-                      value={msg.stage ? msg.stage.charAt(0).toUpperCase() + msg.stage.slice(1) : ''}
-                      groups={[{ label: 'Choose one', options: [...MESSAGE_STAGE_OPTIONS] }]}
-                      placeholder="Choose"
-                      allowCreate={false}
-                      onCommit={(v) => set({ stage: v.toLowerCase() as Message['stage'] })}
-                    />
-                  ))}
-                  {field('Status', (
-                    <RecordCombo
-                      value={msg.status ? msg.status.charAt(0).toUpperCase() + msg.status.slice(1) : ''}
-                      groups={[{ label: 'Choose one', options: ['Draft', 'Approved', 'Retired'] }]}
-                      placeholder="Choose"
-                      allowCreate={false}
-                      onCommit={(v) => set({ status: v.toLowerCase() as Message['status'] })}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          {/* WHAT THE BRAND SELLS. The brand profile already lists product NAMES, which tells a writer
-              what the company offers and nothing more. What decides how copy about a product reads is
-              who it is for, what it displaces, and how much explaining it still needs, and none of
-              that had anywhere to live. */}
-          {nt.kind === 'product' && (() => {
-            const prd = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
-            const others = products.filter((x) => x.id !== prd.id)
-            const own = (key: keyof Product): string[] => others.map((x) => String(x[key] ?? '')).filter(Boolean)
-            const set = (patch: Partial<Product>) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), patch) }
-            const field = (label: string, node: ReactNode) => (
-              <div key={label} className="flow-recform-field">
-                <span className="flow-recform-key">{label}</span>
-                {node}
-              </div>
-            )
-            const pick = (label: string, key: keyof Product, options: readonly string[]) =>
-              field(label, (
-                <RecordCombo
-                  value={String(prd[key] ?? '')}
-                  groups={[{ label: 'Choose one', options: [...options] }]}
-                  placeholder="Choose"
-                  allowCreate={false}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            const combo = (label: string, key: keyof Product, placeholder: string, extra: OptionGroup[] = []) =>
-              field(label, (
-                <RecordCombo
-                  value={String(prd[key] ?? '')}
-                  groups={[{ label: 'From your other products', options: own(key) }, ...extra]}
-                  placeholder={placeholder}
-                  onCommit={(v) => set({ [key]: v })}
-                />
-              ))
-            return (
-              <>
-                <label className="flow-inspect-label" style={{ marginTop: 14 }}>What this is</label>
-                <div className="flow-recform">
-                  {field('Name', (
-                    <BufferedInput
-                      className="flow-recform-input"
-                      value={prd.name}
-                      placeholder="Name this product"
-                      onCommit={(v) => set({ name: v })}
-                    />
-                  ))}
-                  {/* A product page is usually the clearest statement of what a product is and who
-                      it is for, so the same scan works here, pointed at that page rather than the
-                      homepage. */}
-                  {field('Product page', (
-                    <>
-                      <BufferedInput
-                        className="flow-recform-input"
-                        value={prd.website ?? ''}
-                        placeholder="example.com/product"
-                        onCommit={(v) => set({ website: v })}
-                      />
-                      {prd.website?.trim() && (
-                        <button
-                          className="flow-scan-btn"
-                          disabled={scanning === nt.id}
-                          onClick={() => void scanSiteInto(nt.id, prd.website ?? '', 'product', prd as unknown as Record<string, unknown>, (patch) => set(patch as Partial<Product>))}
-                        >
-                          {scanning === nt.id ? 'Reading the page…' : 'Fill this in from the page'}
-                        </button>
-                      )}
-                      {scanNote[nt.id] && scanning !== nt.id && <span className="flow-zip-echo">{scanNote[nt.id]}</span>}
-                    </>
-                  ))}
-                  {combo('What it is', 'summary', 'One line, for someone who has not heard of it')}
-                  {pick('Kind', 'kind', PRODUCT_KINDS)}
-                  {/* Loosely joined to the brand's audiences by name, so a product and an audience card
-                      can agree without a second reference to keep in step. */}
-                  {combo('Who it is for', 'forWho', 'Which audience', [
-                    { label: "This brand's audiences", options: brandSegments.map((a) => a.name).filter(Boolean) },
-                  ])}
-                  {combo('The job it does', 'jobToBeDone', 'The one thing it does better than the alternative')}
-                  {/* Displacement is most of what copy about a product has to argue. */}
-                  {combo('What it replaces', 'replaces', 'What they use instead today')}
-                  {pick('Pricing', 'pricing', PRODUCT_PRICING)}
-                  {pick('Stage', 'stage', PRODUCT_STAGES)}
-                  {pick('Status', 'status', PRODUCT_STATUSES)}
-                </div>
-              </>
             )
           })()}
           {/* APPLIED TO: what this card feeds. A readout, not a control: wires are drawn and cut on
@@ -7885,54 +6897,35 @@ export function FlowsView() {
               Stated plainly at the top, because the two ways to make a card count — point it at a
               smart object, or fill this in — were both on the panel with nothing saying that is the
               choice, and a card left with neither reads exactly like one that is finished. */}
-          {/* Direction is for kinds with no record of their own. Person and Audience carry a full
-              record form above, which asks the same questions with better controls, so showing
-              "They care about" underneath was a second, worse copy of "What they want". */}
-          {(HAS_RECORD_FORM.has(nt.kind) ? [] : DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => {
+          {/* Direction stays on the kinds that had no record form, exactly as before: those cards
+              had nothing else to say with, and the kinds that did carry a form were already left out
+              of this so the panel would not ask the same question twice in two vocabularies. */}
+          {(RECORD_LED.has(nt.kind) ? [] : DIRECTION_KEYS[nt.kind] ?? []).map((k, i) => {
             /**
-             * AN INSTRUCTION, PICKED. The suggestions used to be chips under the box, shown only
-             * while it was empty — which made typing the default and offered nothing once you had
-             * written anything. Now they are the control: a dropdown of the brand's own material,
-             * with typing one option down the list.
+             * AN INSTRUCTION, TYPED. This was a dropdown of the brand's own material, and the
+             * argument for it was the same one the record forms made: pick from what exists and a
+             * brand keeps one vocabulary. It goes for the same reason they went — the panel is a
+             * place to say what you mean now, not to shop a list — and it goes more easily, because
+             * an instruction is a sentence about THIS campaign rather than a value the library needs
+             * to be able to compare. The presets were only ever the brand's own strings anyway, and
+             * they are still where they came from.
              *
-             * A field with NOTHING honest to offer stays a textarea. An empty dropdown is not a
-             * dropdown, and this is common: most of these keys have no library (see
-             * directionPresets, which invents nothing), and a card with no record linked has no
-             * audience to draw pains or objections from at all.
+             * Capped at capFor(k): buildDirection would trim it later regardless, and a limit you
+             * meet while typing is kinder than one applied silently on the way to the writer.
              */
-            const presets = directionPresets(k, presetSourcesFor(nt))
-            const byFrom = new Map<string, string[]>()
-            for (const p of presets) {
-              const list = byFrom.get(p.from)
-              if (list) list.push(p.value)
-              else byFrom.set(p.from, [p.value])
-            }
-            const groups: OptionGroup[] = [...byFrom].map(([label, options]) => ({ label: `From ${label}`, options }))
             return (
               <Fragment key={k}>
                 <label className="flow-inspect-label" style={{ marginTop: i === 0 ? 0 : 14 }}>
                   {DIRECTION_FIELD[k].label}
                 </label>
-                {groups.length ? (
-                  <div className="flow-recform-field flow-recform-solo">
-                    <RecordCombo
-                      value={directionValue(nt, k)}
-                      groups={groups}
-                      placeholder={DIRECTION_FIELD[k].hint}
-                      maxLength={capFor(k)}
-                      onCommit={(v) => setDirectionValue(nt, k, v)}
-                    />
-                  </div>
-                ) : (
-                  <textarea
-                    className="flow-inspect-input"
-                    rows={2}
-                    maxLength={capFor(k)}
-                    value={directionValue(nt, k)}
-                    placeholder={DIRECTION_FIELD[k].hint}
-                    onChange={(e) => setDirectionValue(nt, k, e.target.value)}
-                  />
-                )}
+                <textarea
+                  className="flow-inspect-input"
+                  rows={2}
+                  maxLength={capFor(k)}
+                  value={directionValue(nt, k)}
+                  placeholder={DIRECTION_FIELD[k].hint}
+                  onChange={(e) => setDirectionValue(nt, k, e.target.value)}
+                />
               </Fragment>
             )
           })}

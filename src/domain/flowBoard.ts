@@ -9,6 +9,8 @@
  * the component that renders it. OBJECT_META stays in the component: it carries JSX icons.
  */
 
+import type { ObjectReference } from './objectReference'
+
 /** The kinds of object you can drop on a board. */
 export type CanvasObjectKind =
   | 'audience' | 'data-source' | 'note'
@@ -90,6 +92,20 @@ export interface CanvasObject {
    * instruction belongs to the card that carries it.
    */
   direction?: { key: string; value: string }[]
+  /**
+   * THE DOCUMENT THIS CARD IS, uploaded as a .md and kept verbatim.
+   *
+   * A card is given its context in one of two ways: describe it and have the record filled in, or
+   * hand it the document that already says all of this. The second one is stored rather than parsed
+   * — the material a person wrote about a buyer, a proposition or an account is worth more to the
+   * writer whole than squeezed into a dozen fields, and a document you can read back is a document
+   * you can argue with. It travels to the copy writer beside the smart objects' own references, on
+   * the same terms and out of the same budget (see ObjectReference).
+   *
+   * It never fills a field. What the card's record holds and what its document says are two answers
+   * from two sources, and quietly merging them would leave nobody able to say which said what.
+   */
+  reference?: ObjectReference
 }
 
 /**
@@ -106,6 +122,14 @@ export interface CanvasObject {
  */
 export const objectName = (o: CanvasObject, linked?: string, fallback = ''): string =>
   o.name?.trim() || linked?.trim() || o.text.trim().split('\n')[0].trim() || fallback
+
+/**
+ * A kind as a human word — "proof point", "data source" — for the readers that cannot reach
+ * OBJECT_META. That registry carries JSX icons and so lives in a .tsx; the store is plain state and
+ * has no business importing React to name a thing. DERIVED from the kind rather than a second list
+ * of labels, so there is nothing here that can fall out of step with the registry.
+ */
+export const kindWord = (k: CanvasObjectKind): string => k.replace(/-/g, ' ')
 
 /**
  * A smart object AS PLACED on this canvas. The name and the contents live on the SmartObject in the
