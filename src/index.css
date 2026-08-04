@@ -4644,6 +4644,28 @@ button.mf-open:focus-visible,
   flex: 1;
   min-width: 0;
 }
+/* The title stacked over the kind's one-line definition. The column takes the flex the title used
+   to, and the title stops stretching inside it. */
+.flow-panel-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.flow-panel-heading .flow-panel-title { flex: 0 1 auto; }
+/* Title + any tag that qualifies it, on one line above the definition. */
+.flow-panel-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.flow-panel-sub {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
 .flow-back {
   border: 0;
   background: none;
@@ -4746,12 +4768,24 @@ button.mf-open:focus-visible,
   margin: 4px 0 16px;
   line-height: 1.5;
 }
+/* SECTION HEADS. Now that a field label is quiet sentence case, the head has to be the loud one or
+   the panel is one undifferentiated stack: full text colour and a heavier weight, which is the only
+   place in the panel body those two land together. */
 .flow-inspect-label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
   margin-bottom: 6px;
+}
+/* A head that OPENS A NEW GROUP after one has closed gets a rule, so a long panel reads as two or
+   three named things rather than forty rows. Scoped to that adjacency on purpose: the same class
+   also labels the first thing in a panel, and a rule above the top item would fence it off from the
+   header. */
+.flow-recform + .flow-inspect-label,
+.flow-inspect-input + .flow-inspect-label {
+  border-top: 1px solid var(--border);
+  padding-top: 15px;
 }
 .flow-inspect-input {
   width: 100%;
@@ -4952,26 +4986,42 @@ button.mf-open:focus-visible,
    a record is edited where it is judged, not in Records. An unfilled row stays visible and quiet,
    because the gap is the prompt. Shared by every card kind that names a record. */
 .flow-recform { display: flex; flex-direction: column; margin-top: 4px; }
+/* SEPARATORS BETWEEN ROWS, not under every one. A border-bottom on each field drew a rule under the
+   last one too, which fenced the group off from the note that explains it, and one directly beneath
+   a section head, which cut the head away from the fields it introduces. Between-only leaves the
+   group with a top and a bottom that belong to it. */
 .flow-recform-field {
-  display: flex; flex-direction: column; gap: 1px;
+  display: flex; flex-direction: column; gap: 3px;
   padding: 9px 0 10px;
-  border-bottom: 1px solid var(--border);
 }
+.flow-recform-field + .flow-recform-field {
+  border-top: 1px solid var(--border);
+}
+/* A FIELD LABEL IS READ, NOT SCANNED. These were 9.5px uppercase Space Mono with 0.08em tracking —
+   the metadata voice this file gives to a card's kind chip and the layer rows, where two or three
+   letterspaced words sit alone. A form is eleven of them stacked, and at that count the treatment
+   inverts the hierarchy: the labels shout in caps while the answers underneath them, which are the
+   thing you came to read, whisper at regular weight. Worse, phrases that long ("WHAT THEY BELIEVE
+   AGAINST YOU") are genuinely slower to read set in caps.
+
+   Sentence case, Switzer, one step down from the value and muted. The label is now quieter than the
+   answer, which is the correct order. The mono voice keeps the jobs it does well: the kind chip, the
+   layer sub-rows, the outline heads. */
 .flow-recform-key {
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--text-faint);
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
 }
 .flow-recform-select,
 .flow-recform-input {
   width: 100%;
   border: none; background: none; outline: none;
-  font: inherit; font-size: 12.5px; color: var(--text);
+  font: inherit; font-size: 13px; color: var(--text);
   padding: 0; overflow-wrap: anywhere;
 }
 .flow-recform-select { cursor: pointer; text-transform: none; }
 .flow-recform-area {
   width: 100%; border: none; background: none; outline: none;
-  font: inherit; font-size: 12.5px; line-height: 1.45; color: var(--text);
+  font: inherit; font-size: 13px; line-height: 1.45; color: var(--text);
   padding: 0; resize: vertical; min-height: 34px; overflow-wrap: anywhere;
 }
 .flow-recform-area::placeholder,
@@ -4996,12 +5046,19 @@ button.mf-open:focus-visible,
 /* DESCRIBE IT AND HAVE IT FILLED IN. Top of the inspector, styled as an input you write into rather
    than a field you fill: it takes a sentence, not a value, and it is the one control here that
    produces the others. */
+/* Quiet chrome, loud button. It used to carry a tinted fill AND an accent border AND a bold heading
+   AND five lines of help, which made the optional shortcut the loudest thing in the panel — above
+   the fields it is a shortcut TO. The accent now lives in one place, the Fill button, where it marks
+   the action rather than the furniture. */
+/* The Name field now sits directly above this on an object card, and 2px of air read as the two
+   controls being one thing. */
+.flow-inspect-input + .flow-fillbox { margin-top: 14px; }
 .flow-fillbox {
-  margin: 2px 0 12px;
-  padding: 8px 9px 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  margin: 2px 0 16px;
+  padding: 9px 10px 8px;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: var(--surface-2);
 }
 .flow-fill-input {
   width: 100%;
@@ -5064,15 +5121,21 @@ button.mf-open:focus-visible,
   padding: 4px 10px; border-radius: 7px;
 }
 .flow-fill-go:hover { filter: brightness(1.06); }
-.flow-fill-go:disabled { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text-faint); cursor: default; }
+/* Neutral when there is nothing to send. A 30%-accent fill read as a washed-out primary against the
+   box's old accent tint; on the plain surface it reads as a pink blob, which is louder than the
+   enabled state it is meant to be quieter than. */
+.flow-fill-go:disabled { background: var(--border); color: var(--text-faint); cursor: default; }
 .flow-fill-note { font-size: 11px; color: var(--text-faint); }
 
-/* FILL THIS IN FROM THE SITE. Sits under the URL it acts on, quiet until there is a URL to act on. */
+/* FILL THIS IN FROM THE SITE. Sits under the URL it acts on, quiet until there is a URL to act on.
+   Sized to its own label rather than stretched across the panel: as a full-width tinted bar it broke
+   the field stack in half and became the loudest thing in a form it is an aside to. */
 .flow-scan-btn {
-  display: block;
-  margin-top: 5px;
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 6px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: none;
   color: var(--accent);
   cursor: pointer;
   font: inherit; font-size: 11.5px; font-weight: 600;
@@ -22747,8 +22810,6 @@ table.aud-sheet td.stick .aud-cell {
    worse than applying it to one screen properly.
    ============================================================================ */
 
-/* The uppercase keys: NAME, OBJECTIVE, CAMPAIGN LENGTH, BUDGET. */
-.flow-recform-key,
 /* Section heads in the right panel: LAYERS, GETS MADE, MADE FROM. */
 .flow-outline-head,
 /* A layer row's type, under its name: CAMPAIGN BRIEF, BRAND, META-ADS. */
@@ -22872,9 +22933,15 @@ table.aud-sheet td.stick .aud-cell {
 }
 .flow-agg-dot.on { background: var(--green, #3fb950); }
 .flow-agg-name { font-size: 11.5px; font-weight: 600; color: var(--text); }
+/* SENTENCES ARE NOT METADATA. Everything below that reads as a sentence — why a connector is off,
+   what a source will send, what a table does and does not say — was set in 9.5px Space Mono, which
+   is the voice this file reserves for machine-set values and reads as unwelcoming at prose length.
+   The rule was already written at the top of the type block ("everything a person actually reads or
+   writes stays Switzer"); these are the places the inspector had not applied it. The figures
+   themselves (.flow-send-val, the headline finding) keep the mono, because those ARE values. */
 .flow-agg-why {
   grid-column: 2;
-  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--text-faint);
+  font-size: 11px; line-height: 1.45; color: var(--text-faint);
 }
 .flow-agg-win { display: flex; gap: 4px; margin: 2px 0; }
 .flow-agg-chip {
@@ -22887,7 +22954,7 @@ table.aud-sheet td.stick .aud-cell {
 .flow-agg-foot { display: flex; gap: 5px; margin-top: 2px; }
 .flow-agg-muted,
 .flow-agg-err {
-  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--text-faint);
+  font-size: 11px; line-height: 1.45; color: var(--text-faint);
 }
 .flow-agg-err { color: var(--amber); }
 /* Warehouses and direct channels, as two labelled groups in one panel. */
@@ -22902,7 +22969,7 @@ table.aud-sheet td.stick .aud-cell {
 .flow-agg-name { display: inline-flex; align-items: center; gap: 5px; }
 /* The one-source rule, stated where the swap would otherwise be silent. */
 .flow-agg-replace {
-  font-family: var(--font-label); font-size: 9.5px; line-height: 1.35; color: var(--amber);
+  font-size: 11px; line-height: 1.45; color: var(--amber);
 }
 
 /* The Data source picker, in the inspector rather than on the card. The controls were moved here so
@@ -22930,7 +22997,7 @@ table.aud-sheet td.stick .aud-cell {
 .flow-src-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .flow-src-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .flow-src-sub {
-  font-family: var(--font-label); font-size: 9.5px; line-height: 1.3; color: var(--text-faint);
+  font-size: 11px; line-height: 1.4; color: var(--text-faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .flow-src-tick { color: var(--accent); display: inline-flex; }
@@ -22943,12 +23010,12 @@ table.aud-sheet td.stick .aud-cell {
 .flow-send-lab { font-size: 11.5px; line-height: 1.35; color: var(--text-muted); }
 .flow-send-none,
 .flow-send-foot {
-  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4; color: var(--text-faint);
-  margin-top: 4px;
+  display: block; font-size: 11px; line-height: 1.45; color: var(--text-faint);
+  margin-top: 5px;
 }
 .flow-send-held {
-  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4; color: var(--amber);
-  margin-top: 4px;
+  display: block; font-size: 11px; line-height: 1.45; color: var(--amber);
+  margin-top: 5px;
 }
 .flow-paste {
   width: 100%; min-height: 46px; resize: vertical; margin-top: 4px;
@@ -22957,12 +23024,12 @@ table.aud-sheet td.stick .aud-cell {
   font: inherit; font-size: 11.5px; padding: 7px 9px;
 }
 .flow-src-why {
-  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4;
-  color: var(--text-faint); margin: 2px 0 4px;
+  display: block; font-size: 11px; line-height: 1.45;
+  color: var(--text-faint); margin: 3px 0 5px;
 }
 .flow-src-more {
   border: 0; background: none; cursor: pointer; text-align: left; padding: 3px 2px;
-  font-family: var(--font-label); font-size: 9.5px; font-weight: 600; color: var(--accent);
+  font-size: 11px; font-weight: 600; color: var(--accent);
 }
 
 /* What the table says. Sits above the source picker: the answer belongs above the question. */
@@ -22978,8 +23045,8 @@ table.aud-sheet td.stick .aud-cell {
 .flow-read-detail,
 .flow-read-caveat,
 .flow-read-none {
-  display: block; font-family: var(--font-label); font-size: 9.5px; line-height: 1.4;
-  color: var(--text-faint); margin-top: 3px;
+  display: block; font-size: 11px; line-height: 1.45;
+  color: var(--text-faint); margin-top: 4px;
 }
 .flow-read-caveat { color: var(--amber); }
 
@@ -22996,6 +23063,9 @@ table.aud-sheet td.stick .aud-cell {
   border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
   border-radius: 999px; padding: 2px 7px; white-space: nowrap;
 }
+/* Inside the title row the head's own 48px right padding already clears the collapse control, so the
+   tag does not need to reserve that space a second time. */
+.flow-panel-titlerow .flow-panel-wip { margin-right: 0; }
 .flow-wip-note { color: var(--text-faint); }
 
 /* A lazily loaded view that failed to arrive, almost always a chunk retired by a redeploy while
@@ -23365,9 +23435,9 @@ table.aud-sheet td.stick .aud-cell {
   margin-bottom: 8px;
 }
 .flow-fill-title {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 .flow-fill-help {
   font-size: 11.5px;
