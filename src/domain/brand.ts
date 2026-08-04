@@ -109,6 +109,33 @@ export function campaignInBrandScope(client: string | undefined, brand: string):
   return isBrandless(client) || client === DRAFTS_SPACE || client === brand
 }
 
+/**
+ * THE CAMPAIGNS INDEX SHOWS EVERYTHING UNTIL YOU PICK A BRAND.
+ *
+ * `brandChosen` is whether the workspace filter names a brand — NOT whether one got resolved. The
+ * difference is the whole fix. clientFilter resets to 'all' on every load (it is not persisted), so
+ * after a refresh no brand has been chosen, and the two ways that used to resolve were both wrong
+ * for a list:
+ *
+ *   one brand in the workspace  → canvasBrandScope returns it, and campaigns filed under any other
+ *                                 client vanished from the only page that lists them
+ *   two or more                 → canvasBrandScope returns '' rather than guess, and only the
+ *                                 brandless ones survived the filter
+ *
+ * Either way a refresh emptied the page, and opening any campaign set the filter to its own client,
+ * so coming back the campaigns reappeared — then vanished on the next refresh. The list was
+ * answering "which brand am I bound to", a question it has no business asking.
+ *
+ * AN INDEX IS NOT A PICKER, and this is the distinction the leak rule turns on. canvasBrandScope
+ * refuses to guess because a picker offering one client's audiences on another client's campaign is
+ * contamination. Listing your own workspace's campaigns on your own campaigns page is not: it is the
+ * file browser, and an agency needs it to see every client's work in order to pick one. Once you DO
+ * name a brand, the scope tightens to that brand plus the brandless — never another brand's.
+ */
+export function campaignInIndexScope(client: string | undefined, brand: string, brandChosen: boolean): boolean {
+  return !brandChosen || campaignInBrandScope(client, brand)
+}
+
 export function parentOf(brand: string, meta: BrandMetaMap): string | undefined {
   const p = meta[brand]?.parent?.trim()
   return p && p !== brand ? p : undefined
