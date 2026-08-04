@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { mockAttio } from '../adapters/attio/mockAttio'
 import { resolveCampaignGoal, type CampaignGoal } from '../domain/campaignGoal'
 import { applyBreakStatus, breakScopeKey, resolveBreaks } from '../domain/breaks'
-import { clientForCampaign } from '../domain/clients'
+import { clientForCampaign, liveCampaignNames } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { campaignAttention, deriveCampaignStatus, type CampaignAttention, type CampaignStatus } from '../domain/lifecycle'
 import type { TrafficRow } from '../domain/types'
@@ -60,12 +60,9 @@ export function useHomeCanvases(): {
     // via restoreCampaign, but hidden from the gallery + counts.
     const live = rows.filter((r) => !r.archivedAt)
     const meta = new Map(campaignList.map((c) => [c.name, c] as const))
-    const names = [
-      ...new Set([
-        ...live.map((r) => (r.campaign ?? '').trim()).filter(Boolean),
-        ...campaignList.filter((c) => !c.archivedAt).map((c) => c.name),
-      ]),
-    ]
+    // The same "which campaigns exist" the tab strip reconciles against, so a tab can never name a
+    // campaign this page cannot show. It used to be spelled out here and nowhere else.
+    const names = [...liveCampaignNames(live, campaignList)]
     return names.flatMap((name) => {
       const cRowsAll = live.filter((r) => (r.campaign ?? '').trim() === name)
       // The library bucket ("Published content") holds EVERY brand's ingested content in one shared

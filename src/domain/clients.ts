@@ -305,6 +305,41 @@ export const clientForCampaign = (campaign?: string): string =>
   (campaign && (runtimeCampaignClients[campaign] ?? CAMPAIGN_CLIENTS[campaign])) || UNASSIGNED
 
 /**
+ * THE CAMPAIGNS THAT EXIST, by name.
+ *
+ * Two things make a campaign real, and it needs only one of them: the list has a record of it, or a
+ * live asset claims it. The second half is not a fallback — a campaign can exist as nothing but a
+ * value on a row (ingested assets arrive that way, before anything registers them), and the
+ * Campaigns page shows those, so anything asking "does this campaign exist" has to count them too.
+ *
+ * Archived on either side does not count. A soft-deleted campaign is hidden from the gallery, and a
+ * name carried only by archived rows is a campaign whose every asset was deleted; both are things
+ * you cannot open, which is the question this answers.
+ *
+ * SHARED, because two definitions of "exists" is exactly how a tab outlived its campaign. The
+ * Campaigns page derived its list this way while the tab strip read a separately persisted list that
+ * nothing reconciled against it, so a tab could name a campaign the page could not show — and the
+ * tab, having no folder to report for a campaign the list has never heard of, labelled it Drafts.
+ */
+export function liveCampaignNames(
+  rows: readonly { campaign?: string; archivedAt?: number }[],
+  campaigns: readonly { name: string; archivedAt?: number }[],
+): Set<string> {
+  const names = new Set<string>()
+  for (const r of rows) {
+    if (r.archivedAt) continue
+    const c = (r.campaign ?? '').trim()
+    if (c) names.add(c)
+  }
+  for (const c of campaigns) {
+    if (c.archivedAt) continue
+    const n = c.name.trim()
+    if (n) names.add(n)
+  }
+  return names
+}
+
+/**
  * The campaign name as somebody typed it. Names are STORED brand-prefixed — "Big Buoy — Competitive
  * Campaign" — so two brands can each own a "Q3 Launch" without colliding on the one key that flights,
  * chats and open tabs all hang off. The prefix is plumbing, so every surface that shows a name to a
