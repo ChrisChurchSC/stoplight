@@ -1,3 +1,4 @@
+import { canvasBrandScope } from '../domain/brand'
 import { VOICE_COLUMNS, VOICE_FIELDS, VOICE_STATUSES } from '../domain/voice'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -21,7 +22,9 @@ export function VoicesView() {
   // Scope to the brand in the rail; untagged records show under every brand rather than vanishing.
   const { brands } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's records here and filed anything added under it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const scoped = voices.filter((v) => !v.brand || v.brand === brand)
 
   return (

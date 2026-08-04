@@ -27,7 +27,7 @@ import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartO
 import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
-import { resolveBrandScope } from '../domain/brand'
+import { canvasBrandScope, resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, asList, newAudience, splitLines, type AudienceType } from '../domain/audiences'
@@ -342,6 +342,23 @@ const kindsInFamily = (family: ObjectFamily): CanvasObjectKind[] =>
 const articleFor = (noun: string): string => (/^[aeiou]/.test(noun) ? 'an' : 'a')
 const pluralOf = (noun: string): string =>
   noun === 'person' ? 'people' : noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`
+
+/**
+ * A RECORD KEPT IN A BRAND'S OWN BUCKET CANNOT BE AUTHORED BEFORE THERE IS A BRAND.
+ *
+ * Audiences and proof are stored per brand, so with none bound ensureAudienceRef and ensureProofRef
+ * both refuse — correctly, since neither will write an empty-brand bucket — and every field on the
+ * card commits into nothing. That refusal used to be unreachable because the canvas fell back to the
+ * first brand in the workspace, and writing into whichever brand happens to be first is worse than
+ * refusing: it edits a record belonging to another client. Now that it refuses, it has to SAY so,
+ * next to the fields, before the typing rather than after it is lost.
+ */
+const BrandlessNotice = ({ noun }: { noun: string }) => (
+  <span className="flow-fill-help" style={{ display: 'block', marginTop: 6 }}>
+    Nothing typed here will save yet: {articleFor(noun)} {noun} belongs to a brand, and this campaign
+    has not named one. Connect a Brand card to the brief first.
+  </span>
+)
 
 /** Everything on the board: context objects plus the deliverables that get made. */
 export type BoardObject = CanvasObject | FlowDeliverable
@@ -1308,7 +1325,22 @@ export function FlowsView() {
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  /**
+   * THE BRAND EVERY RECORD LIST ON THIS CANVAS IS SCOPED TO.
+   *
+   * The rail follows the campaign (see bindBrandFromCard), so a campaign opened from anywhere has
+   * already pointed clientFilter at its own brand and this is only that, read back. The case worth
+   * thinking about is 'all': a board with no brand bound yet — the builder, or a campaign whose
+   * Brand card was unwired, or a workspace landed on without going through a campaign.
+   *
+   * That case used to fall through to brands[0], and the first brand in the workspace is a guess
+   * dressed as an answer. On a multi-brand account it silently offered one client's audiences,
+   * proof, messages, products and data sets on another client's board — the exact leak every filter
+   * below exists to prevent. The rule now lives in canvasBrandScope, next to the scope resolver it
+   * belongs with and under a test, because it is a boundary rather than a default.
+   */
+  const brandNames = useMemo(() => brands.map((b) => b.name), [brands])
+  const brand = canvasBrandScope(clientFilter, brandNames)
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
   const brandDatasets = useMemo(() => {
     // NEWEST FIRST. A brand accumulates data sets and the useful one is almost always the last one
@@ -4622,7 +4654,11 @@ export function FlowsView() {
     return id
   }
   const ensureBrandObjectFor = (nt: CanvasObject): string => {
-    if (nt.refId && brandObjects.some((b) => b.id === nt.refId)) return nt.refId
+    // ALL brand objects, matching how the card resolves its own record for display and how the
+    // picker above offers them. Measured against the brand-scoped list, a card naming a brand other
+    // than the one in view read as unlinked, and the first edit minted a second blank brand record
+    // beside the one it was already pointing at.
+    if (nt.refId && allBrandObjects.some((b) => b.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
     if (already) return already
     const id = addBrandObject({ name: '', brand: brand || undefined })
@@ -4739,7 +4775,13 @@ export function FlowsView() {
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
       // a brand you already wrote without going through a smart object.
-      case 'brand': return named(brandObjects)
+      //
+      // A BRAND CANNOT BE SCOPED BY THE BRAND. With none bound, the scoped list is just the untagged
+      // ones, so the one board that most needs to name a brand is the one offering nothing to name:
+      // the card that establishes the scope would be filtered by the scope it establishes, and
+      // there would be no way out of an unbound campaign. Every other kind stays scoped, because
+      // every other kind is chosen WITHIN a brand rather than to decide which brand.
+      case 'brand': return named(brand ? brandObjects : allBrandObjects)
       case 'product': return named(products)
       default: return null
     }
@@ -6906,6 +6948,7 @@ export function FlowsView() {
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>{aud.name || 'Untitled audience'}</label>
+                {!brand && <BrandlessNotice noun="audience" />}
                 <div className="flow-recform">
                   {combo('Who exactly', aud.definition ?? '', [
                     { label: 'From your other audiences', options: own((a) => a.definition) },
@@ -7290,6 +7333,7 @@ export function FlowsView() {
             return (
               <>
                 <label className="flow-inspect-label" style={{ marginTop: 14 }}>What makes it believable</label>
+                {!brand && <BrandlessNotice noun="proof point" />}
                 <div className="flow-recform">
                   {field('Proof point', (
                     <BufferedInput
@@ -9314,7 +9358,12 @@ export function FlowsView() {
                           if (isAttached(nt.id)) attachToCampaign(nt.id)
                         }}
                       >
-                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : `No ${pluralOf(noun)} yet`}</option>
+                        {/* "No audiences yet" is false on a board with no brand bound: there may be
+                            plenty, they just belong to brands this campaign has not named. Saying
+                            that points at the fix — wire a Brand card — instead of at a library the
+                            user is told is empty and can see is not. The Brand card is exempt,
+                            because it IS that gesture and has nothing to wait for. */}
+                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : brand || nt.kind === 'brand' ? `No ${pluralOf(noun)} yet` : 'Connect a Brand card first…'}</option>
                         {opts.map((o) => (
                           <option key={o.id} value={o.id}>{o.label}</option>
                         ))}

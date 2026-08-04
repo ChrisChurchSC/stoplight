@@ -1,3 +1,4 @@
+import { canvasBrandScope } from '../domain/brand'
 import { MESSAGE_COLUMNS, MESSAGE_FIELDS, MESSAGE_STATUSES } from '../domain/message'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -21,7 +22,9 @@ export function MessagesView() {
   const { brands } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's records here and filed anything added under it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const scoped = messages.filter((m) => !m.brand || m.brand === brand)
   // The Audience column picks from the brand's audiences.
   const audienceNames = (clientAudiences[brand] ?? []).map((a) => a.name)
