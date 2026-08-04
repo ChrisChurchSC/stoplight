@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { objectName } from '../domain/flowBoard'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { describeSmartObject, scopeOf } from '../domain/smartObject'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -136,8 +137,10 @@ export function ObjectPage() {
                     {meta?.label ?? c.kind}
                   </div>
                   <div className="objpage-card-body">
-                    {object.refs.find((r) => r.id === c.refId)?.label ?? c.text.trim().split('\n')[0] ?? ''}
-                    {!c.refId && !c.text.trim() && <span className="objpage-card-empty">Nothing picked yet</span>}
+                    {objectName(c, object.refs.find((r) => r.id === c.refId)?.label)}
+                    {/* "Nothing picked yet" has to follow the same ladder as the line above it, or a
+                        card that says its name would sit there being told it says nothing. */}
+                    {!c.name?.trim() && !c.refId && !c.text.trim() && <span className="objpage-card-empty">Nothing picked yet</span>}
                   </div>
                 </div>
               )

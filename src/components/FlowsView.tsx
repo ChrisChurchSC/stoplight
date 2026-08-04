@@ -5,7 +5,7 @@ import { CHANNELS, CHANNEL_LIST } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
+  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard,
 } from '../domain/flowBoard'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
@@ -3339,7 +3339,9 @@ export function FlowsView() {
           tone: meta.tone,
           icon: meta.icon,
           kindLabel: meta.label,
-          label: linked?.name ?? own?.label ?? named ?? nt.text.trim().split('\n')[0] ?? '',
+          // What you named the card wins over what it points at: this list is how you check what is
+          // feeding an asset, and it should answer in the words you wrote on the board.
+          label: objectName(nt, linked?.name ?? own?.label ?? named),
           // A brand card carries no refs and still decides a great deal, so it says what it does
           // rather than falling through to "Contributes nothing yet", which is simply untrue.
           detail: linked ? describeSmartObject(linked) : nt.kind === 'brand' && named ? 'Sets the brand this is written as' : '',
@@ -3926,7 +3928,7 @@ export function FlowsView() {
     const named = cards
       .map((c) => {
         const own = refForObject(c)
-        return own?.label ?? c.text.trim().split('\n')[0] ?? ''
+        return objectName(c, own?.label)
       })
       .filter(Boolean)
     // A bundle named after its lead record ("Manager/Brand Deals") would otherwise print that record
@@ -4507,8 +4509,9 @@ export function FlowsView() {
     for (const id of ids) {
       const nt = objects.find((n) => n.id === id)
       if (!nt) continue
-      const opts = objectOptions(nt.kind)
-      const label = nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : nt.text.trim().split('\n')[0]
+      // Its own name first, so bundling a card you have already named carries that name up into the
+      // object instead of reaching past it for whichever record the card happens to point at.
+      const label = cardLabel(nt)
       if (label) return label.slice(0, 48)
     }
     // Nothing inside is filled in yet, so name it after what it holds. "Bundle" only when there is
@@ -4611,6 +4614,14 @@ export function FlowsView() {
     setPlacements((gs) => gs.map((g) => (g.id === gid ? { ...g, memberIds: g.memberIds.filter((m) => m !== noteId) } : g)))
 
   const updateObjectText = (id: string, text: string) => setObjects((n) => n.map((x) => (x.id === id ? { ...x, text } : x)))
+  /**
+   * Name a card. The NAME, not the record: renaming a card is a board-local act, and rewriting the
+   * segment or the person underneath it would rename it on every other campaign reading the same
+   * record. Blank clears the field rather than storing an empty string, so a card that was named and
+   * then cleared falls back to its record exactly like one that was never named (see objectName).
+   */
+  const renameObject = (id: string, name: string) =>
+    setObjects((n) => n.map((x) => (x.id === id ? { ...x, name: name.trim() ? name : undefined } : x)))
   const setObjectRef = (id: string, refId: string) => {
     // Pointing a card at a different record changes every asset it feeds as completely as editing a
     // field does, so it raises the Save bar too.
@@ -4793,6 +4804,20 @@ export function FlowsView() {
       case 'product': return named(products)
       default: return null
     }
+  }
+  /**
+   * WHAT A CARD IS CALLED, resolved here where the record collections live.
+   *
+   * objectName holds the ladder (the card's own name, then what it points at, then a sticky's first
+   * line); this supplies the middle rung, which needs the store. Four surfaces read it — the Layers
+   * panel, the inspector's title, a smart object's member list and the name a fresh object suggests
+   * for itself — so a card cannot be "Enterprise buyers" in one and "Audience" in the next.
+   */
+  const cardLabel = (nt: CanvasObject, fallback = ''): string => {
+    const obj = nt.smartObjectId ? smartObjects.find((o) => o.id === nt.smartObjectId) : undefined
+    const opts = objectOptions(nt.kind)
+    const linked = obj ? obj.name : nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : ''
+    return objectName(nt, linked, fallback)
   }
   // View mode: add a deliverable straight into the opened flow's campaign (seed its rows
   // and write their copy), so an existing flow can grow without leaving Flows or rebuilding.
@@ -6538,14 +6563,12 @@ export function FlowsView() {
         }
       })
   const objectLayer = (nt: CanvasObject, depth = 0): Layer => {
-    const opts = objectOptions(nt.kind)
-    // An object-linked card has no refId, so reading refId alone showed it in Layers as its bare
-    // kind ("Person") rather than what it points at. Check the object first.
-    const obj = nt.smartObjectId ? smartObjects.find((o) => o.id === nt.smartObjectId) : undefined
-    const linked = obj ? obj.name : nt.refId && opts ? opts.find((o) => o.id === nt.refId)?.label : ''
     return {
       id: nt.id,
-      label: linked || nt.text.trim().split('\n')[0] || OBJECT_META[nt.kind].label,
+      // The card's own name, then what it points at, then its kind (see cardLabel). An
+      // object-linked card has no refId, so reading refId alone showed it here as its bare kind
+      // ("Person") rather than as what it points at.
+      label: cardLabel(nt, OBJECT_META[nt.kind].label),
       sub: OBJECT_META[nt.kind].label,
       icon: (
         <span className="flow-layer-ic" style={{ color: OBJECT_META[nt.kind].tone }}>
@@ -6604,7 +6627,10 @@ export function FlowsView() {
           <span className="flow-note-ic flow-insp-ic" style={{ color: meta.tone }} aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{meta.icon}</svg>
           </span>
-          <span className="flow-panel-title">{meta.label}</span>
+          {/* The card's NAME heads its panel, falling back to the kind. With four Audience cards on
+              a board, four panels headed "Audience" gave you no way to tell from the panel which one
+              you had selected. */}
+          <span className="flow-panel-title">{cardLabel(nt, meta.label)}</span>
           {/* SAY THAT THIS ONE IS NOT FINISHED.
               The card acquires, reads and cites a table, and the parts that are missing (connecting
               LinkedIn or Instagram, reading an .xlsx, comparing two periods) are invisible from here:
@@ -6614,6 +6640,17 @@ export function FlowsView() {
         </div>
         <div className="flow-inspect">
           <p className="flow-inspect-desc">{meta.menuDesc}</p>
+          {/* NAME IT. Above the fill box on purpose: it is one line, it is not authoring, and it is
+              the answer to "which card am I looking at" — which you need before anything below is
+              worth reading. The fill box is still the first thing here that DOES anything.
+              Blank is fine; the card then answers to the record it names, as it always did. */}
+          <label className="flow-inspect-label">Name</label>
+          <input
+            className="flow-inspect-input"
+            value={nt.name ?? ''}
+            placeholder={`Name this ${meta.label.toLowerCase()}…`}
+            onChange={(e) => renameObject(nt.id, e.target.value)}
+          />
           {nt.kind === 'data-source' && (
             <p className="flow-inspect-note flow-wip-note">
               This card is still being built. Pasting, uploading and describing a table all work, and
@@ -7926,22 +7963,18 @@ export function FlowsView() {
           <input className="flow-inspect-input" value={placementName(g)} placeholder="Name this object…" onChange={(e) => renamePlacement(g.id, e.target.value)} />
           <label className="flow-inspect-label" style={{ marginTop: 14 }}>Inside ({members.length})</label>
           <div className="flow-obj-list">
-            {members.map((m) => {
-              const opts = objectOptions(m.kind)
-              const linked = m.refId && opts ? opts.find((o) => o.id === m.refId)?.label : ''
-              return (
+            {members.map((m) => (
                 <div key={m.id} className="flow-obj-row">
                   <span className="flow-obj-row-ic" style={{ color: OBJECT_META[m.kind].tone }} aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{OBJECT_META[m.kind].icon}</svg>
                   </span>
                   <span className="flow-obj-row-txt">
                     <span className="flow-obj-row-kind">{OBJECT_META[m.kind].label}</span>
-                    <span className="flow-obj-row-val">{linked || m.text.trim().split('\n')[0] || 'Nothing picked yet'}</span>
+                    <span className="flow-obj-row-val">{cardLabel(m) || 'Nothing picked yet'}</span>
                   </span>
                   <button className="flow-obj-row-out" title="Move out of this object" aria-label="Move out of this object" onClick={() => removeFromPlacement(g.id, m.id)}>✕</button>
                 </div>
-              )
-            })}
+            ))}
             {members.length === 0 && <div className="flow-inspect-note" style={{ margin: 0 }}>Nothing inside. Open it and add an object, or release it.</div>}
           </div>
           <button className="flow-insp-open" onClick={() => setOpenGroupId(g.id)}>Open this smart object</button>
@@ -9346,6 +9379,20 @@ export function FlowsView() {
                     )}
 
                   </div>
+                  {/* WHAT YOU CALL IT. Every card carries one, the same field and the same place a
+                      smart object has always had it, because the question "which of these three
+                      Audience cards is the cold list" is asked of a plain card far more often than
+                      of a bundle. The uppercase caption above still says the KIND; this says which
+                      one. Empty falls back to the record, so a board that never touches this reads
+                      exactly as it did before. */}
+                  <input
+                    className="flow-note-name"
+                    value={nt.name ?? ''}
+                    placeholder={`Name this ${meta.label.toLowerCase()}…`}
+                    aria-label={`Name this ${meta.label.toLowerCase()}`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => renameObject(nt.id, e.target.value)}
+                  />
                   {nt.kind === 'data-source' ? (
                     // DISPLAY ONLY. Choosing a source is authoring, and authoring happens in the
                     // inspector like it does for every other kind; the card shows what was chosen.

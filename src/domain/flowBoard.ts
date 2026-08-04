@@ -55,6 +55,25 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
 export interface CanvasObject {
   id: string
   kind: CanvasObjectKind
+  /**
+   * WHAT THIS CARD IS CALLED, in the person's own words.
+   *
+   * Until this existed a card was named by whatever it happened to point at — the linked record's
+   * label, or the first line of a sticky's text, or failing both the bare kind. So three Audience
+   * cards on one board read as "Audience", "Audience", "Audience" in the Layers panel, in the
+   * grid's Applied-to list and in every "what feeds this asset" answer, until each one had a record
+   * picked. The name belongs to the CARD: it survives changing the record underneath it, and it is
+   * what the person typed rather than what the library happened to call the thing.
+   *
+   * Not the record's name. Renaming a card is a board-local act and must never rewrite a shared
+   * record that other campaigns are reading — that is what the record forms in the inspector are
+   * for. Two Audience cards can name the same segment and still be "Enterprise, cold" and
+   * "Enterprise, renewal".
+   *
+   * Optional because every board saved before this existed has none, and a card with no name still
+   * answers to whatever it points at. See objectName for the ladder.
+   */
+  name?: string
   /** The team note. Never sent to the copy writer; direction is what reaches it. */
   text: string
   /** For record-linked kinds, the record's id. */
@@ -72,6 +91,21 @@ export interface CanvasObject {
    */
   direction?: { key: string; value: string }[]
 }
+
+/**
+ * WHAT TO CALL A CARD, as one ladder rather than five copies of it.
+ *
+ * The canvas, the Layers panel, the grid's object columns, a smart object's default name and its
+ * member list each had their own version of "name || record || text || kind", which is how the same
+ * card could read as "Audience" in one place and "Enterprise buyers" in another. The card's own name
+ * wins, then whatever record or smart object it points at, then the first line of a sticky's text.
+ *
+ * `linked` is passed in rather than resolved here: a card names a record in one of a dozen
+ * collections that live in the store, and a domain module has no business reaching for those.
+ * `fallback` is for the callers that would rather print the kind than print nothing.
+ */
+export const objectName = (o: CanvasObject, linked?: string, fallback = ''): string =>
+  o.name?.trim() || linked?.trim() || o.text.trim().split('\n')[0].trim() || fallback
 
 /**
  * A smart object AS PLACED on this canvas. The name and the contents live on the SmartObject in the
