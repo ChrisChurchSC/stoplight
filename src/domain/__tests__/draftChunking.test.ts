@@ -117,3 +117,57 @@ describe('chunking the draft request', () => {
     expect(out.source).toBe('heuristic')
   })
 })
+
+/**
+ * A FALLBACK SAYS WHY.
+ *
+ * The catch was bare, so a missing key, an expired session, a spend cap and a function timeout all
+ * reached the user as one sentence about the AI being unreachable, and the evidence that told them
+ * apart was thrown away at the point it was caught. These pin that each distinct status arrives as
+ * its own reason, because the advice that follows differs: retrying is worth doing after a timeout
+ * and pointless while signed out.
+ */
+describe('why the offline writer ran', () => {
+  const withStatus = async (status: number, body: unknown = {}) => {
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status, json: async () => body })) as never
+    const w = new ClaudeCopyWriter(fallback)
+    return (await w.draft({ campaign: 'C', icp: null, assets: assets(1) })) as { source?: string; reason?: string }
+  }
+
+  it('names an expired session rather than an unreachable AI', async () => {
+    expect((await withStatus(401)).reason).toMatch(/session/i)
+  })
+
+  it('names a missing key or spent budget on a 501', async () => {
+    expect((await withStatus(501)).reason).toMatch(/model is connected|budget/i)
+  })
+
+  it('names the rate limit on a 429', async () => {
+    expect((await withStatus(429)).reason).toMatch(/too many/i)
+  })
+
+  it('names a timeout on a gateway status, which is how a killed function arrives', async () => {
+    expect((await withStatus(504)).reason).toMatch(/too long/i)
+  })
+
+  it("passes the server's own error through when the status alone says nothing", async () => {
+    const out = await withStatus(500, { error: 'NO_BUDGET' })
+    expect(out.reason).toContain('NO_BUDGET')
+  })
+
+  it('distinguishes a served request that carried no copy', async () => {
+    const { out } = await run(1, () => 'empty')
+    expect(out.source).toBe('heuristic')
+    expect((out as { reason?: string }).reason).toMatch(/no copy/i)
+  })
+
+  it('says nothing when the model wrote it', async () => {
+    const { out } = await run(4, () => 'ok')
+    expect((out as { reason?: string }).reason).toBeUndefined()
+  })
+
+  it('reports one reason for a campaign whose batches failed together', async () => {
+    const { out } = await run(12, () => 'fail')
+    expect(typeof (out as { reason?: string }).reason).toBe('string')
+  })
+})

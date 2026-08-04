@@ -2167,6 +2167,22 @@ interface TrafficState {
   /** True once flights have been hydrated from the backend (or immediately, with no backend). Gates
    *  ensureFlights so it can't overwrite the workspace's real flights during the load race. */
   flightsHydrated: boolean
+  /**
+   * True once the workspace's BOARDS and the records they point at have arrived from the backend
+   * (or immediately, with no backend). Gates every read-modify-write of a flow board.
+   *
+   * The same load race flightsHydrated exists for, with a worse ending. `flowBoards`, `smartObjects`
+   * and the record slices all arrive from hydrateRecords a beat after mount, and `rows` from the
+   * refresh before it; until they do, the store holds this device's stale copy or nothing at all.
+   * openView prunes a board against exactly those collections — dropping connectors whose target
+   * row it cannot see, placements whose smart object it cannot see — and the canvas then autosaves
+   * the pruned result straight back over the workspace's real board. Pressing Generate forces that
+   * write immediately (regenerateFlow flushes the board before drafting), which is why the cards and
+   * wires disappeared at the moment of generating rather than at the moment of opening.
+   *
+   * So a board is neither pruned nor persisted until the things that decide what is live are loaded.
+   */
+  boardsHydrated: boolean
   /** Give every campaign that has assets a default flight (idempotent; gated on flightsHydrated). */
   ensureFlights: () => Promise<void>
   /** Add a flight to a campaign; returns the new flight's id. */
@@ -2525,6 +2541,16 @@ interface TrafficState {
    * having to remember to look.
    */
   lastCopySource: CopySource | null
+  /**
+   * WHY the last run fell back to templates, when it did. Null when the model wrote it.
+   *
+   * The offline notice could only ever say "the AI could not be reached", because that was the most
+   * anything downstream knew: the writer caught every failure and threw the cause away. A missing
+   * key, an expired session, a spend cap and a timeout are four different problems with four
+   * different answers, and telling a user to "generate again to retry" is only useful for one of
+   * them.
+   */
+  lastCopyReason: string | null
   lastCopyAt: number | null
   /** Dismiss the "written offline" notice until the next generation. */
   clearCopySource: () => void
@@ -2954,8 +2980,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   clientAudiences: loadClientAudiences(),
   regenIds: new Set<string>(),
   lastCopySource: null,
+  lastCopyReason: null,
   lastCopyAt: null,
-  clearCopySource: () => set({ lastCopySource: null }),
+  clearCopySource: () => set({ lastCopySource: null, lastCopyReason: null }),
   cardComments: loadCardComments(),
   addCardComment: (campaign, cardId, author, text) =>
     set((s) => {
@@ -3022,6 +3049,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // backend-configured device, ensureFlights must NOT mint+persist fresh flights or it would clobber
   // the real ones. With no backend (mock/share) there's nothing to wait for, so start ready.
   flightsHydrated: localDataMode,
+  // With no backend there is nothing in flight to wait for: the boards in localStorage are the
+  // workspace's boards, so the gate opens at once and the canvas behaves exactly as it always has.
+  boardsHydrated: localDataMode,
   campaignFolderView: null,
   wizardOpen: false,
   wizardClient: null,
@@ -4508,6 +4538,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       }
       const rest = s.flowBoards.filter((b) => b.key !== board2.key)
       const flowBoards = empty ? rest : [...rest, board2]
+      /**
+       * THE LAST GUARD BEFORE THE BACKEND, and the one that makes the size of the mistake matter.
+       *
+       * saveFlowBoards persists the WHOLE array under one key, so a single write made before
+       * hydrateRecords lands does not just damage the board being saved: it pushes this device's
+       * entire stale copy of every board over the workspace's. The callers that used to do this on a
+       * timer (the canvas autosave) and on a button (Generate) are gated at the call site; this
+       * catches everything else, now and later.
+       *
+       * The in-memory slice is still updated, so the session stays coherent for whatever asked. Only
+       * the write out is withheld, and only until the workspace has been read.
+       */
+      if (!s.boardsHydrated) return { flowBoards }
       saveFlowBoards(flowBoards)
       return { flowBoards }
     }),
@@ -5549,8 +5592,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // indistinguishable from an empty workspace, and releasing the gate on that lets ensureFlights
     // persist this device's flights over the workspace's real ones — the same shape of loss the
     // record slices above now avoid by leaving an unread slice untouched.
-    if (stateOk) patch.flightsHydrated = true
-    else {
+    if (stateOk) {
+      patch.flightsHydrated = true
+      // Boards and smart objects both ride in workspace_state, so the read that releases the flights
+      // gate is the same read that releases this one. On a FAILED read the gate stays shut: an
+      // unread board is indistinguishable from an empty one, and persisting over the workspace's
+      // copy on a guess is the loss this exists to prevent.
+      patch.boardsHydrated = true
+    } else {
       patch.toast = `Couldn't load your workspace (${stateError ?? 'unknown error'}). You're seeing this device's copy — changes may not be saved to your account.`
       patch.toastTone = 'warn'
       patch.toastAction = null
@@ -6740,6 +6789,9 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // Which writer produced the copy. 'heuristic' is sticky (a single fallback means
     // the run isn't fully Claude-written), so the badge never over-claims.
     let copySource: CopySource | null = null
+    // The first cause seen across every campaign group in this run. First rather than last: groups
+    // fail for the same reason far more often than for different ones.
+    let copyReason: string | null = null
     set({ drafting: true })
     try {
       // Group by campaign so RTBs (proof) stay scoped and shared within a story.
@@ -7272,6 +7324,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // run is 'heuristic'; otherwise it's 'claude'.
         if (result.source === 'heuristic') copySource = 'heuristic'
         else if (result.source === 'claude' && copySource !== 'heuristic') copySource = 'claude'
+        if (result.reason && !copyReason) copyReason = result.reason
         // Anti-repetition: regenerate any unit whose headline / primary / CTA
         // collides across the campaign, so the set reads as distinct assets.
         const redraftFellBack = await dedupeCampaignDrafts(result, assets, baseReq)
@@ -7382,7 +7435,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
      * no console error. Patching the four call sites would leave the fifth to forget; a slice set
      * here covers callers that do not exist yet.
      */
-    set({ lastCopySource: copySource, lastCopyAt: copySource ? Date.now() : get().lastCopyAt })
+    set({ lastCopySource: copySource, lastCopyReason: copySource === 'heuristic' ? copyReason : null, lastCopyAt: copySource ? Date.now() : get().lastCopyAt })
     return copySource
   },
 

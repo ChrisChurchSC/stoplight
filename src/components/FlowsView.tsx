@@ -617,6 +617,7 @@ export function FlowsView() {
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
   const setCampaignReferences = useTrafficStore((s) => s.setCampaignReferences)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
+  const boardsHydrated = useTrafficStore((s) => s.boardsHydrated)
   const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
   const updatePerson = useTrafficStore((s) => s.updatePerson)
   const updateCompany = useTrafficStore((s) => s.updateCompany)
@@ -1053,6 +1054,7 @@ export function FlowsView() {
   // Per-card draft, so switching cards mid-sentence does not lose what was typed on the first.
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const lastCopySource = useTrafficStore((s) => s.lastCopySource)
+  const lastCopyReason = useTrafficStore((s) => s.lastCopyReason)
   const clearCopySource = useTrafficStore((s) => s.clearCopySource)
   const adoptBuilderBoard = useTrafficStore((s) => s.adoptBuilderBoard)
   const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
@@ -3443,10 +3445,16 @@ export function FlowsView() {
     const targetIds = ids && ids.length ? ids : viewRows.map((r) => r.id)
     if (!targetIds.length) return
     recordHistory(true)
-    // Flush the board before generating. The autosave is debounced 600ms, and draftCopy resolves the
-    // graph from the SAVED board — so drawing a wire and hitting Generate inside that window would
-    // write copy that ignores the wire you just drew. buildFlow already does this for the same reason.
-    saveFlowBoard(boardSnapshot(boardKey))
+    /**
+     * Flush the board before generating. The autosave is debounced 600ms, and draftCopy resolves the
+     * graph from the SAVED board — so drawing a wire and hitting Generate inside that window would
+     * write copy that ignores the wire you just drew. buildFlow already does this for the same reason.
+     *
+     * Gated like the autosave, and this is the call that made the bug visible: a flush is a write,
+     * and a write of a board that has not loaded yet replaces the workspace's cards and wires with
+     * whatever this device had. Generating is exactly when someone would notice their cards going.
+     */
+    if (boardsHydrated) saveFlowBoard(boardSnapshot(boardKey))
     /**
      * REFUSE BEFORE THE WIPE.
      *
@@ -4967,6 +4975,34 @@ export function FlowsView() {
     // building on is two front doors, and the quieter one is the canvas.
     setChatCollapsed(true)
   }
+  /**
+   * A campaign's board, ready to put on screen.
+   *
+   * PRUNING IS GATED ON THE WORKSPACE HAVING LOADED. Pruning asks "which of these ids still exist?",
+   * and before hydrateRecords lands the honest answer is "we do not know yet" — `rows`, `smartObjects`
+   * and the record slices are empty or stale, so every wire to a deliverable and every placement
+   * would read as dangling and be dropped. The board is then autosaved back in that state, which is
+   * how opening a campaign a beat too early deleted the cards and wires it was meant to be showing.
+   *
+   * So: prune once we can answer the question, and load the board verbatim until then. A stale ref
+   * that survives one extra load is a card pointing at nothing for a moment; the alternative was
+   * permanent, and it was pushed to the backend.
+   */
+  const loadBoardFor = (n: string): FlowBoard => {
+    const board = boardFor(flowBoards, n)
+    if (!boardsHydrated) return board
+    // The campaign's live outputs, so a wire to a deliverable or a post survives the prune. Built
+    // from the STORE, not from viewDelivs: viewDelivs derives from viewName, which the caller sets
+    // after this, so at this moment it still describes the campaign being left.
+    const openingRows = useTrafficStore
+      .getState()
+      .rows.filter((r) => (r.campaign ?? '').trim() === n && !r.archivedAt)
+    return pruneBoard(board, {
+      objectKinds: new Set(Object.keys(OBJECT_META)),
+      smartObjectIds: new Set(smartObjects.map((o) => o.id)),
+      targetIds: new Set(openingRows.flatMap((r) => [r.id, deliverableKeyFor(r)])),
+    })
+  }
   const openView = (n: string) => {
     persistActiveChat()
     setChatMsgs([])
@@ -4976,17 +5012,7 @@ export function FlowsView() {
     // right about the problem, and the only fix available while the board was session state.
     // Prune on load, because refId and smartObjectId are unvalidated cross-namespace keys, so a
     // record deleted since you were last here would leave an object pointing at nothing.
-    // The campaign's live outputs, so a wire to a deliverable or a post survives the prune. Built
-    // from the STORE, not from viewDelivs: viewDelivs derives from viewName, which is set below, so
-    // at this moment it still describes the campaign being left.
-    const openingRows = useTrafficStore
-      .getState()
-      .rows.filter((r) => (r.campaign ?? '').trim() === n && !r.archivedAt)
-    const loaded = pruneBoard(boardFor(flowBoards, n), {
-      objectKinds: new Set(Object.keys(OBJECT_META)),
-      smartObjectIds: new Set(smartObjects.map((o) => o.id)),
-      targetIds: new Set(openingRows.flatMap((r) => [r.id, deliverableKeyFor(r)])),
-    })
+    const loaded = loadBoardFor(n)
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
@@ -5214,6 +5240,10 @@ export function FlowsView() {
   }
   const boardSaveTimer = useRef<number | null>(null)
   useEffect(() => {
+    // NOTHING IS WRITTEN BEFORE THE WORKSPACE HAS BEEN READ. Until hydrateRecords lands, what is on
+    // screen is this device's stale copy of the board (or nothing), and saving it back is not a
+    // save, it is an overwrite of the workspace's copy with whatever this browser happened to have.
+    if (!boardsHydrated) return
     if (boardSaveTimer.current) window.clearTimeout(boardSaveTimer.current)
     boardSaveTimer.current = window.setTimeout(() => {
       saveFlowBoard(boardSnapshot(boardKey))
@@ -5225,7 +5255,33 @@ export function FlowsView() {
     // `detached` belongs here for the same reason `connectors` does: it is part of what the board
     // says about itself. Left out, a cut line vanished on screen and came back on the next load,
     // because the save never fired for it.
-  }, [boardKey, objects, placements, connectors, pos, detached])
+  }, [boardKey, objects, placements, connectors, pos, detached, boardsHydrated])
+
+  /**
+   * The workspace arrived while a campaign was open, so put its board on screen.
+   *
+   * Without this the gate above only converts a wipe into a stall: openView had already loaded the
+   * pre-hydration board into state, so the canvas would sit on the stale copy and the first edit
+   * would write it back over the real one. Re-reading once the gate opens makes the board the
+   * workspace's board before anything can be saved from it.
+   *
+   * Keyed on the flip only. It is not a general "reload when flowBoards changes" effect: this
+   * component is the thing that writes flowBoards, so reacting to every change would fight the user's
+   * own edits.
+   */
+  const hydratedOnce = useRef(boardsHydrated)
+  useEffect(() => {
+    if (!boardsHydrated || hydratedOnce.current) return
+    hydratedOnce.current = true
+    if (!viewName) return
+    const loaded = loadBoardFor(viewName)
+    setObjects(loaded.objects)
+    setPlacements(loaded.placements)
+    setConnectors(loaded.connectors)
+    setDetached(loaded.detached ?? [])
+    setPos((p) => ({ ...p, ...loaded.pos }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardsHydrated])
 
   // Measure node positions (canvas-local) so the SVG connectors track them as nodes
   // move, pan, and zoom. During an active drag we SKIP the remeasure — re-reading every node's
@@ -10736,9 +10792,13 @@ export function FlowsView() {
         <div className="flow-offline-note" role="status">
           <span className="flow-offline-dot" aria-hidden="true" />
           <span>
-            <strong>Written offline.</strong> The AI could not be reached, so this copy came from
-            templates built out of your own brand and audience, not from a model. Generate again to
-            retry.
+            {/* The CAUSE first, because it is the part that decides what to do next, and it used to
+                be the part nobody had. "Generate again to retry" is only advice worth taking for a
+                failure that might not repeat, so it is offered only for those. */}
+            <strong>Written offline.</strong>{' '}
+            {lastCopyReason ? `The AI did not write this because ${lastCopyReason}.` : 'The AI could not be reached.'}{' '}
+            This copy came from templates built out of your own brand and audience, not from a model.
+            {lastCopyReason ? '' : ' Generate again to retry.'}
           </span>
           <button className="flow-offline-x" onClick={clearCopySource} aria-label="Dismiss">✕</button>
         </div>
