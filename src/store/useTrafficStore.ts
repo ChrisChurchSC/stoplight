@@ -147,7 +147,8 @@ import {
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
 import { type Product, freshProductId } from '../domain/product'
 import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
-import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, makeObjectReference, withContents } from '../domain/smartObject'
+import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
+import { makeObjectReference } from '../domain/objectReference'
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -171,8 +172,8 @@ import {
   resolveBreaks,
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
-import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
-import { directionForRow, resolveBoardDirection, wiredObjectsFor, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, kindWord, objectName, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
+import { directionForRow, resolveBoardDirection, wiredCardDocsFor, wiredObjectsFor, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
 import { contextGaps, type ContextGapKey } from '../domain/contextGaps'
 import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { normalizeFigure } from '../domain/coherenceChecks'
@@ -808,7 +809,13 @@ function saveOnboarding(state: OnboardingState): void {
 // Campaign BOARDS: the objects, smart-object placements, positions and links on a campaign canvas.
 // Persisted per campaign so a board survives a reload and a campaign switch, and synced like
 // flowChats so it follows the user to a second device.
-const FLOW_BOARDS_KEY = 'stoplight.flowBoards.v1'
+/**
+ * Exported for ONE reader: the canvas, checking that a document it just attached to a card actually
+ * reached storage. See attachObjectReference for the same check on a smart object, and the reason —
+ * persistState swallows a quota error, and a card's document is the first thing written into a board
+ * big enough to hit one on its own.
+ */
+export const FLOW_BOARDS_KEY = 'stoplight.flowBoards.v1'
 function loadFlowBoards(): FlowBoard[] {
   try {
     const v = JSON.parse(localStorage.getItem(FLOW_BOARDS_KEY) || '[]')
@@ -6952,14 +6959,40 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
          * about what a document says, and listing every wired object with an empty description under
          * it would spend context saying that most of them have not been written about.
          */
-        const references = wiredObjectsFor(board, get().smartObjects, 'campaign')
-          .filter((o) => o.reference?.text.trim())
-          .map((o) => ({
-            object: o.name || 'Untitled object',
-            document: o.reference!.name,
-            text: o.reference!.text,
-            truncated: o.reference!.truncated,
-          }))
+        const references = [
+          ...wiredObjectsFor(board, get().smartObjects, 'campaign')
+            .filter((o) => o.reference?.text.trim())
+            .map((o) => ({
+              object: o.name || 'Untitled object',
+              document: o.reference!.name,
+              text: o.reference!.text,
+              truncated: o.reference!.truncated,
+            })),
+          /**
+           * AND THE DOCUMENTS ON THE CARDS THEMSELVES, in the same list and under the same rules.
+           *
+           * A card is given its context by describing it or by handing it the .md that already says
+           * it, and the second route only means anything if the file arrives here. It joins the
+           * objects' references rather than opening a second channel because it is the same kind of
+           * thing — a document that is the authority on the one thing it names, and on nothing else
+           * — so it should be capped by the same budget and read under the same instruction. A
+           * separate list would need its own paragraph in the prompt saying the same thing slightly
+           * differently, which is how two rules become two behaviours.
+           *
+           * SECOND, deliberately. The server keeps the first six and counts the rest as omitted, and
+           * an object is a bundle somebody assembled and named, so where a campaign has more
+           * documents than fit, the assembled ones are the better six.
+           *
+           * The label says what sort of card it is, because "Acme Corp" alone does not tell the
+           * writer whether it is reading about an account, an audience or a proposition.
+           */
+          ...wiredCardDocsFor(board, 'campaign').map((c) => ({
+            object: `${objectName(c, undefined, 'Untitled')} (${kindWord(c.kind)} card)`,
+            document: c.reference!.name,
+            text: c.reference!.text,
+            truncated: c.reference!.truncated,
+          })),
+        ]
         // The graph, resolved once for the batch rather than per asset.
         const resolved = resolveBoardDirection(board)
         const campaignDirection = get().campaignList.find((c) => c.name === campaign)?.direction ?? []

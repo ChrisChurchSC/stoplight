@@ -197,10 +197,11 @@ export interface DraftRequest {
     datasetId: string
   }[]
   /**
-   * DOCUMENTS describing the smart objects wired to this campaign, each the authority on what its
-   * own object is. Uploaded by hand, so unlike every other entry here it is prose rather than a
-   * typed record — which is exactly why it carries the object's name with it: a description that
-   * cannot say what it describes is just loose text in the prompt.
+   * DOCUMENTS describing the smart objects AND THE CARDS wired to this campaign, each the authority
+   * on what its own one thing is. Uploaded by hand, so unlike every other entry here it is prose
+   * rather than a typed record — which is exactly why it carries the thing's name with it: a
+   * description that cannot say what it describes is just loose text in the prompt. A card's entry
+   * names its kind too, since a name alone does not say whether this is an account or an audience.
    */
   references?: { object: string; document: string; text: string; truncated?: boolean }[]
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }

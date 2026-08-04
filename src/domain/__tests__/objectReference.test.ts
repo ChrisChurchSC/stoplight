@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { wiredObjectsFor, wiredRefsFor } from '../boardResolve'
+import { wiredCardDocsFor, wiredObjectsFor, wiredRefsFor } from '../boardResolve'
 import type { CanvasObject, FlowBoard, SmartPlacement } from '../flowBoard'
-import { REFERENCE_LIMIT, makeObjectReference, type SmartObject } from '../smartObject'
+import { type SmartObject } from '../smartObject'
+import { REFERENCE_LIMIT, makeObjectReference } from '../objectReference'
 import type { FlowReference } from '../clients'
 
 /**
@@ -111,6 +112,95 @@ describe('wiredObjectsFor', () => {
     )
     const lib = [library('so_a', [], doc('a')), library('so_b', [], doc('b'))]
     expect(names(wiredObjectsFor(b, lib, 'campaign')).sort()).toEqual(['so_a', 'so_b'])
+  })
+})
+
+/**
+ * THE SAME PROPERTY ONE RUNG DOWN: a document attached to a CARD.
+ *
+ * A card can now be given a .md instead of being described, and that document is the card's whole
+ * contribution rather than a source that filled some fields in. So the walk that finds it has to
+ * hold to the same rules as the objects' one — a wire is what makes it count, a cycle terminates,
+ * and one document is sent once — because the failure it prevents is worse here: a card's brief is
+ * often the only thing the card carries, and a card whose document does not travel is a card that
+ * silently contributes nothing at all.
+ */
+describe('wiredCardDocsFor', () => {
+  const ids = (objects: CanvasObject[]): string[] => objects.map((o) => o.id)
+  const withDoc = (id: string, kind: CanvasObject['kind'], text: string): CanvasObject =>
+    obj(id, kind, { reference: makeObjectReference(`${id}.md`, text, 0) })
+
+  it('carries a card wired straight into the brief', () => {
+    const b = board([withDoc('c1', 'audience', 'They buy on renewal.')], [{ from: 'c1', to: 'campaign' }])
+    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+  })
+
+  it('carries a card several hops back, exactly as its records travel', () => {
+    // brand -> message -> brief. The chain is the flow the board exists to support, and a document
+    // that only travelled on a direct wire would drop the card at the head of it.
+    const b = board(
+      [withDoc('c1', 'brand', 'We only do emergencies.'), obj('c2', 'message')],
+      [
+        { from: 'c1', to: 'c2' },
+        { from: 'c2', to: 'campaign' },
+      ],
+    )
+    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+  })
+
+  it('reads the cards inside a smart object placed on the board', () => {
+    // Bundling a card says where it lives. It has never meant "stop reading what this one says".
+    const b = board(
+      [withDoc('c1', 'person', 'Fishes most weekends.'), obj('c2', 'voice')],
+      [{ from: 'p1', to: 'campaign' }],
+      [{ id: 'p1', smartObjectId: 'so_buyer', memberIds: ['c1', 'c2'] }],
+    )
+    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+  })
+
+  it('sends one card once, however many ways it is reached', () => {
+    // Two copies of one brief read to the writer as two briefs that happen to agree, which is a
+    // corroboration nobody wrote.
+    const b = board(
+      [withDoc('c1', 'audience', 'One brief.'), obj('c2', 'message')],
+      [
+        { from: 'c1', to: 'campaign' },
+        { from: 'c1', to: 'c2' },
+        { from: 'c2', to: 'campaign' },
+      ],
+    )
+    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+  })
+
+  it('ignores a card with no document, and one that reaches nothing', () => {
+    const b = board(
+      [obj('c1', 'audience'), withDoc('c2', 'person', 'Unwired.'), withDoc('c3', 'voice', '   ')],
+      [
+        { from: 'c1', to: 'campaign' },
+        { from: 'c3', to: 'campaign' },
+      ],
+    )
+    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual([])
+  })
+
+  it('terminates on a cycle', () => {
+    const b = board(
+      [withDoc('c1', 'brand', 'a'), withDoc('c2', 'message', 'b')],
+      [
+        { from: 'c1', to: 'c2' },
+        { from: 'c2', to: 'c1' },
+        { from: 'c2', to: 'campaign' },
+      ],
+    )
+    expect(ids(wiredCardDocsFor(b, 'campaign')).sort()).toEqual(['c1', 'c2'])
+  })
+
+  it('scopes to the target it was asked about', () => {
+    // A card wired to one deliverable is not context for the whole campaign, which is the entire
+    // reason somebody draws the narrower wire.
+    const b = board([withDoc('c1', 'season', 'The fortnight before.')], [{ from: 'c1', to: 'email|nurture' }])
+    expect(ids(wiredCardDocsFor(b, 'email|nurture'))).toEqual(['c1'])
+    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual([])
   })
 })
 

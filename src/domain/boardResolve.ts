@@ -277,6 +277,47 @@ export function wiredObjectsFor(board: FlowBoard, smartObjects: SmartObject[], t
 }
 
 /**
+ * The CARDS wired into a target that carry a document of their own, nearest first.
+ *
+ * The same question wiredObjectsFor asks one rung down. A smart object's document describes a bundle
+ * somebody assembled; a card's describes the one thing the card is, and once a card can be given a
+ * .md instead of a form, that document IS the card. Both reach the writer, in one list, on the same
+ * terms — so this shares upstreamCardIds with the other two walks for the reason stated there: three
+ * answers to "what is wired in" would eventually disagree, invisibly.
+ *
+ * A card inside a smart object contributes its document too. The placement stands in for its members
+ * everywhere else on this board, and a document is not the exception: bundling a card is a statement
+ * about where it lives, never a decision to stop reading what it says.
+ *
+ * Cards with no document are dropped rather than listed empty, exactly as objects are: the block
+ * this feeds is about what a document says, and naming the cards that have not been written about
+ * spends context saying nothing.
+ */
+export function wiredCardDocsFor(board: FlowBoard, target: string): CanvasObject[] {
+  const objectById = new Map(board.objects.map((o) => [o.id, o]))
+  const placementById = new Map(board.placements.map((p) => [p.id, p]))
+  const out: CanvasObject[] = []
+  const seen = new Set<string>()
+  /** Every card a node stands for: itself, or everything inside it if it is a placement. */
+  const cardsAt = (id: string): CanvasObject[] => {
+    const placed = placementById.get(id)
+    if (placed) return placed.memberIds.map((m) => objectById.get(m)).filter((o): o is CanvasObject => !!o)
+    const o = objectById.get(id)
+    return o ? [o] : []
+  }
+  for (const id of upstreamCardIds(board, target)) {
+    for (const card of cardsAt(id)) {
+      // Deduped by CARD, so a card reached both directly and through the object holding it sends its
+      // document once. Two copies of one brief read as two briefs that happen to agree.
+      if (seen.has(card.id) || !card.reference?.text.trim()) continue
+      seen.add(card.id)
+      out.push(card)
+    }
+  }
+  return out
+}
+
+/**
  * Does this board connect anything to an OUTPUT? The gate on generating from nothing.
  *
  * An output is the brief, a deliverable or a post — anything that is not another card. So a
