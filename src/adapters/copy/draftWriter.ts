@@ -196,6 +196,13 @@ export interface DraftRequest {
     partial: boolean
     datasetId: string
   }[]
+  /**
+   * DOCUMENTS describing the smart objects wired to this campaign, each the authority on what its
+   * own object is. Uploaded by hand, so unlike every other entry here it is prose rather than a
+   * typed record — which is exactly why it carries the object's name with it: a description that
+   * cannot say what it describes is just loose text in the prompt.
+   */
+  references?: { object: string; document: string; text: string; truncated?: boolean }[]
   avoid?: { headlines: string[]; bodies: string[]; ctas: string[] }
   /**
    * The model to write with, as an AI_MODELS id. Omitted (or 'auto') leaves the choice to the

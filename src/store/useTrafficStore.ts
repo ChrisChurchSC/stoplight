@@ -147,7 +147,7 @@ import {
 import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domain/brandRecord'
 import { type Product, freshProductId } from '../domain/product'
 import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
-import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
+import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, makeObjectReference, withContents } from '../domain/smartObject'
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -172,7 +172,7 @@ import {
 } from '../domain/breaks'
 import { claudeCoherence } from '../adapters/coherence/claudeCoherence'
 import { BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, type CanvasObject, type FlowBoard } from '../domain/flowBoard'
-import { directionForRow, resolveBoardDirection, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
+import { directionForRow, resolveBoardDirection, wiredObjectsFor, wiredRefsFor, hasWiredContext } from '../domain/boardResolve'
 import { contextGaps, type ContextGapKey } from '../domain/contextGaps'
 import { citableFigures, figuresUsedIn, MAX_FIGURES_PER_CAMPAIGN } from '../domain/datasetRead'
 import { normalizeFigure } from '../domain/coherenceChecks'
@@ -1840,7 +1840,13 @@ interface TrafficState {
      *  reconstruct the ones that carry no record. */
     contents?: CanvasObject[],
   ) => string
-  updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs'>>) => void
+  updateSmartObject: (id: string, patch: Partial<Pick<SmartObject, 'name' | 'refs' | 'reference'>>) => void
+  /**
+   * Attach an uploaded document as the object's reference — what the copy writer reads as the
+   * authority on what this object IS. Resolves to a message when the file cannot be used, or null
+   * when it landed, so the caller can say so without the store growing a notice field for it.
+   */
+  attachObjectReference: (id: string, file: File) => Promise<string | null>
   /**
    * Hand the builder's work to the campaign Build just named: its board is re-keyed, and any smart
    * object made on the builder slot is re-stamped to the real campaign.
@@ -3588,6 +3594,53 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       saveSmartObjects(smartObjects)
       return { smartObjects }
     }),
+  attachObjectReference: async (id, file) => {
+    /**
+     * Guarded on the way IN, by extension, exactly as the asset ingest is. file.text() on a PDF or a
+     * .docx returns binary garbage that is still a non-empty string, so it satisfies every check
+     * downstream and arrives at the writer as a document made of mojibake. There is no later point
+     * at which that is detectable, which is what makes this the only place to stop it.
+     */
+    if (!/\.(md|markdown|txt)$/i.test(file.name.trim())) {
+      const ext = file.name.split('.').pop()?.toUpperCase()
+      return `${ext ? `${ext} files` : 'That file'} cannot be read as a reference. Save it as .md or .txt and add it again.`
+    }
+    let raw: string
+    try {
+      raw = await file.text()
+    } catch {
+      return 'Could not read that file.'
+    }
+    if (!raw.trim()) return 'That file is empty.'
+    const reference = makeObjectReference(file.name, raw, Date.now())
+    get().updateSmartObject(id, { reference })
+    /**
+     * DID IT ACTUALLY LAND? persistState swallows a localStorage quota error by design — every other
+     * caller writes something small enough for that to be the right trade — and a reference document
+     * is the first thing written through it big enough to blow the budget on its own.
+     *
+     * Swallowing it here would ship exactly the bug this whole feature was reported as: a file that
+     * looks attached, reads back fine from memory, and is gone on reload. Only worth saying when
+     * there is no backend, because with one configured the Supabase mirror carries the object
+     * regardless of what the local cache managed to keep.
+     */
+    if (!isSupabaseConfigured) {
+      try {
+        const saved = localStorage.getItem(SMART_OBJECTS_KEY)
+        const kept = saved
+          ? (JSON.parse(saved) as SmartObject[]).find((o) => o.id === id)?.reference?.text.length
+          : undefined
+        if (kept !== reference.text.length) {
+          get().updateSmartObject(id, { reference: undefined })
+          return 'That document is too large for this browser to store. Shorten it, or sign in to a workspace so it saves to the backend.'
+        }
+      } catch {
+        /* A read-back that itself fails says nothing either way; leave the attach alone. */
+      }
+    }
+    return null
+  },
+
   updateSmartObject: (id, patch) =>
     set((s) => {
       const before = s.smartObjects.find((o) => o.id === id)
@@ -6224,7 +6277,16 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   fillRowMedia: async (id, file) => {
     const [asset] = await filesToAssets([file])
     if (!asset) return
-    const patch: Partial<TrafficRow> = { mediaRef: asset.previewUrl, mediaType: asset.mediaType }
+    const patch: Partial<TrafficRow> = { mediaType: asset.mediaType }
+    /**
+     * Only when there IS one. filesToAssets mints an object URL for images and video and for nothing
+     * else, so a text file arrived with previewUrl undefined and this assignment wrote that
+     * undefined straight over whatever the row already had. Two things followed, and the second is
+     * what made it look broken: any creative already on the row was silently dropped, and the tile
+     * kept rendering its "Upload" state, because that state is keyed on mediaRef. Uploading a .md
+     * therefore looked exactly like uploading nothing.
+     */
+    if (asset.previewUrl) patch.mediaRef = asset.previewUrl
     if (asset.body !== undefined) patch.body = asset.body
     await sheet.update(id, patch)
     await get().refresh()
@@ -6742,6 +6804,23 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
          * regression, with typed instructions reaching no writer at all.
          */
         const board = boardFor(get().flowBoards, campaign)
+        /**
+         * THE DOCUMENTS BEHIND THE OBJECTS. Same walk as campaignRefs, kept as objects rather than
+         * flattened, so an object carrying an uploaded brief can hand the writer that brief instead
+         * of only the records inside it.
+         *
+         * Objects with no document contribute nothing here and are dropped: the block this feeds is
+         * about what a document says, and listing every wired object with an empty description under
+         * it would spend context saying that most of them have not been written about.
+         */
+        const references = wiredObjectsFor(board, get().smartObjects, 'campaign')
+          .filter((o) => o.reference?.text.trim())
+          .map((o) => ({
+            object: o.name || 'Untitled object',
+            document: o.reference!.name,
+            text: o.reference!.text,
+            truncated: o.reference!.truncated,
+          }))
         // The graph, resolved once for the batch rather than per asset.
         const resolved = resolveBoardDirection(board)
         const campaignDirection = get().campaignList.find((c) => c.name === campaign)?.direction ?? []
@@ -7178,7 +7257,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           .flatMap((d) => citableFigures(d))
           .slice(0, MAX_FIGURES_PER_CAMPAIGN)
         const model = pickGenerationModel(campMeta?.aiModel, get().aiModel)
-        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, datasets, products, triggers, model }
+        const baseReq = { icp, campaign, theme, flightWeeks: campMeta?.durationWeeks, brand, brandGuide, proofPool: sentProof, hooks: sys.hooks.map((h) => h.text).filter(Boolean), personas, messages, concepts, voices, seasons, datasets, products, triggers, references, model }
         const result = await copyWriter.draft({ ...baseReq, assets })
         // Track the writer: once any group falls back to the heuristic, the whole
         // run is 'heuristic'; otherwise it's 'claude'.
