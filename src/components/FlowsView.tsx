@@ -43,7 +43,7 @@ import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
-import { describeReference, makeObjectReference, type ObjectReference } from '../domain/objectReference'
+import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
@@ -6710,18 +6710,26 @@ export function FlowsView() {
                     the one control that matters on it. It is the card's context rather than a thing
                     that filled the card in, so it stays here, and it goes to the writer whole. */}
                 {ref && (
-                  <div className="flow-fill-doc">
+                  <div className="flow-fill-doc flow-fill-doc-head">
                     <span className="flow-fill-doc-ic" aria-hidden="true">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
                         <path d="M14 3v4h4" />
                       </svg>
                     </span>
-                    <span className="flow-fill-doc-name">
-                      {describeReference(ref)}
-                      {/* A cut brief that does not say it was cut reads as a whole one, to the
-                          person and to the writer. */}
-                      {ref.truncated && <em className="flow-fill-doc-cut"> · cut to fit the writer</em>}
+                    {/* TWO LINES, because the three facts do not fit on one in a column this narrow.
+                        As a single string a long filename ate the rest of it, and the first thing
+                        lost was the cut warning — the one thing here that changes what you should
+                        believe about the writing. Side by side was no better: the name then
+                        collapsed to a letter, and a document you cannot identify is not much of a
+                        source. So the name gets the top line to itself and shortens if it must; what
+                        the file amounts to sits underneath at full length. */}
+                    <span className="flow-fill-doc-text">
+                      <span className="flow-fill-doc-name">{ref.name}</span>
+                      <span className="flow-fill-doc-size">
+                        {ref.text.length.toLocaleString()} characters
+                        {ref.truncated && <em className="flow-fill-doc-cut"> · cut to fit the writer</em>}
+                      </span>
                     </span>
                     <button
                       className="flow-fill-doc-x"
@@ -6733,6 +6741,23 @@ export function FlowsView() {
                     </button>
                   </div>
                 )}
+                {/* AND WHAT IT SAYS. A filename and a character count tell you a file is attached;
+                    they do not tell you it is the right file, that the paste landed whole, or what
+                    the writer is about to be told. This is the card's context — the panel cannot
+                    show everything else about the card and then keep its one authoritative source
+                    folded up behind its own name.
+
+                    SHOWN EXACTLY AS STORED, markdown marks and all, rather than rendered into
+                    headings and bullets. What is in this box is character-for-character what the
+                    writer receives, and a prettier version would be a second reading of the document
+                    sitting where the real one should be — you would be checking the rendering, not
+                    the source. It is also the honest way to show the cut: the text simply stops
+                    where the writer's copy stops.
+
+                    Bounded and scrolled rather than truncated. A brief runs to thousands of words
+                    and the panel is a column, so the box takes a screenful and the rest is a scroll
+                    away; nothing is hidden, it is only further down. */}
+                {ref && <div className="flow-fill-doc-body">{ref.text}</div>}
                 {canGenerate && target && (
                   <textarea
                     className="flow-fill-input"
