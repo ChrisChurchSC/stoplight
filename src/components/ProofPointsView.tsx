@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { canvasBrandScope } from '../domain/brand'
 import type { Rtb } from '../domain/rtb'
 import { freshRecordId, type RecordColumn, type RecordField, type RecordFieldKind } from '../domain/records'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -41,7 +42,9 @@ export function ProofPointsView() {
   const addLibraryItem = useTrafficStore((s) => s.addLibraryItem)
   const updateLibraryItem = useTrafficStore((s) => s.updateLibraryItem)
   const removeLibraryItem = useTrafficStore((s) => s.removeLibraryItem)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's proof here and pointed the library write at it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
 
   // Point the messaging library at this brand so reads + writes target it.
   useEffect(() => {

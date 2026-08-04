@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import { describeSmartObject, scopeOf } from '../domain/smartObject'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -18,6 +19,10 @@ export function ObjectPage() {
   const updateSmartObject = useTrafficStore((s) => s.updateSmartObject)
   const deleteSmartObject = useTrafficStore((s) => s.deleteSmartObject)
   const closeObjectTab = useTrafficStore((s) => s.closeObjectTab)
+  const attachObjectReference = useTrafficStore((s) => s.attachObjectReference)
+  // Held here rather than in the store: it is one sentence about the last thing this page tried, and
+  // nothing else in the app has any use for it.
+  const [note, setNote] = useState<string | null>(null)
 
   if (!id || !object) {
     return (
@@ -61,6 +66,61 @@ export function ObjectPage() {
 
       <div className="objpage-body">
         <div className="objpage-sub">{describeSmartObject(object)}</div>
+
+        {/* THE DOCUMENT. Sits above the contents because that is the order of authority: what this
+            object IS, then the records it is made of. A reader who sees the cards first reads them
+            as the description, which is the misreading the whole field exists to correct. */}
+        <div className="objpage-ref">
+          {object.reference ? (
+            <>
+              <div className="objpage-ref-head">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" /><path d="M14 3v4h4" />
+                </svg>
+                <strong>{object.reference.name}</strong>
+                <span className="objpage-ref-size">
+                  {object.reference.text.length.toLocaleString()} characters
+                </span>
+                <span className="spacer" />
+                <button
+                  className="btn ghost sm"
+                  title="Remove this reference"
+                  onClick={() => { updateSmartObject(object.id, { reference: undefined }); setNote(null) }}
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="objpage-ref-note">
+                The copy writer reads this as what this object is, ahead of the cards below.
+              </div>
+              {object.reference.truncated && (
+                <div className="objpage-ref-warn">
+                  Too long to send whole, so it was cut at {object.reference.text.length.toLocaleString()} characters. The writer is told it is reading part of a document.
+                </div>
+              )}
+            </>
+          ) : (
+            <label className="objpage-ref-add">
+              <input
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  // Reset first: picking the same file twice in a row fires no change event otherwise.
+                  e.target.value = ''
+                  if (f) setNote(await attachObjectReference(object.id, f))
+                }}
+              />
+              <span className="objpage-ref-add-ic">⬆</span>
+              <span>
+                <strong>Add a reference document</strong>
+                <em>A .md or .txt saying what this object is. The copy writer reads it as the authority on this object.</em>
+              </span>
+            </label>
+          )}
+          {note && <div className="objpage-ref-warn">{note}</div>}
+        </div>
+
         {contents.length === 0 ? (
           <div className="bds-missing">Nothing inside yet. Select a card on a campaign canvas and press ⌘G, or several to bundle them.</div>
         ) : (

@@ -228,15 +228,27 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   })
 }
 
-export function persistState(key: string, value: unknown): void {
+/**
+ * Returns whether the LOCAL write landed. Most callers ignore it — a failed mirror is recoverable
+ * and a failed local write usually just means the next one will re-send. Callers that show the user
+ * something on the strength of the save (saveOutputTypes rolls its table back and names the quota)
+ * need to be able to tell, and a quota error swallowed in here is invisible to them.
+ *
+ * The server mirror is deliberately NOT part of this answer: it's debounced, so it hasn't happened
+ * yet when this returns. Its outcome arrives later, through onSaveTrouble.
+ */
+export function persistState(key: string, value: unknown): boolean {
   // Synchronous and unconditional: this is the copy a reload reads, so it must never wait on a
   // debounce. Only the workspace mirror below is coalesced.
+  let stored = true
   try {
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    /* ignore quota / serialization errors, same as before */
+    // Quota or serialization. Still mirror to the workspace below — the server has no quota, and a
+    // value that cannot fit in this browser is exactly the one worth getting off it.
+    stored = false
   }
-  if (!isSupabaseConfigured || !supabase) return
+  if (!isSupabaseConfigured || !supabase) return stored
   const p: PendingWrite = pending.get(key) ?? { value, seq: 0, sent: 0, timer: null, inFlight: false, failures: 0 }
   p.value = value
   p.seq += 1
@@ -245,12 +257,13 @@ export function persistState(key: string, value: unknown): void {
   p.failures = 0
   pending.set(key, p)
   // A request already out will pick this value up when it lands, so don't schedule a second wake-up.
-  if (p.inFlight) return
+  if (p.inFlight) return stored
   if (p.timer) clearTimeout(p.timer)
   p.timer = setTimeout(() => {
     p.timer = null
     void mirror(key)
   }, MIRROR_DELAY_MS)
+  return stored
 }
 
 /**

@@ -1,3 +1,4 @@
+import { canvasBrandScope } from '../domain/brand'
 import { CHANNELS } from '../domain/channels'
 import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS, MARITAL_STATUSES } from '../domain/taxonomy'
 import { newAudience, type AudienceType } from '../domain/audiences'
@@ -106,7 +107,9 @@ export function SegmentsView() {
   const brandRecords = useTrafficStore((s) => s.brandRecords)
   const showToast = useTrafficStore((s) => s.showToast)
   const openAudienceWizard = useTrafficStore((s) => s.openAudienceWizard)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's records here and filed anything added under it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const audiences = clientAudiences[brand] ?? []
 
   // Recommend the three INTERPRETIVE fields (message angle, funnel stage, conversion outcome) for one

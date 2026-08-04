@@ -184,7 +184,7 @@ begin
   foreach t in array array[
     'brands', 'companies', 'people', 'segments', 'channels',
     'objectives', 'message_records', 'voice_records', 'patterns', 'triggers', 'tasks', 'proof_points',
-    'concept_records', 'season_records'
+    'concept_records', 'season_records', 'products', 'brand_objects', 'library_folders'
   ] loop
     execute format($f$
       create table if not exists public.%1$I (
@@ -311,5 +311,59 @@ returns jsonb language sql security definer set search_path = public as $$
 $$;
 grant execute on function public.get_share_snapshot(text) to anon, authenticated;
 
+-- ── Audit log + campaign version history (append-only) ─────────────────────
+-- The disclosure trail and the copy save-points. Both are pure appends in the app, and neither
+-- grants update: a trail entry a client can rewrite is not a trail entry, and a save point you can
+-- rewrite is not a save point. audit_log grants no delete either. campaign_versions does, because
+-- deleting a brand purges its history with it (see brandPurgePatch) — without that the purge would
+-- succeed locally and a fresh device would hydrate the deleted brand's versions back.
+-- Key columns are extracted for querying; the full record stays in `data`. See migrations/0010.
+create table if not exists public.audit_log (
+  id           text primary key,
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  break_id     text,
+  action       text not null,
+  actor        text,
+  at           bigint not null,
+  data         jsonb not null,
+  created_at   timestamptz not null default now()
+);
+create index if not exists audit_log_workspace_idx on public.audit_log (workspace_id, at desc);
+alter table public.audit_log enable row level security;
+drop policy if exists audit_log_select on public.audit_log;
+create policy audit_log_select on public.audit_log
+  for select using (public.is_member(workspace_id));
+drop policy if exists audit_log_insert on public.audit_log;
+create policy audit_log_insert on public.audit_log
+  for insert with check (public.is_editor(workspace_id));
+
+create table if not exists public.campaign_versions (
+  id           text primary key,
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  client       text not null,
+  label        text,
+  author       text,
+  ts           bigint not null,
+  data         jsonb not null,
+  created_at   timestamptz not null default now()
+);
+create index if not exists campaign_versions_ws_client_idx on public.campaign_versions (workspace_id, client, ts desc);
+alter table public.campaign_versions enable row level security;
+drop policy if exists campaign_versions_select on public.campaign_versions;
+create policy campaign_versions_select on public.campaign_versions
+  for select using (public.is_member(workspace_id));
+drop policy if exists campaign_versions_insert on public.campaign_versions;
+create policy campaign_versions_insert on public.campaign_versions
+  for insert with check (public.is_editor(workspace_id));
+drop policy if exists campaign_versions_delete on public.campaign_versions;
+create policy campaign_versions_delete on public.campaign_versions
+  for delete using (public.is_editor(workspace_id));
+
 -- Still local (UI/ephemeral): saved views, pinned insights, open projects,
 -- active canvas, break status, onboarding — fine to leave per-browser for now.
+--
+-- Also still local, and NOT because anyone decided so — these predate the backend and were simply
+-- never wired: brand actuals, drive links, brand datasets, conditions, coherence decisions,
+-- artboards, canvas card positions, campaign RTBs, accounts / target lists / campaign target,
+-- share grants, ai model choice. Listed here so the gap is visible rather than inferred from a
+-- grep for localStorage.setItem.

@@ -1,3 +1,4 @@
+import { canvasBrandScope } from '../domain/brand'
 import { CHANNEL_LIST } from '../domain/channels'
 import { TRIGGER_COLUMNS, TRIGGER_FIELDS, TRIGGER_STATUSES } from '../domain/trigger'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -17,7 +18,9 @@ export function TriggersView() {
   const { brands } = useHomeCanvases()
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
-  const brand = clientFilter !== 'all' ? clientFilter : brands[0]?.name ?? ''
+  // Scoped by canvasBrandScope, not by "whichever brand is first": with several in the account and
+  // none selected, guessing one showed that brand's records here and filed anything added under it.
+  const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const scoped = triggers.filter((t) => !t.brand || t.brand === brand)
   const audienceNames = (clientAudiences[brand] ?? []).map((a) => a.name)
 
