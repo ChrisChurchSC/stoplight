@@ -4362,6 +4362,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
        */
       if (!s.flightsHydrated || s.openProjectsPruned) return {}
       const live = liveCampaignNames(s.rows, s.campaignList)
+      /**
+       * AND IF WE CAN SEE NO CAMPAIGNS AT ALL, WE DO NOT BELIEVE IT.
+       *
+       * A workspace with genuinely zero campaigns and tabs still open is not a state worth tidying,
+       * and it is indistinguishable from the states that are worth fearing: a read that returned a
+       * shape we could not use, a device opening a workspace whose campaigns have not cached yet.
+       * Emptiness is the one answer this must never act on, because it is the one that closes
+       * everything at once. It costs nothing to skip — the tabs are still openable — and it turns
+       * the worst failure available here into no change at all.
+       */
+      if (!live.size) return { openProjectsPruned: true }
       const openProjects = s.openProjects.filter((c) => live.has(c))
       if (openProjects.length === s.openProjects.length) return { openProjectsPruned: true }
       saveOpenProjects(openProjects)

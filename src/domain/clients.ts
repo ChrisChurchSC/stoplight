@@ -327,13 +327,25 @@ export function liveCampaignNames(
 ): Set<string> {
   const names = new Set<string>()
   for (const r of rows) {
-    if (r.archivedAt) continue
-    const c = (r.campaign ?? '').trim()
+    if (r?.archivedAt) continue
+    const c = (r?.campaign ?? '').trim()
     if (c) names.add(c)
   }
   for (const c of campaigns) {
-    if (c.archivedAt) continue
-    const n = c.name.trim()
+    if (c?.archivedAt) continue
+    /**
+     * `?? ''`, NOT `c.name.trim()`, and the type is not the assurance it looks like.
+     *
+     * `name` is non-optional on Campaign, so calling .trim() on it typechecks — but this list is
+     * hydrated from a workspace, and a stored record is only as well-formed as whatever wrote it.
+     * A single legacy or half-written row with no name turned this into a TypeError thrown inside
+     * the useMemo that builds the campaigns gallery, which does not fail politely: it takes out the
+     * render, and the page a signed-in user was looking at came back with no campaigns on it.
+     *
+     * The code this replaced never touched the value (`.map((c) => c.name)`), so it was accidentally
+     * immune. Anything reading a persisted record has to be deliberately immune instead.
+     */
+    const n = (c?.name ?? '').trim()
     if (n) names.add(n)
   }
   return names
