@@ -5,7 +5,7 @@ import { CHANNELS, CHANNEL_LIST } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
+  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
@@ -4988,6 +4988,11 @@ export function FlowsView() {
    * that survives one extra load is a card pointing at nothing for a moment; the alternative was
    * permanent, and it was pushed to the backend.
    */
+  /**
+   * The board exactly as it was last put on screen, by reference. Lets the hydration re-read below
+   * tell an untouched board from one somebody has been working on, without diffing it.
+   */
+  const loadedRef = useRef<FlowBoard>(emptyBoard(BUILDER_BOARD_KEY))
   const loadBoardFor = (n: string): FlowBoard => {
     const board = boardFor(flowBoards, n)
     if (!boardsHydrated) return board
@@ -5013,6 +5018,7 @@ export function FlowsView() {
     // Prune on load, because refId and smartObjectId are unvalidated cross-namespace keys, so a
     // record deleted since you were last here would leave an object pointing at nothing.
     const loaded = loadBoardFor(n)
+    loadedRef.current = loaded
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
@@ -5274,7 +5280,18 @@ export function FlowsView() {
     if (!boardsHydrated || hydratedOnce.current) return
     hydratedOnce.current = true
     if (!viewName) return
+    /**
+     * ONLY OVER A BOARD NOBODY HAS TOUCHED.
+     *
+     * openView puts the loaded arrays into state by reference, so an untouched board still holds
+     * them and a changed one does not. Anything the person drew, dragged or added while the
+     * workspace was still arriving fails that check and is kept — replacing it with the stored copy
+     * would delete their work to fix a race, which is the same trade this whole gate exists to
+     * refuse. Their board is now free to save, because the gate has just opened.
+     */
+    if (objects !== loadedRef.current.objects || connectors !== loadedRef.current.connectors || placements !== loadedRef.current.placements) return
     const loaded = loadBoardFor(viewName)
+    loadedRef.current = loaded
     setObjects(loaded.objects)
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)

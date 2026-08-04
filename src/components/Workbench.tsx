@@ -153,7 +153,15 @@ export function Workbench() {
         }
       }
       await refresh()
-      await hydrateRecords()
+      try {
+        await hydrateRecords()
+      } finally {
+        // The canvas does not save while this gate is shut, so it must open whatever happened above.
+        // hydrateRecords opens it itself on the way out; this covers the path where it throws first
+        // and never gets there, which would otherwise turn one failed read into a session that
+        // silently stops persisting the board.
+        useTrafficStore.getState().markBoardsHydrated()
+      }
       // New users land straight in the app now; the first-run onboarding takeover was removed.
       // The SetupFlow is still available to open manually (Getting started / setup wizard).
     })()
