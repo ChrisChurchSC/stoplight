@@ -288,19 +288,24 @@ function stripEmDashes(d: AssetDraft): AssetDraft {
 const ASSETS_PER_REQUEST = 4
 
 /**
- * A failed /api/draft-copy response, as a sentence naming what to do about it.
+ * A failed /api/draft-copy response, as the shortest true thing plus what to do.
+ *
+ * KEPT TO ONE LINE. The notice this feeds sits over the canvas, and a paragraph there is a paragraph
+ * nobody finishes: the first version explained the fallback, named the cause AND described where the
+ * template copy came from, which is three sentences to say one thing. The badge already says the
+ * copy was written offline, so all this owes is why, and the fix where there is one.
  *
  * The statuses are the contract the rest of the app already speaks: 501 is jsonRoute's answer for
  * both a missing key and an exhausted budget, 401 is requireAuth, 429 is the per-instance rate
- * guard, and 504 is the platform killing a function at its 60s ceiling. Anything else carries the
+ * guard, and 502/504 is the platform killing a function at its ceiling. Anything else carries the
  * server's own `error` field, which is where a provider's message (a spent balance, an unavailable
  * model) actually lands.
  */
 async function failureText(res: Response): Promise<string> {
-  if (res.status === 401) return 'your session has expired, so sign in again'
-  if (res.status === 501) return 'no AI model is connected, or its budget is used up'
-  if (res.status === 429) return 'too many requests at once, so wait a moment'
-  if (res.status === 504 || res.status === 502) return 'the request took too long and was cut off, so generate again'
+  if (res.status === 401) return 'Your session expired. Sign in again.'
+  if (res.status === 501) return 'No AI model connected.'
+  if (res.status === 429) return 'Too many requests. Wait a moment.'
+  if (res.status === 504 || res.status === 502) return 'The request timed out. Generate again.'
   let detail = ''
   try {
     const body = (await res.json()) as { error?: unknown }
@@ -308,12 +313,8 @@ async function failureText(res: Response): Promise<string> {
   } catch {
     // A body that is not JSON tells us nothing the status has not already said.
   }
-  // Each reason carries its own advice, because the notice no longer offers a blanket "retry": that
-  // is the right thing to do after a timeout and a waste of time while signed out. An unrecognised
-  // failure is the one case where trying again is genuinely the best guess available.
-  return detail
-    ? `the server said: ${detail.slice(0, 200)}. Generating again may work`
-    : `the server answered ${res.status}. Generating again may work`
+  // An unrecognised failure is the one case where trying again is genuinely the best guess going.
+  return detail ? `${detail.slice(0, 120)}. Generate again.` : `Server error ${res.status}. Generate again.`
 }
 
 /** The message off a thrown failure, defended against the ones that carry nothing useful. */
@@ -322,7 +323,7 @@ function reasonOf(e: unknown): string | undefined {
   if (!msg) return undefined
   // A fetch that never reached the server throws a bare "Failed to fetch" / "Load failed", which is
   // the one case where the original "could not be reached" wording was literally true.
-  if (/failed to fetch|load failed|networkerror/i.test(msg)) return 'the server could not be reached, so check your connection and generate again'
+  if (/failed to fetch|load failed|networkerror/i.test(msg)) return 'Could not reach the server. Check your connection.'
   return msg.slice(0, 200)
 }
 
@@ -340,7 +341,7 @@ export class ClaudeCopyWriter implements CopyWriter {
     const out = (await res.json()) as DraftResult
     // A 200 carrying no drafts is its own failure and a distinct one: the request was served, so it
     // was not the network, the key or the clock. Named rather than folded into the generic message.
-    if (!out?.drafts?.length) throw new Error('the model returned no copy')
+    if (!out?.drafts?.length) throw new Error('The model returned no copy. Generate again.')
     return { ...out, drafts: out.drafts.map(stripEmDashes) }
   }
 

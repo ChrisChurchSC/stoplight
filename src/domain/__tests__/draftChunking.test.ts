@@ -135,19 +135,19 @@ describe('why the offline writer ran', () => {
   }
 
   it('names an expired session rather than an unreachable AI', async () => {
-    expect((await withStatus(401)).reason).toMatch(/session/i)
+    expect((await withStatus(401)).reason).toBe('Your session expired. Sign in again.')
   })
 
   it('names a missing key or spent budget on a 501', async () => {
-    expect((await withStatus(501)).reason).toMatch(/model is connected|budget/i)
+    expect((await withStatus(501)).reason).toBe('No AI model connected.')
   })
 
   it('names the rate limit on a 429', async () => {
-    expect((await withStatus(429)).reason).toMatch(/too many/i)
+    expect((await withStatus(429)).reason).toBe('Too many requests. Wait a moment.')
   })
 
   it('names a timeout on a gateway status, which is how a killed function arrives', async () => {
-    expect((await withStatus(504)).reason).toMatch(/too long/i)
+    expect((await withStatus(504)).reason).toBe('The request timed out. Generate again.')
   })
 
   it("passes the server's own error through when the status alone says nothing", async () => {
@@ -159,6 +159,14 @@ describe('why the offline writer ran', () => {
     const { out } = await run(1, () => 'empty')
     expect(out.source).toBe('heuristic')
     expect((out as { reason?: string }).reason).toMatch(/no copy/i)
+  })
+
+  it('reads as a finished sentence, since the notice prints it verbatim', async () => {
+    for (const status of [401, 501, 429, 504]) {
+      const r = (await withStatus(status)).reason ?? ''
+      expect(r[0]).toBe(r[0].toUpperCase())
+      expect(r.endsWith('.')).toBe(true)
+    }
   })
 
   it('says nothing when the model wrote it', async () => {

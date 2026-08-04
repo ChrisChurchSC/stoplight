@@ -10809,13 +10809,12 @@ export function FlowsView() {
         <div className="flow-offline-note" role="status">
           <span className="flow-offline-dot" aria-hidden="true" />
           <span>
-            {/* The CAUSE first, because it is the part that decides what to do next, and it used to
-                be the part nobody had. "Generate again to retry" is only advice worth taking for a
-                failure that might not repeat, so it is offered only for those. */}
-            <strong>Written offline.</strong>{' '}
-            {lastCopyReason ? `The AI did not write this because ${lastCopyReason}.` : 'The AI could not be reached.'}{' '}
-            This copy came from templates built out of your own brand and audience, not from a model.
-            {lastCopyReason ? '' : ' Generate again to retry.'}
+            {/* Two clauses, and that is the budget. This said the same thing three ways — that the
+                copy was written offline, why, and that it came from templates built out of the
+                brand — which is a paragraph over the canvas that nobody reads to the end. The label
+                carries the first, the reason carries the second, and the third was only ever there
+                to stand in for a cause we did not have. */}
+            <strong>Written offline.</strong> {lastCopyReason ?? 'The AI could not be reached. Generate again.'}
           </span>
           <button className="flow-offline-x" onClick={clearCopySource} aria-label="Dismiss">✕</button>
         </div>
