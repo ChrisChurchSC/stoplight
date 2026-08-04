@@ -233,6 +233,17 @@ export interface DraftResult {
   drafts: AssetDraft[]
   /** Which writer produced this result. Set by the writer; lets the UI show a source badge. */
   source?: CopySource
+  /**
+   * WHY the offline writer ran, in as few words as the failure allows. Absent when the model wrote.
+   *
+   * The fallback used to be a bare `catch {}`: every distinct cause — signed out, no key, a spend
+   * cap, a function timeout, a truncated reply that would not parse — arrived at the user as the
+   * same sentence saying the AI could not be reached, and the one piece of evidence that could tell
+   * them apart was discarded at the point it was caught. "Generate again to retry" is good advice
+   * for a timeout and useless advice for an expired session, and nothing on screen could say which
+   * of those had happened.
+   */
+  reason?: string
 }
 
 export interface CopyWriter {
@@ -272,6 +283,45 @@ function stripEmDashes(d: AssetDraft): AssetDraft {
  */
 const ASSETS_PER_REQUEST = 4
 
+/**
+ * A failed /api/draft-copy response, as a sentence naming what to do about it.
+ *
+ * The statuses are the contract the rest of the app already speaks: 501 is jsonRoute's answer for
+ * both a missing key and an exhausted budget, 401 is requireAuth, 429 is the per-instance rate
+ * guard, and 504 is the platform killing a function at its 60s ceiling. Anything else carries the
+ * server's own `error` field, which is where a provider's message (a spent balance, an unavailable
+ * model) actually lands.
+ */
+async function failureText(res: Response): Promise<string> {
+  if (res.status === 401) return 'your session has expired, so sign in again'
+  if (res.status === 501) return 'no AI model is connected, or its budget is used up'
+  if (res.status === 429) return 'too many requests at once, so wait a moment'
+  if (res.status === 504 || res.status === 502) return 'the request took too long and was cut off, so generate again'
+  let detail = ''
+  try {
+    const body = (await res.json()) as { error?: unknown }
+    if (typeof body?.error === 'string') detail = body.error
+  } catch {
+    // A body that is not JSON tells us nothing the status has not already said.
+  }
+  // Each reason carries its own advice, because the notice no longer offers a blanket "retry": that
+  // is the right thing to do after a timeout and a waste of time while signed out. An unrecognised
+  // failure is the one case where trying again is genuinely the best guess available.
+  return detail
+    ? `the server said: ${detail.slice(0, 200)}. Generating again may work`
+    : `the server answered ${res.status}. Generating again may work`
+}
+
+/** The message off a thrown failure, defended against the ones that carry nothing useful. */
+function reasonOf(e: unknown): string | undefined {
+  const msg = (e as Error)?.message?.trim()
+  if (!msg) return undefined
+  // A fetch that never reached the server throws a bare "Failed to fetch" / "Load failed", which is
+  // the one case where the original "could not be reached" wording was literally true.
+  if (/failed to fetch|load failed|networkerror/i.test(msg)) return 'the server could not be reached, so check your connection and generate again'
+  return msg.slice(0, 200)
+}
+
 export class ClaudeCopyWriter implements CopyWriter {
   constructor(private fallback: CopyWriter) {}
 
@@ -282,9 +332,11 @@ export class ClaudeCopyWriter implements CopyWriter {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(req),
     })
-    if (!res.ok) throw new Error(`draft-copy ${res.status}`)
+    if (!res.ok) throw new Error(await failureText(res))
     const out = (await res.json()) as DraftResult
-    if (!out?.drafts?.length) throw new Error('empty draft')
+    // A 200 carrying no drafts is its own failure and a distinct one: the request was served, so it
+    // was not the network, the key or the clock. Named rather than folded into the generic message.
+    if (!out?.drafts?.length) throw new Error('the model returned no copy')
     return { ...out, drafts: out.drafts.map(stripEmDashes) }
   }
 
@@ -293,8 +345,8 @@ export class ClaudeCopyWriter implements CopyWriter {
     if (assets.length <= ASSETS_PER_REQUEST) {
       try {
         return { ...(await this.once(req)), source: 'claude' }
-      } catch {
-        return { ...(await this.fallback.draft(req)), source: 'heuristic' }
+      } catch (e) {
+        return { ...(await this.fallback.draft(req)), source: 'heuristic', reason: reasonOf(e) }
       }
     }
 
@@ -308,13 +360,17 @@ export class ClaudeCopyWriter implements CopyWriter {
      * trade than serialising the requests to keep them informed of each other.
      */
     let anyFellBack = false
+    // The first cause, not a tally: several batches failing together almost always failed for the
+    // same reason, and a toast listing it three times reads as three problems.
+    let reason: string | undefined
     const results = await Promise.all(
       batches.map(async (batch) => {
         const part = { ...req, assets: batch }
         try {
           return await this.once(part)
-        } catch {
+        } catch (e) {
           anyFellBack = true
+          reason ??= reasonOf(e)
           return await this.fallback.draft(part)
         }
       }),
@@ -333,7 +389,7 @@ export class ClaudeCopyWriter implements CopyWriter {
      * The opposite, claiming the model wrote a set where some came from templates, is a bug this
      * codebase has already fixed once.
      */
-    return { rtbs, drafts, source: anyFellBack ? 'heuristic' : 'claude' }
+    return { rtbs, drafts, source: anyFellBack ? 'heuristic' : 'claude', ...(anyFellBack && reason ? { reason } : {}) }
   }
 }
 

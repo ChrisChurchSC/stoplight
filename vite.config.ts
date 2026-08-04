@@ -50,7 +50,10 @@ function jsonMiddleware(load: () => Promise<(body: unknown) => Promise<unknown>>
       res.end(JSON.stringify(result))
     } catch (err) {
       const code = (err as { code?: string })?.code
-      res.statusCode = code === 'NO_KEY' ? 501 : 500
+      // NO_BUDGET rides with NO_KEY exactly as it does in production's jsonRoute. Left out here, a
+      // spent balance answered 500 in dev and 501 on the pilot, so the fallback that the comment
+      // above promises this mirrors did not actually happen on a developer's machine.
+      res.statusCode = code === 'NO_KEY' || code === 'NO_BUDGET' ? 501 : 500
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ error: code ?? String((err as Error)?.message ?? err) }))
     }

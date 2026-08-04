@@ -147,6 +147,16 @@ export function makeModelClient(tier: ModelTier = 'extract', modelOverride?: str
             // Same money-shaped statuses as the OpenRouter branch, so this path degrades identically.
             const status = (err as { status?: number })?.status
             if (status === 402 || status === 429) throw new BudgetError(`Anthropic ${status}`)
+            /**
+             * An exhausted Anthropic balance is a 400, not a 402. Measured against a real key with
+             * no credit: `400 invalid_request_error "Your credit balance is too low to access the
+             * Anthropic API"`. Only 402 and 429 were treated as money, so the one status this
+             * actually arrives as fell through as a generic error and surfaced as a 500 — a crash
+             * rather than the "no model available" state it is, and the same class of mistake the
+             * BudgetError comment above describes fixing for the other two.
+             */
+            if (status === 400 && /credit balance is too low|billing/i.test(String((err as Error)?.message ?? '')))
+              throw new BudgetError('Anthropic credit balance too low')
             throw err
           }
         },
