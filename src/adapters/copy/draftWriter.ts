@@ -274,12 +274,16 @@ function stripEmDashes(d: AssetDraft): AssetDraft {
  *
  * MEASURED, not chosen. The endpoint writes every asset it is given in a single model call, and the
  * time scales with the count: 1 asset 12.4s, 3 assets 25.9s, 12 assets 64.8s. Vercel caps every
- * function in this project at 60 seconds (vercel.json), so a real campaign of a dozen posts and
+ * function in this project at maxDuration (vercel.json), so a real campaign of a dozen posts and
  * emails was killed by the platform partway through, and the client reported it as "the AI could
  * not be reached".
  *
- * Four keeps a request near 30s, half the ceiling, with room for a slower day. Chunks go out
- * together, so twelve assets now finish in about the time three used to take rather than timing out.
+ * Four keeps a request near 30s against a cap that is now 300s. It was 60s when this was written and
+ * four was chosen to sit at half of it, which turned out to be too fine a margin: a real campaign's
+ * context is far larger than the measurement above, providers vary by minutes on a bad day, and the
+ * timeout came back as a 504 on the pilot. The headroom is the fix; the chunking stays because it
+ * buys two things the cap does not — batches run in parallel, and one that fails costs four assets
+ * rather than the campaign.
  */
 const ASSETS_PER_REQUEST = 4
 
