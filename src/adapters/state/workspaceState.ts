@@ -9,6 +9,11 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase'
  * persistState() writes localStorage always (cache/offline) and mirrors to the workspace when a
  * backend is configured; hydrateState() pulls the whole set back on sign-in. Additive: with no
  * backend it's a plain localStorage write, unchanged from before.
+ *
+ * A mirror that fails is REPORTED (see onSaveTrouble) rather than swallowed. That distinction is
+ * the point of the error handling here: localStorage always succeeds, so a workspace write that
+ * quietly fails looks identical to one that worked — right up until you open the app in another
+ * browser and the campaigns you started aren't there.
  */
 
 /**
@@ -19,6 +24,15 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabase'
  */
 const MIRROR_DELAY_MS = 500
 
+/**
+ * A failed mirror retries itself, doubling the wait each time so an unreachable workspace isn't
+ * hammered. After RETRY_LIMIT attempts it stops trying on its own but stays pending, so the next
+ * edit to that key — or a flush, or the banner's Retry — picks it straight back up.
+ */
+const RETRY_BASE_MS = 1_000
+const RETRY_MAX_MS = 30_000
+const RETRY_LIMIT = 6
+
 type PendingWrite = {
   /** Newest value handed to persistState. Only this one is ever worth sending. */
   value: unknown
@@ -28,9 +42,85 @@ type PendingWrite = {
   sent: number
   timer: ReturnType<typeof setTimeout> | null
   inFlight: boolean
+  /** Consecutive failed attempts, driving the backoff. Cleared by the first success. */
+  failures: number
 }
 
 const pending = new Map<string, PendingWrite>()
+
+/**
+ * The account copy is behind. Nothing is lost on THIS device — localStorage holds every value — but
+ * the work isn't in the workspace, so another browser, another machine, or a teammate won't see it.
+ */
+export type SaveTrouble = {
+  /** Keys whose newest value hasn't reached the workspace. */
+  keys: string[]
+  /** The most recent reason, straight from the server where there is one. */
+  message: string
+  /** True when every stuck write failed for want of a workspace (signed out, or no membership). */
+  signedOut: boolean
+}
+
+const troubled = new Map<string, { message: string; signedOut: boolean }>()
+const listeners = new Set<(t: SaveTrouble | null) => void>()
+
+function currentTrouble(): SaveTrouble | null {
+  if (troubled.size === 0) return null
+  const entries = [...troubled.entries()]
+  const [, newest] = entries[entries.length - 1]
+  return {
+    keys: entries.map(([k]) => k),
+    message: newest.message,
+    signedOut: entries.every(([, t]) => t.signedOut),
+  }
+}
+
+function emit(): void {
+  const t = currentTrouble()
+  for (const cb of listeners) {
+    // A listener is UI; a throwing one must never take the write path down with it.
+    try {
+      cb(t)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Subscribe to save trouble. Called immediately with the current state, then on every change, and
+ * with null once everything pending has landed.
+ */
+export function onSaveTrouble(cb: (t: SaveTrouble | null) => void): () => void {
+  listeners.add(cb)
+  cb(currentTrouble())
+  return () => {
+    listeners.delete(cb)
+  }
+}
+
+/** The stuck keys right now, or null — a one-off read for a caller that doesn't want a subscription. */
+export function saveTrouble(): SaveTrouble | null {
+  return currentTrouble()
+}
+
+function failed(key: string, p: PendingWrite, message: string, signedOut: boolean): void {
+  p.failures += 1
+  troubled.set(key, { message, signedOut })
+  if (p.failures <= RETRY_LIMIT) {
+    const delay = Math.min(RETRY_BASE_MS * 2 ** (p.failures - 1), RETRY_MAX_MS)
+    if (p.timer) clearTimeout(p.timer)
+    p.timer = setTimeout(() => {
+      p.timer = null
+      void mirror(key)
+    }, delay)
+  }
+  emit()
+}
+
+function landed(key: string): void {
+  if (troubled.delete(key)) emit()
+}
 
 /**
  * Mirror one key, with at most one request in flight for it. When persistState is called while the
@@ -54,22 +144,45 @@ async function mirror(key: string): Promise<void> {
         clearTimeout(p.timer)
         p.timer = null
       }
-      const ws = await getActiveWorkspaceId()
-      if (!ws) return
+      let ws: string | null = null
+      try {
+        ws = await getActiveWorkspaceId()
+      } catch (e) {
+        failed(key, p, String((e as Error)?.message ?? e), true)
+        return
+      }
+      // No workspace means no account to save into: signed out, or signed in without a usable
+      // membership. Either way the value stays local, and that is worth saying out loud.
+      if (!ws) {
+        failed(key, p, 'Not signed in to a workspace', true)
+        return
+      }
       // Read the value only once the workspace has resolved: a save that landed in the meantime
       // then rides in this request instead of costing another one.
       const seq = p.seq
       const value = p.value
+      let message: string | null = null
       try {
-        await client
+        // The error is READ, not discarded. postgrest-js resolves with { error } instead of
+        // rejecting unless shouldThrowOnError is set (it isn't anywhere here), so `await
+        // …upsert(…)` on its own swallows an RLS denial, an expired JWT and an oversized payload
+        // alike — and the line below would then mark the write confirmed. supabaseSheetAdapter
+        // .writeBatch learned the same lesson; this path hadn't.
+        const { error } = await client
           .from('workspace_state')
           .upsert({ workspace_id: ws, key, value, updated_at: new Date().toISOString() })
-      } catch {
-        // Network failure. localStorage still holds the value and the next save re-sends it, which
-        // is what the old fire-and-forget call did too (it just did it as an unhandled rejection).
+        message = error?.message ?? null
+      } catch (e) {
+        // Network failure. localStorage still holds the value, and the retry below re-sends it.
+        message = String((e as Error)?.message ?? e)
+      }
+      if (message) {
+        failed(key, p, message, false)
         return
       }
       p.sent = seq
+      p.failures = 0
+      landed(key)
     }
   } finally {
     p.inFlight = false
@@ -85,6 +198,21 @@ export function flushPersistedState(): Promise<void> {
   // Best effort by contract, so it never rejects: a caller awaiting it is asking for the writes to
   // have been attempted, not for them to be guaranteed.
   return Promise.all([...pending.keys()].map((k) => mirror(k).catch(() => undefined))).then(() => undefined)
+}
+
+/**
+ * Try every stuck key again now, ignoring the backoff — what the save banner's Retry calls once the
+ * person has, say, signed back in.
+ */
+export function retryPersistedState(): Promise<void> {
+  for (const p of pending.values()) {
+    p.failures = 0
+    if (p.timer) {
+      clearTimeout(p.timer)
+      p.timer = null
+    }
+  }
+  return flushPersistedState()
 }
 
 // A tab closed inside the debounce window would strand the newest value in localStorage: this
@@ -109,9 +237,12 @@ export function persistState(key: string, value: unknown): void {
     /* ignore quota / serialization errors, same as before */
   }
   if (!isSupabaseConfigured || !supabase) return
-  const p: PendingWrite = pending.get(key) ?? { value, seq: 0, sent: 0, timer: null, inFlight: false }
+  const p: PendingWrite = pending.get(key) ?? { value, seq: 0, sent: 0, timer: null, inFlight: false, failures: 0 }
   p.value = value
   p.seq += 1
+  // A fresh edit deserves a fresh attempt: clear the backoff so a key that had given up isn't
+  // stranded waiting for a flush.
+  p.failures = 0
   pending.set(key, p)
   // A request already out will pick this value up when it lands, so don't schedule a second wake-up.
   if (p.inFlight) return
@@ -122,13 +253,21 @@ export function persistState(key: string, value: unknown): void {
   }, MIRROR_DELAY_MS)
 }
 
-/** Every persisted state key for the signed-in workspace, as { key: value }. Empty on localStorage. */
-export async function hydrateState(): Promise<Record<string, unknown>> {
-  if (!isSupabaseConfigured || !supabase) return {}
+/**
+ * Every persisted state key for the signed-in workspace, as { key: value }, plus whether the read
+ * actually happened.
+ *
+ * `ok` matters as much as the data: a failed read used to return {}, which the caller could only
+ * read as "this workspace has nothing saved" — so a permissions or network problem presented as an
+ * empty account, and hydration carried on as though the workspace were simply new.
+ */
+export async function hydrateState(): Promise<{ state: Record<string, unknown>; ok: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) return { state: {}, ok: true }
   const ws = await getActiveWorkspaceId()
-  if (!ws) return {}
-  const { data } = await supabase.from('workspace_state').select('key, value').eq('workspace_id', ws)
+  if (!ws) return { state: {}, ok: false, error: 'Not signed in to a workspace' }
+  const { data, error } = await supabase.from('workspace_state').select('key, value').eq('workspace_id', ws)
+  if (error) return { state: {}, ok: false, error: error.message }
   const out: Record<string, unknown> = {}
   for (const r of data ?? []) out[(r as { key: string }).key] = (r as { value: unknown }).value
-  return out
+  return { state: out, ok: true }
 }

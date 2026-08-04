@@ -5464,10 +5464,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.outputTypes.v1': 'outputTypes',
       'stoplight.homeChats.v1': 'homeChats',
     }
-    const state = await hydrateState()
+    const { state, ok: stateOk, error: stateError } = await hydrateState()
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
-    // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights gate.
-    patch.flightsHydrated = true
+    // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights
+    // gate. ONLY on a read that actually happened, though: a failed read returns no keys, which is
+    // indistinguishable from an empty workspace, and releasing the gate on that lets ensureFlights
+    // persist this device's flights over the workspace's real ones. Say so rather than presenting a
+    // workspace we couldn't read as a workspace with nothing in it.
+    if (stateOk) patch.flightsHydrated = true
+    else {
+      patch.toast = `Couldn't load your workspace (${stateError ?? 'unknown error'}). You're seeing this device's copy — changes may not be saved to your account.`
+      patch.toastTone = 'warn'
+      patch.toastAction = null
+    }
     // Interface preferences (skill level + role) live in localStorage, not a store slice, but do sync
     // through workspace_state — restore the workspace's copy on a fresh device, merged with defaults
     // so a newer field (e.g. focusDismissed) is never dropped by an older saved blob.
