@@ -5223,6 +5223,21 @@ export function FlowsView() {
   // viewDelivs + varTreeH are deps too: adding/removing assets reflows the branch columns, so we
   // must remeasure IN THE SAME COMMIT (before paint) or the connectors paint against stale rects
   // for a frame and visibly break-then-reconnect as the layout settles.
+  //
+  // flowScreen + flowView are deps for a different reason: THEY GATE WHETHER THE CANVAS EXISTS AT
+  // ALL. Grid and Calendar unmount the whole flow body, and the home does too, so `cv` is null and
+  // this effect bails. A bail still COUNTS AS A RUN — React has recorded the new deps — so every
+  // layout change made while you were on another tab was silently swallowed, and coming back to
+  // Flow re-drew the connectors against the geometry from before you left. That is the reported
+  // jump. Everything that moves the board is reachable from the Grid: editing rows there changes
+  // viewRows and reflows the columns, and its own pinch-zoom writes the SAME `zoom` this canvas
+  // scales by, so a zoomed sheet sent every line off by the scale factor. Cards were never wrong —
+  // they are positioned by CSS transforms; `rects` is read by the connectors and nothing else,
+  // which is why only the lines were out of place, and why any unrelated re-render (a pan, a
+  // click) snapped them back.
+  //
+  // Listing the two gates rather than watching the element means remeasuring in the very commit
+  // that mounts the canvas, before paint, so the lines are never drawn wrong even for a frame.
   useLayoutEffect(() => {
     if (dragging.current) return
     const cv = canvasRef.current
@@ -5249,7 +5264,7 @@ export function FlowsView() {
       return same ? prev : next
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, objects, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH])
+  }, [nodes, objects, pos, offset, zoom, selected, connectors, viewName, chatCollapsed, flowAssetsOpen, briefCollapsed, dragDelta, viewDelivs, varTreeH, flowScreen, flowView])
 
   // Once a just-created card is measured, nudge it to where it was dropped.
   useEffect(() => {
