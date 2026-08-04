@@ -7,7 +7,7 @@ import {
   type FlowBoard,
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, freshObjectId, freshPlacementId as freshGroupId, pruneBoard,
 } from '../domain/flowBoard'
-import { MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
+import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
@@ -4443,7 +4443,7 @@ export function FlowsView() {
           onDrop={unfiledDrop.onDrop}
           onDragLeave={() => setObjDropFolder((p) => (p === '__unfiled__' ? null : p))}
         >
-          {tree.length > 0 && unfiled.length > 0 && <div className="flow-lib-objects-h">Unfiled</div>}
+          {tree.length > 0 && unfiled.length > 0 && <div className="flow-lib-objects-h">{DRAFTS}</div>}
           {unfiled.map(renderShelfObject)}
           {tree.length > 0 && unfiled.length === 0 && (
             <div className="flow-lib-folder-empty">Drag here to take an object out of its folder.</div>

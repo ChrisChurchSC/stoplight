@@ -23,6 +23,19 @@ export const MAX_FOLDER_DEPTH = 4
 
 export const FOLDER_SEP = '/'
 
+/**
+ * What the no-folder bucket is CALLED everywhere it is shown: tabs, the campaign tree, the object
+ * shelf. Not a folder — nothing is stored under this path, and `folder` is still undefined on
+ * everything in it — just the one name the empty case answers to.
+ *
+ * It used to be "Unfiled", which named an absence and made a thing with no folder read as a thing
+ * that had lost one. Work starts in Drafts and gets filed later, so the bucket is a stage of the
+ * work rather than a failure to tidy it. One constant because the word has to match in all three
+ * places at once: a tab reading "Drafts" over a sidebar reading "Unfiled" is two buckets to anyone
+ * who has not seen the code.
+ */
+export const DRAFTS = 'Drafts'
+
 /** The segments of a path. "" → []. */
 export const folderSegments = (path: string): string[] => path.split(FOLDER_SEP).filter(Boolean)
 
