@@ -2183,6 +2183,15 @@ interface TrafficState {
    * So a board is neither pruned nor persisted until the things that decide what is live are loaded.
    */
   boardsHydrated: boolean
+  /**
+   * Open the board gate because the load attempt is over, however it ended.
+   *
+   * hydrateRecords sets this itself on its way out; this exists for the path where it never gets
+   * there — a throw anywhere in that function would otherwise strand the gate shut for the session,
+   * and a shut gate silently stops the canvas saving. Called from a `finally`, so the failure mode
+   * of the loader cannot become a failure mode of the board.
+   */
+  markBoardsHydrated: () => void
   /** Give every campaign that has assets a default flight (idempotent; gated on flightsHydrated). */
   ensureFlights: () => Promise<void>
   /** Add a flight to a campaign; returns the new flight's id. */
@@ -3052,6 +3061,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   // With no backend there is nothing in flight to wait for: the boards in localStorage are the
   // workspace's boards, so the gate opens at once and the canvas behaves exactly as it always has.
   boardsHydrated: localDataMode,
+  markBoardsHydrated: () => set((s) => (s.boardsHydrated ? {} : { boardsHydrated: true })),
   campaignFolderView: null,
   wizardOpen: false,
   wizardClient: null,
@@ -5592,13 +5602,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // indistinguishable from an empty workspace, and releasing the gate on that lets ensureFlights
     // persist this device's flights over the workspace's real ones — the same shape of loss the
     // record slices above now avoid by leaving an unread slice untouched.
+    /**
+     * The board gate opens on the ATTEMPT, not on the result, and the difference is the whole bug.
+     *
+     * It first shut only on success, reasoning that an unread board is indistinguishable from an
+     * empty one. True, but it made a failed read permanent: hydrateRecords runs once on mount, so a
+     * signed-out workspace or one failed query left the gate shut for the rest of the session, and
+     * saveFlowBoard withheld every write. Nothing was overwritten and nothing was saved either —
+     * every card added after that vanished on the next load, which is indistinguishable from the
+     * app deleting them, and worse than the race it was guarding.
+     *
+     * What the gate is actually for is the WINDOW: the beat between mount and the read landing, when
+     * the store holds a stale copy that would be pruned and written back as if it were the
+     * workspace's. That window closes when the read finishes, however it finishes. On a failure the
+     * user is already told their changes may not reach their account, and local editing goes on
+     * working exactly as it did before any of this.
+     */
+    patch.boardsHydrated = true
     if (stateOk) {
       patch.flightsHydrated = true
-      // Boards and smart objects both ride in workspace_state, so the read that releases the flights
-      // gate is the same read that releases this one. On a FAILED read the gate stays shut: an
-      // unread board is indistinguishable from an empty one, and persisting over the workspace's
-      // copy on a guess is the loss this exists to prevent.
-      patch.boardsHydrated = true
     } else {
       patch.toast = `Couldn't load your workspace (${stateError ?? 'unknown error'}). You're seeing this device's copy — changes may not be saved to your account.`
       patch.toastTone = 'warn'
