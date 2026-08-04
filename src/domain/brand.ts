@@ -1,4 +1,4 @@
-import { UNASSIGNED } from './clients'
+import { DRAFTS_SPACE, UNASSIGNED } from './clients'
 import { type MessagingLibrary, emptyLibrary } from './library'
 
 /**
@@ -85,6 +85,28 @@ export function isDraftBrand(brand: string, meta: BrandMetaMap): boolean {
 export function canvasBrandScope(clientFilter: string, brandNames: string[]): string {
   if (clientFilter && clientFilter !== 'all') return clientFilter
   return brandNames.length === 1 ? brandNames[0] ?? '' : ''
+}
+
+/**
+ * DOES THIS CAMPAIGN BELONG IN THE CAMPAIGNS LIST for the brand in scope?
+ *
+ * Its own brand's, yes. And the BRANDLESS ones — the campaigns filed under nobody, which is what a
+ * campaign is until something binds it to a brand. Those used to be filtered out entirely, and the
+ * result was a page that lied: a workspace whose only brand was "Breadcrumbs", holding eleven
+ * campaigns filed as Unassigned, opened on "0 campaigns" with a folder tree above it. The campaigns
+ * were not lost, or archived, or slow to load — they were scoped to a brand they had never been
+ * filed under. Opening any one of them set the filter to Unassigned, and on the way back all eleven
+ * appeared, which is a confusing way to learn that nothing was ever missing.
+ *
+ * They land in the unfiled bucket, which the Campaigns page calls DRAFTS, and that is the honest
+ * description: work that has not been assigned to a brand yet.
+ *
+ * ANOTHER BRAND'S CAMPAIGN IS STILL NEVER IN SCOPE. That is the line this must not cross — it is the
+ * same leak canvasBrandScope above refuses, and showing one client's work on another client's page
+ * would be worse than the empty page this fixes. Brandless is not another brand: it is nobody's.
+ */
+export function campaignInBrandScope(client: string | undefined, brand: string): boolean {
+  return isBrandless(client) || client === DRAFTS_SPACE || client === brand
 }
 
 export function parentOf(brand: string, meta: BrandMetaMap): string | undefined {

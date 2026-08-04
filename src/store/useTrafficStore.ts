@@ -20,7 +20,7 @@ import type { PublisherRegistry } from '../adapters/publishers/types'
 import type { Asset, ChannelId, MediaType, RowStatus, TrafficRow } from '../domain/types'
 import { proposeSchedule } from '../scheduling/propose'
 import { classifyAssets } from '../lib/classifyAsset'
-import { UNASSIGNED, registerCampaign, clientForCampaign, liveCampaignNames, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
+import { DRAFTS_SPACE, UNASSIGNED, registerCampaign, clientForCampaign, liveCampaignNames, type Campaign, type ClientProfile, type FlowReference } from '../domain/clients'
 import { FOLDER_SEP, buildFolderPath, folderName, folderParent, isDescendantFolder, sanitizeSegment, withAncestors } from '../domain/campaignFolders'
 import { newFlight, flightForRow, type Flight } from '../domain/flight'
 import { reachByChannelFromActuals, type BrandActuals } from '../domain/actuals'
@@ -314,10 +314,9 @@ function freshRowId(): string {
   return `row_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`
 }
 
-/** The personal space loose canvases live in until a brand is attached (Figma's
- *  "Drafts"). A canvas here isn't tied to any client; the Brand card on the canvas
- *  re-homes it to a real brand whenever you're ready. */
-export const DRAFTS_SPACE = 'Drafts'
+/** Defined in the domain now (a domain module has to answer "is this campaign brandless" without
+ *  reaching into the store), and re-exported here so every existing importer is unaffected. */
+export { DRAFTS_SPACE }
 
 // Map an extracted message's {headline, body, cta} onto a channel's real
 // messaging field keys, so the current-state copy renders on the canvas.

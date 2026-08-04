@@ -11,6 +11,17 @@ export const CAMPAIGN_CLIENTS: Record<string, string> = {
 
 export const UNASSIGNED = 'Unassigned'
 
+/**
+ * The personal space loose canvases live in until a brand is attached (Figma's "Drafts"). A canvas
+ * here isn't tied to any client; the Brand card on the canvas re-homes it to a real brand whenever
+ * you're ready.
+ *
+ * Defined here rather than in the store, where it used to live, because the domain now has to answer
+ * "is this campaign brandless" (see campaignInBrandScope) and a domain module cannot reach into the
+ * store. The store re-exports it, so every existing importer is unaffected.
+ */
+export const DRAFTS_SPACE = 'Drafts'
+
 /** Four tone dimensions on a 0–100 scale (0 = the left trait, 100 = the right).
  *  A neutral brand sits at 50 on each. Modeled on the NN/g tone-of-voice axes. */
 export interface VoiceTone {
