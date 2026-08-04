@@ -5542,10 +5542,19 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       'stoplight.outputTypes.v1': 'outputTypes',
       'stoplight.homeChats.v1': 'homeChats',
     }
-    const state = await hydrateState()
+    const { state, ok: stateOk, error: stateError } = await hydrateState()
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
-    // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights gate.
-    patch.flightsHydrated = true
+    // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights
+    // gate. ONLY on a read that actually happened, though: a failed read returns no keys, which is
+    // indistinguishable from an empty workspace, and releasing the gate on that lets ensureFlights
+    // persist this device's flights over the workspace's real ones — the same shape of loss the
+    // record slices above now avoid by leaving an unread slice untouched.
+    if (stateOk) patch.flightsHydrated = true
+    else {
+      patch.toast = `Couldn't load your workspace (${stateError ?? 'unknown error'}). You're seeing this device's copy — changes may not be saved to your account.`
+      patch.toastTone = 'warn'
+      patch.toastAction = null
+    }
     // The audit trail and version history come from their own append-only tables, not
     // workspace_state: they're written one row at a time, so replacing a whole jsonb blob on every
     // entry would be both wasteful and lossy across devices. Their own reads already fall back to

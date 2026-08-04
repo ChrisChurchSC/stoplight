@@ -21259,6 +21259,17 @@ table.aud-sheet td.stick .aud-cell {
 .migrate-go { border: 1px solid var(--accent); background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
 .migrate-go:disabled { opacity: .6; cursor: default; }
 
+/* ---- Save banner: this device has work that hasn't reached the account ----
+   Amber rather than the migrate banner's accent, because it reports a problem rather than
+   offering an option, and it stays until the writes land. */
+.save-banner { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: color-mix(in srgb, var(--amber) 14%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--amber) 40%, var(--border)); font-size: 13.5px; color: var(--text); }
+.save-banner-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+.save-banner-text { flex: 1; min-width: 0; }
+.save-banner-why { color: var(--text-muted); }
+.save-banner-retry { flex: 0 0 auto; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.save-banner-retry:hover:not(:disabled) { background: var(--surface-2); }
+.save-banner-retry:disabled { opacity: .6; cursor: default; }
+
 /* ---- Home: agenda layout (Ask box + Meetings + Tasks) ---- */
 .pf-home { height: 100%; display: flex; min-height: 0; }
 .agenda2 { flex: 1; overflow-y: auto; min-height: 0; }

@@ -165,10 +165,14 @@ async function resolveWorkspaceId(): Promise<string | null> {
 
   // Already a member of one or more workspaces? Prefer the pinned active one (e.g. a workspace the
   // user was invited into), else the first membership.
-  const { data: memberships } = await supabase
+  const { data: memberships, error: memErr } = await supabase
     .from('workspace_members')
     .select('workspace_id')
     .eq('user_id', user.id)
+  // A FAILED lookup is not the same as "no memberships yet", and reading it as one is how a person
+  // ends up with a brand-new workspace every time the network hiccups on load. Give up for now —
+  // the next call re-resolves — rather than creating a second home for their work.
+  if (memErr) return null
   const ids = (memberships ?? []).map((m) => m.workspace_id as string)
   if (ids.length > 0) {
     let pinned: string | null = null
@@ -188,14 +192,41 @@ async function resolveWorkspaceId(): Promise<string | null> {
   const meta = (user.user_metadata ?? {}) as { company?: string }
   const company = (meta.company ?? '').trim()
   const name = company || (user.email ?? 'My workspace').split('@')[0] + "'s workspace"
-  const { data: ws, error: wsErr } = await supabase
+
+  // Before creating anything, look for a workspace this user already created. If an earlier run
+  // made one but failed to add the membership row, this finds it and finishes the job — instead of
+  // minting a fresh orphan on every single load, none of which the user can read or write.
+  // (workspaces_select permits created_by = auth.uid() precisely so this lookup works.)
+  const { data: mine } = await supabase
     .from('workspaces')
-    .insert({ name, created_by: user.id })
     .select('id')
-    .single()
-  if (wsErr || !ws) return null
-  await supabase.from('workspace_members').insert({ workspace_id: ws.id, user_id: user.id, role: 'owner' })
-  workspaceId = ws.id as string
+    .eq('created_by', user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+  let id = (mine?.[0] as { id?: string } | undefined)?.id
+
+  if (!id) {
+    const { data: ws, error: wsErr } = await supabase
+      .from('workspaces')
+      .insert({ name, created_by: user.id })
+      .select('id')
+      .single()
+    if (wsErr || !ws) return null
+    id = ws.id as string
+  }
+
+  // The membership row is what every RLS policy actually checks — is_member/is_editor read
+  // workspace_members, not workspaces.created_by. Without it you own a workspace you can neither
+  // read nor write, and since every failure downstream is a silent empty result, the app would
+  // present that as an account that simply has nothing saved in it. So this error ends the resolve
+  // instead of being discarded. A duplicate is not a failure: the row already being there is the
+  // outcome we wanted.
+  const { error: joinErr } = await supabase
+    .from('workspace_members')
+    .insert({ workspace_id: id, user_id: user.id, role: 'owner' })
+  if (joinErr && joinErr.code !== '23505') return null
+
+  workspaceId = id
   return workspaceId
 }
 
