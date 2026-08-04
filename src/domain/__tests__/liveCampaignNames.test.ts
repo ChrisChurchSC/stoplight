@@ -49,6 +49,26 @@ describe('liveCampaignNames', () => {
     expect(liveCampaignNames([{ campaign: '  Q3 Launch  ' }], [])).toEqual(new Set(['Q3 Launch']))
   })
 
+  /**
+   * SURVIVES A MALFORMED RECORD, because this reads persisted data and `name` being non-optional on
+   * the type is a promise about new records, not about what is already in a workspace.
+   *
+   * This is not hypothetical: reaching for .trim() on a name that was not there threw a TypeError
+   * inside the useMemo that builds the campaigns gallery, and a throw there takes the render with
+   * it — a signed-in user refreshed and the page came back with no campaigns on it. One bad row
+   * must cost its own entry and nothing else.
+   */
+  it('skips a record with no name instead of throwing, and still returns the good ones', () => {
+    const campaigns = [{ name: 'Q3 Launch' }, {}, { name: null }, { name: 'Q4 Launch' }] as never as { name: string }[]
+    expect(() => liveCampaignNames([], campaigns)).not.toThrow()
+    expect(liveCampaignNames([], campaigns)).toEqual(new Set(['Q3 Launch', 'Q4 Launch']))
+  })
+
+  it('survives a hole in the rows array too', () => {
+    const rows = [{ campaign: 'Q3 Launch' }, undefined, { campaign: null }] as never as { campaign?: string }[]
+    expect(liveCampaignNames(rows, [])).toEqual(new Set(['Q3 Launch']))
+  })
+
   it('is a set: one name from both sides collapses to one campaign', () => {
     const names = liveCampaignNames([{ campaign: 'Q3 Launch' }], [{ name: 'Q3 Launch' }])
     expect([...names]).toEqual(['Q3 Launch'])
@@ -77,5 +97,15 @@ describe('pruning the open tabs', () => {
 
   it('preserves tab order, since the drawer is ordered', () => {
     expect(keep(['C', 'A', 'B'], [], [{ name: 'A' }, { name: 'B' }, { name: 'C' }])).toEqual(['C', 'A', 'B'])
+  })
+
+  /**
+   * The store refuses to act on an empty set (see pruneOpenProjects), so this pins the shape of that
+   * refusal rather than the filter: seeing no campaigns at all means "we cannot see", not "there are
+   * none", and the difference is every tab you had open.
+   */
+  it('would strip everything if the set is empty — which is exactly why the store refuses to', () => {
+    expect(keep(['A', 'B'], [], [])).toEqual([])
+    expect(liveCampaignNames([], []).size).toBe(0)
   })
 })
