@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent, type ReactElement } from 'react'
 import { CHANNELS } from '../domain/channels'
+import { campaignInBrandScope } from '../domain/brand'
 import { clientForCampaign } from '../domain/clients'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
 import { deriveCampaignStatus, type CampaignStatus } from '../domain/lifecycle'
@@ -175,8 +176,21 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
   }
 
   const folders = campaignFolders[brand] ?? []
-  const brandRows = rows.filter((r) => !r.archivedAt && clientForCampaign(r.campaign) === brand)
-  const forBrand = campaignList.filter((c) => c.client === brand && !c.archivedAt)
+  /**
+   * This brand's campaigns AND the brandless ones, which land in the DRAFTS bucket below.
+   *
+   * Scoping strictly to `brand` made the page lie. clientFilter resets to 'all' on every load, and
+   * canvasBrandScope answers a single-brand workspace with that brand — so a workspace holding one
+   * brand and eleven campaigns filed as Unassigned opened on "0 campaigns" with a folder tree above
+   * it. Nothing was lost; the campaigns had simply never been filed under the brand they were being
+   * looked for under. Opening any one of them set the filter to its own client, and coming back
+   * showed all eleven, which is a confusing way to find out nothing was missing.
+   *
+   * Another brand's campaigns are still never in scope — see campaignInBrandScope. Brandless is not
+   * another brand, it is nobody's, so no client's work reaches another client's page.
+   */
+  const brandRows = rows.filter((r) => !r.archivedAt && campaignInBrandScope(clientForCampaign(r.campaign), brand))
+  const forBrand = campaignList.filter((c) => !c.archivedAt && campaignInBrandScope(c.client, brand))
   const meta = new Map(forBrand.map((c) => [c.name, c] as const))
   const names = [
     ...new Set([
