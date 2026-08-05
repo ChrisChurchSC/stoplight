@@ -51,7 +51,7 @@ import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { type Pattern, PATTERN_TYPE_OPTIONS, isPatternRetired, usablePatterns } from '../domain/pattern'
-import { withRefs, withoutRefs } from '../domain/rowRefs'
+import { editRefs, sharedRefs, withRefs, withoutRefs } from '../domain/rowRefs'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
 import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
@@ -3347,29 +3347,44 @@ export function FlowsView() {
     replace: replaceActiveRef,
     openPicker: () => { setPickerDeliv(null); setPickerQuery(''); setPickerOpen(true) },
   }
-  // A deliverable's effective records: its per-asset OVERRIDE if any row carries one, else what the
-  // campaign is WIRED to. Editing writes the full resulting set onto every asset of the deliverable
-  // (materializing the override) and flags a regenerate.
-  //
-  // Inherits campaignWiredRefs(), not the stored set: a brand object is a library you pull onto a
-  // campaign, and it only counts once a card on the canvas connects it. Inheriting the stored refs
-  // was the last path where one still reached the assets with no card behind it.
-  const delivEffRefs = (deliv: ViewDeliverable): FlowReference[] =>
-    deliv.rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
-  const writeDelivRefs = (deliv: ViewDeliverable, next: FlowReference[]) => {
-    void updateRows(deliv.rows.map((r) => ({ id: r.id, patch: { references: next } })))
+  /**
+   * A deliverable's effective records: what EVERY asset under it is written from, else what the
+   * campaign is WIRED to. Editing applies the change to each asset from ITS OWN set and flags a
+   * regenerate.
+   *
+   * Both halves used to read and write one array for the whole group — display took the first row
+   * carrying an override, and every edit wrote the result to all of them. So one asset's private pin
+   * was shown as a fact about the channel, and then handed to its siblings by the next edit. See
+   * sharedRefs and editRefs, which hold both halves of that rule.
+   *
+   * Inherits campaignWiredRefs(), not the stored set: a brand object is a library you pull onto a
+   * campaign, and it only counts once a card on the canvas connects it. Inheriting the stored refs
+   * was the last path where one still reached the assets with no card behind it.
+   */
+  const delivEffRefs = (deliv: ViewDeliverable): FlowReference[] => sharedRefs(deliv.rows, campaignWiredRefs())
+  /** Apply one change across a deliverable's assets, each resolved from its own references. */
+  const editDelivRefs = (deliv: ViewDeliverable, ops: { add?: FlowReference[]; drop?: FlowReference[] }) => {
+    const campaignRefs = campaignWiredRefs()
+    void updateRows(deliv.rows.map((r) => ({ id: r.id, patch: { references: editRefs(r.references, campaignRefs, ops) } })))
     setRefsDirty(true)
   }
   const delivTagOps = (deliv: ViewDeliverable): TagOps => ({
     refs: delivEffRefs(deliv),
     has: (type, id) => delivEffRefs(deliv).some((r) => r.type === type && r.id === id),
     add: (type, id, label) => {
-      const cur = delivEffRefs(deliv)
-      if (cur.some((r) => r.type === type && r.id === id)) return
-      writeDelivRefs(deliv, [...cur, { type, id, label }])
+      if (delivEffRefs(deliv).some((r) => r.type === type && r.id === id)) return
+      editDelivRefs(deliv, { add: [{ type, id, label }] })
     },
-    remove: (key) => writeDelivRefs(deliv, delivEffRefs(deliv).filter((r) => refKey(r) !== key)),
-    replace: (key, type, id, label) => writeDelivRefs(deliv, delivEffRefs(deliv).map((r) => (refKey(r) === key ? { type, id, label } : r))),
+    // By KEY off the shared set, so removing a tag the channel shows removes that record and leaves
+    // whatever an individual asset carries of its own alone.
+    remove: (key) => {
+      const gone = delivEffRefs(deliv).filter((r) => refKey(r) === key)
+      if (gone.length) editDelivRefs(deliv, { drop: gone })
+    },
+    replace: (key, type, id, label) => {
+      const gone = delivEffRefs(deliv).filter((r) => refKey(r) === key)
+      editDelivRefs(deliv, { drop: gone, add: [{ type, id, label }] })
+    },
     openPicker: () => { setPickerDeliv(deliv.key); setPickerQuery(''); setPickerOpen(true) },
   })
   // The Record Tags block (label + one row per tag with a swap dropdown + remove, then "Add a
@@ -5106,14 +5121,14 @@ export function FlowsView() {
       const fresh = { ...was, refId }
       const refs = [refForObject(fresh)].filter((r): r is FlowReference => !!r)
       if (refs.length) {
+        const campaignRefs = campaignWiredRefs()
         for (const e of connectors) {
           if (e.from !== id || e.to === 'campaign') continue
           const rows = rowsForTarget(e.to)
           if (!rows.length) continue
-          const base = rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
-          const next = [...base]
-          for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
-          void updateRows(rows.map((r) => ({ id: r.id, patch: { references: next } })))
+          // Per row, like attachToTarget: naming a card that is already wired to a channel is the
+          // same act as wiring it, so it must not hand one asset's pins to the rest of them either.
+          void updateRows(rows.map((r) => ({ id: r.id, patch: { references: withRefs(r.references, campaignRefs, refs) } })))
           setRefsDirty(true)
         }
       }
