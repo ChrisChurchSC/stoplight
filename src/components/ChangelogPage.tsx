@@ -38,6 +38,8 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'Wiring a card to a channel no longer copies one asset\'s records onto its siblings. Every asset in the channel was given the same set, built from whichever asset in the group happened to have its own records already, so pinning a pattern to a single post and then wiring anything to that post\'s channel handed that pattern to every other post too. The grid then listed assets as made from records the canvas showed no connection for, which is where the two surfaces stopped agreeing. Each asset now keeps its own.',
+          'Unwiring has the same fix, and it was the more costly direction: removing a card from a channel rebuilt every asset in it from one asset\'s records, so records that a single asset alone carried a connection for disappeared from it. A record is now only dropped from an asset when nothing else still reaches that asset with it, including its own connections and the campaign brief.',
           'Archiving a pattern a card already uses no longer makes the card look empty. The picker hides archived patterns so it cannot offer a shape that generation drops, which meant a card naming one fell back to "Link a pattern…" while it was still wired and still feeding the copy. It now shows the pattern it names, marked archived, and the card carries an Archived warning. A card that names nothing is still never offered one.',
         ],
       },

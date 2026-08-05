@@ -47,6 +47,7 @@ import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
 import { type Pattern, PATTERN_TYPE_OPTIONS, isPatternRetired, usablePatterns } from '../domain/pattern'
+import { withRefs, withoutRefs } from '../domain/rowRefs'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
 import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
@@ -3229,12 +3230,12 @@ export function FlowsView() {
     const refs = refsBehind(nodeId)
     const rows = rowsForTarget(target)
     if (!refs.length || !rows.length) return
-    // Start from whatever those assets already write to: their own override if they have one, else
-    // what the campaign is wired to, so wiring an object ADDS context rather than replacing it.
-    const base = rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
-    const next = [...base]
-    for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
-    void updateRows(rows.map((r) => ({ id: r.id, patch: { references: next } })))
+    // PER ROW. Each asset starts from its OWN override, else what the campaign is wired to, so
+    // wiring an object ADDS context rather than replacing it. This used to take the first row in the
+    // group that had an override and write that one array to all of them, which copied a pin made on
+    // a single post onto every sibling in its channel. See withRefs.
+    const campaignRefs = campaignWiredRefs()
+    void updateRows(rows.map((r) => ({ id: r.id, patch: { references: withRefs(r.references, campaignRefs, refs) } })))
     setRefsDirty(true)
   }
   /** The counterpart: drop this object's records from those assets, unless another wired card gives them. */
@@ -3242,15 +3243,25 @@ export function FlowsView() {
     const mine = refsBehind(nodeId)
     const rows = rowsForTarget(target)
     if (!mine.length || !rows.length) return
-    const stillWired = edges
-      .filter((e) => e.to === target && e.from !== nodeId)
-      .flatMap((e) => refsBehind(e.from))
-    const drop = mine.filter((r) => !stillWired.some((x) => x.type === r.type && x.id === r.id))
-    if (!drop.length) return
-    const base = (rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()).filter(
-      (r) => !drop.some((d) => d.type === r.type && d.id === r.id),
+    const campaignRefs = campaignWiredRefs()
+    /**
+     * WHAT STILL SUPPLIES A RECORD to this one asset once this card is gone, which has to be asked
+     * per row rather than per target. Unwiring from a channel used to consider only the other cards
+     * wired to that channel, so a record a single post carried its own wire for was dropped from it
+     * along with the channel's — and a card wired to the brief, which every asset inherits, could be
+     * cancelled by unwiring an unrelated card that happened to name the same record.
+     */
+    const survives = (r: TrafficRow, ref: FlowReference) =>
+      edges
+        .filter((e) => (e.to === target || e.to === r.id || e.to === 'campaign') && e.from !== nodeId)
+        .flatMap((e) => refsBehind(e.from))
+        .some((x) => x.type === ref.type && x.id === ref.id)
+    void updateRows(
+      rows.map((r) => {
+        const drop = mine.filter((ref) => !survives(r, ref))
+        return { id: r.id, patch: { references: withoutRefs(r.references, campaignRefs, drop) } }
+      }),
     )
-    void updateRows(rows.map((r) => ({ id: r.id, patch: { references: base } })))
     setRefsDirty(true)
   }
   /** Is this node attached to the campaign right now? Drives the card's "in the campaign" look. */
