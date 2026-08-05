@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.25',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The website channel has a Login page type. It sits alongside the homepage, pricing, solutions, comparison and about pages, and it can be picked from the Type dropdown or dropped straight onto a canvas from the Web palette. Until now the only honest way to plan the page every returning customer actually uses was to file it under the generic "Web page" and write the difference in a note.',
+          'A login page is briefed as a door rather than a pitch. It asks for a page title, a supporting line, the sign-in button, the forgot-password link, the prompt for someone who does not have an account yet, the message shown when a sign-in fails, and a line pointing at help. The website default would have asked for social proof, a mid-page CTA and objection handling, which is a lot of persuasion aimed at somebody who has already bought.',
+          'It also sits in the right part of the funnel. Website pages default to consideration because that is what they are doing, but a login page is talking to existing customers, so it resolves to retention and stops being counted as a page that has to win the argument.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.24',
     dateLabel: 'August 5, 2026',
     groups: [
