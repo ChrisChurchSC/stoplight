@@ -23,6 +23,26 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.18',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Group cards on the canvas. Select two or more, then Group (⌘⌥G, or right-click) and they hold together: click one and you get them all, drag one and they all move, keeping the arrangement you built.',
+          'A group is framed and named on the board, so a launch set or a test cell reads as one thing. Double-click the name to rename it, and drag the frame label to move the whole group.',
+          'Groups are saved with the campaign, along with where their cards sit, so the arrangement is still there when you come back. Ungroup with ⌘⌥⇧G; the cards stay exactly where they are.',
+        ],
+      },
+      {
+        tag: 'Improved',
+        items: [
+          'A selection box now takes whole groups: catch one card of a group and you have the group, so a drag can never pull half of one out of shape.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.17',
     dateLabel: 'August 4, 2026',
     groups: [

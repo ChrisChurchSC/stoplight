@@ -7,6 +7,10 @@ import {
   type FlowBoard,
   BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard,
 } from '../domain/flowBoard'
+import {
+  MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
+  type CardGroup,
+} from '../domain/cardGroups'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { assetBadge } from '../domain/assetBadge'
@@ -92,6 +96,13 @@ import { apiFetch } from '../lib/apiFetch'
  */
 const MIN_ZOOM = 10
 const MAX_ZOOM = 200
+
+/**
+ * A group frame's breathing room around its cards, and the strip above it that carries the name and
+ * doubles as the handle for dragging the whole group. In canvas units, scaled by the zoom at render.
+ */
+const GROUP_PAD = 20
+const GROUP_HEAD = 26
 
 /** Drag payload for a smart object leaving the Assets panel for the canvas. */
 const SMART_OBJECT_DND = 'application/x-breadcrumbs-smart-object'
@@ -1645,6 +1656,23 @@ export function FlowsView() {
   // Free-move: per-card translate offsets, applied on top of the layout. Dragging a
   // selected card moves the whole selection.
   const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({})
+  /**
+   * GROUPS: cards tied together so an arrangement you built by hand holds.
+   *
+   * A marquee already drags what it caught, but only for as long as the selection lasts — click
+   * anywhere and the set is gone, and there is nothing on the board that says those cards belong
+   * together. A group is that record: select one member and you have them all, drag one and they
+   * all go, and it survives a reload because it is saved with the board.
+   *
+   * Deliberately NOT a smart object (⌘G). That collapses context cards into one named, reusable
+   * thing and changes what gets written from them. This changes nothing but where cards sit.
+   */
+  const [groups, setGroups] = useState<CardGroup[]>([])
+  const groupsRef = useRef<CardGroup[]>([])
+  groupsRef.current = groups
+  const groupSeq = useRef(0)
+  /** The group whose frame label is being renamed inline. */
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
   // ids = nodes whose OWN pos we move; visualIds = every node that visually shifts by the drag
   // delta (the moved nodes plus any children carried along inside a moved parent's transform), so
   // connectors track them all. Splitting the two is what stops nested children double-moving.
@@ -1974,8 +2002,11 @@ export function FlowsView() {
     // start a drag on that gesture.
     if (e.shiftKey || e.metaKey || e.ctrlKey) return
     setSelEdge(null)
-    const selIds = selected.has(id) && selected.size ? [...selected] : [id]
-    if (!selected.has(id)) setSelected(new Set(selIds))
+    // Grabbing any member of a group grabs the group: the whole point of one is that the
+    // arrangement moves intact, so a member can never be dragged out from under the rest.
+    const grabbed = groupBy.get(id)
+    const selIds = grabbed ? grabbed.ids : selected.has(id) && selected.size ? [...selected] : [id]
+    if (grabbed || !selected.has(id)) setSelected(new Set(selIds))
     const selSet = new Set(selIds)
     // Move only nodes whose parent isn't ALSO in the drag — a child inside a moving parent's
     // transform is carried along, so moving its own pos too would double it.
@@ -2009,6 +2040,19 @@ export function FlowsView() {
   const clickSelect = (e: ReactMouseEvent, id: string) => {
     e.stopPropagation()
     setSelEdge(null)
+    // A plain click on a grouped card selects the whole group — that is what makes a group a thing
+    // on the board rather than a saved list. Shift/Cmd-click still reaches the one card, which is
+    // how you edit a member (and the modifier arm below already handles that).
+    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      const g = groupBy.get(id)
+      if (g) {
+        setSelected(new Set(g.ids))
+        setSel(id)
+        setPickAt(null)
+        setBriefCollapsed(false)
+        return
+      }
+    }
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       setSelected((prev) => {
         const next = new Set(prev)
@@ -2259,6 +2303,20 @@ export function FlowsView() {
           spaceHeld.current = true
           setSpaceCursor(true)
         }
+        return
+      }
+      /**
+       * Cmd/Ctrl+Alt+G ties the selection into a GROUP; add Shift to untie it.
+       *
+       * Before the plain-⌘G arm, which it would otherwise fall into. Matched on e.code, not e.key:
+       * Option is a dead-key modifier on macOS, so Option+G arrives as "©" and a key test would
+       * never fire. Two chords because they are two different moves — a group holds cards in a
+       * shape, a smart object collapses them into one reusable thing.
+       */
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyG') {
+        e.preventDefault()
+        if (e.shiftKey) groupActionsRef.current.ungroup()
+        else groupActionsRef.current.group()
         return
       }
       // Cmd/Ctrl+G bundles the selected cards into a smart object (the universal "group" chord).
@@ -4519,6 +4577,66 @@ export function FlowsView() {
     const g = placements.find((x) => x.id === gid)
     if (g) updateSmartObject(g.smartObjectId, { name })
   }
+  // ---- groups: hold an arrangement of cards together ----
+  /** card id → the group it belongs to. A card is only ever in one. */
+  const groupBy = useMemo(() => groupIndex(groups), [groups])
+  /**
+   * The group the selection IS — exactly its membership, nothing more or less. Anything else is a
+   * loose selection, so the toolbar offers Group rather than Ungroup and cannot dissolve a group
+   * you only happen to be overlapping.
+   */
+  const selectedGroup = useMemo(() => {
+    if (selected.size < MIN_GROUP) return null
+    const first = groupBy.get([...selected][0])
+    return first && isWholeGroup(first, selected) ? first : null
+  }, [selected, groupBy])
+  /** Tie the selected cards together. Any positionable node may join — a card, a channel, a post. */
+  const groupSelection = () => {
+    const ids = [...selected]
+    if (ids.length < MIN_GROUP) return
+    const { groups: next, group } = withGroup(
+      groupsRef.current,
+      ids,
+      nextGroupName(groupsRef.current),
+      `grp_${Date.now().toString(36)}_${groupSeq.current++}`,
+    )
+    if (!group) return
+    setGroups(next)
+    setSelected(new Set(group.ids))
+  }
+  /** Cut the tie. Every card stays exactly where it is — only "these move together" ends. */
+  const ungroupSelection = () => {
+    const g = selectedGroup ?? (selected.size ? groupBy.get([...selected][0]) : null)
+    if (!g) return
+    setGroups(withoutGroup(groupsRef.current, g.id))
+    setRenamingGroup(null)
+  }
+  /**
+   * A GROUP CANNOT OUTLIVE ITS CARDS. Deleting a card does not route through the grouping UI, so a
+   * group can be starved down to one member — or to none — without ever being touched, and would
+   * otherwise keep drawing a frame around whatever was left.
+   *
+   * Guarded on a non-empty board on purpose. An empty live set is not "everything was deleted", it
+   * is "we do not know yet" — the canvas unmounts wholesale for the Grid and Calendar tabs, and the
+   * debounced save would happily write that wipe back over a real board.
+   */
+  const liveNodeIds = useMemo(() => {
+    const s = new Set<string>(['campaign'])
+    for (const o of objects) s.add(o.id)
+    for (const p of placements) s.add(p.id)
+    for (const d of viewDelivs) s.add(d.key)
+    for (const r of viewRows) s.add(r.id)
+    return s
+  }, [objects, placements, viewDelivs, viewRows])
+  useEffect(() => {
+    if (liveNodeIds.size <= 1) return
+    const next = pruneGroups(groupsRef.current, liveNodeIds)
+    if (next !== groupsRef.current) setGroups(next)
+  }, [liveNodeIds])
+  // Read through refs by the global keydown effect, which runs with deps [nodes.length, viewName]
+  // and would otherwise capture a stale selection.
+  const groupActionsRef = useRef({ group: groupSelection, ungroup: ungroupSelection })
+  groupActionsRef.current = { group: groupSelection, ungroup: ungroupSelection }
   // The global keydown effect below runs with deps [nodes.length, viewName] and reads everything
   // else through refs, so Cmd+G goes through one too rather than capturing a stale selection.
   const convertSelectionRef = useRef(convertSelection)
@@ -4906,6 +5024,9 @@ export function FlowsView() {
     setPlacements([])
     setConnectors([])
     setDetached([])
+    // Groups frame cards on the canvas you left, so they go with it.
+    setGroups([])
+    setRenamingGroup(null)
     setSelEdge(null)
     setOpenGroupId(null)
     // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
@@ -4981,6 +5102,12 @@ export function FlowsView() {
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
     setDetached(loaded.detached ?? [])
+    setGroups(loaded.groups ?? [])
+    setRenamingGroup(null)
+    // A loaded group's cards are hand-placed by definition, so mark them settled: the branch
+    // auto-placer would otherwise pull any branch deliverable among them back to its default slot
+    // and take the arrangement apart on the very load that restored it.
+    for (const g of loaded.groups ?? []) for (const m of g.ids) placedRef.current.add(m)
     // The line you had selected belongs to the campaign you just left. Without this the next one
     // opens with an unrelated line lit up, and Delete acts on a board that is no longer on screen.
     setSelEdge(null)
@@ -5132,6 +5259,42 @@ export function FlowsView() {
     return m
   }, [viewName, viewDelivs, nodes])
 
+  /**
+   * A group's frame: the bounding box of its members, padded, with room above for the name.
+   *
+   * Built from the same measured rects the connectors use, and offset by the live drag delta for
+   * the same reason — rects are not remeasured mid-drag, so without this the frame would sit still
+   * while the cards it belongs to slid out of it.
+   *
+   * Canvas-local pixels, already through the zoom, so the frame renders as a sibling of the
+   * marquee rather than inside the scaled stack.
+   */
+  const groupFrames = useMemo(() => {
+    const s = zoom / 100
+    const out: { group: CardGroup; x: number; y: number; w: number; h: number }[] = []
+    for (const g of groups) {
+      const ms = g.ids
+        .map((id) => {
+          const r = rects[id]
+          if (!r) return null
+          const moving = dragDelta && dragDelta.ids.includes(id)
+          return moving ? { ...r, x: r.x + dragDelta.dx * s, y: r.y + dragDelta.dy * s } : r
+        })
+        .filter((r): r is { x: number; y: number; w: number; h: number } => !!r)
+      // A frame is only drawn around what is actually on screen. Fewer than two members visible
+      // (a filtered view, a half-measured board) means there is no arrangement to show.
+      if (ms.length < MIN_GROUP) continue
+      const x0 = Math.min(...ms.map((r) => r.x))
+      const y0 = Math.min(...ms.map((r) => r.y))
+      const x1 = Math.max(...ms.map((r) => r.x + r.w))
+      const y1 = Math.max(...ms.map((r) => r.y + r.h))
+      const pad = GROUP_PAD * s
+      const head = GROUP_HEAD * s
+      out.push({ group: g, x: x0 - pad, y: y0 - pad - head, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2 + head })
+    }
+    return out
+  }, [groups, rects, dragDelta, zoom])
+
   // A node's rect for connector drawing: its measured rect, but while it's being dragged, offset
   // live by the current drag delta (canvas units → screen px via the zoom scale). This is what
   // keeps a connector glued to its card mid-drag without a per-frame remeasure.
@@ -5196,11 +5359,30 @@ export function FlowsView() {
    */
   const boardSnapshot = (key: string): FlowBoard => {
     const ids = new Set([...objects.map((o) => o.id), ...placements.map((p) => p.id), 'campaign'])
+    /**
+     * A GROUPED CARD'S POSITION IS BOARD STATE, whatever kind of card it is.
+     *
+     * A channel or post card's offset is normally left out on purpose: it nudges a derived flow
+     * layout, and the layout is re-derived on load. Grouping one is the person saying they placed
+     * it deliberately — that is the whole promise of a group — so keeping the tie while dropping
+     * the offsets would reload the group with its cards scattered back to their default slots.
+     */
+    for (const g of groups) for (const m of g.ids) ids.add(m)
     const boardPos: Record<string, { x: number; y: number }> = {}
     for (const [k, v] of Object.entries(pos)) if (ids.has(k)) boardPos[k] = v
     // `detached` is omitted when empty so a board that has never had a line cut carries no field at
     // all, which is what lets every board saved before this existed load with its old meaning.
-    return { key, objects, placements, pos: boardPos, connectors, ...(detached.length ? { detached } : {}) }
+    return {
+      key,
+      objects,
+      placements,
+      pos: boardPos,
+      connectors,
+      ...(detached.length ? { detached } : {}),
+      // Omitted when there are none, for the same reason `detached` is: a board that has never had
+      // a group carries no field at all, so nothing about it changes shape.
+      ...(groups.length ? { groups } : {}),
+    }
   }
   const boardSaveTimer = useRef<number | null>(null)
   useEffect(() => {
@@ -5219,7 +5401,9 @@ export function FlowsView() {
     // `detached` belongs here for the same reason `connectors` does: it is part of what the board
     // says about itself. Left out, a cut line vanished on screen and came back on the next load,
     // because the save never fired for it.
-  }, [boardKey, objects, placements, connectors, pos, detached, boardsHydrated])
+    // `groups` belongs here for the reason `detached` does: it is part of what the board says about
+    // itself, and left out a group would vanish on the next load.
+  }, [boardKey, objects, placements, connectors, pos, detached, groups, boardsHydrated])
 
   /**
    * The workspace arrived while a campaign was open, so put its board on screen.
@@ -5254,6 +5438,7 @@ export function FlowsView() {
     setPlacements(loaded.placements)
     setConnectors(loaded.connectors)
     setDetached(loaded.detached ?? [])
+    setGroups(loaded.groups ?? [])
     setPos((p) => ({ ...p, ...loaded.pos }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardsHydrated])
@@ -8249,8 +8434,11 @@ export function FlowsView() {
                   if (id) ids.add(id)
                 }
               })
-              setSelected(ids)
-              if (ids.size) setSelEdge(null)
+              // Catch one card of a group and you have caught the group. Without this a marquee
+              // could take half of one, and the next drag would pull that half out of its shape.
+              const picked = expandToGroups(groupsRef.current, ids)
+              setSelected(picked)
+              if (picked.size) setSelEdge(null)
               marqueeStart.current = null
               setMarquee(null)
             }
@@ -8419,6 +8607,63 @@ export function FlowsView() {
               }}
             />
           )}
+          {/* Group frames. Rendered BEFORE the stack and carrying no z-index of their own, so DOM
+              order alone puts them behind the cards — a frame that painted over a card would take
+              the clicks meant for it. The box is pass-through for the same reason; only the name
+              strip takes the mouse, where it acts as the handle for dragging the whole group. */}
+          {groupFrames.map(({ group, x, y, w, h }) => {
+            const on = group.ids.some((id) => selected.has(id))
+            return (
+              <div key={group.id} className={`flow-group${on ? ' sel' : ''}`} style={{ left: x, top: y, width: w, height: h }}>
+                <div
+                  className="flow-group-head"
+                  style={{ height: GROUP_HEAD * (zoom / 100) }}
+                  title={`${group.name}: drag to move all ${group.ids.length} cards together, double-click to rename`}
+                  onMouseDown={(e) => {
+                    if (renamingGroup === group.id) return
+                    // Same gesture as grabbing a member, entered off the frame instead.
+                    startDrag(e, group.ids[0])
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelEdge(null)
+                    setSelected(new Set(group.ids))
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setRenamingGroup(group.id)
+                  }}
+                >
+                  {renamingGroup === group.id ? (
+                    <input
+                      className="flow-group-input"
+                      defaultValue={group.name}
+                      autoFocus
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        setGroups(renameGroup(groupsRef.current, group.id, e.currentTarget.value))
+                        setRenamingGroup(null)
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        else if (e.key === 'Escape') {
+                          e.currentTarget.value = group.name
+                          e.currentTarget.blur()
+                        }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <span className="flow-group-name">{group.name}</span>
+                      <span className="flow-group-n">{group.ids.length}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
           {/* The outline (a map of the campaign's contents) now lives in the inspector's
               nothing-selected state instead of a floating canvas pill. */}
           <div className={`flow-stack${viewing ? ' flow-stack-view' : ''}`} style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom / 100})`, transformOrigin: '0 0' }}>
@@ -9932,6 +10177,32 @@ export function FlowsView() {
           <>
             <div className="flow-ctx-scrim" onMouseDown={close} onContextMenu={(e) => { e.preventDefault(); close() }} />
             <div className="flow-ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }} role="menu">
+              {/* Group sits ABOVE the per-target arms, not inside one. Every kind of card can be
+                  grouped — a channel and a post as readily as an object card — so burying it in the
+                  object arm made it unreachable from a right-click on exactly the cards a person is
+                  most likely to be arranging. */}
+              {selectedGroup ? (
+                <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); ungroupSelection() }}>
+                  Ungroup {selectedGroup.name}
+                  <span className="flow-ctx-kbd">⌘⌥⇧G</span>
+                </button>
+              ) : (
+                <button
+                  className="flow-ctx-item"
+                  role="menuitem"
+                  disabled={selected.size < MIN_GROUP}
+                  title={
+                    selected.size < MIN_GROUP
+                      ? 'Select two or more cards first: drag a box around them, or Shift-click each one'
+                      : 'Keep these cards together: select one and you get them all, move one and they all move'
+                  }
+                  onClick={() => { close(); groupSelection() }}
+                >
+                  {selected.size >= MIN_GROUP ? `Group these ${selected.size} cards` : 'Group cards'}
+                  <span className="flow-ctx-kbd">⌘⌥G</span>
+                </button>
+              )}
+              <div className="flow-ctx-sep" />
               {onDeliv || onPost ? (
                 <button
                   className="flow-ctx-item danger"

@@ -4593,7 +4593,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       // leaves a row behind, and the slice grows with visits rather than with work.
       // A board whose only content is a CUT is not empty: dropping the row would silently reattach
       // the channel, which is the state the person went out of their way to change.
-      const empty = !board.objects.length && !board.placements.length && !board.connectors.length && !board.detached?.length
+      // A board whose only content is a GROUP is not empty either, for the same reason: the person
+      // went out of their way to tie those cards together, and dropping the row unties them.
+      const empty =
+        !board.objects.length && !board.placements.length && !board.connectors.length && !board.detached?.length && !board.groups?.length
       // Never persist a partial board. One saved without `placements` crashed every reader that
       // walks all boards (the smart-object inspector counts how many boards use an object), and a
       // board with no key is unreachable but still iterated. Normalise here so a bad shape cannot
@@ -4608,6 +4611,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
         // Rebuilt field by field on purpose (a partial board crashes readers that walk all boards),
         // so anything new has to be added here or it is silently dropped on the way to storage.
         ...(board.detached?.length ? { detached: board.detached } : {}),
+        ...(board.groups?.length ? { groups: board.groups } : {}),
       }
       const rest = s.flowBoards.filter((b) => b.key !== board2.key)
       const flowBoards = empty ? rest : [...rest, board2]
