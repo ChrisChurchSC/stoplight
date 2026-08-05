@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.26',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Dragging on the canvas is no longer doing six times the work it can show you. A mouse or trackpad reports its position far faster than a screen can redraw, and the board was rebuilding itself for every one of those reports. Measured on a hundred-card canvas, a second and a half of dragging produced 299 rebuilds to paint 46 frames: six of every seven were computed and thrown away before anything reached the screen. The board now updates once per frame, which is as often as you can actually see.',
+          'Panning and marquee selection went the same way, for the same reason. All three gestures still land exactly where you let go: the last position is applied on release rather than left waiting for a frame that never comes.',
+          'Cards that move together stopped being counted one at a time. Asking "is this card moving?" walked the whole list of dragged cards, once per member and once per connector, on every frame, so the bigger the group the more it cost to move it. It is a direct lookup now.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.25',
     dateLabel: 'August 5, 2026',
     groups: [
