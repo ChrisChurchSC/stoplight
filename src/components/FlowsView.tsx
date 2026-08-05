@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard, remapBuiltTargets,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -18,7 +18,7 @@ import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
-import { contextGapMessage, type ContextGapKey } from '../domain/contextGaps'
+import { contextGapMessage, type ContextGapKey, type GapStanding } from '../domain/contextGaps'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, type Product } from '../domain/product'
@@ -3662,6 +3662,34 @@ export function FlowsView() {
     return id
   }
   /**
+   * WHAT THIS BOARD ALREADY HAS for a gap, so the toast can stop telling somebody to add a card
+   * that is sitting in front of them.
+   *
+   * contextGapsFor asks what reaches the WRITER, and a card contributes to that only when it names
+   * a record AND a chain of cards carries it into the brief. Neither is visible from the card
+   * itself: an unwired Audience card and a wired one look the same apart from a line, and a card
+   * naming no record still says "Audience" across the top. So a real gap and a board with no
+   * audience on it are different states, and only one of them is fixed by adding a card.
+   *
+   * Ordered by how cheaply the person can act on it. A named card with no line is one drag from
+   * working, so it wins over a blank card that needs a record picked first. `overridden` is last
+   * because it is the one case where the brief is fine and the assets are the problem: reaching it
+   * means a named card IS wired to the brief, so every asset must be carrying its own records
+   * instead (contextGapsFor unions the rows, so a single inheriting asset would have closed the
+   * gap).
+   */
+  const gapStanding = (kind: CanvasObjectKind): { standing: GapStanding; cardId?: string } => {
+    const mine = objects.filter((o) => o.kind === kind)
+    if (!mine.length) return { standing: 'none' }
+    const names = (o: CanvasObject) => !!o.refId || !!o.smartObjectId
+    const toBrief = new Set(upstreamCardIds({ key: boardKey, objects, placements, pos: {}, connectors }, 'campaign'))
+    const unwired = mine.find((o) => names(o) && !toBrief.has(o.id))
+    if (unwired) return { standing: 'unwired', cardId: unwired.id }
+    const unnamed = mine.find((o) => !names(o))
+    if (unnamed) return { standing: 'unnamed', cardId: unnamed.id }
+    return mine.some((o) => names(o) && toBrief.has(o.id)) ? { standing: 'overridden' } : { standing: 'none' }
+  }
+  /**
    * SAY WHAT THE CAMPAIGN DID NOT SAY, once the copy is back.
    *
    * The blocker refuses a canvas with no brand or no wires. Everything past that generates, including
@@ -3673,15 +3701,39 @@ export function FlowsView() {
    * code's place to stop one. It reports what generating just did and offers the card that would
    * change it. See src/domain/contextGaps.ts for what counts as thin.
    *
+   * WHAT IT OFFERS depends on what is already there: gapStanding decides whether the remedy is a new
+   * card, the one on the board that has no line to the brief, or the blank one that needs a record
+   * picked. "Add an audience" over a board with an audience card on it is the app failing to see its
+   * own canvas, and it was the most common way to meet this toast.
+   *
    * `prefix` lets the build share its one toast ("Built · 6 drafts.") instead of firing a second one
    * that would replace it — there is a single toast slot, so two messages means the first is never read.
    */
   const suggestContext = (campaign: string, prefix?: string) => {
     const gaps = useTrafficStore.getState().contextGapsFor(campaign)
-    const msg = contextGapMessage(gaps, prefix ? undefined : campaign)
-    if (!msg) return false
+    if (!gaps.length) return false
     const kind = CARD_FOR_GAP[gaps[0]]
-    showToastAction(prefix ? `${prefix} ${msg}` : msg, `Add ${OBJECT_META[kind].label}`, () => {
+    /**
+     * Only when the toast is about the board on screen. `gapStanding` reads this component's
+     * objects and connectors, which belong to whatever canvas is open; a build that has moved on
+     * has already opened the campaign it built, and Generate runs on the open one, so in practice
+     * they agree. Guarding it anyway keeps a stale answer from ever reaching the sentence.
+     */
+    const { standing, cardId } = viewNameRef.current === campaign ? gapStanding(kind) : { standing: 'none' as GapStanding, cardId: undefined }
+    const msg = contextGapMessage(gaps, prefix ? undefined : campaign, standing)
+    if (!msg) return false
+    const label = OBJECT_META[kind].label
+    /**
+     * Nothing to press when the brief is already right and the assets are overriding it. The fix is
+     * per-asset, in the inspector, and a button here would have to guess which assets the person
+     * meant and silently drop records they had set deliberately.
+     */
+    if (standing === 'overridden') {
+      showToast(prefix ? `${prefix} ${msg}` : msg)
+      return true
+    }
+    const verb = standing === 'unwired' ? 'Wire' : standing === 'unnamed' ? 'Open' : 'Add'
+    showToastAction(prefix ? `${prefix} ${msg}` : msg, `${verb} ${label}`, () => {
       /**
        * The board on screen is the one these setters write to, and a toast outlives the click that
        * raised it: nine seconds is long enough to open another campaign. Dropping the card onto
@@ -3689,7 +3741,16 @@ export function FlowsView() {
        * looking at.
        */
       if (viewNameRef.current !== campaign) {
-        showToast(`Open "${campaign}" to add that card — you have moved to another canvas.`)
+        showToast(`Open "${campaign}" to fix that — you have moved to another canvas.`)
+        return
+      }
+      /**
+       * A blank card cannot be wired into anything useful, so the remedy is to open it and let the
+       * person name the record. Wiring it first would draw a line that carries nothing and leave
+       * the same gap reported next time, which is the failure this whole branch exists to stop.
+       */
+      if (standing === 'unnamed' && cardId) {
+        setSel(cardId)
         return
       }
       /**
@@ -3698,7 +3759,7 @@ export function FlowsView() {
        * first, in the order the drag gesture and the chat both use it; it no-ops on a card that names
        * no record yet, and picking one on the card pushes it through from there.
        */
-      const id = addObject(kind)
+      const id = standing === 'unwired' && cardId ? cardId : addObject(kind)
       attachToCampaign(id)
       setConnectors((cs) => (cs.some((x) => x.from === id && x.to === 'campaign') ? cs : [...cs, { from: id, to: 'campaign' }]))
     })
@@ -4780,6 +4841,44 @@ export function FlowsView() {
      * the campaign back to whatever it named before. brandCardName reads this ref instead.
      */
     objectsRef.current = objectsRef.current.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x))
+    /**
+     * AND PUSH IT DOWN THE WIRES THAT WERE ALREADY DRAWN.
+     *
+     * Every call site follows this with `if (isAttached(id)) attachToCampaign(id)`, which covers the
+     * brief and only the brief. A card wired straight to a deliverable materialises through
+     * attachToTarget instead, and that runs once, when the LINE is drawn: draw it on a blank card and
+     * it finds no records, returns silently, and is never asked again. Naming the record afterwards
+     * is the obvious order to work in (drop the card where it belongs, wire it up, then say what it
+     * is), and it left the wire on the board carrying nothing.
+     *
+     * Only the blank -> named transition. A card that already named a record has had its refs
+     * materialised, and re-running the attach on a change would ADD the new record without removing
+     * the old one, which is detachFromTarget's job and belongs with a deliberate swap rather than
+     * here. Reading the pre-change array is what makes that test possible.
+     *
+     * COVERS PICKING A RECORD, not minting one by typing. refForObject resolves the label through
+     * objectOptions, and a record created a line earlier in the same handler is not in that list
+     * until the next render, so the mint-on-first-keystroke path still lands nothing here. That path
+     * is naming a record that is blank at the moment it is made, so there is nothing yet to carry;
+     * the case worth fixing is wiring a card up and then choosing the audience it means.
+     */
+    const was = objects.find((x) => x.id === id)
+    if (refId && was && !was.refId && !was.smartObjectId) {
+      const fresh = { ...was, refId }
+      const refs = [refForObject(fresh)].filter((r): r is FlowReference => !!r)
+      if (refs.length) {
+        for (const e of connectors) {
+          if (e.from !== id || e.to === 'campaign') continue
+          const rows = rowsForTarget(e.to)
+          if (!rows.length) continue
+          const base = rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
+          const next = [...base]
+          for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
+          void updateRows(rows.map((r) => ({ id: r.id, patch: { references: next } })))
+          setRefsDirty(true)
+        }
+      }
+    }
   }
   /**
    * The record a card edits, CREATING it if the card has not named one yet.
@@ -5758,6 +5857,22 @@ export function FlowsView() {
       // Builder-mode direction is no longer stamped onto the campaign: it lives on the cards, and
       // adoptBuilderBoard (below) hands the whole board to the campaign Build just named.
       const allNewIds: string[] = []
+      /**
+       * WHICH DELIVERABLE EACH BUILD NODE TURNED INTO — the mapping that exists nowhere else, and
+       * only here.
+       *
+       * A build node is identified by a minted id (`dl_…`); the deliverable it becomes is identified
+       * by what it IS (`deliverableKeyFor`, e.g. "email|nurture"). Nothing translates between the
+       * two, so every wire drawn to a deliverable in build mode pointed at an id the campaign's
+       * board had never heard of. Two things followed, and each hid the other: attachToTarget found
+       * no rows to write to and returned silently (the records never reached the copy), and then the
+       * first openView after Build ran pruneBoard, which deleted the wire for pointing at an unknown
+       * endpoint. The card was left sitting on the canvas with no line and no contribution, and the
+       * only symptom was the context-gap toast asking for a card that was already there.
+       *
+       * Collected during the seeding loop because this is the one moment both ids are in hand.
+       */
+      const builtFromNode = new Map<string, { key: string; rows: TrafficRow[] }>()
       for (const n of cfg.nodes) {
         const p = presetByKey(n.presetKey)
         if (!p) continue
@@ -5766,6 +5881,10 @@ export function FlowsView() {
         const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName).map((r) => r.id))
         await seedCampaignAssets(campaignName, [d], { flightWeeks: cfg.flightWeeks, audiences: auds })
         const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !before.has(r.id))
+        // One preset seeds one deliverable, so every fresh row here shares a key. Audiences vary
+        // across them and deliverableKeyFor does not read the audience, which is what makes the
+        // first row a safe representative rather than a guess.
+        if (fresh.length) builtFromNode.set(n.id, { key: deliverableKeyFor(fresh[0]), rows: fresh })
         const briefs = (n.briefs ?? []).map((b) => b.trim()).filter(Boolean)
         // A blueprint carries per-email guidance (framework / subject formula / levers) that
         // rides in `lineage`; draftCopy copies lineage into the copy context automatically.
@@ -5782,6 +5901,37 @@ export function FlowsView() {
           }
         }
         allNewIds.push(...fresh.map((r) => r.id))
+      }
+      /**
+       * TRANSLATE THE WIRES, THEN LAND WHAT THEY CARRY. Both halves, because either alone leaves a
+       * board that contradicts the copy.
+       *
+       * Remapping without materialising would draw a line from an Audience card to an email while
+       * that email was written to the brand's whole audience list. Materialising without remapping is
+       * the failure pruneBoard's own comment describes from the other direction: records on the rows
+       * steering the copy, and no line left on the board to explain or undo them.
+       *
+       * Read from the PERSISTED board rather than component state: adoptBuilderBoard has just handed
+       * the builder's board over under the campaign's key, and that copy is the one that survives the
+       * openView at the end of this build. It is the same content (the snapshot was flushed above),
+       * which is what lets refsBehind resolve these cards from state that has not moved yet.
+       */
+      if (builtFromNode.size) {
+        const adopted = boardFor(useTrafficStore.getState().flowBoards, campaignName)
+        const remapped = remapBuiltTargets(adopted.connectors, new Map([...builtFromNode].map(([id, b]) => [id, b.key])))
+        if (remapped.some((e, i) => e.to !== adopted.connectors[i].to)) saveFlowBoard({ ...adopted, connectors: remapped })
+        // The brief's own records first, so a deliverable INHERITS the campaign and adds its wired
+        // card on top, exactly as attachToTarget does when the wire is drawn on a live campaign.
+        const base = campaignWiredRefs()
+        for (const [nodeId, built] of builtFromNode) {
+          const refs = adopted.connectors
+            .filter((e) => e.to === nodeId && isContextNode(e.from))
+            .flatMap((e) => refsBehind(e.from))
+          if (!refs.length) continue
+          const next = [...base]
+          for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
+          void updateRows(built.rows.map((r) => ({ id: r.id, patch: { references: next } })))
+        }
       }
       let source: CopySource | null = null
       /**
