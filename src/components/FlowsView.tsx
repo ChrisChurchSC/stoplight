@@ -9165,11 +9165,10 @@ export function FlowsView() {
                   <button className="flow-back" onClick={() => { setPickAt(null); setConnectFrom(null) }}>
                     ‹ Back
                   </button>
-                  <span className="flow-panel-title">
-                    {connectFrom
-                      ? `Next step after ${viewRows.find((r) => r.id === connectFrom)?.assetName ?? 'this asset'}`
-                      : 'Add channel'}
-                  </span>
+                  {/* The card you branched from is the one selected on the board, right next to the
+                      line being drawn out of it, so naming it again in the title only made the title
+                      long enough to truncate. */}
+                  <span className="flow-panel-title">{connectFrom ? 'Next Step' : 'Add channel'}</span>
                 </div>
                 <div className="flow-picker-list">
                   {grouped.map(([group, presets]) => (
