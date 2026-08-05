@@ -415,11 +415,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       } else if (k === 'v' && clipboard.current) {
         e.preventDefault()
         void pasteAsset(clipboard.current)
-      } else if (k === 'g' || (e.altKey && e.code === 'KeyG')) {
-        // ⌘G is free on this canvas, but the campaign canvas spends it on smart objects and uses
-        // ⌘⌥G for a group. Accept both here so one chord for "group" works on either board.
-        // Matched on e.code for the Option variant: Option is a dead-key modifier on macOS, so
-        // Option+G arrives as "©" and a key test would never fire.
+      } else if (k === 'g') {
+        // ⌘G groups, ⌘⇧G ungroups — the same chords as the campaign canvas, so one thing is
+        // learned once and works on either board.
         e.preventDefault()
         if (e.shiftKey) groupActions.current.ungroup()
         else groupActions.current.group()

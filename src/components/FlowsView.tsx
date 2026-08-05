@@ -2306,21 +2306,27 @@ export function FlowsView() {
         return
       }
       /**
-       * Cmd/Ctrl+Alt+G ties the selection into a GROUP; add Shift to untie it.
+       * Cmd/Ctrl+G ties the selection into a GROUP; add Shift to untie it.
        *
-       * Before the plain-⌘G arm, which it would otherwise fall into. Matched on e.code, not e.key:
-       * Option is a dead-key modifier on macOS, so Option+G arrives as "©" and a key test would
-       * never fire. Two chords because they are two different moves — a group holds cards in a
-       * shape, a smart object collapses them into one reusable thing.
+       * ⌘G because it is the universal group chord — every design tool a person arrives here from
+       * spends it on exactly this, so it is the one they will reach for. It used to bundle a smart
+       * object, on the reasoning that ⌘G is "the universal group chord"; that reasoning is why it
+       * belongs to grouping now that real grouping exists. Bundling moved to ⌘⇧B.
+       *
+       * It was briefly ⌘⌥G, to leave ⌘G where it was. That has to be reachable to be a shortcut,
+       * and it is not: something outside the page (macOS, or a Google app) takes ⌘⌥G first, so the
+       * keydown never arrives and preventDefault has nothing to prevent. A chord the page cannot
+       * receive is worse than no chord, because it looks like the feature is broken.
        */
-      if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyG') {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'g') {
         e.preventDefault()
         if (e.shiftKey) groupActionsRef.current.ungroup()
         else groupActionsRef.current.group()
         return
       }
-      // Cmd/Ctrl+G bundles the selected cards into a smart object (the universal "group" chord).
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
+      // Cmd/Ctrl+Shift+B bundles the selected cards into a smart object. B for bundle, which is
+      // what the menu has always called it — only the chord moved, not the idea.
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'b') {
         e.preventDefault()
         convertSelectionRef.current()
         return
@@ -2338,7 +2344,10 @@ export function FlowsView() {
         setOpenGroupId(null)
         return
       }
-      if (e.key.toLowerCase() === 'b' && viewName === null) {
+      // Bare B opens the block picker in the builder. Modifiers excluded now that B carries a chord
+      // of its own: a near-miss on ⌘⇧B (⌘B, or letting go of Shift a moment early) would otherwise
+      // open the picker instead of doing nothing, which reads as the bundle going wrong.
+      if (e.key.toLowerCase() === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey && viewName === null) {
         e.preventDefault()
         setPickGroup(null)
         setPickAt(nodes.length)
@@ -10184,7 +10193,7 @@ export function FlowsView() {
               {selectedGroup ? (
                 <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); ungroupSelection() }}>
                   Ungroup {selectedGroup.name}
-                  <span className="flow-ctx-kbd">⌘⌥⇧G</span>
+                  <span className="flow-ctx-kbd">⌘⇧G</span>
                 </button>
               ) : (
                 <button
@@ -10199,7 +10208,7 @@ export function FlowsView() {
                   onClick={() => { close(); groupSelection() }}
                 >
                   {selected.size >= MIN_GROUP ? `Group these ${selected.size} cards` : 'Group cards'}
-                  <span className="flow-ctx-kbd">⌘⌥G</span>
+                  <span className="flow-ctx-kbd">⌘G</span>
                 </button>
               )}
               <div className="flow-ctx-sep" />
@@ -10243,7 +10252,7 @@ export function FlowsView() {
                     onClick={() => { close(); convertSelection() }}
                   >
                     {convertible.length > 1 ? 'Bundle into a smart object' : 'Make a smart object'}
-                    <span className="flow-ctx-kbd">⌘G</span>
+                    <span className="flow-ctx-kbd">⌘⇧B</span>
                   </button>
                   {openPlacement && onCard && (
                     <button className="flow-ctx-item" role="menuitem" onClick={() => { close(); removeFromPlacement(openPlacement.id, onCard.id) }}>
