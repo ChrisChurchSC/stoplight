@@ -7,6 +7,7 @@ import { flagResolved } from '../adapters/icp/mockIcp'
 import { rtbsForCampaign } from '../domain/rtb'
 import { boardFor, deliverableKeyFor, objectName, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
+import { usablePatterns } from '../domain/pattern'
 import { madeFrom } from '../domain/madeFrom'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -92,7 +93,7 @@ const MADE_FROM_COL = { key: 'madeFrom', label: 'Made from', icon: '◈', width:
  * name produces something that looks established and says nothing — worse than an empty picker that
  * sends you to build it properly. The canvas takes the same line about data sets.
  */
-const CREATABLE = new Set<CanvasObjectKind>(['brand', 'product', 'audience', 'message', 'voice', 'concept', 'season', 'company', 'person', 'trigger'])
+const CREATABLE = new Set<CanvasObjectKind>(['brand', 'product', 'audience', 'message', 'voice', 'concept', 'season', 'company', 'person', 'trigger', 'pattern'])
 const MIN_COL = 60
 const MIN_ROWS = 20
 /**
@@ -415,6 +416,7 @@ export function SheetGrid({
   const messages = useTrafficStore((s) => s.messages)
   const concepts = useTrafficStore((s) => s.concepts)
   const seasons = useTrafficStore((s) => s.seasons)
+  const patterns = useTrafficStore((s) => s.patterns)
   const voices = useTrafficStore((s) => s.voices)
   const triggers = useTrafficStore((s) => s.triggers)
   const products = useTrafficStore((s) => s.products)
@@ -440,6 +442,7 @@ export function SheetGrid({
       : o.kind === 'voice' ? byId(voices)
       : o.kind === 'concept' ? byId(concepts)
       : o.kind === 'season' ? byId(seasons)
+      : o.kind === 'pattern' ? byId(patterns)
       : o.kind === 'company' ? byId(companies)
       : o.kind === 'person' ? byId(people)
       : o.kind === 'trigger' ? byId(triggers)
@@ -469,6 +472,16 @@ export function SheetGrid({
       case 'voice': return named(voices, (v) => v.summary || v.tone)
       case 'concept': return named(concepts, (c) => c.idea)
       case 'season': return named(seasons, (s) => s.moment)
+      /**
+       * The detail is the pattern's description, falling back to its type, because a list of
+       * pattern NAMES is the one list here where the names are least self-explanatory: "Ladder",
+       * "Open loop" and "Third rail" mean nothing until somebody says what shape they are.
+       *
+       * Archived patterns are filtered out. This picker sets what an asset is WRITTEN to, and a
+       * pattern the library has retired is the one answer already ruled out; generation drops it
+       * too (see poolsFrom), so offering it here would set a value that reaches nothing.
+       */
+      case 'pattern': return named(usablePatterns(patterns), (p) => p.description || p.type)
       case 'company': return named(companies, (c) => c.description || c.segment)
       case 'person': return named(people, (p) => p.title)
       case 'trigger': return named(triggers, (t) => t.signal)

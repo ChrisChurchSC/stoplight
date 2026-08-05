@@ -46,6 +46,7 @@ import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
+import { type Pattern, PATTERN_TYPE_OPTIONS, usablePatterns } from '../domain/pattern'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
 import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
@@ -158,6 +159,8 @@ const RECORD_TYPE_ICON: Record<FlowRefType, ReactNode> = {
   // The lightbulb the Concept card carries on the canvas.
   // The leaf the Season card carries on the canvas.
   season: <><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z" /><path d="M5 19c4-2 7-5 9.5-9.5" /></>,
+  // The two repeating waves the Pattern card carries on the canvas.
+  pattern: <><path d="M3 8.5c2.2-3 4.4-3 6.6 0s4.4 3 6.6 0 4.4-3 4.8 0" /><path d="M3 15.5c2.2-3 4.4-3 6.6 0s4.4 3 6.6 0 4.4-3 4.8 0" /></>,
   // The speech-waveform the Voice card carries on the canvas.
   voice: <><path d="M12 4v16M8 8v8M16 8v8M4 11v2M20 11v2" /></>,
   concept: <><path d="M9.5 18h5M10.5 21h3" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.1 2v.2h5v-.2c0-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" /></>,
@@ -809,6 +812,19 @@ export function FlowsView() {
       { key: 'response', brief: 'the one action it drives' },
     ],
     /**
+     * A pattern is described in terms of its SHAPE, which is why every brief here asks about
+     * structure and none asks what the copy should say. `example` is the one that earns its place:
+     * a pattern stated abstractly ("lead with the objection") reads as advice, and the same pattern
+     * with a line written to it is a thing you can follow.
+     */
+    pattern: [
+      { key: 'name', brief: 'a short name for this pattern, how it would be filed' },
+      { key: 'type', brief: 'what kind of pattern it is', options: [...PATTERN_TYPE_OPTIONS] },
+      { key: 'description', brief: 'the shape it takes, as the moves the copy makes in order' },
+      { key: 'example', brief: 'one short piece of copy written to this shape, so the form is visible' },
+      { key: 'whenToUse', brief: 'when this shape is the right one, and when it is not' },
+    ],
+    /**
      * NO COMPANY ENTRY, on purpose. See TAKES_CONTEXT: an account is the one kind whose facts may
      * not be generated at all, so its card takes a document and nothing else.
      */
@@ -1138,6 +1154,9 @@ export function FlowsView() {
   const allSeasons = useTrafficStore((s) => s.seasons)
   const addSeason = useTrafficStore((s) => s.addSeason)
   const updateSeason = useTrafficStore((s) => s.updateSeason)
+  const allPatterns = useTrafficStore((s) => s.patterns)
+  const addPattern = useTrafficStore((s) => s.addPattern)
+  const updatePattern = useTrafficStore((s) => s.updatePattern)
   const importBrandDataset = useTrafficStore((s) => s.importBrandDataset)
   const refreshBrandDataset = useTrafficStore((s) => s.refreshBrandDataset)
   const datasetUndo = useTrafficStore((s) => s.datasetUndo)
@@ -1413,6 +1432,16 @@ export function FlowsView() {
   const messages = useMemo(() => allMessages.filter((m) => !m.brand || m.brand === brand), [allMessages, brand])
   const concepts = useMemo(() => allConcepts.filter((c) => !c.brand || c.brand === brand), [allConcepts, brand])
   const seasons = useMemo(() => allSeasons.filter((x) => !x.brand || x.brand === brand), [allSeasons, brand])
+  /**
+   * Brand-scoped like the rest, and ARCHIVED ONES ARE LEFT OUT of what a card can pick. Archiving a
+   * pattern is how the library says "we stopped using this", so offering it in a picker is offering
+   * the one answer already ruled out. Generation applies the same rule (see poolsFrom), so a wire
+   * drawn before the pattern was archived stops reaching the writer too.
+   */
+  const patterns = useMemo(
+    () => usablePatterns(allPatterns).filter((x) => !x.brand || x.brand === brand),
+    [allPatterns, brand],
+  )
   const objectives = useMemo(() => allObjectives.filter((o) => !o.brand || o.brand === brand), [allObjectives, brand])
   const companies = useMemo(() => allCompanies.filter((c) => !c.brand || c.brand === brand), [allCompanies, brand])
   const people = useMemo(() => allPeople.filter((p) => !p.brand || p.brand === brand), [allPeople, brand])
@@ -2807,8 +2836,9 @@ export function FlowsView() {
       { type: 'concept' as FlowRefType, label: 'Concepts', items: concepts.map((c) => ({ id: c.id, label: c.name })) },
       { type: 'voice' as FlowRefType, label: 'Voices', items: voices.map((v) => ({ id: v.id, label: v.name })) },
       { type: 'season' as FlowRefType, label: 'Seasons', items: seasons.map((x) => ({ id: x.id, label: x.name })) },
+      { type: 'pattern' as FlowRefType, label: 'Patterns', items: patterns.map((x) => ({ id: x.id, label: x.name })) },
     ],
-    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts, voices, seasons],
+    [companies, people, brandSegments, channelRecords, brandProof, messages, concepts, voices, seasons, patterns],
   )
   /**
    * The campaign's stored references, minus any whose record no longer exists.
@@ -3753,6 +3783,12 @@ export function FlowsView() {
        */
       case 'concept': return { id: addConcept({ name: nm, brand: brand || undefined }), label: nm }
       case 'season': return { id: addSeason({ name: nm, brand: brand || undefined }), label: nm }
+      /**
+       * A pattern minted from a card is ACTIVE, not archived: you are naming it because you are
+       * about to use it. `addPattern` already defaults status to 'active'; it is passed explicitly
+       * here so a card can never mint the one state the picker above filters out.
+       */
+      case 'pattern': return { id: addPattern({ name: nm, brand: brand || undefined, status: 'active' }), label: nm }
       default: return null
     }
   }
@@ -4825,6 +4861,15 @@ export function FlowsView() {
     setObjectRef(nt.id, id)
     return id
   }
+  const ensurePatternFor = (nt: CanvasObject): string => {
+    if (nt.refId && patterns.some((x) => x.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addPattern({ name: '', brand: brand || undefined, status: 'active' })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
   const ensureConceptFor = (nt: CanvasObject): string => {
     if (nt.refId && concepts.some((c) => c.id === nt.refId)) return nt.refId
     const already = mintedRecordRef.current.get(nt.id)
@@ -4889,6 +4934,7 @@ export function FlowsView() {
       case 'message': return named(messages)
       case 'concept': return named(concepts)
       case 'season': return named(seasons)
+      case 'pattern': return named(patterns)
       case 'voice': return named(voices)
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
@@ -6962,6 +7008,10 @@ export function FlowsView() {
                 case 'season': {
                   const se = (nt.refId ? allSeasons.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Season)
                   return { current: se as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateSeason(ensureSeasonFor(nt), p as Partial<Season>) } }
+                }
+                case 'pattern': {
+                  const pt = (nt.refId ? allPatterns.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Pattern)
+                  return { current: pt as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updatePattern(ensurePatternFor(nt), p as Partial<Pattern>) } }
                 }
                 case 'proof-point': {
                   const pp = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)

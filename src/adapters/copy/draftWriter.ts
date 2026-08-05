@@ -86,6 +86,25 @@ export interface DraftAsset {
   direction?: DirectionEntry[]
   /** A conditioned lead hook ("if audience = X then lead with …") — the copy opens on it. */
   hook?: string
+  /**
+   * The SHAPE this asset is built to — a hook, a format, a structure, a trend worth riding.
+   *
+   * Per asset rather than per request, and the only record-linked input that is: everything else a
+   * campaign pins is true of the whole set, while a pattern is chosen for one post. Rides inside
+   * the assets array, which the server stringifies wholesale, so it cannot be lost at the
+   * destructure the way `hooks` was.
+   *
+   * Read by the model writer only. The heuristic below builds from its own fixed formats and
+   * cannot follow a pattern somebody wrote, so it leaves this alone.
+   */
+  pattern?: {
+    name: string
+    /** Pattern / Trend / Hook / Format / Structure. */
+    type?: string
+    description?: string
+    example?: string
+    whenToUse?: string
+  }
   /** Stable index in the batch — lets the heuristic vary deterministically. */
   index?: number
 }
