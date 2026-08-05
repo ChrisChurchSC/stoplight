@@ -43,6 +43,11 @@ export function madeFrom(args: {
   /**
    * The brand the campaign is bound to. Brand carries no FlowRefType and is not per asset: it is the
    * campaign's OWNER, so it is handed in already resolved rather than looked for among the pins.
+   *
+   * Its callers resolve it by matching `row.client` against brand records BY NAME, which is a string
+   * comparison across two slices and fails quietly in every way a string comparison can: a row whose
+   * client was never set, a brand renamed after the rows were made, a stray space. That is why the
+   * card below is a fallback rather than a nicety.
    */
   brandRefId?: string
   nameOf: (kind: CanvasObjectKind, refId: string) => string | undefined
@@ -54,7 +59,22 @@ export function madeFrom(args: {
     const mine = cards.filter((c) => c.kind === kind)
     const type = REF_TYPE_FOR_OBJECT_KIND[kind]
     const pinned = type ? (references ?? []).find((r) => r.type === type) : undefined
-    const chosen = kind === 'brand' ? (brandRefId ?? '') : pinned?.id || mine.find((c) => c.refId)?.refId || ''
+    /**
+     * BRAND FALLS BACK TO THE WIRED CARD, like every other kind falls back to its own.
+     *
+     * It used to be `brandRefId ?? ''` and nothing else, so an asset whose `client` resolved to no
+     * brand record read as "No brand picked" while a Brand card sat on the canvas naming one and
+     * wired into the brief. The brand was not missing — it was on the board, in the copy, and in
+     * the campaign — and the grid was the only surface saying otherwise. The card then turned up
+     * again further down the same cell under "Also reaching this asset", which is the tell: the
+     * entry knew about the card and had already refused to let it be the answer.
+     *
+     * The binding still wins where there is one. It is the campaign's owner and the thing
+     * bindCampaignBrand writes; the card is what to believe when that lookup comes back empty.
+     */
+    const chosen = kind === 'brand'
+      ? brandRefId || mine.find((c) => c.refId)?.refId || ''
+      : pinned?.id || mine.find((c) => c.refId)?.refId || ''
 
     if (chosen) {
       const card = mine.find((c) => c.refId === chosen)
