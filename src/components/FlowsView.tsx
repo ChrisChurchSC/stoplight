@@ -222,7 +222,7 @@ const RecordTypeIcon = ({ type }: { type: FlowRefType }) => (
 // A recurring deliverable (newsletter, social) breaks into monthly posts. A lead magnet
 // (ebook, whitepaper) breaks into sections, and a web page (homepage, pricing, landing)
 // into a page card that carries its copy. Other one-offs (events) stay a single asset.
-const PAGE_CHANNELS = new Set<ChannelId>(['website', 'landing-page'])
+const PAGE_CHANNELS = new Set<ChannelId>(['website', 'landing-page', 'checkout', 'post-purchase'])
 const hasSubcards = (p: DeliverablePreset): boolean =>
   !(p.brand || p.runtime === 'one-off') || p.channel === 'lead-magnet' || PAGE_CHANNELS.has(p.channel)
 // The word for a sub-card: monthly posts, ebook sections, or a page.
@@ -272,9 +272,9 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
 // start by hand. Four, not six, so the blank state stays one clear hierarchy rather than three
 // dense rows; "More" opens the full picker. Keys must exist in DELIVERABLE_PRESETS.
 /**
- * The eight motions a deliverable can belong to, matching DELIVERABLE_PRESETS' own `group` values
+ * The nine motions a deliverable can belong to, matching DELIVERABLE_PRESETS' own `group` values
  * exactly. They sit in the toolbar's "Gets made" band so the palette offers the KIND of work you
- * are adding, not one generic "Deliverable" button that hides eight very different choices behind
+ * are adding, not one generic "Deliverable" button that hides nine very different choices behind
  * a single click. Picking one opens the deliverable picker scoped to that motion.
  *
  * No tone here: it comes from GROUP_TONE, keyed by this same `group`, which is also what the
@@ -298,6 +298,8 @@ const DELIVERABLE_GROUPS: { group: DeliverableGroup; label: string; icon: ReactN
     icon: <><path d="M5.5 4h7l5.5 5.5V20a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M12.5 4v6h5.5" /><path d="M12 12.5v5M9.5 15.5l2.5 2.5 2.5-2.5" /></> },
   { group: 'Events', label: 'Events',
     icon: <><rect x="3.5" y="5" width="17" height="15" rx="2.2" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></> },
+  { group: 'Sales & commerce', label: 'Close',
+    icon: <><path d="M5.4 8h13.2l1 12.4a1.1 1.1 0 0 1-1.1 1.1H5.5a1.1 1.1 0 0 1-1.1-1.1z" /><path d="M8.8 8V6.2a3.2 3.2 0 0 1 6.4 0V8" /><path d="M9.3 14.2l2 2 3.4-3.6" /></> },
 ]
 
 const STARTER_KEYS = ['newsletter', 'blog', 'ig-reel', 'landing'] as const

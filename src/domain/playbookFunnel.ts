@@ -36,6 +36,12 @@ export interface PlaybookStage {
 // forward-only flow is preserved and no edge has to draw upward.)
 const CAPTURE: ChannelId[] = ['lead-magnet']
 
+// The opportunity artifacts — what a rep puts in front of a buyer once a deal is
+// open. These used to have no channel at all, so every Opp band rendered empty
+// and a flow had no way to close. Both are canonically conversion, so claiming
+// them here splits the conversion bucket without inverting funnel order.
+const DEAL: ChannelId[] = ['proposal', 'sales-collateral']
+
 /**
  * The 10 GTM playbooks' funnel stages, keyed by GtmStrategy.key. Labels match
  * each playbook's `sequence` tokens. Most stages just declare a `canon`; channel
@@ -48,7 +54,7 @@ export const PLAYBOOK_FUNNELS: Record<string, PlaybookStage[]> = {
     { label: 'Lead', canon: 'consideration', channels: CAPTURE },
     { label: 'MQL', canon: 'consideration' },
     { label: 'SQL', canon: 'conversion' },
-    { label: 'Opp', canon: 'conversion', channels: [] },
+    { label: 'Opp', canon: 'conversion', channels: DEAL },
     { label: 'Closed', canon: 'retention' },
   ],
   plg: [
@@ -62,7 +68,7 @@ export const PLAYBOOK_FUNNELS: Record<string, PlaybookStage[]> = {
     { label: 'Lead', canon: 'consideration', channels: CAPTURE },
     { label: 'MQL', canon: 'consideration' },
     { label: 'SQL', canon: 'conversion' },
-    { label: 'Opp', canon: 'conversion', channels: [] },
+    { label: 'Opp', canon: 'conversion', channels: DEAL },
     { label: 'Closed', canon: 'retention' },
   ],
   lifecycle: [
@@ -98,7 +104,9 @@ export const PLAYBOOK_FUNNELS: Record<string, PlaybookStage[]> = {
     { label: 'Analyze', canon: 'retention' },
   ],
   outbound: [
-    { label: 'Contact', canon: 'awareness' },
+    // Outbound's first touch IS the rep's cold email / DM, so the outreach
+    // channel claims Contact rather than sitting in Reply with the follow-ups.
+    { label: 'Contact', canon: 'awareness', channels: ['sales-outreach'] },
     { label: 'Reply', canon: 'consideration' },
     { label: 'Meeting', canon: 'conversion' },
     { label: 'Opportunity', canon: 'retention' },

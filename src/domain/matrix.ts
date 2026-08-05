@@ -77,10 +77,12 @@ const eng = (r: TrafficRow): number => (r.engagement ? r.engagement.likes + r.en
 
 // High-leverage channels to open a stage that no channel currently reaches.
 export const SUGGEST_BY_STAGE: Record<FunnelStage, ChannelId[]> = {
-  awareness: ['instagram', 'youtube', 'tiktok'],
-  consideration: ['linkedin', 'blog', 'youtube'],
-  conversion: ['landing-page', 'email', 'google-search'],
-  retention: ['email', 'sms', 'push'],
+  awareness: ['instagram', 'youtube', 'tiktok', 'sales-outreach'],
+  consideration: ['linkedin', 'blog', 'youtube', 'sales-outreach'],
+  // The closing surfaces lead the conversion list: a flow that only offers a
+  // landing page has no way to finish.
+  conversion: ['landing-page', 'checkout', 'proposal', 'email', 'google-search', 'sales-collateral'],
+  retention: ['email', 'post-purchase', 'sms', 'push'],
 }
 
 /** The CTA for a stage, laddering toward the audience's chosen outcome. No em

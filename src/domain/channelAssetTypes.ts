@@ -59,6 +59,12 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   'landing-page': [t('lead-capture', 'Lead capture page'), t('sales', 'Sales/offer page'), t('webinar-reg', 'Webinar/event registration'), t('waitlist', 'Waitlist/coming soon')],
   'lead-magnet': [t('ebook', 'Ebook'), t('whitepaper', 'Whitepaper'), t('checklist', 'Checklist'), t('template', 'Template'), t('webinar', 'Webinar'), t('cheat-sheet', 'Cheat sheet')],
   events: [t('screening', 'Screening'), t('panel', 'Panel / talk'), t('popup', 'Pop-up / activation'), t('workshop', 'Workshop')],
+  // sales & commerce — the assets a flow needs to actually close
+  'sales-outreach': [t('cold-email', 'Cold email'), t('follow-up', 'Follow-up email'), t('linkedin-dm', 'LinkedIn DM'), t('sequence', 'Sequence / cadence'), t('call-script', 'Call script'), t('voicemail', 'Voicemail script'), t('break-up', 'Break-up email')],
+  'sales-collateral': [t('deck', 'Sales deck'), t('one-pager', 'One-pager'), t('case-study', 'Case study pack'), t('battlecard', 'Battlecard'), t('roi', 'ROI / value calculator'), t('demo-script', 'Demo script'), t('objection', 'Objection / FAQ doc'), t('security', 'Security / compliance pack')],
+  proposal: [t('proposal', 'Proposal'), t('quote', 'Quote / pricing sheet'), t('sow', 'Scope of work'), t('contract', 'Contract / order form'), t('action-plan', 'Mutual action plan'), t('recap', 'Deal recap email')],
+  checkout: [t('cart', 'Cart page'), t('checkout', 'Checkout page'), t('plan-selector', 'Pricing / plan selector'), t('order-bump', 'Order bump'), t('upsell', 'Upsell / cross-sell'), t('trust', 'Trust & guarantee block'), t('promo', 'Promo / discount offer')],
+  'post-purchase': [t('confirmation', 'Confirmation / thank-you page'), t('onboarding', 'Onboarding / setup guide'), t('review-request', 'Review request'), t('referral', 'Referral offer'), t('upsell', 'Post-purchase upsell'), t('survey', 'NPS / feedback survey')],
 }
 
 const FALLBACK: AssetType[] = [t('post', 'Post')]

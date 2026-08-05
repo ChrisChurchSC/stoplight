@@ -1,7 +1,7 @@
 import type { ChannelId, MediaType } from './types'
 
 /** How a channel is funded/owned — drives the sidebar grouping. */
-export type ChannelKind = 'paid' | 'organic' | 'owned'
+export type ChannelKind = 'paid' | 'organic' | 'owned' | 'sales'
 
 /**
  * Per-channel configuration: labeling, the platform it belongs to, accepted
@@ -143,6 +143,31 @@ const CHANNELS_DEFS: Record<ChannelId, ChannelConfig> = {
     id: 'events', label: 'Events', short: 'EVENT', kind: 'owned', platform: 'Events',
     color: '#ec4899', accepts: ['image', 'video', 'text'], bestTimes: [t(18)],
   },
+
+  // ---------------- Sales & commerce — the last mile ----------------
+  // Marketing channels hand a person over; these are the surfaces that close.
+  // Without them a flow stops at the landing page and the conversion / Opp /
+  // Closed stages have nothing that can legitimately land in them.
+  'sales-outreach': {
+    id: 'sales-outreach', label: 'Sales outreach', short: 'OUTRCH', kind: 'sales', platform: 'Sales',
+    color: '#4f46e5', accepts: ['text', 'link'], bestTimes: [t(8), t(16)],
+  },
+  'sales-collateral': {
+    id: 'sales-collateral', label: 'Sales collateral', short: 'COLLAT', kind: 'sales', platform: 'Sales',
+    color: '#0f766e', accepts: ['text', 'image', 'link', 'video'], bestTimes: [t(10)],
+  },
+  proposal: {
+    id: 'proposal', label: 'Proposal & quote', short: 'PROP', kind: 'sales', platform: 'Sales',
+    color: '#b45309', accepts: ['text', 'link'], bestTimes: [t(10)],
+  },
+  checkout: {
+    id: 'checkout', label: 'Checkout', short: 'CHKOUT', kind: 'sales', platform: 'Commerce',
+    color: '#047857', accepts: ['text', 'image', 'link'], bestTimes: [t(10)],
+  },
+  'post-purchase': {
+    id: 'post-purchase', label: 'Post-purchase', short: 'POSTPUR', kind: 'sales', platform: 'Commerce',
+    color: '#c026d3', accepts: ['text', 'image', 'link'], bestTimes: [t(10)],
+  },
 }
 
 /** A neutral config for a channel id we don't define (legacy / ingested labels
@@ -181,6 +206,7 @@ export const KIND_ORDER: { kind: ChannelKind; label: string }[] = [
   { kind: 'paid', label: 'Paid' },
   { kind: 'organic', label: 'Organic' },
   { kind: 'owned', label: 'Owned' },
+  { kind: 'sales', label: 'Sales & commerce' },
 ]
 
 export const channelsByKind = (kind: ChannelKind): ChannelConfig[] =>
@@ -209,6 +235,21 @@ const CHANNEL_ALIASES: Record<string, ChannelId> = {
   web: 'website',
   site: 'website',
   'landing page': 'landing-page',
+  // sales & commerce sub-formats people name instead of the channel
+  outbound: 'sales-outreach',
+  'cold email': 'sales-outreach',
+  'sales email': 'sales-outreach',
+  'sales deck': 'sales-collateral',
+  'one-pager': 'sales-collateral',
+  'one pager': 'sales-collateral',
+  battlecard: 'sales-collateral',
+  quote: 'proposal',
+  sow: 'proposal',
+  cart: 'checkout',
+  'cart page': 'checkout',
+  'checkout page': 'checkout',
+  'thank you page': 'post-purchase',
+  'confirmation page': 'post-purchase',
 }
 const HOST_TO_CHANNEL: Record<string, ChannelId> = {
   'youtube.com': 'youtube',

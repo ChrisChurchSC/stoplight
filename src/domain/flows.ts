@@ -9,7 +9,7 @@ import type { ChannelId, MediaType } from './types'
  * palette the picker draws from; each preset maps to a real Deliverable the seeder
  * understands (channel + asset type + media + cadence).
  */
-/** The eight motions a deliverable can belong to. Every preset below carries exactly one. */
+/** The nine motions a deliverable can belong to. Every preset below carries exactly one. */
 export type DeliverableGroup =
   | 'Social'
   | 'Email & lifecycle'
@@ -19,9 +19,10 @@ export type DeliverableGroup =
   | 'Video'
   | 'Lead magnets'
   | 'Events'
+  | 'Sales & commerce'
 
 /**
- * THE colour table for the eight motions, and the only one. A motion's toolbar icon, the cards
+ * THE colour table for the nine motions, and the only one. A motion's toolbar icon, the cards
  * its deliverables become, those cards' chips, ports and selection rings all read from here, so
  * a paid ad is the same red in the palette as it is on the board.
  *
@@ -39,6 +40,7 @@ export const GROUP_TONE: Record<DeliverableGroup, string> = {
   Video: '#8a34d6',
   'Lead magnets': '#b8860b',
   Events: '#0f766e',
+  'Sales & commerce': '#4f46e5',
 }
 
 /** Social blue is the fallback: it is what an unknown channel used to get, and still should. */
@@ -144,6 +146,17 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'screening', label: 'Screening', channel: 'events', assetType: 'screening', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   { key: 'panel', label: 'Panel / talk', channel: 'events', assetType: 'panel', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   { key: 'workshop', label: 'Workshop', channel: 'events', assetType: 'workshop', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  // Sales & commerce — the deliverables that close a flow. Everything above hands a
+  // person over to something; until these existed there was nothing to hand them to,
+  // so a campaign stopped at the landing page.
+  { key: 'outreach-sequence', label: 'Outreach sequence', channel: 'sales-outreach', assetType: 'sequence', media: 'text', runtime: 'always-on', perMonth: 2, group: 'Sales & commerce' },
+  { key: 'cold-email', label: 'Cold email', channel: 'sales-outreach', assetType: 'cold-email', media: 'text', runtime: 'always-on', perMonth: 4, group: 'Sales & commerce' },
+  { key: 'sales-deck', label: 'Sales deck', channel: 'sales-collateral', assetType: 'deck', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Sales & commerce', brand: true },
+  { key: 'sales-one-pager', label: 'One-pager', channel: 'sales-collateral', assetType: 'one-pager', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Sales & commerce', brand: true },
+  { key: 'proposal-doc', label: 'Proposal', channel: 'proposal', assetType: 'proposal', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Sales & commerce', brand: true },
+  { key: 'checkout-page', label: 'Checkout page', channel: 'checkout', assetType: 'checkout', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Sales & commerce', brand: true },
+  { key: 'cart-page', label: 'Cart page', channel: 'checkout', assetType: 'cart', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Sales & commerce', brand: true },
+  { key: 'thank-you-page', label: 'Confirmation / thank-you page', channel: 'post-purchase', assetType: 'confirmation', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Sales & commerce', brand: true },
 ]
 
 export const presetByKey = (key: string): DeliverablePreset | undefined => DELIVERABLE_PRESETS.find((p) => p.key === key)

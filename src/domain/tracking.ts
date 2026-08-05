@@ -41,6 +41,11 @@ export const TRACKING_CONVENTION: Record<ChannelId, { source: string; medium: st
   'landing-page': { source: 'site', medium: 'web' },
   'lead-magnet': { source: 'leadmagnet', medium: 'content' },
   events: { source: 'events', medium: 'offline' },
+  'sales-outreach': { source: 'sales', medium: 'outreach' },
+  'sales-collateral': { source: 'sales', medium: 'collateral' },
+  proposal: { source: 'sales', medium: 'proposal' },
+  checkout: { source: 'site', medium: 'checkout' },
+  'post-purchase': { source: 'site', medium: 'post_purchase' },
 }
 
 /** Expected tracking per channel: the pixel/tag and the conversion event. */
@@ -200,6 +205,13 @@ export const CHANNEL_TRACKING: Record<ChannelId, TrackingItem[]> = {
   'landing-page': [ti('GA4', 'analytics'), ti('GTM container', 'tagmanager'), ti('Conversion event', 'event'), UTM],
   'lead-magnet': [ti('GA4', 'analytics'), ti('Form conversion event', 'event'), UTM],
   events: [ti('GA4', 'analytics'), ti('RSVP / registration event', 'event'), UTM],
+  // sales & commerce: attribution moves from the ad platform to the CRM and the
+  // store. The purchase event is the one that closes the loop back to media.
+  'sales-outreach': [ti('CRM sequence tracking', 'esp'), UTM, ti('Opt-out compliance', 'compliance')],
+  'sales-collateral': [ti('Doc / deck view tracking', 'analytics'), UTM],
+  proposal: [ti('Proposal view tracking', 'analytics'), ti('CRM deal stage', 'event'), UTM],
+  checkout: [ti('GA4', 'analytics'), ti('Purchase event', 'event'), ti('Server-side purchase', 'server'), ti('Ad platform pixels', 'pixel'), UTM],
+  'post-purchase': [ti('GA4', 'analytics'), ti('Purchase event', 'event'), UTM],
 }
 
 /**
@@ -215,7 +227,9 @@ export const INSTALLED_TRACKING = new Set<string>([
   'ESP link tracking', 'Link tracking', 'Delivery + click tracking',
   // not yet set up: Conversions API, Events API, Enhanced conversions, Domain
   // verification, GTM container, Ad platform pixels, X Pixel, Snap Pixel, Reddit
-  // Pixel, Suppression / unsubscribe, Opt-out compliance.
+  // Pixel, Suppression / unsubscribe, Opt-out compliance, and the sales/commerce
+  // set (CRM sequence tracking, Doc / deck view tracking, Proposal view tracking,
+  // CRM deal stage, Purchase event, Server-side purchase).
 ])
 
 /** The "is the channel itself connected" item — always first, marked set up
@@ -224,6 +238,8 @@ function channelSetupItem(channel: ChannelId): TrackingItem {
   const c = CHANNELS[channel]
   if (c.kind === 'paid') return ti(`${c.platform} Ads account`, 'channel')
   if (c.kind === 'organic') return ti(`${c.platform} profile`, 'channel')
+  if (c.kind === 'sales')
+    return ti(c.platform === 'Commerce' ? 'Store / checkout connected' : 'CRM connected', 'channel')
   return ti('Account connected', 'channel')
 }
 

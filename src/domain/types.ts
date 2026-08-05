@@ -41,6 +41,12 @@ export type ChannelId =
   | 'landing-page'
   | 'lead-magnet'
   | 'events'
+  // sales & commerce — the last mile that closes the flow
+  | 'sales-outreach'
+  | 'sales-collateral'
+  | 'proposal'
+  | 'checkout'
+  | 'post-purchase'
 
 /**
  * Lifecycle of a single trafficked row. The review gate (draft -> in_review ->

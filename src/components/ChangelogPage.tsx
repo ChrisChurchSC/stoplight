@@ -23,6 +23,21 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.22',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Campaigns can be taken all the way to the close. There is a new Sales & commerce group of channels: sales outreach (cold emails, follow-ups, sequences, call scripts), sales collateral (decks, one-pagers, battlecards, ROI calculators), proposals and quotes, checkout (cart, checkout, plan selector, order bumps) and post-purchase (confirmation pages, onboarding, review requests, referral offers). Until now the last thing a flow could contain was a landing page, so every campaign stopped one step short of the thing it was for.',
+          'The conversion stage has somewhere to land. Three channels used to resolve to conversion, all of them media or a page, which is why the stage looked thin on a campaign that was converting perfectly well offline. A proposal, a checkout and the collateral worked in a live deal now sit there as first-class assets, and a pricing or comparison page is read as a decision surface rather than as education.',
+          'The Opp band is no longer empty. The demand-gen and sales-led playbooks drew that band with nothing in it because no channel existed that could honestly land there. Proposals and sales collateral now fill it, and outbound campaigns start where they really start, with the rep\'s first email in Contact rather than folded in with the follow-ups.',
+          'Each new channel arrives with the rest of what a channel needs: its own copy fields (the ask on an outreach email, the terms on a proposal, the guarantee on a checkout), its own UTM convention, and its own tracking checklist, which for these is the CRM and the store rather than an ad pixel.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.21',
     dateLabel: 'August 4, 2026',
     groups: [

@@ -30,6 +30,10 @@ const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
   tiktok: 'awareness',
   youtube: 'awareness',
   pinterest: 'awareness',
+  // A cold email is a first touch like any other: the channel's primary type is
+  // 'cold-email', so the channel reaches. Its follow-ups nurture (see the
+  // type-aware override below).
+  'sales-outreach': 'awareness',
   // Mid funnel — education, nurture, demand gen.
   'linkedin-ads': 'consideration',
   'google-demand': 'consideration',
@@ -38,14 +42,20 @@ const STAGE_BY_CHANNEL: Record<ChannelId, FunnelStage> = {
   website: 'consideration',
   'lead-magnet': 'consideration',
   events: 'consideration',
-  // Bottom funnel — high intent, conversion.
+  // Bottom funnel — high intent, conversion. The sales + commerce surfaces are
+  // what actually closes a flow: the collateral worked in a live deal, the
+  // proposal that asks for the signature, the checkout that takes the money.
   'google-search': 'conversion',
   pmax: 'conversion',
   'landing-page': 'conversion',
+  'sales-collateral': 'conversion',
+  proposal: 'conversion',
+  checkout: 'conversion',
   // Post-conversion — lifecycle, retention.
   email: 'retention',
   sms: 'retention',
   push: 'retention',
+  'post-purchase': 'retention',
 }
 
 /**
@@ -58,6 +68,17 @@ export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelSt
   if (channel === 'youtube')
     return assetType === 'short' || assetType === 'community' ? 'awareness' : 'consideration'
   if (channel === 'blog' && assetType === 'case-study') return 'conversion'
+  // A first touch is a first touch even when a rep sends it: cold outreach reaches
+  // (the channel default), and everything that comes after it nurtures.
+  if (channel === 'sales-outreach')
+    return assetType === 'follow-up' ||
+      assetType === 'call-script' ||
+      assetType === 'voicemail' ||
+      assetType === 'break-up'
+      ? 'consideration'
+      : 'awareness'
+  // A pricing page is a decision surface, not education.
+  if (channel === 'website' && (assetType === 'pricing' || assetType === 'comparison')) return 'conversion'
   if (channel === 'email') {
     // Lifecycle emails (onboarding, win-back) are post-conversion; nurture /
     // newsletter / announcement drive prospects to content + offers, so they sit
