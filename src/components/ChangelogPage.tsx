@@ -23,6 +23,27 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.27',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Pattern card can be wired to a single asset, and the board now says so. Dropping a connection on one post has always applied to just that post, but an asset card was the only card on the canvas that never lit up under a line, and everything that is not a target dims while you drag, so the board actively said you could not land there. Asset cards now highlight like every other target.',
+          'Each target says what landing on it would do: attach to this campaign, apply to every asset in this channel, or apply to this asset only. The ring could say "this one" but not that a channel feeds everything under it while a post feeds only itself, which is the whole reason to drop on one asset.',
+          'Pattern has its own button in the toolbar instead of sitting behind the Message caret. Every other card in that group answers what the copy says; a Pattern answers how it is built, and it is the one you reach for while looking at a single post.',
+          'The Pattern card looks like what it is. It carries a wave across its head, and once linked it shows the kind of pattern (hook, format, trend) and its example line, because "Teardown" and "Objection-first" are names for structures and the structure is the thing you are choosing between.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Archiving a pattern a card already uses no longer makes the card look empty. The picker hides archived patterns so it cannot offer a shape that generation drops, which meant a card naming one fell back to "Link a pattern…" while it was still wired and still feeding the copy. It now shows the pattern it names, marked archived, and the card carries an Archived warning. A card that names nothing is still never offered one.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.26',
     dateLabel: 'August 5, 2026',
     groups: [

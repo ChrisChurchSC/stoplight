@@ -46,7 +46,7 @@ import { MESSAGE_STAGE_OPTIONS, type Message } from '../domain/message'
 import { type Concept } from '../domain/concept'
 import { type Voice } from '../domain/voice'
 import { type Season } from '../domain/season'
-import { type Pattern, PATTERN_TYPE_OPTIONS, usablePatterns } from '../domain/pattern'
+import { type Pattern, PATTERN_TYPE_OPTIONS, isPatternRetired, usablePatterns } from '../domain/pattern'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
 import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
 import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
@@ -354,8 +354,17 @@ const INPUT_FAMILIES: { family: ObjectFamily; label: string }[] = [
   { family: 'when', label: 'When' },
   { family: 'draws', label: 'What it draws on' },
 ]
-/** Brand has its own button on the bar, so it must not also appear inside a family caret. */
-const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand', 'product'])
+/**
+ * Kinds with their OWN button on the bar, so they must not also appear inside a family caret.
+ *
+ * Pattern is here because of what it answers rather than how often it is used. Every other kind in
+ * the `says` family answers WHAT the copy says — which angle, which proof, which voice — so leading
+ * that group with Message and hiding the rest behind a caret costs you nothing but a click. A
+ * Pattern answers HOW the copy is built, and it is the only kind meant to be pinned to a single
+ * asset, so it is the one card in that family you reach for while looking at one post. Behind
+ * Message's caret it was a shape decision filed under the angle menu.
+ */
+const STANDALONE_KINDS = new Set<CanvasObjectKind>(['brand', 'product', 'pattern'])
 /**
  * The card that CLOSES each gap — what the suggestion toast offers to drop on the canvas.
  *
@@ -4920,7 +4929,26 @@ export function FlowsView() {
   // a form, and a card that lets you write into one without picking it is how a campaign ends up
   // carrying an idea no other campaign can find again.
   const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
-  const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
+  /**
+   * `refId` is the record this card is ALREADY pointing at, and it is passed so the list can contain
+   * an option the list would never offer.
+   *
+   * Only Pattern needs it, because Pattern is the only kind with a retirement rule: `patterns` is
+   * filtered by usablePatterns so the picker cannot offer a shape that generation will drop. That is
+   * right for choosing and wrong for displaying — archive a pattern that a card already names and the
+   * select finds no option matching its value, falls back to the placeholder, and the card reads
+   * "Link a pattern…" while it is still wired and still on the board. The card said one thing and the
+   * picker said the opposite.
+   *
+   * So the retired record is appended, labelled, and only when a card actually names it: it is a
+   * statement about this card, never an option on a fresh one.
+   */
+  const objectOptions = (kind: CanvasObjectKind, refId?: string): { id: string; label: string }[] | null => {
+    if (kind === 'pattern') {
+      const opts = named(patterns)
+      const wired = refId && !opts.some((o) => o.id === refId) ? allPatterns.find((p) => p.id === refId) : undefined
+      return wired ? [...opts, { id: wired.id, label: `${wired.name || 'Untitled'} (archived)` }] : opts
+    }
     switch (kind) {
       case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
       // A Data source card's refId is a DATA SET id, whatever route filled it. This used to return
@@ -4934,7 +4962,6 @@ export function FlowsView() {
       case 'message': return named(messages)
       case 'concept': return named(concepts)
       case 'season': return named(seasons)
-      case 'pattern': return named(patterns)
       case 'voice': return named(voices)
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
@@ -8964,7 +8991,8 @@ export function FlowsView() {
                       )
                     })()
                   ) : (() => {
-                    const opts = objectOptions(nt.kind)
+                    // refId so a card naming a RETIRED pattern still shows what it names. See objectOptions.
+                    const opts = objectOptions(nt.kind, nt.refId)
                     if (!opts) return null
                     const noun = meta.label.toLowerCase()
                     // Naming a new record: the picker becomes a name field. Enter creates and links
@@ -9011,6 +9039,34 @@ export function FlowsView() {
                             fresh brand dead-ends here with nowhere to go. */}
                         {CREATABLE_KINDS.has(nt.kind) && <option value="__new__">+ New {noun}…</option>}
                       </select>
+                    )
+                  })()}
+                  {/* THE SHAPE, ON THE CARD. Every other input card is fully described by the record
+                      it names: "Enterprise, cold" tells you what the Audience card does. A Pattern's
+                      name does not — "Teardown" and "Objection-first" are labels for structures, and
+                      the structure is the thing you are choosing between. So the card shows the two
+                      fields that say which shape this is: its TYPE, and the example line.
+
+                      Read-only, like the Data source card's sheet preview: choosing is authoring and
+                      authoring happens in the inspector. This is the card saying what it carries. */}
+                  {nt.kind === 'pattern' && (() => {
+                    const pat = nt.refId ? allPatterns.find((x) => x.id === nt.refId) : null
+                    if (!pat) return null
+                    // The example is what a shape looks like in practice, so it leads; the
+                    // description is the fallback for a pattern nobody has written an example for.
+                    const line = (pat.example || pat.description || '').trim()
+                    return (
+                      <div className="flow-pat-prev">
+                        {/* An ARCHIVED pattern still draws, still reads as wired, and is silently
+                            dropped at generation (isPatternRetired). The card is the only place that
+                            can say so before you wonder why the copy ignored it. */}
+                        {isPatternRetired(pat) ? (
+                          <span className="flow-pat-type retired" title="Archived patterns are dropped when the copy is written. Pick another, or move this one back to active.">Archived</span>
+                        ) : pat.type ? (
+                          <span className="flow-pat-type">{pat.type}</span>
+                        ) : null}
+                        {line && <span className="flow-pat-line">{line}</span>}
+                      </div>
                     )
                   })()}
                   {/* Only a markup card (a sticky) keeps a text box: the text IS the card. On every
@@ -9193,8 +9249,17 @@ export function FlowsView() {
                             return (
                               <div className="flow-branch-row" key={r.id}>
                                 <span className="flow-branch-port" style={{ borderColor: d.tone }} />
+                                {/* A DROP TARGET like any other card. The wiring always worked —
+                                    rowsForTarget resolves a row id and attachToTarget writes the
+                                    refs onto that one asset — but this card was the only node that
+                                    never lit up under a line, and `.connecting .flow-node:not(
+                                    .drop-target)` dims everything else, so the board actively said
+                                    "you cannot land here" about the one gesture that pins a Pattern
+                                    to a single post. Builder subcards below stay out: their ids are
+                                    `node:index` placeholders with no row behind them yet, so a wire
+                                    to one would resolve to nothing. */}
                                 <div
-                                  className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
+                                  className={`flow-node flow-brief-node${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
@@ -10549,6 +10614,10 @@ export function FlowsView() {
               })),
             )
           })}
+          {/* PATTERN, on the bar rather than behind the `says` caret. It is the kind you add while
+              looking at one asset ("build this one as a teardown"), and a card you reach for that
+              way should not cost a caret, a menu and a read. See STANDALONE_KINDS. */}
+          {palBtn('pattern')}
           <span className="flow-tb-divider" />
           {palBtn('note')}
         </div>
