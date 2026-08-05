@@ -15,6 +15,10 @@ import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnde
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { edgeKey, onTrail, trailSide, trailThrough } from '../domain/cardTrail'
 import { assetBadge } from '../domain/assetBadge'
+import {
+  CTA_KINDS, CTA_KIND_META, ctaForHandoff, danglingCtas, freshCtaId, handoffWhere, handoffsFrom, uncoveredHandoffs,
+  type AssetCta, type CtaKind, type Handoff,
+} from '../domain/assetCtas'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -35,7 +39,7 @@ import { can } from '../domain/access'
 import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENIORITIES } from '../domain/taxonomy'
-import { BufferedInput } from './BufferedInput'
+import { BufferedInput, BufferedTextarea } from './BufferedInput'
 // Only the campaign brief picks from a list now — the object cards' own forms are gone.
 import { RecordCombo } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
@@ -4002,6 +4006,176 @@ export function FlowsView() {
       </>
     )
   }
+
+  /**
+   * The assets one asset shares a journey with: its campaign's own rows.
+   *
+   * Resolved from the row's OWN campaign rather than from viewRows, which is keyed on the campaign
+   * currently open on the canvas and is empty until one has been built. The grid and calendar panels
+   * reach this inspector for a campaign that is still being assembled (see gridPick), and there the
+   * handoffs would otherwise all read as "no longer in this campaign" — the same trap the asset
+   * lookup in that panel already had to climb out of.
+   */
+  const journeyRowsFor = (row: TrafficRow): TrafficRow[] => {
+    const own = canvases.find((c) => c.name === row.campaign)?.rows.filter((r) => !r.archivedAt)
+    if (own?.length) return own
+    return viewRows.length ? viewRows : [row]
+  }
+
+  /**
+   * CTAs: WHAT HAS TO BE BUILT INTO THIS ASSET.
+   *
+   * Every journey line out of a card is a promise somebody builds a control at this end of it, and
+   * the board has always drawn the line without ever naming the cost. An ad pointing at a landing
+   * page owes a button. A page that hands to a nurture sequence owes a form, because there is no way
+   * to email a person who has not given you an address. A card that hands to checkout owes a way to
+   * take money. Those are exactly the items that get found late, by whoever is building the asset.
+   *
+   * SUGGESTED, NEVER FILLED IN. The journey proposes one entry per uncovered handoff and the person
+   * presses Add. It cannot know the capture already lives in the site header, or that the button is
+   * the one the template ships with, so a row silently growing entries it did not ask for would be a
+   * spec nobody wrote claiming to be one somebody did. Same reason the copy writer is not sent this:
+   * `messaging.cta` is the words, this is the mechanism under them, and they are edited apart.
+   *
+   * Shared by the canvas panel and the grid/calendar panel, because both render renderPostInspector.
+   */
+  const renderCtas = (row: TrafficRow) => {
+    const rows = journeyRowsFor(row)
+    const ctas = row.ctas ?? []
+    const handoffs = handoffsFrom(row, rows)
+    const uncovered = uncoveredHandoffs(row, rows)
+    const dangling = new Set(danglingCtas(row, rows).map((c) => c.id))
+    const unbuilt = ctas.filter((c) => !c.built).length
+
+    // An empty list is cleared off the row rather than stored as [], so an asset with no CTAs looks
+    // the same as one from before this existed instead of carrying an empty spec around.
+    const write = (next: AssetCta[]) => void updateRow(row.id, { ctas: next.length ? next : undefined })
+    const patch = (id: string, p: Partial<AssetCta>) => write(ctas.map((c) => (c.id === id ? { ...c, ...p } : c)))
+    const addFor = (h?: Handoff) => {
+      const seed = h ? ctaForHandoff(h.row) : null
+      write([
+        ...ctas,
+        seed && h
+          ? { id: freshCtaId(), kind: seed.kind, label: seed.label, note: seed.note, target: h.row.assetName }
+          : { id: freshCtaId(), kind: 'button' as CtaKind, label: '' },
+      ])
+    }
+
+    return (
+      <>
+        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+          CTAs{ctas.length ? ` · ${ctas.length}` : ''}
+        </label>
+        {/* "All built" has to mean built, so an empty list says empty rather than claiming a clean
+            sheet it got by having nothing on it. */}
+        <p className="flow-inspect-note" style={{ marginBottom: 10 }}>
+          The buttons, forms and inputs this asset has to carry.{' '}
+          {ctas.length === 0
+            ? handoffs.length === 0
+              ? 'Nothing in this campaign leads out of it, so nothing is owed.'
+              : 'None listed yet.'
+            : unbuilt > 0
+              ? `${unbuilt} still to build.`
+              : 'All built.'}
+        </p>
+
+        {ctas.length > 0 && (
+          <div className="flow-cta-list">
+            {ctas.map((c) => (
+              <div key={c.id} className={`flow-cta${c.built ? ' built' : ''}${dangling.has(c.id) ? ' dangling' : ''}`}>
+                <div className="flow-cta-h">
+                  <label className="flow-cta-check" title={c.built ? 'Built' : 'Not built yet'}>
+                    <input
+                      type="checkbox"
+                      checked={!!c.built}
+                      aria-label={`Built into the asset: ${c.label || CTA_KIND_META[c.kind].label}`}
+                      onChange={(e) => patch(c.id, { built: e.target.checked })}
+                    />
+                    <span className="flow-cta-box" aria-hidden="true">✓</span>
+                  </label>
+                  <select
+                    className="flow-cta-kind"
+                    value={c.kind}
+                    aria-label="What kind of thing this is"
+                    title={CTA_KIND_META[c.kind].blurb}
+                    onChange={(e) => patch(c.id, { kind: e.target.value as CtaKind })}
+                  >
+                    {CTA_KINDS.map((k) => (
+                      <option key={k} value={k}>{CTA_KIND_META[k].label}</option>
+                    ))}
+                  </select>
+                  <button className="flow-cta-del" title="Remove" aria-label="Remove this CTA" onClick={() => write(ctas.filter((x) => x.id !== c.id))}>✕</button>
+                </div>
+                <BufferedInput
+                  className="flow-inspect-input flow-cta-label"
+                  value={c.label}
+                  placeholder={c.kind === 'input' || c.kind === 'form' ? 'What it is called' : 'The words on it'}
+                  onCommit={(v) => patch(c.id, { label: v })}
+                />
+                {/* WHERE IT GOES, from the campaign's own assets. Free text would let a button
+                    point at a name no asset has, which is the gap this section exists to close. */}
+                <select
+                  className="flow-inspect-input flow-inspect-select flow-cta-target"
+                  value={c.target ?? ''}
+                  aria-label="Where it takes them"
+                  onChange={(e) => patch(c.id, { target: e.target.value || undefined })}
+                >
+                  <option value="">Goes nowhere in this campaign</option>
+                  {/* The dangling target stays in the list while it is set, so the control shows what
+                      is actually on the row rather than silently reading as "goes nowhere". */}
+                  {c.target && !rows.some((r) => r.assetName === c.target) && (
+                    <option value={c.target}>{c.target} (not in this campaign)</option>
+                  )}
+                  {[...new Set(rows.filter((r) => r.id !== row.id).map((r) => r.assetName))].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                {/* A textarea, because the note is the build instruction — which fields, where it
+                    posts, what it needs — and a one-line input showed the first six words of it. */}
+                <BufferedTextarea
+                  className="flow-inspect-input flow-cta-note"
+                  rows={2}
+                  value={c.note ?? ''}
+                  placeholder="What has to be built"
+                  onCommit={(v) => patch(c.id, { note: v.trim() || undefined })}
+                />
+                {dangling.has(c.id) && (
+                  <span className="flow-cta-warn">This points at an asset that is not in the campaign, so it leads nowhere.</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* THE HANDOFFS NOTHING ACCOUNTS FOR. One line per link out of this asset with no CTA
+            against it, naming the mechanism the destination requires rather than the intent. */}
+        {uncovered.length > 0 && (
+          <div className="flow-cta-need">
+            {uncovered.map((h) => {
+              const s = ctaForHandoff(h.row)
+              return (
+                <div key={h.row.id} className="flow-cta-needrow">
+                  <div className="flow-cta-needtxt">
+                    <span className="flow-cta-needhead">
+                      {h.via === 'branchOf' ? 'Leads to' : 'Links to'} {h.row.assetName}
+                      <span className="flow-cta-needwhere"> · {handoffWhere(h.row)}</span>
+                    </span>
+                    <span className="flow-cta-needwhy">
+                      Needs {CTA_KIND_META[s.kind].label.toLowerCase()}. {s.note}
+                    </span>
+                  </div>
+                  <button className="flow-cta-add" onClick={() => addFor(h)}>Add</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <button className="flow-insp-open subtle" onClick={() => addFor()}>+ Add a CTA</button>
+      </>
+    )
+  }
+
   /**
    * A list of context rows, shared by the campaign brief, a deliverable and a post so all three read
    * the same. `onRemove` is omitted where the row is inherited and cannot be unwired from here.
@@ -8012,6 +8186,13 @@ export function FlowsView() {
               : 'Written by the model.'}
           </p>
         )}
+
+        {/* WHAT HAS TO BE BUILT INTO IT. Directly under the copy, because the words and the control
+            they sit on are the same asset and were previously answered in two different places: the
+            copy here, the mechanism nowhere. Above "Connected to" on purpose — that section is
+            about which CARDS instruct this post, which is a different question from what a person
+            has to build. */}
+        {renderCtas(selPost)}
 
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the

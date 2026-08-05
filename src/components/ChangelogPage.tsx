@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.29',
+    version: 'v1.30',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -33,6 +33,21 @@ const RELEASES: Release[] = [
           'The picker itself shows those lines too. Choosing between "Ladder", "Open loop" and "Third rail" used to mean already knowing what all three were, because a dropdown could only offer their names. Every record now comes with its own description, and a library big enough to scroll comes with a search box.',
           'The name field is gone from the card, because the record already carries the name. It was a second place to write the same word, and the two drifted apart the moment either changed. Naming a card something the library should not be called is still there, in the inspector, where it is a deliberate act rather than the first thing a blank card asks you for. A sticky note keeps its name field, having no record to inherit one from.',
           'Making a record you do not have yet is still one gesture from the card, and unlinking one is now an option on the list rather than a blank row at the top of it.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.29',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Every asset has a CTAs field: the buttons, forms, inputs and functionality that have to be built into it. Open any asset from the canvas, the grid or the calendar and it is there under the copy. Each entry carries what kind of thing it is, the words on it, where it takes you, a note on what has to be built, and a tick for whether it exists yet, so a spec turns into a checklist without leaving the asset.',
+          'The journey says what it costs. Every line out of an asset is a promise that somebody builds a control at this end of it, and the board has always drawn the line without naming the price. Now an asset with a link nothing accounts for lists the gap and proposes the entry, read off where the line goes: a page you can link to needs a button, an email or an SMS needs a capture and a consent because there is no link to an inbox, a person needs a booking, a file needs the download and the gate you trade it for, and a webinar or an event needs a registration.',
+          'It suggests, it never fills anything in. Nothing is written to an asset until you press Add, because the campaign cannot know the capture already lives in your site header. Point a CTA somewhere else and the old gap reopens; point one at an asset that has left the campaign and it says so, rather than leaving a button that leads nowhere.',
+          'The CTA field and the CTA copy are separate on purpose. The copy is the words; this is the mechanism they sit on. An asset can carry three buttons and one line of CTA copy, and a form with no fields decided is a build task whether or not anybody has written its label yet.',
         ],
       },
     ],
