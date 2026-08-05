@@ -217,7 +217,7 @@ export interface ClientProfile {
  * exhaustive map below a member that means something different from all the others. It binds through
  * bindCampaignBrand instead.
  */
-export type FlowRefType = 'company' | 'person' | 'segment' | 'channel' | 'proof' | 'media-mix' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger'
+export type FlowRefType = 'company' | 'person' | 'segment' | 'channel' | 'proof' | 'media-mix' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger' | 'pattern'
 export interface FlowReference {
   type: FlowRefType
   id: string

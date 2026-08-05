@@ -92,6 +92,20 @@ export const OBJECT_META: Record<CanvasObjectKind, ObjectMeta> = {
     menuDesc: 'A moment to hit',
     icon: <><path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z" /><path d="M5 19c4-2 7-5 9.5-9.5" /></>,
   },
+  /**
+   * THE SHAPE THE COPY TAKES: a hook, a format, a structure, a trend worth riding.
+   *
+   * Every other input here answers WHAT the copy says — which audience, which angle, which proof.
+   * A Pattern answers HOW it is built, which is why it is the one kind meant to be pinned to a
+   * single asset: a campaign argues one message across twenty posts, and those twenty posts should
+   * not all be built the same way. Wired to the brief it rotates across the set instead, so the
+   * patterns you have chosen are the shapes the set spans.
+   */
+  pattern: {
+    label: 'Pattern', tone: '#6d8b2f', placeholder: 'Which pattern, hook or format?', role: 'input', family: 'says',
+    menuDesc: 'The shape the copy takes',
+    icon: <><path d="M3 8.5c2.2-3 4.4-3 6.6 0s4.4 3 6.6 0 4.4-3 4.8 0" /><path d="M3 15.5c2.2-3 4.4-3 6.6 0s4.4 3 6.6 0 4.4-3 4.8 0" /></>,
+  },
   note: {
     label: 'Note', tone: '#9aa1ac', placeholder: 'Type a note…', role: 'markup', family: 'markup',
     menuDesc: 'A sticky note on the board',

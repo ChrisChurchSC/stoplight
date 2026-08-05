@@ -123,7 +123,7 @@ import { type Message, freshMessageId } from '../domain/message'
 import { type Concept, freshConceptId } from '../domain/concept'
 import { type Season, freshSeasonId } from '../domain/season'
 import { type Voice, freshVoiceId } from '../domain/voice'
-import { type Pattern, freshPatternId } from '../domain/pattern'
+import { type Pattern, freshPatternId, patternForAsset, usablePatterns } from '../domain/pattern'
 import { type Trigger, freshTriggerId } from '../domain/trigger'
 import { snapshotsFromActuals } from '../domain/metricSnapshot'
 import { appendSnapshots } from '../adapters/metrics/metricSnapshots'
@@ -7143,6 +7143,18 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
           const tgs = get().triggers.filter(
             (x) => ofBrand(x) && (tgIds.has(x.id) || tgNames.has(x.name)),
           )
+          /**
+           * PATTERNS — the shape the copy takes, not what it says.
+           *
+           * Same terms as the rest (explicit refs only, brand-scoped, no library fallback), plus one
+           * rule no other pool needs: a RETIRED pattern never travels (see isPatternRetired, which
+           * the pickers share so they cannot offer what this drops).
+           */
+          const ptIds = new Set(refList.filter((x) => x.type === 'pattern').map((x) => x.id))
+          const ptNames = new Set(refList.filter((x) => x.type === 'pattern').map((x) => x.label))
+          const pats = usablePatterns(get().patterns).filter(
+            (x) => ofBrand(x) && (ptIds.has(x.id) || ptNames.has(x.name)),
+          )
           return {
             audiencePool: auds.length ? auds : libAudiences,
             activeProof: prf.length ? prf : proofPool,
@@ -7154,6 +7166,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
             datasets: dss,
             products: pds,
             triggers: tgs,
+            patterns: pats,
           }
         }
         const campaignPools = poolsFrom(campaignRefs)
@@ -7295,6 +7308,27 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
               : undefined,
             context: Object.keys(context).length ? context : undefined,
             hook: cond.hook,
+            /**
+             * THE SHAPE THIS ASSET IS BUILT TO.
+             *
+             * PER ASSET, and it is the only record-linked input that is. Personas, messages, voices
+             * and the rest ride on the request because they are true of the whole campaign; a
+             * pattern is true of one post, which is the entire reason to have it. A pattern pinned
+             * on the row (row.references) reaches that row alone, and one wired to the brief
+             * ROTATES across the set on the batch index, the same way proof does — so choosing
+             * three patterns spans three shapes instead of writing the same post twenty times.
+             *
+             * Unlike a Message, a Pattern is sent on its name alone. A message named "Q3 push"
+             * instructs nobody, which is why that pool drops any message with no angle written on
+             * it; a pattern named "Myth-bust" or "Before / after" already is the instruction, and
+             * the description, example and when-to-use sharpen it where somebody filled them in.
+             *
+             * ⚠️ Only the model writer follows this. The offline heuristic composes from a fixed
+             * set of execution formats and cannot read a pattern somebody wrote, so it ignores the
+             * field rather than claiming a shape it did not use (row.format still records what it
+             * actually wrote).
+             */
+            pattern: patternForAsset(eff.patterns, i),
             // WHAT THIS ASSET IS WRITTEN UNDER. Its own wired instructions first, then the
             // campaign-wide ones, then the legacy list. Order is the whole mechanism: buildDirection
             // keeps the first entry it sees per key, so a card wired straight to this deliverable
