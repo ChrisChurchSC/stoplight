@@ -21,7 +21,27 @@ interface Release {
 
 // Newest first. Each entry is one shipped release, grouped by the kind of change.
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
-const RELEASES: Release[] = []
+const RELEASES: Release[] = [
+  {
+    version: 'v1.17',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Clicking a connector dot on a card opens the channel picker. The dot says "draw a connection", and until now the only thing it did was start a drag: press it, let go, and nothing happened at all. It was the one control on the board that answered a click with silence. A click now asks the question the dot implies, which is what comes next from this card, and answers it with the full list of channels, anchored to the dot you pressed. Dragging is unchanged: drop on another card to connect the two, drop on empty canvas to think better of it.',
+          'Picking a channel this way inside an open campaign makes real assets, branched off the card you started from, the same as the card\'s + button already did. The picker and the + now go to the same place.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Six channels are pickable that never were. X Ads, Pinterest Ads, Snapchat Ads, Reddit Ads, Google Demand Gen and Push were defined everywhere the app counts channels, carried their own ad formats, and reported in the channel mix, but no picker ever listed them, so there was no way to plan anything on them. All 27 channels now appear in the picker, and a test fails if a new one is ever added without one.',
+        ],
+      },
+    ],
+  },
+]
 
 const TAG_CLASS: Record<Tag, string> = {
   New: 'chlog-tag-new',

@@ -80,6 +80,14 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'yt-skippable', label: 'YouTube skippable ad', channel: 'youtube-ads', assetType: 'skippable', media: 'video', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
   { key: 'tiktok-ad', label: 'TikTok in-feed ad', channel: 'tiktok-ads', assetType: 'in-feed', media: 'video', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
   { key: 'spotify-ad', label: 'Spotify audio ad', channel: 'spotify-ads', assetType: 'audio', media: 'text', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
+  // The rest of the paid roster. These channels were defined in CHANNELS and had asset types in
+  // channelAssetTypes, but no preset — so they existed everywhere EXCEPT the one place you pick a
+  // channel from. A picker that calls itself the channel list has to be able to reach all of it.
+  { key: 'x-ad', label: 'X image ad', channel: 'x-ads', assetType: 'image', media: 'image', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
+  { key: 'pinterest-ad', label: 'Pinterest pin ad', channel: 'pinterest-ads', assetType: 'standard', media: 'image', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
+  { key: 'snapchat-ad', label: 'Snapchat single ad', channel: 'snapchat-ads', assetType: 'single', media: 'video', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
+  { key: 'reddit-ad', label: 'Reddit image ad', channel: 'reddit-ads', assetType: 'image', media: 'image', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
+  { key: 'google-demand-ad', label: 'Google Demand Gen ad', channel: 'google-demand', assetType: 'image', media: 'image', runtime: 'flight', perMonth: 1, group: 'Paid', tone: 'gold' },
   // Email & lifecycle
   { key: 'newsletter', label: 'Newsletter', channel: 'email', assetType: 'newsletter', media: 'text', runtime: 'always-on', perMonth: 4, group: 'Email & lifecycle', tone: 'teal' },
   { key: 'nurture', label: 'Nurture email', channel: 'email', assetType: 'nurture', media: 'text', runtime: 'always-on', perMonth: 1, group: 'Email & lifecycle', tone: 'teal' },
@@ -87,6 +95,7 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'welcome-email', label: 'Welcome email', channel: 'email', assetType: 'welcome', media: 'text', runtime: 'always-on', perMonth: 1, group: 'Email & lifecycle', tone: 'teal' },
   { key: 'announcement', label: 'Announcement email', channel: 'email', assetType: 'announcement', media: 'text', runtime: 'always-on', perMonth: 1, group: 'Email & lifecycle', tone: 'teal' },
   { key: 'sms', label: 'SMS campaign', channel: 'sms', assetType: 'promotional', media: 'text', runtime: 'always-on', perMonth: 2, group: 'Email & lifecycle', tone: 'teal' },
+  { key: 'push', label: 'Push notification', channel: 'push', assetType: 'promotional', media: 'text', runtime: 'always-on', perMonth: 2, group: 'Email & lifecycle', tone: 'teal' },
   // Content & SEO
   { key: 'blog', label: 'Blog article', channel: 'blog', assetType: 'article', media: 'text', runtime: 'always-on', perMonth: 4, group: 'Content & SEO', tone: 'green' },
   { key: 'pillar', label: 'Pillar guide', channel: 'blog', assetType: 'pillar', media: 'text', runtime: 'always-on', perMonth: 1, group: 'Content & SEO', tone: 'green' },

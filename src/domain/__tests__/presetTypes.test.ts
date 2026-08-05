@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DELIVERABLE_PRESETS } from '../flows'
 import { isValidType } from '../channelAssetTypes'
+import { CHANNEL_LIST } from '../channels'
 
 /**
  * EVERY PRESET MUST NAME A TYPE ITS CHANNEL ACTUALLY HAS.
@@ -21,5 +22,21 @@ describe('DELIVERABLE_PRESETS', () => {
   it('preset keys are unique', () => {
     const keys = DELIVERABLE_PRESETS.map((p) => p.key)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  /**
+   * EVERY CHANNEL MUST BE PICKABLE.
+   *
+   * The presets ARE the channel picker — the card's +, and the connector port's menu, both draw
+   * from this list and nothing else. Six channels (x-ads, pinterest-ads, snapchat-ads, reddit-ads,
+   * google-demand, push) were defined in CHANNELS, carried asset types, reported in the mix, and
+   * were simply unreachable from the one screen where you choose a channel. Adding a channel to
+   * CHANNELS without a preset is the same bug again, and it is silent: nothing errors, the channel
+   * just never appears.
+   */
+  it('every channel in CHANNELS is reachable from the picker', () => {
+    const covered = new Set(DELIVERABLE_PRESETS.map((p) => p.channel))
+    const missing = CHANNEL_LIST.filter((c) => !covered.has(c.id)).map((c) => c.id)
+    expect(missing).toEqual([])
   })
 })
