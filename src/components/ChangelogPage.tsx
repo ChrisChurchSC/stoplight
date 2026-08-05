@@ -41,9 +41,9 @@ const RELEASES: Release[] = [
       {
         tag: 'New',
         items: [
-          'Group cards on the canvas. Select two or more, then Group (⌘⌥G, or right-click) and they hold together: click one and you get them all, drag one and they all move, keeping the arrangement you built.',
+          'Group cards on the canvas. Select two or more, then Group (⌘G, or right-click) and they hold together: click one and you get them all, drag one and they all move, keeping the arrangement you built.',
           'A group is framed and named on the board, so a launch set or a test cell reads as one thing. Double-click the name to rename it, and drag the frame label to move the whole group.',
-          'Groups are saved with the campaign, along with where their cards sit, so the arrangement is still there when you come back. Ungroup with ⌘⌥⇧G; the cards stay exactly where they are.',
+          'Groups are saved with the campaign, along with where their cards sit, so the arrangement is still there when you come back. Ungroup with ⌘⇧G; the cards stay exactly where they are.',
         ],
       },
       {
