@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.26',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A card wired to a deliverable while you are still building the campaign now reaches the copy. A deliverable has one identity while you are configuring it and another once it is a group of real assets, and nothing translated between the two, so every line drawn in the builder pointed at something the finished campaign had never heard of. Two things followed and each hid the other: the records never reached the writer, and the line itself was deleted the next time the campaign was opened. What was left was an Audience card sitting on the canvas with no line and no effect on a word of the copy.',
+          'Naming a card after you have wired it works in that order now. Drop a card, wire it into an email, then say which audience it is: the record reaches that email. Before this, the wire was checked for records once, at the moment it was drawn, and a card that was still blank at that moment was never asked again.',
+          'The context toast stops asking for a card that is already on the board. When something is missing it now says which of the three things is actually wrong: the card has no line to the brief, or it names no record yet, or the brief is fine and every asset is overriding it. The button matches, so it wires or opens the card you have instead of adding a second one beside it.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.25',
     dateLabel: 'August 5, 2026',
     groups: [

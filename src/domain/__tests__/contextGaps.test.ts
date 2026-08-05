@@ -75,4 +75,38 @@ describe('contextGapMessage', () => {
       'No proof point is wired — the copy leans on whatever proof the brand has rather than the point this campaign is making.',
     )
   })
+
+  /**
+   * THE CARD THAT IS ALREADY THERE.
+   *
+   * Every one of these is a real gap: nothing reaches the writer, so the copy came out of the whole
+   * library either way. What changes is what the person is looking at while they read the toast. A
+   * board with an Audience card on it and a board with none are the same to contextGaps and must not
+   * be the same to the sentence, because on one of them "add an audience" is advice to make a
+   * duplicate of something already in view.
+   */
+  it('speaks about the card on the board instead of the fallback, when there is one', () => {
+    expect(contextGapMessage(['audience'], 'Spring launch', 'unwired')).toBe(
+      'No audience is wired to "Spring launch" — there is one on this board with no line to the brief, so nothing it says reaches the copy.',
+    )
+    expect(contextGapMessage(['audience'], undefined, 'unnamed')).toBe(
+      'No audience is wired — the one on this board names no record yet, so nothing it says reaches the copy.',
+    )
+    expect(contextGapMessage(['audience'], undefined, 'overridden')).toBe(
+      'No audience is wired — one is wired to the brief, but every asset here overrides the brief with records of its own.',
+    )
+  })
+
+  it('names one gap only once it is talking about a specific card', () => {
+    // "No audience or proof point is wired — there is one on this board" would leave the reader
+    // working out which of the two it means, and the standing was only ever computed for the first.
+    expect(contextGapMessage(['audience', 'proof'], undefined, 'unwired')).toBe(
+      'No audience is wired — there is one on this board with no line to the brief, so nothing it says reaches the copy.',
+    )
+  })
+
+  it('keeps the fallback wording when the board has nothing of that kind', () => {
+    // The default, and what every existing caller gets without passing a standing at all.
+    expect(contextGapMessage(['audience'], undefined, 'none')).toBe(contextGapMessage(['audience']))
+  })
 })
