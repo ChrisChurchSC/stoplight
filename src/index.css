@@ -4352,7 +4352,10 @@ button.mf-open:focus-visible,
   padding: 8px 10px 12px;
   cursor: pointer;
   box-shadow: var(--shadow-raise);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  /* Opacity is in the base transition, not on the .off-trail rule that sets it: a transition
+     declared only on the dimmed state animates the way IN and snaps on the way out, so clicking
+     from one card to another would fade the board down smoothly and slam it back. */
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, opacity 0.14s ease;
 }
 /* Hover: a connection port on the node's right edge + an inline "+" to add the next
    block right from the node (the Attio node hover). */
@@ -8046,6 +8049,9 @@ button.mf-open:focus-visible,
   border-radius: 14px;
   background: color-mix(in srgb, var(--text-faint) 7%, transparent);
   box-sizing: border-box;
+  /* So a frame fades with the cards it holds when the board goes to a trail, rather than snapping
+     while they ease (see .flow-group.off-trail). */
+  transition: opacity 0.14s ease;
 }
 .flow-group.sel {
   border-style: solid;
@@ -8305,6 +8311,69 @@ button.mf-open:focus-visible,
 }
 .flow-edge-del:hover path {
   stroke: #fff;
+}
+/* THE TRAIL THROUGH THE SELECTED CARD: what led here, and what follows.
+   ------------------------------------------------------------------------------------------------
+   Select an asset and the board fades everything that is not on its route. Highlighting alone was
+   tried first and does not work at the size these boards reach: on thirty cards joined by identical
+   dotted lines, brightening six of them still leaves twenty-four competing for the same attention,
+   and the eye has to do the subtraction the canvas should have done. Dimming is the version that
+   answers the question from across the room.
+
+   BACK IS THE ACCENT, FORWARD IS BLUE. The two directions are different claims — one is how this
+   asset came to exist, the other is where a reader goes after it — and a single "connected" colour
+   would flatten them into a halo. The accent is the hue the app already spends on the selected
+   thing, so the route INTO the selection reads as part of it; --accent-3 is the calm counterpart and
+   carries its own dark-mode value, which a literal would not.
+
+   NOTHING HERE TOUCHES pointer-events. A dimmed card stays clickable, because clicking another card
+   (or the background) is how you leave the trail, and a card you can see but cannot point at is a
+   trap. */
+.flow-node.off-trail,
+.flow-group.off-trail {
+  opacity: 0.26;
+}
+/* On the group rather than each path: a line is two elements (the visible stroke and the wide
+   invisible band that takes the clicks) and only the first has anything to fade. */
+.flow-edge-g {
+  transition: opacity 0.14s ease;
+}
+.flow-edge-g.off-trail {
+  opacity: 0.16;
+}
+/* :not(.sel) because this is 0-4-0 and the selected card's own ring is 0-2-0, so without the guard
+   the trail's weaker border would overwrite the accent ring on the very card you selected. The same
+   trick, for the same reason, as .flow-edge-g:hover .flow-edge:not(.sel) above. */
+.flow-node.on-trail.trail-back:not(.sel) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+.flow-node.on-trail.trail-fwd:not(.sel) {
+  border-color: color-mix(in srgb, var(--accent-3) 55%, var(--border-strong));
+}
+/* A line on the trail goes solid and gains weight — the same "resting line is a chain of beads, this
+   one is continuous" distinction the selected line makes, which reads at any zoom and does not
+   depend on colour. Width only here, so the hover rule (which is more specific) still thickens
+   whichever line you are pointing at. */
+.flow-edge-g.on-trail .flow-edge {
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+/* THE HUE ONLY WHERE THERE IS NOT ONE ALREADY. Gold means the line touches paid media and red means
+   that paid line has no budget behind it; both outrank a highlight, because they say something is
+   wrong or costs money and this only says "you are looking at this". The unfunded line also keeps
+   its sparse beads through the rule above, since .flow-edge.paid.needs-budget:not(.sel) is 0-4-0 and
+   wins the dasharray outright — deliberately: a warning survives being highlighted.
+
+   :not(:hover) so the hover feedback still lands. These rules are 0-6-0 and would otherwise beat
+   .flow-edge-g:hover .flow-edge:not(.sel) at 0-4-0, leaving the line under the cursor looking
+   exactly like the five beside it at the moment you are deciding which one to click. */
+.flow-edge-g.on-trail:not(:hover) .flow-edge:not(.paid):not(.needs-budget) {
+  stroke: var(--accent);
+}
+/* After the rule above, not merged into it: equal specificity is settled by source order, and a
+   forward line has to win where both could apply. */
+.flow-edge-g.trail-fwd:not(:hover) .flow-edge:not(.paid):not(.needs-budget) {
+  stroke: var(--accent-3);
 }
 /* Retire the old CSS branch lines in favor of the SVG connectors. */
 .flow-branch-list::before,
