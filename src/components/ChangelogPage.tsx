@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.29',
+    version: 'v1.30',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -32,6 +32,21 @@ const RELEASES: Release[] = [
           'Dragging on the canvas is no longer doing several times the work it can show you. A mouse or trackpad reports its position far faster than a screen can redraw, and the board was rebuilding itself for every one of those reports: on a 180-card canvas each report cost a full rebuild, and a fast pointer sends two or three of them between one frame and the next. A report now costs nothing at all, and the board rebuilds once per frame, which is as often as you can actually see. The heavier the board and the faster your pointer, the more of that work was being thrown away.',
           'Panning and marquee selection went the same way, for the same reason. All three gestures still land exactly where you let go: the last position is applied on release rather than left waiting for a frame that never comes.',
           'Cards that move together stopped being counted one at a time. Asking "is this card moving?" walked the whole list of dragged cards, once per member and once per connector, on every frame, so the bigger the group the more it cost to move it. It is a direct lookup now.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.29',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Every asset has a CTAs field: the buttons, forms, inputs and functionality that have to be built into it. Open any asset from the canvas, the grid or the calendar and it is there under the copy. Each entry carries what kind of thing it is, the words on it, where it takes you, a note on what has to be built, and a tick for whether it exists yet, so a spec turns into a checklist without leaving the asset.',
+          'The journey says what it costs. Every line out of an asset is a promise that somebody builds a control at this end of it, and the board has always drawn the line without naming the price. Now an asset with a link nothing accounts for lists the gap and proposes the entry, read off where the line goes: a page you can link to needs a button, an email or an SMS needs a capture and a consent because there is no link to an inbox, a person needs a booking, a file needs the download and the gate you trade it for, and a webinar or an event needs a registration.',
+          'It suggests, it never fills anything in. Nothing is written to an asset until you press Add, because the campaign cannot know the capture already lives in your site header. Point a CTA somewhere else and the old gap reopens; point one at an asset that has left the campaign and it says so, rather than leaving a button that leads nowhere.',
+          'The CTA field and the CTA copy are separate on purpose. The copy is the words; this is the mechanism they sit on. An asset can carry three buttons and one line of CTA copy, and a form with no fields decided is a build task whether or not anybody has written its label yet.',
         ],
       },
     ],
