@@ -1730,11 +1730,55 @@ export function FlowsView() {
   // ids = nodes whose OWN pos we move; visualIds = every node that visually shifts by the drag
   // delta (the moved nodes plus any children carried along inside a moved parent's transform), so
   // connectors track them all. Splitting the two is what stops nested children double-moving.
-  const dragging = useRef<{ ids: string[]; visualIds: string[]; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
+  // visualSet is visualIds as a set, built once per drag: it is asked "is this node moving?" once
+  // per group member and once per connector endpoint on EVERY frame, and an array answered that
+  // with a linear scan — quadratic in the size of the thing being dragged.
+  const dragging = useRef<{ ids: string[]; visualIds: string[]; visualSet: Set<string>; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
   // Live drag delta for the nodes currently being dragged, in canvas units. Connectors read this
   // so their endpoints move in the SAME commit as the cards (see connRect) — instead of waiting on
   // a per-frame rect remeasure, which rubber-bands the lines behind the cards on a big flow.
-  const [dragDelta, setDragDelta] = useState<{ ids: string[]; dx: number; dy: number } | null>(null)
+  const [dragDelta, setDragDelta] = useState<{ ids: Set<string>; dx: number; dy: number } | null>(null)
+
+  /**
+   * ONE BOARD UPDATE PER PAINTED FRAME.
+   *
+   * A pointer reports far faster than a screen refreshes: a 200Hz trackpad against a 60Hz display
+   * is three moves per frame, and each one used to re-render the whole canvas. Measured on a
+   * 100-card board, a 1.5s drag turned 308 pointer events into 46 painted frames — six of every
+   * seven renders were computed, reconciled and thrown away before anything reached the glass.
+   *
+   * So a gesture writes what it wants applied and schedules a single frame. A move that arrives
+   * before that frame runs REPLACES the pending one rather than queueing behind it, which is
+   * exactly right for a drag: only the newest pointer position is true, and the ones in between
+   * describe a position the user has already left.
+   *
+   * The pending work reads `dragging.current` / `pan.current` when the frame runs, not when it was
+   * scheduled, so it always applies against the live gesture. That is also why `flushGesture` must
+   * run BEFORE mouseup clears those refs — otherwise the last move of every drag is dropped and
+   * cards land a frame short of where they were let go.
+   */
+  const gestureRaf = useRef<number | null>(null)
+  const gestureWork = useRef<(() => void) | null>(null)
+  const scheduleGesture = (work: () => void) => {
+    gestureWork.current = work
+    if (gestureRaf.current !== null) return
+    gestureRaf.current = requestAnimationFrame(() => {
+      gestureRaf.current = null
+      const w = gestureWork.current
+      gestureWork.current = null
+      w?.()
+    })
+  }
+  /** Apply whatever is pending right now — the end of a gesture cannot wait for the next frame. */
+  const flushGesture = () => {
+    if (gestureRaf.current !== null) {
+      cancelAnimationFrame(gestureRaf.current)
+      gestureRaf.current = null
+    }
+    const w = gestureWork.current
+    gestureWork.current = null
+    w?.()
+  }
   // Connectors between nodes, plus the in-progress drag and measured node rects.
   const canvasRef = useRef<HTMLDivElement>(null)
   /** The Grid/Calendar stage, so Fit can measure the sheet inside it without a global selector. */
@@ -2074,7 +2118,8 @@ export function FlowsView() {
     moveIds.forEach((i) => {
       start[i] = pos[i] ?? { x: 0, y: 0 }
     })
-    dragging.current = { ids: moveIds, visualIds: [...moveIds, ...carried], x: e.clientX, y: e.clientY, start }
+    const visualIds = [...moveIds, ...carried]
+    dragging.current = { ids: moveIds, visualIds, visualSet: new Set(visualIds), x: e.clientX, y: e.clientY, start }
     dragSnapRef.current = { ...pos } // layout before this drag, committed to undo history on drop
     dragMovedRef.current = false
   }
@@ -5718,7 +5763,7 @@ export function FlowsView() {
         .map((id) => {
           const r = rects[id]
           if (!r) return null
-          const moving = dragDelta && dragDelta.ids.includes(id)
+          const moving = dragDelta && dragDelta.ids.has(id)
           return moving ? { ...r, x: r.x + dragDelta.dx * s, y: r.y + dragDelta.dy * s } : r
         })
         .filter((r): r is { x: number; y: number; w: number; h: number } => !!r)
@@ -5742,7 +5787,7 @@ export function FlowsView() {
   const connRect = (id: string) => {
     const r = rects[id]
     if (!r) return undefined
-    if (dragDelta && dragDelta.ids.includes(id)) {
+    if (dragDelta && dragDelta.ids.has(id)) {
       const s = zoom / 100
       return { x: r.x + dragDelta.dx * s, y: r.y + dragDelta.dy * s, w: r.w, h: r.h }
     }
@@ -8794,30 +8839,54 @@ export function FlowsView() {
               const id = over?.dataset.nodeId ?? null
               setConnectOver(id && id !== drawingFrom.current ? id : null)
             } else if (dragging.current) {
-              const scale = zoom / 100
-              const dx = (e.clientX - dragging.current.x) / scale
-              const dy = (e.clientY - dragging.current.y) / scale
-              const d = dragging.current
+              // Read the pointer here, apply it on the next frame. Everything below is deferred so
+              // that a burst of moves inside one frame costs one render, not one render each.
+              const px = e.clientX
+              const py = e.clientY
               dragMovedRef.current = true
-              setPos((prev) => {
-                const next = { ...prev }
-                d.ids.forEach((i) => {
-                  next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
+              scheduleGesture(() => {
+                const d = dragging.current
+                if (!d) return
+                const scale = zoomRef.current / 100
+                const dx = (px - d.x) / scale
+                const dy = (py - d.y) / scale
+                setPos((prev) => {
+                  const next = { ...prev }
+                  d.ids.forEach((i) => {
+                    next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
+                  })
+                  return next
                 })
-                return next
+                // Move the connectors in lockstep with the cards this same commit (rect remeasure is
+                // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
+                // visualSet includes carried children so their edges track without moving their pos.
+                setDragDelta({ ids: d.visualSet, dx, dy })
               })
-              // Move the connectors in lockstep with the cards this same commit (rect remeasure is
-              // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
-              // visualIds includes carried children so their edges track without moving their pos.
-              setDragDelta({ ids: d.visualIds, dx, dy })
             } else if (pan.current) {
-              setOffset({ x: pan.current.ox + (e.clientX - pan.current.x), y: pan.current.oy + (e.clientY - pan.current.y) })
+              const px = e.clientX
+              const py = e.clientY
+              scheduleGesture(() => {
+                const p = pan.current
+                if (!p) return
+                setOffset({ x: p.ox + (px - p.x), y: p.oy + (py - p.y) })
+              })
             } else if (marqueeStart.current) {
+              // The rect is read synchronously: currentTarget is only valid inside the handler.
               const r = e.currentTarget.getBoundingClientRect()
-              setMarquee({ x0: marqueeStart.current.x0, y0: marqueeStart.current.y0, x1: e.clientX - r.left, y1: e.clientY - r.top })
+              const px = e.clientX
+              const py = e.clientY
+              scheduleGesture(() => {
+                const m = marqueeStart.current
+                if (!m) return
+                setMarquee({ x0: m.x0, y0: m.y0, x1: px - r.left, y1: py - r.top })
+              })
             }
           }}
           onMouseUp={(e) => {
+            // The last move of a gesture is usually still pending a frame. Apply it now, while
+            // dragging/pan are still set — everything below clears them, and a drop that ran a
+            // frame behind would leave cards short of where they were released.
+            flushGesture()
             if (addDrag.current) {
               const cr = e.currentTarget.getBoundingClientRect()
               setAddMenu({ at: addDrag.current.at, from: addDrag.current.from, x: e.clientX - cr.left, y: e.clientY - cr.top })
@@ -8916,6 +8985,7 @@ export function FlowsView() {
             if (dragDelta) setDragDelta(null)
           }}
           onMouseLeave={() => {
+            flushGesture()
             pan.current = null
             marqueeStart.current = null
             dragging.current = null
