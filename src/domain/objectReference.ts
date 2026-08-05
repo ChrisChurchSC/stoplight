@@ -12,6 +12,21 @@
  * other, which is a thing every future reader would have to unpick.
  */
 
+/**
+ * WHERE A DOCUMENT LIVES, now that three things can hold one.
+ *
+ * A RECORD holds the canonical document: this is what a Voice, an Audience or an Account IS, and it
+ * is true of that record everywhere the record is named. Attaching a .md to a card writes it here,
+ * because a brief describing an audience does not stop being true on the next campaign.
+ *
+ * A CARD may hold one that OVERRIDES the record's, for its own board only. That is the "this
+ * campaign reads the persona differently" case, and it has to be a separate slot rather than an
+ * edit: writing it onto the record would silently rewrite what every other campaign is generated
+ * from, which is the one failure a shared library cannot recover from.
+ *
+ * A SMART OBJECT holds one describing the bundle, which is a different subject and stays as it was.
+ */
+
 /** An uploaded document standing as the description of an object or a card. */
 export interface ObjectReference {
   /** The uploaded file's name, kept so both the writer and the UI can say where this came from. */
@@ -54,4 +69,62 @@ export function makeObjectReference(name: string, raw: string, at: number): Obje
   // Only honour the break if it is not so early that obeying it would throw away more than the limit
   // saved. A document written as one long block has no break to find and is cut flat.
   return { name, text: brk > REFERENCE_LIMIT / 2 ? head.slice(0, brk) : head, addedAt: at, truncated: true }
+}
+
+/** Long enough to be a title, short enough to sit in a Records cell without pushing every column. */
+const MAX_TITLE = 60
+
+/**
+ * A NAME FOR THE RECORD A DOCUMENT JUST CREATED.
+ *
+ * Handing a card a .md mints the object it describes, and an object with no name is the thing this
+ * was supposed to stop producing: a row in Records reading "Untitled" that nobody can identify well
+ * enough to reuse, which is most of the value of putting it in a library at all.
+ *
+ * The document's own H1 first, because a brief that opens "# Enterprise ops lead" has already been
+ * given a name by the person who wrote it, and any name derived from a filename is a worse guess
+ * than the one they typed. The filename second, tidied: "persona-enterprise-ops.md" is a real
+ * answer, "persona enterprise ops" is a readable one. A pasted body has no filename worth showing,
+ * so it falls through to its first line.
+ *
+ * NEVER EMPTY, and never the literal placeholder: a caller that gets "" back would write a nameless
+ * record and we would be where we started. The last resort is the honest, visibly-renameable
+ * placeholder ensureAudienceFor already uses for the same reason.
+ */
+export function titleFromDoc(fileName: string, text: string, fallback = 'Untitled'): string {
+  const clean = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE).trim()
+  // Only the opening of the document: a "# " thirty screens down is a section, not the subject.
+  for (const line of text.split('\n', 40)) {
+    const h = /^#{1,2}\s+(.+?)\s*#*$/.exec(line.trim())
+    // Strip the marks a heading may still carry, so "# **Enterprise ops**" is not named with asterisks.
+    if (h) { const t = clean(h[1].replace(/[*_`]/g, '')); if (t) return t }
+  }
+  const named = fileName.replace(/\.(md|markdown|mdx|txt|text)$/i, '').replace(/[-_]+/g, ' ')
+  // "Pasted text" is this app's word for "no filename", so it is not a title, it is the absence of one.
+  if (named.trim() && named.trim().toLowerCase() !== 'pasted text') {
+    const t = clean(named)
+    return t.charAt(0).toUpperCase() + t.slice(1)
+  }
+  const first = clean(text.split('\n').find((l) => l.trim())?.replace(/^[#>*\-\s]+/, '') ?? '')
+  return first || fallback
+}
+
+/**
+ * WHICH DOCUMENT A CARD IS ACTUALLY READ FROM, and which of the two slots it came from.
+ *
+ * The card wins, by the rule stated at the top of this file. It lives here rather than at each call
+ * site because there are three of them and they must not disagree: a precedence that resolves one
+ * way in the inspector and the other way in the copy request is a card that shows you one brief and
+ * generates from another, and nothing on screen would say so.
+ *
+ * `from` is returned rather than inferred by the caller so the UI can say which one it is showing.
+ * A document you cannot tell the origin of is exactly the confusion an override introduces.
+ */
+export function pickReference(
+  cardRef: ObjectReference | undefined,
+  recordRef: ObjectReference | undefined,
+): { ref: ObjectReference; from: 'card' | 'record' } | null {
+  if (cardRef?.text.trim()) return { ref: cardRef, from: 'card' }
+  if (recordRef?.text.trim()) return { ref: recordRef, from: 'record' }
+  return null
 }

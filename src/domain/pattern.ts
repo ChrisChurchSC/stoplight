@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
 
 /**
@@ -21,6 +22,8 @@ export interface Pattern {
   source?: string
   status?: 'active' | 'testing' | 'archived' | ''
   notes?: string
+  /** The document this record is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 /** What kind of pattern this is — a fixed pick-list. */

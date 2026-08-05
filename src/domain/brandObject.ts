@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId } from './records'
 
 /**
@@ -39,6 +40,8 @@ export interface BrandObject {
   /** What it must never sound like. The inverse of voice, and the one people forget to write down. */
   avoidVoice?: string
   notes?: string
+  /** The document this record is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 export function freshBrandObjectId(): string {

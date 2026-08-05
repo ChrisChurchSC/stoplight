@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
 
 /**
@@ -16,6 +17,8 @@ export interface Message {
   stage?: 'awareness' | 'consideration' | 'conversion' | ''
   status?: 'draft' | 'approved' | 'retired' | ''
   notes?: string
+  /** The document this record is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 /** Funnel-stage pick-list for a Message (mirrors FUNNEL_STAGES). */

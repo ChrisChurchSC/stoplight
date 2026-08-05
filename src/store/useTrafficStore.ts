@@ -148,7 +148,8 @@ import { type BrandRecord, freshBrandRecordId, seedBrandRecords } from '../domai
 import { type Product, freshProductId } from '../domain/product'
 import { type BrandObject, freshBrandObjectId } from '../domain/brandObject'
 import { type SmartObject, type SmartObjectScope, freshSmartObjectId, kindForRefs, withContents } from '../domain/smartObject'
-import { makeObjectReference } from '../domain/objectReference'
+import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
+import { indexRecordDocs } from '../domain/recordDocs'
 import { type BrandDataset, type DatasetSource, blankDataset } from '../domain/brandDataset'
 import type { PinnedInsight } from '../domain/pinnedInsights'
 import { isLinkedExternal } from '../domain/assetKind'
@@ -7041,6 +7042,32 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
          * about what a document says, and listing every wired object with an empty description under
          * it would spend context saying that most of them have not been written about.
          */
+        /**
+         * EVERY RECORD'S DOCUMENT, so a card that names one can hand the writer the object's own
+         * brief rather than only the fields somebody managed to fill in.
+         *
+         * Built here, once, for a request that then loops over every asset in the batch: rebuilding
+         * it per row would walk all twelve lists per asset for an answer that cannot change inside
+         * one draft. Audience-owned proof is included from libAudiences as well as the brand
+         * library's, because a proof point authored on the canvas belongs to the audience it
+         * persuades and never appears in sys.rtbs.
+         */
+        const recordDocIndex = (): Map<string, ObjectReference> =>
+          indexRecordDocs([
+            get().people,
+            get().companies,
+            get().products,
+            get().brandObjects,
+            get().voices,
+            get().concepts,
+            get().seasons,
+            get().patterns,
+            get().messages,
+            get().triggers,
+            libAudiences,
+            proofPool,
+            ...libAudiences.map((a) => a.rtbs ?? []),
+          ])
         const references = [
           ...wiredObjectsFor(board, get().smartObjects, 'campaign')
             .filter((o) => o.reference?.text.trim())
@@ -7068,11 +7095,17 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
            * The label says what sort of card it is, because "Acme Corp" alone does not tell the
            * writer whether it is reading about an account, an audience or a proposition.
            */
-          ...wiredCardDocsFor(board, 'campaign').map((c) => ({
-            object: `${objectName(c, undefined, 'Untitled')} (${kindWord(c.kind)} card)`,
-            document: c.reference!.name,
-            text: c.reference!.text,
-            truncated: c.reference!.truncated,
+          ...wiredCardDocsFor(board, 'campaign', recordDocIndex()).map(({ card, ref, from }) => ({
+            /**
+             * NAMED BY THE RECORD when the document is the record's, because that is whose brief the
+             * writer is reading. A card can be renamed to anything and usually is not renamed at
+             * all, so labelling an object's own document with a card's name would attribute one
+             * audience's research to whatever the third card on the board happened to be called.
+             */
+            object: `${objectName(card, undefined, ref.name)} (${kindWord(card.kind)}${from === 'card' ? ' card' : ''})`,
+            document: ref.name,
+            text: ref.text,
+            truncated: ref.truncated,
           })),
         ]
         // The graph, resolved once for the batch rather than per asset.

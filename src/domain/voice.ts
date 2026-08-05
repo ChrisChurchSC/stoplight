@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
 
 /**
@@ -18,6 +19,15 @@ export interface Voice {
   useFor?: string
   status?: 'active' | 'draft' | 'archived' | ''
   notes?: string
+  /**
+   * THE DOCUMENT THIS RECORD IS, kept whole rather than minced into the fields above.
+   *
+   * Not a field: deliberately absent from VOICE_FIELDS and VOICE_COLUMNS. A brief runs to thousands
+   * of words and a Records column is a cell, so listing it there would give every row a wall of
+   * prose in place of the one line that tells them apart. It is shown on the record itself, where
+   * there is somewhere to put it. See objectReference.ts for which of the three slots wins.
+   */
+  reference?: ObjectReference
 }
 
 export const VOICE_COLUMNS: RecordColumn[] = [

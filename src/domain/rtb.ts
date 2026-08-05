@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import type { TrafficRow } from './types'
 import { messagingAllText } from './messaging'
 
@@ -56,6 +57,8 @@ export interface Rtb {
   /** This proof's track record — what it converted, where it fell flat. Starts
    *  empty; the rank/reuse intelligence reads this once outcomes accrue. */
   outcomes?: RtbOutcome[]
+  /** The document this proof is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 /** A proof is a vetted library master unless explicitly marked an unapproved draft. */

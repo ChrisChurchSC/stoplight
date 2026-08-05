@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { wiredCardDocsFor, wiredObjectsFor, wiredRefsFor } from '../boardResolve'
+import { wiredCardDocsFor, wiredObjectsFor, wiredRefsFor, type WiredCardDoc } from '../boardResolve'
 import type { CanvasObject, FlowBoard, SmartPlacement } from '../flowBoard'
 import { type SmartObject } from '../smartObject'
-import { REFERENCE_LIMIT, makeObjectReference } from '../objectReference'
+import { REFERENCE_LIMIT, makeObjectReference, pickReference, titleFromDoc, type ObjectReference } from '../objectReference'
 import type { FlowReference } from '../clients'
 
 /**
@@ -126,13 +126,15 @@ describe('wiredObjectsFor', () => {
  * silently contributes nothing at all.
  */
 describe('wiredCardDocsFor', () => {
-  const ids = (objects: CanvasObject[]): string[] => objects.map((o) => o.id)
+  const ids = (found: WiredCardDoc[]): string[] => found.map((f) => f.card.id)
   const withDoc = (id: string, kind: CanvasObject['kind'], text: string): CanvasObject =>
     obj(id, kind, { reference: makeObjectReference(`${id}.md`, text, 0) })
+  /** No record anywhere holds a document, so every case below is about the card's own slot. */
+  const NO_DOCS = new Map<string, ObjectReference>()
 
   it('carries a card wired straight into the brief', () => {
     const b = board([withDoc('c1', 'audience', 'They buy on renewal.')], [{ from: 'c1', to: 'campaign' }])
-    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS))).toEqual(['c1'])
   })
 
   it('carries a card several hops back, exactly as its records travel', () => {
@@ -145,7 +147,7 @@ describe('wiredCardDocsFor', () => {
         { from: 'c2', to: 'campaign' },
       ],
     )
-    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS))).toEqual(['c1'])
   })
 
   it('reads the cards inside a smart object placed on the board', () => {
@@ -155,7 +157,7 @@ describe('wiredCardDocsFor', () => {
       [{ from: 'p1', to: 'campaign' }],
       [{ id: 'p1', smartObjectId: 'so_buyer', memberIds: ['c1', 'c2'] }],
     )
-    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS))).toEqual(['c1'])
   })
 
   it('sends one card once, however many ways it is reached', () => {
@@ -169,7 +171,7 @@ describe('wiredCardDocsFor', () => {
         { from: 'c2', to: 'campaign' },
       ],
     )
-    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual(['c1'])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS))).toEqual(['c1'])
   })
 
   it('ignores a card with no document, and one that reaches nothing', () => {
@@ -180,7 +182,7 @@ describe('wiredCardDocsFor', () => {
         { from: 'c3', to: 'campaign' },
       ],
     )
-    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual([])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS))).toEqual([])
   })
 
   it('terminates on a cycle', () => {
@@ -192,15 +194,127 @@ describe('wiredCardDocsFor', () => {
         { from: 'c2', to: 'campaign' },
       ],
     )
-    expect(ids(wiredCardDocsFor(b, 'campaign')).sort()).toEqual(['c1', 'c2'])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS)).sort()).toEqual(['c1', 'c2'])
   })
 
   it('scopes to the target it was asked about', () => {
     // A card wired to one deliverable is not context for the whole campaign, which is the entire
     // reason somebody draws the narrower wire.
     const b = board([withDoc('c1', 'season', 'The fortnight before.')], [{ from: 'c1', to: 'email|nurture' }])
-    expect(ids(wiredCardDocsFor(b, 'email|nurture'))).toEqual(['c1'])
-    expect(ids(wiredCardDocsFor(b, 'campaign'))).toEqual([])
+    expect(ids(wiredCardDocsFor(b, 'email|nurture', NO_DOCS))).toEqual(['c1'])
+    expect(ids(wiredCardDocsFor(b, 'campaign', NO_DOCS))).toEqual([])
+  })
+
+  /**
+   * THE DOCUMENT USUALLY BELONGS TO THE RECORD, and these are the cases that separates.
+   *
+   * Handing a card a .md writes it onto the object the card names, so the same brief is true of that
+   * object on every board. What a card holds of its own is an override, and an override is only
+   * worth having if it actually wins and if the thing it overrides is genuinely shared.
+   */
+  const recordDoc = (id: string, text: string): Map<string, ObjectReference> =>
+    new Map([[id, makeObjectReference(`${id}.md`, text, 0)]])
+
+  it("reads the record's document through a card that carries none of its own", () => {
+    const b = board([obj('c1', 'audience', { refId: 'aud_1' })], [{ from: 'c1', to: 'campaign' }])
+    const found = wiredCardDocsFor(b, 'campaign', recordDoc('aud_1', 'They buy on renewal.'))
+    expect(found.map((f) => [f.card.id, f.from, f.ref.text])).toEqual([['c1', 'record', 'They buy on renewal.']])
+  })
+
+  it("lets a card's own document win over the record's, for this board only", () => {
+    const b = board(
+      [obj('c1', 'audience', { refId: 'aud_1', reference: makeObjectReference('local.md', 'Renewals only.', 0) })],
+      [{ from: 'c1', to: 'campaign' }],
+    )
+    const found = wiredCardDocsFor(b, 'campaign', recordDoc('aud_1', 'The library version.'))
+    expect(found.map((f) => [f.from, f.ref.text])).toEqual([['card', 'Renewals only.']])
+  })
+
+  it('sends a record\'s document once however many cards name it', () => {
+    // The ordinary shape of a board: one audience pointed at from three channels. It is one brief,
+    // and three copies would read to the writer as three sources that happen to agree.
+    const b = board(
+      [obj('c1', 'audience', { refId: 'aud_1' }), obj('c2', 'audience', { refId: 'aud_1' })],
+      [
+        { from: 'c1', to: 'campaign' },
+        { from: 'c2', to: 'campaign' },
+      ],
+    )
+    expect(ids(wiredCardDocsFor(b, 'campaign', recordDoc('aud_1', 'One brief.')))).toEqual(['c1'])
+  })
+
+  it('keeps an override alongside the record it overrides, when both are wired', () => {
+    // Genuinely two documents: one is the object's, one exists only on this board. Deduping them
+    // together would silently drop whichever the walk reached second.
+    const b = board(
+      [
+        obj('c1', 'audience', { refId: 'aud_1' }),
+        obj('c2', 'audience', { refId: 'aud_1', reference: makeObjectReference('local.md', 'Just here.', 0) }),
+      ],
+      [
+        { from: 'c1', to: 'campaign' },
+        { from: 'c2', to: 'campaign' },
+      ],
+    )
+    const found = wiredCardDocsFor(b, 'campaign', recordDoc('aud_1', 'The library version.'))
+    expect(found.map((f) => f.from).sort()).toEqual(['card', 'record'])
+  })
+
+  it('ignores a record document when the card names no record at all', () => {
+    // The state every card is in before its document has minted one. There is nothing to look up.
+    const b = board([obj('c1', 'audience')], [{ from: 'c1', to: 'campaign' }])
+    expect(ids(wiredCardDocsFor(b, 'campaign', recordDoc('aud_1', 'Not this card.')))).toEqual([])
+  })
+})
+
+describe('pickReference', () => {
+  const ref = (text: string) => makeObjectReference('d.md', text, 0)
+
+  it('prefers the card, falls back to the record, and reports which', () => {
+    expect(pickReference(ref('card'), ref('record'))).toMatchObject({ from: 'card' })
+    expect(pickReference(undefined, ref('record'))).toMatchObject({ from: 'record' })
+    expect(pickReference(undefined, undefined)).toBeNull()
+  })
+
+  it('treats a whitespace-only override as no override', () => {
+    // Otherwise clearing an override by emptying it would silently hide the record's document
+    // instead of revealing it again, and nothing on screen would say why the brief went missing.
+    expect(pickReference(ref('   \n  '), ref('record'))).toMatchObject({ from: 'record' })
+  })
+})
+
+/**
+ * A DOCUMENT MINTS THE RECORD IT DESCRIBES, so it has to be able to name one.
+ *
+ * An object called "Untitled" in Records is the failure this exists to prevent: it cannot be found,
+ * compared or reused, which is most of the point of putting it in a library.
+ */
+describe('titleFromDoc', () => {
+  it('prefers the heading the author wrote', () => {
+    expect(titleFromDoc('persona-v2.md', '# Enterprise ops lead\n\nThey buy on renewal.')).toBe('Enterprise ops lead')
+  })
+
+  it('strips the marks a heading carries', () => {
+    expect(titleFromDoc('x.md', '## **Enterprise ops** ##')).toBe('Enterprise ops')
+  })
+
+  it('tidies a filename when the document has no heading', () => {
+    expect(titleFromDoc('persona_enterprise-ops.md', 'They buy on renewal.')).toBe('Persona enterprise ops')
+  })
+
+  it('falls back to the first line for a paste, which has no filename worth showing', () => {
+    expect(titleFromDoc('Pasted text', '- They buy on renewal.\nAnd they churn on price.')).toBe(
+      'They buy on renewal.',
+    )
+  })
+
+  it('never returns empty, however little it was given', () => {
+    expect(titleFromDoc('', '   ')).toBe('Untitled')
+  })
+
+  it('ignores a heading far down the document, which is a section and not the subject', () => {
+    const body = `${'A line of prose.\n'.repeat(60)}# Appendix`
+    expect(titleFromDoc('the-brief.md', body)).toBe('The brief')
   })
 })
 

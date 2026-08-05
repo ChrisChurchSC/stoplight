@@ -53,8 +53,10 @@ import { type Season } from '../domain/season'
 import { type Pattern, PATTERN_TYPE_OPTIONS, isPatternRetired, usablePatterns } from '../domain/pattern'
 import { editRefs, sharedRefs, withRefs, withoutRefs } from '../domain/rowRefs'
 import { parseTable, isParsableTableFile } from '../lib/parseTable'
-import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc } from '../lib/cardDoc'
-import { makeObjectReference, type ObjectReference } from '../domain/objectReference'
+import { DOC_ACCEPT, PASTE_AS_DOC_CHARS, docFromPaste, isDocFile, readCardDoc, type CardDoc } from '../lib/cardDoc'
+import { makeObjectReference, pickReference, titleFromDoc, type ObjectReference } from '../domain/objectReference'
+import type { Company } from '../domain/companies'
+import { indexRecordDocs } from '../domain/recordDocs'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { AggregatorConnect } from './AggregatorConnect'
 import { aggregatorSpec, parsePullQuery, specKind, type AggregatorProvider, type AggregatorStatus } from '../domain/aggregator'
@@ -884,7 +886,14 @@ export function FlowsView() {
    * a ref, since mounting an input per card puts dozens in the tree for a control used once.
    */
   const docFileRef = useRef<HTMLInputElement | null>(null)
-  const docTargetRef = useRef<string | null>(null)
+  /**
+   * Which card opened the picker, and whether it asked for an override rather than the record's own
+   * document. Both, because one hidden input serves two buttons and the file arrives with no memory
+   * of which was pressed: without the flag, "use a different document here" would quietly rewrite
+   * the object for every campaign that names it, which is the exact damage the override exists to
+   * prevent.
+   */
+  const docTargetRef = useRef<{ cardId: string; override: boolean } | null>(null)
   /**
    * A record field's key as a readable word: householdIncome -> "household income". Good enough for
    * a receipt, and derived rather than a hand-written map of forty keys that would go stale the
@@ -893,10 +902,21 @@ export function FlowsView() {
   const fieldWord = (key: string): string =>
     key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toLowerCase())
   /**
-   * ATTACH A DOCUMENT TO A CARD, or take it off. It is stored ON the card and persists with the
-   * board, which is the difference between this and the version that only fed a prompt: the file is
-   * the card's context now, so it has to be there when somebody opens the campaign next week and
-   * asks where a line came from.
+   * "an audience", "a message". The kind labels are data, so a sentence that names one cannot pick
+   * its own article: "a audience" is the kind of thing that makes the rest of a sentence read as
+   * generated rather than written. Sound, not spelling, so it holds for the words this list has.
+   */
+  const withArticle = (word: string): string => (/^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`)
+  /**
+   * ATTACH A CAMPAIGN-LOCAL DOCUMENT TO A CARD, or take it off. It is stored ON the card and
+   * persists with the board, which is the difference between this and the version that only fed a
+   * prompt: the file is the card's context now, so it has to be there when somebody opens the
+   * campaign next week and asks where a line came from.
+   *
+   * THE OVERRIDE PATH ONLY, since a document became something a record can hold. An ordinary upload
+   * goes through attachDocToCard onto the object the card names, so it is true of that object
+   * everywhere; this is what "use a different document for this campaign" writes, and the whole
+   * value of it is that it stops at the edge of this board. See objectReference.ts for the rule.
    *
    * Clamped by makeObjectReference to the same budget a smart object's reference gets, and flagged
    * when it had to be cut, so the chip can say so rather than showing two thirds of a brief as
@@ -949,11 +969,19 @@ export function FlowsView() {
       /* A read-back that itself fails says nothing either way; leave the attach alone. */
     }
   }
-  /** Read a picked or dropped file onto a card, saying why in the note when it will not read. */
-  const attachDocFile = async (cardId: string, file: File) => {
+  /**
+   * Read a picked or dropped file onto a card, saying why in the note when it will not read.
+   *
+   * Takes an ID rather than the card, because the hidden picker's onChange fires long after the
+   * render that opened it and the card it was opened from may have been re-created since. Resolved
+   * against the ref for the same reason ensurePersonFor consults one: what is captured in a closure
+   * here is a snapshot, and a snapshot is what minted two records from one typed name.
+   */
+  const attachDocFile = async (cardId: string, file: File, override = false) => {
     try {
       const doc = await readCardDoc(file)
-      setCardReference(cardId, makeObjectReference(doc.name, doc.text, Date.now()))
+      const nt = objectsRef.current.find((o) => o.id === cardId)
+      if (nt) attachDocToCard(nt, doc, override)
     } catch (e) {
       setFillNote((m) => ({ ...m, [cardId]: (e as Error)?.message ?? 'Could not read that file.' }))
     }
@@ -1027,7 +1055,16 @@ export function FlowsView() {
    * the other audiences by rebuilding the array wrong.
    */
   const patchAudience = (id: string, patch: Partial<AudienceType>) => {
-    const list = clientAudiences[brand] ?? []
+    /**
+     * READ LIVE, for the same reason ensureAudienceRef does one line above where it writes.
+     *
+     * `clientAudiences` is captured at render, so an audience minted moments ago is not in it yet:
+     * the guard below then finds no such id and returns, and the patch is dropped in silence. That
+     * is not hypothetical. Minting and writing in one tick is exactly what happens when a document
+     * is dropped on an unnamed Audience card, and the whole edit vanished with nothing on screen to
+     * say it had. The generate path only escaped it by being slow enough to land after a re-render.
+     */
+    const list = useTrafficStore.getState().clientAudiences[brand] ?? []
     if (!list.some((a) => a.id === id)) return
     setClientAudiences(brand, list.map((a) => (a.id === id ? { ...a, ...patch } : a)))
   }
@@ -1076,6 +1113,7 @@ export function FlowsView() {
   const markOnboardingDone = useTrafficStore((s) => s.markOnboardingDone)
   const campaignList = useTrafficStore((s) => s.campaignList)
   const allCompanies = useTrafficStore((s) => s.companies)
+  const updateCompany = useTrafficStore((s) => s.updateCompany)
   const allPeople = useTrafficStore((s) => s.people)
   const channelRecords = useTrafficStore((s) => s.channelRecords)
   const allObjectives = useTrafficStore((s) => s.objectives)
@@ -5271,6 +5309,212 @@ export function FlowsView() {
     setObjectRef(nt.id, made.ref.id)
     return made.ref.id
   }
+  /**
+   * The account this card names, minting one if it names none.
+   *
+   * There was no such function until a document could stand as a record, because there was nothing a
+   * Company card could mint one FROM: an account's facts are never generated (see FILLABLE, which
+   * has no company entry, and the paragraph above it on why). A document is the opposite case. It is
+   * the thing somebody already wrote about a real organisation, so it is the one input that can
+   * honestly bring an account into the library.
+   */
+  const ensureCompanyFor = (nt: CanvasObject): string => {
+    if (nt.refId && allCompanies.some((c) => c.id === nt.refId)) return nt.refId
+    const already = mintedRecordRef.current.get(nt.id)
+    if (already) return already
+    const id = addCompany({ name: '', brand: brand || undefined })
+    mintedRecordRef.current.set(nt.id, id)
+    setObjectRef(nt.id, id)
+    return id
+  }
+  /**
+   * THE RECORD A CARD EDITS, and how to write to it: one switch, for every kind that has one.
+   *
+   * It used to live inside the inspector's JSX, which was fine while the only thing that wrote to a
+   * record was a button rendered next to it. A dropped file is not: it arrives at a hidden input
+   * mounted at the bottom of the component, at a drop handler, and at a paste, none of which can see
+   * a value computed inside somebody else's render block. Three call sites reaching for the same
+   * switch is the moment it stops being a detail of one panel.
+   *
+   * `nameKey` is here because the kinds do not agree on what "name" is called: a proof point's is
+   * `label`. Every caller that writes a name needs that answer and none of them should have to know
+   * it, least of all by remembering the one exception.
+   *
+   * Returns null for a kind with no record at all (a Note), which is the honest answer rather than a
+   * blank record object that later code would mint something from.
+   */
+  const recordForCard = (
+    nt: CanvasObject,
+  ): { current: Record<string, unknown>; apply: (p: Record<string, unknown>) => void; nameKey: string } | null => {
+    const as = (r: unknown) => r as Record<string, unknown>
+    switch (nt.kind) {
+      case 'brand': {
+        const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
+        return { current: as(bo), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), p as Partial<BrandObject>) } }
+      }
+      case 'product': {
+        const pr = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
+        return { current: as(pr), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), p as Partial<Product>) } }
+      }
+      case 'person': {
+        const pe = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
+        return { current: as(pe), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), p as Partial<Person>) } }
+      }
+      case 'company': {
+        const co = (nt.refId ? allCompanies.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Company)
+        return { current: as(co), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateCompany(ensureCompanyFor(nt), p as Partial<Company>) } }
+      }
+      case 'trigger': {
+        const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
+        return { current: as(tg), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
+      }
+      case 'season': {
+        const se = (nt.refId ? allSeasons.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Season)
+        return { current: as(se), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateSeason(ensureSeasonFor(nt), p as Partial<Season>) } }
+      }
+      case 'pattern': {
+        const pt = (nt.refId ? allPatterns.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Pattern)
+        return { current: as(pt), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updatePattern(ensurePatternFor(nt), p as Partial<Pattern>) } }
+      }
+      case 'proof-point': {
+        const pp = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)
+        return {
+          current: as(pp),
+          // A proof point calls its name `label`. The one kind that disagrees, and the reason this
+          // key is returned rather than assumed by each caller.
+          nameKey: 'label',
+          apply: (p) => {
+            markCardDirty(nt.id)
+            const id = ensureProofFor(nt)
+            if (id && brand) updateBrandProof(brand, id, p as Partial<Rtb>)
+          },
+        }
+      }
+      case 'voice': {
+        const vo = (nt.refId ? allVoices.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Voice)
+        return { current: as(vo), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateVoice(ensureVoiceFor(nt), p as Partial<Voice>) } }
+      }
+      case 'concept': {
+        const cp = (nt.refId ? allConcepts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Concept)
+        return { current: as(cp), nameKey: 'name', apply: (p) => { markCardDirty(nt.id); updateConcept(ensureConceptFor(nt), p as Partial<Concept>) } }
+      }
+      case 'message': {
+        const mg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
+        return {
+          current: as(mg),
+          nameKey: 'name',
+          apply: (p) => {
+            markCardDirty(nt.id)
+            // MESSAGE_STAGE_OPTIONS are Title Case because they are shown in a picker, but the
+            // record stores stage lowercase. Left alone, a filled card would hold "Awareness"
+            // against a type that only admits "awareness", and every later comparison would quietly
+            // miss.
+            const patch = { ...p } as Partial<Message> & { stage?: string }
+            if (typeof patch.stage === 'string') patch.stage = patch.stage.toLowerCase() as Message['stage']
+            updateMessage(ensureMessageFor(nt), patch as Partial<Message>)
+          },
+        }
+      }
+      case 'audience': {
+        const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
+        return { current: as(au), nameKey: 'name', apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
+      }
+      default: return null
+    }
+  }
+  /**
+   * EVERY RECORD'S DOCUMENT, read from the store as it is right now rather than as this render saw
+   * it. Used to confirm a write actually landed, which is a question a render-time snapshot cannot
+   * answer about a write made after it. The same index the copy request builds, from the same
+   * lists: two answers to "does this record have a document" would eventually differ, and the one
+   * that differed would be the one deciding whether to tell somebody their file went nowhere.
+   */
+  const liveRecordDocs = (): Map<string, ObjectReference> => {
+    const s = useTrafficStore.getState()
+    const auds = Object.values(s.clientAudiences ?? {}).flat()
+    return indexRecordDocs([
+      s.people, s.companies, s.products, s.brandObjects, s.voices, s.concepts,
+      s.seasons, s.patterns, s.messages, s.triggers, auds,
+      ...auds.map((a) => a.rtbs ?? []),
+      // The brand libraries too, since a proof point can live in one rather than on an audience.
+      ...Object.values(s.brandSystems ?? {}).flatMap((lib) => [lib?.rtbs ?? [], lib?.audiences ?? []]),
+    ])
+  }
+  /**
+   * The document the card is actually read from, and which of the two slots it came from.
+   *
+   * The same call the copy request makes (see wiredCardDocsFor), against the same helper, so the
+   * panel cannot show you one document while the writer is sent another.
+   */
+  const cardDocFor = (nt: CanvasObject): { ref: ObjectReference; from: 'card' | 'record' } | null =>
+    pickReference(nt.reference, (recordForCard(nt)?.current.reference as ObjectReference | undefined))
+  /**
+   * A DOCUMENT LANDING ON A CARD MINTS THE OBJECT IT DESCRIBES, and writes itself onto it.
+   *
+   * This is the change the whole feature is. Uploading a .md used to set one field on the card and
+   * stop: no record was created, so the card named nothing, showed as unlinked in the grid, appeared
+   * nowhere in Records, and the file reached the writer down a private channel that only existed for
+   * it. You had given the app a document about an audience and the app had not learned an audience
+   * existed. Describing the same card in a sentence DID mint one, which is why the two boxes sitting
+   * under one "or" behaved so differently: they were not two ways to do a thing, they were two
+   * different things wearing the same layout.
+   *
+   * SO THE RECORD IS THE DEFAULT HOME. A brief about an audience is true of that audience on the
+   * next campaign too, and writing it to the card would mean re-uploading the same file every time
+   * the object is used, with no way to tell the copies apart once they drift.
+   *
+   * THE NAME COMES FROM THE DOCUMENT, and only when the record has none. A minted record with an
+   * empty name is the "Untitled" row nobody can identify later, and overwriting a name somebody
+   * typed with one scraped from an H1 is the same disrespect the empty-fields-only rule exists to
+   * avoid everywhere else here.
+   *
+   * NOTHING ELSE IS FILLED. The fields stay empty and Generate still fills them on request. Mincing
+   * a brief into a dozen boxes was rejected before (it is a file with invisible effects) and it is
+   * still rejected: what changed is that the document now has a visible home of its own, which is
+   * what made the objection true in the first place.
+   */
+  const attachDocToCard = (nt: CanvasObject, doc: CardDoc, override: boolean) => {
+    const ref = makeObjectReference(doc.name, doc.text, Date.now())
+    const target = recordForCard(nt)
+    // A kind with no record of its own (a Note) keeps its document on the card: there is nothing
+    // else to put it on, and refusing the file would be a worse answer than holding it locally.
+    if (!target || override) { setCardReference(nt.id, ref); return }
+    const named = String(target.current[target.nameKey] ?? '').trim()
+    target.apply({
+      reference: ref,
+      ...(named ? {} : { [target.nameKey]: titleFromDoc(doc.name, doc.text, `Untitled ${(OBJECT_META[nt.kind]?.label ?? 'record').toLowerCase()}`) }),
+    })
+    // The card is dirty either way: `apply` marks it, but only after minting, and the note left over
+    // from whatever happened here last is now describing a document that has been replaced.
+    markCardDirty(nt.id)
+    setFillNote((m) => { const { [nt.id]: _drop, ...rest } = m; return rest })
+    /**
+     * DID IT LAND ON A RECORD? If not, keep it on the card and say so.
+     *
+     * Not every apply can mint. An Audience or a proof point needs a brand to belong to, and with
+     * none picked ensureAudienceRef refuses and returns null, at which point patchCardAudience does
+     * nothing at all. Left alone that is the exact failure this whole change exists to remove: you
+     * hand the app a document, the panel acknowledges the edit, and the file is nowhere.
+     *
+     * So the record is the intent and the card is the floor. The document is never lost, and the
+     * note says which of the two happened rather than leaving the ownership line underneath to
+     * explain a state nobody chose.
+     *
+     * CHECKED AGAINST THE LIVE STORE, because `target.current` was read at render and cannot show a
+     * write made a line ago; `mintedRecordRef` is consulted first for the same reason it exists,
+     * since a record minted in this tick is not on `nt` yet either.
+     */
+    const recId = mintedRecordRef.current.get(nt.id) ?? nt.refId
+    if (recId && liveRecordDocs().get(recId)?.addedAt === ref.addedAt) return
+    setCardReference(nt.id, ref)
+    const word = (OBJECT_META[nt.kind]?.label ?? 'record').toLowerCase()
+    setFillNote((m) => ({
+      ...m,
+      [nt.id]: brand
+        ? `Kept on this campaign: this ${word} could not be saved to Records.`
+        : `Kept on this campaign. Pick a brand for it to become ${withArticle(word)} every campaign can use.`,
+    }))
+  }
   // Linked kinds pick from an established record; only markup (a Note) is freeform and returns null.
   // Concept and Season were once listed here as freeform and are not: both have a record, a rail and
   // a form, and a card that lets you write into one without picking it is how a campaign ends up
@@ -7457,81 +7701,23 @@ export function FlowsView() {
               them, and they are edited where records are edited. What a card asks you for now is the
               thing only you can give it, in the form you already have it in. */}
           {TAKES_CONTEXT.has(nt.kind) && (() => {
-            const recordFor = (): { current: Record<string, unknown>; apply: (p: Record<string, unknown>) => void } | null => {
-              switch (nt.kind) {
-                case 'brand': {
-                  const bo = (nt.refId ? allBrandObjects.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as BrandObject)
-                  return { current: bo as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateBrandObject(ensureBrandObjectFor(nt), p as Partial<BrandObject>) } }
-                }
-                case 'product': {
-                  const pr = (nt.refId ? allProducts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Product)
-                  return { current: pr as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateProduct(ensureProductFor(nt), p as Partial<Product>) } }
-                }
-                case 'person': {
-                  const pe = (nt.refId ? allPeople.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Person)
-                  return { current: pe as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updatePerson(ensurePersonFor(nt), p as Partial<Person>) } }
-                }
-                case 'trigger': {
-                  const tg = (nt.refId ? triggers.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Trigger)
-                  return { current: tg as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateTrigger(ensureTriggerFor(nt), p as Partial<Trigger>) } }
-                }
-                case 'season': {
-                  const se = (nt.refId ? allSeasons.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Season)
-                  return { current: se as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateSeason(ensureSeasonFor(nt), p as Partial<Season>) } }
-                }
-                case 'pattern': {
-                  const pt = (nt.refId ? allPatterns.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Pattern)
-                  return { current: pt as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updatePattern(ensurePatternFor(nt), p as Partial<Pattern>) } }
-                }
-                case 'proof-point': {
-                  const pp = (nt.refId ? brandProof.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', label: '', detail: '' } as Rtb)
-                  return {
-                    current: pp as unknown as Record<string, unknown>,
-                    apply: (p) => {
-                      markCardDirty(nt.id)
-                      const id = ensureProofFor(nt)
-                      if (id && brand) updateBrandProof(brand, id, p as Partial<Rtb>)
-                    },
-                  }
-                }
-                case 'voice': {
-                  const vo = (nt.refId ? allVoices.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Voice)
-                  return { current: vo as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateVoice(ensureVoiceFor(nt), p as Partial<Voice>) } }
-                }
-                case 'concept': {
-                  const cp = (nt.refId ? allConcepts.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Concept)
-                  return { current: cp as unknown as Record<string, unknown>, apply: (p) => { markCardDirty(nt.id); updateConcept(ensureConceptFor(nt), p as Partial<Concept>) } }
-                }
-                case 'message': {
-                  const mg = (nt.refId ? allMessages.find((x) => x.id === nt.refId) : undefined) ?? ({ id: '', name: '' } as Message)
-                  return {
-                    current: mg as unknown as Record<string, unknown>,
-                    apply: (p) => {
-                      markCardDirty(nt.id)
-                      // MESSAGE_STAGE_OPTIONS are Title Case because they are shown in a picker, but
-                      // the record stores stage lowercase. Left alone, a filled card would hold
-                      // "Awareness" against a type that only admits "awareness", and every later
-                      // comparison would quietly miss.
-                      const patch = { ...p } as Partial<Message> & { stage?: string }
-                      if (typeof patch.stage === 'string') patch.stage = patch.stage.toLowerCase() as Message['stage']
-                      updateMessage(ensureMessageFor(nt), patch as Partial<Message>)
-                    },
-                  }
-                }
-                case 'audience': {
-                  const au = (nt.refId ? brandSegments.find((x) => x.id === nt.refId) : undefined) ?? newAudience()
-                  return { current: au as unknown as Record<string, unknown>, apply: (p) => patchCardAudience(nt, p as Partial<AudienceType>) }
-                }
-                // No company case: an account's facts are not generated, so nothing here writes one.
-                default: return null
-              }
-            }
-            const target = recordFor()
+            const target = recordForCard(nt)
             const fields = FILLABLE[nt.kind]
-            /** A Company reaches this box for the upload alone — there is nothing for it to generate. */
+            /** A Company reaches this box for the upload alone: there is nothing for it to generate. */
             const canGenerate = !!fields && !!target
             const busy = filling === nt.id
-            const ref = nt.reference
+            /**
+             * THE DOCUMENT IN FORCE, resolved exactly as the copy request resolves it. Reading
+             * `nt.reference` here instead, as this panel used to, would show the card's override and
+             * stay blank for every card reading its object's own brief: the common case, and the one
+             * the upload button now produces.
+             */
+            const doc = cardDocFor(nt)
+            const ref = doc?.ref
+            /** Whether the record has one of its own, which is what makes an override removable. */
+            const hasRecordDoc = !!(target?.current.reference as ObjectReference | undefined)?.text.trim()
+            /** The object this card names, once it names one. Blank until a document or a Generate mints it. */
+            const recordName = target ? String(target.current[target.nameKey] ?? '').trim() : ''
             const kindLabel = (OBJECT_META[nt.kind]?.label ?? 'card').toLowerCase()
             return (
               <div
@@ -7600,8 +7786,11 @@ export function FlowsView() {
                         const text = e.clipboardData.getData('text/plain')
                         if (text.trim().length < PASTE_AS_DOC_CHARS) return
                         e.preventDefault()
-                        const pasted = docFromPaste(text)
-                        setCardReference(nt.id, makeObjectReference(pasted.name, pasted.text, Date.now()))
+                        // Through the same door an upload uses, so a pasted brief mints and names
+                        // the object exactly as a dropped one does. Two routes to a document that
+                        // differed on whether an object came out of it is the confusion this whole
+                        // change is undoing, and a paste is the easiest one to leave behind.
+                        attachDocToCard(nt, docFromPaste(text), false)
                       }}
                       onKeyDown={(e) => {
                         // Enter generates; shift-Enter is a newline, since a description can run to two lines.
@@ -7632,13 +7821,17 @@ export function FlowsView() {
                     </span>
                     <span className="flow-doc-help">
                       {canGenerate ? (
-                        <>A .md, kept whole and read by the copy writer as what this card is.</>
+                        <>
+                          A .md, kept whole and read by the copy writer as what this card is. It
+                          becomes this {kindLabel} in Records, so every campaign that uses it reads
+                          the same document.
+                        </>
                       ) : (
                         <>
                           A {kindLabel} is a real organisation, so its context has to come from a
                           document rather than from a description: a generated account is a page of
-                          confident guesses about somebody real. Nothing here reaches the copy until
-                          this card is connected.
+                          confident guesses about somebody real. The document becomes the account in
+                          Records. Nothing here reaches the copy until this card is connected.
                         </>
                       )}
                     </span>
@@ -7646,9 +7839,11 @@ export function FlowsView() {
                   <button
                     className="flow-fill-upload"
                     disabled={busy}
-                    onClick={() => { docTargetRef.current = nt.id; docFileRef.current?.click() }}
+                    onClick={() => { docTargetRef.current = { cardId: nt.id, override: false }; docFileRef.current?.click() }}
                   >
-                    {ref ? 'Replace the document' : 'Upload a .md'}
+                    {/* Named for what it writes to, because the two buttons here write to different
+                        things and a pair both saying "Upload a .md" would be a coin toss. */}
+                    {hasRecordDoc ? `Replace this ${kindLabel}'s document` : 'Upload a .md'}
                   </button>
                   {/* The note belongs to whichever control last did something, and with the prompt
                       box gone on a Company card this is the only place a refusal ("that has to be a
@@ -7656,7 +7851,31 @@ export function FlowsView() {
                   {!canGenerate && fillNote[nt.id] && !busy && <span className="flow-fill-note">{fillNote[nt.id]}</span>}
                 {/* THE ATTACHED DOCUMENT, shown as what it is: a named source of a stated size, with
                     the one control that matters on it. It is the card's context rather than a thing
-                    that filled the card in, so it stays here, and it goes to the writer whole. */}
+                    that filled the card in, so it stays here, and it goes to the writer whole.
+
+                    WHOSE DOCUMENT IT IS, said above it. Almost always the object's own, which is
+                    why it can appear on a card nobody has uploaded anything to: point a card at an
+                    audience that already has a brief and the brief is simply there. Without a line
+                    saying so, a document you did not attach showing up under an upload button reads
+                    as a bug, and the "Remove" beside it reads as removing it from this campaign
+                    when it would take it off the object for every campaign at once. */}
+                {ref && doc && (
+                  <div className="flow-fill-doc-from">
+                    {doc.from === 'record' ? (
+                      <>
+                        This is {recordName ? <strong>{recordName}</strong> : `the ${kindLabel}`}'s own
+                        document. Every campaign that uses it reads this.
+                      </>
+                    ) : (
+                      <>
+                        Written for this campaign only.{' '}
+                        {hasRecordDoc
+                          ? `The ${kindLabel}'s own document is set aside while this is here.`
+                          : `It is not saved onto the ${kindLabel}, so no other campaign reads it.`}
+                      </>
+                    )}
+                  </div>
+                )}
                 {ref && (
                   <div className="flow-fill-doc flow-fill-doc-head">
                     <span className="flow-fill-doc-ic" aria-hidden="true">
@@ -7679,14 +7898,47 @@ export function FlowsView() {
                         {ref.truncated && <em className="flow-fill-doc-cut"> · cut to fit the writer</em>}
                       </span>
                     </span>
+                    {/* REMOVES WHICHEVER DOCUMENT IS SHOWING, which is the only behaviour that
+                        matches the thing above it. Sending this always to the card would leave the
+                        record's document on screen after you pressed the button that removes it,
+                        and sending it always to the record would let a campaign-local override take
+                        the object's brief away from every other campaign on its way out. */}
                     <button
                       className="flow-fill-doc-x"
-                      title="Remove this document"
-                      aria-label="Remove this document"
-                      onClick={() => setCardReference(nt.id, null)}
+                      title={doc?.from === 'record' ? `Remove this document from the ${kindLabel}` : 'Remove this campaign’s document'}
+                      aria-label={doc?.from === 'record' ? `Remove this document from the ${kindLabel}` : 'Remove this campaign’s document'}
+                      onClick={() => {
+                        if (doc?.from === 'card') setCardReference(nt.id, null)
+                        else if (target) { target.apply({ reference: undefined }); markCardDirty(nt.id) }
+                      }}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
+                  </div>
+                )}
+                {/* THE OVERRIDE, offered only once there is something to override.
+                    A second document on a card is a real need (this campaign reads the persona
+                    differently) and a bad default: shown from the start it would read as the normal
+                    way to attach a file, and every upload would land somewhere only one campaign can
+                    see. So it appears under a document that already exists, phrased as the departure
+                    from it that it is. */}
+                {ref && target && (
+                  <div className="flow-doc-override">
+                    {doc.from === 'record' ? (
+                      <button
+                        className="flow-doc-override-go"
+                        disabled={busy}
+                        onClick={() => { docTargetRef.current = { cardId: nt.id, override: true }; docFileRef.current?.click() }}
+                      >
+                        Use a different document for this campaign
+                      </button>
+                    ) : (
+                      hasRecordDoc && (
+                        <button className="flow-doc-override-go" onClick={() => setCardReference(nt.id, null)}>
+                          Go back to the {kindLabel}&rsquo;s own document
+                        </button>
+                      )
+                    )}
                   </div>
                 )}
                 {/* AND WHAT IT SAYS. A filename and a character count tell you a file is attached;
@@ -7743,13 +7995,21 @@ export function FlowsView() {
             const n = affectedRowIds(nt).length
             return (
               <div className="flow-applybar">
+                {/* SAYS WHAT IS TRUE OF THE COPY, not "Saved" next to a button reading "Save".
+                    The card is already saved and the button never saved it: it rewrites work that
+                    was drafted before this edit. Opening with the word the button also uses left
+                    people pressing it to find out whether the first sentence meant it, and pressing
+                    it a second time to be sure. The state of the record is not in question here;
+                    what the change has and has not reached is. */}
                 <span className="flow-applybar-txt">
                   {n
-                    ? `Saved. ${n} ${n === 1 ? 'asset was' : 'assets were'} written before this change.`
-                    : 'Saved. Nothing is written from this card yet.'}
+                    ? `${n} ${n === 1 ? 'asset was' : 'assets were'} written before this change, so ${n === 1 ? 'it does' : 'they do'} not reflect it yet.`
+                    : 'Kept. Anything generated from this card from now on will use it.'}
                 </span>
+                {/* Named for what it does. "Save updates" on a card that is already saved is the
+                    reason the bar above it had to open by insisting it was saved. */}
                 <button className="flow-applybar-go" disabled={regenerating} onClick={() => void applyCardChanges(nt, n > 0)}>
-                  {regenerating ? 'Rewriting…' : n ? 'Save updates and rewrite' : 'Save updates'}
+                  {regenerating ? 'Rewriting…' : n ? `Rewrite ${n === 1 ? 'it' : 'them'} with this` : 'Done'}
                 </button>
                 {/* Flagging rather than rewriting is the honest option for a large set: it marks them
                     without spending the tokens or discarding copy someone may have hand-edited. */}
@@ -11445,7 +11705,7 @@ export function FlowsView() {
           // Reset first: picking the same file twice in a row fires no change event otherwise.
           e.target.value = ''
           docTargetRef.current = null
-          if (f && target) void attachDocFile(target, f)
+          if (f && target) void attachDocFile(target.cardId, f, target.override)
         }}
       />
 
