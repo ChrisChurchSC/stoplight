@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
 import { AGE_RANGES, INCOME_RANGES } from './taxonomy'
 
@@ -55,6 +56,15 @@ export interface Person {
   readsWhen?: string
   /** Who else is in the decision: a spouse, a crew, a buying committee. */
   decidesWith?: string
+  /**
+   * The document this person is, kept whole. Not a column: see Voice.reference for why.
+   *
+   * NOT counted by hasPersona, on purpose. That asks whether the ten persona FIELDS are filled well
+   * enough to send, and the answer does not change because a research doc is attached: the document
+   * travels by its own route (see wiredCardDocsFor) and would otherwise make every field-empty
+   * person read as a complete persona to code that then sends ten blanks.
+   */
+  reference?: ObjectReference
 }
 
 /** The persona fields, in the order they are asked for and sent. */

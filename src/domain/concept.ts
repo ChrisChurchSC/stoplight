@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId } from './records'
 
 /**
@@ -26,6 +27,8 @@ export interface Concept {
   audience?: string
   status?: 'draft' | 'approved' | 'retired' | ''
   notes?: string
+  /** The document this record is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 export const freshConceptId = (): string => freshRecordId('cpt')

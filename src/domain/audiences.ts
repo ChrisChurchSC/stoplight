@@ -1,4 +1,5 @@
 import type { Descriptor } from './descriptors'
+import type { ObjectReference } from './objectReference'
 import type { Rtb } from './rtb'
 import type { ChannelId } from './types'
 
@@ -80,6 +81,8 @@ export interface AudienceType {
   /** Library governance: undefined/true = an approved master; explicit false = an
    *  unvetted draft (authored, not yet blessed into the curated library). */
   approved?: boolean
+  /** The document this segment is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 /** Stored lowercase, because that is what funnelStage already holds everywhere else. Capitalizing

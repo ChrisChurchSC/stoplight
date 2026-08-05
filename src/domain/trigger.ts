@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
 
 /**
@@ -22,6 +23,8 @@ export interface Trigger {
   audience?: string
   status?: 'active' | 'paused' | 'draft' | ''
   notes?: string
+  /** The document this record is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 /** What kind of trigger this is — a fixed pick-list. */

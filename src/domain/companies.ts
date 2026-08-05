@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId, type RecordColumn, type RecordField } from './records'
 
 /**
@@ -25,6 +26,14 @@ export interface Company {
   linkedin?: string
   owner?: string
   notes?: string
+  /**
+   * The document this account is, kept whole. Not a column: see Voice.reference for why.
+   *
+   * The one kind where this is the ONLY way in. An account is a real organisation, so its facts are
+   * never generated from a sentence (see FILLABLE, which has no company entry), and until a document
+   * could stand as the record there was nothing a Company card could be filled from at all.
+   */
+  reference?: ObjectReference
 }
 
 export const COMPANY_COLUMNS: RecordColumn[] = [

@@ -1,3 +1,4 @@
+import type { ObjectReference } from './objectReference'
 import { freshRecordId } from './records'
 
 /**
@@ -35,6 +36,8 @@ export interface Product {
   stage?: string
   status?: 'active' | 'sunset' | 'concept' | ''
   notes?: string
+  /** The document this record is, kept whole. Not a column: see Voice.reference for why. */
+  reference?: ObjectReference
 }
 
 /** What kind of thing is being sold. Sets the shape of the sale more than the category does. */

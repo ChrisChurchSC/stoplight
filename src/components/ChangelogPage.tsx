@@ -23,6 +23,29 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.36',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Handing a card a .md now creates the thing the document describes. Upload a persona onto an Audience card and an audience appears in Records, named from the document\'s own heading, with the file attached to it. Until now the two boxes on a card behaved as opposites while sitting under one word: describing a card in a sentence created a record, and uploading the document that already said all of it created nothing. The file sat on the card alone, so the card named no object, read as unlinked in the grid, and appeared nowhere in your library.',
+          'The document belongs to the object, not to the campaign you happened to upload it on. Every campaign that uses that audience reads the same brief, and the card now says so above the file rather than leaving you to guess why a document you did not attach is showing.',
+          'A pasted brief takes the same route as an uploaded one, so it also mints and names the object instead of quietly living on one card.',
+          'Where one campaign needs to read an object differently, "Use a different document for this campaign" attaches one that applies to that board only and leaves the object untouched everywhere else. Removing it puts the object\'s own document back.',
+          'A Company card can be filled in at last. An account\'s facts are never generated, because a generated account is a page of confident guesses about somebody real, which left nothing a Company card could be built from. Its document is now that answer, and it creates the account.',
+          'Records show the document a record holds, where you can read it, replace it or take it off.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'The bar under a card no longer opens by saying "Saved" next to a button reading "Save updates". The card was already saved and that button never saved it: it rewrites assets that were drafted before your change. It now says which assets are behind and offers to rewrite them.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.35',
     dateLabel: 'August 5, 2026',
     groups: [

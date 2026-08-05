@@ -1,6 +1,22 @@
 import { MAX_OBJECT_DEPTH, type SmartObject } from './smartObject'
 import { REF_TYPE_FOR_OBJECT_KIND, type CanvasObject, type FlowBoard } from './flowBoard'
+import { pickReference, type ObjectReference } from './objectReference'
 import type { FlowReference } from './clients'
+
+/**
+ * A document that reached a target, and the card that carried it there.
+ *
+ * The RESOLVED reference travels with the card rather than being looked up again by the caller: the
+ * card holds one slot and its record holds another, so a caller handed only the card would have to
+ * repeat the precedence, and a precedence repeated in two places is one that eventually differs.
+ * `from` is here so the copy request can say whether the writer is reading the object's own brief or
+ * something written for this board alone.
+ */
+export interface WiredCardDoc {
+  card: CanvasObject
+  ref: ObjectReference
+  from: 'card' | 'record'
+}
 
 /**
  * WHAT A WIRE CARRIES: resolving the board's graph into per-target instructions.
@@ -285,6 +301,16 @@ export function wiredObjectsFor(board: FlowBoard, smartObjects: SmartObject[], t
  * terms — so this shares upstreamCardIds with the other two walks for the reason stated there: three
  * answers to "what is wired in" would eventually disagree, invisibly.
  *
+ * THE DOCUMENT IS USUALLY THE RECORD'S, not the card's. Handing a card a .md writes it onto the
+ * object the card names, so it is true of that object on every board; a card holds one of its own
+ * only when somebody deliberately overrode it here. `recordDocs` is that lookup, taken as a map
+ * rather than read from a store so this stays a pure walk over a board, and the precedence is
+ * pickReference's rather than this function's for the reason given there.
+ *
+ * A CARD THAT NAMES NOTHING contributes nothing, even if its record would have had a document: with
+ * no refId there is no record to ask about, which is exactly the state a card is in before its
+ * document has minted one.
+ *
  * A card inside a smart object contributes its document too. The placement stands in for its members
  * everywhere else on this board, and a document is not the exception: bundling a card is a statement
  * about where it lives, never a decision to stop reading what it says.
@@ -293,10 +319,14 @@ export function wiredObjectsFor(board: FlowBoard, smartObjects: SmartObject[], t
  * this feeds is about what a document says, and naming the cards that have not been written about
  * spends context saying nothing.
  */
-export function wiredCardDocsFor(board: FlowBoard, target: string): CanvasObject[] {
+export function wiredCardDocsFor(
+  board: FlowBoard,
+  target: string,
+  recordDocs: Map<string, ObjectReference>,
+): WiredCardDoc[] {
   const objectById = new Map(board.objects.map((o) => [o.id, o]))
   const placementById = new Map(board.placements.map((p) => [p.id, p]))
-  const out: CanvasObject[] = []
+  const out: WiredCardDoc[] = []
   const seen = new Set<string>()
   /** Every card a node stands for: itself, or everything inside it if it is a placement. */
   const cardsAt = (id: string): CanvasObject[] => {
@@ -307,11 +337,25 @@ export function wiredCardDocsFor(board: FlowBoard, target: string): CanvasObject
   }
   for (const id of upstreamCardIds(board, target)) {
     for (const card of cardsAt(id)) {
-      // Deduped by CARD, so a card reached both directly and through the object holding it sends its
-      // document once. Two copies of one brief read as two briefs that happen to agree.
-      if (seen.has(card.id) || !card.reference?.text.trim()) continue
-      seen.add(card.id)
-      out.push(card)
+      const picked = pickReference(card.reference, card.refId ? recordDocs.get(card.refId) : undefined)
+      if (!picked) continue
+      /**
+       * DEDUPED BY THE DOCUMENT'S OWNER, not by the card.
+       *
+       * A card reached both directly and through the object holding it must send its brief once:
+       * two copies read as two briefs that happen to agree. But so must two DIFFERENT cards that
+       * name the same record, which is the ordinary way a board points at one audience from three
+       * channels: the document belongs to the record, so three cards naming it is still one brief.
+       * That is the rule wiredObjectsFor already keeps one rung up.
+       *
+       * An override is keyed by its card, because it is a document that exists nowhere else. Two
+       * cards on one record with one override between them are genuinely two briefs, and collapsing
+       * them would drop whichever the walk happened to reach second.
+       */
+      const key = picked.from === 'card' ? card.id : card.refId!
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ card, ...picked })
     }
   }
   return out
