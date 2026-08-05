@@ -68,6 +68,10 @@ export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelSt
   if (channel === 'youtube')
     return assetType === 'short' || assetType === 'community' ? 'awareness' : 'consideration'
   if (channel === 'blog' && assetType === 'case-study') return 'conversion'
+  // A login page is the one website page that talks to people who already bought. Left on the
+  // channel default it would sit in consideration and be briefed like a page that has to
+  // persuade, which is how it ends up carrying social proof and objection handling.
+  if (channel === 'website' && assetType === 'login') return 'retention'
   // A first touch is a first touch even when a rep sends it: cold outreach reaches
   // (the channel default), and everything that comes after it nurtures.
   if (channel === 'sales-outreach')

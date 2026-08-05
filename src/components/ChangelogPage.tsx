@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.25',
+    version: 'v1.26',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -33,6 +33,20 @@ const RELEASES: Release[] = [
           'The picker itself shows those lines too. Choosing between "Ladder", "Open loop" and "Third rail" used to mean already knowing what all three were, because a dropdown could only offer their names. Every record now comes with its own description, and a library big enough to scroll comes with a search box.',
           'The name field is gone from the card, because the record already carries the name. It was a second place to write the same word, and the two drifted apart the moment either changed. Naming a card something the library should not be called is still there, in the inspector, where it is a deliberate act rather than the first thing a blank card asks you for. A sticky note keeps its name field, having no record to inherit one from.',
           'Making a record you do not have yet is still one gesture from the card, and unlinking one is now an option on the list rather than a blank row at the top of it.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.25',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The website channel has a Login page type. It sits alongside the homepage, pricing, solutions, comparison and about pages, and it can be picked from the Type dropdown or dropped straight onto a canvas from the Web palette. Until now the only honest way to plan the page every returning customer actually uses was to file it under the generic "Web page" and write the difference in a note.',
+          'A login page is briefed as a door rather than a pitch. It asks for a page title, a supporting line, the sign-in button, the forgot-password link, the prompt for someone who does not have an account yet, the message shown when a sign-in fails, and a line pointing at help. The website default would have asked for social proof, a mid-page CTA and objection handling, which is a lot of persuasion aimed at somebody who has already bought.',
+          'It also sits in the right part of the funnel. Website pages default to consideration because that is what they are doing, but a login page is talking to existing customers, so it resolves to retention and stops being counted as a page that has to win the argument.',
         ],
       },
     ],
