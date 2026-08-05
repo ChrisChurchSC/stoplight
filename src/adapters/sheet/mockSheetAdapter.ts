@@ -30,6 +30,12 @@ export class MockSheetAdapter implements SheetAdapter {
     return this.read().rows
   }
 
+  /** localStorage is already synchronous, so the async wrapper was the only thing making the
+   *  store wait a paint for rows it could have had at creation. See SheetAdapter.listSync. */
+  listSync(): TrafficRow[] {
+    return this.read().rows
+  }
+
   async append(rows: TrafficRow[]): Promise<void> {
     const snap = this.read()
     snap.rows.push(...rows)

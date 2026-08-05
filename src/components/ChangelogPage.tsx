@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.23',
+    version: 'v1.24',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -33,6 +33,19 @@ const RELEASES: Release[] = [
           'The conversion stage has somewhere to land. Three channels used to resolve to conversion, all of them media or a page, which is why the stage looked thin on a campaign that was converting perfectly well offline. A proposal, a checkout and the collateral worked in a live deal now sit there as first-class assets, and a pricing or comparison page is read as a decision surface rather than as education.',
           'The Opp band is no longer empty. The demand-gen and sales-led playbooks drew that band with nothing in it because no channel existed that could honestly land there. Proposals and sales collateral now fill it, and outbound campaigns start where they really start, with the rep\'s first email in Contact rather than folded in with the follow-ups.',
           'Each new channel arrives with the rest of what a channel needs: its own copy fields (the ask on an outreach email, the terms on a proposal, the guarantee on a checkout), its own UTM convention, and its own tracking checklist, which for these is the CRM and the store rather than an ad pixel.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.23',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Campaigns opens with your campaigns in it. The page used to paint once before your work had loaded, so for a moment it said "0 campaigns" and offered to start your first one, and then the cards and their channel counts appeared underneath that. Nothing was ever wrong with the data; the page was simply answering a question it could not yet answer, and the correction is what read as a glitch.',
+          'The workspace is now read before the first frame rather than just after it, so there is no empty state to correct. Where the work genuinely does have to be fetched, the page stays quiet until it arrives instead of claiming you have nothing.',
         ],
       },
     ],
