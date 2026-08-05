@@ -23,6 +23,21 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.25',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A card on the canvas now shows what it is pointing at, not just a dropdown of names. Pick a concept, an audience, a pattern or a proof point and the card reads as that record: its name, and the one line underneath saying what it is. A card with nothing behind it says so plainly, so an empty card is visible from the board instead of turning up missing in the copy.',
+          'The picker itself shows those lines too. Choosing between "Ladder", "Open loop" and "Third rail" used to mean already knowing what all three were, because a dropdown could only offer their names. Every record now comes with its own description, and a library big enough to scroll comes with a search box.',
+          'The name field is gone from the card, because the record already carries the name. It was a second place to write the same word, and the two drifted apart the moment either changed. Naming a card something the library should not be called is still there, in the inspector, where it is a deliberate act rather than the first thing a blank card asks you for. A sticky note keeps its name field, having no record to inherit one from.',
+          'Making a record you do not have yet is still one gesture from the card, and unlinking one is now an option on the list rather than a blank row at the top of it.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.24',
     dateLabel: 'August 5, 2026',
     groups: [

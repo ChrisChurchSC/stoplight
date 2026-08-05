@@ -7818,11 +7818,10 @@ button.mf-open:focus-visible,
 }
 .flow-note-sel:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
 .flow-note-sel:hover { border-color: var(--border-strong); }
-/* THE CARD'S NAME, under the kind caption and above whatever it points at.
-   Plain text rather than a bordered box: every card carries one now, and eleven framed inputs on a
-   board would out-shout the record pickers underneath them, which are the controls that do the work.
-   Same material as .flow-obj-name, which a smart object has had all along — one field, two places,
-   so naming a card and naming a bundle look like the same act. */
+/* THE CARD'S NAME — a sticky's, now. A record-linked card takes its name from the record its picker
+   names, and the inspector holds the override; this is what is left for the one kind with no record
+   underneath it. Plain text rather than a bordered box, same material as .flow-obj-name, so naming a
+   sticky and naming a bundle look like the same act. */
 .flow-note-name {
   margin: 0 10px 5px; width: calc(100% - 20px); box-sizing: border-box;
   border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
@@ -7830,6 +7829,87 @@ button.mf-open:focus-visible,
 }
 .flow-note-name:focus { outline: none; }
 .flow-note-name::placeholder { color: var(--text-faint); font-weight: 550; }
+
+/* THE RECORD PICKER on an object card: the card's face, and the list you change it from.
+   The face is the card's whole body — a name and the line under it saying what the record is — so
+   the closed state reads as a statement about the card rather than as a form control sitting on it.
+   No border and no chevron until you go near it: a board of eleven cards is eleven of these, and
+   eleven framed dropdowns is a settings panel, not a canvas. */
+/* 5px + the face's own 4px padding = the 9px inset every other child of an input card carries, so
+   the name lines up under the kind caption instead of stepping in from it. Only input cards ever
+   render a picker (a sticky has no record to point at), so there is one inset to match, not two. */
+.flow-pick { position: relative; margin: 0 5px 6px; }
+.flow-pick-face {
+  width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 1px;
+  border: 1px solid transparent; border-radius: 8px; background: none; padding: 4px;
+  font: inherit; text-align: left; cursor: pointer; min-width: 0;
+}
+.flow-pick-face:hover, .flow-pick-face.open { border-color: var(--border); background: var(--surface-2); }
+.flow-pick-face:focus-visible { outline: 2px solid var(--note-tone, var(--accent)); outline-offset: 1px; }
+.flow-pick-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Nothing picked: italic and faint, the same way the inspector's context list says it. */
+.flow-pick-name em { font-weight: 550; color: var(--text-faint); }
+.flow-pick-sub {
+  font-size: 11px; color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-height: 14px;
+}
+/* Anchored to the card, above the cards around it. There is deliberately no scrim: every card
+   carries an inline transform, so a fixed-position child is contained by the card rather than the
+   viewport. RecordPicker closes on a capture-phase press instead — see the comment there. */
+/* WIDER THAN THE CARD, on purpose. The card is 236px and the detail line is the whole reason this
+   list exists — at card width every one of them ellipsed after five words, which is the state the
+   bare <select> was already in. */
+.flow-pick-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 41;
+  width: 282px; max-width: 82vw;
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px; box-shadow: 0 14px 36px rgba(16, 24, 40, 0.2);
+  padding: 5px; cursor: default;
+}
+.flow-pick-search {
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
+  font: inherit; font-size: 12px; color: var(--text); padding: 5px 8px; margin-bottom: 4px;
+}
+.flow-pick-search:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
+.flow-pick-list { max-height: 232px; overflow-y: auto; display: flex; flex-direction: column; }
+.flow-pick-note { font-size: 11px; line-height: 1.45; color: var(--text-faint); padding: 5px 8px 6px; }
+/* One option: the name, and the record's own line under it. The same two lines the card's face
+   shows, because picking one is a preview of what the card becomes. */
+.flow-pick-opt {
+  display: flex; align-items: flex-start; gap: 6px;
+  border: 0; background: none; text-align: left; cursor: pointer;
+  border-radius: 7px; padding: 6px 8px; font: inherit; color: var(--text); min-width: 0;
+}
+.flow-pick-opt:hover { background: var(--surface-2); }
+.flow-pick-opt.on .flow-pick-opt-name { font-weight: 650; }
+.flow-pick-opt-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.flow-pick-opt-name {
+  font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Two lines, then clipped. One line ellipsed most of these mid-sentence and the row stopped
+   answering the question it is there to answer; unbounded, one wordy record pushes the rest of the
+   library below the fold. */
+.flow-pick-opt-sub {
+  font-size: 11px; line-height: 1.35; color: var(--text-faint);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.flow-pick-tick { flex: 0 0 auto; width: 11px; font-size: 11px; line-height: 1.5; }
+/* Unlink and "+ New" — actions on the list rather than members of it, so they sit below a hairline
+   and never scroll away with the options. */
+.flow-pick-act {
+  border: 0; background: none; text-align: left; cursor: pointer; font: inherit; font-size: 12px;
+  color: var(--text-muted); border-radius: 7px; padding: 6px 8px; margin-top: 4px;
+  border-top: 1px solid var(--border); border-top-left-radius: 0; border-top-right-radius: 0;
+}
+.flow-pick-act:hover { background: var(--surface-2); color: var(--text); }
+.flow-pick-act + .flow-pick-act { margin-top: 0; }
+.flow-pick-new { color: var(--accent); font-weight: 600; }
+.flow-pick-new:hover { color: var(--accent); }
 /* A Data source card previews its linked data set as a mini spreadsheet (double-click to open). */
 .flow-note-mini { margin: 0 10px 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
 .flow-note-mini .bds-mini { height: 50px; border-radius: 5px; }
