@@ -139,6 +139,7 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'pricing-page', label: 'Pricing page', channel: 'website', assetType: 'pricing', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'solutions-page', label: 'Solutions / use-case page', channel: 'website', assetType: 'solutions', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'comparison-page', label: 'Comparison / vs page', channel: 'website', assetType: 'comparison', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
+  { key: 'login-page', label: 'Login page', channel: 'website', assetType: 'login', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'landing', label: 'Landing page', channel: 'landing-page', assetType: 'lead-capture', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'sales-page', label: 'Sales / offer page', channel: 'landing-page', assetType: 'sales', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'case-study', label: 'Case study', channel: 'blog', assetType: 'case-study', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },

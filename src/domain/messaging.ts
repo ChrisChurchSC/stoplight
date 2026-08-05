@@ -201,6 +201,19 @@ const OVERRIDES: Record<string, MessagingField[]> = {
     f('faq', 'FAQ', undefined, 300, true),
     f('cta-footer', 'Footer CTA', undefined, 30),
   ],
+  // A login page is a door, not a pitch. Everything the website base carries — social proof,
+  // mid-page CTA, objection handling — is noise between someone and their account, so the set
+  // is the door itself plus the two ways through it that fail most often: a forgotten password
+  // and a visitor who does not have an account yet.
+  'website:login': [
+    f('headline', 'Page title', undefined, 40),
+    f('subhead', 'Supporting line', undefined, 90, true),
+    f('cta', 'Sign-in button', undefined, 20),
+    f('recovery', 'Forgot-password link', undefined, 30),
+    f('signup', 'No account yet / sign-up prompt', undefined, 60),
+    f('error', 'Failed sign-in message', undefined, 120, true),
+    f('support', 'Help / contact line', undefined, 90, true),
+  ],
   // Email
   'email:newsletter': [subject(), preview(), body(), cta(30)],
   'email:promotional': [subject(), preview(), f('headline', 'Hero headline', undefined, 60), body(), cta(30)],
