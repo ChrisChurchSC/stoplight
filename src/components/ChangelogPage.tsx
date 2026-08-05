@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.26',
+    version: 'v1.28',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -32,6 +32,34 @@ const RELEASES: Release[] = [
           'A card wired to a deliverable while you are still building the campaign now reaches the copy. A deliverable has one identity while you are configuring it and another once it is a group of real assets, and nothing translated between the two, so every line drawn in the builder pointed at something the finished campaign had never heard of. Two things followed and each hid the other: the records never reached the writer, and the line itself was deleted the next time the campaign was opened. What was left was an Audience card sitting on the canvas with no line and no effect on a word of the copy.',
           'Naming a card after you have wired it works in that order now. Drop a card, wire it into an email, then say which audience it is: the record reaches that email. Before this, the wire was checked for records once, at the moment it was drawn, and a card that was still blank at that moment was never asked again.',
           'The context toast stops asking for a card that is already on the board. When something is missing it now says which of the three things is actually wrong: the card has no line to the brief, or it names no record yet, or the brief is fine and every asset is overriding it. The button matches, so it wires or opens the card you have instead of adding a second one beside it.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.27',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Closing a campaign tab closes the tab, and does nothing else. With several campaigns open, tidying one away could throw you off the Campaigns page and into a different campaign\'s board. The strip was moving you whenever the tab you closed happened to be the campaign you had opened most recently, and that is remembered long after you have gone back to the index, so a close that should have been housekeeping read as being sent somewhere.',
+          'It could also change which brand you were looking at. The campaign it jumped to was simply the next tab along, and opening a campaign scopes the workspace to its brand, so a close could quietly narrow the Campaigns page to one brand and take every other brand\'s campaigns off it. Nothing had been deleted, but the page had emptied. A close now stays within the brand you are in, and leaves an "all brands" view showing all brands.',
+          'Closing the campaign you are actually looking at still moves you, because what you were reading has gone: to another tab of the same brand, or back to the Campaigns index when that was the last one. Previously the last tab left you standing on the board of the campaign whose tab you had just closed, with nothing in the strip pointing at it.',
+          'A campaign only ever leaves the Campaigns page when it is deleted.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.26',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The pattern picker is gone from the asset panel. Opening a single email used to offer a list of alternative copy patterns, which let one asset step out of the arc its siblings were written to and quietly rewrote its copy the moment you clicked. Choosing a pattern is a decision about the channel, so it now happens in one place: the channel card, where it sets the arc for everything in it.',
+          'The asset panel still tells you where the asset sits. The step block stays, so you can see which pattern this one is part of, which step it is, its subject formula, framework and CTA, without a control next to it that rewrites the copy when read as a label.',
         ],
       },
     ],

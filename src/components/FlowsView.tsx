@@ -1643,8 +1643,6 @@ export function FlowsView() {
       next.has(type) ? next.delete(type) : next.add(type)
       return next
     })
-  // Swap a generated-idea post for a real ingested post from the library.
-  const [patternBusy, setPatternBusy] = useState(false)
   // References changed since the last generation → offer a Regenerate button.
   const [refsDirty, setRefsDirty] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
@@ -6867,31 +6865,6 @@ export function FlowsView() {
   const selObject = objects.find((n) => n.id === sel) ?? null
   const selGroup = placements.find((g) => g.id === sel) ?? null
 
-  // Candidates for a swap: only ingested posts that MATCH the deliverable — same channel, or at
-  // least the same platform (so a real LinkedIn post can back a LinkedIn ad, but a YouTube video
-  // can never stand in for a LinkedIn ad). No cross-platform fallback. Filtered by the search box.
-
-  // Replace the selected generated-idea post's content with a real ingested post, keeping
-  // its slot in the flow (id, campaign, schedule, audience) so it stays in place.
-  // The reverse of a swap: drop the ingested post's live fields (source, url, metrics, posted
-  // status) back to a generated draft, then write fresh AI copy for the slot.
-  // Change the copy PATTERN (blueprint) on a single asset: reapply the blueprint's step at this
-  // asset's position, keeping its slot, then rewrite its copy to the new framework/CTA/levers.
-  const applyPatternToPost = async (row: TrafficRow, bp: EmailBlueprint) => {
-    if (patternBusy) return
-    setPatternBusy(true)
-    try {
-      const cur = stepFromLineage(row.lineage)
-      const i = cur ? Math.max(0, cur.blueprint.steps.findIndex((s) => s.label === cur.step.label)) : 0
-      const fieldKeys = messagingFields(row.channel, row.assetType).map((f) => f.key)
-      const briefs = blueprintBriefs(bp, fieldKeys)
-      const lineage: Record<string, string> = { ...(row.lineage ?? {}), brief: briefs[i % briefs.length], ...stepLineage(bp, i) }
-      await updateRow(row.id, { messaging: {}, lineage })
-      await draftCopy([row.id])
-    } finally {
-      setPatternBusy(false)
-    }
-  }
   useEffect(() => {
     setRefsDirty(false)
   }, [viewName])
@@ -8209,30 +8182,12 @@ export function FlowsView() {
             </div>
           )
         })()}
-        {(() => {
-          // Alternatives come from the pattern the asset is USING (its blueprint's
-          // channel), so a post keeps its pattern family even if its row channel drifted.
-          const curBp = stepFromLineage(selPost.lineage)?.blueprint
-          const chan = (curBp?.channel ?? selPost.channel) as ChannelId
-          const bps = blueprintsFor(chan, curBp?.assetType ?? selPost.assetType)
-          // Changing the pattern rewrites the copy, so only for generated posts — an
-          // ingested (live) post keeps its real copy until you Replace it.
-          if (bps.length < 2 || isIngestedPost(selPost)) return null
-          const cur = curBp?.key
-          return (
-            <div className="flow-bp" style={{ marginTop: 12 }}>
-              <div className="flow-cfg-h">Pattern</div>
-              <div className="flow-inspect-note" style={{ marginTop: 0, marginBottom: 8 }}>Change the copy pattern for just this asset. This rewrites its copy.</div>
-              {bps.map((bp) => (
-                <button key={bp.key} className={`flow-bp-pick${cur === bp.key ? ' on' : ''}`} disabled={patternBusy} onClick={() => void applyPatternToPost(selPost, bp)}>
-                  <span className="flow-bp-pick-name">{bp.name}</span>
-                  <span className="flow-bp-pick-cadence">{patternBusy ? 'Applying…' : cur === bp.key ? 'Current' : bp.cadence}</span>
-                  <span className="flow-bp-pick-sum">{bp.summary}</span>
-                </button>
-              ))}
-            </div>
-          )
-        })()}
+        {/* NO per-asset pattern picker. Choosing a blueprint is a decision about the
+            CHANNEL — it sets the arc every asset in that channel steps through — so it
+            lives on the channel node's panel. Offering it again on a single asset let one
+            card leave the arc its siblings were written to, and buried an operation that
+            silently rewrites the copy under a heading that read like a label. The step
+            block above still says which pattern this asset is part of. */}
 
       </div>
     </>
