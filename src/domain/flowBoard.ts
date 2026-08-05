@@ -9,6 +9,8 @@
  * the component that renders it. OBJECT_META stays in the component: it carries JSX icons.
  */
 
+import type { CardGroup } from './cardGroups'
+import { pruneGroups } from './cardGroups'
 import type { ObjectReference } from './objectReference'
 
 /** The kinds of object you can drop on a board. */
@@ -165,6 +167,22 @@ export interface FlowBoard {
    * loads with the old meaning intact.
    */
   detached?: string[]
+  /**
+   * CARDS TIED TOGETHER SO AN ARRANGEMENT HOLDS.
+   *
+   * A group is spatial, not semantic: it says "these cards belong at these offsets from each
+   * other", so selecting one selects all and dragging one drags all. That is the whole of it — a
+   * group changes nothing about what a card means, what it is wired to, or what gets written from
+   * it. The semantic bundle is a smart object (see SmartPlacement), which is a different move
+   * entirely: it collapses context cards into one named, reusable thing.
+   *
+   * Kept on the board rather than on the cards because membership is a property of THIS canvas.
+   * Any node id the board can position may be a member — an object card, a placement, a channel or
+   * a post — which is also why it lives beside `pos` and is pruned by the same rules.
+   *
+   * Optional, and omitted when empty, so every board saved before groups existed loads unchanged.
+   */
+  groups?: CardGroup[]
 }
 
 /**
@@ -245,6 +263,21 @@ export function pruneBoard(
       ? (() => {
           const kept = board.detached.filter((k) => known.targetIds?.has(k))
           return kept.length ? { detached: kept } : {}
+        })()
+      : {}),
+    // A group holds node ids, so it goes stale exactly the way a connector endpoint does — and is
+    // kept honest by the same test for what still exists. Members that have gone are dropped, and
+    // a group left holding fewer than two cards dissolves rather than framing a single card.
+    ...(board.groups?.length
+      ? (() => {
+          const live = new Set<string>()
+          for (const g of board.groups) {
+            for (const m of g.ids) {
+              if (liveIds.has(m) || known.targetIds?.has(m) || m.includes(':')) live.add(m)
+            }
+          }
+          const kept = pruneGroups(board.groups, live)
+          return kept.length ? { groups: kept } : {}
         })()
       : {}),
   }

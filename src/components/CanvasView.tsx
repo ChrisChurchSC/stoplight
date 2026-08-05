@@ -16,6 +16,20 @@ import {
   stageSuggestions,
   type BranchSuggestion,
 } from '../domain/branchSuggest'
+import {
+  expandToGroups,
+  groupIndex,
+  isWholeGroup,
+  loadCardGroups,
+  MIN_GROUP,
+  nextGroupName,
+  pruneGroups,
+  renameGroup,
+  saveCardGroups,
+  withGroup,
+  withoutGroup,
+  type CardGroup,
+} from '../domain/cardGroups'
 import { journeyPerformance, formatReach } from '../domain/journeyPerf'
 import { assetCta, isCtaField, messagingFields, messagingMap, messagingSummary, primaryFieldKey } from '../domain/messaging'
 import { composeMessaging } from '../domain/matrixDraft'
@@ -71,6 +85,11 @@ const BAND_BOTTOM_PAD = 120
 // canvas roots, starting at the top.
 const AUD_Y = 20
 const MSG_Y = 220
+
+// A group's frame: the breathing room drawn around its members' bounding box, and
+// the header strip above it that carries the name and doubles as a drag handle.
+const GROUP_PAD = 22
+const GROUP_HEAD = 30
 
 // Hand-placed card positions persist per canvas, so a card you drag stays exactly
 // where you dropped it across re-layouts, reloads, and canvas switches.
@@ -314,7 +333,10 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const [vp, setVp] = useState({ tx: 260, ty: 40, s: 0.7 })
   const wrapRef = useRef<HTMLDivElement>(null)
   const pan = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
-  const drag = useRef<{ id: string; sx: number; sy: number; mx: number; my: number; far: boolean } | null>(null)
+  // An in-flight card drag. `members` is every card moving with this gesture, each
+  // with the position it started at — one card normally, a whole group (or a whole
+  // multi-selection) when the card that was grabbed belongs to one.
+  const drag = useRef<{ id: string; mx: number; my: number; far: boolean; members: { id: string; sx: number; sy: number }[] } | null>(null)
   const suppressClick = useRef(false)
   // The "write a new CTA" / "write a new proof" inputs inside the pill menus.
   const ctaInputRef = useRef<HTMLInputElement>(null)
@@ -330,19 +352,53 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
   const marquee = useRef<{ x0: number; y0: number } | null>(null)
   const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [multiSel, setMultiSel] = useState<Set<string>>(new Set())
+  // Card groups: a named set of cards that moves as one and holds its arrangement.
+  // Grouping PINS every member where it sits (see `groupSelection`) — that pinning
+  // is what makes the shape survive, since the auto-layout re-places any card it
+  // hasn't been told to leave alone. Persisted per canvas, beside the positions.
+  const [groups, setGroups] = useState<CardGroup[]>([])
+  const groupsRef = useRef<CardGroup[]>([])
+  const applyGroups = (next: CardGroup[]) => {
+    groupsRef.current = next
+    setGroups(next)
+    if (posKey) saveCardGroups(posKey, next)
+  }
+  const groupSeq = useRef(0)
+  // The group whose frame label is being edited inline.
+  const [renaming, setRenaming] = useState<string | null>(null)
   const spaceDown = useRef(false)
   // Selected journey connector (a child row id) — click a line to select, then ✕ or
   // Delete/Backspace to remove it (clears that card's branchOf, unlinking the step).
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null)
   const clipboard = useRef<string | null>(null)
-  // Load hand-placed card positions for the canvas you're on (and reload them when
-  // you switch canvases), so a card sits exactly where it was dropped.
+  // Load hand-placed card positions and card groups for the canvas you're on (and
+  // reload them when you switch canvases), so a card sits exactly where it was
+  // dropped and the groups you drew around them come back with it. Assigned
+  // straight (not via applyGroups) so loading never re-saves what it just read.
   useEffect(() => {
     applyMoved(posKey ? loadCardPos(posKey) : {})
+    const loaded = posKey ? loadCardGroups(posKey) : []
+    groupsRef.current = loaded
+    setGroups(loaded)
+    setMultiSel(new Set())
+    setRenaming(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posKey])
+  // A card deleted from the board leaves its group, and a group starved below two
+  // members dissolves — so a frame never outlives the cards it was drawn around.
+  const rowIdKey = rows.map((r) => r.id).join('|')
+  useEffect(() => {
+    const next = pruneGroups(groupsRef.current, new Set(rows.map((r) => r.id)))
+    if (next !== groupsRef.current) applyGroups(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowIdKey])
+  // Group/ungroup held in a ref so the shortcut always acts on the CURRENT
+  // selection without re-subscribing the listener every time the layout ticks
+  // (which it does on every frame of a drag).
+  const groupActions = useRef<{ group: () => void; ungroup: () => void }>({ group: () => {}, ungroup: () => {} })
   // Canvas keyboard shortcuts: Cmd/Ctrl+Z undo · Cmd/Ctrl+C copy the selected card
-  // · Cmd/Ctrl+V paste a copy. Ignored while typing in a field.
+  // · Cmd/Ctrl+V paste a copy · Cmd/Ctrl+G group the selection, +Shift to ungroup.
+  // Ignored while typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return
@@ -359,6 +415,14 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       } else if (k === 'v' && clipboard.current) {
         e.preventDefault()
         void pasteAsset(clipboard.current)
+      } else if (k === 'g' || (e.altKey && e.code === 'KeyG')) {
+        // ⌘G is free on this canvas, but the campaign canvas spends it on smart objects and uses
+        // ⌘⌥G for a group. Accept both here so one chord for "group" works on either board.
+        // Matched on e.code for the Option variant: Option is a dead-key modifier on macOS, so
+        // Option+G arrives as "©" and a key test would never fire.
+        e.preventDefault()
+        if (e.shiftKey) groupActions.current.ungroup()
+        else groupActions.current.group()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -988,6 +1052,89 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
     }
   }, [scoped, audiencesKey(scoped), collapsed, campaignList, clientAudiences, clientFilter, moved, detail, comments, scopeKeyDep, mediaH])
 
+  // ---- card groups ----
+  // card id → its group, for selection and drag.
+  const groupBy = useMemo(() => groupIndex(groups), [groups])
+  // The group the selection IS (exactly its membership) — what the toolbar offers
+  // Rename and Ungroup for. A partial or mixed selection is not a group.
+  const selectedGroup = useMemo(() => {
+    if (multiSel.size < MIN_GROUP) return null
+    const first = groupBy.get([...multiSel][0])
+    return first && isWholeGroup(first, multiSel) ? first : null
+  }, [multiSel, groupBy])
+  // A frame per group: the bounding box of its members, padded, with a header strip
+  // above it for the name. Derived from live node positions, so it tracks the cards
+  // as they move, resize with zoom detail, or get re-laid-out.
+  const groupFrames = useMemo(() => {
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    const out: { group: CardGroup; x: number; y: number; w: number; h: number }[] = []
+    for (const g of groups) {
+      const ms = g.ids.map((id) => byId.get(id)).filter((n): n is Node => !!n)
+      if (ms.length < MIN_GROUP) continue
+      const x0 = Math.min(...ms.map((n) => n.x))
+      const y0 = Math.min(...ms.map((n) => n.y))
+      const x1 = Math.max(...ms.map((n) => n.x + n.w))
+      const y1 = Math.max(...ms.map((n) => n.y + n.h))
+      out.push({
+        group: g,
+        x: x0 - GROUP_PAD,
+        y: y0 - GROUP_PAD - GROUP_HEAD,
+        w: x1 - x0 + GROUP_PAD * 2,
+        h: y1 - y0 + GROUP_PAD * 2 + GROUP_HEAD,
+      })
+    }
+    return out
+  }, [groups, nodes])
+  // Where the selection toolbar hangs: centred over the top edge of whatever's
+  // multi-selected, in WORLD coords (the render converts to screen, so the toolbar
+  // stays the same size at any zoom).
+  const selBox = useMemo(() => {
+    if (multiSel.size < MIN_GROUP) return null
+    const ms = nodes.filter((n) => multiSel.has(n.id))
+    if (!ms.length) return null
+    const x0 = Math.min(...ms.map((n) => n.x))
+    const x1 = Math.max(...ms.map((n) => n.x + n.w))
+    const y0 = Math.min(...ms.map((n) => n.y))
+    // A grouped selection is framed, so clear the frame's header instead of the card.
+    return { cx: (x0 + x1) / 2, top: y0 - (selectedGroup ? GROUP_PAD + GROUP_HEAD : 0) }
+  }, [multiSel, nodes, selectedGroup])
+
+  // Group the current multi-selection. Grouping pins every member where it sits:
+  // without a pinned position the auto-layout would re-place the card on the next
+  // re-layout and the group would come apart even though the tie survived.
+  const groupSelection = () => {
+    const messageIds = new Set(nodes.filter((n) => n.kind === 'message').map((n) => n.id))
+    const ids = [...multiSel].filter((id) => messageIds.has(id))
+    if (ids.length < MIN_GROUP) return
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    const pos = { ...movedRef.current }
+    for (const id of ids) {
+      const n = byId.get(id)
+      if (n) pos[id] = { x: n.x, y: n.y }
+    }
+    applyMoved(pos)
+    if (posKey) saveCardPos(posKey, pos)
+    const { groups: next, group } = withGroup(
+      groupsRef.current,
+      ids,
+      nextGroupName(groupsRef.current),
+      `grp-${Date.now().toString(36)}-${groupSeq.current++}`,
+    )
+    if (!group) return
+    applyGroups(next)
+    setSelected(null)
+    setMultiSel(new Set(group.ids))
+  }
+  // Ungroup: the cards keep the positions they were pinned at, only the tie is cut.
+  const ungroupSelection = () => {
+    if (!selectedGroup) return
+    applyGroups(withoutGroup(groupsRef.current, selectedGroup.id))
+    setRenaming(null)
+  }
+  useEffect(() => {
+    groupActions.current = { group: groupSelection, ungroup: ungroupSelection }
+  })
+
   // Only load a card's image when the card is near the viewport, so a canvas of 80+ real
   // posts doesn't fetch ~28MB up front — images stream in as you pan. Conservative (a big
   // margin + window size ≥ the actual container) so a visible card's image never gets culled.
@@ -1056,10 +1203,41 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       setVp((v) => ({ ...v, tx: v.tx - e.deltaX, ty: v.ty - e.deltaY }))
     }
   }
+  /** Snapshot the start position of every card a drag will carry. */
+  const dragMembers = (ids: string[]) => {
+    const byId = new Map(nodes.map((x) => [x.id, x]))
+    return ids
+      .map((id) => byId.get(id))
+      .filter((x): x is Node => !!x)
+      .map((x) => ({ id: x.id, sx: x.x, sy: x.y }))
+  }
   const startDrag = (e: React.MouseEvent, n: Node) => {
     e.stopPropagation()
-    drag.current = { id: n.id, sx: n.x, sy: n.y, mx: e.clientX, my: e.clientY, far: false }
+    // A card in a group drags its whole group; an ad-hoc multi-selection drags every
+    // card in it. Cmd/Ctrl-drag isolates the one card, so a member can be nudged
+    // within its group without hauling the rest along.
+    const solo = e.metaKey || e.ctrlKey
+    const g = solo ? null : groupBy.get(n.id)
+    const ids = g ? g.ids : !solo && multiSel.has(n.id) && multiSel.size > 1 ? [...multiSel] : [n.id]
+    const members = dragMembers(ids)
+    drag.current = {
+      id: n.id,
+      mx: e.clientX,
+      my: e.clientY,
+      far: false,
+      members: members.length ? members : [{ id: n.id, sx: n.x, sy: n.y }],
+    }
     publishNode(n.id)
+  }
+  /** Drag a whole group by its frame header — the same gesture, grabbed off the box. */
+  const startGroupDrag = (e: React.MouseEvent, g: CardGroup) => {
+    e.stopPropagation()
+    const members = dragMembers(g.ids)
+    if (!members.length) return
+    drag.current = { id: members[0].id, mx: e.clientX, my: e.clientY, far: false, members }
+    setSelected(null)
+    setMultiSel(new Set(g.ids))
+    publishNode(members[0].id)
   }
   // Pull a connector out of one of a card's four edge handles.
   const startConnect = (e: React.MouseEvent, n: Node, edge: 'top' | 'right' | 'bottom' | 'left') => {
@@ -1141,7 +1319,9 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
         if (n.kind !== 'message') continue
         if (n.x < box.x + box.w && n.x + n.w > box.x && n.y < box.y + box.h && n.y + n.h > box.y) hit.add(n.id)
       }
-      setMultiSel(hit)
+      // Touch one card of a group and you've caught the group — a group selects as
+      // a unit, so a marquee can never take half of one and break it up.
+      setMultiSel(expandToGroups(groupsRef.current, hit))
       return
     }
     // Rubber-band the connector to the cursor while pulling one out.
@@ -1160,10 +1340,12 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
       const dx = (e.clientX - d.mx) / vp.s
       const dy = (e.clientY - d.my) / vp.s
       if (Math.abs(dx) + Math.abs(dy) > 3) d.far = true
-      const nx = d.sx + dx
-      const ny = d.sy + dy
-      applyMoved({ ...movedRef.current, [d.id]: { x: nx, y: ny } })
-      publishMove(d.id, nx, ny)
+      // Every member shifts by the SAME delta from its own start position, so the
+      // set keeps its exact internal arrangement however far it's dragged.
+      const next = { ...movedRef.current }
+      for (const m of d.members) next[m.id] = { x: m.sx + dx, y: m.sy + dy }
+      applyMoved(next)
+      for (const m of d.members) publishMove(m.id, m.sx + dx, m.sy + dy)
       return
     }
     // Capture the pan origin: the setVp updater runs later, and a mouseup could
@@ -1529,6 +1711,64 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
               style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h }}
             />
           )}
+          {/* A group's frame: a named box drawn behind its cards, tracking their
+              bounding box. The box itself is pass-through (it must never swallow a
+              click meant for a card or the canvas); only the header takes the mouse,
+              where it acts as the handle for dragging the whole group. */}
+          {groupFrames.map(({ group, x, y, w, h }) => {
+            const on = group.ids.some((id) => multiSel.has(id))
+            return (
+              <div key={group.id} className={`cv-group${on ? ' selected' : ''}`} style={{ left: x, top: y, width: w, height: h }}>
+                <div
+                  className="cv-group-head"
+                  style={{ height: GROUP_HEAD }}
+                  title={`${group.name}: drag to move all ${group.ids.length} cards, double-click to rename`}
+                  onMouseDown={(e) => {
+                    if (renaming === group.id) return
+                    startGroupDrag(e, group)
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (suppressClick.current) return
+                    setSelected(null)
+                    setMultiSel(new Set(group.ids))
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setRenaming(group.id)
+                  }}
+                >
+                  <span className="cv-group-ico">⛶</span>
+                  {renaming === group.id ? (
+                    <input
+                      className="cv-group-input"
+                      defaultValue={group.name}
+                      autoFocus
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        applyGroups(renameGroup(groupsRef.current, group.id, e.currentTarget.value))
+                        setRenaming(null)
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        else if (e.key === 'Escape') {
+                          e.currentTarget.value = group.name
+                          e.currentTarget.blur()
+                        }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <span className="cv-group-name">{group.name}</span>
+                      <span className="cv-group-n">{group.ids.length}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
           <svg className="cv-edges" width={bounds.w + 60} height={bounds.h + 60}>
             <defs>
               {/* The coherent thread runs the brand gradient (orange → purple → light
@@ -1667,10 +1907,18 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
                 if (suppressClick.current) return
                 // A click on a message card just selects/picks it up (the drag is
                 // handled on mousedown); editing is via the ✎ button, bottom-right.
-                // A plain click replaces any marquee multi-selection with just this card.
+                // A plain click replaces any marquee multi-selection with just this
+                // card — unless the card is in a group, which selects as a whole.
+                // Cmd/Ctrl-click reaches past the group to the one card inside it.
                 if (n.kind === 'message') {
-                  setSelected(n.id)
-                  setMultiSel(new Set())
+                  const g = e.metaKey || e.ctrlKey ? null : groupBy.get(n.id)
+                  if (g) {
+                    setSelected(null)
+                    setMultiSel(new Set(g.ids))
+                  } else {
+                    setSelected(n.id)
+                    setMultiSel(new Set())
+                  }
                 }
                 // Click an audience lane to swap its audience (Brand / Subject / Strategy
                 // now live in the top bar).
@@ -2502,6 +2750,46 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           </div>
         )}
 
+        {/* Selection toolbar — group or ungroup whatever's multi-selected. Anchored
+            over the top of the selection but rendered in SCREEN space, so it stays
+            the same readable size however far the canvas is zoomed out. */}
+        {selBox && (
+          <div
+            className="cv-seltool"
+            style={{
+              left: vp.tx + selBox.cx * vp.s,
+              top: Math.max(10, vp.ty + selBox.top * vp.s - 42),
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="cv-seltool-n">
+              {selectedGroup ? selectedGroup.name : `${multiSel.size} cards`}
+            </span>
+            {selectedGroup ? (
+              <>
+                <button onClick={() => setRenaming(selectedGroup.id)} title="Rename this group">
+                  Rename
+                </button>
+                <button
+                  onClick={ungroupSelection}
+                  title="Ungroup (⌘⇧G). The cards stay exactly where they are, they just stop moving together"
+                >
+                  Ungroup
+                </button>
+              </>
+            ) : (
+              <button
+                className="cv-seltool-go"
+                onClick={groupSelection}
+                title="Group these cards (⌘G). They pin where they sit and move together from here on"
+              >
+                ⛶ Group
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Zoom controls float bottom-left over the canvas. stopPropagation keeps a
             button press from kicking off a pan. */}
         <div className="cv-zoom cv-zoom-float" onMouseDown={(e) => e.stopPropagation()}>
@@ -2517,11 +2805,16 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
           <button
             className="cv-zoom-organize"
             onClick={() => {
+              // Organize hands every card back to the auto-layout — which is exactly
+              // the pinning a group depends on, so the groups go with it rather than
+              // leaving frames drawn around cards the engine has since scattered.
               applyMoved({})
               if (posKey) saveCardPos(posKey, {})
+              applyGroups([])
+              setMultiSel(new Set())
               fit()
             }}
-            title="Organize canvas — snap every card back to the auto-layout and fit to view"
+            title="Organize canvas: snap every card back to the auto-layout, release any groups, and fit to view"
           >
             ⊞ Organize
           </button>
