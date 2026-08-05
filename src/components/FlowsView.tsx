@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -3671,11 +3671,12 @@ export function FlowsView() {
    * (dedup against the brand's full set, no dangling refs on an empty brand) rather than
    * re-implementing it here and drifting.
    */
-  /** Kinds whose record this card can create. Freeform kinds have no record; Data source has its own. */
-  // 'data-source' is deliberately ABSENT: createRecordForKind resolves an existing data set for it and
-// never creates one, so offering "+ New data set" through this path would promise something it does
-// not do. The card's own picker is where a data set is made.
-  const CREATABLE_KINDS = new Set<CanvasObjectKind>(['audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger', 'brand', 'product'])
+  /**
+   * Kinds whose record this card can create. The set itself lives in flowBoard, beside the ref-type
+   * map it has to stay in step with, so a kind that carries a record and forgets to be creatable
+   * fails a test rather than shipping a picker with nothing in it and no way out.
+   */
+  const CREATABLE_KINDS = CREATABLE_OBJECT_KINDS
   const createRecordForKind = (kind: CanvasObjectKind, rawName: string): { id: string; label: string } | null => {
     const nm = rawName.trim()
     if (!nm) return null
@@ -3712,6 +3713,19 @@ export function FlowsView() {
       case 'trigger': return { id: addTrigger({ name: nm, brand: brand || undefined }), label: nm }
       case 'brand': return { id: addBrandObject({ name: nm, brand: brand || undefined }), label: nm }
       case 'product': return { id: addProduct({ name: nm, brand: brand || undefined }), label: nm }
+      /**
+       * Concept and Season were the last two record-linked kinds with no way to make one.
+       *
+       * Both had the picker and the record behind it all along: a Concept card lists the brand's
+       * concepts and resolves to a `concept` ref like every other card here. What neither had an
+       * answer for was the empty brand, where the picker read "No concepts yet" and stopped, so a
+       * card dropped precisely because the campaign needed an idea could only report that there
+       * wasn't one. The other route in, describing the card and letting the context box fill it,
+       * goes through ensureConceptFor and mints the record NAMELESS, which is how a concept that
+       * had plainly been written still read "Nothing picked yet" wherever it was listed.
+       */
+      case 'concept': return { id: addConcept({ name: nm, brand: brand || undefined }), label: nm }
+      case 'season': return { id: addSeason({ name: nm, brand: brand || undefined }), label: nm }
       default: return null
     }
   }
@@ -3727,6 +3741,22 @@ export function FlowsView() {
     // If the card is already attached to the campaign, the new record joins it immediately, so
     // creating from an attached card does the whole job in one gesture.
     if (isAttached(nt.id)) attachToCampaign(nt.id)
+    /**
+     * SELECT THE CARD, so the record you just made is open where the rest of it gets written.
+     *
+     * The picker stops the canvas's mousedown (otherwise dragging the dropdown drags the card), so
+     * creating a record left the inspector showing whatever happened to be selected before — a
+     * fresh card, named and linked, with the box that gives it the rest of its context nowhere in
+     * view. A name is all this path mints, on purpose; the point is that the next thing to say is
+     * already open rather than one more thing to go and find.
+     *
+     * The name is typed ONCE and no more. A card carries its own name and the record it points at
+     * carries another, which sounds like two places to keep the same word, and objectName is why it
+     * is not: an unnamed card answers to its record everywhere it is listed. Naming the card is
+     * then a deliberate act — for when the board should call it something the library shouldn't.
+     */
+    setSel(nt.id)
+    setSelected(new Set())
   }
 
   // ---- Smart objects ----------------------------------------------------------------------
@@ -4813,7 +4843,10 @@ export function FlowsView() {
     setObjectRef(nt.id, made.ref.id)
     return made.ref.id
   }
-  // Linked kinds pick from an established record; freeform kinds (note, concept, season) return null.
+  // Linked kinds pick from an established record; only markup (a Note) is freeform and returns null.
+  // Concept and Season were once listed here as freeform and are not: both have a record, a rail and
+  // a form, and a card that lets you write into one without picking it is how a campaign ends up
+  // carrying an idea no other campaign can find again.
   const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
   const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
     switch (kind) {
