@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.30',
+    version: 'v1.31',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -32,6 +32,21 @@ const RELEASES: Release[] = [
           'Dragging on the canvas is no longer doing several times the work it can show you. A mouse or trackpad reports its position far faster than a screen can redraw, and the board was rebuilding itself for every one of those reports: on a 180-card canvas each report cost a full rebuild, and a fast pointer sends two or three of them between one frame and the next. A report now costs nothing at all, and the board rebuilds once per frame, which is as often as you can actually see. The heavier the board and the faster your pointer, the more of that work was being thrown away.',
           'Panning and marquee selection went the same way, for the same reason. All three gestures still land exactly where you let go: the last position is applied on release rather than left waiting for a frame that never comes.',
           'Cards that move together stopped being counted one at a time. Asking "is this card moving?" walked the whole list of dragged cards, once per member and once per connector, on every frame, so the bigger the group the more it cost to move it. It is a direct lookup now.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.30',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A card on the canvas now shows what it is pointing at, not just a dropdown of names. Pick a concept, an audience, a pattern or a proof point and the card reads as that record: its name, and the one line underneath saying what it is. A card with nothing behind it says so plainly, so an empty card is visible from the board instead of turning up missing in the copy.',
+          'The picker itself shows those lines too. Choosing between "Ladder", "Open loop" and "Third rail" used to mean already knowing what all three were, because a dropdown could only offer their names. Every record now comes with its own description, and a library big enough to scroll comes with a search box.',
+          'The name field is gone from the card, because the record already carries the name. It was a second place to write the same word, and the two drifted apart the moment either changed. Naming a card something the library should not be called is still there, in the inspector, where it is a deliberate act rather than the first thing a blank card asks you for. A sticky note keeps its name field, having no record to inherit one from.',
+          'Making a record you do not have yet is still one gesture from the card, and unlinking one is now an option on the list rather than a blank row at the top of it.',
         ],
       },
     ],

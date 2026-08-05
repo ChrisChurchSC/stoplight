@@ -71,6 +71,8 @@ import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
 import { MiniSheet } from './MiniSheet'
+import { ObjectCardPicker, type ObjectCardOption } from './ObjectCardPicker'
+import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -5237,23 +5239,30 @@ export function FlowsView() {
   // Concept and Season were once listed here as freeform and are not: both have a record, a rail and
   // a form, and a card that lets you write into one without picking it is how a campaign ends up
   // carrying an idea no other campaign can find again.
-  const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
-  const objectOptions = (kind: CanvasObjectKind): { id: string; label: string }[] | null => {
+  /**
+   * `detail` is the record's own one line — what a Message argues, what a Product is, what fires a
+   * Trigger. The card's picker prints it under each name, because a list of thirty names is a list
+   * of thirty things you have to already know. Which field that line comes from is NOT decided
+   * here: recordDetail decides it once, for this picker and the grid's Made-from drawer together.
+   */
+  const named = <T extends { id: string; name: string }>(list: T[], detail?: (x: T) => string | undefined) =>
+    list.map((r) => ({ id: r.id, label: r.name || 'Untitled', detail: detail?.(r)?.trim() || undefined }))
+  const objectOptions = (kind: CanvasObjectKind): ObjectCardOption[] | null => {
     switch (kind) {
-      case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
+      case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience', detail: recordDetail.audience(a)?.trim() || undefined }))
       // A Data source card's refId is a DATA SET id, whatever route filled it. This used to return
       // the four hardcoded connector names, so Layers and smart-object naming looked up a dataset id
       // in a list of connectors, found nothing, and fell back to the bare kind ("Data source").
-      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set' }))
-      case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
-      case 'company': return named(companies)
-      case 'person': return named(people)
-      case 'trigger': return named(triggers)
-      case 'message': return named(messages)
-      case 'concept': return named(concepts)
-      case 'season': return named(seasons)
-      case 'pattern': return named(patterns)
-      case 'voice': return named(voices)
+      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set', detail: recordDetail.dataSource(d) }))
+      case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point', detail: recordDetail.proofPoint(r)?.trim() || undefined }))
+      case 'company': return named(companies, recordDetail.company)
+      case 'person': return named(people, recordDetail.person)
+      case 'trigger': return named(triggers, recordDetail.trigger)
+      case 'message': return named(messages, recordDetail.message)
+      case 'concept': return named(concepts, recordDetail.concept)
+      case 'season': return named(seasons, recordDetail.season)
+      case 'pattern': return named(patterns, recordDetail.pattern)
+      case 'voice': return named(voices, recordDetail.voice)
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
       // a brand you already wrote without going through a smart object.
@@ -5263,8 +5272,8 @@ export function FlowsView() {
       // the card that establishes the scope would be filtered by the scope it establishes, and
       // there would be no way out of an unbound campaign. Every other kind stays scoped, because
       // every other kind is chosen WITHIN a brand rather than to decide which brand.
-      case 'brand': return named(brand ? brandObjects : allBrandObjects)
-      case 'product': return named(products)
+      case 'brand': return named(brand ? brandObjects : allBrandObjects, recordDetail.brand)
+      case 'product': return named(products, recordDetail.product)
       default: return null
     }
   }
@@ -9300,20 +9309,25 @@ export function FlowsView() {
                     )}
 
                   </div>
-                  {/* WHAT YOU CALL IT. Every card carries one, the same field and the same place a
-                      smart object has always had it, because the question "which of these three
-                      Audience cards is the cold list" is asked of a plain card far more often than
-                      of a bundle. The uppercase caption above still says the KIND; this says which
-                      one. Empty falls back to the record, so a board that never touches this reads
-                      exactly as it did before. */}
-                  <input
-                    className="flow-note-name"
-                    value={nt.name ?? ''}
-                    placeholder={`Name this ${meta.label.toLowerCase()}…`}
-                    aria-label={`Name this ${meta.label.toLowerCase()}`}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => renameObject(nt.id, e.target.value)}
-                  />
+                  {/* WHAT YOU CALL IT — on a sticky only, now.
+                      A record-linked card was carrying this field AND a dropdown, which is one
+                      question answered twice: the record you pick already has a name, and the
+                      picker below now prints it as the card's face. Naming a card is still a real
+                      thing to want ("which of these three Audience cards is the cold list") and it
+                      still works exactly as before — it moved to the inspector, where a board-local
+                      override belongs, and objectName still puts it ahead of the record everywhere.
+                      A sticky keeps the field here because there is no record underneath it to
+                      inherit a name from. */}
+                  {!objectOptions(nt.kind) && (
+                    <input
+                      className="flow-note-name"
+                      value={nt.name ?? ''}
+                      placeholder={`Name this ${meta.label.toLowerCase()}…`}
+                      aria-label={`Name this ${meta.label.toLowerCase()}`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onChange={(e) => renameObject(nt.id, e.target.value)}
+                    />
+                  )}
                   {nt.kind === 'data-source' ? (
                     // DISPLAY ONLY. Choosing a source is authoring, and authoring happens in the
                     // inspector like it does for every other kind; the card shows what was chosen.
@@ -9387,31 +9401,45 @@ export function FlowsView() {
                         />
                       )
                     }
+                    const picked = nt.refId ? opts.find((o) => o.id === nt.refId) : undefined
                     return (
-                      <select
-                        className="flow-note-sel"
-                        value={nt.refId ?? ''}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          if (e.target.value === '__new__') { setCreatingName(''); setCreatingFor(nt.id); return }
-                          setObjectRef(nt.id, e.target.value)
+                      <ObjectCardPicker
+                        options={opts}
+                        refId={nt.refId}
+                        // The card's own name still wins where it has one; otherwise the record it
+                        // points at names it, which is the whole reason the card stopped carrying a
+                        // name field of its own.
+                        name={objectName(nt, picked?.label)}
+                        // A brand card carries no one-liner half the time and still decides a great
+                        // deal, so it says what it does rather than sitting there with a blank line
+                        // under it. Same sentence the inspector's context list uses, for the same
+                        // reason.
+                        detail={picked ? picked.detail || (nt.kind === 'brand' ? 'Sets the brand this is written as' : undefined) : undefined}
+                        noun={noun}
+                        article={articleFor(noun)}
+                        plural={pluralOf(noun)}
+                        tone={meta.tone}
+                        /* "No audiences yet" is false on a board with no brand bound: there may be
+                           plenty, they just belong to brands this campaign has not named. Saying
+                           that points at the fix — wire a Brand card — instead of at a library the
+                           user is told is empty and can see is not. The Brand card is exempt,
+                           because it IS that gesture and has nothing to wait for. */
+                        emptyNote={
+                          brand || nt.kind === 'brand'
+                            ? `No ${pluralOf(noun)} yet. Make one below and it joins the library.`
+                            : 'Connect a Brand card first. These come from the brand this campaign writes as.'
+                        }
+                        // Every record-linked card can make the thing it needs. Without this a fresh
+                        // brand dead-ends here with nowhere to go.
+                        canCreate={CREATABLE_KINDS.has(nt.kind)}
+                        onPick={(id) => {
+                          setObjectRef(nt.id, id)
                           // Re-attach so a changed record reaches the campaign without redrawing the edge.
                           if (isAttached(nt.id)) attachToCampaign(nt.id)
                         }}
-                      >
-                        {/* "No audiences yet" is false on a board with no brand bound: there may be
-                            plenty, they just belong to brands this campaign has not named. Saying
-                            that points at the fix — wire a Brand card — instead of at a library the
-                            user is told is empty and can see is not. The Brand card is exempt,
-                            because it IS that gesture and has nothing to wait for. */}
-                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : brand || nt.kind === 'brand' ? `No ${pluralOf(noun)} yet` : 'Connect a Brand card first…'}</option>
-                        {opts.map((o) => (
-                          <option key={o.id} value={o.id}>{o.label}</option>
-                        ))}
-                        {/* Every record-linked card can make the thing it needs. Without this a
-                            fresh brand dead-ends here with nowhere to go. */}
-                        {CREATABLE_KINDS.has(nt.kind) && <option value="__new__">+ New {noun}…</option>}
-                      </select>
+                        onCreate={() => { setCreatingName(''); setCreatingFor(nt.id) }}
+                        onOpen={() => { setSel(nt.id); setSelected(new Set()) }}
+                      />
                     )
                   })()}
                   {/* Only a markup card (a sticky) keeps a text box: the text IS the card. On every
