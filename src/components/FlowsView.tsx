@@ -1932,6 +1932,10 @@ export function FlowsView() {
     setConfirmDeleteObject(null)
   }, [sel])
   const drawingFrom = useRef<string | null>(null)
+  // Where the pointer went down on a connector port, so mouseup can tell a CLICK from a DRAG.
+  // Dropping a drag on empty canvas still means "cancel"; a click means "I want the next step from
+  // here" and opens the channel picker. Without the distinction one gesture has to mean both.
+  const connectStart = useRef<{ x: number; y: number } | null>(null)
   const [rects, setRects] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({})
   // Branch keys whose auto-placement has settled — locked so a later hand drag is respected.
   const placedRef = useRef<Set<string>>(new Set())
@@ -1959,6 +1963,7 @@ export function FlowsView() {
     if (!cv) return
     const cr = cv.getBoundingClientRect()
     drawingFrom.current = from
+    connectStart.current = { x: e.clientX, y: e.clientY }
     setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
   }
   const startDrag = (e: ReactMouseEvent, id: string) => {
@@ -4802,6 +4807,18 @@ export function FlowsView() {
   }
   const addFromMenu = (p: DeliverablePreset) => {
     if (!addMenu) return
+    // IN A VIEWED CAMPAIGN THE CARDS ARE REAL ROWS, not builder nodes. Minting a FlowDeliverable
+    // here would draw a card on the board that no asset backs, and "Build campaign" is not coming
+    // back to materialize it — the campaign is already built. Seed it the way the card's + does, so
+    // both routes into the picker produce the same thing.
+    if (viewing) {
+      const { from } = addMenu
+      connectFromRef.current = from // read synchronously by addViewDeliverable, before its first await
+      setConnectFrom(from)
+      setAddMenu(null)
+      void addViewDeliverable(p)
+      return
+    }
     const id = freshNodeId()
     const node: FlowDeliverable = { id, presetKey: p.key, perMonth: startCount(p) }
     const { at, from, x, y } = addMenu
@@ -8168,6 +8185,24 @@ export function FlowsView() {
               const from = drawingFrom.current
               const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.flow-node[data-node-id]') as HTMLElement | null
               const to = el?.dataset.nodeId
+              // A CLICK ON THE PORT, landing on nothing, used to be the one gesture on the board that
+              // did nothing at all — you pressed a dot that says "draw a connection", let go, and the
+              // canvas simply forgot it. Treat it as the question it obviously is (what comes next
+              // from this card?) and answer it with the channel picker, anchored to the port.
+              // A drag that moved and landed on nothing still cancels: that is the escape hatch.
+              // `to === from` is the normal reading of a click: the port sits ON its own card, so the
+              // element under the pointer resolves back to the source. It is not a self-connection.
+              const down = connectStart.current
+              connectStart.current = null
+              if ((!to || to === from) && down && Math.abs(e.clientX - down.x) < 5 && Math.abs(e.clientY - down.y) < 5) {
+                const cr = e.currentTarget.getBoundingClientRect()
+                setAddMenu({ at: viewing ? viewDelivs.length : nodes.length, from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+                setAddSearch('')
+                drawingFrom.current = null
+                setDrawing(null)
+                setConnectOver(null)
+                return
+              }
               // Direction carries meaning: a context card flows INTO the campaign. Dropping the
               // campaign onto a card is the same statement backwards, so accept it and store it
               // the right way round rather than making the user guess which end to start from.
@@ -8237,6 +8272,7 @@ export function FlowsView() {
             marqueeStart.current = null
             dragging.current = null
             drawingFrom.current = null
+            connectStart.current = null
             addDrag.current = null
             setMarquee(null)
             setDrawing(null)
