@@ -23,6 +23,26 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.20',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Concept and Season cards can make the record they need. Every other card on the canvas could already pick an existing one or add a new one from the same dropdown; these two could only pick, so on a brand with no concepts written yet the card read "No concepts yet" and there was nowhere to go from it. Both now offer "+ New concept…" and "+ New season…", the same one-step move.',
+          'Naming a new record from a card selects that card, so the panel that gives it the rest of its context is already open beside you rather than one more thing to go and find.',
+          'You type the name once. The card takes the name of the record it points at, so a card you have not separately named still reads "The quiet upgrade" on the board, in Layers, in the grid and in the list of what is informing the campaign. Name the card itself only when you want it to say something different there.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'A Concept card wired into a campaign no longer has to sit there reading "Nothing picked yet" with no way out of it. That row under "Informing the messaging" was telling the truth: the card was contributing nothing, because the only thing it could do was pick from a list that was empty.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.19',
     dateLabel: 'August 4, 2026',
     groups: [

@@ -56,6 +56,29 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
   trigger: 'trigger',
 }
 
+/**
+ * KINDS WHOSE RECORD A CARD CAN MAKE, when the brand has none to pick yet.
+ *
+ * A record-linked card picks from an established record, which is the whole point of records: an
+ * audience two campaigns argue to is one audience. But a picker over an empty list is a dead end,
+ * and a fresh brand is nothing but empty lists. Every kind here offers "+ New …" as the last option
+ * in its own dropdown, so the card you dropped because you needed the thing is where you make it.
+ *
+ * `brand` is here without a ref type above, deliberately: a brand OWNS the campaign rather than
+ * being referred to by it, and you still have to be able to name the first one.
+ *
+ * `data-source` is deliberately ABSENT: a data set is a TABLE, and minting one from a name produces
+ * an empty spreadsheet titled after a question nobody can answer. The card resolves an existing data
+ * set instead, and its own picker is where a new one is made.
+ *
+ * Lives here, next to the ref-type map, so the parity between the two is testable: a new kind that
+ * carries a record and forgets this set ships a card that can only ever pick from nothing.
+ */
+export const CREATABLE_OBJECT_KINDS = new Set<CanvasObjectKind>([
+  'audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger',
+  'brand', 'product', 'concept', 'season',
+])
+
 export interface CanvasObject {
   id: string
   kind: CanvasObjectKind
