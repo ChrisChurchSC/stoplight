@@ -258,6 +258,7 @@ export function describeSmartObject(o: SmartObject): string {
     season: 'season',
     product: 'product',
     trigger: 'trigger',
+    pattern: 'pattern',
   }
   const tail = [...byType].map(([t, n]) => `${n} ${LABEL[t]}${n === 1 ? '' : 's'}`)
   return [lead?.label, ...tail].filter(Boolean).join(' · ')

@@ -23,8 +23,8 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.22',
-    dateLabel: 'August 4, 2026',
+    version: 'v1.23',
+    dateLabel: 'August 5, 2026',
     groups: [
       {
         tag: 'New',
@@ -33,6 +33,22 @@ const RELEASES: Release[] = [
           'The conversion stage has somewhere to land. Three channels used to resolve to conversion, all of them media or a page, which is why the stage looked thin on a campaign that was converting perfectly well offline. A proposal, a checkout and the collateral worked in a live deal now sit there as first-class assets, and a pricing or comparison page is read as a decision surface rather than as education.',
           'The Opp band is no longer empty. The demand-gen and sales-led playbooks drew that band with nothing in it because no channel existed that could honestly land there. Proposals and sales collateral now fill it, and outbound campaigns start where they really start, with the rep\'s first email in Contact rather than folded in with the follow-ups.',
           'Each new channel arrives with the rest of what a channel needs: its own copy fields (the ask on an outreach email, the terms on a proposal, the guarantee on a checkout), its own UTM convention, and its own tracking checklist, which for these is the CRM and the store rather than an ad pixel.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.22',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Patterns are a card on the canvas. The Patterns library has been in Records all along, holding the hooks, formats and structures your content leans on, and nothing could reach for one. There is now a Pattern card in the palette: drop it, pick a pattern or write a new one, and wire it to the work it shapes.',
+          'A pattern applies to a single asset, which is the point of it. Every other input on the board is true of the whole campaign: one brand, one audience, one message argued across twenty posts. A shape is not. Wire a Pattern card straight to a post, or add one from that asset’s "Made from" cell in the grid, and that one asset is written to it while the rest of the campaign is not.',
+          'Wire a pattern to the campaign instead and it rotates. Three patterns on the brief means the set spans three shapes rather than twenty posts built the same way, so choosing patterns is how you choose how much the work varies.',
+          'A pattern governs how an asset is built, never what it claims. The audience, the proof and the goal are unchanged by it, and a pattern is overruled where following it would write a line your brand guide forbids or the sentence an audience must never be told. Where a pattern carries an example, it is read as a demonstration of the form, not as copy to reuse.',
+          'Archiving a pattern retires it properly. It stops being offered on cards and in the grid, and it stops reaching the writer even where a card wired to it is still on the board. A pattern marked "testing" keeps working, because testing one is what using it means.',
         ],
       },
     ],

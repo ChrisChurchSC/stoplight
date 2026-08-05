@@ -17,7 +17,7 @@ import type { ObjectReference } from './objectReference'
 export type CanvasObjectKind =
   | 'audience' | 'data-source' | 'note'
   | 'proof-point' | 'trigger' | 'message' | 'voice' | 'company' | 'person' | 'concept' | 'season'
-  | 'brand' | 'product'
+  | 'brand' | 'product' | 'pattern'
 
 /** What an object DOES, and the value of its data-role attribute. */
 export type ObjectRole = 'output' | 'input' | 'markup' | 'brief'
@@ -32,7 +32,7 @@ export type ObjectFamily = 'who' | 'says' | 'when' | 'draws' | 'markup'
  * across campaigns has to know what a plain card contributes, and comparing contributions needs
  * only a type and an id, never a label.
  */
-export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger'>> = {
+export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment' | 'proof' | 'company' | 'person' | 'message' | 'concept' | 'voice' | 'season' | 'dataset' | 'product' | 'trigger' | 'pattern'>> = {
   audience: 'segment',
   'proof-point': 'proof',
   company: 'company',
@@ -54,6 +54,13 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
   // drew, wired, lit up as connected and reached the writer with nothing.
   product: 'product',
   trigger: 'trigger',
+  /**
+   * A Pattern card names the SHAPE the copy takes — a hook, a format, a structure, a trend worth
+   * riding. Unlike every other kind here it is meant to be pinned per ASSET rather than per
+   * campaign: "argue this message" is true of a campaign, "open on the objection and answer it"
+   * is true of one post. See the pattern branch in poolsFrom and DraftAsset.pattern.
+   */
+  pattern: 'pattern',
 }
 
 /**
@@ -76,7 +83,7 @@ export const REF_TYPE_FOR_OBJECT_KIND: Partial<Record<CanvasObjectKind, 'segment
  */
 export const CREATABLE_OBJECT_KINDS = new Set<CanvasObjectKind>([
   'audience', 'proof-point', 'company', 'person', 'message', 'voice', 'trigger',
-  'brand', 'product', 'concept', 'season',
+  'brand', 'product', 'concept', 'season', 'pattern',
 ])
 
 export interface CanvasObject {
