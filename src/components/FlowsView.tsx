@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard, remapBuiltTargets,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -15,10 +15,14 @@ import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnde
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { edgeKey, onTrail, trailSide, trailThrough } from '../domain/cardTrail'
 import { assetBadge } from '../domain/assetBadge'
+import {
+  CTA_KINDS, CTA_KIND_META, ctaForHandoff, danglingCtas, freshCtaId, handoffWhere, handoffsFrom, uncoveredHandoffs,
+  type AssetCta, type CtaKind, type Handoff,
+} from '../domain/assetCtas'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
-import { contextGapMessage, type ContextGapKey } from '../domain/contextGaps'
+import { contextGapMessage, type ContextGapKey, type GapStanding } from '../domain/contextGaps'
 import { AGE_BANDS, DECIDERS, EXPERTISE_LEVELS, INCOME_BANDS, MOTIVES, READING_MOMENTS, type Person } from '../domain/people'
 import { TRIGGER_TYPE_OPTIONS, type Trigger } from '../domain/trigger'
 import { PRODUCT_KINDS, PRODUCT_PRICING, PRODUCT_STAGES, type Product } from '../domain/product'
@@ -35,7 +39,7 @@ import { can } from '../domain/access'
 import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENIORITIES } from '../domain/taxonomy'
-import { BufferedInput } from './BufferedInput'
+import { BufferedInput, BufferedTextarea } from './BufferedInput'
 // Only the campaign brief picks from a list now — the object cards' own forms are gone.
 import { RecordCombo } from './RecordPickers'
 import { ROLE_PRESETS } from '../domain/roles'
@@ -68,6 +72,8 @@ import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
 import { MiniSheet } from './MiniSheet'
+import { ObjectCardPicker, type ObjectCardOption } from './ObjectCardPicker'
+import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
 import { CONTENT_LIBRARY_CAMPAIGN } from '../domain/importAssets'
@@ -1734,11 +1740,55 @@ export function FlowsView() {
   // ids = nodes whose OWN pos we move; visualIds = every node that visually shifts by the drag
   // delta (the moved nodes plus any children carried along inside a moved parent's transform), so
   // connectors track them all. Splitting the two is what stops nested children double-moving.
-  const dragging = useRef<{ ids: string[]; visualIds: string[]; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
+  // visualSet is visualIds as a set, built once per drag: it is asked "is this node moving?" once
+  // per group member and once per connector endpoint on EVERY frame, and an array answered that
+  // with a linear scan — quadratic in the size of the thing being dragged.
+  const dragging = useRef<{ ids: string[]; visualIds: string[]; visualSet: Set<string>; x: number; y: number; start: Record<string, { x: number; y: number }> } | null>(null)
   // Live drag delta for the nodes currently being dragged, in canvas units. Connectors read this
   // so their endpoints move in the SAME commit as the cards (see connRect) — instead of waiting on
   // a per-frame rect remeasure, which rubber-bands the lines behind the cards on a big flow.
-  const [dragDelta, setDragDelta] = useState<{ ids: string[]; dx: number; dy: number } | null>(null)
+  const [dragDelta, setDragDelta] = useState<{ ids: Set<string>; dx: number; dy: number } | null>(null)
+
+  /**
+   * ONE BOARD UPDATE PER PAINTED FRAME.
+   *
+   * A pointer reports far faster than a screen refreshes: a 200Hz trackpad against a 60Hz display
+   * is three moves per frame, and each one used to re-render the whole canvas. Measured on a
+   * 100-card board, a 1.5s drag turned 308 pointer events into 46 painted frames — six of every
+   * seven renders were computed, reconciled and thrown away before anything reached the glass.
+   *
+   * So a gesture writes what it wants applied and schedules a single frame. A move that arrives
+   * before that frame runs REPLACES the pending one rather than queueing behind it, which is
+   * exactly right for a drag: only the newest pointer position is true, and the ones in between
+   * describe a position the user has already left.
+   *
+   * The pending work reads `dragging.current` / `pan.current` when the frame runs, not when it was
+   * scheduled, so it always applies against the live gesture. That is also why `flushGesture` must
+   * run BEFORE mouseup clears those refs — otherwise the last move of every drag is dropped and
+   * cards land a frame short of where they were let go.
+   */
+  const gestureRaf = useRef<number | null>(null)
+  const gestureWork = useRef<(() => void) | null>(null)
+  const scheduleGesture = (work: () => void) => {
+    gestureWork.current = work
+    if (gestureRaf.current !== null) return
+    gestureRaf.current = requestAnimationFrame(() => {
+      gestureRaf.current = null
+      const w = gestureWork.current
+      gestureWork.current = null
+      w?.()
+    })
+  }
+  /** Apply whatever is pending right now — the end of a gesture cannot wait for the next frame. */
+  const flushGesture = () => {
+    if (gestureRaf.current !== null) {
+      cancelAnimationFrame(gestureRaf.current)
+      gestureRaf.current = null
+    }
+    const w = gestureWork.current
+    gestureWork.current = null
+    w?.()
+  }
   // Connectors between nodes, plus the in-progress drag and measured node rects.
   const canvasRef = useRef<HTMLDivElement>(null)
   /** The Grid/Calendar stage, so Fit can measure the sheet inside it without a global selector. */
@@ -2078,7 +2128,8 @@ export function FlowsView() {
     moveIds.forEach((i) => {
       start[i] = pos[i] ?? { x: 0, y: 0 }
     })
-    dragging.current = { ids: moveIds, visualIds: [...moveIds, ...carried], x: e.clientX, y: e.clientY, start }
+    const visualIds = [...moveIds, ...carried]
+    dragging.current = { ids: moveIds, visualIds, visualSet: new Set(visualIds), x: e.clientX, y: e.clientY, start }
     dragSnapRef.current = { ...pos } // layout before this drag, committed to undo history on drop
     dragMovedRef.current = false
   }
@@ -3680,6 +3731,34 @@ export function FlowsView() {
     return id
   }
   /**
+   * WHAT THIS BOARD ALREADY HAS for a gap, so the toast can stop telling somebody to add a card
+   * that is sitting in front of them.
+   *
+   * contextGapsFor asks what reaches the WRITER, and a card contributes to that only when it names
+   * a record AND a chain of cards carries it into the brief. Neither is visible from the card
+   * itself: an unwired Audience card and a wired one look the same apart from a line, and a card
+   * naming no record still says "Audience" across the top. So a real gap and a board with no
+   * audience on it are different states, and only one of them is fixed by adding a card.
+   *
+   * Ordered by how cheaply the person can act on it. A named card with no line is one drag from
+   * working, so it wins over a blank card that needs a record picked first. `overridden` is last
+   * because it is the one case where the brief is fine and the assets are the problem: reaching it
+   * means a named card IS wired to the brief, so every asset must be carrying its own records
+   * instead (contextGapsFor unions the rows, so a single inheriting asset would have closed the
+   * gap).
+   */
+  const gapStanding = (kind: CanvasObjectKind): { standing: GapStanding; cardId?: string } => {
+    const mine = objects.filter((o) => o.kind === kind)
+    if (!mine.length) return { standing: 'none' }
+    const names = (o: CanvasObject) => !!o.refId || !!o.smartObjectId
+    const toBrief = new Set(upstreamCardIds({ key: boardKey, objects, placements, pos: {}, connectors }, 'campaign'))
+    const unwired = mine.find((o) => names(o) && !toBrief.has(o.id))
+    if (unwired) return { standing: 'unwired', cardId: unwired.id }
+    const unnamed = mine.find((o) => !names(o))
+    if (unnamed) return { standing: 'unnamed', cardId: unnamed.id }
+    return mine.some((o) => names(o) && toBrief.has(o.id)) ? { standing: 'overridden' } : { standing: 'none' }
+  }
+  /**
    * SAY WHAT THE CAMPAIGN DID NOT SAY, once the copy is back.
    *
    * The blocker refuses a canvas with no brand or no wires. Everything past that generates, including
@@ -3691,15 +3770,39 @@ export function FlowsView() {
    * code's place to stop one. It reports what generating just did and offers the card that would
    * change it. See src/domain/contextGaps.ts for what counts as thin.
    *
+   * WHAT IT OFFERS depends on what is already there: gapStanding decides whether the remedy is a new
+   * card, the one on the board that has no line to the brief, or the blank one that needs a record
+   * picked. "Add an audience" over a board with an audience card on it is the app failing to see its
+   * own canvas, and it was the most common way to meet this toast.
+   *
    * `prefix` lets the build share its one toast ("Built · 6 drafts.") instead of firing a second one
    * that would replace it — there is a single toast slot, so two messages means the first is never read.
    */
   const suggestContext = (campaign: string, prefix?: string) => {
     const gaps = useTrafficStore.getState().contextGapsFor(campaign)
-    const msg = contextGapMessage(gaps, prefix ? undefined : campaign)
-    if (!msg) return false
+    if (!gaps.length) return false
     const kind = CARD_FOR_GAP[gaps[0]]
-    showToastAction(prefix ? `${prefix} ${msg}` : msg, `Add ${OBJECT_META[kind].label}`, () => {
+    /**
+     * Only when the toast is about the board on screen. `gapStanding` reads this component's
+     * objects and connectors, which belong to whatever canvas is open; a build that has moved on
+     * has already opened the campaign it built, and Generate runs on the open one, so in practice
+     * they agree. Guarding it anyway keeps a stale answer from ever reaching the sentence.
+     */
+    const { standing, cardId } = viewNameRef.current === campaign ? gapStanding(kind) : { standing: 'none' as GapStanding, cardId: undefined }
+    const msg = contextGapMessage(gaps, prefix ? undefined : campaign, standing)
+    if (!msg) return false
+    const label = OBJECT_META[kind].label
+    /**
+     * Nothing to press when the brief is already right and the assets are overriding it. The fix is
+     * per-asset, in the inspector, and a button here would have to guess which assets the person
+     * meant and silently drop records they had set deliberately.
+     */
+    if (standing === 'overridden') {
+      showToast(prefix ? `${prefix} ${msg}` : msg)
+      return true
+    }
+    const verb = standing === 'unwired' ? 'Wire' : standing === 'unnamed' ? 'Open' : 'Add'
+    showToastAction(prefix ? `${prefix} ${msg}` : msg, `${verb} ${label}`, () => {
       /**
        * The board on screen is the one these setters write to, and a toast outlives the click that
        * raised it: nine seconds is long enough to open another campaign. Dropping the card onto
@@ -3707,7 +3810,16 @@ export function FlowsView() {
        * looking at.
        */
       if (viewNameRef.current !== campaign) {
-        showToast(`Open "${campaign}" to add that card — you have moved to another canvas.`)
+        showToast(`Open "${campaign}" to fix that — you have moved to another canvas.`)
+        return
+      }
+      /**
+       * A blank card cannot be wired into anything useful, so the remedy is to open it and let the
+       * person name the record. Wiring it first would draw a line that carries nothing and leave
+       * the same gap reported next time, which is the failure this whole branch exists to stop.
+       */
+      if (standing === 'unnamed' && cardId) {
+        setSel(cardId)
         return
       }
       /**
@@ -3716,7 +3828,7 @@ export function FlowsView() {
        * first, in the order the drag gesture and the chat both use it; it no-ops on a card that names
        * no record yet, and picking one on the card pushes it through from there.
        */
-      const id = addObject(kind)
+      const id = standing === 'unwired' && cardId ? cardId : addObject(kind)
       attachToCampaign(id)
       setConnectors((cs) => (cs.some((x) => x.from === id && x.to === 'campaign') ? cs : [...cs, { from: id, to: 'campaign' }]))
     })
@@ -3959,6 +4071,176 @@ export function FlowsView() {
       </>
     )
   }
+
+  /**
+   * The assets one asset shares a journey with: its campaign's own rows.
+   *
+   * Resolved from the row's OWN campaign rather than from viewRows, which is keyed on the campaign
+   * currently open on the canvas and is empty until one has been built. The grid and calendar panels
+   * reach this inspector for a campaign that is still being assembled (see gridPick), and there the
+   * handoffs would otherwise all read as "no longer in this campaign" — the same trap the asset
+   * lookup in that panel already had to climb out of.
+   */
+  const journeyRowsFor = (row: TrafficRow): TrafficRow[] => {
+    const own = canvases.find((c) => c.name === row.campaign)?.rows.filter((r) => !r.archivedAt)
+    if (own?.length) return own
+    return viewRows.length ? viewRows : [row]
+  }
+
+  /**
+   * CTAs: WHAT HAS TO BE BUILT INTO THIS ASSET.
+   *
+   * Every journey line out of a card is a promise somebody builds a control at this end of it, and
+   * the board has always drawn the line without ever naming the cost. An ad pointing at a landing
+   * page owes a button. A page that hands to a nurture sequence owes a form, because there is no way
+   * to email a person who has not given you an address. A card that hands to checkout owes a way to
+   * take money. Those are exactly the items that get found late, by whoever is building the asset.
+   *
+   * SUGGESTED, NEVER FILLED IN. The journey proposes one entry per uncovered handoff and the person
+   * presses Add. It cannot know the capture already lives in the site header, or that the button is
+   * the one the template ships with, so a row silently growing entries it did not ask for would be a
+   * spec nobody wrote claiming to be one somebody did. Same reason the copy writer is not sent this:
+   * `messaging.cta` is the words, this is the mechanism under them, and they are edited apart.
+   *
+   * Shared by the canvas panel and the grid/calendar panel, because both render renderPostInspector.
+   */
+  const renderCtas = (row: TrafficRow) => {
+    const rows = journeyRowsFor(row)
+    const ctas = row.ctas ?? []
+    const handoffs = handoffsFrom(row, rows)
+    const uncovered = uncoveredHandoffs(row, rows)
+    const dangling = new Set(danglingCtas(row, rows).map((c) => c.id))
+    const unbuilt = ctas.filter((c) => !c.built).length
+
+    // An empty list is cleared off the row rather than stored as [], so an asset with no CTAs looks
+    // the same as one from before this existed instead of carrying an empty spec around.
+    const write = (next: AssetCta[]) => void updateRow(row.id, { ctas: next.length ? next : undefined })
+    const patch = (id: string, p: Partial<AssetCta>) => write(ctas.map((c) => (c.id === id ? { ...c, ...p } : c)))
+    const addFor = (h?: Handoff) => {
+      const seed = h ? ctaForHandoff(h.row) : null
+      write([
+        ...ctas,
+        seed && h
+          ? { id: freshCtaId(), kind: seed.kind, label: seed.label, note: seed.note, target: h.row.assetName }
+          : { id: freshCtaId(), kind: 'button' as CtaKind, label: '' },
+      ])
+    }
+
+    return (
+      <>
+        <label className="flow-inspect-label" style={{ marginTop: 16 }}>
+          CTAs{ctas.length ? ` · ${ctas.length}` : ''}
+        </label>
+        {/* "All built" has to mean built, so an empty list says empty rather than claiming a clean
+            sheet it got by having nothing on it. */}
+        <p className="flow-inspect-note" style={{ marginBottom: 10 }}>
+          The buttons, forms and inputs this asset has to carry.{' '}
+          {ctas.length === 0
+            ? handoffs.length === 0
+              ? 'Nothing in this campaign leads out of it, so nothing is owed.'
+              : 'None listed yet.'
+            : unbuilt > 0
+              ? `${unbuilt} still to build.`
+              : 'All built.'}
+        </p>
+
+        {ctas.length > 0 && (
+          <div className="flow-cta-list">
+            {ctas.map((c) => (
+              <div key={c.id} className={`flow-cta${c.built ? ' built' : ''}${dangling.has(c.id) ? ' dangling' : ''}`}>
+                <div className="flow-cta-h">
+                  <label className="flow-cta-check" title={c.built ? 'Built' : 'Not built yet'}>
+                    <input
+                      type="checkbox"
+                      checked={!!c.built}
+                      aria-label={`Built into the asset: ${c.label || CTA_KIND_META[c.kind].label}`}
+                      onChange={(e) => patch(c.id, { built: e.target.checked })}
+                    />
+                    <span className="flow-cta-box" aria-hidden="true">✓</span>
+                  </label>
+                  <select
+                    className="flow-cta-kind"
+                    value={c.kind}
+                    aria-label="What kind of thing this is"
+                    title={CTA_KIND_META[c.kind].blurb}
+                    onChange={(e) => patch(c.id, { kind: e.target.value as CtaKind })}
+                  >
+                    {CTA_KINDS.map((k) => (
+                      <option key={k} value={k}>{CTA_KIND_META[k].label}</option>
+                    ))}
+                  </select>
+                  <button className="flow-cta-del" title="Remove" aria-label="Remove this CTA" onClick={() => write(ctas.filter((x) => x.id !== c.id))}>✕</button>
+                </div>
+                <BufferedInput
+                  className="flow-inspect-input flow-cta-label"
+                  value={c.label}
+                  placeholder={c.kind === 'input' || c.kind === 'form' ? 'What it is called' : 'The words on it'}
+                  onCommit={(v) => patch(c.id, { label: v })}
+                />
+                {/* WHERE IT GOES, from the campaign's own assets. Free text would let a button
+                    point at a name no asset has, which is the gap this section exists to close. */}
+                <select
+                  className="flow-inspect-input flow-inspect-select flow-cta-target"
+                  value={c.target ?? ''}
+                  aria-label="Where it takes them"
+                  onChange={(e) => patch(c.id, { target: e.target.value || undefined })}
+                >
+                  <option value="">Goes nowhere in this campaign</option>
+                  {/* The dangling target stays in the list while it is set, so the control shows what
+                      is actually on the row rather than silently reading as "goes nowhere". */}
+                  {c.target && !rows.some((r) => r.assetName === c.target) && (
+                    <option value={c.target}>{c.target} (not in this campaign)</option>
+                  )}
+                  {[...new Set(rows.filter((r) => r.id !== row.id).map((r) => r.assetName))].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                {/* A textarea, because the note is the build instruction — which fields, where it
+                    posts, what it needs — and a one-line input showed the first six words of it. */}
+                <BufferedTextarea
+                  className="flow-inspect-input flow-cta-note"
+                  rows={2}
+                  value={c.note ?? ''}
+                  placeholder="What has to be built"
+                  onCommit={(v) => patch(c.id, { note: v.trim() || undefined })}
+                />
+                {dangling.has(c.id) && (
+                  <span className="flow-cta-warn">This points at an asset that is not in the campaign, so it leads nowhere.</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* THE HANDOFFS NOTHING ACCOUNTS FOR. One line per link out of this asset with no CTA
+            against it, naming the mechanism the destination requires rather than the intent. */}
+        {uncovered.length > 0 && (
+          <div className="flow-cta-need">
+            {uncovered.map((h) => {
+              const s = ctaForHandoff(h.row)
+              return (
+                <div key={h.row.id} className="flow-cta-needrow">
+                  <div className="flow-cta-needtxt">
+                    <span className="flow-cta-needhead">
+                      {h.via === 'branchOf' ? 'Leads to' : 'Links to'} {h.row.assetName}
+                      <span className="flow-cta-needwhere"> · {handoffWhere(h.row)}</span>
+                    </span>
+                    <span className="flow-cta-needwhy">
+                      Needs {CTA_KIND_META[s.kind].label.toLowerCase()}. {s.note}
+                    </span>
+                  </div>
+                  <button className="flow-cta-add" onClick={() => addFor(h)}>Add</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <button className="flow-insp-open subtle" onClick={() => addFor()}>+ Add a CTA</button>
+      </>
+    )
+  }
+
   /**
    * A list of context rows, shared by the campaign brief, a deliverable and a post so all three read
    * the same. `onRemove` is omitted where the row is inherited and cannot be unwired from here.
@@ -4798,6 +5080,44 @@ export function FlowsView() {
      * the campaign back to whatever it named before. brandCardName reads this ref instead.
      */
     objectsRef.current = objectsRef.current.map((x) => (x.id === id ? { ...x, refId: refId || undefined } : x))
+    /**
+     * AND PUSH IT DOWN THE WIRES THAT WERE ALREADY DRAWN.
+     *
+     * Every call site follows this with `if (isAttached(id)) attachToCampaign(id)`, which covers the
+     * brief and only the brief. A card wired straight to a deliverable materialises through
+     * attachToTarget instead, and that runs once, when the LINE is drawn: draw it on a blank card and
+     * it finds no records, returns silently, and is never asked again. Naming the record afterwards
+     * is the obvious order to work in (drop the card where it belongs, wire it up, then say what it
+     * is), and it left the wire on the board carrying nothing.
+     *
+     * Only the blank -> named transition. A card that already named a record has had its refs
+     * materialised, and re-running the attach on a change would ADD the new record without removing
+     * the old one, which is detachFromTarget's job and belongs with a deliberate swap rather than
+     * here. Reading the pre-change array is what makes that test possible.
+     *
+     * COVERS PICKING A RECORD, not minting one by typing. refForObject resolves the label through
+     * objectOptions, and a record created a line earlier in the same handler is not in that list
+     * until the next render, so the mint-on-first-keystroke path still lands nothing here. That path
+     * is naming a record that is blank at the moment it is made, so there is nothing yet to carry;
+     * the case worth fixing is wiring a card up and then choosing the audience it means.
+     */
+    const was = objects.find((x) => x.id === id)
+    if (refId && was && !was.refId && !was.smartObjectId) {
+      const fresh = { ...was, refId }
+      const refs = [refForObject(fresh)].filter((r): r is FlowReference => !!r)
+      if (refs.length) {
+        for (const e of connectors) {
+          if (e.from !== id || e.to === 'campaign') continue
+          const rows = rowsForTarget(e.to)
+          if (!rows.length) continue
+          const base = rows.find((r) => r.references && r.references.length)?.references ?? campaignWiredRefs()
+          const next = [...base]
+          for (const r of refs) if (!next.some((x) => x.type === r.type && x.id === r.id)) next.push(r)
+          void updateRows(rows.map((r) => ({ id: r.id, patch: { references: next } })))
+          setRefsDirty(true)
+        }
+      }
+    }
   }
   /**
    * The record a card edits, CREATING it if the card has not named one yet.
@@ -4939,7 +5259,14 @@ export function FlowsView() {
   // Concept and Season were once listed here as freeform and are not: both have a record, a rail and
   // a form, and a card that lets you write into one without picking it is how a campaign ends up
   // carrying an idea no other campaign can find again.
-  const named = <T extends { id: string; name: string }>(list: T[]) => list.map((r) => ({ id: r.id, label: r.name || 'Untitled' }))
+  /**
+   * `detail` is the record's own one line — what a Message argues, what a Product is, what fires a
+   * Trigger. The card's picker prints it under each name, because a list of thirty names is a list
+   * of thirty things you have to already know. Which field that line comes from is NOT decided
+   * here: recordDetail decides it once, for this picker and the grid's Made-from drawer together.
+   */
+  const named = <T extends { id: string; name: string }>(list: T[], detail?: (x: T) => string | undefined) =>
+    list.map((r) => ({ id: r.id, label: r.name || 'Untitled', detail: detail?.(r)?.trim() || undefined }))
   /**
    * `refId` is the record this card is ALREADY pointing at, and it is passed so the list can contain
    * an option the list would never offer.
@@ -4947,33 +5274,36 @@ export function FlowsView() {
    * Only Pattern needs it, because Pattern is the only kind with a retirement rule: `patterns` is
    * filtered by usablePatterns so the picker cannot offer a shape that generation will drop. That is
    * right for choosing and wrong for displaying — archive a pattern that a card already names and the
-   * select finds no option matching its value, falls back to the placeholder, and the card reads
-   * "Link a pattern…" while it is still wired and still on the board. The card said one thing and the
-   * picker said the opposite.
+   * card finds no option matching its value, falls back to the empty state, and reads as naming
+   * nothing while it is still wired and still on the board. The card said one thing and the picker
+   * said the opposite.
    *
    * So the retired record is appended, labelled, and only when a card actually names it: it is a
    * statement about this card, never an option on a fresh one.
    */
-  const objectOptions = (kind: CanvasObjectKind, refId?: string): { id: string; label: string }[] | null => {
+  const objectOptions = (kind: CanvasObjectKind, refId?: string): ObjectCardOption[] | null => {
     if (kind === 'pattern') {
-      const opts = named(patterns)
+      const opts = named(patterns, recordDetail.pattern)
       const wired = refId && !opts.some((o) => o.id === refId) ? allPatterns.find((p) => p.id === refId) : undefined
-      return wired ? [...opts, { id: wired.id, label: `${wired.name || 'Untitled'} (archived)` }] : opts
+      return wired
+        ? [...opts, { id: wired.id, label: `${wired.name || 'Untitled'} (archived)`, detail: recordDetail.pattern(wired)?.trim() || undefined }]
+        : opts
     }
     switch (kind) {
-      case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience' }))
+      case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience', detail: recordDetail.audience(a)?.trim() || undefined }))
       // A Data source card's refId is a DATA SET id, whatever route filled it. This used to return
       // the four hardcoded connector names, so Layers and smart-object naming looked up a dataset id
       // in a list of connectors, found nothing, and fell back to the bare kind ("Data source").
-      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set' }))
-      case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
-      case 'company': return named(companies)
-      case 'person': return named(people)
-      case 'trigger': return named(triggers)
-      case 'message': return named(messages)
-      case 'concept': return named(concepts)
-      case 'season': return named(seasons)
-      case 'voice': return named(voices)
+      case 'data-source': return brandDatasets.map((d) => ({ id: d.id, label: d.name || 'Untitled data set', detail: recordDetail.dataSource(d) }))
+      case 'proof-point': return brandProof.map((r) => ({ id: r.id, label: r.label || 'Untitled proof point', detail: recordDetail.proofPoint(r)?.trim() || undefined }))
+      case 'company': return named(companies, recordDetail.company)
+      case 'person': return named(people, recordDetail.person)
+      case 'trigger': return named(triggers, recordDetail.trigger)
+      case 'message': return named(messages, recordDetail.message)
+      case 'concept': return named(concepts, recordDetail.concept)
+      case 'season': return named(seasons, recordDetail.season)
+      // 'pattern' is handled above, where a card naming a retired one still shows what it names.
+      case 'voice': return named(voices, recordDetail.voice)
       // Brand and Product are authored on the card, but they are still records, so the card names
       // one the same way every other record card does — and picking an existing one is how you reuse
       // a brand you already wrote without going through a smart object.
@@ -4983,8 +5313,8 @@ export function FlowsView() {
       // the card that establishes the scope would be filtered by the scope it establishes, and
       // there would be no way out of an unbound campaign. Every other kind stays scoped, because
       // every other kind is chosen WITHIN a brand rather than to decide which brand.
-      case 'brand': return named(brand ? brandObjects : allBrandObjects)
-      case 'product': return named(products)
+      case 'brand': return named(brand ? brandObjects : allBrandObjects, recordDetail.brand)
+      case 'product': return named(products, recordDetail.product)
       default: return null
     }
   }
@@ -5474,7 +5804,7 @@ export function FlowsView() {
         .map((id) => {
           const r = rects[id]
           if (!r) return null
-          const moving = dragDelta && dragDelta.ids.includes(id)
+          const moving = dragDelta && dragDelta.ids.has(id)
           return moving ? { ...r, x: r.x + dragDelta.dx * s, y: r.y + dragDelta.dy * s } : r
         })
         .filter((r): r is { x: number; y: number; w: number; h: number } => !!r)
@@ -5498,7 +5828,7 @@ export function FlowsView() {
   const connRect = (id: string) => {
     const r = rects[id]
     if (!r) return undefined
-    if (dragDelta && dragDelta.ids.includes(id)) {
+    if (dragDelta && dragDelta.ids.has(id)) {
       const s = zoom / 100
       return { x: r.x + dragDelta.dx * s, y: r.y + dragDelta.dy * s, w: r.w, h: r.h }
     }
@@ -5787,6 +6117,22 @@ export function FlowsView() {
       // Builder-mode direction is no longer stamped onto the campaign: it lives on the cards, and
       // adoptBuilderBoard (below) hands the whole board to the campaign Build just named.
       const allNewIds: string[] = []
+      /**
+       * WHICH DELIVERABLE EACH BUILD NODE TURNED INTO — the mapping that exists nowhere else, and
+       * only here.
+       *
+       * A build node is identified by a minted id (`dl_…`); the deliverable it becomes is identified
+       * by what it IS (`deliverableKeyFor`, e.g. "email|nurture"). Nothing translates between the
+       * two, so every wire drawn to a deliverable in build mode pointed at an id the campaign's
+       * board had never heard of. Two things followed, and each hid the other: attachToTarget found
+       * no rows to write to and returned silently (the records never reached the copy), and then the
+       * first openView after Build ran pruneBoard, which deleted the wire for pointing at an unknown
+       * endpoint. The card was left sitting on the canvas with no line and no contribution, and the
+       * only symptom was the context-gap toast asking for a card that was already there.
+       *
+       * Collected during the seeding loop because this is the one moment both ids are in hand.
+       */
+      const builtFromNode = new Map<string, { key: string; rows: TrafficRow[] }>()
       for (const n of cfg.nodes) {
         const p = presetByKey(n.presetKey)
         if (!p) continue
@@ -5795,6 +6141,10 @@ export function FlowsView() {
         const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName).map((r) => r.id))
         await seedCampaignAssets(campaignName, [d], { flightWeeks: cfg.flightWeeks, audiences: auds })
         const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === campaignName && !before.has(r.id))
+        // One preset seeds one deliverable, so every fresh row here shares a key. Audiences vary
+        // across them and deliverableKeyFor does not read the audience, which is what makes the
+        // first row a safe representative rather than a guess.
+        if (fresh.length) builtFromNode.set(n.id, { key: deliverableKeyFor(fresh[0]), rows: fresh })
         const briefs = (n.briefs ?? []).map((b) => b.trim()).filter(Boolean)
         // A blueprint carries per-email guidance (framework / subject formula / levers) that
         // rides in `lineage`; draftCopy copies lineage into the copy context automatically.
@@ -5811,6 +6161,38 @@ export function FlowsView() {
           }
         }
         allNewIds.push(...fresh.map((r) => r.id))
+      }
+      /**
+       * TRANSLATE THE WIRES, THEN LAND WHAT THEY CARRY. Both halves, because either alone leaves a
+       * board that contradicts the copy.
+       *
+       * Remapping without materialising would draw a line from an Audience card to an email while
+       * that email was written to the brand's whole audience list. Materialising without remapping is
+       * the failure pruneBoard's own comment describes from the other direction: records on the rows
+       * steering the copy, and no line left on the board to explain or undo them.
+       *
+       * Read from the PERSISTED board rather than component state: adoptBuilderBoard has just handed
+       * the builder's board over under the campaign's key, and that copy is the one that survives the
+       * openView at the end of this build. It is the same content (the snapshot was flushed above),
+       * which is what lets refsBehind resolve these cards from state that has not moved yet.
+       */
+      if (builtFromNode.size) {
+        const adopted = boardFor(useTrafficStore.getState().flowBoards, campaignName)
+        const remapped = remapBuiltTargets(adopted.connectors, new Map([...builtFromNode].map(([id, b]) => [id, b.key])))
+        if (remapped.some((e, i) => e.to !== adopted.connectors[i].to)) saveFlowBoard({ ...adopted, connectors: remapped })
+        // The brief's own records first, so a deliverable INHERITS the campaign and adds its wired
+        // card on top, exactly as attachToTarget does when the wire is drawn on a live campaign.
+        const base = campaignWiredRefs()
+        for (const [nodeId, built] of builtFromNode) {
+          const refs = adopted.connectors
+            .filter((e) => e.to === nodeId && isContextNode(e.from))
+            .flatMap((e) => refsBehind(e.from))
+          if (!refs.length) continue
+          // Through withRefs like the other two writers, so the per-row rule has one home. These
+          // rows were minted by this build and carry no override yet, so every one of them resolves
+          // to base + refs today; going through the helper is what keeps that true if they ever do.
+          void updateRows(built.rows.map((r) => ({ id: r.id, patch: { references: withRefs(r.references, base, refs) } })))
+        }
       }
       let source: CopySource | null = null
       /**
@@ -7892,6 +8274,13 @@ export function FlowsView() {
           </p>
         )}
 
+        {/* WHAT HAS TO BE BUILT INTO IT. Directly under the copy, because the words and the control
+            they sit on are the same asset and were previously answered in two different places: the
+            copy here, the mechanism nowhere. Above "Connected to" on purpose — that section is
+            about which CARDS instruct this post, which is a different question from what a person
+            has to build. */}
+        {renderCtas(selPost)}
+
         {/* CONNECTED TO: THE CARDS FIRST, THEN WHAT THEY SAY.
             This asked the wrong question and answered it confidently. It read only the
             DIRECTION channel: the typed instruction fields on a card. A card can be
@@ -8492,30 +8881,54 @@ export function FlowsView() {
               const id = over?.dataset.nodeId ?? null
               setConnectOver(id && id !== drawingFrom.current ? id : null)
             } else if (dragging.current) {
-              const scale = zoom / 100
-              const dx = (e.clientX - dragging.current.x) / scale
-              const dy = (e.clientY - dragging.current.y) / scale
-              const d = dragging.current
+              // Read the pointer here, apply it on the next frame. Everything below is deferred so
+              // that a burst of moves inside one frame costs one render, not one render each.
+              const px = e.clientX
+              const py = e.clientY
               dragMovedRef.current = true
-              setPos((prev) => {
-                const next = { ...prev }
-                d.ids.forEach((i) => {
-                  next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
+              scheduleGesture(() => {
+                const d = dragging.current
+                if (!d) return
+                const scale = zoomRef.current / 100
+                const dx = (px - d.x) / scale
+                const dy = (py - d.y) / scale
+                setPos((prev) => {
+                  const next = { ...prev }
+                  d.ids.forEach((i) => {
+                    next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
+                  })
+                  return next
                 })
-                return next
+                // Move the connectors in lockstep with the cards this same commit (rect remeasure is
+                // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
+                // visualSet includes carried children so their edges track without moving their pos.
+                setDragDelta({ ids: d.visualSet, dx, dy })
               })
-              // Move the connectors in lockstep with the cards this same commit (rect remeasure is
-              // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
-              // visualIds includes carried children so their edges track without moving their pos.
-              setDragDelta({ ids: d.visualIds, dx, dy })
             } else if (pan.current) {
-              setOffset({ x: pan.current.ox + (e.clientX - pan.current.x), y: pan.current.oy + (e.clientY - pan.current.y) })
+              const px = e.clientX
+              const py = e.clientY
+              scheduleGesture(() => {
+                const p = pan.current
+                if (!p) return
+                setOffset({ x: p.ox + (px - p.x), y: p.oy + (py - p.y) })
+              })
             } else if (marqueeStart.current) {
+              // The rect is read synchronously: currentTarget is only valid inside the handler.
               const r = e.currentTarget.getBoundingClientRect()
-              setMarquee({ x0: marqueeStart.current.x0, y0: marqueeStart.current.y0, x1: e.clientX - r.left, y1: e.clientY - r.top })
+              const px = e.clientX
+              const py = e.clientY
+              scheduleGesture(() => {
+                const m = marqueeStart.current
+                if (!m) return
+                setMarquee({ x0: m.x0, y0: m.y0, x1: px - r.left, y1: py - r.top })
+              })
             }
           }}
           onMouseUp={(e) => {
+            // The last move of a gesture is usually still pending a frame. Apply it now, while
+            // dragging/pan are still set — everything below clears them, and a drop that ran a
+            // frame behind would leave cards short of where they were released.
+            flushGesture()
             if (addDrag.current) {
               const cr = e.currentTarget.getBoundingClientRect()
               setAddMenu({ at: addDrag.current.at, from: addDrag.current.from, x: e.clientX - cr.left, y: e.clientY - cr.top })
@@ -8614,6 +9027,7 @@ export function FlowsView() {
             if (dragDelta) setDragDelta(null)
           }}
           onMouseLeave={() => {
+            flushGesture()
             pan.current = null
             marqueeStart.current = null
             dragging.current = null
@@ -8937,20 +9351,25 @@ export function FlowsView() {
                     )}
 
                   </div>
-                  {/* WHAT YOU CALL IT. Every card carries one, the same field and the same place a
-                      smart object has always had it, because the question "which of these three
-                      Audience cards is the cold list" is asked of a plain card far more often than
-                      of a bundle. The uppercase caption above still says the KIND; this says which
-                      one. Empty falls back to the record, so a board that never touches this reads
-                      exactly as it did before. */}
-                  <input
-                    className="flow-note-name"
-                    value={nt.name ?? ''}
-                    placeholder={`Name this ${meta.label.toLowerCase()}…`}
-                    aria-label={`Name this ${meta.label.toLowerCase()}`}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => renameObject(nt.id, e.target.value)}
-                  />
+                  {/* WHAT YOU CALL IT — on a sticky only, now.
+                      A record-linked card was carrying this field AND a dropdown, which is one
+                      question answered twice: the record you pick already has a name, and the
+                      picker below now prints it as the card's face. Naming a card is still a real
+                      thing to want ("which of these three Audience cards is the cold list") and it
+                      still works exactly as before — it moved to the inspector, where a board-local
+                      override belongs, and objectName still puts it ahead of the record everywhere.
+                      A sticky keeps the field here because there is no record underneath it to
+                      inherit a name from. */}
+                  {!objectOptions(nt.kind) && (
+                    <input
+                      className="flow-note-name"
+                      value={nt.name ?? ''}
+                      placeholder={`Name this ${meta.label.toLowerCase()}…`}
+                      aria-label={`Name this ${meta.label.toLowerCase()}`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onChange={(e) => renameObject(nt.id, e.target.value)}
+                    />
+                  )}
                   {nt.kind === 'data-source' ? (
                     // DISPLAY ONLY. Choosing a source is authoring, and authoring happens in the
                     // inspector like it does for every other kind; the card shows what was chosen.
@@ -9025,47 +9444,69 @@ export function FlowsView() {
                         />
                       )
                     }
+                    const picked = nt.refId ? opts.find((o) => o.id === nt.refId) : undefined
                     return (
-                      <select
-                        className="flow-note-sel"
-                        value={nt.refId ?? ''}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          if (e.target.value === '__new__') { setCreatingName(''); setCreatingFor(nt.id); return }
-                          setObjectRef(nt.id, e.target.value)
+                      <ObjectCardPicker
+                        options={opts}
+                        refId={nt.refId}
+                        // The card's own name still wins where it has one; otherwise the record it
+                        // points at names it, which is the whole reason the card stopped carrying a
+                        // name field of its own.
+                        name={objectName(nt, picked?.label)}
+                        // A brand card carries no one-liner half the time and still decides a great
+                        // deal, so it says what it does rather than sitting there with a blank line
+                        // under it. Same sentence the inspector's context list uses, for the same
+                        // reason.
+                        detail={picked ? picked.detail || (nt.kind === 'brand' ? 'Sets the brand this is written as' : undefined) : undefined}
+                        noun={noun}
+                        article={articleFor(noun)}
+                        plural={pluralOf(noun)}
+                        tone={meta.tone}
+                        /* "No audiences yet" is false on a board with no brand bound: there may be
+                           plenty, they just belong to brands this campaign has not named. Saying
+                           that points at the fix — wire a Brand card — instead of at a library the
+                           user is told is empty and can see is not. The Brand card is exempt,
+                           because it IS that gesture and has nothing to wait for. */
+                        emptyNote={
+                          brand || nt.kind === 'brand'
+                            ? `No ${pluralOf(noun)} yet. Make one below and it joins the library.`
+                            : 'Connect a Brand card first. These come from the brand this campaign writes as.'
+                        }
+                        // Every record-linked card can make the thing it needs. Without this a fresh
+                        // brand dead-ends here with nowhere to go.
+                        canCreate={CREATABLE_KINDS.has(nt.kind)}
+                        onPick={(id) => {
+                          setObjectRef(nt.id, id)
                           // Re-attach so a changed record reaches the campaign without redrawing the edge.
                           if (isAttached(nt.id)) attachToCampaign(nt.id)
                         }}
-                      >
-                        {/* "No audiences yet" is false on a board with no brand bound: there may be
-                            plenty, they just belong to brands this campaign has not named. Saying
-                            that points at the fix — wire a Brand card — instead of at a library the
-                            user is told is empty and can see is not. The Brand card is exempt,
-                            because it IS that gesture and has nothing to wait for. */}
-                        <option value="">{opts.length ? `Link ${articleFor(noun)} ${noun}…` : brand || nt.kind === 'brand' ? `No ${pluralOf(noun)} yet` : 'Connect a Brand card first…'}</option>
-                        {opts.map((o) => (
-                          <option key={o.id} value={o.id}>{o.label}</option>
-                        ))}
-                        {/* Every record-linked card can make the thing it needs. Without this a
-                            fresh brand dead-ends here with nowhere to go. */}
-                        {CREATABLE_KINDS.has(nt.kind) && <option value="__new__">+ New {noun}…</option>}
-                      </select>
+                        onCreate={() => { setCreatingName(''); setCreatingFor(nt.id) }}
+                        onOpen={() => { setSel(nt.id); setSelected(new Set()) }}
+                      />
                     )
                   })()}
                   {/* THE SHAPE, ON THE CARD. Every other input card is fully described by the record
                       it names: "Enterprise, cold" tells you what the Audience card does. A Pattern's
                       name does not — "Teardown" and "Objection-first" are labels for structures, and
-                      the structure is the thing you are choosing between. So the card shows the two
-                      fields that say which shape this is: its TYPE, and the example line.
+                      the structure is the thing you are choosing between.
+
+                      STRICTLY WHAT THE PICKER ABOVE DOES NOT ALREADY SAY. It prints the record's
+                      name and recordDetail.pattern, which is `description || type`. So the example
+                      is shown here and the description is not — repeating the line directly above it
+                      would read as two facts when it is one. The type gets a chip of its own because
+                      the detail line only falls back to it when a description is missing, and
+                      "is this a hook or a format" is the thing you scan a board for.
 
                       Read-only, like the Data source card's sheet preview: choosing is authoring and
                       authoring happens in the inspector. This is the card saying what it carries. */}
                   {nt.kind === 'pattern' && (() => {
                     const pat = nt.refId ? allPatterns.find((x) => x.id === nt.refId) : null
                     if (!pat) return null
-                    // The example is what a shape looks like in practice, so it leads; the
-                    // description is the fallback for a pattern nobody has written an example for.
-                    const line = (pat.example || pat.description || '').trim()
+                    const line = (pat.example ?? '').trim()
+                    const chip = isPatternRetired(pat) || !!pat.type
+                    // Nothing to add beyond what the picker already said. Rendering the wrapper
+                    // anyway would hang 9px of empty margin off the bottom of the card.
+                    if (!chip && !line) return null
                     return (
                       <div className="flow-pat-prev">
                         {/* An ARCHIVED pattern still draws, still reads as wired, and is silently

@@ -226,6 +226,33 @@ export interface FlowBoard {
 export const deliverableKeyFor = (r: { channel: string; assetType?: string; branchOf?: string }): string =>
   `${r.channel}|${r.assetType ?? ''}${r.branchOf ? `|↳${r.branchOf}` : ''}`
 
+/**
+ * REPOINT THE BUILDER'S WIRES AT THE DELIVERABLES THEY TURNED INTO.
+ *
+ * In build mode a deliverable is a NODE with a minted id (`dl_…`), because it does not exist yet and
+ * a thing you are still configuring needs an identity of its own. The moment Build runs it becomes a
+ * group of assets, identified by what it IS (deliverableKeyFor). Nothing translated between the two,
+ * so a wire drawn from a card to a deliverable in the builder was handed to the campaign still
+ * pointing at the node id, and the campaign's board has no such endpoint: pruneBoard dropped it on
+ * the next openView, quietly, and the line the person drew was gone.
+ *
+ * Here rather than in the component because it is the reverse of deliverableKeyFor and belongs next
+ * to it: both answer "what is this deliverable called right now", and a copy of either that drifted
+ * would put a wire on a board pointing at a deliverable nothing answers to.
+ *
+ * Endpoints with no entry are left exactly as they are. A node that seeded no assets became no
+ * deliverable, and inventing a key for it would be worse than the dangling wire pruneBoard removes.
+ */
+export function remapBuiltTargets(
+  connectors: readonly { from: string; to: string }[],
+  builtKeyByNodeId: ReadonlyMap<string, string>,
+): { from: string; to: string }[] {
+  return connectors.map((c) => {
+    const key = builtKeyByNodeId.get(c.to)
+    return key ? { ...c, to: key } : c
+  })
+}
+
 export const emptyBoard = (key: string): FlowBoard => ({ key, objects: [], placements: [], pos: {}, connectors: [] })
 
 /**

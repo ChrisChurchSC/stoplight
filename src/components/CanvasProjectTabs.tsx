@@ -44,6 +44,12 @@ export function CanvasProjectTabs() {
   const closeObjectTab = useTrafficStore((s) => s.closeObjectTab)
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
   const campaignList = useTrafficStore((s) => s.campaignList)
+  // Whether a campaign BOARD is the thing on screen, as opposed to the Campaigns index. FlowsView
+  // mirrors its own screen state here; it is the only honest answer to "am I looking at a campaign",
+  // and closing a tab has to know. See close().
+  const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
+  const goFlowHome = useTrafficStore((s) => s.goFlowHome)
+  const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   // The workspace-read-succeeded flag the prune waits on; see pruneOpenProjects for why it is this
   // one and not boardsHydrated.
   const flightsHydrated = useTrafficStore((s) => s.flightsHydrated)
@@ -105,14 +111,47 @@ export function CanvasProjectTabs() {
     if (campaign === campaignFilter) return
     openFlow(campaign)
   }
+  /**
+   * CLOSING A TAB IS NOT NAVIGATION, AND IT IS NOT A DELETE.
+   *
+   * The ✕ used to move you whenever the tab it closed matched campaignFilter — and campaignFilter
+   * names the campaign most recently OPENED, which outlives leaving it: going back to the Campaigns
+   * index does not clear it. So tidying a tab away while standing ON the Campaigns page threw you
+   * into some other campaign's board, and the page you were reading was gone. Worse when the tab it
+   * landed on belonged to another brand: openFlow re-scopes the workspace to the campaign it opens,
+   * so a close could swap the brand under you and empty the Campaigns page of everything you had
+   * just been looking at. Nothing was deleted, but everything looked deleted.
+   *
+   * So: the tab always goes, and NOTHING ELSE HAPPENS unless the campaign you closed is the board
+   * actually on screen. Only then is there something to replace, because the thing you were looking
+   * at has gone.
+   */
   const close = (e: React.MouseEvent, campaign: string) => {
     e.stopPropagation()
     closeProject(campaign)
-    if (campaign === campaignFilter) {
-      const next = projects.find((p) => p.campaign !== campaign)
-      if (next) openFlow(next.campaign)
-      else setPage('flows')
+    const viewingIt = page === 'flows' && flowCanvasOpen && campaign === campaignFilter
+    if (!viewingIt) return
+    /**
+     * WITHIN THE SAME BRAND, OR HOME. A sibling tab is the browser-ish answer and the right one, but
+     * only among this brand's tabs: openFlow sets the workspace scope to its campaign's client, and
+     * a close is not a request to change brand. With no sibling, go to the Campaigns index — the old
+     * setPage('flows') was a no-op from a flow (we were already on that page), which stranded you on
+     * the board of the campaign whose tab you had just closed, with no tab left pointing at it.
+     */
+    const client = clientForCampaign(campaign)
+    const next = projects.find((p) => p.campaign !== campaign && p.client === client)
+    if (next) {
+      // Read BEFORE the open: openFlow narrows the scope to its campaign's brand, and if you were
+      // browsing all of them the index has to stay that way. A close must not shrink what you can see.
+      const wasAllBrands = clientFilter === 'all'
+      openFlow(next.campaign)
+      if (wasAllBrands) setClientFilter('all')
+      return
     }
+    goFlowHome()
+    // Nothing is open now, so no tab should read as active — and campaignFilter left pointing at a
+    // closed campaign is exactly what the effect above re-opens a tab from.
+    setCampaignFilter('all')
   }
 
   const openBrand = (b: string) => {

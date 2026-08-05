@@ -8,6 +8,7 @@ import { rtbsForCampaign } from '../domain/rtb'
 import { boardFor, deliverableKeyFor, objectName, type CanvasObject, type CanvasObjectKind } from '../domain/flowBoard'
 import { cardsForRow } from '../domain/cardsForRow'
 import { usablePatterns } from '../domain/pattern'
+import { recordDetail } from '../domain/recordDetail'
 import { madeFrom } from '../domain/madeFrom'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
@@ -460,39 +461,43 @@ export function SheetGrid({
    * Trigger. The drawer shows it under the name, because a list of thirty names is a list of thirty
    * things you have to already know; it is absent for the kinds whose records carry no such line,
    * rather than padded with something invented to fill the row.
+   *
+   * WHICH FIELD that line comes from is recordDetail's to decide, not this function's. The canvas
+   * card's picker prints the same line under the same names, and when the two chose their own
+   * fields the same Voice could read as its tone here and its summary there.
    */
   const optionsFor = (kind: CanvasObjectKind): { id: string; label: string; detail?: string }[] => {
     const named = <T extends { id: string; name?: string }>(l: T[], detail?: (x: T) => string | undefined) =>
       l.map((x) => ({ id: x.id, label: x.name || 'Untitled', detail: detail?.(x)?.trim() || undefined }))
     switch (kind) {
-      case 'brand': return named(brandObjects, (b) => b.oneLiner)
-      case 'product': return named(products, (p) => p.summary)
-      case 'audience': return named(clientAudiences[clientFilter] ?? [], (a) => a.role)
-      case 'message': return named(messages, (m) => m.angle)
-      case 'voice': return named(voices, (v) => v.summary || v.tone)
-      case 'concept': return named(concepts, (c) => c.idea)
-      case 'season': return named(seasons, (s) => s.moment)
+      case 'brand': return named(brandObjects, recordDetail.brand)
+      case 'product': return named(products, recordDetail.product)
+      case 'audience': return named(clientAudiences[clientFilter] ?? [], recordDetail.audience)
+      case 'message': return named(messages, recordDetail.message)
+      case 'voice': return named(voices, recordDetail.voice)
+      case 'concept': return named(concepts, recordDetail.concept)
+      case 'season': return named(seasons, recordDetail.season)
       /**
-       * The detail is the pattern's description, falling back to its type, because a list of
-       * pattern NAMES is the one list here where the names are least self-explanatory: "Ladder",
-       * "Open loop" and "Third rail" mean nothing until somebody says what shape they are.
-       *
        * Archived patterns are filtered out. This picker sets what an asset is WRITTEN to, and a
        * pattern the library has retired is the one answer already ruled out; generation drops it
        * too (see poolsFrom), so offering it here would set a value that reaches nothing.
        */
-      case 'pattern': return named(usablePatterns(patterns), (p) => p.description || p.type)
-      case 'company': return named(companies, (c) => c.description || c.segment)
-      case 'person': return named(people, (p) => p.title)
-      case 'trigger': return named(triggers, (t) => t.signal)
+      case 'pattern': return named(usablePatterns(patterns), recordDetail.pattern)
+      case 'company': return named(companies, recordDetail.company)
+      case 'person': return named(people, recordDetail.person)
+      case 'trigger': return named(triggers, recordDetail.trigger)
       case 'data-source': return brandDatasets.map((d) => ({
         id: d.id,
         label: d.name || 'Untitled data set',
-        detail: d.columns?.length ? `${d.rows?.length ?? 0} rows · ${d.columns.join(', ')}` : undefined,
+        detail: recordDetail.dataSource(d),
       }))
       // Proof lives per campaign rather than per brand, which is why it is fetched differently
       // from every other kind here.
-      case 'proof-point': return rtbsForCampaign(scopeCampaign).map((r) => ({ id: r.id, label: r.label || 'Untitled proof point' }))
+      case 'proof-point': return rtbsForCampaign(scopeCampaign).map((r) => ({
+        id: r.id,
+        label: r.label || 'Untitled proof point',
+        detail: recordDetail.proofPoint(r)?.trim() || undefined,
+      }))
       default: return []
     }
   }
