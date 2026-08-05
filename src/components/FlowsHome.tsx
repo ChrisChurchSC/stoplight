@@ -52,6 +52,13 @@ const STATUS_RANK: Record<CampaignStatus, number> = { active: 0, 'in-review': 1,
 export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (name: string) => void; onNew: () => void }) {
   const rows = useTrafficStore((s) => s.rows)
   /**
+   * Whether `rows` is the whole workspace yet. Every "you have nothing" surface on this page is
+   * derived from rows, and on a network-backed workspace rows arrive after the first paint — so
+   * without this the page opens by announcing "0 campaigns" and offering "Start a campaign" to
+   * someone who has fifty, then swaps the cards and their channels in underneath them.
+   */
+  const rowsHydrated = useTrafficStore((s) => s.rowsHydrated)
+  /**
    * Whether a brand has been CHOSEN, read straight from the workspace filter rather than inferred
    * from `brand` — which canvasBrandScope may have resolved on its own for a single-brand workspace.
    * That inference is right for a picker and wrong for an index. See campaignInIndexScope.
@@ -514,8 +521,11 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               folder list — every implied ancestor, and every folder left behind by a campaign that
               was archived or deleted. So it read a number the page didn't show and nobody could
               account for. The folders are on screen; they don't need a tally. */}
+          {/* A count is only worth showing once it's true. Until the rows land it would read
+              "0 campaigns", so the line holds its space and says nothing instead of saying
+              something wrong. */}
           <p className="flow-home-sub">
-            {cards.length} campaign{cards.length === 1 ? '' : 's'}
+            {rowsHydrated ? `${cards.length} campaign${cards.length === 1 ? '' : 's'}` : ' '}
           </p>
         </div>
         <div className="flow-home-actions">
@@ -539,7 +549,7 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
               ＋ New campaign
             </button>
             <Hint
-              show={cards.length === 0}
+              show={rowsHydrated && cards.length === 0}
               storageKey="stoplight.hint.newCampaign.v1"
               title="Start a campaign"
               body={[
@@ -578,10 +588,14 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
                   being one. */}
               <div className="flow-home-group-h">
                 {DRAFTS}
-                <span className="flow-home-group-n">{unfiled.length}</span>
+                {/* Same rule as the campaign count above: a tally waits until it is true, rather
+                    than reading 0 and then correcting itself once the rows arrive. */}
+                <span className="flow-home-group-n">{rowsHydrated ? unfiled.length : ''}</span>
               </div>
               {unfiled.length === 0 ? (
-                <div className="flow-home-empty-folder">No campaigns here yet.</div>
+                // "No campaigns here yet" is a claim about the workspace, so it waits until the
+                // workspace is known. Before that the bucket is simply quiet.
+                rowsHydrated ? <div className="flow-home-empty-folder">No campaigns here yet.</div> : null
               ) : (
                 <div className="flow-home-grid">{unfiled.map(renderTop)}</div>
               )}
