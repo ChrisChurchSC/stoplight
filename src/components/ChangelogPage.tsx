@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.27',
+    version: 'v1.28',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -33,6 +33,21 @@ const RELEASES: Release[] = [
           'The picker itself shows those lines too. Choosing between "Ladder", "Open loop" and "Third rail" used to mean already knowing what all three were, because a dropdown could only offer their names. Every record now comes with its own description, and a library big enough to scroll comes with a search box.',
           'The name field is gone from the card, because the record already carries the name. It was a second place to write the same word, and the two drifted apart the moment either changed. Naming a card something the library should not be called is still there, in the inspector, where it is a deliberate act rather than the first thing a blank card asks you for. A sticky note keeps its name field, having no record to inherit one from.',
           'Making a record you do not have yet is still one gesture from the card, and unlinking one is now an option on the list rather than a blank row at the top of it.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.27',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Closing a campaign tab closes the tab, and does nothing else. With several campaigns open, tidying one away could throw you off the Campaigns page and into a different campaign\'s board. The strip was moving you whenever the tab you closed happened to be the campaign you had opened most recently, and that is remembered long after you have gone back to the index, so a close that should have been housekeeping read as being sent somewhere.',
+          'It could also change which brand you were looking at. The campaign it jumped to was simply the next tab along, and opening a campaign scopes the workspace to its brand, so a close could quietly narrow the Campaigns page to one brand and take every other brand\'s campaigns off it. Nothing had been deleted, but the page had emptied. A close now stays within the brand you are in, and leaves an "all brands" view showing all brands.',
+          'Closing the campaign you are actually looking at still moves you, because what you were reading has gone: to another tab of the same brand, or back to the Campaigns index when that was the last one. Previously the last tab left you standing on the board of the campaign whose tab you had just closed, with nothing in the strip pointing at it.',
+          'A campaign only ever leaves the Campaigns page when it is deleted.',
         ],
       },
     ],
