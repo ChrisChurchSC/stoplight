@@ -23,6 +23,21 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.27',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Closing a campaign tab closes the tab, and does nothing else. With several campaigns open, tidying one away could throw you off the Campaigns page and into a different campaign\'s board. The strip was moving you whenever the tab you closed happened to be the campaign you had opened most recently, and that is remembered long after you have gone back to the index, so a close that should have been housekeeping read as being sent somewhere.',
+          'It could also change which brand you were looking at. The campaign it jumped to was simply the next tab along, and opening a campaign scopes the workspace to its brand, so a close could quietly narrow the Campaigns page to one brand and take every other brand\'s campaigns off it. Nothing had been deleted, but the page had emptied. A close now stays within the brand you are in, and leaves an "all brands" view showing all brands.',
+          'Closing the campaign you are actually looking at still moves you, because what you were reading has gone: to another tab of the same brand, or back to the Campaigns index when that was the last one. Previously the last tab left you standing on the board of the campaign whose tab you had just closed, with nothing in the strip pointing at it.',
+          'A campaign only ever leaves the Campaigns page when it is deleted.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.26',
     dateLabel: 'August 5, 2026',
     groups: [
