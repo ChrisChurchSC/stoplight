@@ -21882,17 +21882,27 @@ table.aud-sheet td.stick .aud-cell {
 .flow-node:not(.flow-brief-node) { max-width: 252px; }
 .flow-node:not(.flow-brief-node) .flow-node-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Tier backgrounds — a distinct brand hue per tier so the hierarchy reads at a glance:
-   campaign (tomato) → deliverable (blue) → post/copy (purple). Percentages are tuned per hue
-   so they land at a similar subtle intensity (light blue needs more, saturated purple less). */
+/* Tier backgrounds. HUE is the MOTION the asset belongs to — social blue, email teal, web
+   orange, paid red, and the rest of GROUP_TONE — carried in --tone, which FlowsView sets once
+   per deliverable on its .flow-branched wrapper so the channel card and every post under it
+   inherit the same one. So a board full of cards sorts itself into its motions by colour, and
+   a card is the same colour as the palette button that made it.
+
+   INTENSITY is the tier, and it is what still separates the levels now that hue is spoken for:
+   campaign is a faint plate, its channel card a firm tint, its posts a whisper of the same hue.
+   Percentages stay tuned per tier, not per hue.
+
+   The fallbacks are the old fixed tier colours, so any card that carries no --tone (the campaign
+   plate, a card outside a deliverable) looks exactly as it did. */
 .flow-node.flow-tier-campaign { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius: 14px; padding: 12px 13px 13px; }
-.flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--accent-3) 16%, var(--surface)); border-color: color-mix(in srgb, var(--accent-3) 40%, var(--border)); }
-.flow-node.flow-brief-node { background: color-mix(in srgb, var(--accent-2) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent-2) 18%, var(--border)); }
-/* Selected + click-held (drag) glow match the card's tier hue (campaign tomato is the default). A
-   bold 2px ring + soft outer glow + a lightly tinted body make a selection read at a glance. */
+.flow-node.flow-tier-deliv { background: color-mix(in srgb, var(--tone, var(--accent-3)) 16%, var(--surface)); border-color: color-mix(in srgb, var(--tone, var(--accent-3)) 40%, var(--border)); }
+.flow-node.flow-brief-node { background: color-mix(in srgb, var(--tone, var(--accent-2)) 7%, var(--surface)); border-color: color-mix(in srgb, var(--tone, var(--accent-2)) 18%, var(--border)); }
+/* Selected + click-held (drag) glow match the card's own hue, so selecting a paid ad rings red
+   and selecting a newsletter rings teal. A bold 2px ring + soft outer glow + a lightly tinted
+   body make a selection read at a glance. */
 .flow-node.flow-tier-campaign.sel, .flow-node.flow-tier-campaign.multi { border-color: #ff6347; background: color-mix(in srgb, #ff6347 12%, var(--surface)); box-shadow: 0 0 0 2px #ff6347, 0 0 0 6px color-mix(in srgb, #ff6347 22%, transparent), var(--shadow-raise); }
-.flow-node.flow-tier-deliv.sel, .flow-node.flow-tier-deliv.multi { border-color: #2f6fe0; background: color-mix(in srgb, #2f6fe0 12%, var(--surface)); box-shadow: 0 0 0 2px #2f6fe0, 0 0 0 6px color-mix(in srgb, #2f6fe0 22%, transparent), var(--shadow-raise); }
-.flow-node.flow-brief-node.sel, .flow-node.flow-brief-node.multi { border-color: #8a34d6; background: color-mix(in srgb, #8a34d6 12%, var(--surface)); box-shadow: 0 0 0 2px #8a34d6, 0 0 0 6px color-mix(in srgb, #8a34d6 22%, transparent), var(--shadow-raise); }
+.flow-node.flow-tier-deliv.sel, .flow-node.flow-tier-deliv.multi { border-color: var(--tone, #2f6fe0); background: color-mix(in srgb, var(--tone, #2f6fe0) 12%, var(--surface)); box-shadow: 0 0 0 2px var(--tone, #2f6fe0), 0 0 0 6px color-mix(in srgb, var(--tone, #2f6fe0) 22%, transparent), var(--shadow-raise); }
+.flow-node.flow-brief-node.sel, .flow-node.flow-brief-node.multi { border-color: var(--tone, #8a34d6); background: color-mix(in srgb, var(--tone, #8a34d6) 12%, var(--surface)); box-shadow: 0 0 0 2px var(--tone, #8a34d6), 0 0 0 6px color-mix(in srgb, var(--tone, #8a34d6) 22%, transparent), var(--shadow-raise); }
 /* A marquee / shift multi-selection (2+ cards) also gets a check badge in the corner, so the whole
    set is obvious, not just the one active card. */
 .flow.has-multi .flow-node.multi::after {
@@ -21915,8 +21925,8 @@ table.aud-sheet td.stick .aud-cell {
   pointer-events: none;
 }
 .flow.has-multi .flow-node.flow-tier-campaign.multi::after { background: #ff6347; }
-.flow.has-multi .flow-node.flow-tier-deliv.multi::after { background: #2f6fe0; }
-.flow.has-multi .flow-node.flow-brief-node.multi::after { background: #8a34d6; }
+.flow.has-multi .flow-node.flow-tier-deliv.multi::after { background: var(--tone, #2f6fe0); }
+.flow.has-multi .flow-node.flow-brief-node.multi::after { background: var(--tone, #8a34d6); }
 
 /* ============================================================================
    CARD ROLES — what a card DOES, carried by [data-role] (emitted in FlowsView).

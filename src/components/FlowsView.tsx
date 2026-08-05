@@ -26,7 +26,7 @@ import { AI_MODELS, AI_MODEL_IDS } from '../domain/aiModels'
 import { OBJECTIVE_PRESETS, objectivePresetByName } from '../domain/objectivePresets'
 import { ALL_DIRECTION_KEYS, DIRECTION_FIELD, DIRECTION_KEYS, buildDirection, capFor, type DirectionKey } from '../domain/direction'
 import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartObject'
-import { DELIVERABLE_PRESETS, type DeliverablePreset, type FlowDeliverable, freshNodeId, nodeAssetCount, presetByKey, TONE_HEX } from '../domain/flows'
+import { DELIVERABLE_PRESETS, type DeliverableGroup, type DeliverablePreset, type FlowDeliverable, freshNodeId, GROUP_TONE, nodeAssetCount, presetByKey, toneForPreset } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
 import { canvasBrandScope, resolveBrandScope } from '../domain/brand'
@@ -107,8 +107,22 @@ const GROUP_HEAD = 26
 /** Drag payload for a smart object leaving the Assets panel for the canvas. */
 const SMART_OBJECT_DND = 'application/x-breadcrumbs-smart-object'
 const CAMPAIGN_TONE = '#ff6347'
+/** The generic "add a channel" toolbar button, which stands for no single motion. */
 const DELIV_TONE = '#2f6fe0'
-const POST_TONE = '#8a34d6'
+
+/**
+ * The motion tone for a BUILT asset. A built row carries a channel and an asset type rather than
+ * a preset key, so the preset is found back and its group answers the colour; anything with no
+ * preset falls back on the one distinction that still holds, paid against organic.
+ *
+ * Everywhere a built asset shows a colour — its card, its channel tile, its port, its row in the
+ * layers panel and in the inspector — reads this, so one asset is one colour across the app.
+ */
+const toneForRow = (r: { channel?: string; assetType?: string }): string => {
+  const preset = DELIVERABLE_PRESETS.find((p) => p.channel === r.channel && p.assetType === r.assetType)
+  if (preset) return toneForPreset(preset)
+  return CHANNELS[r.channel as ChannelId]?.kind === 'paid' ? GROUP_TONE.Paid : GROUP_TONE.Social
+}
 
 // The callbacks the shared Record-Tags block edits through, so the same UI can target the
 // campaign brief OR a single deliverable's per-asset override.
@@ -261,23 +275,27 @@ const PresetTile = ({ tone, channel }: { tone: string; channel?: ChannelId }) =>
  * exactly. They sit in the toolbar's "Gets made" band so the palette offers the KIND of work you
  * are adding, not one generic "Deliverable" button that hides eight very different choices behind
  * a single click. Picking one opens the deliverable picker scoped to that motion.
+ *
+ * No tone here: it comes from GROUP_TONE, keyed by this same `group`, which is also what the
+ * cards these motions produce are tinted with. The palette icon and the card it makes are then
+ * the same colour by construction rather than by two lists agreeing.
  */
-const DELIVERABLE_GROUPS: { group: string; label: string; tone: string; icon: ReactNode }[] = [
-  { group: 'Social', label: 'Social', tone: '#2f6fe0',
+const DELIVERABLE_GROUPS: { group: DeliverableGroup; label: string; icon: ReactNode }[] = [
+  { group: 'Social', label: 'Social',
     icon: <><circle cx="7" cy="8" r="2.6" /><circle cx="17" cy="6" r="2.2" /><circle cx="16" cy="17" r="2.6" /><path d="M9.3 9.3l4.6 6M9.2 7.2l5.6-1" /></> },
-  { group: 'Email & lifecycle', label: 'Email', tone: '#0e8f7d',
+  { group: 'Email & lifecycle', label: 'Email',
     icon: <><rect x="3" y="5.5" width="18" height="13" rx="2.2" /><path d="M3.6 7l8.4 6 8.4-6" /></> },
-  { group: 'Content & SEO', label: 'Content', tone: '#7a52d1',
+  { group: 'Content & SEO', label: 'Content',
     icon: <><path d="M5 3.5h9l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20z" /><path d="M14 3.5V9h5" /><path d="M8.5 13h6M8.5 16.5h4" /></> },
-  { group: 'Web', label: 'Web', tone: '#c2410c',
+  { group: 'Web', label: 'Web',
     icon: <><rect x="3" y="4.5" width="18" height="15" rx="2.2" /><path d="M3 9h18" /><circle cx="6.4" cy="6.8" r="0.7" /><circle cx="8.8" cy="6.8" r="0.7" /></> },
-  { group: 'Paid', label: 'Paid', tone: '#c9302c',
+  { group: 'Paid', label: 'Paid',
     icon: <><path d="M3.5 9.5v5a1.5 1.5 0 0 0 1.5 1.5h2.2L14 20V4l-6.8 4H5a1.5 1.5 0 0 0-1.5 1.5z" /><path d="M17.5 9a4.5 4.5 0 0 1 0 6" /></> },
-  { group: 'Video', label: 'Video', tone: '#8a34d6',
+  { group: 'Video', label: 'Video',
     icon: <><rect x="2.8" y="5.5" width="13" height="13" rx="2.4" /><path d="M16 11l5-3v8l-5-3z" /></> },
-  { group: 'Lead magnets', label: 'Lead magnet', tone: '#b8860b',
+  { group: 'Lead magnets', label: 'Lead magnet',
     icon: <><path d="M5.5 4h7l5.5 5.5V20a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M12.5 4v6h5.5" /><path d="M12 12.5v5M9.5 15.5l2.5 2.5 2.5-2.5" /></> },
-  { group: 'Events', label: 'Events', tone: '#0f766e',
+  { group: 'Events', label: 'Events',
     icon: <><rect x="3.5" y="5" width="17" height="15" rx="2.2" /><path d="M3.5 10h17M8 3.5v3M16 3.5v3" /></> },
 ]
 
@@ -2622,8 +2640,7 @@ export function FlowsView() {
       else {
         const preset = DELIVERABLE_PRESETS.find((p) => p.channel === r.channel && p.assetType === r.assetType)
         const label = preset?.label ?? `${CHANNELS[r.channel as ChannelId]?.label ?? r.channel} · ${r.assetType || 'asset'}`
-        const tone = preset ? TONE_HEX[preset.tone] : CHANNELS[r.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue
-        map.set(key, { key, label, tone, channel: r.channel as ChannelId, assetType: r.assetType ?? '', count: 1, rows: [r] })
+        map.set(key, { key, label, tone: toneForRow(r), channel: r.channel as ChannelId, assetType: r.assetType ?? '', count: 1, rows: [r] })
       }
     }
     // Ordered by WHEN the deliverable's first asset goes out, not by how many assets it has.
@@ -6683,7 +6700,7 @@ export function FlowsView() {
   const outputLayers: Layer[] = viewing
     ? viewDelivs.map((d) => ({
         id: d.key, label: d.label, count: d.count, sub: d.channel,
-        icon: <PresetTile tone={DELIV_TONE} channel={d.channel as ChannelId} />,
+        icon: <PresetTile tone={d.tone} channel={d.channel as ChannelId} />,
       }))
     : nodes.map((n) => {
         const p = presetByKey(n.presetKey)
@@ -6692,7 +6709,7 @@ export function FlowsView() {
           label: p?.label ?? 'Channel',
           count: p ? subcardCount(p, n.perMonth) : 0,
           sub: p?.channel,
-          icon: <PresetTile tone={DELIV_TONE} channel={p?.channel} />,
+          icon: <PresetTile tone={p ? toneForPreset(p) : DELIV_TONE} channel={p?.channel} />,
         }
       })
   const objectLayer = (nt: CanvasObject, depth = 0): Layer => {
@@ -7146,8 +7163,8 @@ export function FlowsView() {
               const d = viewDelivs.find((x) => x.key === t)
               if (d) return { id: t, label: d.label, sub: `${d.count} asset${d.count === 1 ? '' : 's'}`, tone: d.tone, channel: d.channel }
               const r = viewRows.find((x) => x.id === t)
-              if (r) return { id: t, label: r.assetName, sub: 'one post', tone: POST_TONE, channel: r.channel as ChannelId }
-              return { id: t, label: t, sub: '', tone: POST_TONE, channel: undefined as ChannelId | undefined }
+              if (r) return { id: t, label: r.assetName, sub: 'one post', tone: toneForRow(r), channel: r.channel as ChannelId }
+              return { id: t, label: t, sub: '', tone: DELIV_TONE, channel: undefined as ChannelId | undefined }
             })
             return (
               <>
@@ -7629,7 +7646,7 @@ export function FlowsView() {
   const renderPostInspector = (selPost: TrafficRow) => (
     <>
       <div className="flow-panel-head">
-        <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? TONE_HEX.gold : TONE_HEX.blue} channel={selPost.channel as ChannelId} />
+        <PresetTile tone={CHANNELS[selPost.channel as ChannelId]?.kind === 'paid' ? GROUP_TONE.Paid : GROUP_TONE.Social} channel={selPost.channel as ChannelId} />
         <span className="flow-panel-title">{selPost.assetName}</span>
       </div>
       <div className="flow-inspect">
@@ -8206,7 +8223,7 @@ export function FlowsView() {
           blank={blankCampaign}
           templates={STARTER_KEYS.flatMap((k) => {
             const p = presetByKey(k)
-            return p ? [{ key: k as string, label: p.label, node: <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} /> }] : []
+            return p ? [{ key: k as string, label: p.label, node: <PresetTile tone={toneForPreset(p)} channel={p.channel} /> }] : []
           })}
           onTemplate={(k) => { const p = presetByKey(k); if (p) addPreset(p) }}
           onMoreTemplates={openAddDeliverable}
@@ -8585,7 +8602,7 @@ export function FlowsView() {
                       <div className="flow-addmenu-group">{group}</div>
                       {presets.map((p) => (
                         <button key={p.key} className="flow-addmenu-item" onClick={() => addFromMenu(p)}>
-                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                          <PresetTile tone={toneForPreset(p)} channel={p.channel} />
                           <span>{p.label}</span>
                         </button>
                       ))}
@@ -8994,9 +9011,12 @@ export function FlowsView() {
                   return (
                     <div key={d.key}>
                       <div className="flow-link" />
+                      {/* --tone is set once on the wrapper and inherits to the channel card, its
+                          posts and their ports, so a whole motion reads as one family on the
+                          board: paid red, email teal, web orange. See GROUP_TONE. */}
                       <div
                         className="flow-branched"
-                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined }}
+                        style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined, ['--tone']: d.tone } as React.CSSProperties}
                       >
                         <div
                           className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
@@ -9008,7 +9028,7 @@ export function FlowsView() {
                           {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
                               DELIVERABLE_PRESETS, the same split Flows kept when it became
                               Campaigns: rename what a person reads, leave what the code keys on. */}
-                          <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
+                          <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
                             Channel
                           </span>
                           <div className="flow-node-main">
@@ -9081,8 +9101,11 @@ export function FlowsView() {
                                     </span>
                                   )}
                                   {/* Every output wears a filled kind chip; an input never does. Post
-                                      cards were the one output missing theirs. */}
-                                  <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
+                                      cards were the one output missing theirs. Tinted with the
+                                      motion it belongs to, not one purple for every post: a post
+                                      under a paid ad and a post under a newsletter are different
+                                      work, and the board now says so before you read a word. */}
+                                  <span className="flow-node-kind" style={{ color: d.tone, background: `color-mix(in srgb, ${d.tone} 15%, transparent)` }}>
                                     Post
                                   </span>
                                   {/* An unanswered question has to be visible from across the board,
@@ -9106,7 +9129,7 @@ export function FlowsView() {
                                     <span className="flow-node-stale" title={`Out of date. ${r.recheckFlag.reason}. Generate to bring it up to date.`} aria-label="Out of date" />
                                   )}
                                   <div className="flow-node-main">
-                                    <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
+                                    <PresetTile tone={d.tone} channel={r.channel as ChannelId} />
                                     <div className="flow-node-text">
                                       {r.lineage?.bpStep && <div className="flow-node-step">{r.lineage.bpStep}</div>}
                                       <div className="flow-node-label">{c.head}</div>
@@ -9200,10 +9223,12 @@ export function FlowsView() {
                   if (!p) return null
                   const cadence = !(p.brand || p.runtime === 'one-off')
                   const slots = subcardCount(p, n.perMonth)
+                  // The motion this node belongs to, and the colour everything under it wears.
+                  const tone = toneForPreset(p)
                   return (
                     <div key={n.id}>
                       <div className="flow-link" />
-                      <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 168}px` : undefined }}>
+                      <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 168}px` : undefined, ['--tone']: tone } as React.CSSProperties}>
                         <div
                           className={`flow-node flow-tier-deliv${connectOver === n.id ? ' drop-target' : ''}${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
                           data-node-id={n.id}
@@ -9214,7 +9239,7 @@ export function FlowsView() {
                           {/* CHANNEL, not Deliverable. Internal ids stay `deliverable` and
                               DELIVERABLE_PRESETS, the same split Flows kept when it became
                               Campaigns: rename what a person reads, leave what the code keys on. */}
-                          <span className="flow-node-kind" style={{ color: DELIV_TONE, background: `color-mix(in srgb, ${DELIV_TONE} 15%, transparent)` }}>
+                          <span className="flow-node-kind" style={{ color: tone, background: `color-mix(in srgb, ${tone} 15%, transparent)` }}>
                             Channel
                           </span>
                           <div className="flow-node-main">
@@ -9243,7 +9268,7 @@ export function FlowsView() {
                           <div className="flow-branch-list">
                             {Array.from({ length: slots }).map((_, bi) => (
                               <div className="flow-branch-row" key={bi}>
-                                <span className="flow-branch-port" style={{ borderColor: TONE_HEX[p.tone] }} />
+                                <span className="flow-branch-port" style={{ borderColor: tone }} />
                                 <div
                                   className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}${building ? ' generating' : ''}`}
                                   data-node-id={`${n.id}:${bi}`}
@@ -9265,11 +9290,11 @@ export function FlowsView() {
                                   )}
                                   {/* Matches the view-mode post chip. Uses the preset's own word so a
                                       lead magnet reads Section and a site page reads Page. */}
-                                  <span className="flow-node-kind" style={{ color: POST_TONE, background: `color-mix(in srgb, ${POST_TONE} 15%, transparent)` }}>
+                                  <span className="flow-node-kind" style={{ color: tone, background: `color-mix(in srgb, ${tone} 15%, transparent)` }}>
                                     {subcardWord(p)}
                                   </span>
                                   <div className="flow-node-main">
-                                    <PresetTile tone={POST_TONE} channel={p.channel} />
+                                    <PresetTile tone={tone} channel={p.channel} />
                                     <div className="flow-node-text">
                                       <div className="flow-node-label">{PAGE_CHANNELS.has(p.channel) ? 'Page' : `${subcardWord(p)} ${bi + 1}`}</div>
                                       {PAGE_CHANNELS.has(p.channel) ? (
@@ -9421,7 +9446,7 @@ export function FlowsView() {
                       <div className="flow-pgroup-h">{group}</div>
                       {presets.map((p) => (
                         <button key={p.key} className="flow-pitem" disabled={addingDeliv} onClick={() => void addViewDeliverable(p)}>
-                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                          <PresetTile tone={toneForPreset(p)} channel={p.channel} />
                           <div className="flow-pitem-text">
                             <div className="flow-pitem-label">{p.label}</div>
                             <div className="flow-pitem-desc">{addingDeliv ? 'Adding…' : p.brand || p.runtime === 'one-off' ? 'one-off' : `${p.perMonth} / month`}</div>
@@ -9519,7 +9544,7 @@ export function FlowsView() {
                     <div className="flow-deliv-list">
                       {selDeliv.rows.map((r) => (
                         <button key={r.id} className="flow-pitem" onClick={() => setSel(r.id)}>
-                          <PresetTile tone={POST_TONE} channel={r.channel as ChannelId} />
+                          <PresetTile tone={selDeliv.tone} channel={r.channel as ChannelId} />
                           <div className="flow-pitem-text">
                             <div className="flow-pitem-label">{r.assetName}</div>
                             <div className="flow-pitem-desc">
@@ -9751,7 +9776,7 @@ export function FlowsView() {
                     <div className="flow-pgroup-h">{group}</div>
                     {presets.map((p) => (
                       <button key={p.key} className="flow-pitem" onClick={() => addPreset(p)}>
-                        <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                        <PresetTile tone={toneForPreset(p)} channel={p.channel} />
                         <div className="flow-pitem-text">
                           <div className="flow-pitem-label">{p.label}</div>
                           <div className="flow-pitem-desc">{p.brand || p.runtime === 'one-off' ? 'one-off' : `${p.perMonth} / month`}</div>
@@ -9891,7 +9916,7 @@ export function FlowsView() {
               return (
                 <>
                   <div className="flow-panel-head">
-                    <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                    <PresetTile tone={toneForPreset(p)} channel={p.channel} />
                     <span className="flow-panel-title">{isPage ? 'Page' : `Post ${bi + 1}`}</span>
                     <button className="flow-back flow-close" onClick={() => setSel(null)}>
                       ✕
@@ -9959,7 +9984,7 @@ export function FlowsView() {
               return (
                 <>
                   <div className="flow-panel-head">
-                    <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                    <PresetTile tone={toneForPreset(p)} channel={p.channel} />
                     <span className="flow-panel-title">{p.label}</span>
                     <button className="flow-back flow-close" onClick={() => setSel(null)}>
                       ✕
@@ -10329,7 +10354,7 @@ export function FlowsView() {
               DELIVERABLE_GROUPS.map((g) => ({
                 label: g.label,
                 hint: `${DELIVERABLE_PRESETS.filter((p) => p.group === g.group).length}`,
-                tone: g.tone,
+                tone: GROUP_TONE[g.group],
                 icon: g.icon,
                 onClick: () => { setPickGroup(g.group); openAddDeliverable() },
               })),
@@ -10568,7 +10593,7 @@ export function FlowsView() {
                           disabled={addingAsset}
                           onClick={() => void addFlowAsset(p, assetPick.scheduledAt)}
                         >
-                          <PresetTile tone={TONE_HEX[p.tone]} channel={p.channel} />
+                          <PresetTile tone={toneForPreset(p)} channel={p.channel} />
                           <div className="flow-pitem-text">
                             <div className="flow-pitem-label">{p.label}</div>
                             <div className="flow-pitem-desc">
