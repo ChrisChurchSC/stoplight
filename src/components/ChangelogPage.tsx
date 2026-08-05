@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.19',
+    version: 'v1.20',
     dateLabel: 'August 4, 2026',
     groups: [
       {
@@ -43,15 +43,27 @@ const RELEASES: Release[] = [
     ],
   },
   {
+    version: 'v1.19',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Cards on the canvas are the colour of the work they are. The toolbar has offered eight motions for a while, each with its own colour: social blue, email teal, content violet, web orange, paid red, video purple, lead magnet gold, events teal. The cards those buttons made ignored all of it and came out the same blue, with the same purple under them, so a board of thirty cards was one colour and told you nothing until you read every label. A channel card now wears its motion, and its posts wear a lighter wash of the same one, which means a board sorts itself into paid, email and web at a glance. Selecting a card rings it in its own colour too.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.18',
     dateLabel: 'August 4, 2026',
     groups: [
       {
         tag: 'New',
         items: [
-          'Group cards on the canvas. Select two or more, then Group (⌘⌥G, or right-click) and they hold together: click one and you get them all, drag one and they all move, keeping the arrangement you built.',
+          'Group cards on the canvas. Select two or more, then Group (⌘G, or right-click) and they hold together: click one and you get them all, drag one and they all move, keeping the arrangement you built.',
           'A group is framed and named on the board, so a launch set or a test cell reads as one thing. Double-click the name to rename it, and drag the frame label to move the whole group.',
-          'Groups are saved with the campaign, along with where their cards sit, so the arrangement is still there when you come back. Ungroup with ⌘⌥⇧G; the cards stay exactly where they are.',
+          'Groups are saved with the campaign, along with where their cards sit, so the arrangement is still there when you come back. Ungroup with ⌘⇧G; the cards stay exactly where they are.',
         ],
       },
       {
