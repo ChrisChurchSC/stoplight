@@ -36,7 +36,7 @@ import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
 import { canvasBrandScope, resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
-import { UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
+import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
 import { BRAND_VOICES, COMPANY_SIZES as TAXONOMY_COMPANY_SIZES, INDUSTRIES, SENIORITIES } from '../domain/taxonomy'
 import { BufferedInput, BufferedTextarea } from './BufferedInput'
@@ -1087,6 +1087,7 @@ export function FlowsView() {
   const mediaMixes = useTrafficStore((s) => s.mediaMixes)
   const seedCampaignAssets = useTrafficStore((s) => s.seedCampaignAssets)
   const addCampaign = useTrafficStore((s) => s.addCampaign)
+  const createDraftCampaign = useTrafficStore((s) => s.createDraftCampaign)
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
   const draftCopy = useTrafficStore((s) => s.draftCopy)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
@@ -5490,7 +5491,22 @@ export function FlowsView() {
     // rest of the session. Persist BEFORE clearing so the thread stays reopenable from history.
     persistActiveChat()
     setChatMsgs([])
-    setViewName(null)
+    /**
+     * THE CAMPAIGN EXISTS FROM THE MOMENT YOU START IT, rather than from the moment you build it.
+     *
+     * This used to be setViewName(null), which put the canvas in builder mode: the board saved into
+     * one shared BUILDER_BOARD_KEY slot and nothing was registered anywhere. So a campaign you were
+     * part way through did not appear on the Campaigns page — and the line below this one used to
+     * blank that shared slot, so the NEXT new campaign destroyed the cards on the last one. Work you
+     * could see was work nothing had recorded.
+     *
+     * Registering it gives the campaign its own board key (boardKey = viewName), a row on the
+     * Campaigns page under Drafts, and the inspector's rename field, which is already wired to
+     * renameCampaign — so naming it in the brief renames the real record rather than a local string.
+     * A campaign with no assets yet already renders correctly: it opens on the same buildable canvas,
+     * reads "0 channels · 0 assets" in the index, and Build fills it in from there.
+     */
+    setViewName(createDraftCampaign(brand && brand !== UNASSIGNED ? brand : DRAFTS_SPACE))
     setNodes([])
     setObjects([])
     // Placements belong to the campaign you made them on, same as the cards and the chat thread.
@@ -5503,8 +5519,9 @@ export function FlowsView() {
     setRenamingGroup(null)
     setSelEdge(null)
     setOpenGroupId(null)
-    // Drop the builder's SAVED board too, or the next new campaign inherits the last unbuilt one.
-    saveFlowBoard({ key: BUILDER_BOARD_KEY, objects: [], placements: [], pos: {}, connectors: [] })
+    // NOTHING IS BLANKED HERE ANY MORE. Every campaign now has a board of its own, keyed by name, so
+    // there is no shared slot for the next one to inherit — and blanking one was how the previous
+    // draft's cards were destroyed.
     setBriefHidden(false)
     setBriefSummoned(false)
     // A fresh campaign opens as a clean, blank canvas: inspector collapsed, just the starter
@@ -6048,7 +6065,18 @@ export function FlowsView() {
   }) => {
     if (!cfg.nodes.length || building) return null
     setBuilding(true)
-    const campaignName = campaignNameFor(cfg.name)
+    /**
+     * BUILD INTO THE CAMPAIGN THAT IS OPEN, and only mint a name when there is not one.
+     *
+     * This was campaignNameFor(cfg.name) unconditionally, which was right while a campaign became
+     * real at build time and nothing existed before it. Now that starting a campaign registers it,
+     * that would name a SECOND campaign from the typed brief and put the rows in it, leaving the
+     * draft you had been working on beside it holding the board and none of the assets.
+     *
+     * Both callers build the campaign on the canvas — the Build button and the agent — so viewName
+     * is the answer whenever there is one. The fallback stays for a build with no campaign open.
+     */
+    const campaignName = viewName ?? campaignNameFor(cfg.name)
     /**
      * THE BRAND CARD WIRED TO THE BRIEF NAMES THE BRAND, ahead of the workspace you happen to be
      * standing in. Build mode has no campaign to bind while you are drawing, so the wire is read
