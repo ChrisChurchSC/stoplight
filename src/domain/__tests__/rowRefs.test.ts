@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { withRefs, withoutRefs } from '../rowRefs'
+import { editRefs, sharedRefs, withRefs, withoutRefs } from '../rowRefs'
 import type { FlowReference } from '../clients'
 
 const ref = (type: string, id: string): FlowReference => ({ type, id, label: id } as FlowReference)
@@ -49,5 +49,51 @@ describe('withoutRefs', () => {
     const own = [ref('pattern', 'teardown')]
     withoutRefs(own, CAMPAIGN, [ref('pattern', 'teardown')])
     expect(own).toEqual([ref('pattern', 'teardown')])
+  })
+})
+
+describe('editRefs', () => {
+  it('resolves the base ONCE, so dropping the last record does not re-inherit the campaign', () => {
+    // The trap that made this one function rather than a compose of the two wrappers: chaining them
+    // re-asks "does this row have an override?" against the intermediate result, and a row emptied
+    // by `drop` answers no and takes back the whole campaign set it was just cleared of.
+    const own = [ref('pattern', 'teardown')]
+    expect(editRefs(own, CAMPAIGN, { drop: [ref('pattern', 'teardown')] })).toEqual([])
+    expect(withoutRefs(withoutRefs(own, CAMPAIGN, [ref('pattern', 'teardown')]), CAMPAIGN, [])).toEqual(CAMPAIGN)
+  })
+
+  it('applies drop before add, so a replace lands as one record', () => {
+    const own = [ref('pattern', 'teardown'), ref('segment', 'aud1')]
+    expect(editRefs(own, CAMPAIGN, { drop: [ref('pattern', 'teardown')], add: [ref('pattern', 'objection')] }))
+      .toEqual([ref('segment', 'aud1'), ref('pattern', 'objection')])
+  })
+
+  it('is a no-op with no ops', () => {
+    const own = [ref('pattern', 'teardown')]
+    expect(editRefs(own, CAMPAIGN, {})).toEqual(own)
+    expect(editRefs(undefined, CAMPAIGN, {})).toEqual(CAMPAIGN)
+  })
+})
+
+describe('sharedRefs', () => {
+  it('is what EVERY asset carries, not what the first one happens to', () => {
+    // The readout half of the leak: post #2's private pin presented as a fact about the channel,
+    // with an editor attached that would then write it to the rest of them.
+    const rows = [
+      { references: [ref('segment', 'aud1'), ref('pattern', 'teardown')] },
+      { references: [ref('segment', 'aud1')] },
+      { references: [ref('segment', 'aud1')] },
+    ]
+    expect(sharedRefs(rows, CAMPAIGN)).toEqual([ref('segment', 'aud1')])
+  })
+
+  it('treats a row with no override as carrying the campaign set', () => {
+    expect(sharedRefs([{ references: [ref('segment', 'aud1')] }, {}], CAMPAIGN)).toEqual([ref('segment', 'aud1')])
+    // A row pinned to something else shares nothing with an inheriting sibling.
+    expect(sharedRefs([{ references: [ref('pattern', 'p1')] }, {}], CAMPAIGN)).toEqual([])
+  })
+
+  it('inherits the campaign when there are no rows to disagree', () => {
+    expect(sharedRefs([], CAMPAIGN)).toEqual(CAMPAIGN)
   })
 })
