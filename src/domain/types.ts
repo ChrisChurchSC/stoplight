@@ -206,6 +206,17 @@ export interface TrafficRow {
    *  from branchOf: a variant is a sibling of its master in the SAME stage (it sits side
    *  by side, not connected by a journey edge). Set by fan-out; carries `lineage`. */
   variantOf?: string
+  /**
+   * WHAT HAS TO BE BUILT INTO THIS ASSET: the buttons, forms, inputs and functionality it
+   * carries — most of them owed to a journey link (see linksTo / branchOf), because a line
+   * on the canvas is a promise that somebody builds a control at this end of it.
+   *
+   * NOT the CTA copy. `messaging.cta` holds the words; this holds the mechanism they sit on
+   * and whether it exists yet. An asset can carry three of these and one line of CTA copy.
+   * Written only from the inspector — the journey suggests, it never fills this in (see
+   * domain/assetCtas.ts).
+   */
+  ctas?: import('./assetCtas').AssetCta[]
   /** Auto-generated tracking parameters, written back to the sheet so they
    *  carry through to the platforms (see tracking.ts). */
   utm?: { source: string; medium: string; campaign: string; content: string }

@@ -4951,6 +4951,66 @@ button.mf-open:focus-visible,
 }
 .flow-note-cmt svg { width: 12px; height: 12px; }
 
+/* CTAs: the buttons, forms and inputs an asset owes its journey. A card per entry rather than a
+   flat list of inputs, because one entry is four decisions (what kind, what it says, where it goes,
+   what has to be built) and stacking them unboxed reads as sixteen unrelated fields. */
+.flow-cta-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.flow-cta {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Built is quieter, not struck through: the spec stays readable after it ships, because the next
+   person to open the asset is checking it against exactly this list. */
+.flow-cta.built { opacity: 0.62; }
+.flow-cta.built:hover, .flow-cta.built:focus-within { opacity: 1; }
+.flow-cta.dangling { border-color: color-mix(in srgb, var(--red) 45%, var(--border)); }
+.flow-cta-h { display: flex; align-items: center; gap: 7px; }
+.flow-cta-check { display: inline-flex; align-items: center; cursor: pointer; flex: 0 0 auto; position: relative; }
+.flow-cta-check input { position: absolute; opacity: 0; width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.flow-cta-box {
+  width: 16px; height: 16px; border-radius: 5px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; color: transparent; background: var(--surface-2);
+}
+.flow-cta-check input:checked + .flow-cta-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.flow-cta-check input:focus-visible + .flow-cta-box { outline: 2px solid var(--accent); outline-offset: 1px; }
+.flow-cta-kind {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px;
+  padding: 4px 8px; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--text); cursor: pointer;
+}
+.flow-cta-del {
+  border: 0; background: none; cursor: pointer; padding: 1px 4px; border-radius: 5px;
+  font-size: 11px; color: var(--text-faint); opacity: 0; flex: 0 0 auto;
+}
+.flow-cta:hover .flow-cta-del, .flow-cta-del:focus-visible { opacity: 1; }
+.flow-cta-del:hover { color: var(--red); background: var(--surface-2); }
+.flow-cta-label { font-weight: 550; }
+.flow-cta-note, .flow-cta-target { font-size: 12px; }
+.flow-cta-note { line-height: 1.45; min-height: 0; }
+.flow-cta-warn { font-size: 11px; color: var(--red); }
+/* THE GAPS. A dashed edge, because these are proposals: nothing here is on the row until Add. */
+.flow-cta-need { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.flow-cta-needrow {
+  display: flex; align-items: flex-start; gap: 8px;
+  border: 1px dashed var(--border); border-radius: 10px; padding: 8px 10px;
+}
+.flow-cta-needtxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.flow-cta-needhead { font-size: 12px; font-weight: 650; color: var(--text); overflow-wrap: anywhere; }
+.flow-cta-needwhere { font-weight: 500; color: var(--text-faint); }
+.flow-cta-needwhy { font-size: 11.5px; color: var(--text-muted); line-height: 1.45; }
+.flow-cta-add {
+  flex: 0 0 auto;
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px;
+  padding: 4px 11px; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--text); cursor: pointer;
+}
+.flow-cta-add:hover { border-color: var(--accent); color: var(--accent); }
+
 .flow-preset-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .flow-preset-chip {
   border: 1px dashed var(--border);
