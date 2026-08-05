@@ -5369,7 +5369,11 @@ export function FlowsView() {
       const segAuds = campaignWiredRefs().filter((r) => r.type === 'segment').map((r) => r.label)
       const auds = segAuds.length ? segAuds : viewAudiences.length ? viewAudiences : audSelection
       const d: Deliverable = { label: p.label, channel: p.channel, assetType: p.assetType, media: p.media, perMonth: startCount(p), runtime: p.runtime, brand: p.brand }
-      const before = new Set(useTrafficStore.getState().rows.filter((r) => r.campaign === viewName).map((r) => r.id))
+      const campaignRows = useTrafficStore.getState().rows.filter((r) => r.campaign === viewName)
+      const before = new Set(campaignRows.map((r) => r.id))
+      // The channels this campaign ALREADY has, so adding assets to one of them is told apart from
+      // adding a channel that was not here before. Only the second is a new connection to make.
+      const beforeKeys = new Set(campaignRows.map(deliverableKeyFor))
       await seedCampaignAssets(viewName, [d], { flightWeeks: viewFlight ?? flightWeeks, audiences: auds })
       const fresh = useTrafficStore.getState().rows.filter((r) => r.campaign === viewName && !before.has(r.id))
       if (srcRow && fresh.length) {
@@ -5377,7 +5381,35 @@ export function FlowsView() {
         // deliverable to the right of that asset automatically.
         await updateRows(fresh.map((r) => ({ id: r.id, patch: { branchOf: srcRow.assetName } })))
       }
-      if (fresh.length) await draftCopy(fresh.map((r) => r.id))
+      /**
+       * A NEW CHANNEL ARRIVES UNCONNECTED, and you draw the line to the brief yourself.
+       *
+       * The line from the campaign to a channel is DERIVED — the channel is on the board because its
+       * assets carry the campaign's name, so there is no connector behind it and it appeared the
+       * instant the channel did. That is a fair statement of a fact once a campaign is built, and it
+       * is the wrong default while you are still laying one out: it decides the shape of the flow for
+       * you, and the shape is the thing being decided. implicitConnectors says the same about the
+       * builder, which has never drawn this line, for the same reason.
+       *
+       * `detached` is how a channel says it is not taking the brief's cards, so it is what "not
+       * connected yet" already means here — no line drawn, nothing inherited, and drawing campaign →
+       * channel reconnects it (see the drop handler). One rule, both directions, nothing new.
+       *
+       * TWO EXCEPTIONS, both cases where the connection was already made by the gesture that added
+       * the channel:
+       *  - Added off an asset's `+`: that channel hangs from THAT asset, which is what the click said.
+       *  - A channel this campaign already had: those assets are joining a connection that exists.
+       */
+      const freshKey = fresh.length ? deliverableKeyFor(fresh[0]) : null
+      const startsCut = !!freshKey && !srcRow && !beforeKeys.has(freshKey)
+      if (freshKey && startsCut) setDetached((cur) => (cur.includes(freshKey) ? cur : [...cur, freshKey]))
+      /**
+       * No copy for a channel that reaches nothing yet. draftCopy would write it from the brief's
+       * cards, which is exactly what an unconnected channel is not entitled to — and the detach above
+       * is React state that has not reached the store this tick, so it would be written with the
+       * context and then cut off from it. The assets are there to connect and Generate.
+       */
+      if (fresh.length && !startsCut) await draftCopy(fresh.map((r) => r.id))
     } finally {
       setAddingDeliv(false)
     }
@@ -9005,17 +9037,31 @@ export function FlowsView() {
               // Direction carries meaning: a context card flows INTO the campaign. Dropping the
               // campaign onto a card is the same statement backwards, so accept it and store it
               // the right way round rather than making the user guess which end to start from.
-              const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
-              // RECONNECTING A CUT CHANNEL restores the derived line rather than storing a second
-              // one beside it. Otherwise the board would carry a real connector saying exactly what
-              // the absent one said, and the next cut would have two things to remove.
-              if (pair && pair.from === 'campaign' && detached.includes(pair.to)) {
-                setChannelDetached(pair.to, false)
+              /**
+               * THE CAMPAIGN AND A CHANNEL, either way round, is a RECONNECTION and never a wire —
+               * and it has to be read here, off the raw endpoints, BEFORE the reversal below.
+               *
+               * That reversal is for context cards, which flow INTO the campaign, so it rewrites
+               * `campaign → X` as `X → campaign`. A channel is an OUTPUT: the campaign flows into it.
+               * So the reversal turned a reconnect gesture into a backwards wire, and the check that
+               * was supposed to catch it tested `pair.from === 'campaign'` on the ALREADY-REVERSED
+               * pair, which can never be true. The result was a stored `channel → campaign`
+               * connector, drawn on the board, saying nothing the derived line did not already say,
+               * while the channel stayed cut off. Dragging the line back did not put it back.
+               *
+               * Restoring the derived line is the whole of what this gesture does; there is no
+               * connector to store either way, which is why an already-connected channel falls
+               * through to the same no-op rather than gaining a duplicate.
+               */
+              const delivEnd = from === 'campaign' ? to : to === 'campaign' ? from : undefined
+              if (delivEnd && viewDelivs.some((d) => d.key === delivEnd)) {
+                if (detached.includes(delivEnd)) setChannelDetached(delivEnd, false)
                 drawingFrom.current = null
                 setDrawing(null)
                 setConnectOver(null)
                 return
               }
+              const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
               if (pair && pair.from !== pair.to) {
                 // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
                 // already bound to a different brand is refused (attachToCampaign says why), and a
@@ -10146,12 +10192,17 @@ export function FlowsView() {
                       a line to a card with no line on it is the one gesture that is not obvious. */}
                   {detached.includes(selDeliv.key) && (
                     <>
+                      {/* WORDED FOR BOTH STATES. This used to say "Cut off from the campaign brief",
+                          which was the only way to get here when the only way in was cutting a line.
+                          A channel now ARRIVES this way, and telling somebody their brand-new channel
+                          has been cut off describes an event that never happened. The fact is the
+                          same either way: it is not connected, and nothing from the brief reaches it. */}
                       <p className="flow-inspect-note">
-                        Cut off from the campaign brief. Its assets keep everything they have, and are
-                        written without the cards wired to the campaign.
+                        Not connected to the campaign brief. Its assets keep everything they have, and
+                        are written without the cards wired to the campaign.
                       </p>
                       <button className="flow-reset-link" onClick={() => setChannelDetached(selDeliv.key, false)}>
-                        Connect it to the brief again
+                        Connect it to the brief
                       </button>
                     </>
                   )}
