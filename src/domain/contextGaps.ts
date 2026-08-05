@@ -85,18 +85,51 @@ const CONSEQUENCE: Record<ContextGapKey, string> = {
 }
 
 /**
+ * WHAT THE BOARD ALREADY HAS for the leading gap, which is a different question from whether the
+ * gap exists and decides what the person is sensibly told to do about it.
+ *
+ * "No audience is wired" is a statement about what reaches the WRITER, and a card can be sitting in
+ * plain sight on the canvas while contributing nothing to that: unwired, or wired but naming no
+ * record, or wired to the brief while every asset overrides the brief with records of its own.
+ * Telling someone to add an audience when one is already on their board reads as the app not being
+ * able to see its own canvas, and the fix it offers (a second card) is the wrong one in all three
+ * cases.
+ *
+ * `none` is the honest default and the only one that means "there is nothing here to fix up".
+ */
+export type GapStanding = 'none' | 'unwired' | 'unnamed' | 'overridden'
+
+/**
+ * The consequence clause when a card IS there. Each replaces CONSEQUENCE, because what generating
+ * did is no longer the interesting half: the person can see the card, so the sentence has to
+ * account for it rather than describe the fallback again.
+ */
+const STANDING_CLAUSE: Record<Exclude<GapStanding, 'none'>, string> = {
+  unwired: 'there is one on this board with no line to the brief, so nothing it says reaches the copy',
+  unnamed: 'the one on this board names no record yet, so nothing it says reaches the copy',
+  overridden: 'one is wired to the brief, but every asset here overrides the brief with records of its own',
+}
+
+/**
  * The toast sentence, or null when the campaign has said enough.
  *
  * Names at most two gaps. A list of three reads as a scolding, and the third is always the least
- * costly one; the drawer the action opens shows everything that is missing anyway.
+ * costly one; the drawer the action opens shows everything that is missing anyway. A standing other
+ * than `none` speaks about the leading gap alone: the card on the board is a fact about ONE kind,
+ * and pluralising it into "no audience or proof point" would attach it to the wrong one.
  *
  * `campaign` is optional because the two callers stand in different places. Generate names it (the
  * toast can outlive the click that caused it, and a name says which canvas it is about); a build
  * that has just opened the campaign it built does not, because the toast already begins "Built".
  */
-export function contextGapMessage(gaps: readonly ContextGapKey[], campaign?: string): string | null {
+export function contextGapMessage(
+  gaps: readonly ContextGapKey[],
+  campaign?: string,
+  standing: GapStanding = 'none',
+): string | null {
   if (!gaps.length) return null
-  const named = gaps.slice(0, 2).map((g) => NOUN[g])
+  const named = (standing === 'none' ? gaps.slice(0, 2) : gaps.slice(0, 1)).map((g) => NOUN[g])
   const where = campaign ? ` to "${campaign}"` : ''
-  return `No ${named.join(' or ')} is wired${where} — ${CONSEQUENCE[gaps[0]]}.`
+  const clause = standing === 'none' ? CONSEQUENCE[gaps[0]] : STANDING_CLAUSE[standing]
+  return `No ${named.join(' or ')} is wired${where} — ${clause}.`
 }
