@@ -22198,6 +22198,94 @@ table.aud-sheet td.stick .aud-cell {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-tone, var(--accent)) 40%, transparent);
 }
 
+/* ============================================================================
+   THE PATTERN CARD, which does not look like the other inputs.
+
+   Every other input card answers WHAT the copy says, and they are deliberately uniform: same grey,
+   same spine, hue on the glyph only, so a board of them reads as one row of context. A Pattern
+   answers HOW the copy is built, and it is the only kind meant to be pinned to a single asset, so
+   it is the card you look for while scanning a board rather than one you read in a set. Uniform
+   chrome made it the hardest card to find and the easiest to mistake for a Message.
+
+   Two departures, both earning their place: a repeating wave across the head (a pattern is a shape
+   that recurs, and it is the card's own icon at card scale), and a warm paper tint instead of the
+   grey, so it separates from the says-family cards it sits beside.
+   ============================================================================ */
+.flow-note[data-role='input'].flow-note-pattern {
+  /* Two periods of a sine over 22px. Black is arbitrary: this is used as a MASK, so only the
+     alpha channel is read and the stroke's colour never reaches the screen. */
+  --pattern-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='6' viewBox='0 0 22 6'%3E%3Cpath d='M0 4.5 Q 5.5 0.5 11 4.5 T 22 4.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  background: color-mix(in srgb, var(--note-tone) 5%, var(--surface-2));
+}
+/* THE WAVE, across the head: the card's own icon at card scale, repeated, so the motif IS
+   repetition rather than a picture of it.
+
+   Drawn as a MASK rather than a background image because the tone has to stay live: an SVG data
+   URI cannot read currentColor or a custom property, so a background-image wave would have to
+   hardcode #6d8b2f and would then keep drawing it after the card went unlinked and the rest of the
+   chrome went grey. Masking a plain background-color keeps one source of truth for the hue. */
+.flow-note[data-role='input'].flow-note-pattern::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  background-color: var(--note-tone);
+  opacity: .55;
+  -webkit-mask-image: var(--pattern-wave);
+  mask-image: var(--pattern-wave);
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+  -webkit-mask-size: 22px 6px;
+  mask-size: 22px 6px;
+  pointer-events: none;
+  border-radius: var(--radius-sm) 0 0 0;
+}
+/* The spine and the wave are the same tone, so an unlinked card must quiet BOTH or the head keeps
+   reading as filled in. Matches the :not(.linked) spine rule above. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) {
+  background: var(--surface-2);
+}
+.flow-note[data-role='input'].flow-note-pattern:not(.linked)::before {
+  background-color: var(--border-strong);
+  opacity: 1;
+}
+/* WHAT THE PATTERN IS, under the picker: the type, then the example line. Indented to the same 9px
+   every other child of an input card carries. */
+.flow-pat-prev {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 0 9px 9px;
+}
+.flow-pat-type {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--note-tone);
+  background: color-mix(in srgb, var(--note-tone) 13%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+/* Archived reads as a WARNING, not as another type: this pattern is wired and will be dropped.
+   Text is mixed toward --text rather than raw --amber: the token is a mid-yellow that carries a
+   dot or a one-word marker fine, and fails as 9.5px uppercase on a tinted chip. */
+.flow-pat-type.retired {
+  color: color-mix(in srgb, var(--amber) 62%, var(--text));
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+}
+/* Two lines, then it clips. The card says which shape this is; the inspector holds the whole thing. */
+.flow-pat-line {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* ATTACHED: this card is part of the campaign, not just sitting on the board.
    An unconnected card is a draft thought, so the difference has to be visible without reading
    the edge. Attached cards come forward: full-strength surface, a solid spine, live label. */
@@ -22517,14 +22605,22 @@ table.aud-sheet td.stick .aud-cell {
   transform-origin: center;
   z-index: 6;
 }
-/* Connecting to the CAMPAIGN is the meaningful one (it attaches the card), so say so louder. */
-.flow-node[data-role='brief'].drop-target::after {
-  content: 'Attach to this campaign';
+/* WHAT LANDING HERE WOULD DO, in words, on the three targets that each mean something different.
+   The ring says "this one"; it cannot say that wiring to a channel feeds every asset under it
+   while wiring to a post feeds that post alone. That distinction is the whole reason to drop on
+   an asset, and it was left to be inferred from a highlight. */
+.flow-node[data-role='brief'].drop-target::after,
+.flow-node.flow-tier-deliv.drop-target::after,
+.flow-node.flow-brief-node.drop-target::after {
   position: absolute; left: 50%; bottom: -26px; transform: translateX(-50%);
   font-size: 11px; font-weight: 600; white-space: nowrap;
   background: var(--accent); color: #fff; border-radius: 6px; padding: 3px 8px;
   pointer-events: none;
 }
+/* Connecting to the CAMPAIGN is the meaningful one (it attaches the card), so say so louder. */
+.flow-node[data-role='brief'].drop-target::after { content: 'Attach to this campaign'; }
+.flow-node.flow-tier-deliv.drop-target::after { content: 'Apply to every asset in this channel'; }
+.flow-node.flow-brief-node.drop-target::after { content: 'Apply to this asset only'; }
 /* While drawing, everything else recedes so the target reads as the one live thing. */
 .flow-canvas.connecting .flow-node:not(.drop-target) { opacity: 0.75; }
 

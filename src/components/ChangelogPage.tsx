@@ -23,6 +23,29 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.32',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Pattern card can be wired to a single asset, and the board now says so. Dropping a connection on one post has always applied to just that post, but an asset card was the only card on the canvas that never lit up under a line, and everything that is not a target dims while you drag, so the board actively said you could not land there. Asset cards now highlight like every other target.',
+          'Each target says what landing on it would do: attach to this campaign, apply to every asset in this channel, or apply to this asset only. The ring could say "this one" but not that a channel feeds everything under it while a post feeds only itself, which is the whole reason to drop on one asset.',
+          'Pattern has its own button in the toolbar instead of sitting behind the Message caret. Every other card in that group answers what the copy says; a Pattern answers how it is built, and it is the one you reach for while looking at a single post.',
+          'The Pattern card looks like what it is. It carries a wave across its head, and it shows the kind of pattern (hook, format, trend) and its example line, because "Teardown" and "Objection-first" are names for structures and the structure is the thing you are choosing between.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Wiring a card to a channel no longer copies one asset\'s records onto its siblings. Every asset in the channel was given the same set, built from whichever asset in the group happened to have its own records already, so pinning a pattern to a single post and then wiring anything to that post\'s channel handed that pattern to every other post too. The grid then listed assets as made from records the canvas showed no connection for, which is where the two surfaces stopped agreeing. Each asset now keeps its own.',
+          'Unwiring has the same fix, and it was the more costly direction: removing a card from a channel rebuilt every asset in it from one asset\'s records, so records that a single asset alone carried a connection for disappeared from it. A record is now only dropped from an asset when nothing else still reaches that asset with it, including its own connections and the campaign brief.',
+          'A card naming a pattern that has since been archived no longer reads as empty. The picker hides archived patterns so it cannot offer a shape that generation drops, which meant such a card showed nothing selected while it was still wired and still feeding the copy. It now shows the pattern it names, marked archived. A card that names nothing is still never offered one.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.31',
     dateLabel: 'August 5, 2026',
     groups: [
