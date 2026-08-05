@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.26',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The pattern picker is gone from the asset panel. Opening a single email used to offer a list of alternative copy patterns, which let one asset step out of the arc its siblings were written to and quietly rewrote its copy the moment you clicked. Choosing a pattern is a decision about the channel, so it now happens in one place: the channel card, where it sets the arc for everything in it.',
+          'The asset panel still tells you where the asset sits. The step block stays, so you can see which pattern this one is part of, which step it is, its subject formula, framework and CTA, without a control next to it that rewrites the copy when read as a label.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.25',
     dateLabel: 'August 5, 2026',
     groups: [
