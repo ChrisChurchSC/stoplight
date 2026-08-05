@@ -7859,7 +7859,7 @@ button.mf-open:focus-visible,
 }
 /* Anchored to the card, above the cards around it. There is deliberately no scrim: every card
    carries an inline transform, so a fixed-position child is contained by the card rather than the
-   viewport. RecordPicker closes on a capture-phase press instead — see the comment there. */
+   viewport. ObjectCardPicker closes on a capture-phase press instead — see the comment there. */
 /* WIDER THAN THE CARD, on purpose. The card is 236px and the detail line is the whole reason this
    list exists — at card width every one of them ellipsed after five words, which is the state the
    bare <select> was already in. */

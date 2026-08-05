@@ -18,10 +18,14 @@
  * The rows deliberately do NOT repeat the kind the way the inspector's context list does. There
  * every row can be a different kind; here every option is the kind the card already announces in
  * its own header, and printing "CONCEPT" twenty times says nothing the header has not.
+ *
+ * NOT RecordPickers.tsx, which is a letter away and a different job: those are the pick-first
+ * controls for the FIELDS on a record (a pain, an objection, a ZIP), keeping typed prose from
+ * forking into four vocabularies. This picks WHICH RECORD a canvas card points at.
  */
 import { useEffect, useRef, useState } from 'react'
 
-export interface RecordOption {
+export interface ObjectCardOption {
   id: string
   label: string
   /** The record's own one line. Absent for kinds whose records carry none. */
@@ -30,7 +34,7 @@ export interface RecordOption {
 
 interface Props {
   /** The records available to pick, already scoped to the brand by the caller. */
-  options: RecordOption[]
+  options: ObjectCardOption[]
   /** The linked record, if any. */
   refId?: string
   /**
@@ -70,7 +74,7 @@ interface Props {
 /** Above this many, scanning beats reading, and a filter box earns its line. */
 const SEARCH_FROM = 7
 
-export function RecordPicker({ options, refId, name, detail, noun, article, tone, plural, emptyNote, canCreate, onPick, onCreate, onOpen }: Props) {
+export function ObjectCardPicker({ options, refId, name, detail, noun, article, tone, plural, emptyNote, canCreate, onPick, onCreate, onOpen }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const root = useRef<HTMLDivElement>(null)

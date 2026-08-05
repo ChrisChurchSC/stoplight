@@ -67,7 +67,7 @@ import { generateFlowEdit } from '../adapters/ask/generateFlowEdit'
 import type { FlowCommand, FlowChatMsg } from '../domain/flowAgent'
 import { FlowChat, type ChatIntent } from './FlowChat'
 import { MiniSheet } from './MiniSheet'
-import { RecordPicker, type RecordOption } from './RecordPicker'
+import { ObjectCardPicker, type ObjectCardOption } from './ObjectCardPicker'
 import { recordDetail } from '../domain/recordDetail'
 import { ChannelIcon } from './ChannelIcon'
 import { InfoTip } from './InfoTip'
@@ -5028,7 +5028,7 @@ export function FlowsView() {
    */
   const named = <T extends { id: string; name: string }>(list: T[], detail?: (x: T) => string | undefined) =>
     list.map((r) => ({ id: r.id, label: r.name || 'Untitled', detail: detail?.(r)?.trim() || undefined }))
-  const objectOptions = (kind: CanvasObjectKind): RecordOption[] | null => {
+  const objectOptions = (kind: CanvasObjectKind): ObjectCardOption[] | null => {
     switch (kind) {
       case 'audience': return brandSegments.map((a) => ({ id: a.id, label: a.name || 'Untitled audience', detail: recordDetail.audience(a)?.trim() || undefined }))
       // A Data source card's refId is a DATA SET id, whatever route filled it. This used to return
@@ -9152,7 +9152,7 @@ export function FlowsView() {
                     }
                     const picked = nt.refId ? opts.find((o) => o.id === nt.refId) : undefined
                     return (
-                      <RecordPicker
+                      <ObjectCardPicker
                         options={opts}
                         refId={nt.refId}
                         // The card's own name still wins where it has one; otherwise the record it

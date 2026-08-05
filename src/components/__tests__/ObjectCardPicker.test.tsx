@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { RecordPicker } from '../RecordPicker'
+import { ObjectCardPicker } from '../ObjectCardPicker'
 
 /**
  * What is worth testing here is the DISMISSAL, not the list.
@@ -44,11 +44,11 @@ afterEach(() => {
   stack.remove()
 })
 
-function mount(over: Partial<Parameters<typeof RecordPicker>[0]> = {}) {
+function mount(over: Partial<Parameters<typeof ObjectCardPicker>[0]> = {}) {
   const calls = { picked: [] as string[], created: 0, opened: 0 }
   act(() => {
     root.render(
-      <RecordPicker
+      <ObjectCardPicker
         options={OPTIONS}
         name=""
         noun="concept"
@@ -78,7 +78,7 @@ function press(target: Element): MouseEvent {
   return e
 }
 
-describe('RecordPicker', () => {
+describe('ObjectCardPicker', () => {
   it('shows the picked record and its line, so the card needs no name field of its own', () => {
     mount({ refId: 'a', name: 'The quiet Friday', detail: OPTIONS[0].detail })
     expect(face().textContent).toContain('The quiet Friday')
