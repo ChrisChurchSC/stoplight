@@ -8,7 +8,7 @@
  * fanOut. Single source of truth: tune a number here and the whole app follows.
  */
 
-export type FanoutChannelKind = 'organic-social' | 'paid' | 'search' | 'email' | 'seo' | 'blog' | 'video'
+export type FanoutChannelKind = 'organic-social' | 'paid' | 'search' | 'email' | 'seo' | 'blog' | 'video' | 'sales'
 
 export const FANOUT_POLICY: Record<FanoutChannelKind, { perMonthCap: number; defaultDimension: string; label: string }> = {
   'organic-social': { perMonthCap: 30, defaultDimension: 'audience', label: 'Organic social' },
@@ -18,6 +18,9 @@ export const FANOUT_POLICY: Record<FanoutChannelKind, { perMonthCap: number; def
   seo: { perMonthCap: 1000, defaultDimension: 'location', label: 'SEO / landing pages' },
   blog: { perMonthCap: 15, defaultDimension: 'audience', label: 'Blog / long-form' },
   video: { perMonthCap: 8, defaultDimension: 'audience', label: 'Video' },
+  // Closing assets are worked by a person, one account at a time: a deck or a
+  // proposal fans out by segment, not by the hundred.
+  sales: { perMonthCap: 40, defaultDimension: 'audience', label: 'Sales & commerce' },
 }
 
 /** A hard ceiling on total variants per flow — protects browser storage + render cost, not marketing judgment. */
@@ -28,6 +31,7 @@ export function fanoutChannelKind(channel: string | undefined): FanoutChannelKin
   const id = (channel ?? '').toLowerCase().trim()
   if (!id) return 'organic-social'
   if (id === 'google-search' || id.includes('search') || id === 'sem') return 'search'
+  if (id.startsWith('sales-') || ['proposal', 'checkout', 'post-purchase', 'cart'].includes(id)) return 'sales'
   if (id.endsWith('-ads') || id === 'pmax' || id === 'google-demand') return 'paid'
   if (['email', 'sms', 'push', 'newsletter'].includes(id) || id.includes('email') || id.includes('newsletter')) return 'email'
   if (id === 'youtube') return 'video'

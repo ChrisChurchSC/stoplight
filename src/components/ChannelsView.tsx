@@ -151,6 +151,9 @@ const EXTRA_BY_KIND: Record<ChannelKind, PickItem[]> = {
   paid: PAID_ITEMS,
   organic: [],
   owned: [...EMAIL_TOOLS, ...OFFLINE_OWNED],
+  // Sales & commerce surfaces are all first-class channels; no tool extras yet
+  // (a CRM / store connector would layer in here).
+  sales: [],
 }
 const ALL_EXTRAS = [...PAID_ITEMS, ...EMAIL_TOOLS, ...OFFLINE_OWNED]
 

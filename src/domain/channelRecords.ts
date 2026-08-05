@@ -10,7 +10,7 @@ import { freshRecordId, type RecordColumn, type RecordField } from './records'
 export interface ChannelRecord {
   id: string
   name: string
-  type?: 'paid' | 'organic' | 'owned' | ''
+  type?: 'paid' | 'organic' | 'owned' | 'sales' | ''
   platform?: string
   /** $ per 1000 impressions. */
   cpm?: string
@@ -46,7 +46,7 @@ export const CHANNEL_RECORD_FIELDS: RecordField[] = [
   { key: 'notes', label: 'Notes', kind: 'multiline', group: 'Delivery' },
 ]
 
-export const CHANNEL_RECORD_STATUSES: NonNullable<ChannelRecord['type']>[] = ['paid', 'organic', 'owned']
+export const CHANNEL_RECORD_STATUSES: NonNullable<ChannelRecord['type']>[] = ['paid', 'organic', 'owned', 'sales']
 
 export function freshChannelRecordId(): string {
   return freshRecordId('ch')

@@ -67,10 +67,12 @@ export function branchSuggestions(row: TrafficRow): BranchSuggestion[] {
 
 /** The channels to draft a new asset on for a given funnel stage — the high-
  *  leverage options for that part of the journey. Used when you click an empty
- *  cell on the canvas to place a card: pick which channel carries it. */
+ *  cell on the canvas to place a card: pick which channel carries it. Shows up
+ *  to 5 so the conversion stage can offer its closing surfaces (checkout,
+ *  proposal) without pushing search or email out of the menu. */
 export function stageSuggestions(stage: FunnelStage): BranchSuggestion[] {
   const st = FUNNEL_STAGES.find((s) => s.stage === stage) ?? FUNNEL_STAGES[0]
-  return SUGGEST_BY_STAGE[stage].slice(0, 3).map((ch) => ({
+  return SUGGEST_BY_STAGE[stage].slice(0, 5).map((ch) => ({
     stage,
     stageLabel: st.label,
     channel: ch,

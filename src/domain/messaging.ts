@@ -90,6 +90,42 @@ const BASE: Record<ChannelId, MessagingField[]> = {
   ],
   'lead-magnet': [title(80), f('description', 'Description', 300, undefined, true), cta(30)],
   events: [f('name', 'Event name', undefined, 80), f('details', 'Details / RSVP copy', undefined, 300, true), cta(30)],
+  // sales & commerce — closing copy: the ask, the terms, the reassurance.
+  'sales-outreach': [
+    subject(),
+    f('opener', 'Opener / relevance', undefined, 200, true),
+    f('body', 'Body', 400, 900, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    f('ask', 'Ask / CTA', undefined, 120),
+  ],
+  'sales-collateral': [
+    title(undefined, 80),
+    subhead(),
+    body(),
+    f('proof-social', 'Social proof', undefined, 200, true),
+    f('proof-stat', 'Proof / stat', undefined, 120, true),
+    cta(40),
+  ],
+  proposal: [
+    title(undefined, 80),
+    f('summary', 'Executive summary', undefined, 600, true),
+    f('scope', 'Scope / deliverables', undefined, 900, true),
+    f('price', 'Price / terms', undefined, 300, true),
+    f('next', 'Next step', undefined, 120),
+  ],
+  checkout: [
+    f('headline', 'Headline', undefined, 60),
+    f('value', 'Value reassurance', undefined, 120, true),
+    f('cta', 'Button label', undefined, 25),
+    f('trust', 'Trust / guarantee', undefined, 160, true),
+    f('objection', 'Objection handler', undefined, 200, true),
+  ],
+  'post-purchase': [
+    f('headline', 'Headline', undefined, 60),
+    body(),
+    f('next', 'Next step', undefined, 120),
+    cta(30),
+  ],
 }
 
 // Per-type overrides where a type's components differ from its channel base.
