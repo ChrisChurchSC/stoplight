@@ -23,13 +23,32 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.16',
+    version: 'v1.18',
     dateLabel: 'August 4, 2026',
     groups: [
       {
         tag: 'Improved',
         items: [
           'Cards on the canvas are the colour of the work they are. The toolbar has offered eight motions for a while, each with its own colour: social blue, email teal, content violet, web orange, paid red, video purple, lead magnet gold, events teal. The cards those buttons made ignored all of it and came out the same blue, with the same purple under them, so a board of thirty cards was one colour and told you nothing until you read every label. A channel card now wears its motion, and its posts wear a lighter wash of the same one, which means a board sorts itself into paid, email and web at a glance. Selecting a card rings it in its own colour too.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.17',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Clicking a connector dot on a card opens the channel picker. The dot says "draw a connection", and until now the only thing it did was start a drag: press it, let go, and nothing happened at all. It was the one control on the board that answered a click with silence. A click now asks the question the dot implies, which is what comes next from this card, and answers it with the full list of channels, anchored to the dot you pressed. Dragging is unchanged: drop on another card to connect the two, drop on empty canvas to think better of it.',
+          'Picking a channel this way inside an open campaign makes real assets, branched off the card you started from, the same as the card\'s + button already did. The picker and the + now go to the same place.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Six channels are pickable that never were. X Ads, Pinterest Ads, Snapchat Ads, Reddit Ads, Google Demand Gen and Push were defined everywhere the app counts channels, carried their own ad formats, and reported in the channel mix, but no picker ever listed them, so there was no way to plan anything on them. All 27 channels now appear in the picker, and a test fails if a new one is ever added without one.',
         ],
       },
     ],
