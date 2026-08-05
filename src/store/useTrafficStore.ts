@@ -2154,6 +2154,18 @@ interface TrafficState {
    *  "New canvas" action. No client / wizard up front; attach a brand later via the
    *  Brand card. Seeds one default audience lane so the blank canvas is addable. */
   createCanvas: () => void
+  /**
+   * Register a brand-new, unbuilt campaign and return the name it was given.
+   *
+   * A campaign used to become REAL only when it was built: startNew reset the canvas, saved the
+   * board into one shared builder slot and registered nothing, so a campaign you were part way
+   * through did not appear on the Campaigns page at all — and the next New campaign overwrote that
+   * shared slot, destroying the cards on it. Work you could see was work nothing had recorded.
+   *
+   * Registering up front costs an "Untitled campaign" for a click you back out of, which is a thing
+   * you can delete, where the old behaviour lost work you could not get back.
+   */
+  createDraftCampaign: (client: string) => string
   /** Link a campaign to a GTM playbook (ABM, Demand Gen, etc.) — the strategy selector. */
   /** Apply a GTM strategy to every campaign of a brand at once — the brand-level playbook. */
   setBrandStrategy: (brand: string, strategy: string) => void
@@ -4568,6 +4580,26 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       return { clientAudiences }
     })
     get().openCampaign(name)
+  },
+
+  /**
+   * The same mint-a-unique-name-and-register move createCanvas makes, for a campaign. See the
+   * declaration above for why an unbuilt campaign has to be registered at all.
+   *
+   * Deliberately does NOT open anything: the caller is FlowsView's startNew, which is already in the
+   * middle of resetting the canvas and knows what to do with the name.
+   */
+  createDraftCampaign: (client) => {
+    const exists = (n: string) =>
+      get().campaignList.some((c) => c.name === n) || get().rows.some((r) => (r.campaign ?? '') === n)
+    // Prefixed the way every other campaign of a brand is, so it sorts and resolves with them and
+    // the rename field can keep editing only the part after the brand.
+    const prefix = client && client !== UNASSIGNED && client !== DRAFTS_SPACE ? `${client} — ` : ''
+    const base = `${prefix}Untitled campaign`
+    let name = base
+    for (let i = 2; exists(name); i++) name = `${base} ${i}`
+    get().addCampaign({ name, client, strategy: 'Current state', status: 'planning' })
+    return name
   },
 
   setBrandStrategy: (brand, strategy) => {
