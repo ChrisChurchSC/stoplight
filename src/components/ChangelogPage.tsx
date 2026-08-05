@@ -29,7 +29,7 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
-          'Dragging on the canvas is no longer doing six times the work it can show you. A mouse or trackpad reports its position far faster than a screen can redraw, and the board was rebuilding itself for every one of those reports. Measured on a hundred-card canvas, a second and a half of dragging produced 299 rebuilds to paint 46 frames: six of every seven were computed and thrown away before anything reached the screen. The board now updates once per frame, which is as often as you can actually see.',
+          'Dragging on the canvas is no longer doing several times the work it can show you. A mouse or trackpad reports its position far faster than a screen can redraw, and the board was rebuilding itself for every one of those reports: on a 180-card canvas each report cost a full rebuild, and a fast pointer sends two or three of them between one frame and the next. A report now costs nothing at all, and the board rebuilds once per frame, which is as often as you can actually see. The heavier the board and the faster your pointer, the more of that work was being thrown away.',
           'Panning and marquee selection went the same way, for the same reason. All three gestures still land exactly where you let go: the last position is applied on release rather than left waiting for a frame that never comes.',
           'Cards that move together stopped being counted one at a time. Asking "is this card moving?" walked the whole list of dragged cards, once per member and once per connector, on every frame, so the bigger the group the more it cost to move it. It is a direct lookup now.',
         ],
