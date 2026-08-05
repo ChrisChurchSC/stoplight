@@ -89,6 +89,26 @@ describe('what an asset is made from', () => {
     expect(out).toEqual([{ kind: 'brand', refId: 'b1', label: 'Northwind', cardId: undefined, primary: true }])
   })
 
+  it('falls back to the wired Brand card when the binding resolves to nothing', () => {
+    // The binding is `row.client` matched against brand records BY NAME, so a row whose client was
+    // never set, or a brand renamed since, resolves to nothing. This used to read "No brand picked"
+    // with a Brand card sitting on the canvas naming one and wired to the brief — and the same card
+    // then appeared lower in the cell as "also reaching this asset", which is how you could tell the
+    // entry had seen it and refused it.
+    const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'brand', 'b1')], nameOf })
+    expect(out).toEqual([{ kind: 'brand', refId: 'b1', label: 'Northwind', cardId: 'c1', primary: true }])
+  })
+
+  it('still lets the campaign binding win over a card naming a different brand', () => {
+    const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'brand', 'b2')], brandRefId: 'b1', nameOf })
+    expect(out[0]).toMatchObject({ kind: 'brand', refId: 'b1', primary: true })
+  })
+
+  it('still says nothing is picked when the wired Brand card names nothing', () => {
+    const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'brand')], nameOf })
+    expect(out).toEqual([{ kind: 'brand', label: '', cardId: 'c1', primary: true }])
+  })
+
   it('carries the card behind an entry, so the cell can open it', () => {
     const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'voice', 'v1')], nameOf })
     expect(out[0].cardId).toBe('c1')

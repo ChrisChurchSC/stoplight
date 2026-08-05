@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.33',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The grid said "No brand picked" on assets that plainly had one. Made from worked out the brand by matching each asset\'s client against your brand records by name, and never looked at the Brand card itself, so an asset whose client was never set, or whose brand had been renamed since, read as having no brand at all. The Brand card was on the canvas, wired to the brief, and shaping every word of the copy. It even showed up further down the same cell under "also reaching this asset", which is how you could tell the column had seen it and refused to count it. It now falls back to the card, the way every other kind already did.',
+          'Two more places where one asset\'s records could be written to all of its siblings: naming a card that was already wired to a channel, and editing a channel\'s records. Both now apply the change to each asset from its own set, and a channel reports the records every one of its assets shares rather than whichever asset happened to be first.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.32',
     dateLabel: 'August 5, 2026',
     groups: [
