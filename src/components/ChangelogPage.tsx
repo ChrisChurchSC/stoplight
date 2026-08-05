@@ -23,6 +23,26 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.36',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A new channel arrives unconnected, and you draw the line to the brief yourself. The line from the campaign to a channel is drawn for you rather than by you, so it appeared the instant the channel did and the shape of the flow was decided before you had a say in it. Adding a channel now gives you the channel and its assets, and connecting it to the brief is your move.',
+          'Connecting it is the ordinary gesture: drag from the campaign brief to the channel, or open the channel and use "Connect it to the brief". Until you do, it takes nothing from the brief, which is what not being connected has always meant here.',
+          'Two things still connect themselves, because the click that made them already said where they belong: a channel added from an asset\'s ＋ hangs off that asset, and assets added to a channel you already have join the channel they are part of.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'Dragging a line from the campaign brief to a disconnected channel now reconnects it. It used to store a backwards connection instead and leave the channel cut off, so the one gesture for putting the line back was the one that did not work, and the board came away carrying a stray line that said nothing the original had not. It reads the same either way round now, and stores nothing, because restoring the line is the whole of what it does.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.34',
     dateLabel: 'August 5, 2026',
     groups: [
