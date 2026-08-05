@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.20',
+    version: 'v1.21',
     dateLabel: 'August 4, 2026',
     groups: [
       {
@@ -32,6 +32,26 @@ const RELEASES: Release[] = [
           'Select a card on the canvas and the board shows its trail. Everything that led to that card stays lit, everything it leads on to stays lit, and the rest of the board fades back. On a campaign with six channels and thirty posts, the chain that produced the asset under your cursor used to be buried in the thirty that did not, because every line on the board looked like every other line.',
           'The two directions are told apart. The route back to the asset is drawn in the accent colour: the channel it hangs off, the brief above that, and the brand, audience and message cards wired into the brief, however many steps back it goes. The route forward is drawn in blue, so a follow-up that branches off an asset reads as what comes next rather than as more of what came before.',
           'It works from any card, not just an asset. Pick a brand or an audience card and the board lights every piece of work it reaches, which is the quickest way to see what one piece of context is actually shaping. Click the background to put the whole board back.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.20',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Concept and Season cards can make the record they need. Every other card on the canvas could already pick an existing one or add a new one from the same dropdown; these two could only pick, so on a brand with no concepts written yet the card read "No concepts yet" and there was nowhere to go from it. Both now offer "+ New concept…" and "+ New season…", the same one-step move.',
+          'Naming a new record from a card selects that card, so the panel that gives it the rest of its context is already open beside you rather than one more thing to go and find.',
+          'You type the name once. The card takes the name of the record it points at, so a card you have not separately named still reads "The quiet upgrade" on the board, in Layers, in the grid and in the list of what is informing the campaign. Name the card itself only when you want it to say something different there.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          'A Concept card wired into a campaign no longer has to sit there reading "Nothing picked yet" with no way out of it. That row under "Informing the messaging" was telling the truth: the card was contributing nothing, because the only thing it could do was pick from a list that was empty.',
         ],
       },
     ],
