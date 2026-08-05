@@ -23,6 +23,21 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.34',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A campaign you have started but not generated yet now exists. It appears on the Campaigns page under Drafts the moment you start it, reading "0 channels · 0 assets" until you build it, and it opens again exactly as you left it. Until now a campaign only became real when it was generated: everything before that was held in one shared slot and recorded nowhere, so going back to the Campaigns page showed nothing and the work looked like it had never happened.',
+          'Worse, starting another new campaign blanked that shared slot, so the cards on the previous unbuilt campaign were destroyed rather than merely hidden. Every campaign now has its own board from the start, so there is nothing shared left to overwrite.',
+          'Cards also survive being built. They used to be handed from the builder\'s slot to the campaign\'s own, and anything that did not make the trip was gone; there is no handover any more, because the board was the campaign\'s all along.',
+          'Naming a campaign in the brief renames the campaign itself, rather than a name held to one side and applied at generation. Starting a campaign and backing out of it leaves an "Untitled campaign" you can delete, which is the trade for never losing work you can see.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.32',
     dateLabel: 'August 5, 2026',
     groups: [
