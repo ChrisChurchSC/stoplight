@@ -13,6 +13,7 @@ import {
 } from '../domain/cardGroups'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
+import { edgeKey, onTrail, trailSide, trailThrough } from '../domain/cardTrail'
 import { assetBadge } from '../domain/assetBadge'
 import { commentAge, commentsFor, openCommentCount, type CardComment } from '../domain/cardComments'
 import { firstNameOf, getSession, onAuthChange } from '../lib/session'
@@ -5256,6 +5257,59 @@ export function FlowsView() {
     return out
   }, [nodes, viewName, viewDelivs, viewRows, detached])
 
+  /**
+   * THE TRAIL THROUGH THE SELECTED CARD: what led here, and what follows.
+   *
+   * Selecting an asset used to light the asset. Everything that explains it — the channel it hangs
+   * off, the brief above that, the brand and audience cards wired into the brief, and the follow-up
+   * a journey branches off it — stayed exactly as legible as the twenty-nine cards that have
+   * nothing to do with it. On a real campaign that is a board of identical dotted lines, and the
+   * one question a person asks by clicking a card is which of them are ITS lines.
+   *
+   * BOTH SETS OF LINES, because only half of them are stored. campaign → channel → post is derived
+   * at render time (see implicitConnectors) and never written to the board, so a trail walked over
+   * board.connectors alone would break at the first channel and leave the brief unlit.
+   *
+   * NOT WHILE SEVERAL CARDS ARE SELECTED. A multi-selection means a bulk move, and a trail drawn
+   * through one card would dim the others in the selection while they sit there wearing their
+   * rings. A group counts, for the same reason (clickSelect selects every member): a group is an
+   * arrangement, not a route.
+   *
+   * `selected.size` rather than `selected.has(sel)`, which reads tighter and is wrong. A marquee
+   * writes `selected` and leaves `sel` alone (see the mouseup handler), so the narrow test would
+   * keep drawing the trail of whatever card had been selected BEFORE the marquee, underneath a set
+   * of rings belonging to entirely different cards. Pressing on a card outside the selection
+   * already resets it to that card, so the blunt test costs nothing in the ordinary flow.
+   *
+   * A CARD WITH NO LINES DIMS NOTHING. Returning a trail with no edges would dim the whole board to
+   * announce that the card you just clicked is unwired, which the card's own styling already says
+   * (see informsOutput). Clicking must not be punished.
+   */
+  const trail = useMemo(() => {
+    if (typeof sel !== 'string' || selected.size > 1) return null
+    const t = trailThrough([...connectors, ...implicitConnectors], sel)
+    return t.edges.size ? t : null
+  }, [sel, selected, connectors, implicitConnectors])
+
+  /** What a CARD wears for its place on the trail: on it and which side, or dimmed off it. */
+  const trailCls = (id: string): string => {
+    if (!trail) return ''
+    const side = trailSide(trail, id)
+    return side ? ` on-trail trail-${side}` : ' off-trail'
+  }
+
+  /**
+   * The same for a LINE, which is keyed by both its ends rather than by a node id. An edge between
+   * two cards that are each on the trail is not necessarily on it — a context card wired straight to
+   * a later step bypasses the selection — so this reads the walk's own edge map rather than testing
+   * the endpoints again here.
+   */
+  const trailEdgeCls = (from: string, to: string): string => {
+    if (!trail) return ''
+    const side = trail.edges.get(edgeKey(from, to))
+    return side ? ` on-trail trail-${side}` : ' off-trail'
+  }
+
   // Card ids (posts, deliverables, build sub-cards) that carry media budget/spend. Connectors
   // touching one of these are tinted gold so a paid path stands out from organic on the canvas.
   const paidCardIds = useMemo(() => {
@@ -8552,7 +8606,7 @@ export function FlowsView() {
               const on = isSelEdge(cn.from, cn.to, 'implicit')
               const d = edgePath(a, b, zoom / 100)
               return (
-                <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}`}>
+                <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}${trailEdgeCls(cn.from, cn.to)}`}>
                   <path className={`flow-edge implicit${paid ? ' paid' : ''}${needsBudget ? ' needs-budget' : ''}${on ? ' sel' : ''}`} d={d} />
                   {/* THE SAME BAND EVERY OTHER LINE GETS. It was narrower at first, on the theory
                       that these are numerous (one from every channel to every post) and would carpet
@@ -8580,7 +8634,7 @@ export function FlowsView() {
               const on = isSelEdge(cn.from, cn.to, 'stored')
               const d = edgePath(a, b, zoom / 100)
               return (
-                <g key={`${cn.from}-${cn.to}-${i}`} className={`flow-edge-g${on ? ' on' : ''}`}>
+                <g key={`${cn.from}-${cn.to}-${i}`} className={`flow-edge-g${on ? ' on' : ''}${trailEdgeCls(cn.from, cn.to)}`}>
                   <path className={`flow-edge${paid ? ' paid' : ''}${needsBudget ? ' needs-budget' : ''}${on ? ' sel' : ''}`} d={d} />
                   {/* Wide transparent hit path so the thin dotted line is easy to point at. The
                       mousedown guard stops the canvas underneath treating this as a click on the
@@ -8672,8 +8726,16 @@ export function FlowsView() {
               strip takes the mouse, where it acts as the handle for dragging the whole group. */}
           {groupFrames.map(({ group, x, y, w, h }) => {
             const on = group.ids.some((id) => selected.has(id))
+            // A group frame follows its cards off the trail, and dims only when NOT ONE member is
+            // on it: a frame around a mix of on- and off-trail cards is still framing part of the
+            // route, and fading it would take a lit card's own frame down with it.
+            const offTrail = !!trail && !group.ids.some((id) => onTrail(trail, id))
             return (
-              <div key={group.id} className={`flow-group${on ? ' sel' : ''}`} style={{ left: x, top: y, width: w, height: h }}>
+              <div
+                key={group.id}
+                className={`flow-group${on ? ' sel' : ''}${offTrail ? ' off-trail' : ''}`}
+                style={{ left: x, top: y, width: w, height: h }}
+              >
                 <div
                   className="flow-group-head"
                   style={{ height: GROUP_HEAD * (zoom / 100) }}
@@ -8732,7 +8794,7 @@ export function FlowsView() {
                 Hideable via delete. */}
             {!briefHidden && (viewing || briefSummoned) && (
             <div
-              className={`flow-node flow-tier-campaign${connectOver === 'campaign' ? ' drop-target' : ''}${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}`}
+              className={`flow-node flow-tier-campaign${connectOver === 'campaign' ? ' drop-target' : ''}${sel === 'campaign' ? ' sel' : ''}${selected.has('campaign') ? ' multi' : ''}${trailCls('campaign')}`}
               data-node-id="campaign"
               data-role="brief"
               style={{ transform: `translate(${pos['campaign']?.x ?? 0}px, ${pos['campaign']?.y ?? 0}px)` }}
@@ -8805,7 +8867,7 @@ export function FlowsView() {
               return (
                 <div
                   key={nt.id}
-                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${informsOutput(nt.id) ? ' attached' : ''}${connectOver === nt.id ? ' drop-target' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-${nt.kind}${nt.refId ? ' linked' : ''}${informsOutput(nt.id) ? ' attached' : ''}${connectOver === nt.id ? ' drop-target' : ''}${sel === nt.id ? ' sel' : ''}${selected.has(nt.id) ? ' multi' : ''}${trailCls(nt.id)}`}
                   data-node-id={nt.id}
                   data-role={meta.role}
                   style={{ transform: `translate(${pos[nt.id]?.x ?? 0}px, ${pos[nt.id]?.y ?? 0}px)`, ['--note-tone']: meta.tone } as React.CSSProperties}
@@ -8981,7 +9043,7 @@ export function FlowsView() {
               return (
                 <div
                   key={g.id}
-                  className={`flow-node flow-note flow-note-object${informsOutput(g.id) ? ' attached' : ''}${connectOver === g.id ? ' drop-target' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}`}
+                  className={`flow-node flow-note flow-note-object${informsOutput(g.id) ? ' attached' : ''}${connectOver === g.id ? ' drop-target' : ''}${sel === g.id ? ' sel' : ''}${selected.has(g.id) ? ' multi' : ''}${trailCls(g.id)}`}
                   data-node-id={g.id}
                   data-role="input"
                   data-scope={scope}
@@ -9061,7 +9123,7 @@ export function FlowsView() {
                         style={{ transform: `translate(${pos[d.key]?.x ?? 0}px, ${pos[d.key]?.y ?? 0}px)`, minHeight: (posts.length > 0 || variantRows.length > 0) ? `${posts.length * 168 + (varTreeH[d.key] ?? 0) + (variantRows.length ? 40 : 0)}px` : undefined, ['--tone']: d.tone } as React.CSSProperties}
                       >
                         <div
-                          className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}`}
+                          className={`flow-node flow-tier-deliv${connectOver === d.key ? ' drop-target' : ''}${sel === d.key ? ' sel' : ''}${selected.has(d.key) ? ' multi' : ''}${trailCls(d.key)}`}
                           data-node-id={d.key}
                           data-role="output"
                           onMouseDown={(e) => startDrag(e, d.key)}
@@ -9125,7 +9187,7 @@ export function FlowsView() {
                               <div className="flow-branch-row" key={r.id}>
                                 <span className="flow-branch-port" style={{ borderColor: d.tone }} />
                                 <div
-                                  className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}`}
+                                  className={`flow-node flow-brief-node${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}
@@ -9272,7 +9334,7 @@ export function FlowsView() {
                       <div className="flow-link" />
                       <div className="flow-branched" style={{ transform: `translate(${pos[n.id]?.x ?? 0}px, ${pos[n.id]?.y ?? 0}px)`, minHeight: slots > 0 ? `${slots * 168}px` : undefined, ['--tone']: tone } as React.CSSProperties}>
                         <div
-                          className={`flow-node flow-tier-deliv${connectOver === n.id ? ' drop-target' : ''}${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}`}
+                          className={`flow-node flow-tier-deliv${connectOver === n.id ? ' drop-target' : ''}${sel === n.id ? ' sel' : ''}${selected.has(n.id) ? ' multi' : ''}${trailCls(n.id)}`}
                           data-node-id={n.id}
                           data-role="output"
                           onMouseDown={(e) => startDrag(e, n.id)}
@@ -9312,7 +9374,7 @@ export function FlowsView() {
                               <div className="flow-branch-row" key={bi}>
                                 <span className="flow-branch-port" style={{ borderColor: tone }} />
                                 <div
-                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}${building ? ' generating' : ''}`}
+                                  className={`flow-node flow-brief-node${sel === `${n.id}:${bi}` ? ' sel' : ''}${selected.has(`${n.id}:${bi}`) ? ' multi' : ''}${pos[`${n.id}:${bi}`] ? ' moved' : ''}${building ? ' generating' : ''}${trailCls(`${n.id}:${bi}`)}`}
                                   data-node-id={`${n.id}:${bi}`}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[`${n.id}:${bi}`]?.x ?? 0}px, ${pos[`${n.id}:${bi}`]?.y ?? 0}px)` }}

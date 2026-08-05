@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.21',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Select a card on the canvas and the board shows its trail. Everything that led to that card stays lit, everything it leads on to stays lit, and the rest of the board fades back. On a campaign with six channels and thirty posts, the chain that produced the asset under your cursor used to be buried in the thirty that did not, because every line on the board looked like every other line.',
+          'The two directions are told apart. The route back to the asset is drawn in the accent colour: the channel it hangs off, the brief above that, and the brand, audience and message cards wired into the brief, however many steps back it goes. The route forward is drawn in blue, so a follow-up that branches off an asset reads as what comes next rather than as more of what came before.',
+          'It works from any card, not just an asset. Pick a brand or an audience card and the board lights every piece of work it reaches, which is the quickest way to see what one piece of context is actually shaping. Click the background to put the whole board back.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.20',
     dateLabel: 'August 4, 2026',
     groups: [
