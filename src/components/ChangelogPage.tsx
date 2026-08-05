@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.26',
+    version: 'v1.27',
     dateLabel: 'August 5, 2026',
     groups: [
       {
@@ -33,6 +33,19 @@ const RELEASES: Release[] = [
           'The picker itself shows those lines too. Choosing between "Ladder", "Open loop" and "Third rail" used to mean already knowing what all three were, because a dropdown could only offer their names. Every record now comes with its own description, and a library big enough to scroll comes with a search box.',
           'The name field is gone from the card, because the record already carries the name. It was a second place to write the same word, and the two drifted apart the moment either changed. Naming a card something the library should not be called is still there, in the inspector, where it is a deliberate act rather than the first thing a blank card asks you for. A sticky note keeps its name field, having no record to inherit one from.',
           'Making a record you do not have yet is still one gesture from the card, and unlinking one is now an option on the list rather than a blank row at the top of it.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.26',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The pattern picker is gone from the asset panel. Opening a single email used to offer a list of alternative copy patterns, which let one asset step out of the arc its siblings were written to and quietly rewrote its copy the moment you clicked. Choosing a pattern is a decision about the channel, so it now happens in one place: the channel card, where it sets the arc for everything in it.',
+          'The asset panel still tells you where the asset sits. The step block stays, so you can see which pattern this one is part of, which step it is, its subject formula, framework and CTA, without a control next to it that rewrites the copy when read as a label.',
         ],
       },
     ],
