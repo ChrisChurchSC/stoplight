@@ -223,6 +223,37 @@ type BatchWrites = {
   removeMany?: (ids: string[]) => Promise<void>
 }
 const batchSheet = sheet as SheetAdapter & BatchWrites
+/**
+ * Canonicalize the channel on every row. The data was seeded with a mix of display names
+ * ("Instagram", "YouTube Shorts", "Newsletter") and canonical ids, and a loose value makes the
+ * grid's channel dropdown fall through to its first option and the card draw a neutral dot
+ * instead of the brand logo.
+ *
+ * Shared by the synchronous seed and `refresh` so both produce IDENTICAL rows — otherwise the
+ * seeded paint and the refreshed one could disagree about a card's channel, and the icons would
+ * visibly change under you a frame later. Returns the same object for a row that needs nothing,
+ * so an untouched workspace allocates nothing here.
+ */
+function normalizeChannels(raw: TrafficRow[]): TrafficRow[] {
+  return raw.map((r) => {
+    const c = resolveChannelId(r.channel)
+    return c && c !== r.channel ? { ...r, channel: c } : r
+  })
+}
+/**
+ * The rows the store is CREATED with, so the first paint is already the real workspace.
+ *
+ * Only the localStorage-backed adapter can answer synchronously; with Supabase the rows are a
+ * network round trip away and this is necessarily empty, which is exactly what `rowsHydrated`
+ * exists to tell the UI apart from "this workspace really is empty".
+ */
+function seedRows(): TrafficRow[] {
+  try {
+    return normalizeChannels(sheet.listSync?.() ?? [])
+  } catch {
+    return []
+  }
+}
 const publishers: PublisherRegistry = channelPublishers
 const icpSource: IcpSource = new MockIcpSource()
 // Real Claude batch review when a backend + key are present; heuristic otherwise.
@@ -1590,6 +1621,19 @@ interface TrafficState {
   assets: Asset[]
   /** Rows mirrored from the sheet (the source of truth). */
   rows: TrafficRow[]
+  /**
+   * True once `rows` can be trusted to be the whole workspace: immediately when the sheet is
+   * local (the store is seeded from it at creation), and after the first completed read when it
+   * is network-backed.
+   *
+   * Read this — not `rows.length` — before telling someone they have nothing. An empty-because-
+   * still-loading workspace and an empty-because-empty one look identical in `rows`, and the
+   * first paint is always the former, which is what made the Campaigns page flash
+   * "0 campaigns / Start a campaign" and a campaign board flash empty on the way in.
+   *
+   * One-way: it never returns to false, so a later refresh can't blink the page back to empty.
+   */
+  rowsHydrated: boolean
   loading: boolean
 
   /** Sidebar channel filter; 'all' shows everything. */
@@ -2907,7 +2951,12 @@ function brandPurgePatch(s: TrafficState, name: string): Partial<TrafficState> {
 
 export const useTrafficStore = create<TrafficState>((set, get) => ({
   assets: [],
-  rows: [],
+  // Seeded synchronously wherever that's possible (see seedRows), so the first paint is the real
+  // workspace rather than an empty one that fills in a frame later.
+  rows: seedRows(),
+  // With localStorage behind the sheet the seed above IS the workspace, so nothing is pending and
+  // the empty states may be trusted immediately. With Supabase the rows are still in flight.
+  rowsHydrated: localDataMode,
   loading: false,
   filter: 'all',
   proofFilter: 'all',
@@ -5802,14 +5851,8 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   refresh: async () => {
     set({ loading: true })
     const raw = await sheet.list()
-    // Normalize channel values to canonical ids so every surface (grid select, drawer,
-    // messaging fields, icons) reads the same channel. The data was seeded with a mix of
-    // display names ("Instagram", "YouTube Shorts", "Newsletter") and canonical ids; a
-    // loose value made the grid's channel dropdown fall through to its first option.
-    const rows = raw.map((r) => {
-      const c = resolveChannelId(r.channel)
-      return c && c !== r.channel ? { ...r, channel: c } : r
-    })
+    // See normalizeChannels — shared with the synchronous seed so both agree.
+    const rows = normalizeChannels(raw)
     // Persist the normalization so it sticks (only the rows that actually changed).
     //
     // Compared against the SOURCE row by index rather than by a find over `raw`: map preserves order,
@@ -5818,7 +5861,10 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     rows.forEach((r, i) => {
       if (raw[i]?.channel !== r.channel) void sheet.update(r.id, { channel: r.channel })
     })
-    set({ rows, loading: false })
+    // rowsHydrated latches on the FIRST completed read and never goes back — `loading` can't do
+    // this job because almost every mutation calls refresh(), so gating an empty state on it
+    // would blink the page back to "you have nothing" on every edit.
+    set({ rows, loading: false, rowsHydrated: true })
   },
 
   // Auto-organize each ingested batch to channel + per-channel type before it

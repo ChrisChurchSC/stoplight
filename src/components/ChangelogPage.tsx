@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.22',
+    dateLabel: 'August 4, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Campaigns opens with your campaigns in it. The page used to paint once before your work had loaded, so for a moment it said "0 campaigns" and offered to start your first one, and then the cards and their channel counts appeared underneath that. Nothing was ever wrong with the data; the page was simply answering a question it could not yet answer, and the correction is what read as a glitch.',
+          'The workspace is now read before the first frame rather than just after it, so there is no empty state to correct. Where the work genuinely does have to be fetched, the page stays quiet until it arrives instead of claiming you have nothing.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.21',
     dateLabel: 'August 4, 2026',
     groups: [
