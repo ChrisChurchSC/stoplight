@@ -48,6 +48,9 @@ export function CanvasProjectTabs() {
   // mirrors its own screen state here; it is the only honest answer to "am I looking at a campaign",
   // and closing a tab has to know. See close().
   const flowCanvasOpen = useTrafficStore((s) => s.flowCanvasOpen)
+  // The scope you were BROWSING at before a campaign borrowed it, or null when nothing has borrowed
+  // it. The strip filters on this rather than on clientFilter — see browseScope.
+  const scopeBeforeFlow = useTrafficStore((s) => s.scopeBeforeFlow)
   const goFlowHome = useTrafficStore((s) => s.goFlowHome)
   const setCampaignFilter = useTrafficStore((s) => s.setCampaignFilter)
   // The workspace-read-succeeded flag the prune waits on; see pruneOpenProjects for why it is this
@@ -71,9 +74,22 @@ export function CanvasProjectTabs() {
     return m
   }, [rows])
 
-  // Only the CURRENT brand's open flows get tabs: switching brands hides the other brand's tabs
-  // (they stay open in the store and reappear when you switch back), so you can't reach another
-  // brand's flows from here. On the "all brands" scope, show everything.
+  /**
+   * THE STRIP FOLLOWS THE SCOPE YOU ARE BROWSING AT, NOT THE ONE THE OPEN CAMPAIGN BORROWED.
+   *
+   * Only the current brand's open flows get tabs, which is right when you PICK a brand: the other
+   * brand's tabs stay open in the store and come back when you switch back. But opening a campaign
+   * narrows clientFilter too, as a side effect of getting the board the brand it needs — and the
+   * strip read that narrowing as a brand change. So clicking one tab deleted every tab belonging to
+   * another brand, from the one strip whose whole job is to say what you have open. A drawer that
+   * empties when you open something out of it is not a drawer, and nothing had closed.
+   *
+   * scopeBeforeFlow is exactly the difference between the two: openFlow records the scope it is
+   * about to borrow (once), setClientFilter clears it because a brand you picked is a choice rather
+   * than a loan, and goFlowHome hands it back. So a non-null value means "a campaign borrowed this",
+   * and the tabs answer to what it borrowed FROM.
+   */
+  const browseScope = scopeBeforeFlow ?? clientFilter
   const projects = useMemo(
     () =>
       openProjects
@@ -87,8 +103,8 @@ export function CanvasProjectTabs() {
             count: assetCounts.get(c) ?? 0,
           }
         })
-        .filter((p) => clientFilter === 'all' || p.client === clientFilter),
-    [openProjects, assetCounts, clientFilter, folderOf],
+        .filter((p) => browseScope === 'all' || p.client === browseScope),
+    [openProjects, assetCounts, browseScope, folderOf],
   )
 
   // Opening a campaign's canvas adds it to the drawer (assets or not).
@@ -106,9 +122,22 @@ export function CanvasProjectTabs() {
     pruneOpenProjects()
   }, [pruneOpenProjects, flightsHydrated, rows, campaignList])
 
-  // A tab opens its campaign as a flow (not the legacy canvas).
+  /**
+   * A tab opens its campaign as a flow (not the legacy canvas).
+   *
+   * AND THE TAB YOU JUST CAME BACK FROM IS STILL A TAB. The guard here used to be
+   * `campaign === campaignFilter`, and campaignFilter names the campaign most recently OPENED,
+   * which outlives leaving it — goFlowHome takes you back to the index without clearing it. So the
+   * one tab you were most likely to want, the campaign you had just been in, was the one tab that
+   * did nothing when clicked. Twice over with the strip bug above: go in, come back, and the tab
+   * you left from is dead while its neighbours work.
+   *
+   * The honest question is whether that board is ON SCREEN, which is the same one close() asks and
+   * the same reason it asks it. Re-opening the campaign you are already looking at is the only
+   * click there is nothing to do about.
+   */
   const switchTo = (campaign: string) => {
-    if (campaign === campaignFilter) return
+    if (page === 'flows' && flowCanvasOpen && campaign === campaignFilter) return
     openFlow(campaign)
   }
   /**
