@@ -4303,10 +4303,32 @@ button.mf-open:focus-visible,
       var(--dot-x, 0) var(--dot-y, 0) / var(--dot-step, 22px) var(--dot-step, 22px),
     var(--surface);
 }
+/**
+ * THE CARD LAYER MUST NOT COVER THE LINE LAYER WHERE IT HAS NO CARD.
+ *
+ * This is a bare layout wrapper — no handlers of its own — but it carries the pan/zoom transform,
+ * and a transform makes an element paint as though it were positioned. So it lands in the same
+ * layer as .flow-edges, which is absolutely positioned, and wins on document order: the card layer
+ * paints OVER the connectors, padding, gaps and all.
+ *
+ * That made most of the board's lines unclickable, and a line you cannot point at cannot be
+ * selected, so it cannot be deleted either. The campaign → channel line was the worst case, because
+ * it runs between two cards and so lies under the stack for its whole length: it was the one line
+ * that always offered a ✕, and it could never be reached to show one.
+ *
+ * The cards take the mouse back below. Everything interactive on this layer is inside a card — the
+ * connector ports and the branch "+" included — so one opt-in covers all of it, and the empty space
+ * between cards now falls through to the line beneath, or to the canvas, where a drag still draws a
+ * selection rectangle.
+ */
 .flow-stack {
   max-width: 360px;
   margin: 0 auto;
   padding: 48px 16px 120px;
+  pointer-events: none;
+}
+.flow-node {
+  pointer-events: auto;
 }
 /* View mode lays out as a left-to-right tree: campaign column, then a deliverables
    column (each branching to its posts), so it doesn't open as one narrow stacked blob. */
@@ -8501,13 +8523,31 @@ button.mf-open:focus-visible,
 /* THE DELETE CONTROL ON THE SELECTED LINE. Only stored lines get one, and that is the point: a
    derived line showing no ✕ answers "why will this not go away" by being looked at, rather than by
    being pressed and doing nothing. */
+/**
+ * THE ✕ HAS TO TAKE THE MOUSE BACK.
+ *
+ * Its layer is pointer-events:none on purpose, so a line never swallows a click meant for a card,
+ * and only .flow-edge-hit opted back in. The ✕ never did — so every press on it fell through to the
+ * 30px hit band of the very line it is drawn on top of, which TOGGLES that line's selection. The
+ * button drew itself, took the click, deselected the line and removed itself, and the connection was
+ * still there. The board's other canvas got this right: see .cv-edge-del.
+ */
 .flow-edge-del {
+  pointer-events: auto;
   cursor: pointer;
+}
+/* A transparent halo, because the visible ✕ is 18px across and sits on a 30px band: a press a few
+   pixels wide of it lands on the line and reads as the button doing nothing. */
+.flow-edge-del-hit {
+  fill: transparent;
 }
 .flow-edge-del circle {
   fill: var(--surface);
   stroke: var(--border-strong);
   stroke-width: 1;
+}
+.flow-edge-del .flow-edge-del-hit {
+  stroke: none;
 }
 .flow-edge-del path {
   stroke: var(--text-muted);
@@ -8515,7 +8555,8 @@ button.mf-open:focus-visible,
   stroke-linecap: round;
   fill: none;
 }
-.flow-edge-del:hover circle {
+/* The halo is excluded by name, or hovering fills a 30px red disc instead of the button. */
+.flow-edge-del:hover circle:not(.flow-edge-del-hit) {
   fill: var(--red);
   stroke: var(--red);
 }

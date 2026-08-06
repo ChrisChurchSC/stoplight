@@ -23,6 +23,22 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.40',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The ✕ on a connector deletes it. It never has. The ✕ is drawn on top of the line it belongs to, but it was not taking the mouse: every press on it fell through to the line underneath, and clicking a line toggles it, so the line deselected itself and the ✕ vanished. It looked like a button that shrugged. The connection was still there every time. Deleting from the keyboard, with the line selected, always worked, which is why this was survivable rather than obvious.',
+          'Connector lines can be clicked where they run between cards. The card layer sat over the line layer, gaps and padding included, so a line crossing it could not be pointed at anywhere along its length, and a line you cannot select is a line you cannot delete. The line from the campaign to a channel was the worst of it: it runs between two cards for its whole length, and it is the one line that has always offered a ✕. Empty space between cards now falls through to whatever is under it, and a drag across it still draws a selection rectangle.',
+          'A channel that follows an asset can be cut loose from it. Adding a channel from an asset\'s "+" makes that channel come after it, and the line says so. That line was the one thing on the board recording a decision you could not change: it offered no ✕, and Delete said there was nothing to cut. The only way out was to delete the channel and add it again. Cutting it now leaves the channel, its assets and their copy exactly as they are, and it hangs off the campaign like every other channel.',
+          'Where cutting one loose would merge it into a channel of the same kind the campaign already has, the message says so before you go looking for the card. Cmd+Z puts it back.',
+          'A line with nothing behind it says so when you hover it, instead of only after you select it, find no ✕ and press Delete to be told. A post sits under its channel because it is one of that channel\'s assets, so there is no line there to cut, only a card to move or delete.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.39',
     dateLabel: 'August 5, 2026',
     groups: [

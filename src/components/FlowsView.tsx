@@ -11,6 +11,7 @@ import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
   type CardGroup,
 } from '../domain/cardGroups'
+import { cutForEdge, type EdgeCut } from '../domain/edgeCut'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { edgeKey, onTrail, trailSide, trailThrough } from '../domain/cardTrail'
@@ -2393,13 +2394,20 @@ export function FlowsView() {
         if (ed) {
           e.preventDefault()
           if (ed.kind === 'stored') deleteEdgeRef.current(ed.from, ed.to)
-          // Campaign → channel is a decision, so cutting it detaches rather than deletes: the channel
-          // and its assets stay, and stop taking anything from the brief.
-          else if (canDetachRef.current(ed.from, ed.to)) setChannelDetachedRef.current(ed.to, true)
-          // The rest are not decisions. A post sits under its channel because of what it IS. Saying
-          // so out loud, because a key that silently does nothing is the defect this file already
-          // fixed once for Delete on a built channel.
-          else showToast('This line follows from where the post lives, so there is nothing to cut. Move or delete the card instead.')
+          else {
+            // The same map the ✕ reads, so the key and the button never disagree about a line.
+            const cut = implicitCutsRef.current.get(`${ed.from}→${ed.to}`)
+            // Campaign → channel is a decision, so cutting it detaches rather than deletes: the
+            // channel and its assets stay, and stop taking anything from the brief.
+            if (cut?.kind === 'detach') setChannelDetachedRef.current(ed.to, true)
+            // A channel following an asset is a decision too — the one made by adding it from that
+            // asset's "+". Cutting it clears the branch and leaves everything else alone.
+            else if (cut?.kind === 'unbranch') unbranchRef.current(cut)
+            // The rest are not decisions. A post sits under its channel because of what it IS. Saying
+            // so out loud, because a key that silently does nothing is the defect this file already
+            // fixed once for Delete on a built channel.
+            else showToast('This line follows from where the post lives, so there is nothing to cut. Move or delete the card instead.')
+          }
           return
         }
         const ids = selectedRef.current.size ? [...selectedRef.current] : selRef.current ? [selRef.current] : []
@@ -3269,20 +3277,35 @@ export function FlowsView() {
    * Matched by pair rather than by index: see selEdge. Held in a ref as well, because the keydown
    * listener is registered once and would otherwise close over a stale `connectors`.
    */
-  /**
-   * Can this derived line be cut? Only campaign → channel. That one is the person's decision to make:
-   * a channel taking the campaign's cards is the default, not a law, and cutting it leaves the
-   * channel and every asset under it exactly where they are. The others are not decisions at all. A
-   * post sits under its channel because of what it IS, and a channel branched off an asset is
-   * describing a journey that asset's own field records; there is nothing to cut without deleting or
-   * moving the card itself.
-   */
-  const canDetach = (from: string, to: string) => viewName !== null && from === 'campaign' && viewDelivs.some((d) => d.key === to)
   /** Cut a channel off from the brief, or restore it. */
   const setChannelDetached = (key: string, off: boolean) => {
     recordHistory(true)
     setDetached((cur) => (off ? (cur.includes(key) ? cur : [...cur, key]) : cur.filter((k) => k !== key)))
     setSelEdge(null)
+  }
+  /**
+   * STOP A CHANNEL FOLLOWING THE ASSET IT WAS ADDED FROM: clear the `branchOf` its rows carry, and
+   * it hangs off the campaign like every other channel. Its assets, their copy and their schedule
+   * are untouched — the only thing that changes is what this channel comes after.
+   *
+   * Rows first, and the toast says what actually happened rather than what was asked for, because
+   * dropping the branch changes the deliverable's key: where the campaign already has that channel
+   * and type, the two cards become one. Undo restores the rows (recordHistory captures them), which
+   * is worth saying out loud for a cut that can move cards.
+   */
+  const unbranchDeliverable = (cut: Extract<EdgeCut, { kind: 'unbranch' }>) => {
+    const d = viewDelivsRef.current.find((x) => x.key === cut.deliv)
+    if (!d) return
+    const updates = d.rows.filter((r) => r.branchOf).map((r) => ({ id: r.id, patch: { branchOf: undefined } }))
+    if (!updates.length) return
+    recordHistory(true)
+    setSelEdge(null)
+    void updateRows(updates)
+    showToast(
+      cut.mergesInto
+        ? `"${d.label}" no longer follows ${cut.source}, so it joins this campaign's other ${d.label} assets. Cmd+Z to put it back.`
+        : `"${d.label}" no longer follows ${cut.source}. It hangs off the campaign now. Cmd+Z to put it back.`,
+    )
   }
   const deleteEdge = (from: string, to: string) => {
     if (!connectors.some((c) => c.from === from && c.to === to)) return
@@ -5098,8 +5121,10 @@ export function FlowsView() {
   releaseRef.current = releasePlacement
   const deleteEdgeRef = useRef(deleteEdge)
   deleteEdgeRef.current = deleteEdge
-  const canDetachRef = useRef(canDetach)
-  canDetachRef.current = canDetach
+  /** Assigned below, where implicitCuts is built: the keydown listener is registered once. */
+  const implicitCutsRef = useRef<Map<string, EdgeCut>>(new Map())
+  const unbranchRef = useRef(unbranchDeliverable)
+  unbranchRef.current = unbranchDeliverable
   /** The campaign open RIGHT NOW, for a callback that outlives the render that made it: a toast
    *  action can be clicked several seconds and one navigation later. See suggestContext. */
   const viewNameRef = useRef(viewName)
@@ -5978,6 +6003,23 @@ export function FlowsView() {
     }
     return out
   }, [nodes, viewName, viewDelivs, viewRows, detached])
+
+  /**
+   * Which derived lines can be cut, worked out ONCE per layout rather than per line per render:
+   * every one of them is asked twice (its hover title, and the ✕ when it is the selected line), and
+   * on a big campaign there is one of these for every post on the board.
+   *
+   * Keyed off the drawn list, so a line that is not drawn is never offered a cut.
+   */
+  const implicitCuts = useMemo(() => {
+    const m = new Map<string, EdgeCut>()
+    for (const cn of implicitConnectors) {
+      const cut = cutForEdge(cn.from, cn.to, viewDelivs, viewRows)
+      if (cut) m.set(`${cn.from}→${cn.to}`, cut)
+    }
+    return m
+  }, [implicitConnectors, viewDelivs, viewRows])
+  implicitCutsRef.current = implicitCuts
 
   /**
    * THE TRAIL THROUGH THE SELECTED CARD: what led here, and what follows.
@@ -9412,6 +9454,7 @@ export function FlowsView() {
               // that cannot run, so it should not read as funded just because its other end is.
               const needsBudget = needsBudgetCardIds.has(cn.to) || needsBudgetCardIds.has(cn.from)
               const on = isSelEdge(cn.from, cn.to, 'implicit')
+              const cut = implicitCuts.get(`${cn.from}→${cn.to}`)
               const d = edgePath(a, b, zoom / 100)
               return (
                 <g key={`imp-${cn.from}-${cn.to}`} className={`flow-edge-g${on ? ' on' : ''}${trailEdgeCls(cn.from, cn.to)}`}>
@@ -9428,7 +9471,18 @@ export function FlowsView() {
                     onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
                     onClick={() => selectEdge(cn.from, cn.to, 'implicit')}
                   >
-                    <title>{needsBudget ? 'Paid placement with no media budget assigned — click to select this connection' : 'Click to select this connection'}</title>
+                    {/* A line with nothing behind it says so ON HOVER, rather than only when you
+                        select it, find no ✕, and press Delete to be told. "Why will this one not go
+                        away" was answerable before, but only by trying. */}
+                    <title>
+                      {needsBudget
+                        ? 'Paid placement with no media budget assigned. Click to select this connection.'
+                        : cut?.kind === 'detach'
+                          ? 'Click to select, then ✕ to cut this channel off from the brief'
+                          : cut?.kind === 'unbranch'
+                            ? `Click to select, then ✕ to stop this channel following ${cut.source}`
+                            : 'This line is drawn from where the card lives, so there is nothing to cut. Click to select it.'}
+                    </title>
                   </path>
                 </g>
               )
@@ -9454,7 +9508,7 @@ export function FlowsView() {
                     onMouseDown={(ev) => { if (tool === 'select' && !spaceHeld.current) ev.stopPropagation() }}
                     onClick={() => selectEdge(cn.from, cn.to, 'stored')}
                   >
-                    <title>{needsBudget ? 'Paid placement with no media budget assigned — click to select this connection' : 'Click to select this connection'}</title>
+                    <title>{needsBudget ? 'Paid placement with no media budget assigned. Click to select this connection.' : 'Click to select this connection'}</title>
                   </path>
                 </g>
               )
@@ -9464,7 +9518,8 @@ export function FlowsView() {
                 line never shows one, so you can see that before you press anything. */}
             {(() => {
               if (!selEdge) return null
-              if (selEdge.kind !== 'stored' && !canDetach(selEdge.from, selEdge.to)) return null
+              const cut = selEdge.kind === 'stored' ? null : implicitCuts.get(`${selEdge.from}→${selEdge.to}`)
+              if (selEdge.kind !== 'stored' && !cut) return null
               const a = connRect(selEdge.from)
               const b = connRect(selEdge.to)
               if (!a || !b) return null
@@ -9478,10 +9533,18 @@ export function FlowsView() {
                   onClick={(ev) => {
                     ev.stopPropagation()
                     if (selEdge.kind === 'stored') deleteEdge(selEdge.from, selEdge.to)
+                    else if (cut?.kind === 'unbranch') unbranchDeliverable(cut)
                     else setChannelDetached(selEdge.to, true)
                   }}
                 >
-                  <title>{selEdge.kind === 'stored' ? 'Delete this connection' : 'Cut this channel off from the brief'}</title>
+                  <title>
+                    {selEdge.kind === 'stored'
+                      ? 'Delete this connection'
+                      : cut?.kind === 'unbranch'
+                        ? `Stop this channel following ${cut.source}`
+                        : 'Cut this channel off from the brief'}
+                  </title>
+                  <circle className="flow-edge-del-hit" cx={mx} cy={my} r={15} />
                   <circle cx={mx} cy={my} r={9} />
                   <path d={`M${mx - 3.4} ${my - 3.4} L${mx + 3.4} ${my + 3.4} M${mx + 3.4} ${my - 3.4} L${mx - 3.4} ${my + 3.4}`} />
                 </g>
