@@ -22294,40 +22294,64 @@ table.aud-sheet td.stick .aud-cell {
    it is the card you look for while scanning a board rather than one you read in a set. Uniform
    chrome made it the hardest card to find and the easiest to mistake for a Message.
 
-   Two departures, both earning their place: a repeating wave across the head (a pattern is a shape
-   that recurs, and it is the card's own icon at card scale), and a warm paper tint instead of the
-   grey, so it separates from the says-family cards it sits beside.
+   Two departures, both earning their place: a zigzag running the whole way round the card (a
+   pattern is a shape that recurs, so the card is edged in one rather than carrying a picture of
+   one), and a warm paper tint instead of the grey, so it separates from the says-family cards it
+   sits beside.
+
+   The zigzag replaced a wave across the head alone. Same idea, but a motif on one edge reads as a
+   decorated top rather than as the card's own shape, and at 6px tall on a 208px card it was easy to
+   miss entirely at board zoom. Edging all four sides is what makes it findable in a scan.
    ============================================================================ */
 .flow-note[data-role='input'].flow-note-pattern {
-  /* Two periods of a sine over 22px. Black is arbitrary: this is used as a MASK, so only the
-     alpha channel is read and the stroke's colour never reaches the screen. */
-  --pattern-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='6' viewBox='0 0 22 6'%3E%3Cpath d='M0 4.5 Q 5.5 0.5 11 4.5 T 22 4.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
-  background: color-mix(in srgb, var(--note-tone) 5%, var(--surface-2));
-}
-/* THE WAVE, across the head: the card's own icon at card scale, repeated, so the motif IS
-   repetition rather than a picture of it.
+  /* Two periods of a sawtooth per tile, laid end to end so a tile meets its neighbour mid-descent
+     and the seam is invisible. One tile per direction, and a mirrored pair so the teeth on facing
+     edges point the same way out of the card rather than both leaning right.
 
-   Drawn as a MASK rather than a background image because the tone has to stay live: an SVG data
-   URI cannot read currentColor or a custom property, so a background-image wave would have to
-   hardcode #6d8b2f and would then keep drawing it after the card went unlinked and the rest of the
-   chrome went grey. Masking a plain background-color keeps one source of truth for the hue. */
+     Black is arbitrary: these are used as MASKS, so only the alpha channel is read and the stroke's
+     colour never reaches the screen. */
+  --zig-top: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'%3E%3Cpath d='M0 5 L3 1 L6 5 L9 1 L12 5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --zig-bottom: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'%3E%3Cpath d='M0 1 L3 5 L6 1 L9 5 L12 1' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --zig-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='12' viewBox='0 0 6 12'%3E%3Cpath d='M5 0 L1 3 L5 6 L1 9 L5 12' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --zig-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='12' viewBox='0 0 6 12'%3E%3Cpath d='M1 0 L5 3 L1 6 L5 9 L1 12' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background: color-mix(in srgb, var(--note-tone) 5%, var(--surface-2));
+  /* Near square, because the zigzag turns a corner and a 11px arc has nowhere to put a tooth. The
+     selection and drop-target rings are box-shadows, so they follow this radius and stay in step. */
+  border-radius: 3px;
+  /* The straight hairline is what the zigzag is standing in for; leaving both drew two borders one
+     pixel apart. Transparent rather than removed so the box keeps its size and every shared metric
+     (the 9px child indent, the head padding) still lands where it does on every other card. */
+  border-color: transparent;
+}
+/* THE ZIGZAG, all the way round: four masked strips over one painted layer. Two horizontal tiles
+   repeating along x at the top and bottom, two vertical ones repeating along y at the sides. Mask
+   layers union by default, so the four strips add up to a frame without needing mask-composite.
+
+   Repeated rather than stretched to fit: a stretched frame would give a short card fat teeth and a
+   tall one thin ones, and the whole point is a constant beat. It also means the corners are wherever
+   the repeat lands, which is what a real zigzag edge does.
+
+   Drawn as a MASK rather than a border-image because the tone has to stay live: an SVG data URI
+   cannot read currentColor or a custom property, so a border-image would have to hardcode #6d8b2f
+   and would then keep drawing it after the card went unlinked and the rest of the chrome went grey.
+   Masking a plain background-color keeps one source of truth for the hue. */
 .flow-note[data-role='input'].flow-note-pattern::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
+  inset: 0;
   background-color: var(--note-tone);
   opacity: .55;
-  -webkit-mask-image: var(--pattern-wave);
-  mask-image: var(--pattern-wave);
-  -webkit-mask-repeat: repeat-x;
-  mask-repeat: repeat-x;
-  -webkit-mask-size: 22px 6px;
-  mask-size: 22px 6px;
+  -webkit-mask-image: var(--zig-top), var(--zig-bottom), var(--zig-left), var(--zig-right);
+  mask-image: var(--zig-top), var(--zig-bottom), var(--zig-left), var(--zig-right);
+  -webkit-mask-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  mask-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  -webkit-mask-position: top left, bottom left, left top, right top;
+  mask-position: top left, bottom left, left top, right top;
+  -webkit-mask-size: 12px 6px, 12px 6px, 6px 12px, 6px 12px;
+  mask-size: 12px 6px, 12px 6px, 6px 12px, 6px 12px;
   pointer-events: none;
-  border-radius: var(--radius-sm) 0 0 0;
 }
-/* The spine and the wave are the same tone, so an unlinked card must quiet BOTH or the head keeps
+/* The spine and the zigzag are the same tone, so an unlinked card must quiet BOTH or the edge keeps
    reading as filled in. Matches the :not(.linked) spine rule above. */
 .flow-note[data-role='input'].flow-note-pattern:not(.linked) {
   background: var(--surface-2);

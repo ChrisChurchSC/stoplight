@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.39',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Pattern card is now edged in a zigzag the whole way round, so it is the card you can find in a scan. A pattern is the shape the copy takes, and it is the one input meant to be pinned to a single asset, so it is the card you go looking for rather than one you read in a set. It used to carry a 6px wave across its head alone, which read as a decorated top rather than as the card\'s own shape and was easy to miss at board zoom.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.38',
     dateLabel: 'August 5, 2026',
     groups: [
