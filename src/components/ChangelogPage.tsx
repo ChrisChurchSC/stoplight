@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.41',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A group on the campaign canvas can be moved by its frame. Grab the dashed border anywhere along its edge and the whole group comes with you. Dragging a card inside a group already moved all of it, but the frame was the one part that looked like a handle and was not one: the box is drawn behind its cards and passes clicks through, so taking hold of the edge fell to the canvas and started a selection rectangle. The only real handle was the name at the top left, which is as wide as the name and shrinks as you zoom out. The same change landed on the flow canvas last release; this is the board most of the work happens on.',
+          'Hovering the edge lights the border and the cursor becomes a hand. The band scales with the zoom, so it stays on the border it is drawing rather than drifting inside the frame at 50% or hanging outside it at 200%.',
+          'The inside of a frame still belongs to what is under it: a click in the middle of a group reaches the card you clicked, and a drag through the space between its cards still draws a selection rectangle.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.40',
     dateLabel: 'August 6, 2026',
     groups: [

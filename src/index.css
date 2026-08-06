@@ -8292,6 +8292,21 @@ button.mf-open:focus-visible,
 }
 /* Sized to its label rather than the frame: a full-width strip would cover any card sitting just
    above the group and take the clicks meant for it. */
+/* The grab band around the frame. A ring, never a lid: the interior stays pass-through so a click
+   inside a group still reaches the card under it, and a drag through the space between its cards
+   still draws a selection rectangle. Same rule as .cv-group-rim on the other canvas; the numbers
+   differ because this frame scales with the zoom. */
+.flow-group-rim {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+}
+.flow-group-rim:active {
+  cursor: grabbing;
+}
+.flow-group:has(.flow-group-rim:hover) {
+  border-color: var(--accent);
+}
 .flow-group-head {
   position: absolute;
   top: 0;
