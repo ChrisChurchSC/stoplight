@@ -8056,6 +8056,13 @@ button.mf-open:focus-visible,
   width: 13px; height: 13px; border-radius: 50%; cursor: crosshair;
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted);
   display: inline-flex; align-items: center; justify-content: center; opacity: 0;
+  /* AN INVISIBLE HANDLE MUST NOT TAKE THE POINTER. opacity:0 hides a thing without excusing it from
+     the hit test, so every card was ringed by four 26px targets you could not see: press the canvas
+     a few pixels off any card and you started a connection from it instead of a marquee, and the
+     bottom handle of a stacked card sat under the top handle of the card below, so reaching for one
+     drew from the other. Both read as the dots behaving at random. They come alive with the reveal
+     rules below and are inert the rest of the time, which is what "hidden" was always meant to say. */
+  pointer-events: none;
 }
 /* The offset centres the dot on the card's edge: half the width, plus the 1px border. Four sides now
    carry one, so the dot is small enough that four of them read as handles rather than as decoration.
@@ -8072,14 +8079,21 @@ button.mf-open:focus-visible,
   inset: -7px;
   border-radius: 50%;
 }
-.flow-note:hover .flow-note-port { opacity: 1; }
+.flow-note:hover .flow-note-port { opacity: 1; pointer-events: auto; }
 /* OUTPUT CARDS GET THE SAME HANDLES. A channel and a post were drop targets with no ports of their
    own: you could draw a line INTO one and never out of one, so the direction that carried the board
    forward was the one direction you could not draw. They are not .flow-note, so the reveal is keyed
    on .flow-node instead. Direct child only, so a post inside a channel does not light up the
    channel's ports as the cursor crosses it. */
 .flow-node:hover > .flow-out-port,
-.flow-canvas.connecting .flow-out-port { opacity: 1; }
+.flow-canvas.connecting .flow-out-port { opacity: 1; pointer-events: auto; }
+/* WHILE A LINE IS IN FLIGHT, every card shows its handles. The question the gesture asks is "where
+   can this land", and the answer was drawn only on the card you happened to already be over. Half
+   strength: they are marks on the map, not the one you are aiming at — the drop-target ring says
+   that. Live to the pointer, so releasing on a handle lands on its card rather than falling through
+   to the canvas and cancelling. */
+.flow-canvas.connecting .flow-note-port { opacity: 0.55; pointer-events: auto; }
+.flow-canvas.connecting .flow-node:hover .flow-note-port { opacity: 1; }
 .flow-note-port:hover { border-color: var(--accent); color: var(--accent); }
 /* Connect tool: crosshair over the whole canvas so it reads as "draw a link". user-select off so
    dragging across a card's text doesn't highlight it mid-connection. */
@@ -8348,11 +8362,14 @@ button.mf-open:focus-visible,
   z-index: 4;
   opacity: 0;
   transition: opacity 0.12s ease;
+  /* Same rule as .flow-note-port: hidden means hidden from the pointer too. */
+  pointer-events: none;
 }
 .flow-node:hover .flow-conn-port,
 .flow-node.sel .flow-conn-port,
 .flow-node.multi .flow-conn-port {
   opacity: 1;
+  pointer-events: auto;
 }
 /* "+" hanging off the right edge of an asset card: spawns a downstream deliverable (a journey
    step) that branches from this asset instead of the campaign. Absolutely positioned inside the
@@ -22388,7 +22405,7 @@ table.aud-sheet td.stick .aud-cell {
 /* .flow-note-port is revealed by `.flow-note:hover`, and the brief is not a .flow-note, so it needs
    its own reveal. Same behaviour, different ancestor. */
 .flow-node[data-role='brief']:hover .flow-brief-port,
-.flow-canvas.connecting .flow-brief-port { opacity: 1; }
+.flow-canvas.connecting .flow-brief-port { opacity: 1; pointer-events: auto; }
 
 /* ---- BRIEF: reclaims the full-width top edge the inputs just vacated ---- */
 .flow-node[data-role='brief'] {

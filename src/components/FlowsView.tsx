@@ -1828,6 +1828,15 @@ export function FlowsView() {
     gestureWork.current = null
     w?.()
   }
+  /** Throw the pending frame away. The counterpart to flush, for a gesture that is being cancelled:
+      applying one more move on the way out is the opposite of what a cancel means. */
+  const dropGesture = () => {
+    if (gestureRaf.current !== null) {
+      cancelAnimationFrame(gestureRaf.current)
+      gestureRaf.current = null
+    }
+    gestureWork.current = null
+  }
   // Connectors between nodes, plus the in-progress drag and measured node rects.
   const canvasRef = useRef<HTMLDivElement>(null)
   /** The Grid/Calendar stage, so Fit can measure the sheet inside it without a global selector. */
@@ -2131,6 +2140,62 @@ export function FlowsView() {
   const [addSearch, setAddSearch] = useState('')
   const addDrag = useRef<{ from: string; at: number } | null>(null)
   const pendingPlace = useRef<{ id: string; x: number; y: number } | null>(null)
+  /**
+   * A GESTURE OUTLIVES THE ELEMENT IT STARTED ON.
+   *
+   * Every drag on this board — drawing a connection, moving a card, a marquee, a pan — used to be
+   * tracked by mousemove/mouseup handlers on the canvas div, with mouseleave cancelling whatever was
+   * in flight. That reads as correct until you notice what floats OVER the canvas without being
+   * inside it: the toolbar, and the setup hint, 320px wide in the middle of the board. Cross either
+   * one mid-drag and the canvas fires mouseleave, so the line being drawn vanished and the card being
+   * moved dropped where it crossed. Nothing said why, and the same drag along a clear path worked,
+   * which is the worst kind of intermittent — you conclude the dot is broken rather than that your
+   * route was.
+   *
+   * The pointer belongs to the gesture from press to release. These listeners live on the window for
+   * exactly that long, so what the cursor passes over on the way is not an event at all. Escape is
+   * the cancel, because a cancel should be something you do rather than something you stray into.
+   *
+   * The handlers are reached through a ref that every render reassigns, so a gesture always runs
+   * against the current render's state rather than whatever was true when the mouse went down.
+   */
+  const gestureRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void; cancel: () => void }>({
+    move: () => {},
+    up: () => {},
+    cancel: () => {},
+  })
+  const releaseGesture = useRef<() => void>(() => {})
+  const gestureHeld = useRef(false)
+  const captureGesture = () => {
+    if (gestureHeld.current) return
+    gestureHeld.current = true
+    const move = (e: MouseEvent) => gestureRef.current.move(e)
+    // Release the pointer BEFORE running the handler: a handler that throws must not leave the
+    // window listening forever, with every later mousemove redrawing a line nobody is drawing.
+    const up = (e: MouseEvent) => {
+      releaseGesture.current()
+      gestureRef.current.up(e)
+    }
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // Only bound while the button is down, so Escape here is unambiguously "abandon this drag"
+      // and must not also close whatever panel is open behind it.
+      e.stopPropagation()
+      releaseGesture.current()
+      gestureRef.current.cancel()
+    }
+    releaseGesture.current = () => {
+      gestureHeld.current = false
+      window.removeEventListener('mousemove', move, true)
+      window.removeEventListener('mouseup', up, true)
+      window.removeEventListener('keydown', key, true)
+    }
+    window.addEventListener('mousemove', move, true)
+    window.addEventListener('mouseup', up, true)
+    window.addEventListener('keydown', key, true)
+  }
+  // Leaving the campaign mid-drag must not leave the listeners behind on the window.
+  useEffect(() => () => releaseGesture.current(), [])
   const startConnect = (e: ReactMouseEvent, from: string) => {
     if (spaceHeld.current) return
     e.stopPropagation()
@@ -2139,6 +2204,7 @@ export function FlowsView() {
     const cr = cv.getBoundingClientRect()
     drawingFrom.current = from
     connectStart.current = { x: e.clientX, y: e.clientY }
+    captureGesture()
     setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
   }
   const startDrag = (e: ReactMouseEvent, id: string) => {
@@ -2157,6 +2223,7 @@ export function FlowsView() {
     const selSet = new Set(selIds)
     // Move only nodes whose parent isn't ALSO in the drag — a child inside a moving parent's
     // transform is carried along, so moving its own pos too would double it.
+    captureGesture()
     const moveIds = selIds.filter((i) => { const p = nodeParent.get(i); return !(p && selSet.has(p)) })
     const moveSet = new Set(moveIds)
     // Connectors, though, must track every node that visually shifts: the moved nodes plus the
@@ -5685,6 +5752,7 @@ export function FlowsView() {
     if (!cr) return
     addDrag.current = { from, at }
     drawingFrom.current = from
+    captureGesture()
     setPickAt(null)
     setSel(null)
     setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
@@ -8860,6 +8928,211 @@ export function FlowsView() {
     </>
   )
 
+  /**
+   * THE BOARD'S POINTER GESTURES. Bound to the window for the length of one press (captureGesture
+   * says why), and reassigned on every render so a drag acts on the state of the frame it is
+   * happening in rather than the frame it started in.
+   *
+   * The canvas rect is read from the ref instead of the event's currentTarget: on the window that is
+   * the window, and every coordinate here is canvas-relative.
+   */
+  gestureRef.current = {
+    move: (e) => {
+      const cv = canvasRef.current
+      if (!cv) return
+      if (drawingFrom.current) {
+        const cr = cv.getBoundingClientRect()
+        setDrawing({ from: drawingFrom.current, x: e.clientX - cr.left, y: e.clientY - cr.top })
+        // What would this land on? Anything but the card we started from.
+        const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)
+          ?.closest('.flow-node[data-node-id]') as HTMLElement | null
+        const id = over?.dataset.nodeId ?? null
+        setConnectOver(id && id !== drawingFrom.current ? id : null)
+      } else if (dragging.current) {
+        // Read the pointer here, apply it on the next frame. Everything below is deferred so
+        // that a burst of moves inside one frame costs one render, not one render each.
+        const px = e.clientX
+        const py = e.clientY
+        dragMovedRef.current = true
+        scheduleGesture(() => {
+          const d = dragging.current
+          if (!d) return
+          const scale = zoomRef.current / 100
+          const dx = (px - d.x) / scale
+          const dy = (py - d.y) / scale
+          setPos((prev) => {
+            const next = { ...prev }
+            d.ids.forEach((i) => {
+              next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
+            })
+            return next
+          })
+          // Move the connectors in lockstep with the cards this same commit (rect remeasure is
+          // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
+          // visualSet includes carried children so their edges track without moving their pos.
+          setDragDelta({ ids: d.visualSet, dx, dy })
+        })
+      } else if (pan.current) {
+        const px = e.clientX
+        const py = e.clientY
+        scheduleGesture(() => {
+          const p = pan.current
+          if (!p) return
+          setOffset({ x: p.ox + (px - p.x), y: p.oy + (py - p.y) })
+        })
+      } else if (marqueeStart.current) {
+        // The rect is read synchronously: the deferred frame runs after the pointer has moved on.
+        const r = cv.getBoundingClientRect()
+        const px = e.clientX
+        const py = e.clientY
+        scheduleGesture(() => {
+          const m = marqueeStart.current
+          if (!m) return
+          setMarquee({ x0: m.x0, y0: m.y0, x1: px - r.left, y1: py - r.top })
+        })
+      }
+    },
+    up: (e) => {
+      const cv = canvasRef.current
+      if (!cv) return
+      // The last move of a gesture is usually still pending a frame. Apply it now, while
+      // dragging/pan are still set — everything below clears them, and a drop that ran a
+      // frame behind would leave cards short of where they were released.
+      flushGesture()
+      if (addDrag.current) {
+        const cr = cv.getBoundingClientRect()
+        setAddMenu({ at: addDrag.current.at, from: addDrag.current.from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+        setAddSearch('')
+        addDrag.current = null
+        drawingFrom.current = null
+        setDrawing(null)
+        setConnectOver(null)
+      } else if (drawingFrom.current) {
+        const from = drawingFrom.current
+        const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.flow-node[data-node-id]') as HTMLElement | null
+        const to = el?.dataset.nodeId
+        // A CLICK ON THE PORT, landing on nothing, used to be the one gesture on the board that
+        // did nothing at all — you pressed a dot that says "draw a connection", let go, and the
+        // canvas simply forgot it. Treat it as the question it obviously is (what comes next
+        // from this card?) and answer it with the channel picker, anchored to the port.
+        // A drag that moved and landed on nothing still cancels: that is the escape hatch.
+        // `to === from` is the normal reading of a click: the port sits ON its own card, so the
+        // element under the pointer resolves back to the source. It is not a self-connection.
+        const down = connectStart.current
+        connectStart.current = null
+        if ((!to || to === from) && down && Math.abs(e.clientX - down.x) < 5 && Math.abs(e.clientY - down.y) < 5) {
+          const cr = cv.getBoundingClientRect()
+          setAddMenu({ at: viewing ? viewDelivs.length : nodes.length, from, x: e.clientX - cr.left, y: e.clientY - cr.top })
+          setAddSearch('')
+          drawingFrom.current = null
+          setDrawing(null)
+          setConnectOver(null)
+          return
+        }
+        // Direction carries meaning: a context card flows INTO the campaign. Dropping the
+        // campaign onto a card is the same statement backwards, so accept it and store it
+        // the right way round rather than making the user guess which end to start from.
+        /**
+         * THE CAMPAIGN AND A CHANNEL, either way round, is a RECONNECTION and never a wire —
+         * and it has to be read here, off the raw endpoints, BEFORE the reversal below.
+         *
+         * That reversal is for context cards, which flow INTO the campaign, so it rewrites
+         * `campaign → X` as `X → campaign`. A channel is an OUTPUT: the campaign flows into it.
+         * So the reversal turned a reconnect gesture into a backwards wire, and the check that
+         * was supposed to catch it tested `pair.from === 'campaign'` on the ALREADY-REVERSED
+         * pair, which can never be true. The result was a stored `channel → campaign`
+         * connector, drawn on the board, saying nothing the derived line did not already say,
+         * while the channel stayed cut off. Dragging the line back did not put it back.
+         *
+         * Restoring the derived line is the whole of what this gesture does; there is no
+         * connector to store either way, which is why an already-connected channel falls
+         * through to the same no-op rather than gaining a duplicate.
+         */
+        const delivEnd = from === 'campaign' ? to : to === 'campaign' ? from : undefined
+        if (delivEnd && viewDelivs.some((d) => d.key === delivEnd)) {
+          if (detached.includes(delivEnd)) setChannelDetached(delivEnd, false)
+          drawingFrom.current = null
+          setDrawing(null)
+          setConnectOver(null)
+          return
+        }
+        const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
+        if (pair && pair.from !== pair.to) {
+          // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
+          // already bound to a different brand is refused (attachToCampaign says why), and a
+          // refused wire must not be left on the board contradicting the binding.
+          const ok = pair.to === 'campaign' ? attachToCampaign(pair.from) : true
+          // A card wired to a DELIVERABLE or a POST informs just that one. The edge was already
+          // drawable and already saved; nothing acted on it, so it looked connected and changed
+          // nothing about the copy.
+          if (ok && pair.to !== 'campaign' && isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
+          if (ok) setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
+        }
+        drawingFrom.current = null
+        setDrawing(null)
+        setConnectOver(null)
+      }
+      if (marqueeStart.current) {
+        const r = cv.getBoundingClientRect()
+        const s = marqueeStart.current
+        const ex = e.clientX - r.left
+        const ey = e.clientY - r.top
+        const l = Math.min(s.x0, ex)
+        const tp = Math.min(s.y0, ey)
+        const rr = Math.max(s.x0, ex)
+        const bt = Math.max(s.y0, ey)
+        const ids = new Set<string>()
+        cv.querySelectorAll('.flow-node[data-node-id]').forEach((el) => {
+          const nr = el.getBoundingClientRect()
+          if (nr.left - r.left < rr && nr.right - r.left > l && nr.top - r.top < bt && nr.bottom - r.top > tp) {
+            const id = (el as HTMLElement).dataset.nodeId
+            if (id) ids.add(id)
+          }
+        })
+        // Catch one card of a group and you have caught the group. Without this a marquee
+        // could take half of one, and the next drag would pull that half out of its shape.
+        const picked = expandToGroups(groupsRef.current, ids)
+        setSelected(picked)
+        if (picked.size) setSelEdge(null)
+        marqueeStart.current = null
+        setMarquee(null)
+      }
+      // A drag that actually moved cards records its pre-drag layout for undo.
+      if (dragging.current && dragMovedRef.current && dragSnapRef.current) {
+        undoStackRef.current.push({ pos: dragSnapRef.current, rows: null })
+        if (undoStackRef.current.length > 40) undoStackRef.current.shift()
+        redoStackRef.current = []
+      }
+      dragSnapRef.current = null
+      dragMovedRef.current = false
+      pan.current = null
+      dragging.current = null
+      // Drag done: clearing dragDelta re-runs the remeasure effect to lock in final geometry.
+      if (dragDelta) setDragDelta(null)
+    },
+    /**
+     * Escape mid-drag: put everything back the way it was. A cancelled card drag returns the cards
+     * to where they were picked up, which is what makes Escape safe to reach for — a cancel that
+     * left them halfway would be a move you then had to undo.
+     */
+    cancel: () => {
+      dropGesture()
+      if (dragging.current && dragSnapRef.current) setPos(dragSnapRef.current)
+      dragging.current = null
+      dragSnapRef.current = null
+      dragMovedRef.current = false
+      pan.current = null
+      marqueeStart.current = null
+      drawingFrom.current = null
+      connectStart.current = null
+      addDrag.current = null
+      setMarquee(null)
+      setDrawing(null)
+      setConnectOver(null)
+      if (dragDelta) setDragDelta(null)
+    },
+  }
+
   return (
     <div
       className={`flow${chatCollapsed && !flowAssetsOpen ? ' chat-collapsed' : ''}${briefCollapsed ? ' brief-collapsed' : ''}${selected.size > 1 ? ' has-multi' : ''}${hasHub ? ' has-hub' : ''}`}
@@ -9181,13 +9454,14 @@ export function FlowsView() {
             // Hand tool (or held space) pans; arrow tool drags a selection box on empty canvas.
             const t = e.target as HTMLElement
             // Connect tool: press on a card, drag to another, release to link them (drops the line
-            // via the same onMouseUp that the node "+" handle uses).
+            // through the same gesture handlers the node "+" handle uses).
             if (tool === 'connect' && !spaceHeld.current) {
               const nodeEl = t.closest('.flow-node[data-node-id]') as HTMLElement | null
               const from = nodeEl?.dataset.nodeId
               if (from) {
                 const cr = e.currentTarget.getBoundingClientRect()
                 drawingFrom.current = from
+                captureGesture()
                 setDrawing({ from, x: e.clientX - cr.left, y: e.clientY - cr.top })
               }
               return
@@ -9195,197 +9469,18 @@ export function FlowsView() {
             const onBackground = !t.closest('.flow-node, .flow-brief-card, button, input, textarea, select')
             if (tool === 'pan' || spaceHeld.current) {
               pan.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y }
+              captureGesture()
             } else if (onBackground) {
               const r = e.currentTarget.getBoundingClientRect()
               const x = e.clientX - r.left
               const y = e.clientY - r.top
               marqueeStart.current = { x0: x, y0: y }
+              captureGesture()
               setMarquee({ x0: x, y0: y, x1: x, y1: y })
               setSelected(new Set())
               setSel(null)
               setSelEdge(null)
             }
-          }}
-          onMouseMove={(e) => {
-            if (drawingFrom.current) {
-              const cr = e.currentTarget.getBoundingClientRect()
-              setDrawing({ from: drawingFrom.current, x: e.clientX - cr.left, y: e.clientY - cr.top })
-              // What would this land on? Anything but the card we started from.
-              const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)
-                ?.closest('.flow-node[data-node-id]') as HTMLElement | null
-              const id = over?.dataset.nodeId ?? null
-              setConnectOver(id && id !== drawingFrom.current ? id : null)
-            } else if (dragging.current) {
-              // Read the pointer here, apply it on the next frame. Everything below is deferred so
-              // that a burst of moves inside one frame costs one render, not one render each.
-              const px = e.clientX
-              const py = e.clientY
-              dragMovedRef.current = true
-              scheduleGesture(() => {
-                const d = dragging.current
-                if (!d) return
-                const scale = zoomRef.current / 100
-                const dx = (px - d.x) / scale
-                const dy = (py - d.y) / scale
-                setPos((prev) => {
-                  const next = { ...prev }
-                  d.ids.forEach((i) => {
-                    next[i] = { x: d.start[i].x + dx, y: d.start[i].y + dy }
-                  })
-                  return next
-                })
-                // Move the connectors in lockstep with the cards this same commit (rect remeasure is
-                // frozen during the drag). dx/dy are the total offset from drag start, in canvas units.
-                // visualSet includes carried children so their edges track without moving their pos.
-                setDragDelta({ ids: d.visualSet, dx, dy })
-              })
-            } else if (pan.current) {
-              const px = e.clientX
-              const py = e.clientY
-              scheduleGesture(() => {
-                const p = pan.current
-                if (!p) return
-                setOffset({ x: p.ox + (px - p.x), y: p.oy + (py - p.y) })
-              })
-            } else if (marqueeStart.current) {
-              // The rect is read synchronously: currentTarget is only valid inside the handler.
-              const r = e.currentTarget.getBoundingClientRect()
-              const px = e.clientX
-              const py = e.clientY
-              scheduleGesture(() => {
-                const m = marqueeStart.current
-                if (!m) return
-                setMarquee({ x0: m.x0, y0: m.y0, x1: px - r.left, y1: py - r.top })
-              })
-            }
-          }}
-          onMouseUp={(e) => {
-            // The last move of a gesture is usually still pending a frame. Apply it now, while
-            // dragging/pan are still set — everything below clears them, and a drop that ran a
-            // frame behind would leave cards short of where they were released.
-            flushGesture()
-            if (addDrag.current) {
-              const cr = e.currentTarget.getBoundingClientRect()
-              setAddMenu({ at: addDrag.current.at, from: addDrag.current.from, x: e.clientX - cr.left, y: e.clientY - cr.top })
-              setAddSearch('')
-              addDrag.current = null
-              drawingFrom.current = null
-              setDrawing(null)
-              setConnectOver(null)
-            } else if (drawingFrom.current) {
-              const from = drawingFrom.current
-              const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.flow-node[data-node-id]') as HTMLElement | null
-              const to = el?.dataset.nodeId
-              // A CLICK ON THE PORT, landing on nothing, used to be the one gesture on the board that
-              // did nothing at all — you pressed a dot that says "draw a connection", let go, and the
-              // canvas simply forgot it. Treat it as the question it obviously is (what comes next
-              // from this card?) and answer it with the channel picker, anchored to the port.
-              // A drag that moved and landed on nothing still cancels: that is the escape hatch.
-              // `to === from` is the normal reading of a click: the port sits ON its own card, so the
-              // element under the pointer resolves back to the source. It is not a self-connection.
-              const down = connectStart.current
-              connectStart.current = null
-              if ((!to || to === from) && down && Math.abs(e.clientX - down.x) < 5 && Math.abs(e.clientY - down.y) < 5) {
-                const cr = e.currentTarget.getBoundingClientRect()
-                setAddMenu({ at: viewing ? viewDelivs.length : nodes.length, from, x: e.clientX - cr.left, y: e.clientY - cr.top })
-                setAddSearch('')
-                drawingFrom.current = null
-                setDrawing(null)
-                setConnectOver(null)
-                return
-              }
-              // Direction carries meaning: a context card flows INTO the campaign. Dropping the
-              // campaign onto a card is the same statement backwards, so accept it and store it
-              // the right way round rather than making the user guess which end to start from.
-              /**
-               * THE CAMPAIGN AND A CHANNEL, either way round, is a RECONNECTION and never a wire —
-               * and it has to be read here, off the raw endpoints, BEFORE the reversal below.
-               *
-               * That reversal is for context cards, which flow INTO the campaign, so it rewrites
-               * `campaign → X` as `X → campaign`. A channel is an OUTPUT: the campaign flows into it.
-               * So the reversal turned a reconnect gesture into a backwards wire, and the check that
-               * was supposed to catch it tested `pair.from === 'campaign'` on the ALREADY-REVERSED
-               * pair, which can never be true. The result was a stored `channel → campaign`
-               * connector, drawn on the board, saying nothing the derived line did not already say,
-               * while the channel stayed cut off. Dragging the line back did not put it back.
-               *
-               * Restoring the derived line is the whole of what this gesture does; there is no
-               * connector to store either way, which is why an already-connected channel falls
-               * through to the same no-op rather than gaining a duplicate.
-               */
-              const delivEnd = from === 'campaign' ? to : to === 'campaign' ? from : undefined
-              if (delivEnd && viewDelivs.some((d) => d.key === delivEnd)) {
-                if (detached.includes(delivEnd)) setChannelDetached(delivEnd, false)
-                drawingFrom.current = null
-                setDrawing(null)
-                setConnectOver(null)
-                return
-              }
-              const pair = to === 'campaign' ? { from, to } : from === 'campaign' && to ? { from: to, to: 'campaign' } : to ? { from, to } : null
-              if (pair && pair.from !== pair.to) {
-                // Attach BEFORE drawing the edge: wiring a second Brand card into a campaign that is
-                // already bound to a different brand is refused (attachToCampaign says why), and a
-                // refused wire must not be left on the board contradicting the binding.
-                const ok = pair.to === 'campaign' ? attachToCampaign(pair.from) : true
-                // A card wired to a DELIVERABLE or a POST informs just that one. The edge was already
-                // drawable and already saved; nothing acted on it, so it looked connected and changed
-                // nothing about the copy.
-                if (ok && pair.to !== 'campaign' && isContextNode(pair.from)) attachToTarget(pair.from, pair.to)
-                if (ok) setConnectors((c) => (c.some((x) => x.from === pair.from && x.to === pair.to) ? c : [...c, pair]))
-              }
-              drawingFrom.current = null
-              setDrawing(null)
-              setConnectOver(null)
-            }
-            if (marqueeStart.current) {
-              const r = e.currentTarget.getBoundingClientRect()
-              const s = marqueeStart.current
-              const ex = e.clientX - r.left
-              const ey = e.clientY - r.top
-              const l = Math.min(s.x0, ex)
-              const tp = Math.min(s.y0, ey)
-              const rr = Math.max(s.x0, ex)
-              const bt = Math.max(s.y0, ey)
-              const ids = new Set<string>()
-              e.currentTarget.querySelectorAll('.flow-node[data-node-id]').forEach((el) => {
-                const nr = el.getBoundingClientRect()
-                if (nr.left - r.left < rr && nr.right - r.left > l && nr.top - r.top < bt && nr.bottom - r.top > tp) {
-                  const id = (el as HTMLElement).dataset.nodeId
-                  if (id) ids.add(id)
-                }
-              })
-              // Catch one card of a group and you have caught the group. Without this a marquee
-              // could take half of one, and the next drag would pull that half out of its shape.
-              const picked = expandToGroups(groupsRef.current, ids)
-              setSelected(picked)
-              if (picked.size) setSelEdge(null)
-              marqueeStart.current = null
-              setMarquee(null)
-            }
-            // A drag that actually moved cards records its pre-drag layout for undo.
-            if (dragging.current && dragMovedRef.current && dragSnapRef.current) {
-              undoStackRef.current.push({ pos: dragSnapRef.current, rows: null })
-              if (undoStackRef.current.length > 40) undoStackRef.current.shift()
-              redoStackRef.current = []
-            }
-            dragSnapRef.current = null
-            dragMovedRef.current = false
-            pan.current = null
-            dragging.current = null
-            // Drag done: clearing dragDelta re-runs the remeasure effect to lock in final geometry.
-            if (dragDelta) setDragDelta(null)
-          }}
-          onMouseLeave={() => {
-            flushGesture()
-            pan.current = null
-            marqueeStart.current = null
-            dragging.current = null
-            drawingFrom.current = null
-            connectStart.current = null
-            addDrag.current = null
-            setMarquee(null)
-            setDrawing(null)
-            if (dragDelta) setDragDelta(null)
           }}
         >
           <svg className="flow-edges" width="100%" height="100%">
