@@ -23,6 +23,22 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.47',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Sharing a campaign is now one click. Open Share and the link is already there, ready to copy. It used to ask you to choose a role from two cards, press Create, and then press Copy, which is three decisions and two clicks to reach the one thing you opened the dialog for.',
+          'A campaign keeps one link, not a growing pile of them. Every press of Create used to mint another, and they were listed as bare ids like m2x9k1_4b7q, so nobody could tell which link had gone to whom, and revoking the right one was a guess. Reopening the dialog, switching access and switching back all hand you back the same link now.',
+          'Choosing what the link can do is a two-option switch under it: Can view, or Can edit. It sits after the link rather than in front of it, and it starts on Can view, so handing out editing rights is something you do on purpose.',
+          'Viewers see the campaign as it stands, without you having to think about it. A shared link shows a snapshot taken when you shared, which used to mean noticing a Refresh button and knowing why it was there. Opening the dialog now brings the snapshot up to date on its own.',
+          'Stop sharing replaces Revoke, and it only stops the link you are looking at. If you handed out a Can view link and a Can edit link, stopping one leaves the other working. Any extra links from before are still listed so you can revoke them.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.46',
     dateLabel: 'August 6, 2026',
     groups: [
