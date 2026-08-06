@@ -11544,6 +11544,23 @@ button.mf-open:focus-visible,
   border-style: solid;
   background: var(--accent-soft);
 }
+/* The grab band around the frame. Sized in CanvasView (GROUP_RIMS) from the same two constants
+   that size the frame, so the two can't drift. Only the ring takes the mouse: the interior stays
+   pass-through, so a click inside still reaches the card under it or the canvas between cards. */
+.cv-group-rim {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+}
+.cv-group-rim:active {
+  cursor: grabbing;
+}
+/* Hovering the band lights the whole border, so the handle says it is one rather than having to
+   be found. On the parent, not the band, so the four rims never double-tint at the corners.
+   After .selected, so a selected group's accent border survives the hover. */
+.cv-group:has(.cv-group-rim:hover) {
+  border-color: var(--accent);
+}
 /* Sized to its label, not to the frame — a full-width strip would sit over any
    card that happens to be just above the group and steal its clicks. */
 .cv-group-head {

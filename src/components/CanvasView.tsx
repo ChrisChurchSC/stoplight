@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { GROUP_HEAD, GROUP_PAD, GROUP_RIMS } from '../domain/groupFrame'
 import { applyBreakStatus, breakScopeKey, coherenceContentHash, resolveBreaks, type CoherenceBreak } from '../domain/breaks'
 import { CHANNELS, resolveChannelId } from '../domain/channels'
 import { emailToolFromRoster } from '../domain/emailTools'
@@ -86,10 +87,9 @@ const BAND_BOTTOM_PAD = 120
 const AUD_Y = 20
 const MSG_Y = 220
 
-// A group's frame: the breathing room drawn around its members' bounding box, and
-// the header strip above it that carries the name and doubles as a drag handle.
-const GROUP_PAD = 22
-const GROUP_HEAD = 30
+// A group's frame: the breathing room drawn around its members' bounding box, the header strip
+// above it that carries the name, and the band around the edge you grab to move the whole group.
+// In domain/groupFrame so the rim can be tested without standing up a canvas.
 
 // Hand-placed card positions persist per canvas, so a card you drag stays exactly
 // where you dropped it across re-layouts, reloads, and canvas switches.
@@ -1717,6 +1717,35 @@ export function CanvasView({ liveScope = false }: { liveScope?: boolean } = {}) 
             const on = group.ids.some((id) => multiSel.has(id))
             return (
               <div key={group.id} className={`cv-group${on ? ' selected' : ''}`} style={{ left: x, top: y, width: w, height: h }}>
+                {/* The border band, made grabbable. Dragging a member card already moved the whole
+                    group, but the frame itself was the one part of a group that looked like a
+                    handle and was not one: the box is pass-through, so grabbing the dashed edge
+                    fell straight through to the canvas and started a marquee instead. The only
+                    handle was the header, which is sized to its label and so is a small target
+                    that shrinks with zoom.
+
+                    Running the full width is safe here in a way it was not for the header: group
+                    frames render before cards and neither sets a z-index, so a card overlapping
+                    the rim paints above it and keeps its own clicks. Rendered before the header
+                    so the header still wins the row it shares, and stays the place you rename. */}
+                {GROUP_RIMS.map((rim) => (
+                  <div
+                    key={rim.edge}
+                    className="cv-group-rim"
+                    style={rim.style}
+                    title={`${group.name}: drag to move all ${group.ids.length} cards`}
+                    onMouseDown={(e) => {
+                      if (renaming === group.id) return
+                      startGroupDrag(e, group)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (suppressClick.current) return
+                      setSelected(null)
+                      setMultiSel(new Set(group.ids))
+                    }}
+                  />
+                ))}
                 <div
                   className="cv-group-head"
                   style={{ height: GROUP_HEAD }}
