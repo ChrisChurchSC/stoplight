@@ -50,9 +50,28 @@ export function madeFrom(args: {
    * card below is a fallback rather than a nicety.
    */
   brandRefId?: string
+  /**
+   * THE AUDIENCE THE ROW ITSELF NAMES, when no card and no pin name one.
+   *
+   * Audience is the only kind with a plain-string mirror on the asset — `row.audience` — and half
+   * the app writes it: the campaign canvas sets it from the asset inspector, seeding picks the
+   * brand's first segment, ingest classifies into it. None of those mint a reference or a card,
+   * because the string IS the field they are setting. So an asset can plainly carry an audience,
+   * be shown under it on the canvas, and have nothing here for this column to find.
+   *
+   * `refId` is the segment that name resolves to, when it resolves to one, so the chip is a real
+   * entry the picker can change rather than a dead label. It is absent for an audience typed or
+   * ingested as a name the library has no record of — which is a true thing to say about the row,
+   * and better said than left blank.
+   *
+   * A CARD STILL WINS, which is the opposite of brand above and right for the same reason: the
+   * binding is brand's most specific answer, and a wire is audience's. This is the fallback for
+   * when nothing was wired at all.
+   */
+  rowAudience?: { refId?: string; label: string }
   nameOf: (kind: CanvasObjectKind, refId: string) => string | undefined
 }): MadeFromEntry[] {
-  const { kinds, cards, references, brandRefId, nameOf } = args
+  const { kinds, cards, references, brandRefId, rowAudience, nameOf } = args
   const out: MadeFromEntry[] = []
 
   for (const kind of kinds) {
@@ -91,6 +110,10 @@ export function madeFrom(args: {
       // Connected and holding nothing. It still shows, because a wired card with no record picked is
       // reaching the writer with nothing, and that is the gap this column exists to make visible.
       out.push({ kind, label: '', cardId: mine[0].id, primary: true })
+    } else if (kind === 'audience' && rowAudience?.label) {
+      // Nothing wired, but the row names one anyway. No cardId: there is no card to open, and
+      // claiming one would send the inspector after a card that does not exist.
+      out.push({ kind, refId: rowAudience.refId, label: rowAudience.label, primary: true })
     }
 
     // Everything else of this kind that reaches the asset. Deduped by record: two Voice cards naming
