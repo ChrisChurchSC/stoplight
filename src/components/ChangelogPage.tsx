@@ -23,6 +23,36 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.43',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A group on the campaign canvas can be moved by its frame. Grab the dashed border anywhere along its edge and the whole group comes with you. Dragging a card inside a group already moved all of it, but the frame was the one part that looked like a handle and was not one: the box is drawn behind its cards and passes clicks through, so taking hold of the edge fell to the canvas and started a selection rectangle. The only real handle was the name at the top left, which is as wide as the name and shrinks as you zoom out. The same change landed on the other canvas in v1.39; this is the board most of the work happens on.',
+          'Hovering the edge lights the border and the cursor becomes a hand. The band scales with the zoom, so it stays on the border it is drawing rather than drifting inside the frame at 50% or hanging outside it at 200%.',
+          'The inside of a frame still belongs to what is under it: a click in the middle of a group reaches the card you clicked, and a drag through the space between its cards still draws a selection rectangle.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.42',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The ✕ on a connector deletes it. It never has. The ✕ is drawn on top of the line it belongs to, but it was not taking the mouse: every press on it fell through to the line underneath, and clicking a line toggles it, so the line deselected itself and the ✕ vanished. It looked like a button that shrugged. The connection was still there every time. Deleting from the keyboard, with the line selected, always worked, which is why this was survivable rather than obvious.',
+          'Connector lines can be clicked where they run between cards. The card layer sat over the line layer, gaps and padding included, so a line crossing it could not be pointed at anywhere along its length, and a line you cannot select is a line you cannot delete. The line from the campaign to a channel was the worst of it: it runs between two cards for its whole length, and it is the one line that has always offered a ✕. Empty space between cards now falls through to whatever is under it, and a drag across it still draws a selection rectangle.',
+          'A channel that follows an asset can be cut loose from it. Adding a channel from an asset\'s "+" makes that channel come after it, and the line says so. That line was the one thing on the board recording a decision you could not change: it offered no ✕, and Delete said there was nothing to cut. The only way out was to delete the channel and add it again. Cutting it now leaves the channel, its assets and their copy exactly as they are, and it hangs off the campaign like every other channel.',
+          'Where cutting one loose would merge it into a channel of the same kind the campaign already has, the message says so before you go looking for the card. Cmd+Z puts it back.',
+          'A line with nothing behind it says so when you hover it, instead of only after you select it, find no ✕ and press Delete to be told. A post sits under its channel because it is one of that channel\'s assets, so there is no line there to cut, only a card to move or delete.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.41',
     dateLabel: 'August 6, 2026',
     groups: [

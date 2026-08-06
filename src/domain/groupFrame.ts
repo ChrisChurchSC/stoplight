@@ -34,12 +34,20 @@ export type RimEdge = 'top' | 'bottom' | 'left' | 'right'
  * between cards, where it starts a marquee. Widening any of these four to span the frame would
  * swallow both, and nothing would error.
  */
-export const GROUP_RIMS: { edge: RimEdge; style: RimStyle }[] = [
-  { edge: 'top', style: { top: 0, left: 0, right: 0, height: GROUP_HEAD + GROUP_PAD } },
-  { edge: 'bottom', style: { bottom: 0, left: 0, right: 0, height: GROUP_PAD } },
-  { edge: 'left', style: { top: 0, bottom: 0, left: 0, width: GROUP_PAD } },
-  { edge: 'right', style: { top: 0, bottom: 0, right: 0, width: GROUP_PAD } },
+export const rimsFor = (pad: number, head: number): { edge: RimEdge; style: RimStyle }[] => [
+  { edge: 'top', style: { top: 0, left: 0, right: 0, height: head + pad } },
+  { edge: 'bottom', style: { bottom: 0, left: 0, right: 0, height: pad } },
+  { edge: 'left', style: { top: 0, bottom: 0, left: 0, width: pad } },
+  { edge: 'right', style: { top: 0, bottom: 0, right: 0, width: pad } },
 ]
+
+/**
+ * Takes its measurements because the two boards do not share them: the campaign canvas pads by 20
+ * with a 26px header and SCALES both by its zoom, so a band fixed at this module's numbers would
+ * sit inside its own frame at 50% and hang outside it at 200%. The ring rule is the same on both,
+ * and it lives in one place; only the numbers differ.
+ */
+export const GROUP_RIMS = rimsFor(GROUP_PAD, GROUP_HEAD)
 
 /**
  * Does a rim cover this point, in frame-local coordinates?
