@@ -23,6 +23,36 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.41',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Pattern card now wears a band in its own colour, with a row of zigzag teeth cut along the band\'s lower edge, so it is the card you can find in a scan. A pattern is the shape the copy takes, and it is the one input meant to be pinned to a single asset, so it is the card you go looking for rather than one you read in a set.',
+          'Two lighter treatments came first, a wave across the head and then a thin zigzag around the whole card, and both dissolved into a faintly noisy border at board zoom while every other cue stayed identical to the neighbouring cards. A block of colour is the thing that carries across a board.',
+          'A Pattern card with nothing picked yet keeps the teeth and drops the band, so a card you have not filled in still reads as empty rather than as done.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.40',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Drag from a card\'s connection dot and the line now reaches wherever you take it. The board tracked a drag only while the cursor stayed over the canvas, and two things float above the canvas without being part of it: the toolbar, and the setup hint in the middle of the board. Crossing either one ended the gesture where you crossed it, so the line vanished and the cards never joined. The same drag along a clear route worked, which is why the dot read as unreliable rather than the route.',
+          'The same fix applies to moving a card. A card dragged over the toolbar used to drop where it crossed instead of where you let go.',
+          'Escape now cancels a drag in progress, and a cancelled card drag puts the cards back where you picked them up.',
+          'The connection dots no longer take clicks while they are invisible. Every card was ringed by four handles you could not see but could still hit, so pressing the canvas a few pixels off a card started a connection from it instead of a selection box, and the bottom handle of a stacked card sat underneath the top handle of the card below it.',
+          'While a line is in flight, every card shows its handles, so where it can land is visible for the whole gesture rather than only on the card you are already over.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.39',
     dateLabel: 'August 5, 2026',
     groups: [

@@ -8056,6 +8056,13 @@ button.mf-open:focus-visible,
   width: 13px; height: 13px; border-radius: 50%; cursor: crosshair;
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted);
   display: inline-flex; align-items: center; justify-content: center; opacity: 0;
+  /* AN INVISIBLE HANDLE MUST NOT TAKE THE POINTER. opacity:0 hides a thing without excusing it from
+     the hit test, so every card was ringed by four 26px targets you could not see: press the canvas
+     a few pixels off any card and you started a connection from it instead of a marquee, and the
+     bottom handle of a stacked card sat under the top handle of the card below, so reaching for one
+     drew from the other. Both read as the dots behaving at random. They come alive with the reveal
+     rules below and are inert the rest of the time, which is what "hidden" was always meant to say. */
+  pointer-events: none;
 }
 /* The offset centres the dot on the card's edge: half the width, plus the 1px border. Four sides now
    carry one, so the dot is small enough that four of them read as handles rather than as decoration.
@@ -8072,14 +8079,21 @@ button.mf-open:focus-visible,
   inset: -7px;
   border-radius: 50%;
 }
-.flow-note:hover .flow-note-port { opacity: 1; }
+.flow-note:hover .flow-note-port { opacity: 1; pointer-events: auto; }
 /* OUTPUT CARDS GET THE SAME HANDLES. A channel and a post were drop targets with no ports of their
    own: you could draw a line INTO one and never out of one, so the direction that carried the board
    forward was the one direction you could not draw. They are not .flow-note, so the reveal is keyed
    on .flow-node instead. Direct child only, so a post inside a channel does not light up the
    channel's ports as the cursor crosses it. */
 .flow-node:hover > .flow-out-port,
-.flow-canvas.connecting .flow-out-port { opacity: 1; }
+.flow-canvas.connecting .flow-out-port { opacity: 1; pointer-events: auto; }
+/* WHILE A LINE IS IN FLIGHT, every card shows its handles. The question the gesture asks is "where
+   can this land", and the answer was drawn only on the card you happened to already be over. Half
+   strength: they are marks on the map, not the one you are aiming at — the drop-target ring says
+   that. Live to the pointer, so releasing on a handle lands on its card rather than falling through
+   to the canvas and cancelling. */
+.flow-canvas.connecting .flow-note-port { opacity: 0.55; pointer-events: auto; }
+.flow-canvas.connecting .flow-node:hover .flow-note-port { opacity: 1; }
 .flow-note-port:hover { border-color: var(--accent); color: var(--accent); }
 /* Connect tool: crosshair over the whole canvas so it reads as "draw a link". user-select off so
    dragging across a card's text doesn't highlight it mid-connection. */
@@ -8348,11 +8362,14 @@ button.mf-open:focus-visible,
   z-index: 4;
   opacity: 0;
   transition: opacity 0.12s ease;
+  /* Same rule as .flow-note-port: hidden means hidden from the pointer too. */
+  pointer-events: none;
 }
 .flow-node:hover .flow-conn-port,
 .flow-node.sel .flow-conn-port,
 .flow-node.multi .flow-conn-port {
   opacity: 1;
+  pointer-events: auto;
 }
 /* "+" hanging off the right edge of an asset card: spawns a downstream deliverable (a journey
    step) that branches from this asset instead of the campaign. Absolutely positioned inside the
@@ -22294,47 +22311,120 @@ table.aud-sheet td.stick .aud-cell {
    it is the card you look for while scanning a board rather than one you read in a set. Uniform
    chrome made it the hardest card to find and the easiest to mistake for a Message.
 
-   Two departures, both earning their place: a repeating wave across the head (a pattern is a shape
-   that recurs, and it is the card's own icon at card scale), and a warm paper tint instead of the
-   grey, so it separates from the says-family cards it sits beside.
+   So the head is a FILLED BAND in the kind's tone, and the band's lower edge is a row of zigzag
+   teeth cut into the body. A pattern is a shape that recurs, so the card carries one along its
+   own edge rather than a picture of one.
+
+   TWO EARLIER ATTEMPTS, and why a filled band beat both. First a wave across the head, then a
+   stroked zigzag running the whole way round the card. Both failed the same way: a 1.6px line at
+   6px tall dissolves into a fuzzy edge at board zoom, so the card read as a rectangle with a
+   slightly noisy border, and every other cue (width, head layout, picker face) was still identical
+   to its neighbours. A field of colour is the thing that carries across a board; an edge treatment
+   is not. The teeth are FILLED triangles here for the same reason a stroked line failed.
+
+   The band is not the reserved signal: the campaign root is marked by a 2px accent hairline along
+   its top (`[data-role='brief']`), which a 26px block of the card's own hue cannot be mistaken for.
+   Breaking uniformity for one kind already has precedent in the yellow sticky.
    ============================================================================ */
 .flow-note[data-role='input'].flow-note-pattern {
-  /* Two periods of a sine over 22px. Black is arbitrary: this is used as a MASK, so only the
-     alpha channel is read and the stroke's colour never reaches the screen. */
-  --pattern-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='6' viewBox='0 0 22 6'%3E%3Cpath d='M0 4.5 Q 5.5 0.5 11 4.5 T 22 4.5' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
-  background: color-mix(in srgb, var(--note-tone) 5%, var(--surface-2));
-}
-/* THE WAVE, across the head: the card's own icon at card scale, repeated, so the motif IS
-   repetition rather than a picture of it.
+  /* Two teeth per tile, laid end to end so a tile meets its neighbour at a vertex and the seam is
+     invisible. Repeated rather than stretched: a stretched row would give a narrow card fat teeth
+     and a wide one thin ones, and the point is a constant beat.
 
-   Drawn as a MASK rather than a background image because the tone has to stay live: an SVG data
-   URI cannot read currentColor or a custom property, so a background-image wave would have to
-   hardcode #6d8b2f and would then keep drawing it after the card went unlinked and the rest of the
-   chrome went grey. Masking a plain background-color keeps one source of truth for the hue. */
-.flow-note[data-role='input'].flow-note-pattern::before {
+     Black is arbitrary. This is used as a MASK, so only the alpha channel is read and the fill's
+     colour never reaches the screen — which is the whole reason it is a mask and not a border-image.
+     An SVG data URI cannot read a custom property, so a border-image would have to hardcode #6d8b2f
+     and would keep drawing it after the card went unlinked and the rest of the chrome went grey. */
+  --zag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7' viewBox='0 0 14 7'%3E%3Cpath d='M0 0 L7 7 L14 0 Z' fill='%23000'/%3E%3C/svg%3E");
+  border-color: color-mix(in srgb, var(--note-tone) 34%, var(--border));
+}
+/* The warm paper tint under the band, so the card separates from the says-family cards it sits
+   beside even where the band is scrolled out of view.
+
+   ⚠️ `.attached` sets `background: var(--surface)` on every input card and is declared BELOW this
+   block, so the tint has to OUT-SPECIFY it rather than merely precede it — hence the second arm,
+   which is (0,4,0) against its (0,3,0). Without it the tint vanished the moment the card was wired
+   to the campaign, which is most of the time and is exactly when you want to spot it. */
+.flow-note[data-role='input'].flow-note-pattern,
+.flow-note[data-role='input'].flow-note-pattern.attached {
+  background: color-mix(in srgb, var(--note-tone) 7%, var(--surface-2));
+}
+/* THE BAND: one painted layer, masked by two mask layers that union — a solid slab covering
+   everything but the bottom 7px, and a strip of teeth along that last 7px.
+
+   ⚠️ It is a PSEUDO-ELEMENT, not the head itself. A mask applies to an element's whole rendering,
+   its children included, so masking the head directly also masked the label sitting on it: in the
+   linked state the slab happened to cover the text and hid the bug, and the unlinked state — teeth
+   only, no slab — erased the word PATTERN from the card completely. Painting the band behind the
+   head's content instead leaves the label unmasked in both.
+
+   `z-index: 0` on the head makes it the stacking context the -1 sits inside, so the band lands
+   above the card's tint and below its own label without depending on the card's transform. */
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head {
+  position: relative;
+  z-index: 0;
+  /* The same 3px gap under the label every other card has, plus the 7px the teeth eat. Declared
+     once for both states so picking a record does not shift the card's layout. */
+  padding: 7px 9px 10px;
+}
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  background-color: var(--note-tone);
-  opacity: .55;
-  -webkit-mask-image: var(--pattern-wave);
-  mask-image: var(--pattern-wave);
-  -webkit-mask-repeat: repeat-x;
-  mask-repeat: repeat-x;
-  -webkit-mask-size: 22px 6px;
-  mask-size: 22px 6px;
-  pointer-events: none;
-  border-radius: var(--radius-sm) 0 0 0;
+  inset: 0;
+  z-index: -1;
+  /* Mixed toward black rather than used raw: white on #6d8b2f is 3.9:1, which fails AA for a 10px
+     uppercase label. At 82% it is 5.4:1. --note-tone is a fixed hex in OBJECT_META rather than a
+     theme token, so this lands the same in both themes. */
+  background-color: color-mix(in srgb, var(--note-tone) 82%, #000);
+  /* Inside a 1px top border and a 3px left spine, so the card's 7px arc reads as 4px on the left
+     and 6px on the right. Square bottom corners: that edge is teeth. */
+  border-radius: 4px 6px 0 0;
+  -webkit-mask-image: linear-gradient(#000, #000), var(--zag);
+  mask-image: linear-gradient(#000, #000), var(--zag);
+  -webkit-mask-repeat: no-repeat, repeat-x;
+  mask-repeat: no-repeat, repeat-x;
+  -webkit-mask-position: top left, bottom left;
+  mask-position: top left, bottom left;
+  -webkit-mask-size: 100% calc(100% - 7px), 14px 7px;
+  mask-size: 100% calc(100% - 7px), 14px 7px;
 }
-/* The spine and the wave are the same tone, so an unlinked card must quiet BOTH or the head keeps
-   reading as filled in. Matches the :not(.linked) spine rule above. */
-.flow-note[data-role='input'].flow-note-pattern:not(.linked) {
+/* On the band, not under it. Each of these has a colour of its own further up the file (the glyph
+   and label take --note-tone, the comment count takes --accent), and all three are illegible on a
+   fill of the same hue. */
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head .flow-note-kind,
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head .flow-note-ic,
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head .flow-note-cmt {
+  color: #fff;
+}
+/* NOTHING PICKED YET: the band goes away and only the teeth are left, so the card reads as empty
+   like every other unlinked input rather than as a filled-in one in a quieter colour.
+   Dropping the slab layer from the mask is what removes the band; the teeth keep the card
+   identifiable while it is still blank. A grey band was the first try and could not work: the
+   label sits ON it, and --border-strong is near-white in the light theme and near-black in the
+   dark one, so no single label colour is legible in both. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked),
+.flow-note[data-role='input'].flow-note-pattern:not(.linked).attached {
   background: var(--surface-2);
 }
-.flow-note[data-role='input'].flow-note-pattern:not(.linked)::before {
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) { border-color: var(--border); }
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head::before {
   background-color: var(--border-strong);
-  opacity: 1;
+  -webkit-mask-image: var(--zag);
+  mask-image: var(--zag);
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+  -webkit-mask-position: bottom left;
+  mask-position: bottom left;
+  -webkit-mask-size: 14px 7px;
+  mask-size: 14px 7px;
+}
+/* Back to the muted pair the other unlinked inputs use, now that there is no fill to sit on. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head .flow-note-kind,
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head .flow-note-ic {
+  color: var(--text-faint);
+}
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head .flow-note-cmt {
+  color: var(--accent);
 }
 /* WHAT THE PATTERN IS, under the picker: the type, then the example line. Indented to the same 9px
    every other child of an input card carries. */
@@ -22405,7 +22495,7 @@ table.aud-sheet td.stick .aud-cell {
 /* .flow-note-port is revealed by `.flow-note:hover`, and the brief is not a .flow-note, so it needs
    its own reveal. Same behaviour, different ancestor. */
 .flow-node[data-role='brief']:hover .flow-brief-port,
-.flow-canvas.connecting .flow-brief-port { opacity: 1; }
+.flow-canvas.connecting .flow-brief-port { opacity: 1; pointer-events: auto; }
 
 /* ---- BRIEF: reclaims the full-width top edge the inputs just vacated ---- */
 .flow-node[data-role='brief'] {
