@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.40',
+    version: 'v1.44',
     dateLabel: 'August 6, 2026',
     groups: [
       {
@@ -33,6 +33,66 @@ const RELEASES: Release[] = [
           'It archives them rather than destroying them, so the answer to "that was not what I meant" is a restore instead of a rewrite. That is already what deleting a campaign does, one level up. Deleting a single asset is unchanged: it goes immediately, and undo covers it.',
           'A menu that runs out of items no longer scrolls the thing behind it. Reaching the end of a list used to hand the rest of the gesture to whatever it was covering, so the board or the page underneath moved while you were reading, and closing the menu revealed somewhere you had not meant to go. The channel picker was the worst of them: every asset type in one list is roughly seven screens inside a one screen window, so running off the end is the normal way to use it rather than an edge case.',
           'This covers the canvas side panels, the channel and record pickers, the audience and flight menus, the chat history menu, the tag picker, the library menus and the modals. Lists that sit in the page rather than over it are deliberately left alone, because a reader scrolling past one of those expects the page to carry on once the list is done.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.43',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A group on the campaign canvas can be moved by its frame. Grab the dashed border anywhere along its edge and the whole group comes with you. Dragging a card inside a group already moved all of it, but the frame was the one part that looked like a handle and was not one: the box is drawn behind its cards and passes clicks through, so taking hold of the edge fell to the canvas and started a selection rectangle. The only real handle was the name at the top left, which is as wide as the name and shrinks as you zoom out. The same change landed on the other canvas in v1.39; this is the board most of the work happens on.',
+          'Hovering the edge lights the border and the cursor becomes a hand. The band scales with the zoom, so it stays on the border it is drawing rather than drifting inside the frame at 50% or hanging outside it at 200%.',
+          'The inside of a frame still belongs to what is under it: a click in the middle of a group reaches the card you clicked, and a drag through the space between its cards still draws a selection rectangle.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.42',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The ✕ on a connector deletes it. It never has. The ✕ is drawn on top of the line it belongs to, but it was not taking the mouse: every press on it fell through to the line underneath, and clicking a line toggles it, so the line deselected itself and the ✕ vanished. It looked like a button that shrugged. The connection was still there every time. Deleting from the keyboard, with the line selected, always worked, which is why this was survivable rather than obvious.',
+          'Connector lines can be clicked where they run between cards. The card layer sat over the line layer, gaps and padding included, so a line crossing it could not be pointed at anywhere along its length, and a line you cannot select is a line you cannot delete. The line from the campaign to a channel was the worst of it: it runs between two cards for its whole length, and it is the one line that has always offered a ✕. Empty space between cards now falls through to whatever is under it, and a drag across it still draws a selection rectangle.',
+          'A channel that follows an asset can be cut loose from it. Adding a channel from an asset\'s "+" makes that channel come after it, and the line says so. That line was the one thing on the board recording a decision you could not change: it offered no ✕, and Delete said there was nothing to cut. The only way out was to delete the channel and add it again. Cutting it now leaves the channel, its assets and their copy exactly as they are, and it hangs off the campaign like every other channel.',
+          'Where cutting one loose would merge it into a channel of the same kind the campaign already has, the message says so before you go looking for the card. Cmd+Z puts it back.',
+          'A line with nothing behind it says so when you hover it, instead of only after you select it, find no ✕ and press Delete to be told. A post sits under its channel because it is one of that channel\'s assets, so there is no line there to cut, only a card to move or delete.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.41',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Pattern card now wears a band in its own colour, with a row of zigzag teeth cut along the band\'s lower edge, so it is the card you can find in a scan. A pattern is the shape the copy takes, and it is the one input meant to be pinned to a single asset, so it is the card you go looking for rather than one you read in a set.',
+          'Two lighter treatments came first, a wave across the head and then a thin zigzag around the whole card, and both dissolved into a faintly noisy border at board zoom while every other cue stayed identical to the neighbouring cards. A block of colour is the thing that carries across a board.',
+          'A Pattern card with nothing picked yet keeps the teeth and drops the band, so a card you have not filled in still reads as empty rather than as done.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.40',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Drag from a card\'s connection dot and the line now reaches wherever you take it. The board tracked a drag only while the cursor stayed over the canvas, and two things float above the canvas without being part of it: the toolbar, and the setup hint in the middle of the board. Crossing either one ended the gesture where you crossed it, so the line vanished and the cards never joined. The same drag along a clear route worked, which is why the dot read as unreliable rather than the route.',
+          'The same fix applies to moving a card. A card dragged over the toolbar used to drop where it crossed instead of where you let go.',
+          'Escape now cancels a drag in progress, and a cancelled card drag puts the cards back where you picked them up.',
+          'The connection dots no longer take clicks while they are invisible. Every card was ringed by four handles you could not see but could still hit, so pressing the canvas a few pixels off a card started a connection from it instead of a selection box, and the bottom handle of a stacked card sat underneath the top handle of the card below it.',
+          'While a line is in flight, every card shows its handles, so where it can land is visible for the whole gesture rather than only on the card you are already over.',
         ],
       },
     ],

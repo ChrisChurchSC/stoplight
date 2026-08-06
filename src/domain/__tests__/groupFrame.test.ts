@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GROUP_HEAD, GROUP_PAD, GROUP_RIMS, onRim } from '../groupFrame'
+import { GROUP_HEAD, GROUP_PAD, GROUP_RIMS, onRim, rimCovers, rimsFor } from '../groupFrame'
 
 /**
  * THE GRAB BAND MUST BE A RING, NOT A LID.
@@ -75,6 +75,30 @@ describe('a group frame’s grab band', () => {
       expect(style[edge]).toBe(0)
       // A band runs a fixed distance in from its edge; it never spans the axis it measures.
       expect(edge === 'top' || edge === 'bottom' ? style.height : style.width).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * THE OTHER BOARD SCALES ITS FRAME BY THE ZOOM, so the ring has to hold at whatever padding and
+   * header it is handed — not just at this module's two constants. Fixed numbers would put the band
+   * inside its own border at 50% and outside it at 200%, and at the small end the interior would be
+   * swallowed: a 20px pad at 10% zoom is 2px, and a band still 20px wide covers the cards.
+   */
+  it('stays a ring at any padding and header, including a zoomed frame', () => {
+    for (const [pad, head] of [[20, 26], [2, 2.6], [40, 52], [0.5, 1]]) {
+      const rims = rimsFor(pad, head)
+      const frame = { w: MEMBERS.w + pad * 2, h: MEMBERS.h + pad * 2 + head }
+      const covers = (x: number, y: number) => rims.some((r) => rimCovers(r.style, frame, x, y))
+      // The border it draws is taken...
+      expect(covers(0, 0)).toBe(true)
+      expect(covers(frame.w - 0.1, frame.h - 0.1)).toBe(true)
+      expect(covers(frame.w / 2, head / 2)).toBe(true)
+      // ...and the members' own box is not, anywhere in it.
+      const swallowed: string[] = []
+      for (let x = pad; x < frame.w - pad; x += 5) {
+        for (let y = head + pad; y < frame.h - pad; y += 5) if (covers(x, y)) swallowed.push(`${pad}@${x},${y}`)
+      }
+      expect(swallowed).toEqual([])
     }
   })
 })
