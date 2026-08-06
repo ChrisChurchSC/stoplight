@@ -12,6 +12,7 @@ import {
   type CardGroup,
 } from '../domain/cardGroups'
 import { cutForEdge, type EdgeCut } from '../domain/edgeCut'
+import { rimsFor } from '../domain/groupFrame'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
 import { directionForRow, downstreamTargets, reachesOutput, resolveBoardDirection, upstreamCardIds } from '../domain/boardResolve'
 import { edgeKey, onTrail, trailSide, trailThrough } from '../domain/cardTrail'
@@ -9688,8 +9689,8 @@ export function FlowsView() {
           )}
           {/* Group frames. Rendered BEFORE the stack and carrying no z-index of their own, so DOM
               order alone puts them behind the cards — a frame that painted over a card would take
-              the clicks meant for it. The box is pass-through for the same reason; only the name
-              strip takes the mouse, where it acts as the handle for dragging the whole group. */}
+              the clicks meant for it. The box is pass-through for the same reason; the name strip
+              and the band around the edge take the mouse, and both drag the whole group. */}
           {groupFrames.map(({ group, x, y, w, h }) => {
             const on = group.ids.some((id) => selected.has(id))
             // A group frame follows its cards off the trail, and dims only when NOT ONE member is
@@ -9702,6 +9703,32 @@ export function FlowsView() {
                 className={`flow-group${on ? ' sel' : ''}${offTrail ? ' off-trail' : ''}`}
                 style={{ left: x, top: y, width: w, height: h }}
               >
+                {/* The frame's edge is a handle. Dragging a member already moved the whole group,
+                    but the dashed border is the part that LOOKS like the handle and was not one:
+                    the box passes clicks through, so taking hold of it fell to the canvas and
+                    started a selection rectangle. The name strip was the only real handle, and it
+                    is only as wide as the name and shrinks with the zoom.
+
+                    Scaled by the zoom, like the frame itself, so the band stays ON the border it
+                    is drawing. Rendered before the head so the head keeps the row they share and
+                    stays the rename target. */}
+                {rimsFor(GROUP_PAD * (zoom / 100), GROUP_HEAD * (zoom / 100)).map((rim) => (
+                  <div
+                    key={rim.edge}
+                    className="flow-group-rim"
+                    style={rim.style}
+                    title={`${group.name}: drag to move all ${group.ids.length} cards together`}
+                    onMouseDown={(e) => {
+                      if (renamingGroup === group.id) return
+                      startDrag(e, group.ids[0])
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelEdge(null)
+                      setSelected(new Set(group.ids))
+                    }}
+                  />
+                ))}
                 <div
                   className="flow-group-head"
                   style={{ height: GROUP_HEAD * (zoom / 100) }}
