@@ -23,6 +23,27 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.38',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The Events channel now covers the events you do not host. A trade show booth, a conference talk, a premiere or launch night, a roundtable dinner and a meetup join screenings, panels, pop-ups and workshops in the Type dropdown and the Events palette. Every event type until now assumed you were the one running it, so standing at somebody else\'s trade show could only be filed as a workshop, or as a generic Other with the difference written in a note.',
+          'The events where somebody else assembled the room are briefed to reach rather than to persuade. A premiere, a booth and a conference talk all put you in front of people who were never on your list, so they sit in awareness. A private dinner sits in conversion instead: eight people who came to decide are not there to be educated.',
+          'A booth, a talk and a dinner ask for the copy they actually need. A booth wants a stand headline, what you are demoing, the offer and the badge-scan follow-up. A talk wants a title, an abstract, the audience takeaways and a speaker bio. Neither carries RSVP copy, because neither is something anyone can RSVP to. A dinner asks who else is at the table.',
+          'A meetup runs as a series rather than a single night, so a monthly community night is planned and costed as the standing commitment it is instead of as one evening\'s work.',
+        ],
+      },
+      {
+        tag: 'Fixed',
+        items: [
+          '"Pop-up / activation" can be started from the Events palette. It was the one event type you could choose from the Type dropdown on an asset that already existed but could never create, because it was the only one of the four with no entry in the palette it belonged to. Nothing said so: the type simply was not there to pick.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.37',
     dateLabel: 'August 5, 2026',
     groups: [
