@@ -3769,7 +3769,20 @@ export function FlowsView() {
      */
     const blocked = useTrafficStore.getState().copyBlockerFor(viewName)
     if (blocked) {
+      /**
+       * SAY IT WHERE THE BUTTON IS.
+       *
+       * setBrandNotice renders in Breadcrumb, and Breadcrumb is not mounted on this canvas. So the
+       * refusal was written to a component that is not on screen at the moment it happens: Generate
+       * did nothing, said nothing, and left every field empty. Reported from the iScribe walkthrough
+       * as the Generate button never populating anything, and read there as a broken API key, which
+       * it never was. The request is not the part that failed. It was never sent.
+       *
+       * The notice still goes to the store, because the other surfaces that call this do show it and
+       * it survives leaving the canvas. The toast is what makes it true HERE.
+       */
       useTrafficStore.getState().setBrandNotice(`${blocked} Nothing was changed.`)
+      showToast(blocked)
       return
     }
     setRegenerating(true)
