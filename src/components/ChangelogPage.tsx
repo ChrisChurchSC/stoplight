@@ -29,7 +29,9 @@ const RELEASES: Release[] = [
       {
         tag: 'Improved',
         items: [
-          'A Pattern card is now edged in a zigzag the whole way round, so it is the card you can find in a scan. A pattern is the shape the copy takes, and it is the one input meant to be pinned to a single asset, so it is the card you go looking for rather than one you read in a set. It used to carry a 6px wave across its head alone, which read as a decorated top rather than as the card\'s own shape and was easy to miss at board zoom.',
+          'A Pattern card now wears a band in its own colour, with a row of zigzag teeth cut along the band\'s lower edge, so it is the card you can find in a scan. A pattern is the shape the copy takes, and it is the one input meant to be pinned to a single asset, so it is the card you go looking for rather than one you read in a set.',
+          'Two lighter treatments came first, a wave across the head and then a thin zigzag around the whole card, and both dissolved into a faintly noisy border at board zoom while every other cue stayed identical to the neighbouring cards. A block of colour is the thing that carries across a board.',
+          'A Pattern card with nothing picked yet keeps the teeth and drops the band, so a card you have not filled in still reads as empty rather than as done.',
         ],
       },
     ],

@@ -22294,71 +22294,120 @@ table.aud-sheet td.stick .aud-cell {
    it is the card you look for while scanning a board rather than one you read in a set. Uniform
    chrome made it the hardest card to find and the easiest to mistake for a Message.
 
-   Two departures, both earning their place: a zigzag running the whole way round the card (a
-   pattern is a shape that recurs, so the card is edged in one rather than carrying a picture of
-   one), and a warm paper tint instead of the grey, so it separates from the says-family cards it
-   sits beside.
+   So the head is a FILLED BAND in the kind's tone, and the band's lower edge is a row of zigzag
+   teeth cut into the body. A pattern is a shape that recurs, so the card carries one along its
+   own edge rather than a picture of one.
 
-   The zigzag replaced a wave across the head alone. Same idea, but a motif on one edge reads as a
-   decorated top rather than as the card's own shape, and at 6px tall on a 208px card it was easy to
-   miss entirely at board zoom. Edging all four sides is what makes it findable in a scan.
+   TWO EARLIER ATTEMPTS, and why a filled band beat both. First a wave across the head, then a
+   stroked zigzag running the whole way round the card. Both failed the same way: a 1.6px line at
+   6px tall dissolves into a fuzzy edge at board zoom, so the card read as a rectangle with a
+   slightly noisy border, and every other cue (width, head layout, picker face) was still identical
+   to its neighbours. A field of colour is the thing that carries across a board; an edge treatment
+   is not. The teeth are FILLED triangles here for the same reason a stroked line failed.
+
+   The band is not the reserved signal: the campaign root is marked by a 2px accent hairline along
+   its top (`[data-role='brief']`), which a 26px block of the card's own hue cannot be mistaken for.
+   Breaking uniformity for one kind already has precedent in the yellow sticky.
    ============================================================================ */
 .flow-note[data-role='input'].flow-note-pattern {
-  /* Two periods of a sawtooth per tile, laid end to end so a tile meets its neighbour mid-descent
-     and the seam is invisible. One tile per direction, and a mirrored pair so the teeth on facing
-     edges point the same way out of the card rather than both leaning right.
+  /* Two teeth per tile, laid end to end so a tile meets its neighbour at a vertex and the seam is
+     invisible. Repeated rather than stretched: a stretched row would give a narrow card fat teeth
+     and a wide one thin ones, and the point is a constant beat.
 
-     Black is arbitrary: these are used as MASKS, so only the alpha channel is read and the stroke's
-     colour never reaches the screen. */
-  --zig-top: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'%3E%3Cpath d='M0 5 L3 1 L6 5 L9 1 L12 5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --zig-bottom: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'%3E%3Cpath d='M0 1 L3 5 L6 1 L9 5 L12 1' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --zig-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='12' viewBox='0 0 6 12'%3E%3Cpath d='M5 0 L1 3 L5 6 L1 9 L5 12' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --zig-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='12' viewBox='0 0 6 12'%3E%3Cpath d='M1 0 L5 3 L1 6 L5 9 L1 12' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background: color-mix(in srgb, var(--note-tone) 5%, var(--surface-2));
-  /* Near square, because the zigzag turns a corner and a 11px arc has nowhere to put a tooth. The
-     selection and drop-target rings are box-shadows, so they follow this radius and stay in step. */
-  border-radius: 3px;
-  /* The straight hairline is what the zigzag is standing in for; leaving both drew two borders one
-     pixel apart. Transparent rather than removed so the box keeps its size and every shared metric
-     (the 9px child indent, the head padding) still lands where it does on every other card. */
-  border-color: transparent;
+     Black is arbitrary. This is used as a MASK, so only the alpha channel is read and the fill's
+     colour never reaches the screen — which is the whole reason it is a mask and not a border-image.
+     An SVG data URI cannot read a custom property, so a border-image would have to hardcode #6d8b2f
+     and would keep drawing it after the card went unlinked and the rest of the chrome went grey. */
+  --zag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7' viewBox='0 0 14 7'%3E%3Cpath d='M0 0 L7 7 L14 0 Z' fill='%23000'/%3E%3C/svg%3E");
+  border-color: color-mix(in srgb, var(--note-tone) 34%, var(--border));
 }
-/* THE ZIGZAG, all the way round: four masked strips over one painted layer. Two horizontal tiles
-   repeating along x at the top and bottom, two vertical ones repeating along y at the sides. Mask
-   layers union by default, so the four strips add up to a frame without needing mask-composite.
+/* The warm paper tint under the band, so the card separates from the says-family cards it sits
+   beside even where the band is scrolled out of view.
 
-   Repeated rather than stretched to fit: a stretched frame would give a short card fat teeth and a
-   tall one thin ones, and the whole point is a constant beat. It also means the corners are wherever
-   the repeat lands, which is what a real zigzag edge does.
+   ⚠️ `.attached` sets `background: var(--surface)` on every input card and is declared BELOW this
+   block, so the tint has to OUT-SPECIFY it rather than merely precede it — hence the second arm,
+   which is (0,4,0) against its (0,3,0). Without it the tint vanished the moment the card was wired
+   to the campaign, which is most of the time and is exactly when you want to spot it. */
+.flow-note[data-role='input'].flow-note-pattern,
+.flow-note[data-role='input'].flow-note-pattern.attached {
+  background: color-mix(in srgb, var(--note-tone) 7%, var(--surface-2));
+}
+/* THE BAND: one painted layer, masked by two mask layers that union — a solid slab covering
+   everything but the bottom 7px, and a strip of teeth along that last 7px.
 
-   Drawn as a MASK rather than a border-image because the tone has to stay live: an SVG data URI
-   cannot read currentColor or a custom property, so a border-image would have to hardcode #6d8b2f
-   and would then keep drawing it after the card went unlinked and the rest of the chrome went grey.
-   Masking a plain background-color keeps one source of truth for the hue. */
-.flow-note[data-role='input'].flow-note-pattern::before {
+   ⚠️ It is a PSEUDO-ELEMENT, not the head itself. A mask applies to an element's whole rendering,
+   its children included, so masking the head directly also masked the label sitting on it: in the
+   linked state the slab happened to cover the text and hid the bug, and the unlinked state — teeth
+   only, no slab — erased the word PATTERN from the card completely. Painting the band behind the
+   head's content instead leaves the label unmasked in both.
+
+   `z-index: 0` on the head makes it the stacking context the -1 sits inside, so the band lands
+   above the card's tint and below its own label without depending on the card's transform. */
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head {
+  position: relative;
+  z-index: 0;
+  /* The same 3px gap under the label every other card has, plus the 7px the teeth eat. Declared
+     once for both states so picking a record does not shift the card's layout. */
+  padding: 7px 9px 10px;
+}
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-color: var(--note-tone);
-  opacity: .55;
-  -webkit-mask-image: var(--zig-top), var(--zig-bottom), var(--zig-left), var(--zig-right);
-  mask-image: var(--zig-top), var(--zig-bottom), var(--zig-left), var(--zig-right);
-  -webkit-mask-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-  mask-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-  -webkit-mask-position: top left, bottom left, left top, right top;
-  mask-position: top left, bottom left, left top, right top;
-  -webkit-mask-size: 12px 6px, 12px 6px, 6px 12px, 6px 12px;
-  mask-size: 12px 6px, 12px 6px, 6px 12px, 6px 12px;
-  pointer-events: none;
+  z-index: -1;
+  /* Mixed toward black rather than used raw: white on #6d8b2f is 3.9:1, which fails AA for a 10px
+     uppercase label. At 82% it is 5.4:1. --note-tone is a fixed hex in OBJECT_META rather than a
+     theme token, so this lands the same in both themes. */
+  background-color: color-mix(in srgb, var(--note-tone) 82%, #000);
+  /* Inside a 1px top border and a 3px left spine, so the card's 7px arc reads as 4px on the left
+     and 6px on the right. Square bottom corners: that edge is teeth. */
+  border-radius: 4px 6px 0 0;
+  -webkit-mask-image: linear-gradient(#000, #000), var(--zag);
+  mask-image: linear-gradient(#000, #000), var(--zag);
+  -webkit-mask-repeat: no-repeat, repeat-x;
+  mask-repeat: no-repeat, repeat-x;
+  -webkit-mask-position: top left, bottom left;
+  mask-position: top left, bottom left;
+  -webkit-mask-size: 100% calc(100% - 7px), 14px 7px;
+  mask-size: 100% calc(100% - 7px), 14px 7px;
 }
-/* The spine and the zigzag are the same tone, so an unlinked card must quiet BOTH or the edge keeps
-   reading as filled in. Matches the :not(.linked) spine rule above. */
-.flow-note[data-role='input'].flow-note-pattern:not(.linked) {
+/* On the band, not under it. Each of these has a colour of its own further up the file (the glyph
+   and label take --note-tone, the comment count takes --accent), and all three are illegible on a
+   fill of the same hue. */
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head .flow-note-kind,
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head .flow-note-ic,
+.flow-note[data-role='input'].flow-note-pattern .flow-note-head .flow-note-cmt {
+  color: #fff;
+}
+/* NOTHING PICKED YET: the band goes away and only the teeth are left, so the card reads as empty
+   like every other unlinked input rather than as a filled-in one in a quieter colour.
+   Dropping the slab layer from the mask is what removes the band; the teeth keep the card
+   identifiable while it is still blank. A grey band was the first try and could not work: the
+   label sits ON it, and --border-strong is near-white in the light theme and near-black in the
+   dark one, so no single label colour is legible in both. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked),
+.flow-note[data-role='input'].flow-note-pattern:not(.linked).attached {
   background: var(--surface-2);
 }
-.flow-note[data-role='input'].flow-note-pattern:not(.linked)::before {
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) { border-color: var(--border); }
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head::before {
   background-color: var(--border-strong);
-  opacity: 1;
+  -webkit-mask-image: var(--zag);
+  mask-image: var(--zag);
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+  -webkit-mask-position: bottom left;
+  mask-position: bottom left;
+  -webkit-mask-size: 14px 7px;
+  mask-size: 14px 7px;
+}
+/* Back to the muted pair the other unlinked inputs use, now that there is no fill to sit on. */
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head .flow-note-kind,
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head .flow-note-ic {
+  color: var(--text-faint);
+}
+.flow-note[data-role='input'].flow-note-pattern:not(.linked) .flow-note-head .flow-note-cmt {
+  color: var(--accent);
 }
 /* WHAT THE PATTERN IS, under the picker: the type, then the example line. Indented to the same 9px
    every other child of an input card carries. */
