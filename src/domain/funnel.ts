@@ -89,7 +89,14 @@ export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelSt
   // Meetup is deliberately left on the channel default: a community night both recruits and keeps
   // people, and consideration is the honest middle rather than a guess in either direction.
   if (channel === 'events') {
-    if (assetType === 'premiere' || assetType === 'booth' || assetType === 'conference-talk')
+    // Awareness is the band for an event whose room somebody else assembled. A press release is
+    // the limit case: there is no room, and the audience it reaches belongs to whoever runs it.
+    if (
+      assetType === 'premiere' ||
+      assetType === 'booth' ||
+      assetType === 'conference-talk' ||
+      assetType === 'press-release'
+    )
       return 'awareness'
     if (assetType === 'dinner') return 'conversion'
   }

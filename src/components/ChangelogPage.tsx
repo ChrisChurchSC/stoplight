@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.49',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Press release is now an Events format. You can start one from the Events palette, or retype an asset into it, the same as a screening or a premiere.',
+          'It is briefed as a release rather than as an invitation. The fields are a headline, a dateline, the lead, a quote with its attribution, supporting detail, boilerplate and a media contact, in place of the event name and RSVP copy every other Events format asks for. It sits in awareness, because the audience a release reaches belongs to whoever runs it, and its handoff is the newsroom rather than a registration form.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.48',
     dateLabel: 'August 6, 2026',
     groups: [

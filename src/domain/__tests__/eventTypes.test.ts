@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { DELIVERABLE_PRESETS } from '../flows'
 import { CHANNEL_TYPES, primaryTypeKey, typesFor } from '../channelAssetTypes'
 import { funnelStageFor } from '../funnel'
+import { messagingFields } from '../messaging'
+import { ctaForHandoff } from '../assetCtas'
+import type { TrafficRow } from '../types'
 
 /**
  * THE EVENTS CHANNEL, WHICH NOW SPANS THREE FUNNEL STAGES.
@@ -78,5 +81,53 @@ describe('the events channel', () => {
   /** The Other/custom escape hatch must survive the additions. */
   it('still offers a custom format', () => {
     expect(typesFor('events').at(-1)?.value).toBe('other')
+  })
+})
+
+/**
+ * A PRESS RELEASE IS THE ONE EVENT TYPE THAT IS NOT AN OCCASION.
+ *
+ * It lives on this channel because there is no earned-media channel and it is what announces a
+ * premiere, so it shares the motion. But every default the channel supplies assumes a room and an
+ * RSVP, and a release has neither. Inheriting any of them is silent: the asset still builds, it is
+ * just briefed to write registration copy for something nobody can register for. So each override
+ * is asserted here rather than trusted, since none of them is a type error.
+ */
+describe('the press release', () => {
+  it('is startable from the palette, like every other event type', () => {
+    const preset = DELIVERABLE_PRESETS.find((p) => p.channel === 'events' && p.assetType === 'press-release')
+    expect(preset?.label).toBe('Press release')
+    expect(preset?.runtime).toBe('one-off')
+  })
+
+  it('did not become the primary type by being added', () => {
+    expect(primaryTypeKey('events')).toBe('screening')
+    expect(CHANNEL_TYPES.events.at(-1)?.value).toBe('press-release')
+  })
+
+  it('sits in awareness, not the channel default', () => {
+    expect(funnelStageFor('events', 'press-release')).toBe('awareness')
+    // The default it would otherwise have inherited.
+    expect(funnelStageFor('events', primaryTypeKey('events'))).toBe('consideration')
+  })
+
+  it('is briefed as a release, not as an invitation', () => {
+    const fields = messagingFields('events', 'press-release').map((f) => f.key)
+    expect(fields).toContain('headline')
+    expect(fields).toContain('quote')
+    expect(fields).toContain('boilerplate')
+    expect(fields).toContain('contact')
+    // 'details' is a base field name too, so the giveaway is the base's own pairing: an event
+    // name and an RSVP ask.
+    expect(fields).not.toContain('name')
+    expect(fields).not.toContain('cta')
+  })
+
+  it('hands off to the newsroom rather than to a registration form', () => {
+    const cta = ctaForHandoff({ channel: 'events', assetType: 'press-release', assetName: 'the release' } as TrafficRow)
+    expect(cta.kind).toBe('button')
+    expect(cta.label).toBe('Read the release')
+    // What it would have inherited from the events channel.
+    expect(cta.label).not.toBe('Save a place')
   })
 })
