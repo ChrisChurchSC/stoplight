@@ -29,6 +29,8 @@ const RELEASES: Release[] = [
       {
         tag: 'Fixed',
         items: [
+          'Removing a channel now asks first, and names what it is about to take. Deleting a channel deletes the assets under it, which was true before and is still true: a channel card is not a thing in its own right, it is made of its assets and keyed by them, so it cannot be removed while they are still on the board. What was wrong was doing it in silence. A keystroke on a channel card took four written posts with no dialog, no count, and nothing naming what had gone.',
+          'It archives them rather than destroying them, so the answer to "that was not what I meant" is a restore instead of a rewrite. That is already what deleting a campaign does, one level up. Deleting a single asset is unchanged: it goes immediately, and undo covers it.',
           'A menu that runs out of items no longer scrolls the thing behind it. Reaching the end of a list used to hand the rest of the gesture to whatever it was covering, so the board or the page underneath moved while you were reading, and closing the menu revealed somewhere you had not meant to go. The channel picker was the worst of them: every asset type in one list is roughly seven screens inside a one screen window, so running off the end is the normal way to use it rather than an edge case.',
           'This covers the canvas side panels, the channel and record pickers, the audience and flight menus, the chat history menu, the tag picker, the library menus and the modals. Lists that sit in the page rather than over it are deliberately left alone, because a reader scrolling past one of those expects the page to carry on once the list is done.',
         ],

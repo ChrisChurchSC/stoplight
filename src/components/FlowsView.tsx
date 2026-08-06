@@ -1131,6 +1131,8 @@ export function FlowsView() {
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
   const removeRows = useTrafficStore((s) => s.removeRows)
+  // Deleting a channel archives its assets rather than destroying them; see confirmDelivDelete.
+  const archiveRows = useTrafficStore((s) => s.archiveRows)
   const updateRows = useTrafficStore((s) => s.updateRows)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
@@ -1756,6 +1758,28 @@ export function FlowsView() {
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const marqueeStart = useRef<{ x0: number; y0: number } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  /**
+   * DELETING A CHANNEL IS THE ONE DELETE THAT TAKES WORK WITH IT, SO IT ASKS FIRST.
+   *
+   * A built channel card is not a stored thing: it is derived from its assets, keyed channel|type.
+   * So there is no version of this where the card goes and the assets stay, because the assets ARE
+   * the card and the next render would draw it again. Deleting the channel can only mean deleting
+   * what is under it.
+   *
+   * That is defensible; doing it silently on a keystroke was not. Reported from the iScribe
+   * walkthrough: a channel was removed and four written posts went with it, with no dialog, no
+   * count and nothing naming what had just gone.
+   *
+   * Two changes, and the pair is the point. It asks first, and it ARCHIVES rather than destroys, so
+   * the answer to "that was not what I meant" is a restore rather than a rewrite. That is already
+   * what deleting a campaign does, one level up, in the same words.
+   *
+   * Deleting a single asset is untouched: it is one card, it is what the person pointed at, and
+   * Cmd+Z already covers it.
+   */
+  const [confirmDelivDelete, setConfirmDelivDelete] = useState<
+    { rowIds: string[]; labels: string[]; assetCount: number } | null
+  >(null)
   // Free-move: per-card translate offsets, applied on top of the layout. Dragging a
   // selected card moves the whole selection.
   const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({})
@@ -2409,6 +2433,11 @@ export function FlowsView() {
           // whole selection and sent as ONE action: selecting a deliverable and two loose posts is
           // a single undo entry, not three.
           const rowIds = new Set<string>()
+          // What a CHANNEL contributed, kept apart from what the person selected directly. Deleting
+          // a channel means deleting assets nobody pointed at, so that case stops for a dialog while
+          // a selection of loose posts goes straight through.
+          const delivLabels: string[] = []
+          const delivRowIds = new Set<string>()
           ids.forEach((id) => {
             if (id === 'campaign') setBriefHidden(true)
             // Delete on a smart object UNGROUPS it rather than destroying it. One keystroke
@@ -2424,10 +2453,20 @@ export function FlowsView() {
             // deliverable silently did nothing at all.
             else {
               const deliv = viewDelivsRef.current.find((d) => d.key === id)
-              if (deliv) deliv.rows.forEach((r) => rowIds.add(r.id))
-              else if (viewRowsRef.current.some((r) => r.id === id)) rowIds.add(id)
+              if (deliv) {
+                delivLabels.push(deliv.label)
+                deliv.rows.forEach((r) => delivRowIds.add(r.id))
+              } else if (viewRowsRef.current.some((r) => r.id === id)) rowIds.add(id)
             }
           })
+          // A channel in the selection sends the WHOLE delete to the dialog, loose posts included,
+          // so one gesture stays one action and one undo rather than half of it happening now and
+          // half of it after an answer.
+          if (delivRowIds.size) {
+            const all = new Set([...rowIds, ...delivRowIds])
+            setConfirmDelivDelete({ rowIds: [...all], labels: delivLabels, assetCount: all.size })
+            return
+          }
           if (rowIds.size) void removeRows([...rowIds])
           setSel(null)
           setSelected(new Set())
@@ -11213,7 +11252,18 @@ export function FlowsView() {
                 <button
                   className="flow-ctx-item danger"
                   role="menuitem"
-                  onClick={() => { close(); void (onDeliv ? removeRows(onDeliv.rows.map((r) => r.id)) : removeRow(onPost!.id)) }}
+                  onClick={() => {
+                    close()
+                    // Same dialog as the keystroke. The menu names the count, but naming it is not
+                    // the same as asking, and this is still the gesture that takes written work.
+                    if (onDeliv) {
+                      setConfirmDelivDelete({
+                        rowIds: onDeliv.rows.map((r) => r.id),
+                        labels: [onDeliv.label],
+                        assetCount: onDeliv.rows.length,
+                      })
+                    } else void removeRow(onPost!.id)
+                  }}
                 >
                   {onDeliv
                     ? `Delete channel and its ${onDeliv.rows.length} post${onDeliv.rows.length === 1 ? '' : 's'}`
@@ -11773,6 +11823,45 @@ export function FlowsView() {
               })()}
             </div>
           </aside>
+        </>
+      )}
+
+      {confirmDelivDelete && (
+        <>
+          <div className="drawer-scrim" onClick={() => setConfirmDelivDelete(null)} />
+          <div className="confirm-modal" role="dialog" aria-label="Delete channel">
+            <strong className="confirm-title">
+              {confirmDelivDelete.labels.length === 1
+                ? `Delete ${confirmDelivDelete.labels[0]}?`
+                : `Delete ${confirmDelivDelete.labels.length} channels?`}
+            </strong>
+            <p className="confirm-text">
+              {/* The count is the whole point of the dialog: a channel card shows a name, not the
+                  work under it, and the work under it is what this takes. */}
+              This archives {confirmDelivDelete.assetCount}{' '}
+              {confirmDelivDelete.assetCount === 1 ? 'asset' : 'assets'}, copy included. A channel is
+              made of its assets, so it cannot be removed while they are still on the board. You can
+              restore them from the archive.
+            </p>
+            <div className="confirm-foot">
+              <button className="btn sm" onClick={() => setConfirmDelivDelete(null)}>
+                Cancel
+              </button>
+              <span className="spacer" />
+              <button
+                className="btn sm danger"
+                onClick={() => {
+                  void archiveRows(confirmDelivDelete.rowIds)
+                  setConfirmDelivDelete(null)
+                  setSel(null)
+                  setSelected(new Set())
+                }}
+              >
+                Archive {confirmDelivDelete.assetCount}{' '}
+                {confirmDelivDelete.assetCount === 1 ? 'asset' : 'assets'}
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>
