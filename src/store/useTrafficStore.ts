@@ -2446,6 +2446,15 @@ interface TrafficState {
   draftMatrixCell: (row: TrafficRow) => Promise<void>
   /** Append a batch of matrix-drafted assets at once (bulk gap-fill), then refresh. */
   draftMatrixCells: (rows: TrafficRow[]) => Promise<void>
+  /**
+   * Append fully-formed assets that a caller has already composed, then refresh.
+   *
+   * Distinct from seedCampaignAssets, which is handed a DELIVERABLE and decides what assets it
+   * implies, how many, and on which weekdays they land. This is for the caller that already knows
+   * every row it wants — pasting a channel copied off another campaign, where the whole point is
+   * that the assets arrive as they were rather than as this campaign would have generated them.
+   */
+  appendAssets: (rows: TrafficRow[]) => Promise<void>
 
   // sheet (spreadsheet) edits
   updateRow: (id: string, patch: Partial<TrafficRow>) => Promise<void>
@@ -5969,6 +5978,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
 
   draftMatrixCells: async (rows) => {
     if (!rows.length) return
+    await sheet.append(rows.map((r) => ({ ...r, utm: r.utm ?? buildUtm(r) })))
+    await get().refresh()
+  },
+
+  appendAssets: async (rows) => {
+    if (!rows.length) return
+    // The utm fallback is the same one every other append route applies: an asset that reaches the
+    // sheet without tracking params is an asset somebody has to hand-type a link for later.
     await sheet.append(rows.map((r) => ({ ...r, utm: r.utm ?? buildUtm(r) })))
     await get().refresh()
   },
