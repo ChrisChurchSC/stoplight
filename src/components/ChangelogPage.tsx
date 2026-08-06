@@ -23,6 +23,28 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.47',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'Cards and channels can be copied from one campaign into another. Select an object card, a channel or a post on a campaign canvas, press ⌘C, open a different campaign and press ⌘V. Copy and paste are also in the right-click menu. Until now the only way to carry anything across was to build it again from the picker: the audience card with the direction typed into it, the brand card, the line from each of them into the brief, the channel and its posts, all of it, per campaign, by hand.',
+          'A paste keeps the shape, not just the pieces. The cards land in the arrangement they were copied in, the lines drawn between them come too, and a group stays a group. A card that was wired into its old campaign brief arrives wired into the new one, which is the difference between a pasted card that the copy writer can read and one that sits there connected to nothing.',
+          'A pasted channel brings its assets and their copy, as fresh drafts. It keeps the cadence it was written on: the gaps between posts and the hour each was scheduled for survive, moved forward to start from today, so a run laid out over one campaign’s flight does not arrive as a set of dates from another campaign’s calendar with half of them in the past.',
+        ],
+      },
+      {
+        tag: 'Improved',
+        items: [
+          'A pasted asset never claims anything that happened to the original. Spend, engagement, platform metrics, the approved and posted stamps, the URL it was published at: none of it travels. What arrives is the plan, as a draft that has not run, with its tracking link rebuilt for the campaign it landed in.',
+          'Pasting into a different brand drops the records the cards pointed at, and says so. Audiences, proof points and products belong to a brand’s own library, so carrying the links across would put one client’s segment on another client’s board and hand it to the copy writer as that campaign’s audience. The name, the note and the direction you typed still come with the card; only the link to pick again is missing.',
+          'Assets are linked to each other by name, so a paste that would collide renames the copy rather than leaving two assets in one campaign answering to the same thing. A journey link whose other end did not come along is dropped instead of quietly attaching to whatever else happens to share the name.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.46',
     dateLabel: 'August 6, 2026',
     groups: [

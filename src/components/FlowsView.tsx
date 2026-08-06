@@ -11,6 +11,9 @@ import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
   type CardGroup,
 } from '../domain/cardGroups'
+import {
+  describeClipboard, isEmptyClipboard, pasteObjects, pasteRows, type CanvasClipboard,
+} from '../domain/canvasClipboard'
 import { cutForEdge, type EdgeCut } from '../domain/edgeCut'
 import { rimsFor } from '../domain/groupFrame'
 import { DRAFTS, MAX_FOLDER_DEPTH, buildFolderPath, buildFolderTree, canNestUnder, countDeep, folderName, withAncestors, type FolderNode } from '../domain/campaignFolders'
@@ -116,6 +119,21 @@ const MAX_ZOOM = 200
  */
 const GROUP_PAD = 20
 const GROUP_HEAD = 26
+
+/**
+ * WHAT WAS COPIED, held OUTSIDE the component on purpose.
+ *
+ * The whole value of this clipboard is that it survives leaving the campaign you copied from —
+ * that is the feature — and every piece of board state in here is per campaign and reset by
+ * openView. A ref would be cleared by the remount that navigating away causes, and a useState
+ * would put a re-render behind every copy for no one's benefit.
+ *
+ * Deliberately NOT persisted. A clipboard is what you are holding right now, and a copy taken a
+ * week ago that survived a reload would paste cards naming records that have since been renamed
+ * or deleted, from a campaign the person no longer has in mind. Session-lived is the honest
+ * lifetime for it.
+ */
+let canvasClipboard: CanvasClipboard | null = null
 
 /** Drag payload for a smart object leaving the Assets panel for the canvas. */
 const SMART_OBJECT_DND = 'application/x-breadcrumbs-smart-object'
@@ -1135,6 +1153,8 @@ export function FlowsView() {
   const removeRows = useTrafficStore((s) => s.removeRows)
   // Deleting a channel archives its assets rather than destroying them; see confirmDelivDelete.
   const archiveRows = useTrafficStore((s) => s.archiveRows)
+  // Writes the assets a pasted channel is made of; see pasteClipboard.
+  const appendAssets = useTrafficStore((s) => s.appendAssets)
   const updateRows = useTrafficStore((s) => s.updateRows)
   const previewFlowCopy = useTrafficStore((s) => s.previewFlowCopy)
   const updateRow = useTrafficStore((s) => s.updateRow)
@@ -2560,6 +2580,29 @@ export function FlowsView() {
         e.preventDefault()
         if (e.shiftKey) void doRedo()
         else void doUndo()
+        return
+      }
+      /**
+       * Cmd/Ctrl+C copies the selection, Cmd/Ctrl+V pastes it into whatever campaign is open now.
+       *
+       * The plain chords, because carrying a piece of one campaign into the next is copy and paste
+       * — there is no second meaning for them on this canvas to compete with, and a person reaching
+       * for ⌘C over a selected card means exactly this.
+       *
+       * TEXT WINS. A selection in the document is somebody copying words off a card, and hijacking
+       * that would take away the ordinary thing to provide the special one. The guard above already
+       * releases the chord inside a field; this releases it for a selection made by dragging across
+       * rendered text, where the target is the canvas rather than an input.
+       */
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        if (window.getSelection()?.toString()) return
+        e.preventDefault()
+        clipboardActionsRef.current.copy()
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault()
+        void clipboardActionsRef.current.paste()
         return
       }
       if (e.key === ' ') {
@@ -5231,8 +5274,185 @@ export function FlowsView() {
     const next = pruneGroups(groupsRef.current, liveNodeIds)
     if (next !== groupsRef.current) setGroups(next)
   }, [liveNodeIds])
+  /**
+   * COPY THE SELECTION, so the next campaign can start from this one.
+   *
+   * Everything selectable on the canvas is fair game — an object card, a bundled smart object, a
+   * channel, a single post — because the thing being carried across is a piece of a campaign, and a
+   * person does not think of those as four different kinds of thing when they select them.
+   *
+   * The BRIEF is the one exception. It is the board's root rather than a card: every board already
+   * has one, and pasting a second would put two campaign cards on a canvas built around having one.
+   * Wires INTO it still travel (see pasteObjects) — that is the useful half.
+   */
+  const copySelection = () => {
+    const ids = selected.size ? [...selected] : sel ? [sel] : []
+    const objs: CanvasObject[] = []
+    const places: SmartPlacement[] = []
+    const rows: TrafficRow[] = []
+    const delivKeys: string[] = []
+    // Every node id the copy covers, so a connector can be told "both ends came along".
+    const covered = new Set<string>()
+    const takeObject = (id: string) => {
+      const o = objects.find((x) => x.id === id)
+      if (!o || objs.some((x) => x.id === id)) return
+      objs.push(o)
+      covered.add(id)
+    }
+    const takeRow = (r: TrafficRow) => {
+      if (rows.some((x) => x.id === r.id)) return
+      rows.push(r)
+      covered.add(r.id)
+    }
+    for (const id of ids) {
+      if (id === 'campaign') continue
+      if (objects.some((x) => x.id === id)) { takeObject(id); continue }
+      const p = placements.find((x) => x.id === id)
+      if (p) {
+        places.push(p)
+        covered.add(p.id)
+        // A smart object is a frame around cards, and a frame that arrived without them would be an
+        // empty box. Its members come whether or not they were selected individually.
+        p.memberIds.forEach(takeObject)
+        continue
+      }
+      const d = viewDelivs.find((x) => x.key === id)
+      if (d) {
+        delivKeys.push(d.key)
+        covered.add(d.key)
+        d.rows.forEach(takeRow)
+        continue
+      }
+      const r = viewRows.find((x) => x.id === id)
+      if (r) takeRow(r)
+    }
+    if (!objs.length && !places.length && !rows.length) {
+      showToast('Select a card, a channel or a post first, then press ⌘C.')
+      return
+    }
+    /**
+     * A WIRE TRAVELS WHEN BOTH ITS ENDS DO, or when one end is the brief.
+     *
+     * The brief is on every board, so a card wired into it arrives wired into the new campaign's
+     * brief — which is the difference between a pasted card that feeds the copy writer and one that
+     * sits there unconnected. The rest have to be whole: half a wire is a line to nowhere.
+     */
+    const conns = connectors.filter(
+      (c) =>
+        (covered.has(c.from) || c.from === 'campaign') &&
+        (covered.has(c.to) || c.to === 'campaign') &&
+        (covered.has(c.from) || covered.has(c.to)),
+    )
+    const picked: Record<string, { x: number; y: number }> = {}
+    for (const id of covered) if (pos[id]) picked[id] = pos[id]
+    canvasClipboard = {
+      fromCampaign: viewName,
+      fromBrand: brand,
+      objects: objs.map((o) => ({ ...o })),
+      placements: places.map((p) => ({ ...p })),
+      connectors: conns.map((c) => ({ ...c })),
+      pos: picked,
+      // A group whose cards came along comes with them; pasteObjects drops the ones left too thin.
+      groups: groups.filter((g) => g.ids.some((i) => covered.has(i))).map((g) => ({ ...g, ids: [...g.ids] })),
+      rows: rows.map((r) => ({ ...r })),
+      delivKeys,
+      detachedKeys: delivKeys.filter((k) => detached.includes(k)),
+      copiedAt: Date.now(),
+    }
+    // Naming the chord is the whole of this feature's discoverability: nothing on the canvas
+    // advertises that a campaign can be started from another one.
+    showToast(`Copied ${describeClipboard(canvasClipboard)}. Open a campaign and press ⌘V.`)
+  }
+  /**
+   * PASTE INTO WHATEVER CANVAS IS OPEN NOW.
+   *
+   * Two writes with different shapes, and the order matters. The ASSETS go first, because a channel
+   * only exists once its assets do and the wire from a card to that channel has to know what the
+   * channel ends up being called. The CARDS follow, wired to the keys the assets just produced.
+   */
+  const pasteClipboard = async () => {
+    const clip = canvasClipboard
+    if (!clip || isEmptyClipboard(clip)) {
+      showToast('Nothing copied yet. Select a card or a channel and press ⌘C.')
+      return
+    }
+    const sameBrand = clip.fromBrand === brand
+    const sameCampaign = clip.fromCampaign !== null && clip.fromCampaign === viewName
+    /**
+     * ASSETS NEED A BUILT CAMPAIGN. In the builder a channel is a NODE being configured, not a group
+     * of rows, so there is nowhere for a copied asset to be written — and seeding one anyway would
+     * build the campaign out from under somebody still deciding its shape. The cards still paste.
+     */
+    const canTakeRows = viewName !== null
+    recordHistory(clip.rows.length > 0 && canTakeRows)
+    let pastedRows: TrafficRow[] = []
+    let rowsUnlinked = 0
+    let keyMap = new Map<string, string>()
+    if (clip.rows.length && canTakeRows) {
+      const taken = new Set(
+        useTrafficStore.getState().rows.filter((r) => r.campaign === viewName && !r.archivedAt).map((r) => r.assetName),
+      )
+      /**
+       * Re-anchored to TODAY when it lands somewhere new, keeping the gaps between assets and the
+       * hour each was written for, so a cadence laid out over one campaign's flight arrives as the
+       * same cadence instead of as a set of dates from another campaign's calendar — half of them in
+       * the past. Today is what seedCampaignAssets starts a fresh channel from, so a pasted channel
+       * and an added one begin in the same place. Pasting back into the campaign it came from keeps
+       * the dates: that is a duplicate, and a duplicate that jumped to today would be the
+       * surprising one.
+       */
+      const out = pasteRows(clip.rows, {
+        campaign: viewName,
+        sameBrand,
+        takenNames: taken,
+        anchorDay: sameCampaign ? null : Date.now(),
+      })
+      pastedRows = out.rows
+      rowsUnlinked = out.unlinked
+      keyMap = out.keyMap
+    }
+    const objOut = pasteObjects(clip, {
+      toBrand: brand,
+      origin: freeSlot(),
+      knownSmartObjectIds: new Set(smartObjects.map((s) => s.id)),
+      liveTargets: liveNodeIds,
+      outputMap: keyMap,
+    })
+    if (objOut.objects.length) setObjects((n) => [...n, ...objOut.objects])
+    if (objOut.placements.length) setPlacements((g) => [...g, ...objOut.placements])
+    if (objOut.connectors.length) setConnectors((c) => [...c, ...objOut.connectors])
+    if (Object.keys(objOut.pos).length) setPos((p) => ({ ...p, ...objOut.pos }))
+    if (objOut.groups.length) setGroups((g) => [...g, ...objOut.groups])
+    // A channel that was cut off from its old brief stays cut off from this one.
+    const cut = clip.detachedKeys.map((k) => keyMap.get(k)).filter((k): k is string => !!k)
+    if (cut.length) setDetached((cur) => [...new Set([...cur, ...cut])])
+    if (pastedRows.length) await appendAssets(pastedRows)
+    // Select what landed, so the next thing you do (drag it, wire it) acts on the paste.
+    setSel(null)
+    setSelected(new Set(objOut.idMap.values()))
+    /**
+     * SAY WHAT DID NOT COME. Every clause here is a thing the person would otherwise discover later,
+     * by finding an empty field on a card they thought they had copied whole.
+     */
+    const landed: string[] = []
+    const cards = objOut.objects.length + objOut.placements.length
+    if (cards) landed.push(`${cards} card${cards === 1 ? '' : 's'}`)
+    if (pastedRows.length) landed.push(`${pastedRows.length} asset${pastedRows.length === 1 ? '' : 's'}`)
+    const notes: string[] = []
+    if (clip.rows.length && !canTakeRows) notes.push('Its channels need a built campaign, so they stayed behind.')
+    if (!sameBrand && (objOut.unlinked || rowsUnlinked)) {
+      notes.push(
+        `${brand ? `This board is ${brand}'s` : 'This board is under no single brand'}, so the records they pointed at did not come. Pick new ones.`,
+      )
+    } else if (objOut.unlinked) {
+      notes.push('Some links pointed at objects that no longer exist, so they were cleared.')
+    }
+    showToast(landed.length ? `Pasted ${landed.join(' and ')}. ${notes.join(' ')}`.trim() : notes.join(' ') || 'Nothing to paste here.')
+  }
   // Read through refs by the global keydown effect, which runs with deps [nodes.length, viewName]
   // and would otherwise capture a stale selection.
+  const clipboardActionsRef = useRef({ copy: copySelection, paste: pasteClipboard })
+  clipboardActionsRef.current = { copy: copySelection, paste: pasteClipboard }
   const groupActionsRef = useRef({ group: groupSelection, ungroup: ungroupSelection })
   groupActionsRef.current = { group: groupSelection, ungroup: ungroupSelection }
   // The global keydown effect below runs with deps [nodes.length, viewName] and reads everything
@@ -11421,11 +11641,43 @@ export function FlowsView() {
         const onPost = ctxMenu.on && !onDeliv ? viewRows.find((r) => r.id === ctxMenu.on) : undefined
         // Cards eligible to bundle: the selection if it has 2+, else nothing to group.
         const convertible = (selected.size ? [...selected] : sel ? [sel] : []).filter((id) => objects.some((n) => n.id === id) && !placementOf(id))
+        /**
+         * The brief does not count. copySelection skips it — every board has one and a second would
+         * be meaningless — so offering Copy on a right-clicked brief is offering an action that
+         * answers with a refusal. Same expression copySelection reads, so the menu and the keystroke
+         * cannot disagree about whether there is anything to take.
+         */
+        const copyable = (selected.size ? [...selected] : sel ? [sel] : []).some((id) => id !== 'campaign')
         const close = () => setCtxMenu(null)
         return (
           <>
             <div className="flow-ctx-scrim" onMouseDown={close} onContextMenu={(e) => { e.preventDefault(); close() }} />
             <div className="flow-ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }} role="menu">
+              {/* Copy and paste sit at the top and outside every arm, because they are the only two
+                  items here that mean the same thing on a card, a channel, a post and bare canvas.
+                  Paste names what it is holding rather than saying "Paste": the clipboard outlives
+                  the campaign it was filled in, so by the time you use it you are somewhere else and
+                  may well have forgotten. */}
+              <button
+                className="flow-ctx-item"
+                role="menuitem"
+                disabled={!copyable}
+                title={!copyable ? 'Select a card, a channel or a post first' : undefined}
+                onClick={() => { close(); copySelection() }}
+              >
+                Copy<span className="flow-ctx-kbd">⌘C</span>
+              </button>
+              <button
+                className="flow-ctx-item"
+                role="menuitem"
+                disabled={isEmptyClipboard(canvasClipboard)}
+                title={isEmptyClipboard(canvasClipboard) ? 'Copy something first' : 'Paste it into this campaign'}
+                onClick={() => { close(); void pasteClipboard() }}
+              >
+                {canvasClipboard && !isEmptyClipboard(canvasClipboard) ? `Paste ${describeClipboard(canvasClipboard)}` : 'Paste'}
+                <span className="flow-ctx-kbd">⌘V</span>
+              </button>
+              <div className="flow-ctx-sep" />
               {/* Group sits ABOVE the per-target arms, not inside one. Every kind of card can be
                   grouped — a channel and a post as readily as an object card — so burying it in the
                   object arm made it unreachable from a right-click on exactly the cards a person is
