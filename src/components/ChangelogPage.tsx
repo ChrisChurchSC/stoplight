@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.51',
+    version: 'v1.52',
     dateLabel: 'August 6, 2026',
     groups: [
       {
@@ -31,6 +31,19 @@ const RELEASES: Release[] = [
         items: [
           'The tooltips inside a campaign are shorter, and they say what the app is called now. Several still called the campaign board a canvas or a sheet, one called it the Flow tab, and one credited Claude for work Gretel does, so hovering told you about a version of the app that no longer exists. The share button also still promised a view-only link, which stopped being true when sharing gained a Can view and Can edit switch.',
           'The long ones are cut to what you actually needed. The worst ran to a full paragraph in a small grey box, which is longer than most people hold a hover, so the sentence that mattered was the one you never reached.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.51',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The grid shows the audience an asset is written to, even when no card on the canvas names it. Made from was built from the cards wired into an asset, and an audience set any other way is not a card: picking one in an asset\'s inspector on the campaign canvas writes a name, and so does seeding a campaign and ingesting an asset. So the canvas showed the asset under an audience while the grid showed nothing under Made from, and the disagreement read as a wire that had come loose.',
+          'The audience it shows is the one you can change from there. Where the name matches a segment in the brand\'s library the chip works like any other, with the picker on it, and setting it from the grid writes the name and the record together so the two surfaces stay level. An audience whose name matches no record still shows, named, rather than leaving the cell blank on an asset that plainly has one.',
         ],
       },
     ],

@@ -579,6 +579,24 @@ export function SheetGrid({
   const optsFor = (kind: CanvasObjectKind) => optionsByKind.get(kind) ?? []
 
   /**
+   * THE AUDIENCE A ROW NAMES BY ITSELF, matched back to the segment it means.
+   *
+   * `row.audience` is a name, not an id — see setRowRecord below, which writes it alongside the
+   * reference so the two stay level. Everything else that sets it writes only the string: the
+   * campaign canvas's asset inspector, seeding, ingest. Matched by name because a name is all
+   * those leave behind, and trimmed on both sides for the same reason the brand lookup is not:
+   * this one is allowed to miss, and says the name anyway when it does.
+   *
+   * Shared by the two madeFrom callers below so they cannot answer this differently.
+   */
+  const rowAudienceFor = (row: TrafficRow) => {
+    const label = (row.audience ?? '').trim()
+    if (!label) return undefined
+    const match = optsFor('audience').find((o) => o.label.trim() === label)
+    return { refId: match?.id, label }
+  }
+
+  /**
    * CAN THIS CELL SET THIS KIND? Everything with a FlowRefType is pinned on the asset itself. Brand
    * is not a reference — it is the campaign's owner — so it is settable only where there is a
    * campaign to rebind, and is read-only anywhere the grid spans more than one.
@@ -962,6 +980,9 @@ export function SheetGrid({
                         // own client rather than from a card: a campaign bound with no Brand card on
                         // the board still has a brand, and the cell has to say which.
                         brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
+                        // The asset's own audience, for when no card or pin names one. Set on the
+                        // campaign canvas and by seeding, neither of which mints a reference.
+                        rowAudience: rowAudienceFor(row),
                         nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
                       })
                       const present = new Set(entries.map((e) => e.kind))
@@ -1366,6 +1387,7 @@ export function SheetGrid({
           cards: cardsByRow.get(row.id) ?? [],
           references: row.references,
           brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
+          rowAudience: rowAudienceFor(row),
           nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
         })
         const on = new Set(entries.filter((e) => e.refId).map((e) => `${e.kind}:${e.refId}`))
