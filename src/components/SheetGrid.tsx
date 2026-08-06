@@ -843,7 +843,7 @@ export function SheetGrid({
                         the page — and the canvas, which is where you look at creative, has no
                         thumbnails either. The name is what you scan this column for. */}
                     <div className="sheet-asset">
-                      <span className="nm" title={onPickRow ? `${row.assetName} — open this asset` : row.assetName}>
+                      <span className="nm" title={onPickRow ? `Open ${row.assetName}` : row.assetName}>
                         {row.assetName}
                       </span>
                     </div>
@@ -886,7 +886,7 @@ export function SheetGrid({
                           one surface where a cut channel's assets sit interleaved with everything
                           else and nothing distinguishes them. */}
                       {detachedRowIds.has(row.id) && (
-                        <span className="ch-cut" title="This channel is cut off from the campaign brief, so its assets are written without the campaign's cards. Reconnect it on the Flow tab.">
+                        <span className="ch-cut" title="Cut off from the brief, so its assets are written without the campaign's cards. Reconnect it on the board.">
                           cut off
                         </span>
                       )}
@@ -898,7 +898,7 @@ export function SheetGrid({
                       {row.classifyConfidence != null && row.classifyConfidence < 0.7 ? (
                         <span
                           className="cat-review"
-                          title="Low-confidence categorization. Claude was not sure of the channel/type; check it."
+                          title="Gretel was unsure of the channel and type. Worth a check."
                         >
                           ⛑
                         </span>
@@ -939,7 +939,7 @@ export function SheetGrid({
                         dep={total}
                         commitOnBlur
                         readOnly={!!scopeCampaign}
-                        title={scopeCampaign ? 'You are inside this campaign. Move the asset from the campaign it belongs to.' : undefined}
+                        title={scopeCampaign ? 'Move this from the campaign it belongs to.' : undefined}
                         onChange={(v) => updateRow(row.id, { campaign: v })}
                       />
                     </td>
@@ -1009,7 +1009,7 @@ export function SheetGrid({
                                   <button
                                     type="button"
                                     className="mf-open"
-                                    title={`${title} — open it`}
+                                    title={`Open ${title}`}
                                     onClick={(ev) => {
                                       ev.stopPropagation()
                                       onPickObject({ kind: e.kind, cardId: e.cardId, label: meta.label })

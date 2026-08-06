@@ -29,7 +29,7 @@ export const OBJECT_META: Record<CanvasObjectKind, ObjectMeta> = {
    */
   brand: {
     label: 'Brand', tone: '#e2564a', placeholder: 'Which brand?', role: 'input', family: 'says',
-    menuDesc: 'Who this canvas writes as',
+    menuDesc: 'Who this campaign writes as',
     icon: <><path d="M12 2.5 3.5 6v6c0 5 3.6 8.7 8.5 9.6 4.9-.9 8.5-4.6 8.5-9.6V6z" /></>,
   },
   /**

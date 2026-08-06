@@ -3711,7 +3711,7 @@ export function FlowsView() {
     <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
       <button
         className="flow-ctxrow-open"
-        title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+        title={`Select this ${r.kindLabel.toLowerCase()} on the board`}
         onClick={() => { setSel(r.id); setSelected(new Set()) }}
       >
         <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
@@ -3741,7 +3741,7 @@ export function FlowsView() {
         /* Disconnects: the card stays on the board, it just stops feeding the campaign. */
         <button
           className="flow-ctxrow-del"
-          title="Disconnect from the campaign (the card stays on the board)"
+          title="Disconnect from the campaign. The card stays."
           aria-label={`Disconnect ${r.label || r.kindLabel}`}
           onClick={onDisconnect}
         >
@@ -4500,7 +4500,7 @@ export function FlowsView() {
         <div key={r.id} className={`flow-ctxrow${sel === r.id ? ' sel' : ''}`}>
           <button
             className="flow-ctxrow-open"
-            title={`Select this ${r.kindLabel.toLowerCase()} on the canvas`}
+            title={`Select this ${r.kindLabel.toLowerCase()} on the board`}
             onClick={() => { setSel(r.id); setSelected(new Set()) }}
           >
             <span className="flow-ctxrow-ic" style={{ color: r.tone }} aria-hidden="true">
@@ -4521,7 +4521,7 @@ export function FlowsView() {
           {onRemove && (
             <button
               className="flow-ctxrow-del"
-              title="Disconnect from this post (the card stays on the board)"
+              title="Disconnect from this post. The card stays."
               aria-label={`Disconnect ${r.label || r.kindLabel} from this post`}
               onClick={() => onRemove(r.id)}
             >
@@ -5012,7 +5012,7 @@ export function FlowsView() {
         key={o.id}
         className="flow-lib-object"
         draggable
-        title={`${o.name} — drag onto the canvas, or double-click to open`}
+        title={`${o.name}: drag onto the board, or double-click to open`}
         onDragStart={(e) => {
           e.dataTransfer.setData(SMART_OBJECT_DND, o.id)
           e.dataTransfer.effectAllowed = 'copy'
@@ -8592,7 +8592,7 @@ export function FlowsView() {
                 <div className="flow-inspect-note">Only on this campaign. Edit it freely: nothing else uses it.</div>
                 <button
                   className="flow-obj-promote"
-                  title="Move this into the brand library so every campaign can use it"
+                  title="Move to the brand library: every campaign can use it"
                   onClick={() => promoteSmartObject(so.id, brand)}
                   disabled={!brand}
                 >
@@ -8763,7 +8763,7 @@ export function FlowsView() {
                 key={z}
                 className={`flow-tb-zoom-item${Math.round(shown) === z ? ' on' : ''}`}
                 disabled={floor != null && z < floor}
-                title={floor != null && z < floor ? 'The whole sheet already fits — use Fit' : undefined}
+                title={floor != null && z < floor ? 'It all fits already: use Fit' : undefined}
                 onClick={() => {
                   // Anchor a preset to the canvas center so it zooms about the middle.
                   const r = opts?.grid ? null : canvasRef.current?.getBoundingClientRect()
@@ -8874,7 +8874,7 @@ export function FlowsView() {
             // not one you should have to press to find out about.
             title={
               viewing && viewRows.length > 0 && !genIds.length && targets.length
-                ? `Generate copy for all ${targets.length} assets in this campaign`
+                ? `Generate copy for all ${targets.length} assets`
                 : undefined
             }
           >
@@ -9490,7 +9490,7 @@ export function FlowsView() {
           {openPlacement && (
             <>
               <span className="flow-crumb-sep">/</span>
-              <button className="flow-crumb-obj" onClick={() => setOpenGroupId(null)} title="Back to the campaign canvas">
+              <button className="flow-crumb-obj" onClick={() => setOpenGroupId(null)} title="Back to the campaign board">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 3l8 4.5-8 4.5-8-4.5z" /><path d="M4 12l8 4.5 8-4.5" />
                 </svg>
@@ -9526,7 +9526,7 @@ export function FlowsView() {
           {aiCredits && (
             <span
               className={`flow-top-credits${aiCredits.remaining < 1 ? ' low' : ''}`}
-              title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} on the model account · 1 credit = $0.01`}
+              title={`$${aiCredits.remaining.toFixed(2)} left of $${aiCredits.totalCredits.toFixed(2)} · 1 credit = $0.01`}
             >
               {aiCredits.remainingCredits.toLocaleString()} credits
             </span>
@@ -9535,7 +9535,7 @@ export function FlowsView() {
             <button
               className="flow-share-btn"
               onClick={() => openShareDialog(viewName ?? undefined)}
-              title={viewName ? 'Share just this campaign (view-only)' : 'Share this workspace'}
+              title={viewName ? 'Share just this campaign' : 'Share this workspace'}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />
@@ -9995,7 +9995,7 @@ export function FlowsView() {
                     key={rim.edge}
                     className="flow-group-rim"
                     style={rim.style}
-                    title={`${group.name}: drag to move all ${group.ids.length} cards together`}
+                    title={`${group.name}: drag to move all ${group.ids.length} together`}
                     onMouseDown={(e) => {
                       if (renamingGroup === group.id) return
                       startDrag(e, group.ids[0])
@@ -10010,7 +10010,7 @@ export function FlowsView() {
                 <div
                   className="flow-group-head"
                   style={{ height: GROUP_HEAD * (zoom / 100) }}
-                  title={`${group.name}: drag to move all ${group.ids.length} cards together, double-click to rename`}
+                  title={`${group.name}: drag to move all ${group.ids.length}, double-click to rename`}
                   onMouseDown={(e) => {
                     if (renamingGroup === group.id) return
                     // Same gesture as grabbing a member, entered off the frame instead.
@@ -10325,7 +10325,7 @@ export function FlowsView() {
                             dropped at generation (isPatternRetired). The card is the only place that
                             can say so before you wonder why the copy ignored it. */}
                         {isPatternRetired(pat) ? (
-                          <span className="flow-pat-type retired" title="Archived patterns are dropped when the copy is written. Pick another, or move this one back to active.">Archived</span>
+                          <span className="flow-pat-type retired" title="Archived, so the copy will skip it. Pick another, or reactivate it.">Archived</span>
                         ) : pat.type ? (
                           <span className="flow-pat-type">{pat.type}</span>
                         ) : null}
@@ -10391,7 +10391,7 @@ export function FlowsView() {
                         everywhere, which is exactly the thing you want to know before you touch it.
                         A local object wears nothing, because there is nothing to warn about. */}
                     {scope === 'brand' && (
-                      <span className="flow-obj-linked" title="In the brand library: editing this changes every campaign using it" aria-label="In the brand library">
+                      <span className="flow-obj-linked" title="In the brand library: edits reach every campaign using it" aria-label="In the brand library">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
                           <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
@@ -10480,7 +10480,7 @@ export function FlowsView() {
                                   const stale = d.rows.filter((r) => r.recheckFlag).length
                                   if (!stale) return null
                                   return (
-                                    <span className="flow-deliv-stale" title={`${stale} of these ${stale === 1 ? 'is' : 'are'} out of date. Generate to bring ${stale === 1 ? 'it' : 'them'} up to date.`}>
+                                    <span className="flow-deliv-stale" title={`${stale} out of date. Generate to refresh ${stale === 1 ? 'it' : 'them'}.`}>
                                       {stale} out of date
                                     </span>
                                   )
@@ -10566,7 +10566,7 @@ export function FlowsView() {
                                       existed only in a queue you had to go and look at. The card is
                                       where you see the copy, so it is where the warning belongs. */}
                                   {r.recheckFlag && (
-                                    <span className="flow-node-stale" title={`Out of date. ${r.recheckFlag.reason}. Generate to bring it up to date.`} aria-label="Out of date" />
+                                    <span className="flow-node-stale" title={`Out of date: ${r.recheckFlag.reason}. Generate to refresh it.`} aria-label="Out of date" />
                                   )}
                                   <div className="flow-node-main">
                                     <PresetTile tone={d.tone} channel={r.channel as ChannelId} />
@@ -11694,8 +11694,8 @@ export function FlowsView() {
                   disabled={selected.size < MIN_GROUP}
                   title={
                     selected.size < MIN_GROUP
-                      ? 'Select two or more cards first: drag a box around them, or Shift-click each one'
-                      : 'Keep these cards together: select one and you get them all, move one and they all move'
+                      ? 'Select two or more first: drag a box around them, or Shift-click each'
+                      : 'Keep these together: select one and you get them all, move one and all move'
                   }
                   onClick={() => { close(); groupSelection() }}
                 >
@@ -11994,7 +11994,7 @@ export function FlowsView() {
               <button
                 className="flow-share-btn"
                 onClick={() => { setGridPick(null); setAssetPick({}) }}
-                title="Add an asset to this campaign — pick its channel"
+                title="Add an asset: pick its channel"
               >
                 ＋ Add asset
               </button>
