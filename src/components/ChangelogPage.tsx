@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.44',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Leaving a campaign puts you back on the Campaigns page you left, with every campaign still on it. Opening a campaign narrows the workspace to that campaign\'s brand, which is right while you are on the board and wrong the moment you are not, and nothing widened it again on the way out. So the back arrow returned you to a Campaigns page quietly scoped to one brand: other brands\' campaigns were missing, the folders they were filed in either vanished or sat there reading 0, and a campaign whose folder had gone with them appeared under Drafts as though nobody had ever filed it. Four campaigns in three folders came back as three campaigns and a draft. Nothing had been moved, unfiled or deleted, which is a hard thing to believe while looking at it.',
+          'The back arrow in the campaign rail and the Campaigns breadcrumb above the board now do exactly the same thing. They were separate paths out of a campaign and only one of them went through the app\'s own navigation, so the two could not help but drift.',
+          'A brand you picked yourself is still the brand you picked. Leaving a campaign undoes the scoping the campaign did on its own; it does not reach past that and widen a choice you made.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.43',
     dateLabel: 'August 6, 2026',
     groups: [

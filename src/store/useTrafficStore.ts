@@ -2116,6 +2116,23 @@ interface TrafficState {
    */
   flowHomeNonce: number
   goFlowHome: () => void
+  /**
+   * THE INDEX SCOPE FROM BEFORE A CAMPAIGN NARROWED IT, so leaving one can put it back.
+   *
+   * openFlow re-scopes the workspace to its campaign's brand, which is right for a board (you are
+   * inside one brand's work) and wrong for the page you land on when you leave. The Campaigns index
+   * reads clientFilter three ways at once: it hides other brands' campaigns, it swaps
+   * campaignFolders to that brand's folder list, and it filters the tab strip. So a scope left
+   * narrowed on the way out did not just hide a brand, it emptied folders of campaigns that were
+   * still there and dropped campaigns filed under an unlisted folder into DRAFTS. Four campaigns in
+   * three folders came back as three campaigns, one folder reading 0, and a filed campaign
+   * presenting as an unfiled draft. Nothing had moved.
+   *
+   * null = no campaign has narrowed anything, so there is nothing to restore. Session state, never
+   * persisted: clientFilter itself resets to 'all' on load, so a remembered scope would outlive the
+   * thing it was remembered from.
+   */
+  scopeBeforeFlow: string | null
   /** Which view of the open campaign is showing (the Flow / Grid / Calendar top tabs). Lifted here
    *  so the campaign icon rail (Files / Assets / Gretel in HomeShell) can drive and reflect it. */
   flowView: 'flow' | 'grid' | 'calendar'
@@ -3119,6 +3136,7 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   flowOpenView: 'flow',
   flowCanvasOpen: false,
   flowHomeNonce: 0,
+  scopeBeforeFlow: null,
   flowView: 'flow',
   flowChatCollapsed: true,
   flowAssetsOpen: false,
@@ -3196,7 +3214,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
   setClientFilter: (clientFilter) => {
     const ss = get().sharedSession
     if (ss && clientFilter !== ss.client) return
-    set({ clientFilter, campaignFilter: 'all', proofFilter: 'all', ctaFilter: 'all', audienceFilter: 'all', cardFilter: 'all' })
+    // A scope somebody PICKED is now the scope, so there is no earlier one to go back to: leaving a
+    // campaign must not undo this by restoring whatever was in effect before the campaign started.
+    // openFlow narrows by writing clientFilter directly and never comes through here, so this only
+    // ever fires on a deliberate choice.
+    set({ clientFilter, campaignFilter: 'all', proofFilter: 'all', ctaFilter: 'all', audienceFilter: 'all', cardFilter: 'all', scopeBeforeFlow: null })
   },
   setCampaignFilter: (campaignFilter) => set({ campaignFilter, proofFilter: 'all', ctaFilter: 'all', audienceFilter: 'all', cardFilter: 'all' }),
   setView: (view) => set({ view }),
@@ -4536,13 +4558,39 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     get().openProject(campaign)
     // campaignFilter tracks the active tab; it's inert on the Flows page (FlowsView scopes
     // by its own viewName), so setting it only drives the tab highlight.
-    set({ page: 'flows', clientFilter: client, campaignFilter: campaign, flowOpen: campaign, flowOpenView: flowView })
+    //
+    // REMEMBER WHAT THE SCOPE WAS BEFORE THIS NARROWED IT, once. Only when nothing is remembered
+    // yet: switching campaign to campaign (a tab click, the breadcrumb switcher) runs this again
+    // with clientFilter ALREADY narrowed by the campaign you are leaving, so capturing every time
+    // would overwrite the browsing scope with the last board's brand and restore that instead. The
+    // first narrowing is the only one that has the answer. See scopeBeforeFlow and goFlowHome.
+    set((s) => ({
+      page: 'flows',
+      clientFilter: client,
+      campaignFilter: campaign,
+      flowOpen: campaign,
+      flowOpenView: flowView,
+      scopeBeforeFlow: s.scopeBeforeFlow ?? s.clientFilter,
+    }))
   },
   clearFlowOpen: () => set({ flowOpen: null, flowOpenView: 'flow' }),
   newCampaignParent: null,
   setNewCampaignParent: (newCampaignParent) => set({ newCampaignParent }),
   setFlowCanvasOpen: (open) => set((s) => (s.flowCanvasOpen === open ? {} : { flowCanvasOpen: open })),
-  goFlowHome: () => set((s) => ({ flowHomeNonce: s.flowHomeNonce + 1 })),
+  /**
+   * Leave the open campaign, and give the index back the scope the campaign borrowed.
+   *
+   * The bump is the request FlowsView answers (see flowHomeNonce). The scope reset is the other
+   * half of the same move: you are going back to a workspace-wide page, so it has to be as wide as
+   * it was when you left it. Restoring rather than forcing 'all', because a brand you CHOSE is a
+   * scope this has no business widening; it is only undoing the narrowing openFlow did on its own.
+   */
+  goFlowHome: () =>
+    set((s) => ({
+      flowHomeNonce: s.flowHomeNonce + 1,
+      ...(s.scopeBeforeFlow === null ? {} : { clientFilter: s.scopeBeforeFlow }),
+      scopeBeforeFlow: null,
+    })),
   setFlowView: (v) => set((s) => (s.flowView === v ? {} : { flowView: v })),
   setFlowChatCollapsed: (v) => set((s) => (s.flowChatCollapsed === v ? {} : { flowChatCollapsed: v })),
   setFlowAssetsOpen: (v) => set((s) => (s.flowAssetsOpen === v ? {} : { flowAssetsOpen: v })),

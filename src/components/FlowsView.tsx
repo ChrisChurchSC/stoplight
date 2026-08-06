@@ -1635,6 +1635,12 @@ export function FlowsView() {
    * ever means "somebody asked to leave", which is unambiguous in either order.
    */
   const flowHomeNonce = useTrafficStore((s) => s.flowHomeNonce)
+  // ...and the way to ASK, which this file's own breadcrumb uses too. Leaving a campaign is one
+  // move with two halves (the screen, and giving the index back the scope openFlow narrowed), and
+  // the breadcrumb used to do the first half by setting flowScreen directly. So the same exit
+  // behaved differently depending on which control you took it from: the rail's back arrow went
+  // through the store and the breadcrumb beside it did not. One door.
+  const goFlowHome = useTrafficStore((s) => s.goFlowHome)
   const seenHomeNonce = useRef(flowHomeNonce)
   useEffect(() => {
     if (flowHomeNonce === seenHomeNonce.current) return
@@ -9190,7 +9196,7 @@ export function FlowsView() {
           {flowShareLock ? (
             <span className="flow-crumb-home" style={{ cursor: 'default' }}>Campaign</span>
           ) : (
-            <button className="flow-crumb-home" onClick={() => setFlowScreen('home')} title="All campaigns">
+            <button className="flow-crumb-home" onClick={() => goFlowHome()} title="All campaigns">
               Campaigns
             </button>
           )}
