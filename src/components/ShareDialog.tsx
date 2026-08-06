@@ -1,14 +1,19 @@
-import { useState } from 'react'
-import { ROLE_META, SHAREABLE_ROLES, type Role } from '../domain/access'
+import { useEffect, useState } from 'react'
+import { SHARE_ACCESS, SHAREABLE_ROLES, type ShareableRole } from '../domain/access'
 import { encodeShareToken, shareUrl } from '../lib/shareLink'
 import { publishShareSnapshot } from '../lib/shareSnapshot'
-import { isSupabaseConfigured } from '../lib/supabase'
 import { useTrafficStore } from '../store/useTrafficStore'
 
 /**
- * Owner-only. Mints a self-contained share link for the current client at a chosen
- * role and lists the links already handed out, each revocable. The grant lives in
- * the link's token, so a recipient needs no account.
+ * Owner-only. ONE link per campaign (or per brand) at each access level, ready to copy the
+ * moment the dialog opens.
+ *
+ * It used to mint them. You picked a role from two cards, pressed Create, then pressed Copy,
+ * and every Create added another row to a list of opaque ids you could not tell apart, so
+ * revoking the right one was guesswork and the extra links bought nothing that one link did
+ * not. Handing out a campaign is a single link, so the dialog reuses it instead of stacking
+ * new ones, and the access choice moved to a two-option switch under the link rather than a
+ * decision standing in front of it.
  */
 export function ShareDialog() {
   const open = useTrafficStore((s) => s.shareDialogOpen)
@@ -19,120 +24,127 @@ export function ShareDialog() {
   const createShare = useTrafficStore((s) => s.createShare)
   const revokeShare = useTrafficStore((s) => s.revokeShare)
 
-  const [role, setRole] = useState<Role>('stakeholder')
-  const [created, setCreated] = useState<string | null>(null)
+  const [role, setRole] = useState<ShareableRole>('stakeholder')
   const [copied, setCopied] = useState(false)
-  const [refreshed, setRefreshed] = useState<string | null>(null)
+  // Stop sharing has to outlast the mint-on-open effect below, or pressing it would hand
+  // straight back the link it just revoked.
+  const [stopped, setStopped] = useState(false)
+
+  // A campaign share shows that campaign's links; a brand share shows the brand-level
+  // (campaign-less) ones. Newest first, because createShare prepends.
+  const scoped = shares.filter((s) => s.client === client && (campaign ? s.campaign === campaign : !s.campaign))
+  const atRole = scoped.filter((s) => s.role === role)
+  const link = atRole[0] ?? null
+  // Duplicates left over from the dialog that could stack any number of links. Nothing else
+  // surfaces them now, and a live grant nobody can see is a live grant nobody can revoke.
+  const extra = atRole.slice(1)
+  // 'all' is not a brand, so there is nothing to scope a link to. Reachable from the
+  // workspace Share button before a brand is picked.
+  const shareable = !!client && client !== 'all'
+
+  useEffect(() => setCopied(false), [role, link?.id])
+  useEffect(() => setStopped(false), [open, campaign, client])
+
+  useEffect(() => {
+    if (!open || stopped || !shareable) return
+    if (!link) {
+      createShare(client, role, campaign ?? undefined)
+      return
+    }
+    // Opening republishes, so a recipient sees the campaign as it stands now. This used to
+    // be a Refresh button, which only worked if the owner knew a share is a point-in-time
+    // snapshot and thought to press it.
+    void publishShareSnapshot(useTrafficStore.getState(), link.client, link.role, link.id, link.campaign)
+  }, [open, stopped, shareable, link, client, role, campaign, createShare])
 
   if (!open) return null
-  // A flow share shows just this flow's links; a brand share shows the brand-level (flow-less) ones.
-  const clientShares = shares.filter((s) => s.client === client && (campaign ? s.campaign === campaign : !s.campaign))
-  const short = (name: string) => name.replace(`${client} — `, '')
-  const subject = campaign ? short(campaign) : client
 
-  const make = () => {
-    const grant = createShare(client, role, campaign ?? undefined)
-    setCreated(
-      shareUrl(encodeShareToken({ client: grant.client, role: grant.role, id: grant.id, campaign: grant.campaign })),
-    )
-    setCopied(false)
-  }
+  const subject = campaign ? campaign.replace(`${client} — `, '') : client
+  const noun = campaign ? 'campaign' : 'workspace'
+  const url = link
+    ? shareUrl(encodeShareToken({ client: link.client, role: link.role, id: link.id, campaign: link.campaign }))
+    : ''
+
   const copy = async () => {
-    if (!created) return
+    if (!url) return
     try {
-      await navigator.clipboard.writeText(created)
+      await navigator.clipboard.writeText(url)
       setCopied(true)
     } catch {
       /* clipboard blocked; the field is selectable as a fallback */
     }
   }
   const dismiss = () => {
-    setCreated(null)
     setCopied(false)
-    setRefreshed(null)
     close()
   }
-  // Republish a link's snapshot so viewers see the current state (snapshots are point-in-time).
-  const refresh = async (id: string, c: string, r: Role, cmp?: string) => {
-    await publishShareSnapshot(useTrafficStore.getState(), c, r, id, cmp)
-    setRefreshed(id)
+  const stop = () => {
+    for (const s of atRole) revokeShare(s.id)
+    setStopped(true)
+    setCopied(false)
   }
 
   return (
     <>
       <div className="share-scrim" onClick={dismiss} />
-      <div className="share-dialog" role="dialog" aria-label="Share workspace">
+      <div className="share-dialog" role="dialog" aria-label={`Share ${subject}`}>
         <div className="share-head">
           <span className="share-title">Share {subject}</span>
-          <button className="share-x" onClick={dismiss}>
+          <button className="share-x" onClick={dismiss} aria-label="Close">
             ✕
           </button>
         </div>
         <p className="share-sub">
-          {campaign
-            ? 'Generate a link that opens just this flow (its flow, grid, and calendar) at a fixed role. Anyone with the link gets that access, no account needed.'
-            : "Generate a link that opens this client's workspace at a fixed role. Anyone with the link gets that access, no account needed."}{' '}
-          Viewers see a snapshot as of when you shared, hit Refresh on a link to bring it up to date.
+          Anyone with this link can {SHARE_ACCESS[role].can} this {noun}. No account needed.
         </p>
 
-        <div className="share-roles">
-          {SHAREABLE_ROLES.map((r) => (
-            <button key={r} className={`share-role${role === r ? ' on' : ''}`} onClick={() => setRole(r)}>
-              <span className="share-role-name">{ROLE_META[r].label}</span>
-              <span className="share-role-blurb">{ROLE_META[r].blurb}</span>
-            </button>
-          ))}
-        </div>
-
-        {created ? (
+        {!shareable ? (
+          <div className="share-blocked">Pick a brand first, then share.</div>
+        ) : link ? (
           <div className="share-link-row">
-            <input
-              className="share-link"
-              readOnly
-              value={created}
-              onFocus={(e) => e.currentTarget.select()}
-            />
-            <button className="btn sm primary" onClick={copy}>
+            <input className="share-link" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+            <button className="btn sm primary share-copy" onClick={copy}>
               {copied ? 'Copied' : 'Copy'}
-            </button>
-            <button className="btn sm" onClick={make} title="Mint another link">
-              New
             </button>
           </div>
         ) : (
-          <button className="btn primary share-make" onClick={make}>
-            Create {ROLE_META[role].label} link
+          <button className="btn primary share-make" onClick={() => setStopped(false)}>
+            Create a link
           </button>
         )}
 
-        <div className="share-list">
-          <div className="share-list-label">
-            Active links{clientShares.length ? ` · ${clientShares.length}` : ''}
-          </div>
-          {clientShares.length === 0 ? (
-            <div className="share-empty">No links yet.</div>
-          ) : (
-            clientShares.map((s) => (
-              <div key={s.id} className="share-item">
-                <span className={`share-badge r-${s.role}`}>{ROLE_META[s.role].label}</span>
-                <span className="share-item-id">{s.id.replace('shr_', '').slice(0, 14)}</span>
-                <span className="spacer" />
-                {isSupabaseConfigured && (
-                  <button
-                    className="share-revoke"
-                    title="Update the snapshot this link shows to the current state"
-                    onClick={() => void refresh(s.id, s.client, s.role, s.campaign)}
-                  >
-                    {refreshed === s.id ? 'Updated' : 'Refresh'}
-                  </button>
-                )}
-                <button className="share-revoke" onClick={() => revokeShare(s.id)}>
-                  Revoke
+        {shareable && (
+          <div className="share-foot">
+            <div className="share-access" role="group" aria-label="Link access">
+              {SHAREABLE_ROLES.map((r) => (
+                <button
+                  key={r}
+                  className={`share-access-opt${role === r ? ' on' : ''}`}
+                  aria-pressed={role === r}
+                  onClick={() => setRole(r)}
+                >
+                  {SHARE_ACCESS[r].label}
                 </button>
-              </div>
-            ))
-          )}
-        </div>
+              ))}
+            </div>
+            {link && (
+              <button className="share-stop" onClick={stop}>
+                Stop sharing
+              </button>
+            )}
+          </div>
+        )}
+
+        {extra.length > 0 && (
+          <div className="share-extra">
+            <span>
+              {extra.length} older link{extra.length > 1 ? 's' : ''} still open{extra.length > 1 ? '' : 's'} this {noun}.
+            </span>
+            <button className="share-extra-revoke" onClick={() => extra.forEach((s) => revokeShare(s.id))}>
+              Revoke
+            </button>
+          </div>
+        )}
       </div>
     </>
   )

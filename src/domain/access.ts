@@ -33,5 +33,27 @@ const MATRIX: Record<Role, Permission[]> = {
 
 export const can = (role: Role, perm: Permission): boolean => MATRIX[role].includes(perm)
 
-/** Roles an owner can hand out via a link (everything except owner itself). */
-export const SHAREABLE_ROLES: Role[] = ['editor', 'stakeholder']
+export type ShareableRole = Exclude<Role, 'owner'>
+
+/**
+ * Roles an owner can hand out via a link (everything except owner itself).
+ * Least privilege first, which is the order the share dialog offers them in and the
+ * default it lands on. Order is otherwise immaterial: the only other reader is
+ * `isShareableRole`, which tests membership.
+ */
+export const SHAREABLE_ROLES: ShareableRole[] = ['stakeholder', 'editor']
+
+/** A link can only ever grant a shareable role, so a forged token asking for owner is not one. */
+export const isShareableRole = (r: unknown): r is ShareableRole =>
+  typeof r === 'string' && (SHAREABLE_ROLES as string[]).includes(r)
+
+/**
+ * How a link's access reads in the share dialog. ROLE_META names the seat a person
+ * holds ("Stakeholder"), which is the right word in the shared-view banner but the
+ * wrong one when you are handing out a link: there the question is what the recipient
+ * will be able to do, so it gets its own plain wording.
+ */
+export const SHARE_ACCESS: Record<ShareableRole, { label: string; can: string }> = {
+  stakeholder: { label: 'Can view', can: 'view and comment on' },
+  editor: { label: 'Can edit', can: 'open and edit' },
+}

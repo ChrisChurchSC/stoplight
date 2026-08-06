@@ -1,4 +1,4 @@
-import { SHAREABLE_ROLES, type Role } from '../domain/access'
+import { isShareableRole, type Role } from '../domain/access'
 
 /**
  * Share links are self-contained: the grant (client + role) is encoded into the
@@ -40,9 +40,9 @@ export function encodeShareToken(grant: { client: string; role: Role; id: string
 export function decodeShareToken(token: string): { client: string; role: Role; id: string; campaign?: string } | null {
   try {
     const o = JSON.parse(b64urlDecode(token)) as Partial<TokenPayload>
-    // A link can only ever grant a shareable role (editor / stakeholder). Reject
+    // A link can only ever grant a shareable role (stakeholder / editor). Reject
     // a forged token trying to mint owner, even though tokens are unsigned.
-    if (!o.c || !o.r || !SHAREABLE_ROLES.includes(o.r)) return null
+    if (!o.c || !isShareableRole(o.r)) return null
     return { client: o.c, role: o.r, id: o.id ?? '', campaign: o.cmp || undefined }
   } catch {
     return null

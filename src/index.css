@@ -14987,48 +14987,16 @@ button.mf-open:focus-visible,
   line-height: 1.5;
   color: var(--text-muted);
 }
-.share-roles {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.share-role {
-  flex: 1;
-  text-align: left;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.share-role.on {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.share-role-name {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--text);
-}
-.share-role-blurb {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-muted);
-}
 .share-make {
   width: 100%;
-  margin-bottom: 14px;
 }
 .share-link-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 14px;
 }
 .share-link {
   flex: 1;
+  min-width: 0;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
   padding: 7px 10px;
@@ -15036,53 +15004,74 @@ button.mf-open:focus-visible,
   color: var(--text);
   background: var(--surface-2);
 }
-.share-list {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
+.share-copy {
+  flex: none;
+  min-width: 72px;
 }
-.share-list-label {
-  font-size: 10.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-faint);
-  margin-bottom: 8px;
-}
-.share-empty {
+.share-blocked {
   font-size: 12.5px;
   color: var(--text-muted);
+  padding: 7px 0;
 }
-.share-item {
+/* Access switch and Stop sharing sit UNDER the link: the link is the thing you came for,
+   the access level is an adjustment to it. */
+.share-foot {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 0;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
 }
-.share-item .spacer {
-  flex: 1;
+.share-access {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
 }
-.share-badge {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: 999px;
+.share-access-opt {
+  border: none;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
 }
-.share-badge.r-editor {
+.share-access-opt + .share-access-opt {
+  border-left: 1px solid var(--border-strong);
+}
+.share-access-opt:hover {
+  color: var(--text);
+}
+.share-access-opt.on {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.share-badge.r-stakeholder {
-  background: #fff7e6;
-  color: #8a5a00;
+.share-stop {
+  border: none;
+  background: none;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 2px;
+  cursor: pointer;
 }
-.share-item-id {
-  font-size: 11.5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--text-faint);
+.share-stop:hover {
+  text-decoration: underline;
 }
-.share-revoke {
+/* Only ever shown for links minted by the old stacking dialog. */
+.share-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.share-extra-revoke {
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: #b42318;
@@ -15092,7 +15081,7 @@ button.mf-open:focus-visible,
   border-radius: 6px;
   cursor: pointer;
 }
-.share-revoke:hover {
+.share-extra-revoke:hover {
   border-color: #b42318;
   background: #fdf4f3;
 }
