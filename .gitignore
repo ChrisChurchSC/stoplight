@@ -14,3 +14,6 @@ dist-ssr
 .rushhour/
 .vercel
 .claude/worktrees/
+# Page snapshots the Playwright MCP browser writes while verifying a change by hand. Debris from
+# testing, not source, and a `git add -A` during a verification run swept eleven of them into a PR.
+.playwright-mcp/

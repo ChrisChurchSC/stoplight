@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.45',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Generate now says why, when it will not run. It refuses a campaign with nothing wired into its brief, because there is nothing to write from, and that refusal was real and correct. What was wrong is where it was written: the explanation went to a notice that lives in the breadcrumb bar, and the breadcrumb bar is not on screen while you are on a campaign canvas. So the button did nothing, said nothing, and left every field empty. It reads exactly like a broken model connection, and it never was one: the request had not failed, it had never been sent.',
+          'The reason now appears on the canvas, where the button is. It names what is missing and what to do about it: draw a line from a card to the campaign brief, or to one channel. Connect one card and Generate writes.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.44',
     dateLabel: 'August 6, 2026',
     groups: [
