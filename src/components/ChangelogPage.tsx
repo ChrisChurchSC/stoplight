@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.52',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The tooltips inside a campaign are shorter, and they say what the app is called now. Several still called the campaign board a canvas or a sheet, one called it the Flow tab, and one credited Claude for work Gretel does, so hovering told you about a version of the app that no longer exists. The share button also still promised a view-only link, which stopped being true when sharing gained a Can view and Can edit switch.',
+          'The long ones are cut to what you actually needed. The worst ran to a full paragraph in a small grey box, which is longer than most people hold a hover, so the sentence that mattered was the one you never reached.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.51',
     dateLabel: 'August 6, 2026',
     groups: [

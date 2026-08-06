@@ -222,7 +222,7 @@ export function CanvasProjectTabs() {
             <span className="cv-project-tab-client">{p.folder ? folderName(p.folder) : DRAFTS}</span>
             <span className="cv-project-tab-name">{p.short}</span>
           </span>
-          <button className="cv-project-tab-x" title="Close this canvas" onClick={(e) => close(e, p.campaign)}>
+          <button className="cv-project-tab-x" title="Close this tab" onClick={(e) => close(e, p.campaign)}>
             ✕
           </button>
         </span>
