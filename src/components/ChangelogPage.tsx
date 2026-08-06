@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.44',
+    version: 'v1.46',
     dateLabel: 'August 6, 2026',
     groups: [
       {
@@ -32,6 +32,34 @@ const RELEASES: Release[] = [
           'Leaving a campaign puts you back on the Campaigns page you left, with every campaign still on it. Opening a campaign narrows the workspace to that campaign\'s brand, which is right while you are on the board and wrong the moment you are not, and nothing widened it again on the way out. So the back arrow returned you to a Campaigns page quietly scoped to one brand: other brands\' campaigns were missing, the folders they were filed in either vanished or sat there reading 0, and a campaign whose folder had gone with them appeared under Drafts as though nobody had ever filed it. Four campaigns in three folders came back as three campaigns and a draft. Nothing had been moved, unfiled or deleted, which is a hard thing to believe while looking at it.',
           'The back arrow in the campaign rail and the Campaigns breadcrumb above the board now do exactly the same thing. They were separate paths out of a campaign and only one of them went through the app\'s own navigation, so the two could not help but drift.',
           'A brand you picked yourself is still the brand you picked. Leaving a campaign undoes the scoping the campaign did on its own; it does not reach past that and widen a choice you made.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.45',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Generate now says why, when it will not run. It refuses a campaign with nothing wired into its brief, because there is nothing to write from, and that refusal was real and correct. What was wrong is where it was written: the explanation went to a notice that lives in the breadcrumb bar, and the breadcrumb bar is not on screen while you are on a campaign canvas. So the button did nothing, said nothing, and left every field empty. It reads exactly like a broken model connection, and it never was one: the request had not failed, it had never been sent.',
+          'The reason now appears on the canvas, where the button is. It names what is missing and what to do about it: draw a line from a card to the campaign brief, or to one channel. Connect one card and Generate writes.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.44',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Removing a channel now asks first, and names what it is about to take. Deleting a channel deletes the assets under it, which was true before and is still true: a channel card is not a thing in its own right, it is made of its assets and keyed by them, so it cannot be removed while they are still on the board. What was wrong was doing it in silence. A keystroke on a channel card took four written posts with no dialog, no count, and nothing naming what had gone.',
+          'It archives them rather than destroying them, so the answer to "that was not what I meant" is a restore instead of a rewrite. That is already what deleting a campaign does, one level up. Deleting a single asset is unchanged: it goes immediately, and undo covers it.',
+          'A menu that runs out of items no longer scrolls the thing behind it. Reaching the end of a list used to hand the rest of the gesture to whatever it was covering, so the board or the page underneath moved while you were reading, and closing the menu revealed somewhere you had not meant to go. The channel picker was the worst of them: every asset type in one list is roughly seven screens inside a one screen window, so running off the end is the normal way to use it rather than an edge case.',
+          'This covers the canvas side panels, the channel and record pickers, the audience and flight menus, the chat history menu, the tag picker, the library menus and the modals. Lists that sit in the page rather than over it are deliberately left alone, because a reader scrolling past one of those expects the page to carry on once the list is done.',
         ],
       },
     ],
