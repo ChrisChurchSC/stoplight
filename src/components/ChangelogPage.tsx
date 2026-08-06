@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.39',
+    dateLabel: 'August 5, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A group can be moved by its frame. Grab the dashed border anywhere along its edge and the whole group comes with you. Dragging a card inside a group already moved all of it, but the frame itself was the one part of a group that looked like a handle and was not one: the box is drawn behind its cards and passes clicks through, so taking hold of the edge fell straight through to the canvas and started a selection rectangle instead. The only real handle was the name at the top left, which is only as wide as the name and gets smaller the further you zoom out.',
+          'Hovering the edge lights the border and the cursor becomes a hand, so the handle says it is one rather than having to be found.',
+          'The inside of a frame still belongs to what is under it. A click in the middle of a group reaches the card you clicked, and a drag through the empty space between its cards still draws a selection rectangle, because only the ring around the edge takes the mouse. A card that happens to overlap the frame keeps its own clicks too.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.38',
     dateLabel: 'August 5, 2026',
     groups: [
