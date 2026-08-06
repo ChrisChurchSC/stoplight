@@ -55,6 +55,10 @@ const onTheIndex = {
   // The prune only runs once the workspace read has landed; leave it un-hydrated so it stays out.
   flightsHydrated: false,
   openProjectsPruned: true,
+  // Reset per test: openFlow writes this, and a value left over from the previous test would scope
+  // the strip to a brand that test never picked.
+  scopeBeforeFlow: null,
+  sharedSession: null,
 }
 
 beforeEach(() => {
@@ -70,6 +74,27 @@ afterEach(() => {
   host.remove()
   useTrafficStore.setState({ ...onTheIndex, openProjects: [], campaignList: [], campaignFilter: 'all' })
 })
+
+/** The names showing in the strip right now, left to right. */
+const tabNames = () => [...host.querySelectorAll('.cv-project-tab-name')].map((n) => n.textContent)
+
+/** The tab named `short` itself, e.g. 'Alpha' — a click on the tab, not on its ✕. */
+const clickTab = (short: string) => {
+  const tab = [...host.querySelectorAll('.cv-project-tab')].find((t) =>
+    t.querySelector('.cv-project-tab-name')?.textContent?.includes(short),
+  )
+  act(() => {
+    tab?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+/** Leave the board, the way the rail's back arrow and the breadcrumb's home both do. */
+const goBack = () => {
+  act(() => {
+    useTrafficStore.setState({ flowCanvasOpen: false })
+    useTrafficStore.getState().goFlowHome()
+  })
+}
 
 /** The ✕ on the tab named `short`, e.g. 'Alpha'. */
 const closeTab = (short: string) => {
@@ -142,5 +167,107 @@ describe('CanvasProjectTabs — closing a campaign tab', () => {
     // A sibling of the SAME brand, and the index still shows every brand's campaigns.
     expect(s.flowOpen).toBe('Acme — Gamma')
     expect(s.clientFilter).toBe('all')
+  })
+})
+
+/**
+ * OPENING A CAMPAIGN FROM THE STRIP MUST NOT EMPTY THE STRIP.
+ *
+ * The report: "when I click a tab of a campaign, and then go back, it loses the other tabs of the
+ * campaigns." Two separate faults on the one gesture, and neither is a type error.
+ *
+ * One, openFlow narrows clientFilter to its campaign's brand — the board needs it — and the strip
+ * filtered on clientFilter. So clicking a tab deleted every tab belonging to any other brand, from
+ * the one strip whose whole job is to say what you have open. Nothing had closed.
+ *
+ * Two, the tab you came back FROM was then a dead click, because switchTo skipped any campaign
+ * matching campaignFilter and campaignFilter still names the campaign you left. So the one tab you
+ * are most likely to want back was the one that did nothing.
+ */
+describe('CanvasProjectTabs — opening a campaign from the strip', () => {
+  /** Every brand's tabs open, and the index browsing all of them. */
+  const browsingEveryBrand = {
+    clientFilter: 'all',
+    campaignFilter: 'all',
+    openProjects: ['Acme — Alpha', 'Acme — Gamma', 'Zeta — One'],
+    scopeBeforeFlow: null,
+  }
+
+  it('keeps the other brand’s tabs while you are inside a campaign', () => {
+    useTrafficStore.setState(browsingEveryBrand)
+    act(() => root.render(<CanvasProjectTabs />))
+    expect(tabNames()).toEqual(['Alpha', 'Gamma', 'One'])
+
+    clickTab('Alpha')
+    act(() => useTrafficStore.setState({ flowCanvasOpen: true }))
+
+    // The board is scoped to Acme, which is right for the board. The drawer is not the board.
+    expect(useTrafficStore.getState().clientFilter).toBe('Acme')
+    expect(tabNames()).toEqual(['Alpha', 'Gamma', 'One'])
+  })
+
+  it('still has them all when you come back out', () => {
+    useTrafficStore.setState(browsingEveryBrand)
+    act(() => root.render(<CanvasProjectTabs />))
+
+    clickTab('Alpha')
+    act(() => useTrafficStore.setState({ flowCanvasOpen: true }))
+    goBack()
+
+    expect(useTrafficStore.getState().clientFilter).toBe('all')
+    expect(tabNames()).toEqual(['Alpha', 'Gamma', 'One'])
+  })
+
+  it('re-opens the campaign you just left when you click its tab again', () => {
+    useTrafficStore.setState(browsingEveryBrand)
+    act(() => root.render(<CanvasProjectTabs />))
+
+    clickTab('Alpha')
+    act(() => useTrafficStore.setState({ flowCanvasOpen: true }))
+    goBack()
+    // campaignFilter still names Alpha here — that is the trap the old guard fell into.
+    expect(useTrafficStore.getState().campaignFilter).toBe('Acme — Alpha')
+
+    act(() => useTrafficStore.setState({ flowOpen: null }))
+    clickTab('Alpha')
+
+    expect(useTrafficStore.getState().flowOpen).toBe('Acme — Alpha')
+  })
+
+  it('does nothing when you click the tab of the board already on screen', () => {
+    useTrafficStore.setState(browsingEveryBrand)
+    act(() => root.render(<CanvasProjectTabs />))
+
+    clickTab('Alpha')
+    act(() => useTrafficStore.setState({ flowCanvasOpen: true, flowOpen: null }))
+    clickTab('Alpha')
+
+    // The one click there is genuinely nothing to do about.
+    expect(useTrafficStore.getState().flowOpen).toBeNull()
+  })
+
+  it('still hides another brand’s tabs when you PICK a brand', () => {
+    // The narrowing a campaign borrows is undone; a brand you chose is a choice, and the strip
+    // follows it. setClientFilter clears scopeBeforeFlow, which is what makes the two tellable apart.
+    useTrafficStore.setState(browsingEveryBrand)
+    act(() => root.render(<CanvasProjectTabs />))
+
+    act(() => useTrafficStore.getState().setClientFilter('Zeta'))
+
+    expect(tabNames()).toEqual(['One'])
+  })
+
+  it('follows the brand you picked, not all brands, after a campaign inside it', () => {
+    useTrafficStore.setState(browsingEveryBrand)
+    act(() => root.render(<CanvasProjectTabs />))
+    act(() => useTrafficStore.getState().setClientFilter('Acme'))
+
+    clickTab('Alpha')
+    act(() => useTrafficStore.setState({ flowCanvasOpen: true }))
+    expect(tabNames()).toEqual(['Alpha', 'Gamma'])
+
+    goBack()
+    expect(useTrafficStore.getState().clientFilter).toBe('Acme')
+    expect(tabNames()).toEqual(['Alpha', 'Gamma'])
   })
 })

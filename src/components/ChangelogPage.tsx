@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.50',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Opening a campaign from the tab strip no longer hides your other campaigns’ tabs. Opening a campaign scopes the workspace to that campaign’s brand, which is right for the board, and the strip was reading it as though you had switched brand: every tab belonging to another brand disappeared the moment you clicked one. Nothing had closed, and they came back when you left, but the row that exists to tell you what you have open was the one thing that stopped saying it.',
+          'The tab you have just come back from works again. Going back to Campaigns leaves that campaign marked as the last one opened, and clicking its tab was being treated as a click on the campaign already in front of you, so it did nothing. The one tab you are most likely to want was the only dead one on the strip.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.49',
     dateLabel: 'August 6, 2026',
     groups: [
