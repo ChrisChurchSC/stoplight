@@ -1,0 +1,488 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - button "Back to all campaigns" [ref=e10] [cursor=pointer]
+        - button "Files" [ref=e15] [cursor=pointer]
+        - button "Assets, coming soon" [disabled] [ref=e20]
+        - button "Gretel, coming soon" [disabled] [ref=e27]
+      - button "Invite a teammate" [ref=e31] [cursor=pointer]
+      - button "C" [ref=e36] [cursor=pointer]
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - button "Drafts Relaunch ✕" [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]:
+            - generic [ref=e41]: Drafts
+            - generic [ref=e42]: Relaunch
+          - button "✕" [ref=e43]
+        - button "＋" [ref=e44] [cursor=pointer]
+      - generic [ref=e46]:
+        - banner [ref=e47]:
+          - generic [ref=e48]:
+            - button "Campaigns" [ref=e52] [cursor=pointer]
+            - generic [ref=e53]: /
+            - button "Relaunch ▾" [ref=e54] [cursor=pointer]:
+              - text: Relaunch
+              - generic [ref=e55]: ▾
+          - generic [ref=e56]:
+            - generic "$0.80 left of $10.00 on the model account · 1 credit = $0.01" [ref=e57]: 79 credits
+            - button "Share" [ref=e58] [cursor=pointer]
+            - generic [ref=e64]:
+              - button "Flow" [ref=e65] [cursor=pointer]
+              - button "Grid" [ref=e66] [cursor=pointer]
+              - button "Calendar" [ref=e67] [cursor=pointer]
+        - generic [ref=e68]:
+          - generic [ref=e69]:
+            - img:
+              - generic "Click to select this connection" [ref=e70] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e72] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e73] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e74] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e75] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e76] [cursor=pointer]
+            - generic [ref=e77]:
+              - generic [ref=e78]:
+                - generic [ref=e79]: Campaign brief
+                - generic [ref=e81]:
+                  - generic [ref=e82]: Relaunch
+                  - generic [ref=e83]: 4 assets · 2 channels
+                - button "Draw a connection from the left" [ref=e84]
+                - button "Draw a connection from the right" [ref=e85]
+                - button "Draw a connection from the top" [ref=e86]
+                - button "Draw a connection from the bottom" [ref=e87]
+              - generic [ref=e88]:
+                - generic [ref=e91]:
+                  - generic [ref=e92]:
+                    - generic [ref=e93]: Channel
+                    - generic [ref=e95]:
+                      - generic [ref=e96]: Instagram feed post
+                      - generic [ref=e97]: ×3
+                    - button "Draw a connection from the left" [ref=e98]
+                    - button "Draw a connection from the right" [ref=e99]
+                    - button "Draw a connection from the top" [ref=e100]
+                    - button "Draw a connection from the bottom" [ref=e101]
+                  - generic [ref=e102]:
+                    - generic [ref=e120]:
+                      - generic [ref=e121]: Post
+                      - generic [ref=e122]: IG post 2
+                      - button "Add a next step from this asset" [ref=e128] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e131]
+                      - button "Draw a connection from the right" [ref=e132]
+                      - button "Draw a connection from the top" [ref=e133]
+                      - button "Draw a connection from the bottom" [ref=e134]
+                    - generic [ref=e136]:
+                      - generic [ref=e137]: Post
+                      - generic [ref=e138]: IG post 3
+                      - button "Add a next step from this asset" [ref=e144] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e147]
+                      - button "Draw a connection from the right" [ref=e148]
+                      - button "Draw a connection from the top" [ref=e149]
+                      - button "Draw a connection from the bottom" [ref=e150]
+                    - generic [ref=e152]:
+                      - generic [ref=e153]: Post
+                      - generic [ref=e154]: IG post 4
+                      - button "Add a next step from this asset" [ref=e160] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e163]
+                      - button "Draw a connection from the right" [ref=e164]
+                      - button "Draw a connection from the top" [ref=e165]
+                      - button "Draw a connection from the bottom" [ref=e166]
+                - generic [ref=e169]:
+                  - generic [ref=e170]:
+                    - generic [ref=e171]: Channel
+                    - generic [ref=e173]:
+                      - generic [ref=e174]: Newsletter
+                      - generic [ref=e175]: ×1
+                    - button "Draw a connection from the left" [ref=e176]
+                    - button "Draw a connection from the right" [ref=e177]
+                    - button "Draw a connection from the top" [ref=e178]
+                    - button "Draw a connection from the bottom" [ref=e179]
+                  - generic [ref=e182]:
+                    - generic [ref=e183]: Post
+                    - generic [ref=e184]: Newsletter A
+                    - button "Add a next step from this asset" [active] [ref=e190] [cursor=pointer]
+                    - button "Draw a connection from the left" [ref=e193]
+                    - button "Draw a connection from the right" [ref=e194]
+                    - button "Draw a connection from the top" [ref=e195]
+                    - button "Draw a connection from the bottom" [ref=e196]
+            - group "Setting up this campaign" [ref=e197]:
+              - generic [ref=e198]:
+                - text: Setting up
+                - generic [ref=e199]: 1 of 7
+              - list [ref=e200]:
+                - listitem [ref=e201]:
+                  - button "Add a Brand card" [ref=e202] [cursor=pointer]:
+                    - generic [ref=e203]: "1"
+                - listitem [ref=e205]:
+                  - generic [ref=e206]: "2"
+                  - generic [ref=e207]: Say who the brand is
+                - listitem [ref=e208]:
+                  - generic [ref=e209]: "3"
+                  - generic [ref=e210]: Add the campaign brief
+                - listitem [ref=e211]:
+                  - generic [ref=e212]: "4"
+                  - generic [ref=e213]: Say what you are launching
+                - listitem [ref=e214]:
+                  - generic [ref=e215]: "5"
+                  - generic [ref=e216]: Add what you are shipping
+                - listitem [ref=e217]:
+                  - generic [ref=e218]: "6"
+                  - generic [ref=e219]: Connect them
+                - listitem [ref=e220]:
+                  - generic [ref=e221]: "7"
+                  - generic [ref=e222]: Generate the copy
+              - button "Complete" [ref=e223] [cursor=pointer]
+          - complementary [ref=e224]:
+            - button "Collapse panel" [ref=e225] [cursor=pointer]
+            - generic [ref=e229]:
+              - button "‹ Back" [ref=e360] [cursor=pointer]
+              - generic [ref=e361]: Next Step
+            - generic [ref=e234]:
+              - generic [ref=e362]:
+                - generic [ref=e363]: Social
+                - button "Instagram feed post 4 / month" [ref=e364] [cursor=pointer]:
+                  - generic [ref=e368]:
+                    - generic [ref=e369]: Instagram feed post
+                    - generic [ref=e370]: 4 / month
+                - button "Instagram reel 4 / month" [ref=e371] [cursor=pointer]:
+                  - generic [ref=e375]:
+                    - generic [ref=e376]: Instagram reel
+                    - generic [ref=e377]: 4 / month
+                - button "Instagram carousel 2 / month" [ref=e378] [cursor=pointer]:
+                  - generic [ref=e382]:
+                    - generic [ref=e383]: Instagram carousel
+                    - generic [ref=e384]: 2 / month
+                - button "Instagram story 8 / month" [ref=e385] [cursor=pointer]:
+                  - generic [ref=e389]:
+                    - generic [ref=e390]: Instagram story
+                    - generic [ref=e391]: 8 / month
+                - button "Facebook post 3 / month" [ref=e392] [cursor=pointer]:
+                  - generic [ref=e396]:
+                    - generic [ref=e397]: Facebook post
+                    - generic [ref=e398]: 3 / month
+                - button "LinkedIn post 4 / month" [ref=e399] [cursor=pointer]:
+                  - generic [ref=e403]:
+                    - generic [ref=e404]: LinkedIn post
+                    - generic [ref=e405]: 4 / month
+                - button "LinkedIn image post 2 / month" [ref=e406] [cursor=pointer]:
+                  - generic [ref=e410]:
+                    - generic [ref=e411]: LinkedIn image post
+                    - generic [ref=e412]: 2 / month
+                - button "LinkedIn document 1 / month" [ref=e413] [cursor=pointer]:
+                  - generic [ref=e417]:
+                    - generic [ref=e418]: LinkedIn document
+                    - generic [ref=e419]: 1 / month
+                - button "LinkedIn poll 1 / month" [ref=e420] [cursor=pointer]:
+                  - generic [ref=e424]:
+                    - generic [ref=e425]: LinkedIn poll
+                    - generic [ref=e426]: 1 / month
+                - button "X post 8 / month" [ref=e427] [cursor=pointer]:
+                  - generic [ref=e431]:
+                    - generic [ref=e432]: X post
+                    - generic [ref=e433]: 8 / month
+                - button "X thread 2 / month" [ref=e434] [cursor=pointer]:
+                  - generic [ref=e438]:
+                    - generic [ref=e439]: X thread
+                    - generic [ref=e440]: 2 / month
+                - button "TikTok video 4 / month" [ref=e441] [cursor=pointer]:
+                  - generic [ref=e445]:
+                    - generic [ref=e446]: TikTok video
+                    - generic [ref=e447]: 4 / month
+                - button "TikTok photo carousel 2 / month" [ref=e448] [cursor=pointer]:
+                  - generic [ref=e452]:
+                    - generic [ref=e453]: TikTok photo carousel
+                    - generic [ref=e454]: 2 / month
+                - button "Pinterest pin 4 / month" [ref=e455] [cursor=pointer]:
+                  - generic [ref=e459]:
+                    - generic [ref=e460]: Pinterest pin
+                    - generic [ref=e461]: 4 / month
+                - button "YouTube community post 2 / month" [ref=e462] [cursor=pointer]:
+                  - generic [ref=e466]:
+                    - generic [ref=e467]: YouTube community post
+                    - generic [ref=e468]: 2 / month
+              - generic [ref=e469]:
+                - generic [ref=e470]: Video
+                - button "YouTube long-form 1 / month" [ref=e471] [cursor=pointer]:
+                  - generic [ref=e475]:
+                    - generic [ref=e476]: YouTube long-form
+                    - generic [ref=e477]: 1 / month
+                - button "YouTube Short 4 / month" [ref=e478] [cursor=pointer]:
+                  - generic [ref=e482]:
+                    - generic [ref=e483]: YouTube Short
+                    - generic [ref=e484]: 4 / month
+                - button "Facebook video 2 / month" [ref=e485] [cursor=pointer]:
+                  - generic [ref=e489]:
+                    - generic [ref=e490]: Facebook video
+                    - generic [ref=e491]: 2 / month
+              - generic [ref=e492]:
+                - generic [ref=e493]: Paid
+                - button "Meta single-image ad 1 / month" [ref=e494] [cursor=pointer]:
+                  - generic [ref=e498]:
+                    - generic [ref=e499]: Meta single-image ad
+                    - generic [ref=e500]: 1 / month
+                - button "Meta video ad 1 / month" [ref=e501] [cursor=pointer]:
+                  - generic [ref=e505]:
+                    - generic [ref=e506]: Meta video ad
+                    - generic [ref=e507]: 1 / month
+                - button "Meta carousel ad 1 / month" [ref=e508] [cursor=pointer]:
+                  - generic [ref=e512]:
+                    - generic [ref=e513]: Meta carousel ad
+                    - generic [ref=e514]: 1 / month
+                - button "LinkedIn sponsored ad 1 / month" [ref=e515] [cursor=pointer]:
+                  - generic [ref=e519]:
+                    - generic [ref=e520]: LinkedIn sponsored ad
+                    - generic [ref=e521]: 1 / month
+                - button "Google search ad 1 / month" [ref=e522] [cursor=pointer]:
+                  - generic [ref=e526]:
+                    - generic [ref=e527]: Google search ad
+                    - generic [ref=e528]: 1 / month
+                - button "Performance Max 1 / month" [ref=e529] [cursor=pointer]:
+                  - generic [ref=e533]:
+                    - generic [ref=e534]: Performance Max
+                    - generic [ref=e535]: 1 / month
+                - button "YouTube skippable ad 1 / month" [ref=e536] [cursor=pointer]:
+                  - generic [ref=e540]:
+                    - generic [ref=e541]: YouTube skippable ad
+                    - generic [ref=e542]: 1 / month
+                - button "TikTok in-feed ad 1 / month" [ref=e543] [cursor=pointer]:
+                  - generic [ref=e547]:
+                    - generic [ref=e548]: TikTok in-feed ad
+                    - generic [ref=e549]: 1 / month
+                - button "Spotify audio ad 1 / month" [ref=e550] [cursor=pointer]:
+                  - generic [ref=e554]:
+                    - generic [ref=e555]: Spotify audio ad
+                    - generic [ref=e556]: 1 / month
+                - button "X image ad 1 / month" [ref=e557] [cursor=pointer]:
+                  - generic [ref=e561]:
+                    - generic [ref=e562]: X image ad
+                    - generic [ref=e563]: 1 / month
+                - button "Pinterest pin ad 1 / month" [ref=e564] [cursor=pointer]:
+                  - generic [ref=e568]:
+                    - generic [ref=e569]: Pinterest pin ad
+                    - generic [ref=e570]: 1 / month
+                - button "Snapchat single ad 1 / month" [ref=e571] [cursor=pointer]:
+                  - generic [ref=e575]:
+                    - generic [ref=e576]: Snapchat single ad
+                    - generic [ref=e577]: 1 / month
+                - button "Reddit image ad 1 / month" [ref=e578] [cursor=pointer]:
+                  - generic [ref=e582]:
+                    - generic [ref=e583]: Reddit image ad
+                    - generic [ref=e584]: 1 / month
+                - button "Google Demand Gen ad 1 / month" [ref=e585] [cursor=pointer]:
+                  - generic [ref=e589]:
+                    - generic [ref=e590]: Google Demand Gen ad
+                    - generic [ref=e591]: 1 / month
+              - generic [ref=e592]:
+                - generic [ref=e593]: Email & lifecycle
+                - button "Newsletter 4 / month" [ref=e594] [cursor=pointer]:
+                  - generic [ref=e598]:
+                    - generic [ref=e599]: Newsletter
+                    - generic [ref=e600]: 4 / month
+                - button "Nurture email 1 / month" [ref=e601] [cursor=pointer]:
+                  - generic [ref=e605]:
+                    - generic [ref=e606]: Nurture email
+                    - generic [ref=e607]: 1 / month
+                - button "Promotional email 2 / month" [ref=e608] [cursor=pointer]:
+                  - generic [ref=e612]:
+                    - generic [ref=e613]: Promotional email
+                    - generic [ref=e614]: 2 / month
+                - button "Welcome email 1 / month" [ref=e615] [cursor=pointer]:
+                  - generic [ref=e619]:
+                    - generic [ref=e620]: Welcome email
+                    - generic [ref=e621]: 1 / month
+                - button "Announcement email 1 / month" [ref=e622] [cursor=pointer]:
+                  - generic [ref=e626]:
+                    - generic [ref=e627]: Announcement email
+                    - generic [ref=e628]: 1 / month
+                - button "SMS campaign 2 / month" [ref=e629] [cursor=pointer]:
+                  - generic [ref=e633]:
+                    - generic [ref=e634]: SMS campaign
+                    - generic [ref=e635]: 2 / month
+                - button "Push notification 2 / month" [ref=e636] [cursor=pointer]:
+                  - generic [ref=e640]:
+                    - generic [ref=e641]: Push notification
+                    - generic [ref=e642]: 2 / month
+              - generic [ref=e643]:
+                - generic [ref=e644]: Content & SEO
+                - button "Blog article 4 / month" [ref=e645] [cursor=pointer]:
+                  - generic [ref=e649]:
+                    - generic [ref=e650]: Blog article
+                    - generic [ref=e651]: 4 / month
+                - button "Pillar guide 1 / month" [ref=e652] [cursor=pointer]:
+                  - generic [ref=e656]:
+                    - generic [ref=e657]: Pillar guide
+                    - generic [ref=e658]: 1 / month
+                - button "Listicle 2 / month" [ref=e659] [cursor=pointer]:
+                  - generic [ref=e663]:
+                    - generic [ref=e664]: Listicle
+                    - generic [ref=e665]: 2 / month
+              - generic [ref=e666]:
+                - generic [ref=e667]: Lead magnets
+                - button "Ebook one-off" [ref=e668] [cursor=pointer]:
+                  - generic [ref=e672]:
+                    - generic [ref=e673]: Ebook
+                    - generic [ref=e674]: one-off
+                - button "Webinar one-off" [ref=e675] [cursor=pointer]:
+                  - generic [ref=e679]:
+                    - generic [ref=e680]: Webinar
+                    - generic [ref=e681]: one-off
+                - button "Checklist one-off" [ref=e682] [cursor=pointer]:
+                  - generic [ref=e686]:
+                    - generic [ref=e687]: Checklist
+                    - generic [ref=e688]: one-off
+                - button "Whitepaper one-off" [ref=e689] [cursor=pointer]:
+                  - generic [ref=e693]:
+                    - generic [ref=e694]: Whitepaper
+                    - generic [ref=e695]: one-off
+              - generic [ref=e696]:
+                - generic [ref=e697]: Web
+                - button "Homepage one-off" [ref=e698] [cursor=pointer]:
+                  - generic [ref=e702]:
+                    - generic [ref=e703]: Homepage
+                    - generic [ref=e704]: one-off
+                - button "Product / feature page one-off" [ref=e705] [cursor=pointer]:
+                  - generic [ref=e709]:
+                    - generic [ref=e710]: Product / feature page
+                    - generic [ref=e711]: one-off
+                - button "Pricing page one-off" [ref=e712] [cursor=pointer]:
+                  - generic [ref=e716]:
+                    - generic [ref=e717]: Pricing page
+                    - generic [ref=e718]: one-off
+                - button "Solutions / use-case page one-off" [ref=e719] [cursor=pointer]:
+                  - generic [ref=e723]:
+                    - generic [ref=e724]: Solutions / use-case page
+                    - generic [ref=e725]: one-off
+                - button "Comparison / vs page one-off" [ref=e726] [cursor=pointer]:
+                  - generic [ref=e730]:
+                    - generic [ref=e731]: Comparison / vs page
+                    - generic [ref=e732]: one-off
+                - button "Login page one-off" [ref=e733] [cursor=pointer]:
+                  - generic [ref=e737]:
+                    - generic [ref=e738]: Login page
+                    - generic [ref=e739]: one-off
+                - button "Landing page one-off" [ref=e740] [cursor=pointer]:
+                  - generic [ref=e744]:
+                    - generic [ref=e745]: Landing page
+                    - generic [ref=e746]: one-off
+                - button "Sales / offer page one-off" [ref=e747] [cursor=pointer]:
+                  - generic [ref=e751]:
+                    - generic [ref=e752]: Sales / offer page
+                    - generic [ref=e753]: one-off
+                - button "Case study one-off" [ref=e754] [cursor=pointer]:
+                  - generic [ref=e758]:
+                    - generic [ref=e759]: Case study
+                    - generic [ref=e760]: one-off
+              - generic [ref=e761]:
+                - generic [ref=e762]: Events
+                - button "Screening one-off" [ref=e763] [cursor=pointer]:
+                  - generic [ref=e767]:
+                    - generic [ref=e768]: Screening
+                    - generic [ref=e769]: one-off
+                - button "Panel / talk one-off" [ref=e770] [cursor=pointer]:
+                  - generic [ref=e774]:
+                    - generic [ref=e775]: Panel / talk
+                    - generic [ref=e776]: one-off
+                - button "Pop-up / activation one-off" [ref=e777] [cursor=pointer]:
+                  - generic [ref=e781]:
+                    - generic [ref=e782]: Pop-up / activation
+                    - generic [ref=e783]: one-off
+                - button "Workshop one-off" [ref=e784] [cursor=pointer]:
+                  - generic [ref=e788]:
+                    - generic [ref=e789]: Workshop
+                    - generic [ref=e790]: one-off
+                - button "Premiere / launch night one-off" [ref=e791] [cursor=pointer]:
+                  - generic [ref=e795]:
+                    - generic [ref=e796]: Premiere / launch night
+                    - generic [ref=e797]: one-off
+                - button "Roundtable / private dinner one-off" [ref=e798] [cursor=pointer]:
+                  - generic [ref=e802]:
+                    - generic [ref=e803]: Roundtable / private dinner
+                    - generic [ref=e804]: one-off
+                - button "Meetup / community night one-off" [ref=e805] [cursor=pointer]:
+                  - generic [ref=e809]:
+                    - generic [ref=e810]: Meetup / community night
+                    - generic [ref=e811]: one-off
+                - button "Trade show booth / stand one-off" [ref=e812] [cursor=pointer]:
+                  - generic [ref=e816]:
+                    - generic [ref=e817]: Trade show booth / stand
+                    - generic [ref=e818]: one-off
+                - button "Conference talk one-off" [ref=e819] [cursor=pointer]:
+                  - generic [ref=e823]:
+                    - generic [ref=e824]: Conference talk
+                    - generic [ref=e825]: one-off
+              - generic [ref=e826]:
+                - generic [ref=e827]: Sales & commerce
+                - button "Outreach sequence 2 / month" [ref=e828] [cursor=pointer]:
+                  - generic [ref=e832]:
+                    - generic [ref=e833]: Outreach sequence
+                    - generic [ref=e834]: 2 / month
+                - button "Cold email 4 / month" [ref=e835] [cursor=pointer]:
+                  - generic [ref=e839]:
+                    - generic [ref=e840]: Cold email
+                    - generic [ref=e841]: 4 / month
+                - button "Sales deck one-off" [ref=e842] [cursor=pointer]:
+                  - generic [ref=e846]:
+                    - generic [ref=e847]: Sales deck
+                    - generic [ref=e848]: one-off
+                - button "One-pager one-off" [ref=e849] [cursor=pointer]:
+                  - generic [ref=e853]:
+                    - generic [ref=e854]: One-pager
+                    - generic [ref=e855]: one-off
+                - button "Proposal one-off" [ref=e856] [cursor=pointer]:
+                  - generic [ref=e860]:
+                    - generic [ref=e861]: Proposal
+                    - generic [ref=e862]: one-off
+                - button "Checkout page one-off" [ref=e863] [cursor=pointer]:
+                  - generic [ref=e867]:
+                    - generic [ref=e868]: Checkout page
+                    - generic [ref=e869]: one-off
+                - button "Cart page one-off" [ref=e870] [cursor=pointer]:
+                  - generic [ref=e874]:
+                    - generic [ref=e875]: Cart page
+                    - generic [ref=e876]: one-off
+                - button "Confirmation / thank-you page one-off" [ref=e877] [cursor=pointer]:
+                  - generic [ref=e881]:
+                    - generic [ref=e882]: Confirmation / thank-you page
+                    - generic [ref=e883]: one-off
+        - generic [ref=e248]:
+          - generic [ref=e249]:
+            - button "Add the campaign brief" [ref=e251] [cursor=pointer]
+            - generic [ref=e255]:
+              - button "Channel. A thing you ship, on a cadence. (B)" [ref=e256] [cursor=pointer]
+              - button "More deliverable options" [ref=e260] [cursor=pointer]
+            - generic [ref=e264]:
+              - generic [ref=e265]:
+                - button "Brand. Who this canvas writes as." [ref=e266] [cursor=pointer]
+                - button "More brand options" [ref=e269] [cursor=pointer]
+              - note [ref=e272]:
+                - generic [ref=e274]:
+                  - generic [ref=e275]: Add a Brand card
+                  - button "Dismiss" [ref=e276] [cursor=pointer]: ✕
+                - paragraph [ref=e277]: A campaign belongs to a brand, and the writing reads that brand’s voice, audiences and proof.
+                - paragraph [ref=e278]: Add a Brand card and connect it to the campaign brief. That connection is what binds the campaign, and until it is made there is nothing to write from.
+                - button "Add a Brand card" [ref=e280] [cursor=pointer]
+            - generic [ref=e281]:
+              - button "Audience. The people it is written for." [ref=e282] [cursor=pointer]
+              - button "More who options" [ref=e287] [cursor=pointer]
+            - generic [ref=e290]:
+              - button "Message. The angle the copy argues." [ref=e291] [cursor=pointer]
+              - button "More says options" [ref=e294] [cursor=pointer]
+            - generic [ref=e297]:
+              - button "Trigger. The signal that starts it." [ref=e298] [cursor=pointer]
+              - button "More when options" [ref=e301] [cursor=pointer]
+            - button "Add a data source object" [ref=e304] [cursor=pointer]
+            - button "Add a pattern object" [ref=e309] [cursor=pointer]
+            - button "Add a note object" [ref=e314] [cursor=pointer]
+          - generic [ref=e318]:
+            - button "Zoom" [ref=e320] [cursor=pointer]:
+              - generic [ref=e324]: 100%
+            - generic [ref=e327]:
+              - button "Pan" [ref=e328] [cursor=pointer]
+              - button "Select" [ref=e331] [cursor=pointer]
+              - button "Link" [ref=e334] [cursor=pointer]
+              - button "Tidy layout" [ref=e339] [cursor=pointer]
+            - 'button "Model: Auto" [ref=e347] [cursor=pointer]':
+              - generic [ref=e350]: Auto
+            - button "Select a card to generate its copy" [disabled] [ref=e884]: Generate
+  - button "DEV Start from scratch" [ref=e358] [cursor=pointer]:
+    - generic [ref=e359]: DEV
+    - text: Start from scratch

@@ -1,0 +1,237 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - button "Back to all campaigns" [ref=e10] [cursor=pointer]
+        - button "Files" [ref=e15] [cursor=pointer]
+        - button "Assets, coming soon" [disabled] [ref=e20]
+        - button "Gretel, coming soon" [disabled] [ref=e27]
+      - button "Invite a teammate" [ref=e31] [cursor=pointer]
+      - button "C" [ref=e36] [cursor=pointer]
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - button "Drafts Relaunch ✕" [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]:
+            - generic [ref=e41]: Drafts
+            - generic [ref=e42]: Relaunch
+          - button "✕" [ref=e43]
+        - button "＋" [ref=e44] [cursor=pointer]
+      - generic [ref=e46]:
+        - banner [ref=e47]:
+          - generic [ref=e48]:
+            - button "Campaigns" [ref=e52] [cursor=pointer]
+            - generic [ref=e53]: /
+            - button "Relaunch ▾" [ref=e54] [cursor=pointer]:
+              - text: Relaunch
+              - generic [ref=e55]: ▾
+          - generic [ref=e56]:
+            - generic "$0.80 left of $10.00 on the model account · 1 credit = $0.01" [ref=e57]: 79 credits
+            - button "Share" [ref=e58] [cursor=pointer]
+            - generic [ref=e64]:
+              - button "Flow" [ref=e65] [cursor=pointer]
+              - button "Grid" [ref=e66] [cursor=pointer]
+              - button "Calendar" [ref=e67] [cursor=pointer]
+        - generic [ref=e68]:
+          - generic [ref=e69]:
+            - img:
+              - generic "Click to select this connection" [ref=e885] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e886] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e887] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e888] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e70] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e72] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e73] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e74] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e75] [cursor=pointer]
+              - generic "Click to select this connection" [ref=e76] [cursor=pointer]
+            - generic [ref=e77]:
+              - generic [ref=e78]:
+                - generic [ref=e79]: Campaign brief
+                - generic [ref=e81]:
+                  - generic [ref=e82]: Relaunch
+                  - generic [ref=e83]: 7 assets · 3 channels
+                - button "Draw a connection from the left" [ref=e84]
+                - button "Draw a connection from the right" [ref=e85]
+                - button "Draw a connection from the top" [ref=e86]
+                - button "Draw a connection from the bottom" [ref=e87]
+              - generic [ref=e88]:
+                - generic [ref=e891]:
+                  - generic [ref=e892]:
+                    - generic [ref=e893]: Channel
+                    - generic [ref=e895]:
+                      - generic [ref=e896]: LinkedIn post
+                      - generic [ref=e897]: ×3
+                    - button "Draw a connection from the left" [ref=e898]
+                    - button "Draw a connection from the right" [ref=e899]
+                    - button "Draw a connection from the top" [ref=e900]
+                    - button "Draw a connection from the bottom" [ref=e901]
+                  - generic [ref=e902]:
+                    - generic [ref=e904]:
+                      - generic [ref=e905]: Post
+                      - generic [ref=e906]: "LinkedIn post #1"
+                      - button "Add a next step from this asset" [ref=e912] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e915]
+                      - button "Draw a connection from the right" [ref=e916]
+                      - button "Draw a connection from the top" [ref=e917]
+                      - button "Draw a connection from the bottom" [ref=e918]
+                    - generic [ref=e920]:
+                      - generic [ref=e921]: Post
+                      - generic [ref=e922]: "LinkedIn post #2"
+                      - button "Add a next step from this asset" [ref=e928] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e931]
+                      - button "Draw a connection from the right" [ref=e932]
+                      - button "Draw a connection from the top" [ref=e933]
+                      - button "Draw a connection from the bottom" [ref=e934]
+                    - generic [ref=e936]:
+                      - generic [ref=e937]: Post
+                      - generic [ref=e938]: "LinkedIn post #3"
+                      - button "Add a next step from this asset" [ref=e944] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e947]
+                      - button "Draw a connection from the right" [ref=e948]
+                      - button "Draw a connection from the top" [ref=e949]
+                      - button "Draw a connection from the bottom" [ref=e950]
+                - generic [ref=e91]:
+                  - generic [ref=e92]:
+                    - generic [ref=e93]: Channel
+                    - generic [ref=e95]:
+                      - generic [ref=e96]: Instagram feed post
+                      - generic [ref=e97]: ×3
+                    - button "Draw a connection from the left" [ref=e98]
+                    - button "Draw a connection from the right" [ref=e99]
+                    - button "Draw a connection from the top" [ref=e100]
+                    - button "Draw a connection from the bottom" [ref=e101]
+                  - generic [ref=e102]:
+                    - generic [ref=e120]:
+                      - generic [ref=e121]: Post
+                      - generic [ref=e122]: IG post 2
+                      - button "Add a next step from this asset" [ref=e128] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e131]
+                      - button "Draw a connection from the right" [ref=e132]
+                      - button "Draw a connection from the top" [ref=e133]
+                      - button "Draw a connection from the bottom" [ref=e134]
+                    - generic [ref=e136]:
+                      - generic [ref=e137]: Post
+                      - generic [ref=e138]: IG post 3
+                      - button "Add a next step from this asset" [ref=e144] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e147]
+                      - button "Draw a connection from the right" [ref=e148]
+                      - button "Draw a connection from the top" [ref=e149]
+                      - button "Draw a connection from the bottom" [ref=e150]
+                    - generic [ref=e152]:
+                      - generic [ref=e153]: Post
+                      - generic [ref=e154]: IG post 4
+                      - button "Add a next step from this asset" [ref=e160] [cursor=pointer]
+                      - button "Draw a connection from the left" [ref=e163]
+                      - button "Draw a connection from the right" [ref=e164]
+                      - button "Draw a connection from the top" [ref=e165]
+                      - button "Draw a connection from the bottom" [ref=e166]
+                - generic [ref=e169]:
+                  - generic [ref=e170]:
+                    - generic [ref=e171]: Channel
+                    - generic [ref=e173]:
+                      - generic [ref=e174]: Newsletter
+                      - generic [ref=e175]: ×1
+                    - button "Draw a connection from the left" [ref=e176]
+                    - button "Draw a connection from the right" [ref=e177]
+                    - button "Draw a connection from the top" [ref=e178]
+                    - button "Draw a connection from the bottom" [ref=e179]
+                  - generic [ref=e182]:
+                    - generic [ref=e183]: Post
+                    - generic [ref=e184]: Newsletter A
+                    - button "Add a next step from this asset" [ref=e190] [cursor=pointer]
+                    - button "Draw a connection from the left" [ref=e193]
+                    - button "Draw a connection from the right" [ref=e194]
+                    - button "Draw a connection from the top" [ref=e195]
+                    - button "Draw a connection from the bottom" [ref=e196]
+          - complementary [ref=e224]:
+            - button "Collapse panel" [ref=e225] [cursor=pointer]
+            - generic [ref=e229]: Newsletter A
+            - generic [ref=e234]:
+              - paragraph [ref=e991]: Email · Aug 6
+              - generic [ref=e992]:
+                - generic [ref=e993]:
+                  - text: Subject line
+                  - generic [ref=e994]: "0"
+                - textbox "Subject line 0" [ref=e995]:
+                  - /placeholder: Subject line…
+              - generic [ref=e996]:
+                - generic [ref=e997]:
+                  - text: Preview text
+                  - generic [ref=e998]: 0/100
+                - textbox "Preview text 0/100" [ref=e999]:
+                  - /placeholder: Preview text…
+              - generic [ref=e1000]:
+                - generic [ref=e1001]:
+                  - text: Body
+                  - generic [ref=e1002]: "0"
+                - textbox "Body 0" [ref=e1003]:
+                  - /placeholder: Body…
+              - generic [ref=e1004]:
+                - generic [ref=e1005]:
+                  - text: CTA
+                  - generic [ref=e1006]: 0/30
+                - textbox "CTA 0/30" [ref=e1007]:
+                  - /placeholder: CTA…
+              - button "Generate the copy for this post" [ref=e1008] [cursor=pointer]: Generate
+              - generic [ref=e1011]: CTAs
+              - paragraph [ref=e1012]: The buttons, forms and inputs this asset has to carry. None listed yet.
+              - generic [ref=e1013]:
+                - generic [ref=e1014]:
+                  - generic [ref=e1015]:
+                    - generic [ref=e1016]:
+                      - text: "Leads to LinkedIn post #1"
+                      - generic [ref=e1017]: · LinkedIn post
+                    - generic [ref=e1018]: "Needs button or link. Somewhere to press that takes them to LinkedIn post #1, carrying the tracking through so it can be attributed back to here."
+                  - button "Add" [ref=e1019] [cursor=pointer]
+                - generic [ref=e1020]:
+                  - generic [ref=e1021]:
+                    - generic [ref=e1022]:
+                      - text: "Leads to LinkedIn post #2"
+                      - generic [ref=e1023]: · LinkedIn post
+                    - generic [ref=e1024]: "Needs button or link. Somewhere to press that takes them to LinkedIn post #2, carrying the tracking through so it can be attributed back to here."
+                  - button "Add" [ref=e1025] [cursor=pointer]
+                - generic [ref=e1026]:
+                  - generic [ref=e1027]:
+                    - generic [ref=e1028]:
+                      - text: "Leads to LinkedIn post #3"
+                      - generic [ref=e1029]: · LinkedIn post
+                    - generic [ref=e1030]: "Needs button or link. Somewhere to press that takes them to LinkedIn post #3, carrying the tracking through so it can be attributed back to here."
+                  - button "Add" [ref=e1031] [cursor=pointer]
+              - button "+ Add a CTA" [ref=e1032] [cursor=pointer]
+              - generic [ref=e1033]: Connected to
+              - paragraph [ref=e1034]: Nothing is connected to this post, to its channel, or to the campaign, so it is written from the brief alone.
+        - generic [ref=e248]:
+          - generic [ref=e249]:
+            - button "Add the campaign brief" [ref=e251] [cursor=pointer]
+            - generic [ref=e255]:
+              - button "Channel. A thing you ship, on a cadence. (B)" [ref=e256] [cursor=pointer]
+              - button "More deliverable options" [ref=e260] [cursor=pointer]
+            - generic [ref=e265]:
+              - button "Brand. Who this canvas writes as." [ref=e266] [cursor=pointer]
+              - button "More brand options" [ref=e269] [cursor=pointer]
+            - generic [ref=e281]:
+              - button "Audience. The people it is written for." [ref=e282] [cursor=pointer]
+              - button "More who options" [ref=e287] [cursor=pointer]
+            - generic [ref=e290]:
+              - button "Message. The angle the copy argues." [ref=e291] [cursor=pointer]
+              - button "More says options" [ref=e294] [cursor=pointer]
+            - generic [ref=e297]:
+              - button "Trigger. The signal that starts it." [ref=e298] [cursor=pointer]
+              - button "More when options" [ref=e301] [cursor=pointer]
+            - button "Add a data source object" [ref=e304] [cursor=pointer]
+            - button "Add a pattern object" [ref=e309] [cursor=pointer]
+            - button "Add a note object" [ref=e314] [cursor=pointer]
+          - generic [ref=e318]:
+            - button "Zoom" [ref=e320] [cursor=pointer]:
+              - generic [ref=e324]: 100%
+            - generic [ref=e327]:
+              - button "Pan" [ref=e328] [cursor=pointer]
+              - button "Select" [ref=e331] [cursor=pointer]
+              - button "Link" [ref=e334] [cursor=pointer]
+              - button "Tidy layout" [ref=e339] [cursor=pointer]
+            - 'button "Model: Auto" [ref=e347] [cursor=pointer]':
+              - generic [ref=e350]: Auto
+            - button "Generate copy for the selected cards" [ref=e1035] [cursor=pointer]: Generate
+  - button "DEV Start from scratch" [ref=e358] [cursor=pointer]:
+    - generic [ref=e359]: DEV
+    - text: Start from scratch

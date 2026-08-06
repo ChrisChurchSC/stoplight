@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.40',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A menu that runs out of items no longer scrolls the thing behind it. Reaching the end of a list used to hand the rest of the gesture to whatever it was covering, so the board or the page underneath moved while you were reading, and closing the menu revealed somewhere you had not meant to go. The channel picker was the worst of them: every asset type in one list is roughly seven screens inside a one screen window, so running off the end is the normal way to use it rather than an edge case.',
+          'This covers the canvas side panels, the channel and record pickers, the audience and flight menus, the chat history menu, the tag picker, the library menus and the modals. Lists that sit in the page rather than over it are deliberately left alone, because a reader scrolling past one of those expects the page to carry on once the list is done.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.39',
     dateLabel: 'August 5, 2026',
     groups: [

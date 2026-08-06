@@ -4186,7 +4186,7 @@ button.mf-open:focus-visible,
 .fchat-hbtn svg { width: 15px; height: 15px; }
 .fchat-hist-wrap { position: relative; }
 .fchat-hist-scrim { position: fixed; inset: 0; z-index: 30; }
-.fchat-hist-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 31; width: 280px; max-height: 60vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 11px; box-shadow: 0 16px 40px rgba(16,24,40,.2); padding: 6px; }
+.fchat-hist-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 31; width: 280px; max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 11px; box-shadow: 0 16px 40px rgba(16,24,40,.2); padding: 6px; }
 .fchat-hist-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); padding: 6px 8px 4px; }
 .fchat-hist-empty { font-size: 12.5px; color: var(--text-faint); padding: 8px; }
 .fchat-hist-row { display: flex; align-items: center; }
@@ -4756,12 +4756,24 @@ button.mf-open:focus-visible,
   color: var(--text);
   border-color: var(--text-faint);
 }
+/**
+ * A PANEL'S SCROLL STOPS AT THE PANEL.
+ *
+ * These three are the canvas side panels, and the channel picker is the worst of them: 157 asset
+ * types is a ~4400px list inside a ~600px window, so reaching its end is the normal way to use it,
+ * not an edge case. Without containment the browser hands the leftover delta to whatever is behind —
+ * the canvas, then the page — so the list bottoming out silently scrolled the board underneath and
+ * the picker appeared to jump. You went looking for LinkedIn and lost your place on the canvas.
+ *
+ * `contain` keeps the chain from starting; it does not stop the panel scrolling normally.
+ */
 .flow-picker-list,
 .flow-inspect,
 .flow-overview {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 14px 20px;
 }
 .flow-pgroup-h,
@@ -4923,7 +4935,9 @@ button.mf-open:focus-visible,
 .flow-aud-btn-txt:empty::before { content: 'Select audience records'; color: var(--text-faint); }
 .flow-aud-caret { color: var(--text-faint); font-size: 11px; flex: 0 0 auto; }
 .flow-aud-scrim { position: fixed; inset: 0; z-index: 30; }
-.flow-aud-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 31; background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 11px; box-shadow: 0 16px 40px rgba(16, 24, 40, 0.2); padding: 6px; max-height: 300px; overflow-y: auto; }
+/* Floating menus contain their scroll for the same reason the panels above do: a menu is layered
+   OVER the page, so a wheel that runs past its last item must not move what it is covering. */
+.flow-aud-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 31; background: var(--surface); border: 1px solid var(--border-strong, var(--border)); border-radius: 11px; box-shadow: 0 16px 40px rgba(16, 24, 40, 0.2); padding: 6px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
 /* Build-brief: campaign budget input */
 .flow-budget { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: 0 11px; }
 .flow-budget:focus-within { border-color: var(--accent); }
@@ -5502,7 +5516,7 @@ button.mf-open:focus-visible,
   padding: 9px 11px;
 }
 .pk-search::placeholder { color: var(--text-faint); }
-.pk-list { max-height: 232px; overflow-y: auto; padding: 4px; outline: none; }
+.pk-list { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; outline: none; }
 .pk-head {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-faint); padding: 7px 8px 3px;
@@ -8006,7 +8020,7 @@ button.mf-open:focus-visible,
   font: inherit; font-size: 12px; color: var(--text); padding: 5px 8px; margin-bottom: 4px;
 }
 .flow-pick-search:focus { outline: none; border-color: var(--note-tone, var(--accent)); }
-.flow-pick-list { max-height: 232px; overflow-y: auto; display: flex; flex-direction: column; }
+.flow-pick-list { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .flow-pick-note { font-size: 11px; line-height: 1.45; color: var(--text-faint); padding: 5px 8px 6px; }
 /* One option: the name, and the record's own line under it. The same two lines the card's face
    shows, because picking one is a preview of what the card becomes. */
@@ -24302,4 +24316,31 @@ table.aud-sheet td.stick .aud-cell {
    transform stays out of the blanket list. */
 :where(.flow-card-break) {
   transition: transform var(--hover-t) var(--hover-e);
+}
+
+/**
+ * A THING LAYERED OVER THE PAGE KEEPS ITS SCROLL TO ITSELF.
+ *
+ * Every selector here is a menu or a modal: it is painted on top of something else, and the thing
+ * underneath is usually mid-task. Without this, a wheel that runs past the last item does not stop —
+ * the browser passes the leftover delta down to whatever is behind, so dismissing the menu revealed
+ * a page (or a canvas) that had quietly moved while you were reading a list. The scroll you started
+ * and the scroll you got were on two different surfaces.
+ *
+ * Collected in one block rather than spread across fifteen rules because it is one invariant, and
+ * the next menu added to this file should join the list rather than rediscover the bug.
+ *
+ * DELIBERATELY NOT the capped-but-in-page lists (.pz-vals, .flag-list, .eng-log and friends). Those
+ * sit IN the document rather than over it, and a reader scrolling the page past one of them expects
+ * the page to carry on once the list is done. Containing those would trap the page instead of
+ * freeing it, which is the same defect pointing the other way.
+ */
+.flow-switch-menu,
+.flow-home-flightpick-menu,
+.task-pick-menu,
+.lib-add-menu,
+.flow-tagpick,
+.lib-modal-overlay,
+.dg {
+  overscroll-behavior: contain;
 }
