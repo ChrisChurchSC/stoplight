@@ -83,6 +83,16 @@ export const funnelStageFor = (channel: ChannelId, assetType?: string): FunnelSt
       : 'awareness'
   // A pricing page is a decision surface, not education.
   if (channel === 'website' && (assetType === 'pricing' || assetType === 'comparison')) return 'conversion'
+  // Events span the funnel far more widely than one channel default can hold. A premiere, a booth
+  // and a conference talk all put you in front of a room that was never your list, so they reach
+  // rather than educate. A private dinner is eight people who came to decide, which is a close.
+  // Meetup is deliberately left on the channel default: a community night both recruits and keeps
+  // people, and consideration is the honest middle rather than a guess in either direction.
+  if (channel === 'events') {
+    if (assetType === 'premiere' || assetType === 'booth' || assetType === 'conference-talk')
+      return 'awareness'
+    if (assetType === 'dinner') return 'conversion'
+  }
   if (channel === 'email') {
     // Lifecycle emails (onboarding, win-back) are post-conversion; nurture /
     // newsletter / announcement drive prospects to content + offers, so they sit

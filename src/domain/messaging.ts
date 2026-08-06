@@ -221,6 +221,34 @@ const OVERRIDES: Record<string, MessagingField[]> = {
   // Lead magnets
   'lead-magnet:ebook': [title(80), f('subtitle', 'Subtitle', undefined, 120), f('description', 'Description', 300, undefined, true), cta(30)],
   'lead-magnet:webinar': [title(80), f('when', 'Date / time', undefined, 60), f('description', 'Description', 300, undefined, true), cta(30)],
+  // Events whose copy is not an invitation. The events base is name + RSVP copy + CTA, which is
+  // right for anything the audience opts into. These three are not that: at a booth and a talk the
+  // room is already assembled and somebody else invited it, and a private dinner is invited by
+  // name rather than announced. Left on the base, all three would be briefed to write RSVP copy
+  // for an event nobody can RSVP to.
+  'events:booth': [
+    f('headline', 'Stand headline', undefined, 60),
+    f('demo', 'What you show / demo', undefined, 200, true),
+    f('offer', 'Offer at the stand', undefined, 120),
+    f('qualifier', 'Qualifying question', undefined, 120),
+    f('follow-up', 'Badge-scan follow-up', undefined, 300, true),
+    f('cta', 'Stand CTA', undefined, 30),
+  ],
+  'events:conference-talk': [
+    f('title', 'Talk title', undefined, 120),
+    f('abstract', 'Abstract / session description', 300, 600, true),
+    f('takeaways', 'Audience takeaways', undefined, 300, true),
+    f('bio', 'Speaker bio', undefined, 300, true),
+    f('slot', 'Track / session slot', undefined, 60),
+    f('cta', 'Closing-slide CTA', undefined, 30),
+  ],
+  'events:dinner': [
+    f('headline', 'Invitation line', undefined, 80),
+    f('topic', 'Question on the table', undefined, 160),
+    f('guests', 'Who else is at the table', undefined, 200, true),
+    f('logistics', 'Date, venue, run of night', undefined, 200, true),
+    f('cta', 'RSVP ask', undefined, 30),
+  ],
   // TikTok organic
   'tiktok:video': [caption(2200), f('hook', 'On-screen hook', undefined, 60)],
   // YouTube organic

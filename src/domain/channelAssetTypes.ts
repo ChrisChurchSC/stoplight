@@ -61,7 +61,12 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   blog: [t('article', 'Article'), t('pillar', 'Long-form guide/pillar'), t('listicle', 'Listicle'), t('case-study', 'Case study')],
   'landing-page': [t('lead-capture', 'Lead capture page'), t('sales', 'Sales/offer page'), t('webinar-reg', 'Webinar/event registration'), t('waitlist', 'Waitlist/coming soon')],
   'lead-magnet': [t('ebook', 'Ebook'), t('whitepaper', 'Whitepaper'), t('checklist', 'Checklist'), t('template', 'Template'), t('webinar', 'Webinar'), t('cheat-sheet', 'Cheat sheet')],
-  events: [t('screening', 'Screening'), t('panel', 'Panel / talk'), t('popup', 'Pop-up / activation'), t('workshop', 'Workshop')],
+  // The first four types all assume YOU are the host. The five appended after them split the
+  // channel along the line that actually changes the work: a booth and a conference talk happen
+  // on somebody else's floor, so their assets are a stand and an abstract rather than RSVP copy,
+  // and they reach an audience that was never yours to invite. Appended, never prepended, for the
+  // same reason as 'login' above: primaryTypeKey takes [0] and funnelStageFor reads it.
+  events: [t('screening', 'Screening'), t('panel', 'Panel / talk'), t('popup', 'Pop-up / activation'), t('workshop', 'Workshop'), t('premiere', 'Premiere / launch night'), t('dinner', 'Roundtable / private dinner'), t('meetup', 'Meetup / community night'), t('booth', 'Trade show booth / stand'), t('conference-talk', 'Conference talk')],
   // sales & commerce — the assets a flow needs to actually close
   'sales-outreach': [t('cold-email', 'Cold email'), t('follow-up', 'Follow-up email'), t('linkedin-dm', 'LinkedIn DM'), t('sequence', 'Sequence / cadence'), t('call-script', 'Call script'), t('voicemail', 'Voicemail script'), t('break-up', 'Break-up email')],
   'sales-collateral': [t('deck', 'Sales deck'), t('one-pager', 'One-pager'), t('case-study', 'Case study pack'), t('battlecard', 'Battlecard'), t('roi', 'ROI / value calculator'), t('demo-script', 'Demo script'), t('objection', 'Objection / FAQ doc'), t('security', 'Security / compliance pack')],

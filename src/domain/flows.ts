@@ -143,10 +143,23 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'landing', label: 'Landing page', channel: 'landing-page', assetType: 'lead-capture', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'sales-page', label: 'Sales / offer page', channel: 'landing-page', assetType: 'sales', media: 'link', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
   { key: 'case-study', label: 'Case study', channel: 'blog', assetType: 'case-study', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Web', brand: true },
-  // Events (built once)
+  // Events. Mostly built once, with one standing exception: a meetup is a series, and giving it
+  // 'one-off' would have priced a monthly community night as a single night's work.
+  //
+  // 'popup' shipped as an asset type with no preset here, so "Pop-up / activation" could be chosen
+  // from the Type dropdown on an asset that already existed but could never be started from the
+  // Events palette, which is drawn from this list. Its three siblings all had one; nothing
+  // explained the gap. (An uncovered type is normal across the app — most ad-format variants have
+  // no preset by design — so this is an inconsistency inside one group, not a missing invariant.)
   { key: 'screening', label: 'Screening', channel: 'events', assetType: 'screening', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   { key: 'panel', label: 'Panel / talk', channel: 'events', assetType: 'panel', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  { key: 'popup', label: 'Pop-up / activation', channel: 'events', assetType: 'popup', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   { key: 'workshop', label: 'Workshop', channel: 'events', assetType: 'workshop', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  { key: 'premiere', label: 'Premiere / launch night', channel: 'events', assetType: 'premiere', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  { key: 'roundtable-dinner', label: 'Roundtable / private dinner', channel: 'events', assetType: 'dinner', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  { key: 'meetup', label: 'Meetup / community night', channel: 'events', assetType: 'meetup', media: 'text', runtime: 'always-on', perMonth: 1, group: 'Events', brand: true },
+  { key: 'trade-show-booth', label: 'Trade show booth / stand', channel: 'events', assetType: 'booth', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  { key: 'conference-talk', label: 'Conference talk', channel: 'events', assetType: 'conference-talk', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   // Sales & commerce — the deliverables that close a flow. Everything above hands a
   // person over to something; until these existed there was nothing to hand them to,
   // so a campaign stopped at the landing page.
