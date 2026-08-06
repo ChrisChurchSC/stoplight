@@ -233,6 +233,14 @@ const CHANNEL_HANDOFF: Partial<Record<string, HandoffRule>> = {
  * share. Anything that just needs better words than "Go to X" is here for the label alone.
  */
 const TYPE_HANDOFF: Record<string, HandoffRule> = {
+  // The events channel hands off to a registration form, which is right for anything with a room
+  // to save a place in. A press release has none: what it owes is somewhere to verify the story
+  // and someone to ask, so it is a link to the newsroom rather than a seat.
+  'events:press-release': (t) => ({
+    kind: 'button',
+    label: 'Read the release',
+    note: `Where ${t.assetName} lives once it is out: the newsroom post, the assets an editor needs, and the contact who answers.`,
+  }),
   'landing-page:lead-capture': (t) => ({ kind: 'button', label: 'Sign up', note: `A button to ${t.assetName}, carrying the tracking through. The fields themselves are that page's build item, not this one's.` }),
   'landing-page:webinar-reg': (t) => ({ kind: 'button', label: 'Register', note: `A button to ${t.assetName}. Registration lives on the page it goes to.` }),
   'landing-page:waitlist': (t) => ({ kind: 'button', label: 'Join the waitlist', note: `A button to ${t.assetName}.` }),

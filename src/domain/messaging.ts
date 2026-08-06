@@ -249,6 +249,19 @@ const OVERRIDES: Record<string, MessagingField[]> = {
     f('logistics', 'Date, venue, run of night', undefined, 200, true),
     f('cta', 'RSVP ask', undefined, 30),
   ],
+  // A press release is not written to the audience, it is written to whoever might carry it, so
+  // none of the base fields survive. The quote and the boilerplate are here because they are the
+  // two parts an editor lifts verbatim, and the contact because a release with nobody to call
+  // does not get followed up.
+  'events:press-release': [
+    f('headline', 'Headline', undefined, 100),
+    f('dateline', 'Dateline (city, date)', undefined, 60),
+    f('lead', 'Lead: what happened, and why now', 250, 400, true),
+    f('quote', 'Quote and attribution', undefined, 300, true),
+    f('details', 'Supporting detail', undefined, 600, true),
+    f('boilerplate', 'Boilerplate: about the brand', undefined, 300, true),
+    f('contact', 'Media contact', undefined, 120, true),
+  ],
   // TikTok organic
   'tiktok:video': [caption(2200), f('hook', 'On-screen hook', undefined, 60)],
   // YouTube organic

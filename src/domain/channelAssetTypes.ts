@@ -66,7 +66,13 @@ export const CHANNEL_TYPES: Record<ChannelId, AssetType[]> = {
   // on somebody else's floor, so their assets are a stand and an abstract rather than RSVP copy,
   // and they reach an audience that was never yours to invite. Appended, never prepended, for the
   // same reason as 'login' above: primaryTypeKey takes [0] and funnelStageFor reads it.
-  events: [t('screening', 'Screening'), t('panel', 'Panel / talk'), t('popup', 'Pop-up / activation'), t('workshop', 'Workshop'), t('premiere', 'Premiere / launch night'), t('dinner', 'Roundtable / private dinner'), t('meetup', 'Meetup / community night'), t('booth', 'Trade show booth / stand'), t('conference-talk', 'Conference talk')],
+  //
+  // 'press-release' is the one that is not an occasion at all. It sits here because there is no
+  // earned-media channel and it is the announcement a premiere or launch night is announced by,
+  // so it belongs to the same motion. Everything downstream of it (funnel band, copy fields, the
+  // handoff) is overridden rather than inherited, because the events defaults all assume a room
+  // and an RSVP, and a press release has neither.
+  events: [t('screening', 'Screening'), t('panel', 'Panel / talk'), t('popup', 'Pop-up / activation'), t('workshop', 'Workshop'), t('premiere', 'Premiere / launch night'), t('dinner', 'Roundtable / private dinner'), t('meetup', 'Meetup / community night'), t('booth', 'Trade show booth / stand'), t('conference-talk', 'Conference talk'), t('press-release', 'Press release')],
   // sales & commerce — the assets a flow needs to actually close
   'sales-outreach': [t('cold-email', 'Cold email'), t('follow-up', 'Follow-up email'), t('linkedin-dm', 'LinkedIn DM'), t('sequence', 'Sequence / cadence'), t('call-script', 'Call script'), t('voicemail', 'Voicemail script'), t('break-up', 'Break-up email')],
   'sales-collateral': [t('deck', 'Sales deck'), t('one-pager', 'One-pager'), t('case-study', 'Case study pack'), t('battlecard', 'Battlecard'), t('roi', 'ROI / value calculator'), t('demo-script', 'Demo script'), t('objection', 'Objection / FAQ doc'), t('security', 'Security / compliance pack')],

@@ -160,6 +160,7 @@ export const DELIVERABLE_PRESETS: DeliverablePreset[] = [
   { key: 'meetup', label: 'Meetup / community night', channel: 'events', assetType: 'meetup', media: 'text', runtime: 'always-on', perMonth: 1, group: 'Events', brand: true },
   { key: 'trade-show-booth', label: 'Trade show booth / stand', channel: 'events', assetType: 'booth', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   { key: 'conference-talk', label: 'Conference talk', channel: 'events', assetType: 'conference-talk', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
+  { key: 'press-release', label: 'Press release', channel: 'events', assetType: 'press-release', media: 'text', runtime: 'one-off', perMonth: 1, group: 'Events', brand: true },
   // Sales & commerce — the deliverables that close a flow. Everything above hands a
   // person over to something; until these existed there was nothing to hand them to,
   // so a campaign stopped at the landing page.
