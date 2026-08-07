@@ -409,7 +409,24 @@ export function reachesOutput(board: FlowBoard, nodeId: string, maxDepth = MAX_O
   const outgoing = forwardEdges(board)
   const boardIds = new Set<string>([...board.objects.map((o) => o.id), ...board.placements.map((p) => p.id)])
   const seen = new Set<string>([nodeId])
-  let frontier = outgoing.get(nodeId) ?? []
+  /**
+   * A CARD DRAWN INSIDE A SMART OBJECT IS WIRED WHEREVER THAT OBJECT IS WIRED.
+   *
+   * Members carry no wire of their own — you wire the object, not the cards in it — so following
+   * only this card's own edges answered "reaches nothing" for every card inside a placed object.
+   * The board then dimmed them and the outline labelled them "unattached", while wiredRefsFor was
+   * handing their records to the writer through the placement the whole time (see refsOf, where a
+   * placement contributes every record inside it). Two surfaces disagreeing about whether a card is
+   * part of the campaign reads as a wire that has come loose, and nothing had.
+   *
+   * The containing placement is walked from, not merely counted as an output: the object may itself
+   * be wired to a deliverable rather than the brief, and the member should inherit whatever it
+   * actually reaches.
+   */
+  const container = board.placements.find((p) => p.memberIds.includes(nodeId))
+  let frontier = container
+    ? [...(outgoing.get(nodeId) ?? []), ...(outgoing.get(container.id) ?? [])]
+    : outgoing.get(nodeId) ?? []
   for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
     const next: string[] = []
     for (const id of frontier) {
