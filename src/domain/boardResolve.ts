@@ -404,8 +404,22 @@ export function downstreamTargets(board: FlowBoard, nodeId: string, maxDepth = M
  * Drives the dimming that marks a card as not yet part of the campaign. It used to mean "has an edge
  * to the brief", so a chain of cards wired to each other and nothing else read as fully wired while
  * reaching nothing at all.
+ *
+ * NO DEPTH CAP, for the same reason upstreamCardIds has none.
+ *
+ * This walk answers a question that wiredRefsFor answers in the other direction, and the two have to
+ * agree: one decides whether a card LOOKS part of the campaign, the other decides whether its record
+ * actually reaches the writer. This one used to stop after MAX_OBJECT_DEPTH hops, a constant that
+ * belongs to nesting smart objects inside each other rather than to the length of a chain somebody
+ * drew. upstreamCardIds is uncapped on purpose — its comment calls a cap "the failure chaining exists
+ * to remove" — so at exactly four hops the two answers diverged: the card's segment was handed to the
+ * campaign and to every asset written under it, while the board dimmed the card and the layers list
+ * tagged it "unattached". Wiring it again changed nothing, because nothing was wrong with the wire.
+ *
+ * Termination is the visited set, not the cap. Every id is walked once, so a cycle stops on its
+ * second visit and the walk is bounded by the size of the board either way.
  */
-export function reachesOutput(board: FlowBoard, nodeId: string, maxDepth = MAX_OBJECT_DEPTH): boolean {
+export function reachesOutput(board: FlowBoard, nodeId: string): boolean {
   const outgoing = forwardEdges(board)
   const boardIds = new Set<string>([...board.objects.map((o) => o.id), ...board.placements.map((p) => p.id)])
   const seen = new Set<string>([nodeId])
@@ -427,7 +441,7 @@ export function reachesOutput(board: FlowBoard, nodeId: string, maxDepth = MAX_O
   let frontier = container
     ? [...(outgoing.get(nodeId) ?? []), ...(outgoing.get(container.id) ?? [])]
     : outgoing.get(nodeId) ?? []
-  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+  while (frontier.length) {
     const next: string[] = []
     for (const id of frontier) {
       if (seen.has(id)) continue

@@ -24068,6 +24068,20 @@ table.aud-sheet td.stick .aud-cell {
   border: 1px solid var(--border);
   box-shadow: 0 10px 26px rgba(16, 24, 40, 0.18);
 }
+/* AND IT STOPS EXISTING WHILE YOU ARE DRAWING A WIRE.
+   This panel is opaque, sits at z-index 30 over the top-left of the board, and the campaign brief
+   card starts at roughly (16, 48) — under it, on any board wide enough that the stack's auto margins
+   collapse, which is most of them once Gretel and the inspector are open. The drop is resolved by
+   elementFromPoint().closest('.flow-node'), so a wire released over the covered part of the brief
+   hit the panel, resolved to no node, and was discarded in silence: no connector, no toast, and no
+   drop-target highlight during the drag either, so the board looked like it was refusing to let you
+   wire there. The card then sat on the canvas reading "unattached", and drawing the line again did
+   the same thing, because the gesture had never reached the brief at all.
+   Scoped to .connecting so it only goes transparent for the length of a wire drag; the rest of the
+   time the checklist is an ordinary panel you can read and press. freeSlot already treats this
+   rectangle as occupied when it places new cards (FlowsView freeSlot), which is the same knowledge
+   applied to the other half of the problem. */
+.flow-canvas.connecting .setup-steps { pointer-events: none; }
 .setup-steps-head {
   display: flex;
   align-items: baseline;

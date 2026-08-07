@@ -321,3 +321,80 @@ describe('reachesOutput and smart-object members', () => {
     expect(reachesOutput(b, 'aud2')).toBe(false)
   })
 })
+
+/**
+ * A LONG CHAIN IS STILL A CHAIN.
+ *
+ * reachesOutput decides whether a card LOOKS part of the campaign; wiredRefsFor decides whether its
+ * record actually reaches the writer. They walk the same graph in opposite directions and they have
+ * to agree. reachesOutput used to stop after MAX_OBJECT_DEPTH (3) hops — a constant about nesting
+ * smart objects inside one another, not about how long a chain somebody drew — while upstreamCardIds
+ * is uncapped on purpose. So at exactly four hops the two diverged: the segment was handed to the
+ * campaign and to every asset written under it, and the board dimmed the card and tagged it
+ * "unattached" anyway. Redrawing the wire fixed nothing, because the wire was never the problem.
+ *
+ * Every case here asserts BOTH answers on one board, because a test that checked only the display
+ * would have passed happily while the two surfaces contradicted each other.
+ */
+describe('reachesOutput does not give up on a long chain', () => {
+  /** aud -> m1 -> ... -> m(n-1) -> campaign, so the audience card is `hops` edges from the brief. */
+  const chain = (hops: number): FlowBoard => {
+    const mids = Array.from({ length: hops - 1 }, (_, i) => `m${i}`)
+    const ids = ['aud', ...mids]
+    return board(
+      [obj('aud', 'audience', { refId: 's_1' }), ...mids.map((m, i) => obj(m, 'message', { refId: `m_${i}` }))],
+      ids.map((id, i) => ({ from: id, to: ids[i + 1] ?? 'campaign' })),
+    )
+  }
+
+  for (const hops of [1, 2, 3, 4, 5, 8]) {
+    it(`reads attached at ${hops} hop${hops === 1 ? '' : 's'}, and its record is on the campaign`, () => {
+      const b = chain(hops)
+      expect(reachesOutput(b, 'aud')).toBe(true)
+      expect(ids(wiredRefsFor(b, [], 'campaign'))).toContain('segment:s_1')
+    })
+  }
+
+  it('still says no when the chain ends in a card rather than an output', () => {
+    // The rule the cap was standing in for, and the one that actually matters: a cluster wired only
+    // to itself reaches nothing, however long it is.
+    const b = board(
+      [
+        obj('aud', 'audience', { refId: 's_1' }),
+        obj('m0', 'message', { refId: 'm_0' }),
+        obj('m1', 'message', { refId: 'm_1' }),
+        obj('m2', 'message', { refId: 'm_2' }),
+        obj('m3', 'message', { refId: 'm_3' }),
+      ],
+      [
+        { from: 'aud', to: 'm0' },
+        { from: 'm0', to: 'm1' },
+        { from: 'm1', to: 'm2' },
+        { from: 'm2', to: 'm3' },
+      ],
+    )
+    expect(reachesOutput(b, 'aud')).toBe(false)
+    expect(ids(wiredRefsFor(b, [], 'campaign'))).toEqual([])
+  })
+
+  it('terminates on a cycle rather than running forever', () => {
+    // The visited set is what bounds the walk now that the cap is gone, so a ring drawn by hand has
+    // to stop on its own. If this regresses it hangs rather than failing, which is why it is here.
+    const b = board(
+      [obj('aud', 'audience', { refId: 's_1' }), obj('m0', 'message'), obj('m1', 'message')],
+      [
+        { from: 'aud', to: 'm0' },
+        { from: 'm0', to: 'm1' },
+        { from: 'm1', to: 'aud' },
+      ],
+    )
+    expect(reachesOutput(b, 'aud')).toBe(false)
+  })
+
+  it('a long chain that ends at a deliverable counts too', () => {
+    const b = chain(5)
+    const rewired = { ...b, connectors: b.connectors.map((c) => (c.to === 'campaign' ? { ...c, to: 'linkedin|text' } : c)) }
+    expect(reachesOutput(rewired, 'aud')).toBe(true)
+    expect(ids(wiredRefsFor(rewired, [], 'linkedin|text'))).toContain('segment:s_1')
+  })
+})
