@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.54',
+    dateLabel: 'August 7, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The setup checklist no longer swallows the line you are drawing to the campaign brief. The checklist sits in the top left of the board, which is where the brief card starts, so on most boards it covers part of it. Releasing a wire over the covered part hit the checklist instead of the brief: no line was drawn, nothing was said, and the brief never lit up as somewhere you could drop, so the board looked like it was refusing to let you wire there. Drawing it again did the same thing, because the drag had never reached the brief at all. The checklist now steps out of the way for as long as you are drawing a line, and goes back to normal the moment you let go.',
+          'A card more than three steps from the brief now reads as part of the campaign, because it is. The check that decides whether a card looks attached gave up after three links in a chain, while the code that actually collects records follows a chain of any length. So a card at the head of a longer chain had its record handed to every asset in the campaign and was greyed out and labelled unattached at the same time. Rewiring it changed nothing, because the wire was never the problem.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.53',
     dateLabel: 'August 6, 2026',
     groups: [
