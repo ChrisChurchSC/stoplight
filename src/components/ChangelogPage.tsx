@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.57',
+    dateLabel: 'August 7, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Pasting a smart object into another brand no longer lands its cards attached to nothing. A smart object cannot be cloned into a library that has no such object, so the paste keeps the cards and drops the wrapper, which is the right trade. But the wrapper was carrying the connection, so the cards arrived loose on the far board and the campaign they landed in read as having nothing behind it. The cards now inherit the connection the object was carrying, in whichever direction it ran.',
+          'Stopping a channel from following the asset it was added from keeps the cards wired into it. A channel is identified by what it is, and following another asset is part of that, so releasing it renames it. Every card wired to it still pointed at the old name, and the next time the campaign opened those lines were dropped as pointing at nothing. The lines move with it now, and where the release merges the channel into one the campaign already has, two lines onto the same card become one instead of a duplicate. Its position and its disconnected state come along too, so it no longer jumps back to a default slot or quietly reattaches.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.56',
     dateLabel: 'August 7, 2026',
     groups: [

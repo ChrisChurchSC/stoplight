@@ -179,9 +179,24 @@ export function pasteObjects(
    * the least. The cards were always the content; the placement was the wrapper.
    */
   const placements: SmartPlacement[] = []
+  /**
+   * ...AND ITS WIRES GO TO THOSE CARDS, or the paste lands them attached to nothing.
+   *
+   * The paragraph above is the whole reason a dropped placement is not a loss: the cards are the
+   * content and they are pasted. But the placement carried the WIRE — you wire the object, not the
+   * cards in it — and its id maps to nothing in the target board, so `endpoint` returned null and
+   * every edge touching it was discarded. The member cards arrived on the far board loose and
+   * unattached, which for a cross-brand paste is every single time.
+   *
+   * Same rule pruneBoard uses when the library object behind a placement is deleted: the members
+   * inherit the edges the wrapper was carrying.
+   */
+  const heirs = new Map<string, string[]>()
   for (const p of clip.placements) {
     if (crossBrand || !opts.knownSmartObjectIds.has(p.smartObjectId)) {
       unlinked++
+      const members = p.memberIds.map((m) => idMap.get(m)).filter((m): m is string => !!m)
+      if (members.length) heirs.set(p.id, members)
       continue
     }
     const id = freshPlacementId()
@@ -209,13 +224,26 @@ export function pasteObjects(
     return opts.liveTargets.has(e) ? e : null
   }
   const connectors: { from: string; to: string }[] = []
+  const seenEdge = new Set<string>()
   for (const c of clip.connectors) {
-    const from = endpoint(c.from)
-    const to = endpoint(c.to)
-    // A wire from the brief to the brief is what two dropped endpoints collapse into. It is not a
-    // connection anybody drew, and it would draw a loop on the root card.
-    if (!from || !to || from === to) continue
-    connectors.push({ from, to })
+    // A dropped placement hands its endpoint to each of its pasted cards; everything else resolves
+    // to the single id it landed on.
+    for (const from of heirs.get(c.from) ?? [endpoint(c.from)]) {
+      for (const to of heirs.get(c.to) ?? [endpoint(c.to)]) {
+        // A wire from the brief to the brief is what two dropped endpoints collapse into. It is not a
+        // connection anybody drew, and it would draw a loop on the root card. A member wired to its
+        // own container collapses the same way.
+        if (!from || !to || from === to) continue
+        // NUL rather than a space or a colon: a deliverable key can carry an asset name
+        // (`email|nurture|↳Launch film`), so both of those appear inside real ids and would let two
+        // different pairs collapse to one key. Same delimiter as cardTrail's edgeKey, written as an
+        // escape so the file stays greppable.
+        const key = `${from}\u0000${to}`
+        if (seenEdge.has(key)) continue
+        seenEdge.add(key)
+        connectors.push({ from, to })
+      }
+    }
   }
 
   /**

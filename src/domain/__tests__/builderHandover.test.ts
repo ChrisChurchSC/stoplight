@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deliverableKeyFor, pruneBoard, remapBuiltTargets } from '../flowBoard'
+import { deliverableKeyFor, pruneBoard, remapBuiltTargets, renameEndpoint } from '../flowBoard'
 import type { FlowBoard } from '../flowBoard'
 
 /**
@@ -74,5 +74,64 @@ describe('handing the builder board to the campaign it built', () => {
       { from: 'c1', to: 'email|nurture' },
       { from: 'c1', to: 'campaign' },
     ])
+  })
+})
+
+/**
+ * AND WHAT HAPPENS TO A WIRE WHEN THE THING IT POINTS AT IS RENAMED.
+ *
+ * The mirror of the case above, and the same loss by a different door. A deliverable's key IS its
+ * identity, and deliverableKeyFor folds branchOf into it, so unbranching a channel renames it.
+ * Every card wired to the old key then pointed at a name nothing answers to, and the next openView
+ * pruned those edges as dangling: a card wired to a channel quietly stopped feeding it, and the
+ * wire could not even be undrawn, because it was already gone. The key carries no colon, so
+ * pruneBoard's escape hatch for build-mode sub-cards does not cover it.
+ *
+ * Unbranching can also MERGE, into a channel the campaign already has, which is why the dedupe and
+ * the self-edge drop are part of the contract rather than tidiness.
+ */
+describe('renaming a deliverable takes its wires with it', () => {
+  const OLD = 'email|nurture|\u21b3Launch film'
+  const NEW = 'email|nurture'
+
+  it('moves a wire pointing at the old key', () => {
+    expect(renameEndpoint([{ from: 'co_1', to: OLD }], OLD, NEW)).toEqual([{ from: 'co_1', to: NEW }])
+  })
+
+  it('moves a wire pointing OUT of it too', () => {
+    expect(renameEndpoint([{ from: OLD, to: 'campaign' }], OLD, NEW)).toEqual([{ from: NEW, to: 'campaign' }])
+  })
+
+  it('leaves every other wire exactly as it was', () => {
+    const cs = [{ from: 'co_1', to: 'campaign' }, { from: 'co_2', to: 'blog|article' }]
+    expect(renameEndpoint(cs, OLD, NEW)).toEqual(cs)
+  })
+
+  it('merges two wires that collapse onto the same pair', () => {
+    const cs = [{ from: 'co_1', to: OLD }, { from: 'co_1', to: NEW }]
+    expect(renameEndpoint(cs, OLD, NEW)).toEqual([{ from: 'co_1', to: NEW }])
+  })
+
+  it('drops an edge that would become a loop on the merged card', () => {
+    expect(renameEndpoint([{ from: OLD, to: NEW }], OLD, NEW)).toEqual([])
+  })
+
+  it('is a no-op when the key did not actually change', () => {
+    const cs = [{ from: 'co_1', to: OLD }]
+    expect(renameEndpoint(cs, OLD, OLD)).toEqual(cs)
+  })
+
+  it('survives the prune afterwards, which is the whole point', () => {
+    const b: FlowBoard = {
+      key: 'K',
+      objects: [{ id: 'co_1', kind: 'audience', text: '' }],
+      placements: [],
+      pos: {},
+      connectors: [{ from: 'co_1', to: OLD }],
+    }
+    const live = { objectKinds: new Set(['audience']), smartObjectIds: new Set<string>(), targetIds: new Set([NEW]) }
+    expect(pruneBoard(b, live).connectors).toEqual([])
+    const renamed = { ...b, connectors: renameEndpoint(b.connectors, OLD, NEW) }
+    expect(pruneBoard(renamed, live).connectors).toEqual([{ from: 'co_1', to: NEW }])
   })
 })

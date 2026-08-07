@@ -253,6 +253,45 @@ export function remapBuiltTargets(
   })
 }
 
+/**
+ * A NODE HAS BEEN RENAMED: MOVE ITS WIRES RATHER THAN LOSING THEM.
+ *
+ * A deliverable's key IS its identity (see deliverableKeyFor), and branchOf is folded into it — so
+ * unbranching a channel renames it. Every card wired to the old name then pointed at something
+ * nothing answers to, and the next openView pruned those edges as dangling: a card wired to a
+ * channel quietly stopped feeding it, and the wire could not even be undrawn because it was gone.
+ * The key carries no colon, so pruneBoard's escape hatch for build-mode ids does not cover it.
+ *
+ * Beside remapBuiltTargets because it is the same move for the same reason, in the other direction:
+ * that one follows a deliverable from node id to key, this one follows it from key to key.
+ *
+ * DEDUPES AND DROPS SELF-EDGES, because a rename can be a MERGE. Unbranching into a channel the
+ * campaign already has turns two deliverables into one, so two edges can collapse onto the same
+ * pair, and a card wired to both ends up wired to itself.
+ */
+export function renameEndpoint(
+  connectors: readonly { from: string; to: string }[],
+  oldId: string,
+  newId: string,
+): { from: string; to: string }[] {
+  if (oldId === newId) return [...connectors]
+  const swap = (e: string) => (e === oldId ? newId : e)
+  const seen = new Set<string>()
+  const out: { from: string; to: string }[] = []
+  for (const c of connectors) {
+    const from = swap(c.from)
+    const to = swap(c.to)
+    if (from === to) continue
+    // NUL is the delimiter because a deliverable key can carry an asset name, so a space or a colon
+    // both appear inside real ids. Same convention as cardTrail's edgeKey.
+    const key = `${from}\u0000${to}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ from, to })
+  }
+  return out
+}
+
 export const emptyBoard = (key: string): FlowBoard => ({ key, objects: [], placements: [], pos: {}, connectors: [] })
 
 /**
@@ -335,7 +374,7 @@ export function pruneBoard(
         // pointing at nothing. Two edges onto the same pair — the object's and the member's own —
         // become one.
         if (from === to) continue
-        const key = `${from} ${to}`
+        const key = `${from}\u0000${to}`
         if (seenEdge.has(key)) continue
         if (!legal(from) || !legal(to)) continue
         seenEdge.add(key)

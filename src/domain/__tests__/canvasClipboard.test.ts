@@ -155,6 +155,87 @@ describe('pasting cards into another campaign', () => {
     expect(out.placements).toHaveLength(1)
     expect(out.placements[0].memberIds).toEqual([out.idMap.get('co_1')])
   })
+
+  /**
+   * AND THE RELEASED CARDS KEEP THE WIRE THE WRAPPER WAS CARRYING.
+   *
+   * Releasing the placement is only "keeps the content" if the content still reaches something. The
+   * placement held the wire — you wire the object, not the cards in it — and its id maps to nothing
+   * on the target board, so every edge touching it used to be discarded and the cards landed loose
+   * and unattached. On a cross-brand paste that happened every time.
+   */
+  it('gives the released cards the wire the placement was carrying', () => {
+    const out = pasteObjects(
+      clip({
+        objects: [obj('co_1'), obj('co_2')],
+        placements: [{ id: 'pl_1', smartObjectId: 'so_gone', memberIds: ['co_1', 'co_2'] }],
+        connectors: [{ from: 'pl_1', to: 'campaign' }],
+      }),
+      AT,
+    )
+    expect(out.connectors).toEqual([
+      { from: out.idMap.get('co_1'), to: 'campaign' },
+      { from: out.idMap.get('co_2'), to: 'campaign' },
+    ])
+  })
+
+  it('carries a wire INTO the placement onto its cards as well', () => {
+    const out = pasteObjects(
+      clip({
+        objects: [obj('co_1'), obj('co_2')],
+        placements: [{ id: 'pl_1', smartObjectId: 'so_gone', memberIds: ['co_2'] }],
+        connectors: [{ from: 'co_1', to: 'pl_1' }],
+      }),
+      AT,
+    )
+    expect(out.connectors).toEqual([{ from: out.idMap.get('co_1'), to: out.idMap.get('co_2') }])
+  })
+
+  it('never lands a self-edge or the same edge twice', () => {
+    // A member already wired in its own right, plus the wrapper's wire, is one edge. A member wired
+    // to its own container would become a card wired to itself.
+    const out = pasteObjects(
+      clip({
+        objects: [obj('co_1'), obj('co_2')],
+        placements: [{ id: 'pl_1', smartObjectId: 'so_gone', memberIds: ['co_1', 'co_2'] }],
+        connectors: [
+          { from: 'pl_1', to: 'campaign' },
+          { from: 'co_1', to: 'campaign' },
+          { from: 'co_1', to: 'pl_1' },
+        ],
+      }),
+      AT,
+    )
+    expect(out.connectors).toEqual([
+      { from: out.idMap.get('co_1'), to: 'campaign' },
+      { from: out.idMap.get('co_2'), to: 'campaign' },
+      { from: out.idMap.get('co_1'), to: out.idMap.get('co_2') },
+    ])
+  })
+
+  it('drops the wire when the placement had no cards to release it to', () => {
+    const out = pasteObjects(
+      clip({
+        objects: [],
+        placements: [{ id: 'pl_1', smartObjectId: 'so_gone', memberIds: [] }],
+        connectors: [{ from: 'pl_1', to: 'campaign' }],
+      }),
+      AT,
+    )
+    expect(out.connectors).toEqual([])
+  })
+
+  it('leaves a surviving placement’s own wire alone', () => {
+    const out = pasteObjects(
+      clip({
+        objects: [obj('co_1')],
+        placements: [{ id: 'pl_1', smartObjectId: 'so_here', memberIds: ['co_1'] }],
+        connectors: [{ from: 'pl_1', to: 'campaign' }],
+      }),
+      { ...AT, knownSmartObjectIds: new Set(['so_here']) },
+    )
+    expect(out.connectors).toEqual([{ from: out.idMap.get('pl_1'), to: 'campaign' }])
+  })
 })
 
 const row = (over: Partial<TrafficRow> = {}): TrafficRow => ({
