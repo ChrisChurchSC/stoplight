@@ -9737,7 +9737,17 @@ export function FlowsView() {
         />
         <div
           ref={canvasRef}
-          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}${dragObjectId ? ' obj-drop' : ''}`}
+          /**
+           * `connecting` is the TOOL MODE: the Link tool stays on until you turn it off, and the
+           * class carries the affordances that belong to the mode — the crosshair, the revealed
+           * ports. `wiring` is the DRAG: it is on only while a wire is actually in flight, because
+           * `drawing` is set on mousedown and cleared at every drop and cancel.
+           *
+           * They were one class, and something that must only happen mid-drag was hung on it (see
+           * .flow-canvas.wiring .setup-steps in index.css). Anything that suppresses interaction has
+           * to use `wiring`; anything that decorates the mode uses `connecting`.
+           */
+          className={`flow-canvas${tool === 'pan' || spaceCursor ? ' panning' : ''}${tool === 'connect' || drawing ? ' connecting' : ''}${drawing ? ' wiring' : ''}${dragObjectId ? ' obj-drop' : ''}`}
           /**
            * The dot grid belongs to the BOARD, not the viewport. It is painted here rather than
            * inside .flow-stack (a tiled background on a scaled element resamples badly and the

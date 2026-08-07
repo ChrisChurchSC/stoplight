@@ -24077,11 +24077,20 @@ table.aud-sheet td.stick .aud-cell {
    drop-target highlight during the drag either, so the board looked like it was refusing to let you
    wire there. The card then sat on the canvas reading "unattached", and drawing the line again did
    the same thing, because the gesture had never reached the brief at all.
-   Scoped to .connecting so it only goes transparent for the length of a wire drag; the rest of the
-   time the checklist is an ordinary panel you can read and press. freeSlot already treats this
-   rectangle as occupied when it places new cards (FlowsView freeSlot), which is the same knowledge
-   applied to the other half of the problem. */
-.flow-canvas.connecting .setup-steps { pointer-events: none; }
+   SCOPED TO .wiring, WHICH IS THE DRAG. It was .connecting, and that is the TOOL MODE: the Link
+   tool stays selected until you turn it off, so the panel was inert for as long as the tool was on
+   rather than for the length of a gesture. Every row in it is a real button, including "Add what
+   you are shipping", which opens the channel picker — so picking the Link tool silently killed the
+   guided way to add a channel, and the Complete button with it, so the panel could not even be
+   dismissed. Switching back to the arrow tool fixed it, which made it read as random. `wiring`
+   comes from `drawing`, which is set on mousedown and cleared at every drop and cancel.
+
+   Anything that SUPPRESSES interaction belongs on .wiring. Anything that decorates the mode (the
+   crosshair, the revealed ports) belongs on .connecting, which is why both classes exist.
+
+   freeSlot already treats this rectangle as occupied when it places new cards (FlowsView freeSlot),
+   which is the same knowledge applied to the other half of the problem. */
+.flow-canvas.wiring .setup-steps { pointer-events: none; }
 .setup-steps-head {
   display: flex;
   align-items: baseline;
