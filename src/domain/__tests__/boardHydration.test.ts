@@ -95,3 +95,102 @@ describe('pruning a board before the workspace has loaded', () => {
     expect(pruneBoard(board(), unhydrated).detached).toBeUndefined()
   })
 })
+
+/**
+ * DELETING A SMART OBJECT MUST NOT SILENTLY UNWIRE THE CARDS IT LEAVES BEHIND.
+ *
+ * deleteSmartObject removes the object from the library and never touches any board, so every
+ * campaign it was placed on keeps a placement whose smartObjectId now dangles. This function is
+ * where that is reconciled, and it already decided the right thing for the CARDS: they survive, and
+ * line ~308 clears their smartObjectId so they carry on as plain cards. It just forgot their wires.
+ *
+ * The placement is dropped, so its id leaves liveIds, so every connector touching it is deleted —
+ * including the one that attached the whole object to the campaign. The cards reappear loose and
+ * unattached, the autosave writes that back, and redrawing by hand is the only repair. Reported as
+ * an Audience card reading "unattached" on a campaign that was plainly written to that audience.
+ *
+ * A wire to the object meant "everything in here informs the campaign". Once the object is gone the
+ * members ARE the everything, so each of them inherits the wire. That is the same judgement the
+ * surviving cards already embody, applied to the edges instead of the nodes.
+ */
+describe('pruning a board whose smart object was deleted from the library', () => {
+  const deleted = { objectKinds: KINDS, smartObjectIds: new Set<string>(), targetIds: new Set(['linkedin|post']) }
+
+  /** An object placed on the campaign, wired in as a whole, holding two cards. */
+  const placed = (): FlowBoard => ({
+    key: 'Peak season',
+    objects: [
+      { id: 'aud', kind: 'audience', text: '', smartObjectId: 'so1' },
+      { id: 'msg', kind: 'message', text: '', smartObjectId: 'so1' },
+    ],
+    placements: [{ id: 'pl1', smartObjectId: 'so1', memberIds: ['aud', 'msg'] }],
+    pos: {},
+    connectors: [{ from: 'pl1', to: 'campaign' }],
+  })
+
+  it('keeps the cards', () => {
+    const out = pruneBoard(placed(), deleted)
+    expect(out.objects.map((o) => o.id)).toEqual(['aud', 'msg'])
+    expect(out.placements).toHaveLength(0)
+  })
+
+  it('leaves every card it kept still attached to the campaign', () => {
+    const out = pruneBoard(placed(), deleted)
+    expect(out.connectors).toEqual([
+      { from: 'aud', to: 'campaign' },
+      { from: 'msg', to: 'campaign' },
+    ])
+  })
+
+  it('re-points a wire INTO the object onto its cards too', () => {
+    const b = placed()
+    b.objects.push({ id: 'brand1', kind: 'brand', text: '' })
+    b.connectors = [{ from: 'brand1', to: 'pl1' }]
+    expect(pruneBoard(b, deleted).connectors).toEqual([
+      { from: 'brand1', to: 'aud' },
+      { from: 'brand1', to: 'msg' },
+    ])
+  })
+
+  it('inherits a deliverable, not just the brief', () => {
+    const b = placed()
+    b.connectors = [{ from: 'pl1', to: 'linkedin|post' }]
+    expect(pruneBoard(b, deleted).connectors).toEqual([
+      { from: 'aud', to: 'linkedin|post' },
+      { from: 'msg', to: 'linkedin|post' },
+    ])
+  })
+
+  it('drops the wire when the object held nothing that survived', () => {
+    // Nothing to inherit it, so there is no card to carry the campaign's context and the edge would
+    // point at a node that is not there.
+    const b = placed()
+    b.objects = []
+    b.placements = [{ id: 'pl1', smartObjectId: 'so1', memberIds: [] }]
+    expect(pruneBoard(b, deleted).connectors).toEqual([])
+  })
+
+  it('never invents a self-edge or a duplicate', () => {
+    // A member already wired to the campaign in its own right, plus the object's wire, must not end
+    // up with the same edge twice; and a member wired to its own container must not end up wired to
+    // itself, which reachesOutput would read as a card pointing at nothing.
+    const b = placed()
+    b.connectors = [
+      { from: 'pl1', to: 'campaign' },
+      { from: 'aud', to: 'campaign' },
+      { from: 'aud', to: 'pl1' },
+    ]
+    const out = pruneBoard(b, deleted)
+    expect(out.connectors).toEqual([
+      { from: 'aud', to: 'campaign' },
+      { from: 'msg', to: 'campaign' },
+      { from: 'aud', to: 'msg' },
+    ])
+  })
+
+  it('leaves boards alone while the object is still in the library', () => {
+    const out = pruneBoard(placed(), { ...deleted, smartObjectIds: new Set(['so1']) })
+    expect(out.placements).toHaveLength(1)
+    expect(out.connectors).toEqual([{ from: 'pl1', to: 'campaign' }])
+  })
+})

@@ -303,6 +303,46 @@ export function pruneBoard(
     .filter((p) => known.smartObjectIds.has(p.smartObjectId))
     .map((p) => ({ ...p, memberIds: p.memberIds.filter((m) => objectIds.has(m)) }))
   const liveIds = new Set([...objectIds, ...placements.map((p) => p.id), 'campaign'])
+  /**
+   * WHAT INHERITS THE WIRES OF AN OBJECT THAT HAS GONE.
+   *
+   * deleteSmartObject removes the object from the library and never touches a board, so this is
+   * where a placement pointing at a deleted object is reconciled. The decision for the CARDS was
+   * already made and is right: they survive, and the map below clears their smartObjectId so they
+   * carry on as plain cards. Their WIRES were being dropped on the floor, because the placement
+   * leaves liveIds and every connector touching it then fails the endpoint test. The cards came
+   * back loose and unattached, the autosave wrote that back, and redrawing by hand was the only
+   * repair — on every campaign the object had been placed on.
+   *
+   * A wire to the object said "everything in here informs this campaign". Once the object is gone
+   * the members ARE the everything, so each surviving member inherits the edge, in whichever
+   * direction it ran. An object holding nothing that survived leaves no heir and its edges go, since
+   * there is nothing left to carry the context and the edge would point at a node that is not there.
+   */
+  const heirs = new Map<string, string[]>()
+  for (const p of board.placements) {
+    if (known.smartObjectIds.has(p.smartObjectId)) continue
+    const surviving = p.memberIds.filter((m) => objectIds.has(m))
+    if (surviving.length) heirs.set(p.id, surviving)
+  }
+  const legal = (e: string): boolean => liveIds.has(e) || !!known.targetIds?.has(e) || e.includes(':')
+  const inherited: { from: string; to: string }[] = []
+  const seenEdge = new Set<string>()
+  for (const c of board.connectors) {
+    for (const from of heirs.get(c.from) ?? [c.from]) {
+      for (const to of heirs.get(c.to) ?? [c.to]) {
+        // A member wired to its own container becomes a card wired to itself, which reads as a card
+        // pointing at nothing. Two edges onto the same pair — the object's and the member's own —
+        // become one.
+        if (from === to) continue
+        const key = `${from} ${to}`
+        if (seenEdge.has(key)) continue
+        if (!legal(from) || !legal(to)) continue
+        seenEdge.add(key)
+        inherited.push({ from, to })
+      }
+    }
+  }
   return {
     key: board.key,
     objects: objects.map((o) => (o.smartObjectId && !known.smartObjectIds.has(o.smartObjectId) ? { ...o, smartObjectId: undefined } : o)),
@@ -312,7 +352,8 @@ export function pruneBoard(
     // keep contributing refs for a deleted object.
     // An endpoint is legal if it is on the board, is a live output, or is a build-mode brief
     // sub-card (`${nodeId}:${briefIndex}` — the one id shape that genuinely carries a colon).
-    connectors: board.connectors.filter((c) => [c.from, c.to].every((e) => liveIds.has(e) || known.targetIds?.has(e) || e.includes(':'))),
+    // Endpoints on a dropped placement are moved onto its surviving cards first; see heirs.
+    connectors: inherited,
     // A cut survives only while the channel it names does. A key left behind by a channel that has
     // gone would silently cut off a NEW channel that later takes the same key, since the key is
     // derived from the channel and type rather than being unique to one.
