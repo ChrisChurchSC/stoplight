@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasWiredContext, wiredRefsFor } from '../boardResolve'
+import { hasWiredContext, reachesOutput, wiredRefsFor } from '../boardResolve'
 import type { CanvasObject, FlowBoard, SmartPlacement } from '../flowBoard'
 import type { SmartObject } from '../smartObject'
 import type { FlowReference } from '../clients'
@@ -271,5 +271,53 @@ describe('outputs do not conduct', () => {
       ],
     )
     expect(ids(wiredRefsFor(b, [], 'linkedin|text')).sort()).toEqual(['message:m_1', 'segment:s_1'])
+  })
+})
+
+/**
+ * A CARD INSIDE A SMART OBJECT IS ATTACHED WHEN THE OBJECT IS.
+ *
+ * reachesOutput drives one thing: whether a card looks like part of the campaign (full-strength on
+ * the board, no "unattached" tag in the outline). It followed the card's OWN wires, and a card drawn
+ * inside a placed smart object has none — you wire the object, not the cards in it. So every card in
+ * a wired object was dimmed and tagged unattached while wiredRefsFor was handing its record to the
+ * writer through the placement, which is the same board saying "this is not in the campaign" and
+ * "this is in the campaign" about one card. Reported as an Audience card reading unattached.
+ *
+ * Pinned against wiredRefsFor in the same test, because the bug was never in either function alone:
+ * it was the two of them disagreeing.
+ */
+describe('reachesOutput and smart-object members', () => {
+  const member = obj('aud1', 'audience', { refId: 's_1', smartObjectId: 'so_1' })
+  const placed: SmartPlacement = { id: 'place1', smartObjectId: 'so_1', memberIds: ['aud1'] }
+  const lib = [library('so_1', [{ type: 'segment', id: 's_1', label: 'Founders' }])]
+
+  it('reads attached when its object is wired to the brief, and its record is on the campaign', () => {
+    const b = board([member], [{ from: 'place1', to: 'campaign' }], [placed])
+    expect(reachesOutput(b, 'place1')).toBe(true)
+    expect(reachesOutput(b, 'aud1')).toBe(true)
+    // The half that was always right, and what makes the other half's answer a contradiction.
+    expect(ids(wiredRefsFor(b, lib, 'campaign'))).toEqual(['segment:s_1'])
+  })
+
+  it('inherits a deliverable, not just the brief', () => {
+    // The object may be wired to one channel rather than the campaign, and the member should say
+    // what it actually reaches rather than being special-cased to the hub.
+    const b = board([member], [{ from: 'place1', to: 'linkedin|text' }], [placed])
+    expect(reachesOutput(b, 'aud1')).toBe(true)
+  })
+
+  it('still reads unattached when its object is wired to nothing', () => {
+    // The negative case is the whole point of the tag: an object dropped on the board and left loose
+    // must not start reporting its cards as part of the campaign.
+    const b = board([member], [], [placed])
+    expect(reachesOutput(b, 'place1')).toBe(false)
+    expect(reachesOutput(b, 'aud1')).toBe(false)
+    expect(ids(wiredRefsFor(b, lib, 'campaign'))).toEqual([])
+  })
+
+  it('leaves a loose card alone', () => {
+    const b = board([obj('aud2', 'audience', { refId: 's_2' })], [])
+    expect(reachesOutput(b, 'aud2')).toBe(false)
   })
 })

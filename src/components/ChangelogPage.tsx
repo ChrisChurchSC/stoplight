@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.53',
+    dateLabel: 'August 6, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A card drawn inside a smart object now reads as part of the campaign when the object is wired into it. You wire the object, not the cards inside it, so those cards carry no line of their own, and the board was reading that as reaching nothing: it dimmed them and the layers list tagged them unattached. Their records were going to the copy writer the whole time, through the object. The report was an Audience card that said it was not attached while the campaign was plainly written to that audience.',
+          'It inherits whatever the object actually reaches, not just the brief, so an object wired to a single channel marks its cards as attached to that channel rather than leaving them looking loose. An object dropped on the board and left unwired still shows its cards as unattached, which is what the tag is for.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.52',
     dateLabel: 'August 6, 2026',
     groups: [
