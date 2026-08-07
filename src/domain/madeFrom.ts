@@ -107,9 +107,24 @@ export function madeFrom(args: {
         primary: true,
       })
     } else if (mine.length) {
-      // Connected and holding nothing. It still shows, because a wired card with no record picked is
-      // reaching the writer with nothing, and that is the gap this column exists to make visible.
-      out.push({ kind, label: '', cardId: mine[0].id, primary: true })
+      /**
+       * Connected and holding nothing. It still shows, because a wired card with no record picked is
+       * reaching the writer with nothing, and that is the gap this column exists to make visible.
+       *
+       * IT SHOWS BY NAME, THOUGH, when the card has one. This used to be a bare `''`, which the cell
+       * renders as "No audience picked" — and an Audience card named "Breadcrumbs ICP", sitting on
+       * the canvas and wired to the brief, read here as though no audience were on the asset at all.
+       * The canvas says the opposite in the same breath: its Connected-to rail names the card and
+       * adds "Contributes nothing yet" underneath, on the stated rule that this kind of list should
+       * answer in the words you wrote on the board. Both surfaces were describing one state; only
+       * this one dropped the half that says something is there.
+       *
+       * The gap survives the change, because the entry still carries no refId: the cell keeps the
+       * dashed, faint styling off that rather than off an empty label, so an empty card now reads as
+       * the thing it is (here, named, holding nothing) instead of as an absence.
+       */
+      const rep = mine.find((c) => c.label.trim()) ?? mine[0]
+      out.push({ kind, label: rep.label.trim(), cardId: rep.id, primary: true })
     } else if (kind === 'audience' && rowAudience?.label) {
       // Nothing wired, but the row names one anyway. No cardId: there is no card to open, and
       // claiming one would send the inspector after a card that does not exist.

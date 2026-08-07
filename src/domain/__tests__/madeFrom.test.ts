@@ -109,6 +109,47 @@ describe('what an asset is made from', () => {
     expect(out).toEqual([{ kind: 'brand', label: '', cardId: 'c1', primary: true }])
   })
 
+  /**
+   * A CARD THAT IS NAMED BUT HOLDS NOTHING IS STILL NAMED.
+   *
+   * An Audience card called "Breadcrumbs ICP", wired to the brief and pointing at no segment, read
+   * here as "No audience picked" — the cell's words for an empty label — while the canvas named it
+   * in the same breath and put "Contributes nothing yet" underneath. One state, and only this
+   * surface dropped the half saying something was there.
+   */
+  it('names a wired card that has not picked a record yet', () => {
+    const out = madeFrom({ kinds: ['audience'], cards: [card('c1', 'audience', undefined, 'Breadcrumbs ICP')], nameOf })
+    expect(out).toEqual([{ kind: 'audience', label: 'Breadcrumbs ICP', cardId: 'c1', primary: true }])
+  })
+
+  /** The gap has to survive being named: no refId is what the cell marks empty. */
+  it('leaves a named-but-empty card carrying no record, so it still reads as unfilled', () => {
+    const out = madeFrom({ kinds: ['audience'], cards: [card('c1', 'audience', undefined, 'Breadcrumbs ICP')], nameOf })
+    expect(out[0].refId).toBeUndefined()
+  })
+
+  /** The record still wins where there is one: the name is the fallback, not the answer. */
+  it('prefers the record over the card’s own name', () => {
+    const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'voice', 'v1', 'What I called it')], nameOf })
+    expect(out[0]).toMatchObject({ refId: 'v1', label: 'Plain-spoken' })
+  })
+
+  /** Nothing to say is still nothing to say, so the unnamed empty card is unchanged. */
+  it('says nothing is picked when the wired card has no name either', () => {
+    const out = madeFrom({ kinds: ['audience'], cards: [card('c1', 'audience')], nameOf })
+    expect(out).toEqual([{ kind: 'audience', label: '', cardId: 'c1', primary: true }])
+  })
+
+  /** The card that can say something represents the kind, and the cell opens that same card. */
+  it('takes the name from a named sibling rather than reading as empty', () => {
+    const out = madeFrom({
+      kinds: ['audience'],
+      cards: [card('c1', 'audience'), card('c2', 'audience', undefined, 'Breadcrumbs ICP')],
+      nameOf,
+    })
+    expect(out).toEqual([{ kind: 'audience', label: 'Breadcrumbs ICP', cardId: 'c2', primary: true }])
+  })
+
   it('carries the card behind an entry, so the cell can open it', () => {
     const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'voice', 'v1')], nameOf })
     expect(out[0].cardId).toBe('c1')

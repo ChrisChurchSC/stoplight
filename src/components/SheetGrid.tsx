@@ -1013,13 +1013,23 @@ export function SheetGrid({
                                 <span className="mf-name">{name}</span>
                               </>
                             )
+                            /**
+                             * EMPTY IS ABOUT THE RECORD, NOT THE LABEL. A card can be named and
+                             * still hold nothing, and it is the missing record that this cell marks
+                             * dashed and faint — naming it does not fill it. Keying the styling off
+                             * the label instead meant a named-but-empty card had to be rendered
+                             * nameless to keep its "nothing picked" mark, which is how an Audience
+                             * card plainly on the board came to read as no audience at all.
+                             */
                             const title = e.primary
-                              ? `${meta.label}: ${e.label || 'nothing picked yet'}`
+                              ? e.label
+                                ? `${meta.label}: ${e.label}${e.refId ? '' : ' — nothing picked yet'}`
+                                : `${meta.label}: nothing picked yet`
                               : `Also reaching this asset: ${e.label}`
                             return (
                               <span
                                 key={`${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`}
-                                className={`mf-chip${e.label ? '' : ' unset'}`}
+                                className={`mf-chip${e.refId ? '' : ' unset'}`}
                                 style={{ ['--note-tone' as string]: meta.tone } as React.CSSProperties}
                               >
                                 {/* Pressing the chip opens the card, which is the gesture the canvas

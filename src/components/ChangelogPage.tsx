@@ -31,6 +31,7 @@ const RELEASES: Release[] = [
         items: [
           'The grid shows the audience an asset is written to, even when no card on the canvas names it. Made from was built from the cards wired into an asset, and an audience set any other way is not a card: picking one in an asset\'s inspector on the campaign canvas writes a name, and so does seeding a campaign and ingesting an asset. So the canvas showed the asset under an audience while the grid showed nothing under Made from, and the disagreement read as a wire that had come loose.',
           'The audience it shows is the one you can change from there. Where the name matches a segment in the brand\'s library the chip works like any other, with the picker on it, and setting it from the grid writes the name and the record together so the two surfaces stay level. An audience whose name matches no record still shows, named, rather than leaving the cell blank on an asset that plainly has one.',
+          'A card you have named but not filled in is shown by name. An Audience card called "Breadcrumbs ICP", sitting on the canvas and wired to the brief, read in the grid as "No audience picked" if it had not been pointed at a segment yet: the canvas named it and said "Contributes nothing yet" underneath, and the grid dropped the half that said anything was there. It now reads as what it is, named, in the dashed and faded style the cell already used for a card holding nothing, so an empty card still looks empty without looking absent.',
         ],
       },
     ],
