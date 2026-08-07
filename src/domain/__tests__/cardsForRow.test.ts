@@ -111,3 +111,81 @@ describe('the cards that reach an asset', () => {
     expect(cardsForRow(board(), ROW, name)).toEqual([])
   })
 })
+
+/**
+ * A SMART OBJECT'S CARDS REACH THE ASSET, AND THE GRID HAS TO SAY SO.
+ *
+ * You wire the object, not the cards inside it, so its members carry no edge of their own and the
+ * upstream walk stops at the placement. cardsForRow looked each returned id up in `objects` and
+ * skipped what it did not find, under a comment claiming the members came back separately. They did
+ * not. So every card inside a smart object was invisible to the grid: "Made from" showed no
+ * audience for an asset whose audience was reaching the copy writer through that very object.
+ * Reported as the audience tag not showing as connected on the grid.
+ *
+ * The canvas half of this was fixed twice already (reachesOutput walking the container, and the
+ * placement's wires surviving its object's deletion). This is the third surface asking the same
+ * question and getting a different answer, so these assert against wiredRefsFor — the writer's own
+ * answer — rather than against a hand-written expectation.
+ */
+describe('cards inside a placed smart object', () => {
+  const aud = (id: string): CanvasObject => ({ id, kind: 'audience', text: '', refId: 's_1', smartObjectId: 'so1' })
+  const withObject = (over: Partial<FlowBoard> = {}): FlowBoard =>
+    board({
+      objects: [aud('aud1'), { ...obj('msg2', 'message'), smartObjectId: 'so1' }],
+      placements: [{ id: 'pl1', smartObjectId: 'so1', memberIds: ['aud1', 'msg2'] }],
+      ...over,
+    })
+
+  it('are listed when the object is wired to the campaign', () => {
+    const b = withObject({ connectors: [{ from: 'pl1', to: 'campaign' }] })
+    expect(cardsForRow(b, ROW, name).map((c) => c.id)).toEqual(['aud1', 'msg2'])
+  })
+
+  it('carry their kind and record, so Made from can show the audience', () => {
+    const b = withObject({ connectors: [{ from: 'pl1', to: 'campaign' }] })
+    const found = cardsForRow(b, ROW, name).find((c) => c.kind === 'audience')
+    expect(found).toEqual({ id: 'aud1', kind: 'audience', refId: 's_1', label: 'aud1' })
+  })
+
+  it('are listed when the object is wired to the channel or to the row', () => {
+    for (const target of [KEY, ROW.id]) {
+      const b = withObject({ connectors: [{ from: 'pl1', to: target }] })
+      expect(cardsForRow(b, ROW, name).map((c) => c.id)).toEqual(['aud1', 'msg2'])
+    }
+  })
+
+  it('are NOT listed when the object is wired to nothing', () => {
+    // The negative case is the point of the column: an object sitting on the board unwired reaches
+    // no asset, and must not start showing up against every row.
+    expect(cardsForRow(withObject(), ROW, name)).toEqual([])
+  })
+
+  it('go with the campaign when the channel is cut off from the brief', () => {
+    const b = withObject({ detached: [KEY], connectors: [{ from: 'pl1', to: 'campaign' }] })
+    expect(cardsForRow(b, ROW, name)).toEqual([])
+  })
+
+  it('lists a member once when it also carries a wire of its own', () => {
+    const b = withObject({
+      connectors: [
+        { from: 'pl1', to: 'campaign' },
+        { from: 'aud1', to: 'campaign' },
+      ],
+    })
+    expect(cardsForRow(b, ROW, name).map((c) => c.id)).toEqual(['aud1', 'msg2'])
+  })
+
+  it('reaches a card wired INTO the object, as well as the ones inside it', () => {
+    // brand1 has to be on the board for the walk to accept it as a card, so this case rebuilds the
+    // object list rather than using withObject's.
+    const b = board({
+      objects: [obj('brand1', 'brand'), aud('aud1'), { ...obj('msg2', 'message'), smartObjectId: 'so1' }],
+      placements: [{ id: 'pl1', smartObjectId: 'so1', memberIds: ['aud1', 'msg2'] }],
+      connectors: [
+        { from: 'brand1', to: 'pl1' },
+        { from: 'pl1', to: 'campaign' },
+      ],
+    })
+    expect(cardsForRow(b, ROW, name).map((c) => c.id).sort()).toEqual(['aud1', 'brand1', 'msg2'])
+  })
+})

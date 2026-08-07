@@ -33,21 +33,45 @@ export function cardsForRow(
   nameFor: (o: CanvasObject) => string,
 ): RowCard[] {
   const objectById = new Map(board.objects.map((o) => [o.id, o]))
+  const placementById = new Map(board.placements.map((p) => [p.id, p]))
   const delivKey = deliverableKeyFor(row)
   const cut = (board.detached ?? []).includes(delivKey)
   const targets = cut ? [row.id, delivKey] : [row.id, delivKey, 'campaign']
 
   const seen = new Set<string>()
   const out: RowCard[] = []
+  const push = (o: CanvasObject) => out.push({ id: o.id, kind: o.kind, refId: o.refId, label: nameFor(o) })
   for (const t of targets) {
     for (const id of upstreamCardIds(board, t)) {
       if (seen.has(id)) continue
       seen.add(id)
-      // A placement (a smart object dropped on the board) has no kind of its own: it is a bag of
-      // cards, and upstreamCardIds already returns those separately, so it contributes nothing here.
+      /**
+       * A PLACEMENT IS A BAG OF CARDS, AND THE BAG IS WHAT CARRIES THE WIRE.
+       *
+       * You wire the smart object, not the cards inside it, so its members have no edge of their
+       * own and the upstream walk stops at the placement. This used to read `objectById.get(id)`
+       * and skip whatever it did not find, under a comment claiming upstreamCardIds returned the
+       * members separately. It does not — it returns the placement id and nothing else — so every
+       * card inside a smart object was invisible to the grid: Made from showed no audience for an
+       * asset whose audience was reaching the copy writer through that very object, and the column
+       * exists precisely to say what the copy is written from.
+       *
+       * wiredRefsFor has always resolved a placement to the records inside it (see refsOf). This is
+       * the same rule for the cards, so the two stop disagreeing.
+       */
+      const placed = placementById.get(id)
+      if (placed) {
+        for (const m of placed.memberIds) {
+          if (seen.has(m)) continue
+          seen.add(m)
+          const mo = objectById.get(m)
+          if (mo) push(mo)
+        }
+        continue
+      }
       const o = objectById.get(id)
       if (!o) continue
-      out.push({ id: o.id, kind: o.kind, refId: o.refId, label: nameFor(o) })
+      push(o)
     }
   }
   return out
