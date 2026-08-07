@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.58',
+    dateLabel: 'August 7, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The setting-up checklist works again while the Link tool is on. Yesterday the checklist was told to get out of the way while you draw a line, so that a line dropped on the campaign brief underneath it would land. That was right, but it was hung on the Link tool rather than on the drawing itself, and the Link tool stays on until you turn it off. So from the moment you picked it the whole checklist stopped responding: every step, including Add what you are shipping, which is how you add a channel from there, and the Complete button, so the panel could not even be dismissed. Clicking the arrow tool brought it all back, which made it look random rather than like a mode.',
+          'It now steps aside only while a line is actually in flight, and comes back the moment you let go. Adding a channel from the toolbar was unaffected throughout.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.57',
     dateLabel: 'August 7, 2026',
     groups: [
