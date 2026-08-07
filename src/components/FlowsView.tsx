@@ -5,7 +5,7 @@ import { CHANNELS } from '../domain/channels'
 import {
   type CanvasObject, type CanvasObjectKind, type ObjectFamily, type SmartPlacement,
   type FlowBoard,
-  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard, remapBuiltTargets,
+  BUILDER_BOARD_KEY, CREATABLE_OBJECT_KINDS, REF_TYPE_FOR_OBJECT_KIND, boardFor, deliverableKeyFor, emptyBoard, freshObjectId, freshPlacementId as freshGroupId, objectName, pruneBoard, remapBuiltTargets, renameEndpoint,
 } from '../domain/flowBoard'
 import {
   MIN_GROUP, expandToGroups, groupIndex, isWholeGroup, nextGroupName, pruneGroups, renameGroup, withGroup, withoutGroup,
@@ -3456,6 +3456,30 @@ export function FlowsView() {
     if (!updates.length) return
     recordHistory(true)
     setSelEdge(null)
+    /**
+     * AND THE WIRES COME WITH IT, because the key IS the channel's identity.
+     *
+     * deliverableKeyFor folds branchOf into the id, so dropping the branch RENAMES this deliverable.
+     * Every card wired to it still pointed at the old name, which nothing answers to any more, and
+     * the next openView pruned them as dangling — a card wired to a channel quietly stopped feeding
+     * it, and the wire could not even be undrawn because it was gone. The key carries no colon, so
+     * pruneBoard's escape hatch for build-mode ids does not protect it either.
+     *
+     * Where the campaign already has that channel and type the two become one card, which is what
+     * the toast says; the dedupe below is what makes that a merge rather than a doubled wire.
+     */
+    const oldKey = d.key
+    const newKey = deliverableKeyFor({ ...d.rows[0], branchOf: undefined })
+    if (newKey !== oldKey) {
+      const swap = (e: string) => (e === oldKey ? newKey : e)
+      // Merging into a channel the campaign already has turns two edges into the same one, and a
+      // card wired to both ends up wired to itself. renameEndpoint settles both, and is tested.
+      setConnectors((cs) => renameEndpoint(cs, oldKey, newKey))
+      // The channel's own position and its cut are keyed the same way, so they are renamed too or
+      // the card jumps back to its default slot and a disconnected channel silently reattaches.
+      setPos((p) => (p[oldKey] && !p[newKey] ? { ...p, [newKey]: p[oldKey] } : p))
+      setDetached((cur) => (cur.includes(oldKey) ? [...new Set(cur.map(swap))] : cur))
+    }
     void updateRows(updates)
     showToast(
       cut.mergesInto
