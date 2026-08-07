@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.56',
+    dateLabel: 'August 7, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'The grid shows the audience an asset gets from a smart object. Made from is built from the cards wired into an asset, and it could not see inside a smart object at all: you wire the object rather than the cards in it, so the walk stopped at the object and everything inside it was skipped. An asset written to an audience that arrived that way had a blank where the audience should be, while the copy writer was being handed that very audience. The cards inside the object are now listed like any others, with their record on them, so the chip is a real entry you can open and change.',
+          'This was the same disagreement in a third place. The board had already been taught to show those cards as part of the campaign, and to keep their connections when the object they came from is deleted. The grid was still answering the old way, which is why an audience could look connected on the board and unset on the grid at the same time.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.55',
     dateLabel: 'August 7, 2026',
     groups: [
