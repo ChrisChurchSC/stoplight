@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.55',
+    dateLabel: 'August 7, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Deleting a smart object no longer quietly unwires the cards it leaves behind. Deleting one from the library left every campaign it was placed on holding a reference to something that was gone. The next time you opened one of those campaigns, the cards inside the object were kept, correctly, but the line joining them to the campaign was thrown away, and the board saved itself in that state. So the cards came back loose and marked as not attached, on every campaign the object had been used on, and drawing each line again by hand was the only way back.',
+          'The cards inherit the line instead. A line drawn to a smart object meant everything inside it feeds this campaign, and once the object is gone those cards are the everything, so each of them keeps the connection the object had, whether it ran to the campaign brief or to a single channel. Lines drawn into the object are carried across the same way. Nothing is duplicated, and an object that held nothing still loses its line, because there is no longer anything for it to join.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.54',
     dateLabel: 'August 7, 2026',
     groups: [
