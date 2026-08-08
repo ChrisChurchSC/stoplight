@@ -80,3 +80,55 @@ describe('buildShareSnapshot — the records a shared board points at', () => {
     expect(ids(snap, 'stoplight.brandDatasets.v1')).toEqual(['ds_acme'])
   })
 })
+
+/**
+ * A CAMPAIGN WHOSE BRAND IS ON ITS BOARD IS STILL THAT BRAND'S CAMPAIGN.
+ *
+ * bindCampaignBrand writes a campaign's `client` when a Brand card is wired into its brief, so a
+ * campaign predating that wiring reads Unassigned while its board plainly names a brand. The link is
+ * scoped by that board (see ShareDialog), and the snapshot was selecting by the record field alone —
+ * so the two ends disagreed about the same campaign and it was left out of its own link. Its assets
+ * still travelled, because rows are attributed by campaign NAME, which is what made the result blank
+ * rather than empty: the work arrived with no campaign record behind it.
+ */
+describe('buildShareSnapshot — a campaign filed under nobody', () => {
+  const CAMPAIGN = 'Q3 BAU'
+  const unfiled = (): SnapshotState => ({
+    ...state(),
+    campaignList: [{ name: CAMPAIGN, client: 'Unassigned', strategy: 'Current state' }],
+    rows: [{ id: 'r1', campaign: CAMPAIGN }],
+    flowBoards: [
+      {
+        key: CAMPAIGN,
+        objects: [{ id: 'n1', kind: 'brand', refId: 'bo_acme' }],
+        connectors: [{ from: 'n1', to: 'campaign' }],
+      },
+    ],
+  })
+
+  it('travels with its own campaign link', () => {
+    // The regression. The subject of the link is not a member of a set to be filtered.
+    const snap = buildShareSnapshot(unfiled(), 'Acme', CAMPAIGN)
+    expect((snap['stoplight.campaigns.v1'] as { name: string }[]).map((c) => c.name)).toEqual([CAMPAIGN])
+    expect((snap['stoplight.sheet.v1'] as { rows: unknown[] }).rows).toHaveLength(1)
+  })
+
+  it('travels with a brand link too, read off the Brand card on its board', () => {
+    const snap = buildShareSnapshot(unfiled(), 'Acme')
+    expect((snap['stoplight.campaigns.v1'] as { name: string }[]).map((c) => c.name)).toEqual([CAMPAIGN])
+    expect((snap['stoplight.sheet.v1'] as { rows: unknown[] }).rows).toHaveLength(1)
+  })
+
+  it('does not follow another brand’s link', () => {
+    // Reading the card is not the same as admitting every unfiled campaign: the card names Acme, so
+    // Globex's link carries none of it.
+    const snap = buildShareSnapshot(unfiled(), 'Globex')
+    expect(snap['stoplight.campaigns.v1']).toEqual([])
+    expect((snap['stoplight.sheet.v1'] as { rows: unknown[] }).rows).toEqual([])
+  })
+
+  it('stays out of a brand link when nothing names a brand at all', () => {
+    const snap = buildShareSnapshot({ ...unfiled(), flowBoards: [] }, 'Acme')
+    expect(snap['stoplight.campaigns.v1']).toEqual([])
+  })
+})

@@ -1,5 +1,6 @@
 import type { Role } from '../domain/access'
-import { clientForCampaign } from '../domain/clients'
+import { brandFromBoard, isBrandless } from '../domain/brand'
+import { DRAFTS_SPACE, clientForCampaign } from '../domain/clients'
 import { decodeShareToken } from './shareLink'
 import { getActiveWorkspaceId } from './session'
 import { isSupabaseConfigured, supabase } from './supabase'
@@ -92,27 +93,72 @@ export function buildShareSnapshot(state: SnapshotState, client: string, campaig
   const set = (k: string, v: unknown) => {
     if (v !== undefined) snap[k] = v
   }
+  /**
+   * WHICH BRAND A CAMPAIGN BELONGS TO, by the same ladder the share dialog scopes the link with:
+   * the campaign's own record, then the Brand card wired into its board.
+   *
+   * Both ends have to answer this the same way or the link scopes to a brand the snapshot then
+   * decides that campaign is not part of. bindCampaignBrand writes the record only when a Brand card
+   * is wired in, so a campaign predating that wiring reads Unassigned while its board plainly names
+   * a brand — and a brand share, which selects by this answer, packed none of it.
+   *
+   * Reading the card rather than admitting every brandless campaign: a link scoped to one brand must
+   * carry that brand's work, not every unfiled draft in the workspace.
+   */
+  const brandOfCampaign = (name: string): string => {
+    const rec = asArr(state.campaignList).find((c) => c.name === name)?.client
+    const filed = [typeof rec === 'string' ? rec.trim() : '', clientForCampaign(name)].find(
+      (b) => b && !isBrandless(b) && b !== DRAFTS_SPACE,
+    )
+    if (filed) return filed
+    const board = asArr(state.flowBoards).find((b) => b.key === name)
+    return brandFromBoard(
+      board as Parameters<typeof brandFromBoard>[0],
+      (refId) => asArr(state.brandObjects).find((b) => b.id === refId)?.name as string | undefined,
+    )
+  }
   // A row/campaign belongs to this share if it's the shared flow (single-flow) or, for a brand
   // share, any campaign attributed to the client.
-  const campInShare = (name: string): boolean =>
-    campaign ? name === campaign : clientForCampaign(name) === client
+  const campInShare = (name: string): boolean => (campaign ? name === campaign : brandOfCampaign(name) === client)
 
   // Rows (assets) — no client field; attribute via the campaign→client map (the app's own rule).
   const scopedRows = asArr(state.rows).filter((r) => campInShare(String(r.campaign ?? '')))
   set('stoplight.sheet.v1', { rows: scopedRows })
 
-  // Direct `client` field — for a single-flow share, narrow campaigns/canvases/reports to the flow.
-  const campaigns = byField(state.campaignList, 'client', client)
-  set('stoplight.campaigns.v1', campaign ? campaigns.filter((c) => (c as Record<string, unknown>).name === campaign) : campaigns)
+  /**
+   * A CAMPAIGN LINK CARRIES ITS OWN CAMPAIGN, whatever that campaign is filed under.
+   *
+   * These were selected by the record's `client` field first and narrowed to the flow second, which
+   * silently dropped the one record the link exists to hand over: a campaign's brand can live on the
+   * Brand card wired into its brief while the record still reads Unassigned (bindCampaignBrand only
+   * writes that field when the wire is drawn), so a link scoped to the brand found no campaign whose
+   * `client` matched and shipped an empty list. The assets travelled — they are attributed by
+   * campaign NAME — and so did the board, so the recipient got a campaign with its work in it and no
+   * campaign record behind it: no goal, no status, no folder, no timing. Blank.
+   *
+   * By name, then, for the single-flow case: the shared campaign is not a member of a set to be
+   * filtered, it is the subject of the link. A brand share still selects a set, but through
+   * brandOfCampaign, so it packs what the owner sees under that brand rather than only what the
+   * record field happens to say.
+   *
+   * Canvases and reports keep the plain `client` filter for a brand share: those carry their own
+   * client and are not the thing whose brand can live on a card.
+   */
+  const byCampaignOrClient = (arr: unknown, field: string): unknown[] =>
+    campaign ? asArr(arr).filter((x) => x[field] === campaign) : byField(arr, 'client', client)
+  set(
+    'stoplight.campaigns.v1',
+    campaign
+      ? asArr(state.campaignList).filter((c) => c.name === campaign)
+      : asArr(state.campaignList).filter((c) => brandOfCampaign(String(c.name ?? '')) === client),
+  )
   // Campaign boards are keyed by campaign NAME, not by client, so scope them through campInShare
   // rather than byField. A share link should show the board the recipient is looking at, and only
   // that one: the builder's own '__new-flow__' slot is never a real campaign and never travels.
   const boards = asArr(state.flowBoards).filter((b) => campInShare(String((b as Record<string, unknown>).key ?? '')))
   set('stoplight.flowBoards.v1', boards)
-  const canvases = byField(state.canvases, 'client', client)
-  set('stoplight.canvases.v1', campaign ? canvases.filter((c) => (c as Record<string, unknown>).campaign === campaign) : canvases)
-  const reports = byField(state.reports, 'client', client)
-  set('stoplight.reports.v1', campaign ? reports.filter((r) => (r as Record<string, unknown>).campaign === campaign) : reports)
+  set('stoplight.canvases.v1', byCampaignOrClient(state.canvases, 'campaign'))
+  set('stoplight.reports.v1', byCampaignOrClient(state.reports, 'campaign'))
 
   // Object keyed by brand/client name.
   set('stoplight.clientAudiences.v1', pick(state.clientAudiences, client))
