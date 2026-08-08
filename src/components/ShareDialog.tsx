@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { SHARE_ACCESS, SHAREABLE_ROLES, type ShareableRole } from '../domain/access'
+import { canvasBrandScope, isBrandless } from '../domain/brand'
+import { DRAFTS_SPACE, clientForCampaign } from '../domain/clients'
 import { encodeShareToken, shareUrl } from '../lib/shareLink'
 import { publishShareSnapshot } from '../lib/shareSnapshot'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -18,7 +20,9 @@ import { useTrafficStore } from '../store/useTrafficStore'
 export function ShareDialog() {
   const open = useTrafficStore((s) => s.shareDialogOpen)
   const close = useTrafficStore((s) => s.closeShareDialog)
-  const client = useTrafficStore((s) => s.clientFilter)
+  const clientFilter = useTrafficStore((s) => s.clientFilter)
+  const clientList = useTrafficStore((s) => s.clientList)
+  const campaignList = useTrafficStore((s) => s.campaignList)
   const campaign = useTrafficStore((s) => s.shareDialogCampaign)
   const shares = useTrafficStore((s) => s.shares)
   const createShare = useTrafficStore((s) => s.createShare)
@@ -30,6 +34,43 @@ export function ShareDialog() {
   // straight back the link it just revoked.
   const [stopped, setStopped] = useState(false)
 
+  /** Every brand the workspace holds, however it was registered — the same union the brand sheet
+   *  seeds itself from, because a brand can exist as a campaign's client before it is ever added
+   *  to the client list. */
+  const brandNames = useMemo(() => {
+    const names = new Set<string>()
+    for (const c of clientList) names.add(c)
+    for (const c of campaignList) names.add(c.client)
+    return [...names].filter((n) => n && n !== DRAFTS_SPACE && !isBrandless(n))
+  }, [clientList, campaignList])
+
+  /**
+   * THE BRAND THIS LINK IS SCOPED TO. The campaign's own brand first, then the canvas rule —
+   * never the raw workspace filter on its own.
+   *
+   * This read clientFilter and nothing else, and clientFilter is not where a campaign's brand
+   * lives. It is a browsing scope that resets to 'all' on every load, and the Campaigns index
+   * opens a campaign without narrowing it (deliberately: the index has to keep showing every
+   * brand's work). So a campaign opened from the index sat on a board that named its brand
+   * everywhere — the rail, the pickers, the Brand card wired into the brief — while Share alone
+   * answered "Pick a brand first, then share." Nothing was unset; the dialog was asking a
+   * different question from the rest of the app and reporting the answer as a missing brand.
+   *
+   * The campaign's binding wins over the filter rather than merely filling in for it, because
+   * the snapshot behind the link is built per brand (voice, proof, audiences, profile), and a
+   * campaign handed out under whichever brand the rail happened to be on would carry another
+   * brand's library. A campaign filed under nobody has no binding to prefer, so those fall
+   * through to the canvas rule, which is the same one every record picker on the board uses.
+   */
+  // The campaign record and the name→client resolver are kept in step by bindCampaignBrand, but
+  // only the record is a store slice, so reading it first is what makes the dialog re-render when
+  // the Brand card on the board changes the binding under it.
+  const bound = campaign
+    ? campaignList.find((c) => c.name === campaign)?.client?.trim() || clientForCampaign(campaign)
+    : ''
+  const filed = !isBrandless(bound) && bound !== DRAFTS_SPACE
+  const client = filed ? bound : canvasBrandScope(clientFilter, brandNames)
+
   // A campaign share shows that campaign's links; a brand share shows the brand-level
   // (campaign-less) ones. Newest first, because createShare prepends.
   const scoped = shares.filter((s) => s.client === client && (campaign ? s.campaign === campaign : !s.campaign))
@@ -38,8 +79,8 @@ export function ShareDialog() {
   // Duplicates left over from the dialog that could stack any number of links. Nothing else
   // surfaces them now, and a live grant nobody can see is a live grant nobody can revoke.
   const extra = atRole.slice(1)
-  // 'all' is not a brand, so there is nothing to scope a link to. Reachable from the
-  // workspace Share button before a brand is picked.
+  // Nothing resolved: no campaign brand, no brand chosen, and more than one to choose between.
+  // Reachable from the workspace Share button before a brand is picked.
   const shareable = !!client && client !== 'all'
 
   useEffect(() => setCopied(false), [role, link?.id])
