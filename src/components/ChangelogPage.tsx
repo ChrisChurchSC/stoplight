@@ -23,7 +23,7 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.59',
+    version: 'v1.60',
     dateLabel: 'August 8, 2026',
     groups: [
       {
@@ -32,6 +32,19 @@ const RELEASES: Release[] = [
           'Made from stops saying "No audience picked" about assets that plainly have one. An Audience card wired to the campaign brief with no record in it reached every asset in the campaign, and the column stopped there instead of falling through to the audience the asset itself names. That name is the one the copy writer resolves the segment by, so the copy went out written to it while this column, alone among every surface, said the asset was written to nobody. It now says the audience, keeps the card as the thing the chip opens, and still marks the card as holding no record of its own.',
           'A segment kept in the brand’s system library is named in the grid like any other. Audiences live in two places and generation reads both; the grid read only one, so a card pointing squarely at a library segment resolved to no name at all and its own picker could not offer the segment back. Both now read the same merged set the writer does.',
           'A card you have named but not filled in is shown by name rather than as an absence. Naming a card is not filling it, so the missing record is still marked, and both halves can now be said at once.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.59',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Share stops asking for a brand on a campaign that plainly has one. It read the workspace filter and nothing else, and that filter is a browsing scope: it resets to every brand on each load, and opening a campaign from the Campaigns index deliberately leaves it that way, because an index that hid the other brands’ work would be no use for picking one. So a campaign you opened from there sat on a board naming its brand everywhere — the rail, every record picker, the Brand card wired into the brief — while Share alone answered “Pick a brand first, then share.” Nothing was unset. The dialog was asking a different question from the rest of the app and reporting the answer as a missing brand.',
+          'It now takes the campaign’s own brand, and falls back to the same rule the board uses when a campaign has not been filed under one. That also settles which brand a link carries: the page behind a shared link is built per brand — voice, proof, audiences, profile — so a campaign handed out while the rail sat on another client used to travel with that client’s library attached. The dialog is titled with the campaign’s short name now too, rather than repeating the brand in front of it.',
         ],
       },
     ],
