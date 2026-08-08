@@ -4846,9 +4846,13 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       filed ||
       brandFromBoard(board, (refId) => s.brandObjects.find((b) => b.id === refId)?.name)
     if (!brand) return ''
-    // The record catches up with the board. bindCampaignBrand is idempotent, so a healed campaign
-    // opening again is a no-op rather than a rebind.
-    if (!filed) get().bindCampaignBrand(name, brand)
+    // The record catches up with the board — and the RESOLVER catches up with the record.
+    // Unconditional, where it used to run only for an unfiled record: bindCampaignBrand's
+    // idempotence check demands the stored record and clientForCampaign AGREE before it skips, so
+    // for a campaign whose record is right but whose name this session never registered (hydrated
+    // from the backend, opened from the index) it is precisely the re-sync — and for a campaign
+    // where both halves already agree it remains the no-op it always was.
+    get().bindCampaignBrand(name, brand)
     /**
      * The audiences this campaign references, wherever the phantom scope filed them. The board's
      * Audience cards and the rows' segment pins are the campaign's own statement of which records
@@ -5870,6 +5874,25 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     }
     const { state, ok: stateOk, error: stateError } = await hydrateState()
     for (const [key, slice] of Object.entries(STATE_SLICES)) if (key in state) patch[slice] = state[key]
+    /**
+     * THE RESOLVER LEARNS THE WORKSPACE'S CAMPAIGNS, not just this device's.
+     *
+     * clientForCampaign resolves through a module-level registry seeded exactly once, at module
+     * init, from loadCampaigns() — which reads THIS DEVICE's localStorage. On a synced workspace
+     * that mirror is whatever this browser last saw, and the line above then replaces campaignList
+     * with the workspace's real list without teaching the resolver a single name from it. Every
+     * campaign created elsewhere (or since this device's mirror went stale) resolved to UNASSIGNED
+     * for the whole session while its own record said its brand, and the two disagreeing is a
+     * different bug on every surface that asks the other one: rowInScope drops the campaign's rows
+     * (a campaign whose grid is BLANK while its canvas shows fifteen assets), the index files it
+     * under the wrong folder, and which door you opened it through decided which behaviour you got,
+     * because openFlow happens to register and openView does not.
+     *
+     * The same loop loadCampaigns runs, on the list that is actually true.
+     */
+    if (Array.isArray(patch.campaignList)) {
+      for (const c of patch.campaignList as Campaign[]) registerCampaign(c.name, c.client)
+    }
     // Flights are now hydrated (whether the workspace had any or not) — release the ensureFlights
     // gate. ONLY on a read that actually happened, though: a failed read returns no keys, which is
     // indistinguishable from an empty workspace, and releasing the gate on that lets ensureFlights
