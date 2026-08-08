@@ -4838,6 +4838,14 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     if (!name) return ''
     // A shared session views someone else's workspace; it heals nothing.
     if (get().sharedSession) return ''
+    /**
+     * NOT BEFORE THE WORKSPACE HAS LOADED. Until hydrateRecords lands, campaignList, flowBoards
+     * and brandObjects are this device's stale copies — and a heal is a WRITE path: binding from a
+     * fossil board and saving would push the fossil's campaign list over the workspace's real one,
+     * which is how "old files" come back from the dead on the next device to load. Same gate, same
+     * reason as saveFlowBoard. The campaign heals on the first open after the load instead.
+     */
+    if (!get().boardsHydrated) return ''
     const s = get()
     const board = s.flowBoards.find((b) => b.key === name)
     const recorded = s.campaignList.find((c) => c.name === name)?.client?.trim() || clientForCampaign(name)

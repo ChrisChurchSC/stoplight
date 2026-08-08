@@ -59,6 +59,14 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
    */
   const rowsHydrated = useTrafficStore((s) => s.rowsHydrated)
   /**
+   * The campaign RECORDS load separately from the rows (hydrateRecords vs. the rows refresh), and
+   * a card can be minted from either — so the card list is only "your campaigns" once both have
+   * landed. Rows alone was enough for the tallies; a list of stale records is still a list of
+   * ghosts however fresh the rows beside it are.
+   */
+  const recordsHydrated = useTrafficStore((s) => s.boardsHydrated)
+  const listReady = rowsHydrated && recordsHydrated
+  /**
    * Whether a brand has been CHOSEN, read straight from the workspace filter rather than inferred
    * from `brand` — which canvasBrandScope may have resolved on its own for a single-brand workspace.
    * That inference is right for a picker and wrong for an index. See campaignInIndexScope.
@@ -568,10 +576,19 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         </div>
       </header>
 
+      {/**
+        * THE CARDS THEMSELVES WAIT TOO, not only the tallies. The counts and empty-states below
+        * already hold their tongue until the workspace is known, but the campaign cards rendered
+        * from whatever the store held at first paint — on a synced workspace, this device's stale
+        * localStorage copy. A refresh flashed every campaign this browser had EVER seen, old ones
+        * included, then swapped in the real list underneath — which reads as deleted work coming
+        * back, not as loading. Same claim, same rule: a list of your campaigns waits until it is
+        * a list of your campaigns.
+        */}
       <div className="flow-home-groups">
-        {folderTree.map(renderFolder)}
+        {listReady && folderTree.map(renderFolder)}
 
-        {(() => {
+        {listReady && (() => {
           const drop = sectionDrop(undefined)
           return (
             <section className={`flow-home-group${drop.active ? ' drop-active' : ''}`} onDragOver={drop.onDragOver} onDrop={drop.onDrop}>
