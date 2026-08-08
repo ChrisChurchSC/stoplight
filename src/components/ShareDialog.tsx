@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SHARE_ACCESS, SHAREABLE_ROLES, type ShareableRole } from '../domain/access'
-import { canvasBrandScope, isBrandless } from '../domain/brand'
+import { brandFromBoard, canvasBrandScope, isBrandless } from '../domain/brand'
 import { DRAFTS_SPACE, clientForCampaign } from '../domain/clients'
+import { boardFor } from '../domain/flowBoard'
 import { encodeShareToken, shareUrl } from '../lib/shareLink'
 import { publishShareSnapshot } from '../lib/shareSnapshot'
 import { useTrafficStore } from '../store/useTrafficStore'
@@ -23,6 +24,8 @@ export function ShareDialog() {
   const clientFilter = useTrafficStore((s) => s.clientFilter)
   const clientList = useTrafficStore((s) => s.clientList)
   const campaignList = useTrafficStore((s) => s.campaignList)
+  const flowBoards = useTrafficStore((s) => s.flowBoards)
+  const brandObjects = useTrafficStore((s) => s.brandObjects)
   const campaign = useTrafficStore((s) => s.shareDialogCampaign)
   const shares = useTrafficStore((s) => s.shares)
   const createShare = useTrafficStore((s) => s.createShare)
@@ -45,8 +48,8 @@ export function ShareDialog() {
   }, [clientList, campaignList])
 
   /**
-   * THE BRAND THIS LINK IS SCOPED TO. The campaign's own brand first, then the canvas rule —
-   * never the raw workspace filter on its own.
+   * THE BRAND THIS LINK IS SCOPED TO. The campaign's binding, then the Brand card on its board,
+   * then the canvas rule — never the raw workspace filter on its own.
    *
    * This read clientFilter and nothing else, and clientFilter is not where a campaign's brand
    * lives. It is a browsing scope that resets to 'all' on every load, and the Campaigns index
@@ -56,11 +59,17 @@ export function ShareDialog() {
    * answered "Pick a brand first, then share." Nothing was unset; the dialog was asking a
    * different question from the rest of the app and reporting the answer as a missing brand.
    *
-   * The campaign's binding wins over the filter rather than merely filling in for it, because
+   * The campaign's own answer wins over the filter rather than merely filling in for it, because
    * the snapshot behind the link is built per brand (voice, proof, audiences, profile), and a
    * campaign handed out under whichever brand the rail happened to be on would carry another
-   * brand's library. A campaign filed under nobody has no binding to prefer, so those fall
-   * through to the canvas rule, which is the same one every record picker on the board uses.
+   * brand's library.
+   *
+   * And its own answer is the binding OR the Brand card, because a campaign can be generating every
+   * word of its copy from a Brand card wired into its brief while its record still says nobody —
+   * bindCampaignBrand writes that record when the wire is drawn, so any campaign predating the wiring
+   * has its brand on the board and nowhere else. That is the state the Made from column was taught to
+   * read a release ago, and this dialog is the same question asked from a different surface: the
+   * brand is not missing, it is on the card.
    */
   // The campaign record and the name→client resolver are kept in step by bindCampaignBrand, but
   // only the record is a store slice, so reading it first is what makes the dialog re-render when
@@ -69,7 +78,14 @@ export function ShareDialog() {
     ? campaignList.find((c) => c.name === campaign)?.client?.trim() || clientForCampaign(campaign)
     : ''
   const filed = !isBrandless(bound) && bound !== DRAFTS_SPACE
-  const client = filed ? bound : canvasBrandScope(clientFilter, brandNames)
+  const onBoard = useMemo(
+    () =>
+      campaign && !filed
+        ? brandFromBoard(boardFor(flowBoards, campaign), (refId) => brandObjects.find((b) => b.id === refId)?.name)
+        : '',
+    [campaign, filed, flowBoards, brandObjects],
+  )
+  const client = filed ? bound : onBoard || canvasBrandScope(clientFilter, brandNames)
 
   // A campaign share shows that campaign's links; a brand share shows the brand-level
   // (campaign-less) ones. Newest first, because createShare prepends.
