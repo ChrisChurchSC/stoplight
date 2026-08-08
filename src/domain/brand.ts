@@ -81,9 +81,20 @@ export function isDraftBrand(brand: string, meta: BrandMetaMap): boolean {
  * A workspace holding exactly one brand is the one safe shortcut: there is nothing to choose
  * between, and no second brand for anything to leak from. Two or more and the answer is none,
  * leaving the user to name one with a Brand card.
+ *
+ * THE BRANDLESS CATCH-ALLS ARE NOT BRANDS, and a filter naming one is a filter naming nothing.
+ * openFlow points the rail at clientForCampaign(name), which is UNASSIGNED for a campaign filed
+ * under nobody — and this used to pass that through as if "Unassigned" were a client. Every record
+ * list on the canvas then scoped to a phantom brand: audiences authored there were filed under
+ * clientAudiences['Unassigned'], invisible from the real brand's scope, and the grid — resolving
+ * the same refIds against whichever bucket TODAY's scope named — showed the tag as unset with a
+ * picker that did not contain it. The tags were never lost; the two surfaces were reading
+ * different buckets depending on how you had navigated in.
  */
 export function canvasBrandScope(clientFilter: string, brandNames: string[]): string {
-  if (clientFilter && clientFilter !== 'all') return clientFilter
+  if (clientFilter && clientFilter !== 'all' && !isBrandless(clientFilter) && clientFilter !== DRAFTS_SPACE) {
+    return clientFilter
+  }
   return brandNames.length === 1 ? brandNames[0] ?? '' : ''
 }
 
