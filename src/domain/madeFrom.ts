@@ -35,6 +35,13 @@ export interface MadeFromEntry {
    * because a picker that set one of them would silently be setting the primary instead.
    */
   primary: boolean
+  /**
+   * The uploaded .md the card behind this entry carries, by file name. A card given its context as
+   * a document instead of a record is contributing that document to the writer, so an entry with a
+   * doc and no refId is NOT the "holding nothing" gap — it is a full card whose content happens not
+   * to be a library record, and the cell must not dash it as an absence.
+   */
+  doc?: string
 }
 
 export function madeFrom(args: {
@@ -112,33 +119,54 @@ export function madeFrom(args: {
         label: nameOf(kind, chosen) ?? pinned?.label ?? card?.label ?? '',
         cardId: card?.id,
         primary: true,
+        doc: card?.doc,
       })
     } else if (mine.length) {
       /**
-       * Connected and holding nothing. It still shows, because a wired card with no record picked is
-       * reaching the writer with nothing, and that is the gap this column exists to make visible.
+       * NO RECORD RESOLVED. Two very different cards land here, and the difference is the fix the
+       * dashed style exists to point at.
        *
-       * IT DOES NOT SPEAK FOR THE ASSET, THOUGH. This used to push a bare `''`, which the cell
-       * renders as "No audience picked" — so one unfilled Audience card wired to the campaign brief
-       * made every asset in the campaign read as written to nobody, while the asset's own inspector,
-       * the canvas lane it sits in and the sidebar filter all named its audience. Generation named it
-       * too: an asset's audience is resolved by matching `row.audience` against the brand's audience
-       * pool, and an empty card contributes no ref, so the pool falls back to the brand's full set and
-       * the match lands. The copy was written to that segment and this column alone denied it.
+       * A card carrying an uploaded .md is FULL. Its document travels to the writer on the same
+       * terms as a record's (see wiredCardDocsFor), so it speaks for the asset: the entry wears the
+       * card's name — the doc's own file name when the card was never named — and carries the doc,
+       * which is what tells the cell not to dash it. Marking it "holding nothing" told the person
+       * who had just uploaded the brief that it did not count.
+       *
+       * A card holding neither still shows, because a wired card reaching the writer with nothing
+       * is the gap this column exists to make visible — but IT DOES NOT SPEAK FOR THE ASSET. This
+       * used to push a bare `''`, which the cell renders as "No audience picked" — so one unfilled
+       * Audience card wired to the campaign brief made every asset in the campaign read as written
+       * to nobody, while the asset's own inspector, the canvas lane it sits in and the sidebar
+       * filter all named its audience. Generation named it too: an asset's audience is resolved by
+       * matching `row.audience` against the brand's audience pool, and an empty card contributes no
+       * ref, so the pool falls back to the brand's full set and the match lands. The copy was
+       * written to that segment and this column alone denied it.
        *
        * So the empty card yields the floor, not the answer: the row's own audience first, then
        * whatever the card is CALLED, and only then nothing. Naming a card does not fill it — the
-       * entry still carries no refId in that case, which is what the cell marks the gap off.
+       * entry still carries no refId and no doc in that case, which is what the cell marks the
+       * gap off.
        */
-      const rep = mine.find((c) => c.label.trim()) ?? mine[0]
-      const fromRow = kind === 'audience' && rowAudience?.label ? rowAudience : undefined
-      out.push({
-        kind,
-        refId: fromRow?.refId,
-        label: fromRow?.label ?? rep.label.trim(),
-        cardId: rep.id,
-        primary: true,
-      })
+      const docCard = mine.find((c) => c.doc)
+      if (docCard) {
+        out.push({
+          kind,
+          label: docCard.label.trim() || docCard.doc || '',
+          cardId: docCard.id,
+          primary: true,
+          doc: docCard.doc,
+        })
+      } else {
+        const rep = mine.find((c) => c.label.trim()) ?? mine[0]
+        const fromRow = kind === 'audience' && rowAudience?.label ? rowAudience : undefined
+        out.push({
+          kind,
+          refId: fromRow?.refId,
+          label: fromRow?.label ?? rep.label.trim(),
+          cardId: rep.id,
+          primary: true,
+        })
+      }
     } else if (kind === 'audience' && rowAudience?.label) {
       // Nothing wired, but the row names one anyway. No cardId: there is no card to open, and
       // claiming one would send the inspector after a card that does not exist.

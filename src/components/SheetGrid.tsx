@@ -1046,13 +1046,18 @@ export function SheetGrid({
                              */
                             const title = e.primary
                               ? e.label
-                                ? `${meta.label}: ${e.label}${e.refId ? '' : ' (no record picked yet)'}`
+                                ? `${meta.label}: ${e.label}${
+                                    e.refId ? '' : e.doc ? ` — from ${e.doc}` : ' (no record picked yet)'
+                                  }`
                                 : `${meta.label}: nothing picked yet`
                               : `Also reaching this asset: ${e.label}`
                             return (
                               <span
                                 key={`${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`}
-                                className={`mf-chip${e.refId ? '' : ' unset'}`}
+                                /* A doc-backed card is full — its .md reaches the writer — so it is
+                                   not dashed as an absence. The dash means "contributes nothing",
+                                   and that card is contributing the very brief someone uploaded. */
+                                className={`mf-chip${e.refId || e.doc ? '' : ' unset'}`}
                                 style={{ ['--note-tone' as string]: meta.tone } as React.CSSProperties}
                               >
                                 {/* Pressing the chip opens the card, which is the gesture the canvas
@@ -1520,8 +1525,11 @@ export function SheetGrid({
                         kind: e.kind,
                         name: e.label || 'Nothing picked yet',
                         empty: !e.label,
+                        // A doc-backed card's line names its document: the card contributes the
+                        // uploaded .md, and "Contributes nothing yet" about it would be false.
                         sub: e.label
                           ? optsFor(e.kind).find((o) => o.id === e.refId)?.detail ||
+                            (e.doc ? `From ${e.doc}` : undefined) ||
                             (e.kind === 'brand' ? 'Sets the brand this is written as' : undefined)
                           : 'Contributes nothing yet',
                         title: onPickObject ? `Open this ${OBJECT_META[e.kind].label.toLowerCase()}` : OBJECT_META[e.kind].label,

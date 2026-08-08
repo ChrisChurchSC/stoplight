@@ -10337,7 +10337,16 @@ export function FlowsView() {
                         // deal, so it says what it does rather than sitting there with a blank line
                         // under it. Same sentence the inspector's context list uses, for the same
                         // reason.
-                        detail={picked ? picked.detail || (nt.kind === 'brand' ? 'Sets the brand this is written as' : undefined) : undefined}
+                        // A card handed a .md instead of a record is not contributing nothing —
+                        // it is contributing that document. The face says where its content comes
+                        // from instead of denying it has any.
+                        detail={
+                          picked
+                            ? picked.detail || (nt.kind === 'brand' ? 'Sets the brand this is written as' : undefined)
+                            : nt.reference?.text.trim()
+                              ? `From ${nt.reference.name}`
+                              : undefined
+                        }
                         noun={noun}
                         article={articleFor(noun)}
                         plural={pluralOf(noun)}
