@@ -49,4 +49,16 @@ describe('canvasBrandScope', () => {
     expect(canvasBrandScope('', ['Big Buoy', 'World Within'])).toBe('')
     expect(canvasBrandScope('', ['Big Buoy'])).toBe('Big Buoy')
   })
+
+  it('treats the brandless catch-alls as unbound, not as brands called "Unassigned"', () => {
+    // openFlow points the rail at clientForCampaign, which is UNASSIGNED for a campaign filed under
+    // nobody. Passing that through scoped every record list to a phantom brand: audiences authored
+    // there landed in clientAudiences['Unassigned'], invisible from the real brand's scope — which
+    // is how a tag made on the canvas resolved to nothing on the grid.
+    expect(canvasBrandScope('Unassigned', ['Big Buoy', 'World Within'])).toBe('')
+    expect(canvasBrandScope('Drafts', ['Big Buoy', 'World Within'])).toBe('')
+    // The single-brand shortcut still applies: the catch-all names nothing, and with one brand
+    // there is still nothing to choose between.
+    expect(canvasBrandScope('Unassigned', ['Big Buoy'])).toBe('Big Buoy')
+  })
 })

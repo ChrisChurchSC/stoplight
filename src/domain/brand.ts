@@ -81,10 +81,66 @@ export function isDraftBrand(brand: string, meta: BrandMetaMap): boolean {
  * A workspace holding exactly one brand is the one safe shortcut: there is nothing to choose
  * between, and no second brand for anything to leak from. Two or more and the answer is none,
  * leaving the user to name one with a Brand card.
+ *
+ * THE BRANDLESS CATCH-ALLS ARE NOT BRANDS, and a filter naming one is a filter naming nothing.
+ * openFlow points the rail at clientForCampaign(name), which is UNASSIGNED for a campaign filed
+ * under nobody — and this used to pass that through as if "Unassigned" were a client. Every record
+ * list on the canvas then scoped to a phantom brand: audiences authored there were filed under
+ * clientAudiences['Unassigned'], invisible from the real brand's scope, and the grid — resolving
+ * the same refIds against whichever bucket TODAY's scope named — showed the tag as unset with a
+ * picker that did not contain it. The tags were never lost; the two surfaces were reading
+ * different buckets depending on how you had navigated in.
  */
 export function canvasBrandScope(clientFilter: string, brandNames: string[]): string {
-  if (clientFilter && clientFilter !== 'all') return clientFilter
+  if (clientFilter && clientFilter !== 'all' && !isBrandless(clientFilter) && clientFilter !== DRAFTS_SPACE) {
+    return clientFilter
+  }
   return brandNames.length === 1 ? brandNames[0] ?? '' : ''
+}
+
+/**
+ * THE BRAND A CAMPAIGN'S BOARD NAMES, read off the Brand card sitting on it.
+ *
+ * The binding written by bindCampaignBrand is a campaign's most specific answer, and this is what
+ * to believe when that lookup comes back empty — the same ladder the Made from column climbs, for
+ * the same reason. A campaign can carry a Brand card wired into its brief, generating every word of
+ * its copy in that brand's voice, while its own record still says nobody: the card is how a campaign
+ * gets a brand, and the binding is written on the wire, so any campaign that predates that wiring
+ * (or that was imported, or built before the card existed) has the brand on the board and nowhere
+ * else. Reading only the record calls those campaigns brandless, which is a statement about where
+ * the app looked rather than about the campaign.
+ *
+ * WIRED INTO THE BRIEF WINS over a card left loose on the canvas. A card connected to the hub is the
+ * one shaping the copy; a loose one is a card someone dropped and has not attached yet. Loose still
+ * counts when it is all there is — it is the only brand named anywhere on the board — but never over
+ * an attached one.
+ *
+ * `brandNameFor` resolves a card's refId to a brand record's name, because a domain module has no
+ * business reaching into the store's collections for it (see objectName for the same split).
+ */
+export function brandFromBoard(
+  board:
+    | { objects: { id: string; kind: string; refId?: string }[]; connectors: { from: string; to: string }[] }
+    | undefined,
+  brandNameFor: (refId: string) => string | undefined,
+): string {
+  if (!board) return ''
+  const named = (id: string): string => {
+    const o = board.objects.find((n) => n.id === id)
+    if (!o || o.kind !== 'brand' || !o.refId) return ''
+    const name = brandNameFor(o.refId)?.trim() ?? ''
+    return isBrandless(name) || name === DRAFTS_SPACE ? '' : name
+  }
+  for (const e of board.connectors) {
+    if (e.to !== 'campaign') continue
+    const name = named(e.from)
+    if (name) return name
+  }
+  for (const o of board.objects) {
+    const name = named(o.id)
+    if (name) return name
+  }
+  return ''
 }
 
 /**

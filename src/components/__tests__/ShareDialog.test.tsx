@@ -35,6 +35,8 @@ const openOnCampaign = {
   clientFilter: 'Acme',
   clientList: BRANDS,
   campaignList: [],
+  flowBoards: [],
+  brandObjects: [],
   shareDialogOpen: true,
   shareDialogCampaign: CAMPAIGN,
   shares: [],
@@ -57,6 +59,8 @@ afterEach(() => {
     clientFilter: 'all',
     clientList: [],
     campaignList: [],
+    flowBoards: [],
+    brandObjects: [],
   })
 })
 
@@ -254,9 +258,34 @@ describe('ShareDialog — the brand a link is scoped to', () => {
     expect(grants()).toHaveLength(0)
   })
 
-  it('still refuses a campaign filed under nobody, with two brands to choose between', () => {
-    // Unassigned is not a brand. Falling through to the canvas rule is what keeps this a refusal
-    // rather than a guess between Acme and Globex.
+  it('reads the brand off the Brand card when the campaign record names nobody', () => {
+    // bindCampaignBrand writes the record when the wire is drawn, so a campaign built before that
+    // wiring has its brand on the board and nowhere else. It is not brandless: the card is naming
+    // one, filling the pickers and writing the copy.
+    useTrafficStore.setState({
+      clientFilter: 'all',
+      campaignList: [{ ...campaignRecord, client: 'Unassigned' }],
+      brandObjects: [{ id: 'br_acme', name: 'Acme' }],
+      flowBoards: [
+        {
+          key: CAMPAIGN,
+          objects: [{ id: 'n1', kind: 'brand', text: '', refId: 'br_acme' }],
+          placements: [],
+          pos: {},
+          connectors: [{ from: 'n1', to: 'campaign' }],
+        },
+      ],
+    })
+    render()
+
+    expect(host.querySelector('.share-blocked')).toBeNull()
+    const token = decodeShareToken(new URL(linkField()!.value).searchParams.get('share')!)
+    expect(token?.client).toBe('Acme')
+  })
+
+  it('still refuses a campaign filed under nobody with nothing on its board either', () => {
+    // Unassigned is not a brand, and an empty board names none. Falling through to the canvas rule
+    // is what keeps this a refusal rather than a guess between Acme and Globex.
     useTrafficStore.setState({ clientFilter: 'all', campaignList: [{ ...campaignRecord, client: 'Unassigned' }] })
     render()
 

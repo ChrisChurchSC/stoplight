@@ -39,7 +39,7 @@ import { type SmartObject, describeSmartObject, scopeOf } from '../domain/smartO
 import { DELIVERABLE_PRESETS, type DeliverableGroup, type DeliverablePreset, type FlowDeliverable, freshNodeId, GROUP_TONE, nodeAssetCount, presetByKey, toneForPreset } from '../domain/flows'
 import { FlowVariantTree, isVariantRow } from './FlowVariantTree'
 import { hasAssignedBudget, needsMediaBudget } from '../domain/budget'
-import { canvasBrandScope, resolveBrandScope } from '../domain/brand'
+import { canvasBrandScope, isBrandless, resolveBrandScope } from '../domain/brand'
 import { can } from '../domain/access'
 import { DRAFTS_SPACE, UNASSIGNED, clientForCampaign, type FlowRefType, type FlowReference } from '../domain/clients'
 import { FUNNEL_STAGE_OPTIONS, newAudience, type AudienceType } from '../domain/audiences'
@@ -1401,22 +1401,36 @@ export function FlowsView() {
   const newCampaignParent = useTrafficStore((s) => s.newCampaignParent)
   const setNewCampaignParent = useTrafficStore((s) => s.setNewCampaignParent)
 
+  // null = the new-campaign builder; a name = viewing that existing campaign as a flow. Declared
+  // up here because the brand scope below is the campaign's before it is the rail's.
+  const [viewName, setViewName] = useState<string | null>(null)
+
   /**
-   * THE BRAND EVERY RECORD LIST ON THIS CANVAS IS SCOPED TO.
+   * THE BRAND EVERY RECORD LIST ON THIS CANVAS IS SCOPED TO — the open campaign's own brand first,
+   * and only then the rail.
    *
-   * The rail follows the campaign (see bindBrandFromCard), so a campaign opened from anywhere has
-   * already pointed clientFilter at its own brand and this is only that, read back. The case worth
-   * thinking about is 'all': a board with no brand bound yet — the builder, or a campaign whose
-   * Brand card was unwired, or a workspace landed on without going through a campaign.
+   * This used to be canvasBrandScope(clientFilter) alone, under a comment claiming the rail follows
+   * the campaign so clientFilter was "only that, read back". It is not, on two live paths. openFlow
+   * points the rail at clientForCampaign(name), which is UNASSIGNED for a campaign filed under
+   * nobody — so opening one from a tab scoped every list on its canvas to a phantom brand called
+   * "Unassigned", and audiences authored there were filed under clientAudiences['Unassigned'].
+   * And openView (the Flows home) never touches the rail at all, so the same campaign opened from
+   * there scoped to whatever you had been browsing. The same campaign, three scopes, three
+   * audience buckets — which is why a tag made on the canvas one day was unresolvable on the grid
+   * the next: the grid looks the refId up in the bucket TODAY's scope names. The tags were never
+   * lost. The surfaces were reading different shelves.
    *
-   * That case used to fall through to brands[0], and the first brand in the workspace is a guess
-   * dressed as an answer. On a multi-brand account it silently offered one client's audiences,
-   * proof, messages, products and data sets on another client's board — the exact leak every filter
-   * below exists to prevent. The rule now lives in canvasBrandScope, next to the scope resolver it
-   * belongs with and under a test, because it is a boundary rather than a default.
+   * So the campaign answers for itself: the brand its record is filed under wins whenever there is
+   * one (healCampaignBrand writes it from the Brand card at open, so a board wired before binding
+   * existed catches up). The builder and the record pages still answer from the rail through
+   * canvasBrandScope, which keeps refusing to guess between brands.
    */
   const brandNames = useMemo(() => brands.map((b) => b.name), [brands])
-  const brand = canvasBrandScope(clientFilter, brandNames)
+  const boundBrand = viewName
+    ? campaignList.find((c) => c.name === viewName)?.client?.trim() || clientForCampaign(viewName)
+    : ''
+  const brand =
+    !isBrandless(boundBrand) && boundBrand !== DRAFTS_SPACE ? boundBrand : canvasBrandScope(clientFilter, brandNames)
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
   const brandDatasets = useMemo(() => {
     // NEWEST FIRST. A brand accumulates data sets and the useful one is almost always the last one
@@ -1535,7 +1549,8 @@ export function FlowsView() {
    * the leak this app is otherwise careful about everywhere.
    */
   const products = useMemo(() => allProducts.filter((p) => !p.brand || p.brand === brand), [allProducts, brand])
-  const brandObjects = useMemo(() => allBrandObjects.filter((b) => !b.brand || b.brand === brand), [allBrandObjects, brand])
+  // Brand objects are deliberately NOT in this list: a brand is what the scope is chosen FROM, so
+  // scoping it by the scope is circular. See the 'brand' case in objectOptions.
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
@@ -1703,8 +1718,6 @@ export function FlowsView() {
   briefCollapsedRef.current = briefCollapsed
   const chatIdRef = useRef(0)
   const nextChatId = () => `msg_${++chatIdRef.current}_${chatMsgs.length}`
-  // null = the new-campaign builder; a name = viewing that existing campaign as a flow.
-  const [viewName, setViewName] = useState<string | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   // View-mode brief drafts: subject + budget buffered so a built flow's brief edits commit on
   // blur (reseeded whenever you open a different flow).
@@ -3238,10 +3251,11 @@ export function FlowsView() {
   /**
    * THE BRAND A BRAND CARD NAMES, or null when this node is not one (or has not named one yet).
    *
-   * Resolved against ALL brand objects rather than the workspace-scoped `brandObjects`, because this
-   * lookup is what DECIDES which workspace the campaign belongs to: scoping it by the brand you
-   * happen to be standing in would make a card resolvable only once the binding it is trying to make
-   * had already happened.
+   * Resolved against ALL brand objects, never a brand-scoped subset, because this lookup is what
+   * DECIDES which workspace the campaign belongs to: scoping it by the brand you happen to be
+   * standing in would make a card resolvable only once the binding it is trying to make had already
+   * happened. The picker answers to the same rule now (see the 'brand' case in objectOptions), which
+   * is what stopped a card being readable here and unpickable there.
    *
    * Reads objectsRef, not `objects`. Every path that changes a card's record calls setObjectRef and
    * then re-attaches in the SAME tick, so the render closure still holds the record the card pointed
@@ -5963,12 +5977,28 @@ export function FlowsView() {
       // one the same way every other record card does — and picking an existing one is how you reuse
       // a brand you already wrote without going through a smart object.
       //
-      // A BRAND CANNOT BE SCOPED BY THE BRAND. With none bound, the scoped list is just the untagged
-      // ones, so the one board that most needs to name a brand is the one offering nothing to name:
-      // the card that establishes the scope would be filtered by the scope it establishes, and
-      // there would be no way out of an unbound campaign. Every other kind stays scoped, because
-      // every other kind is chosen WITHIN a brand rather than to decide which brand.
-      case 'brand': return named(brand ? brandObjects : allBrandObjects, recordDetail.brand)
+      /**
+       * A BRAND CANNOT BE SCOPED BY THE BRAND — in EITHER direction, which is the half this got
+       * wrong. The unbound board was already exempt: with none bound the scoped list is just the
+       * untagged ones, so the board that most needs to name a brand would be the one offering
+       * nothing to name. The same argument does not stop once one is bound.
+       *
+       * A brand object carries the workspace it was authored in, and that tag has nothing to do
+       * with which brand the record IS. Once a campaign was bound, its own Brand card's record
+       * dropped out of its own picker whenever the two disagreed — authored under a different rail,
+       * or before the campaign was filed. The card went on showing the brand's name, because a card
+       * falls back to what it was called, while the picker showed no tick and the list did not
+       * contain it: named on the board, unpickable on the same card.
+       *
+       * And swapping a campaign's brand is a supported act — bindBrandFromCard has a whole notice
+       * for "moved from A to B" — but B's record is by definition tagged to B, so the scoped list
+       * could never offer it. The one control meant to move a campaign could only ever re-offer the
+       * brand it was already on.
+       *
+       * Every other kind stays scoped, because every other kind is chosen WITHIN a brand rather
+       * than to decide which brand.
+       */
+      case 'brand': return named(allBrandObjects, recordDetail.brand)
       case 'product': return named(products, recordDetail.product)
       default: return null
     }
@@ -6269,6 +6299,10 @@ export function FlowsView() {
     persistActiveChat()
     setChatMsgs([])
     setOpenGroupId(null)
+    // The record catches up with the board before anything scopes by it: a campaign wired to a
+    // Brand card before binding existed reads Unassigned until this writes what the card says.
+    // Idempotent, and a no-op when the board names nothing.
+    useTrafficStore.getState().healCampaignBrand(n)
     // LOAD this campaign's board instead of clearing it. These two lines used to be setObjects([])
     // and setPlacements([]), with a comment saying the board belongs to the campaign you left:
     // right about the problem, and the only fix available while the board was session state.

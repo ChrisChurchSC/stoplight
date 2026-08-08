@@ -90,6 +90,7 @@ import {
   resolveBrandScope,
   resolveBrandVoice,
   brandBaseline,
+  brandFromBoard,
   ancestorsOf,
   isBrandless,
   isDraftBrand,
@@ -2236,6 +2237,26 @@ interface TrafficState {
    * another, which is the exact leak the brand boundary exists to prevent.
    */
   bindCampaignBrand: (campaign: string, brand: string) => void
+  /**
+   * THE RECORD CATCHES UP WITH THE BOARD, on open.
+   *
+   * bindBrandFromCard writes a campaign's brand at the moment a Brand card is WIRED into its brief,
+   * so a board wired before that code existed — or imported — carries its brand on the card and
+   * nowhere else. Every reader that asks the record (openFlow's rail, the campaigns index, the row
+   * scoping) then calls the campaign brandless while its board plainly names one. This runs the
+   * same act at load: if the record names nobody and the board names a brand, bind it.
+   *
+   * It also ADOPTS the audiences the campaign references out of the brandless buckets. A canvas
+   * scoped to the phantom "Unassigned" brand filed its authored audiences under
+   * clientAudiences['Unassigned'], where no brand-scoped lookup can see them — the tag showed on
+   * the card (a card keeps its own name) and resolved nowhere else. Only records this campaign's
+   * board or rows actually reference move, only out of the catch-all buckets, and only when the
+   * brand does not already hold them: another brand's shelf is never touched.
+   *
+   * Returns the campaign's brand, or '' when nothing names one. A no-op in a shared session, which
+   * is read-only by definition.
+   */
+  healCampaignBrand: (campaign: string) => string
   /** Shift every scheduled asset in a campaign by N days — drag-to-move a campaign on the calendar. */
   /** Rescale a campaign's assets into a new [startMs, endMs] window and update its duration —
    *  drag-to-resize a campaign on the calendar. */
@@ -4560,7 +4581,11 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
       set({ page: 'flows', flowOpen: '', flowOpenView: flowView })
       return
     }
-    const client = clientForCampaign(campaign)
+    // Heal first, resolve second: a campaign whose brand lives only on its Brand card resolves to
+    // UNASSIGNED here, and the line below then pointed the whole rail at "Unassigned" — a scope
+    // every record list treated as a brand and none could fill. The heal writes the record from the
+    // board, so the rail narrows to the campaign's actual brand.
+    const client = get().healCampaignBrand(campaign) || clientForCampaign(campaign)
     const ss = get().sharedSession
     if (ss && client !== ss.client) return
     registerCampaign(campaign, client)
@@ -4806,6 +4831,48 @@ export const useTrafficStore = create<TrafficState>((set, get) => ({
     // handles them the same way: create the minimal record rather than drop the binding.
     if (current) get().patchCampaign(name, { client })
     else get().addCampaign({ name, client, strategy: 'Current state' })
+  },
+
+  healCampaignBrand: (campaign) => {
+    const name = campaign.trim()
+    if (!name) return ''
+    // A shared session views someone else's workspace; it heals nothing.
+    if (get().sharedSession) return ''
+    const s = get()
+    const board = s.flowBoards.find((b) => b.key === name)
+    const recorded = s.campaignList.find((c) => c.name === name)?.client?.trim() || clientForCampaign(name)
+    const filed = !isBrandless(recorded) && recorded !== DRAFTS_SPACE ? recorded : ''
+    const brand =
+      filed ||
+      brandFromBoard(board, (refId) => s.brandObjects.find((b) => b.id === refId)?.name)
+    if (!brand) return ''
+    // The record catches up with the board. bindCampaignBrand is idempotent, so a healed campaign
+    // opening again is a no-op rather than a rebind.
+    if (!filed) get().bindCampaignBrand(name, brand)
+    /**
+     * The audiences this campaign references, wherever the phantom scope filed them. The board's
+     * Audience cards and the rows' segment pins are the campaign's own statement of which records
+     * it uses; anything else in the catch-all buckets stays put, because "referenced by this
+     * campaign" is the only claim strong enough to move a record onto a brand's shelf.
+     */
+    const wanted = new Set<string>()
+    for (const o of board?.objects ?? []) if (o.kind === 'audience' && o.refId) wanted.add(o.refId)
+    for (const r of s.rows) {
+      if ((r.campaign ?? '').trim() !== name) continue
+      for (const ref of r.references ?? []) if (ref.type === 'segment') wanted.add(ref.id)
+    }
+    if (wanted.size) {
+      const ownIds = new Set((get().clientAudiences[brand] ?? []).map((a) => a.id))
+      for (const bucket of [UNASSIGNED, DRAFTS_SPACE]) {
+        const list = get().clientAudiences[bucket] ?? []
+        const moving = list.filter((a) => wanted.has(a.id) && !ownIds.has(a.id))
+        if (!moving.length) continue
+        for (const a of moving) ownIds.add(a.id)
+        get().setClientAudiences(bucket, list.filter((a) => !moving.includes(a)))
+        get().setClientAudiences(brand, [...(get().clientAudiences[brand] ?? []), ...moving])
+      }
+    }
+    return brand
   },
 
   setCampaignFolder: (name, folder) =>
