@@ -24,6 +24,8 @@ import { useTrafficStore } from '../../store/useTrafficStore'
  */
 
 const CAMPAIGN = 'Acme — Alpha'
+/** Two brands, so nothing resolves by default — the single-brand shortcut is its own case below. */
+const BRANDS = ['Acme', 'Globex']
 
 let host: HTMLDivElement
 let root: Root
@@ -31,6 +33,8 @@ let root: Root
 /** An owner standing on Acme's campaign, share dialog open, nothing handed out yet. */
 const openOnCampaign = {
   clientFilter: 'Acme',
+  clientList: BRANDS,
+  campaignList: [],
   shareDialogOpen: true,
   shareDialogCampaign: CAMPAIGN,
   shares: [],
@@ -46,7 +50,14 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   host.remove()
-  useTrafficStore.setState({ shareDialogOpen: false, shareDialogCampaign: null, shares: [], clientFilter: 'all' })
+  useTrafficStore.setState({
+    shareDialogOpen: false,
+    shareDialogCampaign: null,
+    shares: [],
+    clientFilter: 'all',
+    clientList: [],
+    campaignList: [],
+  })
 })
 
 const render = () => act(() => root.render(<ShareDialog />))
@@ -182,13 +193,74 @@ describe('ShareDialog — links left over from the stacking dialog', () => {
   })
 })
 
-describe('ShareDialog — nothing to scope a link to', () => {
-  it('asks for a brand instead of minting a link for "all"', () => {
+/**
+ * WHICH BRAND THE LINK IS SCOPED TO, when the workspace filter is not it.
+ *
+ * clientFilter is a browsing scope: it resets to 'all' on every load, and the Campaigns index opens
+ * a campaign without narrowing it, because an index that hid the other brands' work would be no use
+ * for picking one. The dialog read that filter alone, so a campaign opened from the index — brand
+ * named on the rail, on the pickers, on the Brand card wired into its brief — answered "Pick a brand
+ * first, then share." The brand was never missing; only this one dialog could not see it.
+ *
+ * Driven rather than reasoned about for the same reason as the tests above: every value here is a
+ * plain string, and "which brand did the grant get" is only answerable by opening the dialog.
+ */
+describe('ShareDialog — the brand a link is scoped to', () => {
+  const campaignRecord = { name: CAMPAIGN, client: 'Acme', strategy: 'Current state' }
+
+  it('shares a campaign the index opened, without waiting for a brand to be picked', () => {
+    useTrafficStore.setState({ clientFilter: 'all', campaignList: [campaignRecord] })
+    render()
+
+    expect(host.querySelector('.share-blocked')).toBeNull()
+    const token = decodeShareToken(new URL(linkField()!.value).searchParams.get('share')!)
+    expect(token?.client).toBe('Acme')
+    expect(token?.campaign).toBe(CAMPAIGN)
+  })
+
+  it('hands out the campaign under its own brand, not the one the rail is on', () => {
+    // The snapshot behind the link is built per brand — voice, proof, audiences, profile. Scoped to
+    // Globex, an Acme campaign would travel with another client's library attached.
+    useTrafficStore.setState({ clientFilter: 'Globex', campaignList: [campaignRecord] })
+    render()
+
+    const token = decodeShareToken(new URL(linkField()!.value).searchParams.get('share')!)
+    expect(token?.client).toBe('Acme')
+  })
+
+  it('names the campaign without its brand prefix', () => {
+    useTrafficStore.setState({ clientFilter: 'all', campaignList: [campaignRecord] })
+    render()
+
+    expect(host.querySelector('.share-title')?.textContent).toBe('Share Alpha')
+  })
+
+  it('takes the only brand in the workspace as the answer', () => {
+    // The one safe shortcut, and the same one every record picker on the board uses: with nothing
+    // to choose between there is no second brand for a link to leak from.
+    useTrafficStore.setState({ clientFilter: 'all', clientList: ['Acme'], shareDialogCampaign: null })
+    render()
+
+    expect(linkField()?.value).toMatch(/\?share=/)
+    expect(grants()[0]?.client).toBe('Acme')
+  })
+
+  it('asks for a brand when the workspace holds several and none is chosen', () => {
     useTrafficStore.setState({ clientFilter: 'all', shareDialogCampaign: null })
     render()
 
     expect(host.querySelector('.share-blocked')).toBeTruthy()
     expect(linkField()).toBeNull()
+    expect(grants()).toHaveLength(0)
+  })
+
+  it('still refuses a campaign filed under nobody, with two brands to choose between', () => {
+    // Unassigned is not a brand. Falling through to the canvas rule is what keeps this a refusal
+    // rather than a guess between Acme and Globex.
+    useTrafficStore.setState({ clientFilter: 'all', campaignList: [{ ...campaignRecord, client: 'Unassigned' }] })
+    render()
+
+    expect(host.querySelector('.share-blocked')).toBeTruthy()
     expect(grants()).toHaveLength(0)
   })
 })
