@@ -3730,8 +3730,16 @@ export function FlowsView() {
           // feeding an asset, and it should answer in the words you wrote on the board.
           label: objectName(nt, linked?.name ?? own?.label ?? named),
           // A brand card carries no refs and still decides a great deal, so it says what it does
-          // rather than falling through to "Contributes nothing yet", which is simply untrue.
-          detail: linked ? describeSmartObject(linked) : nt.kind === 'brand' && named ? 'Sets the brand this is written as' : '',
+          // rather than falling through to "Contributes nothing yet", which is simply untrue. A
+          // card handed a .md is in the same position: its document travels to the writer (see
+          // wiredCardDocsFor), so the row names the file instead of denying the card contributes.
+          detail: linked
+            ? describeSmartObject(linked)
+            : nt.kind === 'brand' && named
+              ? 'Sets the brand this is written as'
+              : nt.reference?.text.trim()
+                ? `From ${nt.reference.name}`
+                : '',
           refs: refsBehind(nt.id),
         }
       })
@@ -4548,9 +4556,12 @@ export function FlowsView() {
               <span className="flow-ctxrow-kind" style={{ color: r.tone }}>{r.kindLabel}</span>
               <span className="flow-ctxrow-name">{r.label || <em>Nothing picked yet</em>}</span>
               {(() => {
+                // Same rule as renderContextRow above: a card with no refs is not automatically
+                // contributing nothing — a Brand card decides the brand, and a card handed a .md
+                // is contributing that document — so its own detail wins before the fallback.
                 const sub =
                   r.refs.length === 0
-                    ? 'Contributes nothing yet'
+                    ? r.detail || 'Contributes nothing yet'
                     : r.detail || (r.refs.length === 1 && r.refs[0].label === r.label ? '' : r.refs.map((x) => x.label).join(' · '))
                 return sub ? <span className="flow-ctxrow-sub">{sub}</span> : null
               })()}
