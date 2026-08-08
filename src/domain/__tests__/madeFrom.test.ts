@@ -159,13 +159,61 @@ describe('the audience a row names by itself', () => {
   })
 
   /**
-   * A wired card holding nothing still wins, and still reads as empty. That gap is the thing the
-   * column exists to expose, and filling it from the row's string would paper over a card that is
-   * reaching the writer with nothing.
+   * AN EMPTY CARD DOES NOT SPEAK FOR THE ASSET.
+   *
+   * This used to assert the opposite — that a wired card holding nothing wins and reads as empty,
+   * on the reasoning that the gap is what the column exists to expose. The gap is real and still
+   * shown, but it was being stated as "No audience picked", which is a claim about the ASSET and an
+   * untrue one: an asset's audience is resolved by matching its own `row.audience` against the
+   * brand's audience pool, and an empty card contributes no ref, so the pool falls back to the
+   * brand's full set and the match lands. The copy went out written to that segment while one
+   * unfilled card wired to the campaign brief made every asset in the campaign read as written to
+   * nobody.
+   *
+   * The card is still the entry — its id is what the chip opens — and the entry still carries the
+   * card's emptiness where it matters. Here the row resolves to a record, so refId is the row's.
    */
-  it('does not fill an empty wired card from the row’s string', () => {
+  it('falls back to the row’s string when the wired card holds nothing', () => {
     const out = madeFrom({ kinds: AUD, cards: [card('c1', 'audience')], rowAudience: { refId: 's1', label: 'Solo founders' }, nameOf })
-    expect(out).toEqual([{ kind: 'audience', label: '', cardId: 'c1', primary: true }])
+    expect(out).toEqual([{ kind: 'audience', refId: 's1', label: 'Solo founders', cardId: 'c1', primary: true }])
+  })
+
+  /**
+   * With nothing on the row either, there is genuinely nothing picked — and the entry says so by
+   * carrying no refId, which is what the cell marks dashed and faint.
+   */
+  it('still reads as nothing picked when neither the card nor the row names one', () => {
+    const out = madeFrom({ kinds: AUD, cards: [card('c1', 'audience')], nameOf })
+    expect(out).toEqual([{ kind: 'audience', refId: undefined, label: '', cardId: 'c1', primary: true }])
+  })
+
+  /**
+   * NAMING A CARD IS NOT FILLING IT, and both halves have to survive. An Audience card called
+   * "Breadcrumbs ICP" sitting on the board read as "No audience picked" because the entry was
+   * rendered nameless to keep its empty mark; the name is the label now and the missing record is
+   * the absent refId, so the cell can say both at once. The named card is preferred over an unnamed
+   * sibling for the same reason the canvas rail answers in the words on the board.
+   */
+  it('shows a named card by name, and still marks it as holding no record', () => {
+    const cards = [card('c1', 'audience'), card('c2', 'audience', undefined, 'Breadcrumbs ICP')]
+    const out = madeFrom({ kinds: AUD, cards, nameOf })
+    expect(out).toEqual([{ kind: 'audience', refId: undefined, label: 'Breadcrumbs ICP', cardId: 'c2', primary: true }])
+  })
+
+  /** The row's own audience beats the card's NAME, because the row names a record and a name is not one. */
+  it('prefers the row’s audience over the empty card’s name', () => {
+    const cards = [card('c1', 'audience', undefined, 'Breadcrumbs ICP')]
+    const out = madeFrom({ kinds: AUD, cards, rowAudience: { refId: 's1', label: 'Solo founders' }, nameOf })
+    expect(out).toEqual([{ kind: 'audience', refId: 's1', label: 'Solo founders', cardId: 'c1', primary: true }])
+  })
+
+  /**
+   * The fallback is audience's alone. Every other kind's empty card shows by name and nothing else:
+   * there is no mirror field on the row for a Voice or a Message to be conjured from.
+   */
+  it('shows a non-audience empty card by name, with no row fallback anywhere', () => {
+    const out = madeFrom({ kinds: KINDS, cards: [card('c1', 'voice', undefined, 'House voice')], rowAudience: { refId: 's1', label: 'Solo founders' }, nameOf })
+    expect(out).toEqual([{ kind: 'voice', refId: undefined, label: 'House voice', cardId: 'c1', primary: true }])
   })
 
   /** Only audience has the mirror field, so nothing else may be conjured from it. */
