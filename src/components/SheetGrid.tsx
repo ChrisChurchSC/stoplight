@@ -10,6 +10,8 @@ import { cardsForRow } from '../domain/cardsForRow'
 import { usablePatterns } from '../domain/pattern'
 import { recordDetail } from '../domain/recordDetail'
 import { madeFrom } from '../domain/madeFrom'
+import { mergeAudiences } from '../domain/audiences'
+import { resolveBrandScope } from '../domain/brand'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
 import { OBJECT_META } from '../domain/canvasObjectMeta'
 import type { ChannelId, TrafficRow } from '../domain/types'
@@ -251,6 +253,8 @@ export function SheetGrid({
   const icp = useTrafficStore((s) => s.icp)
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const clientAudiences = useTrafficStore((s) => s.clientAudiences)
+  const brandSystems = useTrafficStore((s) => s.brandSystems)
+  const brandMeta = useTrafficStore((s) => s.brandMeta)
   // Batch (column-header) actions.
 
   const pains = icp?.pains ?? []
@@ -425,6 +429,25 @@ export function SheetGrid({
   const brandDatasets = useTrafficStore((s) => s.brandDatasets)
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
 
+  /**
+   * THE BRAND'S AUDIENCES, BOTH PLACES THEY LIVE.
+   *
+   * A segment can sit in the brand's system library or in clientAudiences, and generation reads the
+   * MERGE of the two (see mergeAudiences, and libAudiences in the store's draft builder). This sheet
+   * read clientAudiences alone, so a card pointing at a library segment resolved to no name at all:
+   * the chip said "No audience picked" about an asset the writer was writing to that very segment,
+   * and the picker could not offer the segment back. The same split has bitten the coherence gate
+   * before, which is why the merge is a domain function rather than a line copied per surface.
+   *
+   * Empty when the sheet is not scoped to one brand — a grid spanning every brand has no single
+   * library to resolve against, which is what it did before too.
+   */
+  const audienceRecords = (() => {
+    if (!clientFilter || clientFilter === 'all') return []
+    const lib = resolveBrandScope(clientFilter, brandSystems, brandMeta).library.audiences ?? []
+    return mergeAudiences(lib, clientAudiences[clientFilter] ?? [])
+  })()
+
   const nameFor = (o: CanvasObject): string => {
     // WHAT YOU CALLED THE CARD comes first, ahead of the smart object and ahead of the record, for
     // the same reason it does on the canvas: the grid's object columns are how you check what a row
@@ -447,7 +470,7 @@ export function SheetGrid({
       : o.kind === 'company' ? byId(companies)
       : o.kind === 'person' ? byId(people)
       : o.kind === 'trigger' ? byId(triggers)
-      : o.kind === 'audience' ? byId(clientAudiences[clientFilter] ?? [])
+      : o.kind === 'audience' ? byId(audienceRecords)
       : undefined
     return objectName(o, named)
   }
@@ -472,7 +495,7 @@ export function SheetGrid({
     switch (kind) {
       case 'brand': return named(brandObjects, recordDetail.brand)
       case 'product': return named(products, recordDetail.product)
-      case 'audience': return named(clientAudiences[clientFilter] ?? [], recordDetail.audience)
+      case 'audience': return named(audienceRecords, recordDetail.audience)
       case 'message': return named(messages, recordDetail.message)
       case 'voice': return named(voices, recordDetail.voice)
       case 'concept': return named(concepts, recordDetail.concept)
@@ -1013,13 +1036,23 @@ export function SheetGrid({
                                 <span className="mf-name">{name}</span>
                               </>
                             )
+                            /**
+                             * EMPTY IS ABOUT THE RECORD, NOT THE LABEL. A card can be named and hold
+                             * nothing, and an asset can name an audience the library has no record
+                             * of — both have something to say and neither has a record picked. Keyed
+                             * off the label, the cell had to be rendered nameless to keep its
+                             * "nothing picked" mark, which is how a named Audience card plainly on
+                             * the board came to read as no audience at all.
+                             */
                             const title = e.primary
-                              ? `${meta.label}: ${e.label || 'nothing picked yet'}`
+                              ? e.label
+                                ? `${meta.label}: ${e.label}${e.refId ? '' : ' (no record picked yet)'}`
+                                : `${meta.label}: nothing picked yet`
                               : `Also reaching this asset: ${e.label}`
                             return (
                               <span
                                 key={`${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`}
-                                className={`mf-chip${e.label ? '' : ' unset'}`}
+                                className={`mf-chip${e.refId ? '' : ' unset'}`}
                                 style={{ ['--note-tone' as string]: meta.tone } as React.CSSProperties}
                               >
                                 {/* Pressing the chip opens the card, which is the gesture the canvas

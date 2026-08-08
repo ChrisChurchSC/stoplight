@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.59',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'Made from stops saying "No audience picked" about assets that plainly have one. An Audience card wired to the campaign brief with no record in it reached every asset in the campaign, and the column stopped there instead of falling through to the audience the asset itself names. That name is the one the copy writer resolves the segment by, so the copy went out written to it while this column, alone among every surface, said the asset was written to nobody. It now says the audience, keeps the card as the thing the chip opens, and still marks the card as holding no record of its own.',
+          'A segment kept in the brand’s system library is named in the grid like any other. Audiences live in two places and generation reads both; the grid read only one, so a card pointing squarely at a library segment resolved to no name at all and its own picker could not offer the segment back. Both now read the same merged set the writer does.',
+          'A card you have named but not filled in is shown by name rather than as an absence. Naming a card is not filling it, so the missing record is still marked, and both halves can now be said at once.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.58',
     dateLabel: 'August 7, 2026',
     groups: [

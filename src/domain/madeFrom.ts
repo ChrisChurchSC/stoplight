@@ -19,9 +19,13 @@ import type { RowCard } from './cardsForRow'
  */
 export interface MadeFromEntry {
   kind: CanvasObjectKind
-  /** The record named, when one is named. Absent on a card that has picked nothing yet. */
+  /**
+   * The record this asset resolves to for the kind, when it resolves to one. Absent where nothing is
+   * named, which is what a caller marks the gap off — NOT an empty label, since a card can be named,
+   * or an asset can name its audience in words the library has no record of, and still hold nothing.
+   */
   refId?: string
-  /** What to show. Empty when nothing is picked — the caller says so in its own words. */
+  /** What to show. Empty only when there is nothing to say — the caller says so in its own words. */
   label: string
   /** The card behind this entry, when a card is behind it. */
   cardId?: string
@@ -64,9 +68,12 @@ export function madeFrom(args: {
    * ingested as a name the library has no record of — which is a true thing to say about the row,
    * and better said than left blank.
    *
-   * A CARD STILL WINS, which is the opposite of brand above and right for the same reason: the
-   * binding is brand's most specific answer, and a wire is audience's. This is the fallback for
-   * when nothing was wired at all.
+   * A CARD THAT NAMES A RECORD STILL WINS, which is the opposite of brand above and right for the
+   * same reason: the binding is brand's most specific answer, and a wire is audience's.
+   *
+   * An EMPTY card does not, and used to. A card holding no record is not a more specific answer than
+   * the row's, it is no answer, and letting it win made every asset under one unfilled Audience card
+   * read as written to nobody. See the empty-card branch below.
    */
   rowAudience?: { refId?: string; label: string }
   nameOf: (kind: CanvasObjectKind, refId: string) => string | undefined
@@ -107,9 +114,31 @@ export function madeFrom(args: {
         primary: true,
       })
     } else if (mine.length) {
-      // Connected and holding nothing. It still shows, because a wired card with no record picked is
-      // reaching the writer with nothing, and that is the gap this column exists to make visible.
-      out.push({ kind, label: '', cardId: mine[0].id, primary: true })
+      /**
+       * Connected and holding nothing. It still shows, because a wired card with no record picked is
+       * reaching the writer with nothing, and that is the gap this column exists to make visible.
+       *
+       * IT DOES NOT SPEAK FOR THE ASSET, THOUGH. This used to push a bare `''`, which the cell
+       * renders as "No audience picked" — so one unfilled Audience card wired to the campaign brief
+       * made every asset in the campaign read as written to nobody, while the asset's own inspector,
+       * the canvas lane it sits in and the sidebar filter all named its audience. Generation named it
+       * too: an asset's audience is resolved by matching `row.audience` against the brand's audience
+       * pool, and an empty card contributes no ref, so the pool falls back to the brand's full set and
+       * the match lands. The copy was written to that segment and this column alone denied it.
+       *
+       * So the empty card yields the floor, not the answer: the row's own audience first, then
+       * whatever the card is CALLED, and only then nothing. Naming a card does not fill it — the
+       * entry still carries no refId in that case, which is what the cell marks the gap off.
+       */
+      const rep = mine.find((c) => c.label.trim()) ?? mine[0]
+      const fromRow = kind === 'audience' && rowAudience?.label ? rowAudience : undefined
+      out.push({
+        kind,
+        refId: fromRow?.refId,
+        label: fromRow?.label ?? rep.label.trim(),
+        cardId: rep.id,
+        primary: true,
+      })
     } else if (kind === 'audience' && rowAudience?.label) {
       // Nothing wired, but the row names one anyway. No cardId: there is no card to open, and
       // claiming one would send the inspector after a card that does not exist.
