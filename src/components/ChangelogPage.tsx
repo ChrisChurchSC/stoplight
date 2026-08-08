@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.61',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The Audiences page can sweep the records nobody uses. Every campaign build mints audience records for the segments it writes to — deliberately, so generation has something to resolve against — and over months a brand’s shelf fills with names nobody typed. They were invisible while the pickers read the wrong shelf, and a wall of strangers the moment that was fixed. “Clean up unused” shows exactly which audiences nothing points at — no asset, no board, no smart object, no campaign, checked by id, by name and by alias, archived work included — and removes only those, after you have read the list. Anything your work references is never offered.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.60',
     dateLabel: 'August 8, 2026',
     groups: [

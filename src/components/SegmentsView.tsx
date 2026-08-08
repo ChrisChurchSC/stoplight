@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { splitAudiencesByUse } from '../domain/audienceUsage'
 import { canvasBrandScope } from '../domain/brand'
 import { CHANNELS } from '../domain/channels'
 import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS, MARITAL_STATUSES } from '../domain/taxonomy'
@@ -112,6 +114,43 @@ export function SegmentsView() {
   const brand = canvasBrandScope(clientFilter, brands.map((b) => b.name))
   const audiences = clientAudiences[brand] ?? []
 
+  /**
+   * THE SHELF ACCUMULATES; this is where it gets swept. Every campaign build mints records for the
+   * audiences it writes to, so a brand that has generated for months holds dozens the user never
+   * made by hand — invisible while the pickers read the wrong shelf, and a wall of strangers the
+   * moment the scope was fixed. Which ones are safe to remove is a domain question with a test
+   * (splitAudiencesByUse casts the reference net deliberately wide); this page only asks it, shows
+   * the answer, and applies it on an explicit confirm. Nothing referenced is ever offered.
+   */
+  const allRows = useTrafficStore((s) => s.rows)
+  const flowBoards = useTrafficStore((s) => s.flowBoards)
+  const smartObjects = useTrafficStore((s) => s.smartObjects)
+  const campaignList = useTrafficStore((s) => s.campaignList)
+  const { unused } = splitAudiencesByUse(audiences, {
+    rows: allRows,
+    boards: flowBoards,
+    smartObjects,
+    campaigns: campaignList,
+  })
+  const [confirmSweep, setConfirmSweep] = useState(false)
+  const runSweep = () => {
+    // Live read, like every other write on this page: the confirm sat open while the store moved on.
+    const live = useTrafficStore.getState()
+    const split = splitAudiencesByUse(live.clientAudiences[brand] ?? [], {
+      rows: live.rows,
+      boards: live.flowBoards,
+      smartObjects: live.smartObjects,
+      campaigns: live.campaignList,
+    })
+    setClientAudiences(brand, split.used)
+    setConfirmSweep(false)
+    showToast(
+      split.unused.length
+        ? `Removed ${split.unused.length} unused audience${split.unused.length === 1 ? '' : 's'}. Everything your work references is untouched.`
+        : 'Nothing to remove — every audience is referenced.',
+    )
+  }
+
   // Recommend the three INTERPRETIVE fields (message angle, funnel stage, conversion outcome) for one
   // audience from its observable facts + the brand objective, so a user doesn't author them blank.
   // Fill-when-empty: never clobbers a value the user already wrote. Maps the recommender's funnel KEY
@@ -174,6 +213,35 @@ export function SegmentsView() {
   }
 
   return (
+    <>
+    {confirmSweep && (
+      <>
+        <div className="drawer-scrim" onClick={() => setConfirmSweep(false)} />
+        <div className="confirm-modal" role="dialog" aria-label="Remove unused audiences">
+          <strong className="confirm-title">
+            Remove {unused.length} unused audience{unused.length === 1 ? '' : 's'}?
+          </strong>
+          <p className="confirm-text">
+            None of these are referenced by any asset, board, smart object or campaign — most were
+            minted automatically during generation. Everything your work points at stays. Removed
+            for good; there is no archive for audiences.
+          </p>
+          {/* The names ARE the decision, so they are on the dialog rather than behind it. */}
+          <p className="confirm-text" style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {unused.map((a) => a.name || 'Untitled').join(' · ')}
+          </p>
+          <div className="confirm-foot">
+            <button className="btn sm" onClick={() => setConfirmSweep(false)}>
+              Cancel
+            </button>
+            <span className="spacer" />
+            <button className="btn sm danger" onClick={runSweep}>
+              Remove {unused.length}
+            </button>
+          </div>
+        </div>
+      </>
+    )}
     <RecordsTable
       title="Audiences"
       term="audience"
@@ -184,7 +252,12 @@ export function SegmentsView() {
       rows={rows}
       noun={['audience', 'audiences']}
       rowAction={{ label: 'Recommend angle', run: (r) => void recommendAngle(r.id) }}
-      headerAction={{ label: 'Guided', run: openAudienceWizard }}
+      headerAction={[
+        // Only offered while there is something to sweep: a standing "Clean up (0)" would be a
+        // button that exists to be disabled.
+        ...(unused.length ? [{ label: `Clean up unused (${unused.length})`, run: () => setConfirmSweep(true) }] : []),
+        { label: 'Guided', run: openAudienceWizard },
+      ]}
       onAdd={() => {
         // Read the live array (not the render closure) so a paste that creates several rows in one
         // pass appends each one instead of clobbering the last. Return the id so paste can fill it.
@@ -222,5 +295,6 @@ export function SegmentsView() {
         )
       }}
     />
+    </>
   )
 }
