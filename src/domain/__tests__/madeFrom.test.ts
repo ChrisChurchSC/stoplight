@@ -223,3 +223,48 @@ describe('the audience a row names by itself', () => {
     expect(madeFrom({ kinds: KINDS, cards: [], rowAudience: { refId: 's1', label: 'Solo founders' }, nameOf })).toEqual([])
   })
 })
+
+/**
+ * A CARD HANDED A .MD IS FULL, NOT EMPTY.
+ *
+ * A card is given its context one of two ways: pick a record, or upload the document that already
+ * says it all. The second travels to the writer on the same terms (wiredCardDocsFor), so an
+ * Audience card carrying "ICP.md" is contributing the very brief someone wrote — and the cell was
+ * dashing it as "holding nothing" because it keyed the gap off the missing refId alone. The person
+ * who had just uploaded the ICP watched the grid deny it counted.
+ */
+describe('a card carrying an uploaded document', () => {
+  const AUD: CanvasObjectKind[] = ['audience']
+  const docCard = (id: string, kind: CanvasObjectKind, label: string, doc: string): RowCard => ({ id, kind, label, doc })
+
+  it('speaks for the asset, named after the card and carrying its doc', () => {
+    const out = madeFrom({ kinds: AUD, cards: [docCard('c1', 'audience', 'Breadcrumbs ICP', 'ICP.md')], nameOf })
+    expect(out).toEqual([{ kind: 'audience', label: 'Breadcrumbs ICP', cardId: 'c1', primary: true, doc: 'ICP.md' }])
+  })
+
+  it('wears the document’s file name when the card was never named', () => {
+    const out = madeFrom({ kinds: AUD, cards: [docCard('c1', 'audience', '', 'ICP.md')], nameOf })
+    expect(out[0].label).toBe('ICP.md')
+    expect(out[0].doc).toBe('ICP.md')
+  })
+
+  it('beats the row’s own audience, unlike a card that is merely named', () => {
+    // A named-but-empty card yields to the row (see above); a doc card does not, because it is a
+    // full answer: the document is the board's most specific statement of who this is for.
+    const out = madeFrom({
+      kinds: AUD,
+      cards: [docCard('c1', 'audience', 'Breadcrumbs ICP', 'ICP.md')],
+      rowAudience: { refId: 's1', label: 'Solo founders' },
+      nameOf,
+    })
+    expect(out).toEqual([{ kind: 'audience', label: 'Breadcrumbs ICP', cardId: 'c1', primary: true, doc: 'ICP.md' }])
+  })
+
+  it('still yields to a sibling card that resolves a record', () => {
+    // A record is the picker's own answer and the writer resolves it first; the doc card is listed
+    // after it like any second card would be, not silently dropped.
+    const cards = [docCard('c1', 'audience', 'Breadcrumbs ICP', 'ICP.md'), { id: 'c2', kind: 'audience' as const, refId: 'm1', label: 'Storm angle' }]
+    const out = madeFrom({ kinds: AUD, cards, nameOf })
+    expect(out[0]).toEqual({ kind: 'audience', refId: 'm1', label: 'Storm angle', cardId: 'c2', primary: true })
+  })
+})
