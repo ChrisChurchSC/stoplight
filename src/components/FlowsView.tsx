@@ -1429,8 +1429,16 @@ export function FlowsView() {
   const boundBrand = viewName
     ? campaignList.find((c) => c.name === viewName)?.client?.trim() || clientForCampaign(viewName)
     : ''
-  const brand =
-    !isBrandless(boundBrand) && boundBrand !== DRAFTS_SPACE ? boundBrand : canvasBrandScope(clientFilter, brandNames)
+  /**
+   * THE INDEX BROWSES AT THE RAIL'S SCOPE, NOT THE LAST CAMPAIGN'S. viewName survives going home
+   * (only the screen flips), so handing FlowsHome the campaign-first `brand` below re-scoped the
+   * whole campaigns page to whichever campaign you left last: its folder list came off another
+   * brand's key, folders vanished, and every campaign filed into one of them dropped into DRAFTS.
+   * An index is not a picker (see campaignInIndexScope) — it answers to what you are browsing,
+   * which is the rail.
+   */
+  const browseBrand = canvasBrandScope(clientFilter, brandNames)
+  const brand = !isBrandless(boundBrand) && boundBrand !== DRAFTS_SPACE ? boundBrand : browseBrand
   // The brand's data sets (the freeform spreadsheets), linkable from a Data source card on the canvas.
   const brandDatasets = useMemo(() => {
     // NEWEST FIRST. A brand accumulates data sets and the useful one is almost always the last one
@@ -7935,7 +7943,7 @@ export function FlowsView() {
   if (flowScreen === 'home') {
     return (
       <FlowsHome
-        brand={brand}
+        brand={browseBrand}
         onOpen={(name) => {
           openView(name)
           setFlowView('flow')
