@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { newAudience } from '../audiences'
-import { splitAudiencesByUse, type AudienceUsage } from '../audienceUsage'
+import { splitAudiencesByUse, splitRecordsByUse, type AudienceUsage } from '../audienceUsage'
 
 /**
  * "UNUSED" IS A BOUNDARY, so it is pinned like one. A cleanup that removes an audience an asset
@@ -72,5 +72,39 @@ describe('splitAudiencesByUse', () => {
     const usage = { ...empty, campaigns: [{ references: [{ type: 'proof' as const, id: 'a1', label: 'Team leads' }] }] }
     // The proof ref's LABEL is not an audience name claim either — kinds do not cross.
     expect(splitAudiencesByUse([seg('a1', 'Untouched')], usage).unused.map((a) => a.id)).toEqual(['a1'])
+  })
+})
+
+/**
+ * THE SAME BOUNDARY FOR EVERY MINTED KIND. Messages accumulate exactly as audiences do (the
+ * builder names one per campaign), and "unused" has to be one promise across every record page —
+ * so the generic splitter is pinned on its own, through the message wiring the Messages page uses.
+ */
+describe('splitRecordsByUse — messages', () => {
+  const msg = (id: string, name: string) => ({ id, name })
+  const MSG = { refType: 'message' as const, cardKind: 'message' }
+
+  it('keeps a message an asset pins, a board cards, or a campaign references', () => {
+    const usage: AudienceUsage = {
+      rows: [{ references: [{ type: 'message', id: 'm1', label: 'Speed angle' }] }],
+      boards: [{ objects: [{ kind: 'message', refId: 'm2' }] }],
+      smartObjects: [],
+      campaigns: [{ references: [{ type: 'message', id: 'gone', label: 'Trust Angle' }] }],
+    }
+    const shelf = [msg('m1', 'Speed angle'), msg('m2', 'Price angle'), msg('m3', 'trust angle'), msg('m4', 'Orphan')]
+    const { used, unused } = splitRecordsByUse(shelf, usage, MSG)
+    expect(used.map((m) => m.id).sort()).toEqual(['m1', 'm2', 'm3'])
+    expect(unused.map((m) => m.id)).toEqual(['m4'])
+  })
+
+  it('does not let an audience keep a message alive, or vice versa', () => {
+    const usage: AudienceUsage = {
+      rows: [{ audience: 'Speed angle', references: [{ type: 'segment', id: 'm1', label: 'Speed angle' }] }],
+      boards: [{ objects: [{ kind: 'audience', refId: 'm1' }] }],
+      smartObjects: [],
+      campaigns: [],
+    }
+    // Same ids, same labels — all of them audience-typed, none of them message claims.
+    expect(splitRecordsByUse([msg('m1', 'Speed angle')], usage, MSG).unused.map((m) => m.id)).toEqual(['m1'])
   })
 })
