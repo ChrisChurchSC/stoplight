@@ -104,6 +104,26 @@ describe('healCampaignBrand', () => {
     expect((useTrafficStore.getState().clientAudiences['Big Buoy'] ?? []).map((a) => a.id)).toEqual(['aud_card'])
   })
 
+  it('re-syncs the resolver when the record is right and the registry never learnt it', () => {
+    /**
+     * The state a synced workspace boots into: campaignList hydrates from the backend with the
+     * campaign correctly filed, while clientForCampaign — seeded from this device's localStorage —
+     * has never heard the name and answers Unassigned. Every reader that asks the resolver then
+     * contradicts the record: rowInScope drops the campaign's rows, so its grid renders BLANK while
+     * its canvas shows every asset. The heal used to skip the bind entirely for a filed record,
+     * which left the disagreement in place; it must re-register even when it has nothing to file.
+     */
+    useTrafficStore.setState({
+      campaignList: [{ name: CAMPAIGN, client: 'Big Buoy', strategy: 'Current state' }],
+    })
+    registerCampaign(CAMPAIGN, 'Unassigned')
+
+    const brand = useTrafficStore.getState().healCampaignBrand(CAMPAIGN)
+
+    expect(brand).toBe('Big Buoy')
+    expect(clientForCampaign(CAMPAIGN)).toBe('Big Buoy')
+  })
+
   it('does nothing for a board that names no brand', () => {
     useTrafficStore.setState({ flowBoards: [] })
     registerCampaign(CAMPAIGN, 'Unassigned')
