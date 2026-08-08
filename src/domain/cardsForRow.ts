@@ -25,6 +25,13 @@ export interface RowCard {
   /** The record this card names, when it names one. */
   refId?: string
   label: string
+  /**
+   * The uploaded document this card carries, by file name. A card is given its context by picking
+   * a record OR by handing it a .md, and the second one travels to the writer on the same terms
+   * (see wiredCardDocsFor) — so a reader deciding whether a card contributes anything has to be
+   * able to see it, or a card doing real work reads as holding nothing.
+   */
+  doc?: string
 }
 
 export function cardsForRow(
@@ -40,7 +47,14 @@ export function cardsForRow(
 
   const seen = new Set<string>()
   const out: RowCard[] = []
-  const push = (o: CanvasObject) => out.push({ id: o.id, kind: o.kind, refId: o.refId, label: nameFor(o) })
+  const push = (o: CanvasObject) =>
+    out.push({
+      id: o.id,
+      kind: o.kind,
+      refId: o.refId,
+      label: nameFor(o),
+      doc: o.reference?.text.trim() ? o.reference.name : undefined,
+    })
   for (const t of targets) {
     for (const id of upstreamCardIds(board, t)) {
       if (seen.has(id)) continue
