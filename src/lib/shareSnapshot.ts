@@ -32,6 +32,11 @@ export interface SnapshotState {
   brandGuides?: Record<string, unknown>
   campaignFolders?: Record<string, unknown>
   brandRecords?: unknown[]
+  brandObjects?: unknown[]
+  brandDatasets?: unknown[]
+  products?: unknown[]
+  concepts?: unknown[]
+  seasons?: unknown[]
   companies?: unknown[]
   people?: unknown[]
   objectives?: unknown[]
@@ -140,6 +145,28 @@ export function buildShareSnapshot(state: SnapshotState, client: string, campaig
   )
   set('stoplight.targetLists.v1', byField(state.targetLists, 'brand', client))
   set('stoplight.libraryFolders.v1', byField(state.libraryFolders, 'brand', client))
+  // A Data source card's refId is a data set id, so without these the card arrives naming a table
+  // that is not in the snapshot.
+  set('stoplight.brandDatasets.v1', byField(state.brandDatasets, 'brand', client))
+
+  /**
+   * THE RECORDS THE BOARD'S CARDS POINT AT, and the reason this list is not shorter.
+   *
+   * The board travels (flowBoards, above), and a card on it is a `kind` plus a `refId` into one of
+   * these collections. Four of them were never packed: brand objects, products, concepts and
+   * seasons. So a Brand card wired into the brief — the card that names the whole campaign's brand —
+   * arrived on the recipient's side pointing at a record that was not in the snapshot. The card
+   * still showed a name, because a card falls back to what it was called; it just had nothing
+   * behind it. It read as "nothing picked", its own record was missing from the picker, and the
+   * same went for every Product, Concept and Season card on the board.
+   *
+   * Scoped exactly as the campaign board scopes them (see FlowsView): this brand's, plus the
+   * untagged ones the app shows under every brand.
+   */
+  set('stoplight.brandObjects.v1', byBrandOrGlobal(state.brandObjects, client))
+  set('stoplight.products.v1', byBrandOrGlobal(state.products, client))
+  set('stoplight.concepts.v1', byBrandOrGlobal(state.concepts, client))
+  set('stoplight.seasons.v1', byBrandOrGlobal(state.seasons, client))
 
   // Optional `brand` (untagged = shown for all brands, safe to include).
   set('stoplight.companies.v1', byBrandOrGlobal(state.companies, client))

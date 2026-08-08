@@ -1535,7 +1535,8 @@ export function FlowsView() {
    * the leak this app is otherwise careful about everywhere.
    */
   const products = useMemo(() => allProducts.filter((p) => !p.brand || p.brand === brand), [allProducts, brand])
-  const brandObjects = useMemo(() => allBrandObjects.filter((b) => !b.brand || b.brand === brand), [allBrandObjects, brand])
+  // Brand objects are deliberately NOT in this list: a brand is what the scope is chosen FROM, so
+  // scoping it by the scope is circular. See the 'brand' case in objectOptions.
 
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
@@ -3238,10 +3239,11 @@ export function FlowsView() {
   /**
    * THE BRAND A BRAND CARD NAMES, or null when this node is not one (or has not named one yet).
    *
-   * Resolved against ALL brand objects rather than the workspace-scoped `brandObjects`, because this
-   * lookup is what DECIDES which workspace the campaign belongs to: scoping it by the brand you
-   * happen to be standing in would make a card resolvable only once the binding it is trying to make
-   * had already happened.
+   * Resolved against ALL brand objects, never a brand-scoped subset, because this lookup is what
+   * DECIDES which workspace the campaign belongs to: scoping it by the brand you happen to be
+   * standing in would make a card resolvable only once the binding it is trying to make had already
+   * happened. The picker answers to the same rule now (see the 'brand' case in objectOptions), which
+   * is what stopped a card being readable here and unpickable there.
    *
    * Reads objectsRef, not `objects`. Every path that changes a card's record calls setObjectRef and
    * then re-attaches in the SAME tick, so the render closure still holds the record the card pointed
@@ -5963,12 +5965,28 @@ export function FlowsView() {
       // one the same way every other record card does — and picking an existing one is how you reuse
       // a brand you already wrote without going through a smart object.
       //
-      // A BRAND CANNOT BE SCOPED BY THE BRAND. With none bound, the scoped list is just the untagged
-      // ones, so the one board that most needs to name a brand is the one offering nothing to name:
-      // the card that establishes the scope would be filtered by the scope it establishes, and
-      // there would be no way out of an unbound campaign. Every other kind stays scoped, because
-      // every other kind is chosen WITHIN a brand rather than to decide which brand.
-      case 'brand': return named(brand ? brandObjects : allBrandObjects, recordDetail.brand)
+      /**
+       * A BRAND CANNOT BE SCOPED BY THE BRAND — in EITHER direction, which is the half this got
+       * wrong. The unbound board was already exempt: with none bound the scoped list is just the
+       * untagged ones, so the board that most needs to name a brand would be the one offering
+       * nothing to name. The same argument does not stop once one is bound.
+       *
+       * A brand object carries the workspace it was authored in, and that tag has nothing to do
+       * with which brand the record IS. Once a campaign was bound, its own Brand card's record
+       * dropped out of its own picker whenever the two disagreed — authored under a different rail,
+       * or before the campaign was filed. The card went on showing the brand's name, because a card
+       * falls back to what it was called, while the picker showed no tick and the list did not
+       * contain it: named on the board, unpickable on the same card.
+       *
+       * And swapping a campaign's brand is a supported act — bindBrandFromCard has a whole notice
+       * for "moved from A to B" — but B's record is by definition tagged to B, so the scoped list
+       * could never offer it. The one control meant to move a campaign could only ever re-offer the
+       * brand it was already on.
+       *
+       * Every other kind stays scoped, because every other kind is chosen WITHIN a brand rather
+       * than to decide which brand.
+       */
+      case 'brand': return named(allBrandObjects, recordDetail.brand)
       case 'product': return named(products, recordDetail.product)
       default: return null
     }
