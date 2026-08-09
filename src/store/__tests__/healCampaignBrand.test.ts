@@ -29,6 +29,14 @@ beforeEach(() => {
   registerCampaign(CAMPAIGN, 'Unassigned')
   useTrafficStore.setState({
     sharedSession: null,
+    /**
+     * THE HEAL IS GATED ON THE WORKSPACE HAVING LOADED, so a seed that omits this asserts against a
+     * function that returns '' before it reads anything. It defaults to `localDataMode`, which is
+     * false whenever a .env names a backend — so these tests passed on a machine with no .env and
+     * failed on a machine with one, from the same commit. Set explicitly: the state under test here
+     * is a workspace that has loaded, and the gate has its own case above.
+     */
+    boardsHydrated: true,
     campaignList: [{ name: CAMPAIGN, client: 'Unassigned', strategy: 'Current state' }],
     brandObjects: [{ id: 'bo_buoy', name: 'Big Buoy' }],
     flowBoards: [
