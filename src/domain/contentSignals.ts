@@ -747,9 +747,21 @@ export interface ReconcileStat {
  * second. The two disagreed: this one called an `imported` row planned, that one called it live.
  */
 export const isPlannedCard = (r: TrafficRow): boolean => isPlannedAsset(r)
+/**
+ * COUNTED OVER THE POPULATION THAT CAN BE RECONCILED, not over what is still waiting.
+ *
+ * This filtered to planned cards and then counted `reconciledAt` inside that set — which can only
+ * ever be zero, because reconciling a card is what stops it being planned. It went unnoticed while
+ * nothing wrote `reconciledAt` at all; attaching a live post writes it now, and the count would have
+ * stayed at nought while the work was being done, so Signals would recommend reconciling forever and
+ * the data unlock behind it would never open.
+ *
+ * The denominator is therefore "cards that were plans": the ones still waiting plus the ones already
+ * reconciled. A card that arrived from an import was never a plan of ours and is in neither.
+ */
 export function reconciliationStat(rows: TrafficRow[]): ReconcileStat {
-  const planned = rows.filter(isPlannedCard)
-  return { planned: planned.length, reconciled: planned.filter((r) => typeof r.reconciledAt === 'number').length }
+  const reconciled = rows.filter((r) => typeof r.reconciledAt === 'number')
+  return { planned: rows.filter(isPlannedCard).length + reconciled.length, reconciled: reconciled.length }
 }
 
 // ── Channel connection: does each channel push the audience onward? ───────────

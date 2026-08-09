@@ -4108,7 +4108,20 @@ export function FlowsView() {
   const addObject = (kind: CanvasObjectKind, refId?: string) => {
     const id = freshObjectId()
     const spot = freeSlot()
-    setObjects((n) => [...n, { id, kind, text: '', refId }])
+    const made: CanvasObject = { id, kind, text: '', refId }
+    setObjects((n) => [...n, made])
+    /**
+     * AND INTO THE REF, so a caller that acts on the card in the same tick can see it.
+     *
+     * setObjects is a React update: `objects` and objectsRef both still hold the board as it was
+     * until the next render. Everything that reads the board synchronously goes through the ref
+     * (refsBehind, brandCardName), so a card added and wired in one gesture contributed nothing —
+     * the gap toast's "Add an audience" drew the wire, wrote no references, and reported the same
+     * gap next time. Harmless while a fresh card carried no record; it arrives with one now.
+     *
+     * Same fix, same reason, as the line in setObjectRef.
+     */
+    objectsRef.current = [...objectsRef.current, made]
     // Added while inside a smart object: it belongs to that object, not the outer board.
     if (openPlacementId) setPlacements((gs) => gs.map((g) => (g.id === openPlacementId ? { ...g, memberIds: [...g.memberIds, id] } : g)))
     // Provisional position; the pendingPlace effect corrects it to `spot` once the card is
@@ -9583,11 +9596,21 @@ export function FlowsView() {
               Paste the link to the published post. That is what makes this card the record of a real
               asset instead of a plan for one.
             </p>
-            <BufferedInput
+            {/* A PLAIN INPUT, not the buffered one. BufferedInput commits on blur, which every
+                field with a parse/format round-trip needs and this one does not — and the cost here
+                was the whole gesture: the button stayed disabled until the field lost focus, a click
+                on a disabled button fires nothing, so the first press only blurred and the person
+                had to press again. On a face whose entire purpose is this one action, that reads as
+                broken. Typing updates the draft, so one press attaches. */}
+            <input
               className="flow-inspect-input"
               value={draft?.url ?? ''}
               placeholder="https://…"
-              onCommit={(v) => setLiveDraft({ id: selPost.id, url: v })}
+              /* The note goes when the URL changes: a refusal is about the link that earned it, and
+                 carrying it onto the next one would turn "Attach it anyway" into an override of a
+                 question nobody has been asked yet. */
+              onChange={(e) => setLiveDraft({ id: selPost.id, url: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); attach() } }}
             />
             {draft?.note && <p className="flow-live-warn">{draft.note}</p>}
             <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
