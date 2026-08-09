@@ -36,13 +36,11 @@ interface FlowCard {
   name: string
   status: CampaignStatus
   assetCount: number
-  types: number
+  /** The distinct channels this campaign publishes to. Counted AND drawn from this one list. */
   channels: ChannelId[]
   folder?: string
   /** Umbrella parent campaign name, when this is an audience-specific child. */
   parent?: string
-  /** The single audience this campaign is personalized to (its segment reference label). */
-  personalizedTo?: string
   /** A manually-created umbrella container (renders as an umbrella even with no children yet). */
   isUmbrella?: boolean
 }
@@ -236,11 +234,9 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
       name,
       status: deriveCampaignStatus(meta.get(name), cRows),
       assetCount: cRows.length,
-      types: new Set(cRows.map((r) => `${r.channel}/${r.assetType}`)).size,
       channels: [...new Set(cRows.map((r) => r.channel))] as ChannelId[],
       folder: meta.get(name)?.folder,
       parent: meta.get(name)?.parent,
-      personalizedTo: meta.get(name)?.references?.find((r) => r.type === 'segment')?.label,
       isUmbrella: meta.get(name)?.isUmbrella,
     }
   })
@@ -324,22 +320,28 @@ export function FlowsHome({ brand, onOpen, onNew }: { brand: string; onOpen: (na
         {isRenaming ? (
           <div className="flow-home-card-open flow-home-card-renaming">{renameInput('Campaign name')}</div>
         ) : (
+        /* NO AUDIENCE PILL IN THE TITLE.
+            It read as "who this campaign is for" and was not that. It printed the label of the
+            first SEGMENT reference stored on the campaign record, which only exists where someone
+            checked an audience at Build, wired an Audience card into the brief, or tagged the
+            record by hand. There is deliberately no implicit default (see briefRefsEffective), and
+            generation falls back to the brand's audiences when nothing is tagged — so a campaign
+            written end to end for one segment showed nothing, and the index read as though one
+            campaign in four had an audience. It was also only ever the FIRST of several, never
+            re-labelled after a rename, and absent from umbrella heads. One card wearing it and
+            three not is a fact about how those campaigns were built, which is not what a title
+            is for. */
         <button className="flow-home-card-open" onClick={() => onOpen(c.name)}>
           <div className="flow-home-card-name">
             <span className={`flow-home-dot s-${c.status}`} aria-hidden="true" />
             <span className="flow-home-card-title-text">{campaignShortName(c.name, brand)}</span>
-            {c.personalizedTo && (
-              <span className="flow-home-persona" title={`Personalized to ${c.personalizedTo}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="8" r="3.2" />
-                  <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
-                </svg>
-                <span>{c.personalizedTo}</span>
-              </span>
-            )}
           </div>
+          {/* COUNTED FROM THE SAME LIST IT DRAWS. This said `types`, which is distinct
+              channel/assetType PAIRS, while the icons below it are distinct channels — so a card
+              read "10 channels" over five icons and no overflow badge, contradicting itself by one
+              row. Nothing else wanted the pair count, so it is gone rather than relabelled. */}
           <div className="flow-home-card-meta">
-            {c.types} channel{c.types === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
+            {c.channels.length} channel{c.channels.length === 1 ? '' : 's'} · {c.assetCount} asset{c.assetCount === 1 ? '' : 's'}
           </div>
           <div className="flow-home-chans">
             {c.channels.slice(0, 8).map((ch) => (
