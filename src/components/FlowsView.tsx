@@ -4343,9 +4343,13 @@ export function FlowsView() {
   const postFace = (r: TrafficRow): AssetMode => (faceOverride?.id === r.id ? faceOverride.mode : assetMode(r))
   /** What was typed into the Active face but not yet committed: the link, and the copy read back. */
   const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string } | null>(null)
-  /** The read-back in flight, and what it had to say. */
+  /**
+   * The read in flight, and what it had to say — tagged with WHICH read, because the copy and the
+   * numbers are pulled by two buttons in two sections and an answer printed under the other one
+   * reads as a reply to a question nobody asked.
+   */
   const [reading, setReading] = useState(false)
-  const [readNote, setReadNote] = useState<string | null>(null)
+  const [readNote, setReadNote] = useState<{ of: 'copy' | 'metrics'; text: string } | null>(null)
   /**
    * Every reading ever taken for the asset on screen, keyed by its id so a stale load for the card
    * you just left cannot paint under the one you are looking at.
@@ -9464,6 +9468,44 @@ export function FlowsView() {
      * whichever component this format leads with, because that is what a headline IS on a page and
      * on a video, and the body on the first multiline one.
      */
+    /**
+     * PULL WHAT THE PLATFORM STATES PUBLICLY.
+     *
+     * Its own action rather than a side effect of reading the copy back, because the two go stale at
+     * completely different rates: the words are read once and the numbers are read again next week.
+     * Every pull appends to the snapshot store, so pressing this weekly IS the trend.
+     *
+     * Only YouTube answers today, and only with the three counts on the public record. Everything
+     * else says which connection would do it — the same table, the same refusals.
+     */
+    const pullNumbers = async () => {
+      if (!link || reading) return
+      setReading(true)
+      setReadNote(null)
+      try {
+        const res = await apiFetch('/api/read-live-post', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url: link }),
+        })
+        const d = (await res.json()) as { available?: boolean; reason?: string; metrics?: Record<string, number> }
+        if (!res.ok || !d?.available) { setReadNote({ of: 'metrics', text: readBackNote(d?.reason) }); return }
+        const got = d.metrics ?? {}
+        if (!Object.keys(got).length) {
+          setReadNote({ of: 'metrics', text: 'That source does not publish its numbers. Type them in below.' })
+          return
+        }
+        // Merged over what is there, not replacing it: a hand-typed figure this source has no
+        // opinion about is a measurement somebody took and must survive a pull.
+        await setLiveMetrics(selPost.id, { ...metrics, ...got })
+        setReadNote({ of: 'metrics', text: `Pulled ${Object.keys(got).join(', ')}. Every pull is kept, so the trend grows.` })
+      } catch {
+        setReadNote({ of: 'metrics', text: 'Could not reach the reader. Type them in below.' })
+      } finally {
+        setReading(false)
+      }
+    }
+
     const readBack = async () => {
       if (!link || reading) return
       setReading(true)
@@ -9476,7 +9518,7 @@ export function FlowsView() {
         })
         const d = (await res.json()) as { available?: boolean; reason?: string; title?: string; body?: string; publishedAt?: string }
         if (!res.ok || !d?.available) {
-          setReadNote(readBackNote(d?.reason))
+          setReadNote({ of: 'copy', text: readBackNote(d?.reason) })
           return
         }
         const head = fields[0]?.key
@@ -9485,14 +9527,14 @@ export function FlowsView() {
         if (head && d.title && !next[head]?.trim()) next[head] = d.title
         if (long && d.body && !next[long]?.trim()) next[long] = d.body
         if (!Object.keys(next).length) {
-          setReadNote('Nothing came back from that link.')
+          setReadNote({ of: 'copy', text: 'Nothing came back from that link.' })
           return
         }
         await setLiveCopy(selPost.id, next, selPost.live?.extractedCopy)
         if (d.publishedAt && !selPost.publishedAt) await updateRow(selPost.id, { publishedAt: d.publishedAt })
-        setReadNote('Filled what was empty. Anything you had typed is untouched.')
+        setReadNote({ of: 'copy', text: 'Filled what was empty. Anything you had typed is untouched.' })
       } catch {
-        setReadNote('Could not reach the reader. Type it in below.')
+        setReadNote({ of: 'copy', text: 'Could not reach the reader. Type it in below.' })
       } finally {
         setReading(false)
       }
@@ -9584,7 +9626,7 @@ export function FlowsView() {
               <button className="flow-insp-open subtle" disabled={reading} onClick={() => void readBack()}>
                 {reading ? 'Reading…' : 'Read it back from the post'}
               </button>
-              {readNote && <span className="flow-live-readnote">{readNote}</span>}
+              {readNote?.of === 'copy' && <span className="flow-live-readnote">{readNote.text}</span>}
             </div>
             <div className="flow-live-diff">
               {lines.map((l) => (
@@ -9648,8 +9690,23 @@ export function FlowsView() {
                 ? `Last updated ${new Date(selPost.metricsUpdatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Every reading is kept, so the trend survives the next one.`
                 : 'Type in what the platform reports. Every reading is kept, so a number here is a point on a trend rather than a value that overwrites the last.'}
             </p>
+            {/* PULL, where the platform states them. Beside the numbers rather than up with the
+                copy read-back, because this is the one anybody presses twice. */}
+            <div className="flow-live-read">
+              <button className="flow-insp-open subtle" disabled={reading} onClick={() => void pullNumbers()}>
+                {reading ? 'Pulling…' : 'Pull what the platform states'}
+              </button>
+              {readNote?.of === 'metrics' && <span className="flow-live-readnote">{readNote.text}</span>}
+            </div>
             <div className="flow-live-metrics">
-              {LIVE_METRICS.map((m) => {
+              {/* The four worth asking for by hand, PLUS anything a pull brought back that is not
+                  one of them — YouTube states views, likes and comments, and a fixed list would
+                  hold the row's own numbers and never show them. Same rule as the copy above. */}
+              {[...LIVE_METRICS, ...Object.keys(metrics)
+                .filter((k) => !LIVE_METRICS.some((m) => m.key === k))
+                .sort()
+                .map((k) => ({ key: k, label: k.replace(/([a-z])([A-Z])/g, '$1 $2') }))
+              ].map((m) => {
                 const t = trendOf(m.key)
                 return (
                   <label key={m.key} className="flow-live-metric">
