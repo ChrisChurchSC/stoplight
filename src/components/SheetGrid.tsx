@@ -416,18 +416,48 @@ export function SheetGrid({
    * card that is connected and empty is worth seeing — it is reaching the writer with nothing.
    */
   const smartObjects = useTrafficStore((s) => s.smartObjects)
-  const companies = useTrafficStore((s) => s.companies)
-  const people = useTrafficStore((s) => s.people)
-  const messages = useTrafficStore((s) => s.messages)
-  const concepts = useTrafficStore((s) => s.concepts)
-  const seasons = useTrafficStore((s) => s.seasons)
-  const patterns = useTrafficStore((s) => s.patterns)
-  const voices = useTrafficStore((s) => s.voices)
-  const triggers = useTrafficStore((s) => s.triggers)
-  const products = useTrafficStore((s) => s.products)
+  const allCompanies = useTrafficStore((s) => s.companies)
+  const allPeople = useTrafficStore((s) => s.people)
+  const allMessages = useTrafficStore((s) => s.messages)
+  const allConcepts = useTrafficStore((s) => s.concepts)
+  const allSeasons = useTrafficStore((s) => s.seasons)
+  const allPatterns = useTrafficStore((s) => s.patterns)
+  const allVoices = useTrafficStore((s) => s.voices)
+  const allTriggers = useTrafficStore((s) => s.triggers)
+  const allProducts = useTrafficStore((s) => s.products)
   const brandObjects = useTrafficStore((s) => s.brandObjects)
-  const brandDatasets = useTrafficStore((s) => s.brandDatasets)
+  const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
+
+  /**
+   * SCOPED TO THE BRAND, exactly as the canvas scopes the same lists. These fed the pickers raw,
+   * so a Message caret on one brand's campaign opened onto every brand's messages at once —
+   * HyperFocus's founding-user pitch offered on a Breadcrumbs post — and a user who had just
+   * swept a shelf clean watched a dropdown fill back up with records that were never that
+   * brand's to begin with. An agency's picker offering one client's angles while writing
+   * another's is the leak the canvas is careful about in FlowsView; the grid picks from the same
+   * library, so it keeps the same rule: this brand's records plus the untagged (shared) ones.
+   *
+   * Unscoped grids (the Live view, the workbench spanning every brand) keep the whole list, as
+   * they always have: with no brand chosen there is nothing to scope to, and those surfaces are
+   * read-mostly. The Brand kind stays deliberately unscoped everywhere — a brand is what the
+   * scope is chosen FROM, and scoping it by itself is the circle the Brand card picker already
+   * refuses.
+   */
+  const ofBrand = <T extends { brand?: string }>(list: T[]): T[] =>
+    clientFilter && clientFilter !== 'all' ? list.filter((x) => !x.brand || x.brand === clientFilter) : list
+  const companies = ofBrand(allCompanies)
+  const people = ofBrand(allPeople)
+  const messages = ofBrand(allMessages)
+  const concepts = ofBrand(allConcepts)
+  const seasons = ofBrand(allSeasons)
+  const patterns = ofBrand(allPatterns)
+  const voices = ofBrand(allVoices)
+  const triggers = ofBrand(allTriggers)
+  const products = ofBrand(allProducts)
+  // A data set's brand is REQUIRED, so there is no untagged-shared case: scoped is an equality.
+  const brandDatasets =
+    clientFilter && clientFilter !== 'all' ? allBrandDatasets.filter((d) => d.brand === clientFilter) : allBrandDatasets
 
   /**
    * THE BRAND'S AUDIENCES, BOTH PLACES THEY LIVE.
