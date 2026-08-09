@@ -187,10 +187,12 @@ Consolidation, as part of the work rather than after it:
 **Phase 1 — the switch and the link. No platform work. BUILT.**
 The segmented control, the derived mode, both faces, the colour, the link field with dedup and platform check, paste-in copy, manual metrics, the plan-vs-actual diff, snapshots written from whatever is entered. Useful on its own: a campaign can be reconciled by hand and the board finally shows what ran.
 
-Where it landed: `domain/assetMode.ts` (the one predicate and the diff), `domain/liveLink.ts` (normalize, dedup, the two questions), `attachLiveAsset` / `detachLiveAsset` / `setLiveCopy` / `setLiveMetrics` in the store, and `renderActiveFace` beside `renderPostInspector`. `isPlannedCard` and `isLibraryItem` are now one rule, as the consolidation below asks. Not yet done from this phase: the tone on the card face on the canvas and on the grid chip — the switch carries it, the board does not.
+Where it landed: `domain/assetMode.ts` (the one predicate and the diff), `domain/liveLink.ts` (normalize, dedup, the two questions), `attachLiveAsset` / `detachLiveAsset` / `setLiveCopy` / `setLiveMetrics` in the store, and `renderActiveFace` beside `renderPostInspector`. `isPlannedCard` and `isLibraryItem` are now one rule, as the consolidation below asks. The tone reads from across the board too: a green stripe on the canvas card, a green edge on the grid row's gutter, both off the same predicate the panel opens on.
 
-**Phase 2 — read the copy back.**
+**Phase 2 — read the copy back. BUILT.**
 YouTube and web surfaces automatically, since both work today with no OAuth. Instagram and LinkedIn behind their existing gates.
+
+Where it landed: `server/livePost.ts` (the reader and its refusals), `server/livePostHandler.ts`, `read-live-post` in `apiManifest.ts`, and a "Read it back from the post" button on the Active face. It fills only what is EMPTY, so a caption somebody typed is never replaced. The platforms it cannot read are named rather than attempted: "Instagram only shows a post's words to the account that owns it. Connect Instagram to read this back, or type it in below." No model key is needed for any of it, which is why it works on a deployment with no AI configured.
 
 **Phase 3 — pull the numbers.**
 Per-post metrics provider, mock then real. Matching a URL to a post id within a connected account. Refresh on stale.

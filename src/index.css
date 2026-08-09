@@ -4736,6 +4736,10 @@ button.mf-open:focus-visible,
 }
 .flow-live-planned em { color: var(--text-faint); }
 .flow-live-actual { margin-top: 1px; }
+/* The read-back and whatever it had to say. The note sits under the button rather than beside it:
+   half of what it says is a platform explaining itself, which does not fit on one line. */
+.flow-live-read { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.flow-live-readnote { font-size: 11.5px; line-height: 1.5; color: var(--text-faint); }
 .flow-live-metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
