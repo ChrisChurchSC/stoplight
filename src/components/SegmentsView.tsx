@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { liveRecordUsage, splitAudiencesByUse } from '../domain/audienceUsage'
+import { undefinedRecords } from '../domain/recordDefined'
 import { canvasBrandScope } from '../domain/brand'
 import { CHANNELS } from '../domain/channels'
 import { GENDERS, SENIORITIES, INDUSTRIES, COMPANY_SIZES, VALUE_TIERS, MARITAL_STATUSES } from '../domain/taxonomy'
@@ -132,6 +133,25 @@ export function SegmentsView() {
     audiences,
     liveRecordUsage({ rows: allRows, boards: flowBoards, smartObjects, campaigns: campaignList }),
   )
+  /**
+   * THE ONES THAT ARE ONLY A NAME. A record has to say something beyond what it is called — its own
+   * line, or a document — or it is a label the copy gets written from and nobody can choose between
+   * in a picker. See hasDefinition; the rule reads the same line every picker prints, so this list
+   * is exactly the rows that show a name and nothing under it.
+   *
+   * Separate from the unused sweep on purpose. Unused is about whether anything points at a record;
+   * this is about whether the record is one. A name-only audience three campaigns reference is the
+   * worse case of the two, and the sweep would never have touched it.
+   */
+  const undefined_ = undefinedRecords('audience', audiences)
+  const [confirmUndefined, setConfirmUndefined] = useState(false)
+  const runRemoveUndefined = () => {
+    const live = useTrafficStore.getState().clientAudiences[brand] ?? []
+    const gone = new Set(undefinedRecords('audience', live).map((a) => a.id))
+    setClientAudiences(brand, live.filter((a) => !gone.has(a.id)))
+    setConfirmUndefined(false)
+    showToast(`Removed ${gone.size} audience${gone.size === 1 ? '' : 's'} that had nothing but a name.`)
+  }
   const [confirmSweep, setConfirmSweep] = useState(false)
   const runSweep = () => {
     // Live read, like every other write on this page: the confirm sat open while the store moved on.
@@ -252,6 +272,34 @@ export function SegmentsView() {
         </div>
       </>
     )}
+    {confirmUndefined && (
+      <>
+        <div className="drawer-scrim" onClick={() => setConfirmUndefined(false)} />
+        <div className="confirm-modal" role="dialog" aria-label="Remove audiences that are only a name">
+          <strong className="confirm-title">
+            Remove {undefined_.length} audience{undefined_.length === 1 ? '' : 's'} with nothing but a name?
+          </strong>
+          <p className="confirm-text">
+            An audience has to say something beyond what it is called — a role, or an uploaded
+            document — or the copy is written from a label and a picker cannot tell it from the one
+            beside it. These say nothing. Some may still be referenced by live work: those assets
+            keep the name and lose the record, which is the same state as deleting one by hand.
+          </p>
+          <p className="confirm-text" style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {undefined_.map((a) => a.name || 'Untitled').join(' · ')}
+          </p>
+          <div className="confirm-foot">
+            <button className="btn sm" onClick={() => setConfirmUndefined(false)}>
+              Cancel
+            </button>
+            <span className="spacer" />
+            <button className="btn sm danger" onClick={runRemoveUndefined}>
+              Remove {undefined_.length}
+            </button>
+          </div>
+        </div>
+      </>
+    )}
     {confirmWipe && (
       <>
         <div className="drawer-scrim" onClick={() => setConfirmWipe(false)} />
@@ -291,6 +339,11 @@ export function SegmentsView() {
       noun={['audience', 'audiences']}
       rowAction={{ label: 'Recommend angle', run: (r) => void recommendAngle(r.id) }}
       headerAction={[
+        // First, because a record that is only a name is a worse problem than one nothing uses, and
+        // some of these are in use.
+        ...(undefined_.length
+          ? [{ label: `Only a name (${undefined_.length})`, run: () => setConfirmUndefined(true) }]
+          : []),
         // Only offered while there is something to sweep: a standing "Clean up (0)" would be a
         // button that exists to be disabled.
         ...(unused.length ? [{ label: `Clean up unused (${unused.length})`, run: () => setConfirmSweep(true) }] : []),

@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.71',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'A record has to say something beyond its own name, and the pages that hold them will now tell you which ones do not. A name is a label: generation mints records as it needs them and fills them with what it had at the time, so a shelf collects nouns — two audiences with nothing under either, where choosing between them means already knowing what they are, and the copy written from either is written from a string. “Only a name” lists exactly those, names them on the confirm, and removes them. The rule is the one line every picker already prints under a record, or a document attached to it, so what it judges is what you can see; kinds whose records carry no such line are not judged by it at all.',
+          'It is deliberately not the same question as “Clean up unused”. That one asks whether anything points at a record. This asks whether the record is one — and some of these are in use, which makes them the worse of the two, and the sweep would never have touched them.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.69',
     dateLabel: 'August 9, 2026',
     groups: [
