@@ -9603,6 +9603,33 @@ export function FlowsView() {
                 </div>
               ))}
             </div>
+            {/* COPY THAT RAN UNDER A COMPONENT THIS FORMAT DOES NOT HAVE.
+                The diff walks the FORMAT's components, so anything recorded under another key —
+                copy read back before the channel was changed, or arriving with an import — is
+                dropped from it silently. The Planner face has said this about the plan since it was
+                built ("Not part of this format"); saying it about the actual is the same rule, and
+                the alternative is a panel that quietly holds words it never shows. */}
+            {(() => {
+              const known = new Set(fields.map((f) => f.key))
+              const strays = Object.entries(live).filter(([k, v]) => !known.has(k) && v?.trim())
+              if (!strays.length) return null
+              return (
+                <>
+                  <label className="flow-inspect-label" style={{ marginTop: 14 }}>Not part of this format</label>
+                  <p className="flow-inspect-note">
+                    This ran under a component {CHANNELS[selPost.channel as ChannelId]?.label ?? selPost.channel} does not have, so it is not in the comparison above.
+                  </p>
+                  <div className="flow-live-diff">
+                    {strays.map(([k, v]) => (
+                      <div key={k} className="flow-live-line">
+                        <span className="flow-live-k">{k}</span>
+                        <span className="flow-live-planned">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            })()}
             {/* Words on the creative rather than in a field. Its own box because nobody typed them
                 into a component and pretending otherwise would put them in the diff. */}
             <label className="flow-inspect-label" style={{ marginTop: 14 }}>Words on the creative</label>
