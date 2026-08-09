@@ -4415,6 +4415,14 @@ export function FlowsView() {
    * spec nobody wrote claiming to be one somebody did. Same reason the copy writer is not sent this:
    * `messaging.cta` is the words, this is the mechanism under them, and they are edited apart.
    *
+   * ONE END OF A LINE, NEVER A LOOSE ITEM. There is no way to add a CTA from nothing. Every entry
+   * starts as a handoff somebody drew, and the only Add sits on the row naming where that line goes.
+   * A control invented without a destination is exactly what this section exists to catch: it cannot
+   * be built against, because "what has to exist" is read off the far end, and it cannot be checked
+   * against, because nothing downstream knows what it was for. So a card with no lines out of it
+   * shows no list, and the way to get one is to draw the line — which is also the honest answer, as
+   * a button that goes nowhere is a decision that has not been made rather than a thing to build.
+   *
    * Shared by the canvas panel and the grid/calendar panel, because both render renderPostInspector.
    */
   const renderCtas = (row: TrafficRow) => {
@@ -4429,14 +4437,12 @@ export function FlowsView() {
     // the same as one from before this existed instead of carrying an empty spec around.
     const write = (next: AssetCta[]) => void updateRow(row.id, { ctas: next.length ? next : undefined })
     const patch = (id: string, p: Partial<AssetCta>) => write(ctas.map((c) => (c.id === id ? { ...c, ...p } : c)))
-    const addFor = (h?: Handoff) => {
-      const seed = h ? ctaForHandoff(h.row) : null
-      write([
-        ...ctas,
-        seed && h
-          ? { id: freshCtaId(), kind: seed.kind, label: seed.label, note: seed.note, target: h.row.assetName }
-          : { id: freshCtaId(), kind: 'button' as CtaKind, label: '' },
-      ])
+    // The only way a CTA comes into existence, and it takes a handoff to call: the entry is seeded
+    // from what the DESTINATION needs, and it arrives already pointed at that destination. Nothing
+    // here can mint a blank one, so the list can never hold an item with no line behind it.
+    const addFor = (h: Handoff) => {
+      const seed = ctaForHandoff(h.row)
+      write([...ctas, { id: freshCtaId(), kind: seed.kind, label: seed.label, note: seed.note, target: h.row.assetName }])
     }
 
     return (
@@ -4445,12 +4451,14 @@ export function FlowsView() {
           CTAs{ctas.length ? ` · ${ctas.length}` : ''}
         </label>
         {/* "All built" has to mean built, so an empty list says empty rather than claiming a clean
-            sheet it got by having nothing on it. */}
+            sheet it got by having nothing on it. And with no line out of the card there is nothing to
+            press, so the empty state has to name the move that produces one rather than leaving the
+            section looking broken. */}
         <p className="flow-inspect-note" style={{ marginBottom: 10 }}>
           The buttons, forms and inputs this asset has to carry.{' '}
           {ctas.length === 0
             ? handoffs.length === 0
-              ? 'Nothing in this campaign leads out of it, so nothing is owed.'
+              ? 'Nothing in this campaign leads out of it, so nothing is owed. Connect it to another asset and what that handoff needs shows up here.'
               : 'None listed yet.'
             : unbuilt > 0
               ? `${unbuilt} still to build.`
@@ -4491,14 +4499,18 @@ export function FlowsView() {
                   onCommit={(v) => patch(c.id, { label: v })}
                 />
                 {/* WHERE IT GOES, from the campaign's own assets. Free text would let a button
-                    point at a name no asset has, which is the gap this section exists to close. */}
+                    point at a name no asset has, which is the gap this section exists to close — and
+                    there is no blank option to choose, because emptying the target is how a CTA that
+                    arrived as one end of a line turns back into the loose item this list is not.
+                    Retarget it, or remove it. The empty entry shows only for a row that already had
+                    no destination, so the control reads honestly instead of implying one. */}
                 <select
                   className="flow-inspect-input flow-inspect-select flow-cta-target"
                   value={c.target ?? ''}
                   aria-label="Where it takes them"
                   onChange={(e) => patch(c.id, { target: e.target.value || undefined })}
                 >
-                  <option value="">Goes nowhere in this campaign</option>
+                  {!c.target && <option value="" disabled>Not pointed at anything yet</option>}
                   {/* The dangling target stays in the list while it is set, so the control shows what
                       is actually on the row rather than silently reading as "goes nowhere". */}
                   {c.target && !rows.some((r) => r.assetName === c.target) && (
@@ -4548,8 +4560,6 @@ export function FlowsView() {
             })}
           </div>
         )}
-
-        <button className="flow-insp-open subtle" onClick={() => addFor()}>+ Add a CTA</button>
       </>
     )
   }

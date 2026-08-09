@@ -23,13 +23,25 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
-    version: 'v1.68',
+    version: 'v1.69',
     dateLabel: 'August 9, 2026',
     groups: [
       {
         tag: 'Improved',
         items: [
           'A Concept card stops asking for the claim and the register, the same way a Voice card stopped asking for a sample line. A Concept card names a Concept record, and that record is already the answer to both: the big idea in one line, and the reference the work should feel like. Both are sent to the writer for every campaign that uses the record, so “The claim” and “Sounds like this” were the board putting the same two questions in a second vocabulary, once per campaign, where nothing could compare them to the record they duplicate. Anything already typed into those fields stays stored and stops reaching the writer, so what the panel shows and what the copy is written from agree again.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.68',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A CTA is one end of a line, not something you add to a card. Under the list sat “+ Add a CTA”, and pressing it produced a blank button pointed at nothing. That is the one item this list cannot describe: what has to be built is read off the far end of the handoff — a page owes a link, an email sequence owes a capture and a consent, a person owes a booking — so with no far end there is nothing to say beyond the word “button”, and nothing downstream can tell whether it was ever built for anything. CTAs now arrive only from the Add on a handoff that has none, already carrying the destination and what that destination requires. Emptying a CTA’s destination afterwards is gone for the same reason. A card nothing leads out of says so, and says that connecting it to another asset is what fills the list.',
         ],
       },
     ],

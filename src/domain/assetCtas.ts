@@ -256,8 +256,10 @@ const TYPE_HANDOFF: Record<string, HandoffRule> = {
  * The handoffs no CTA on this row accounts for.
  *
  * Matched on target name, so a CTA the person retargeted at a different asset stops covering the old
- * one and the gap comes back. A CTA with no target covers nothing on purpose: a search box is real
- * functionality and it is not how anybody gets to the next step.
+ * one and the gap comes back. A CTA with no target covers nothing, and the inspector no longer has a
+ * way to make one: an entry is added off a handoff and arrives pointed at it, because what has to be
+ * built is read off the far end and there is nothing to read without one. The filter still guards the
+ * case, for rows written before that was true.
  */
 export function uncoveredHandoffs(row: TrafficRow, rows: readonly TrafficRow[]): Handoff[] {
   const covered = new Set((row.ctas ?? []).map((c) => name(c.target)).filter(Boolean))
