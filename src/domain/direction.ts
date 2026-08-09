@@ -18,9 +18,12 @@
 
 export type DirectionKey =
   | 'pain' | 'objection'        // audience
-  | 'claim' | 'notThis'         // message, concept
+  | 'claim' | 'notThis'         // message
   | 'figure'                    // proof point, data source
-  | 'likeThis' | 'avoidSay'     // voice, concept
+  // Asked by no kind since Voice and Concept both retired them. Kept, and kept valid: the chat's
+  // setDirection can still set either on a card deliberately, and RETIRED_DIRECTION drops them only
+  // for the two kinds that withdrew them.
+  | 'likeThis' | 'avoidSay'
   | 'justDid' | 'ask'           // trigger
   | 'situation'                 // company
   | 'caresAbout'                // person
@@ -77,7 +80,12 @@ export const DIRECTION_KEYS: Partial<Record<string, DirectionKey[]>> = {
   trigger: ['justDid', 'ask'],
   company: ['situation'],
   person: ['caresAbout'],
-  concept: ['claim', 'likeThis'],
+  // Concept asks nothing, for the reason Voice above asks nothing. A Concept card names a Concept
+  // record, and that record IS the answer to both questions it used to put on the card: `idea` is
+  // the big idea in one line, `likeThis` is the reference to write toward, and both are sent to the
+  // writer for every campaign that uses the record. Asking the card for "The claim" and "Sounds
+  // like this" put the same two questions on the board in a second vocabulary, per campaign, where
+  // nothing could compare them to the record they duplicate. See RETIRED_DIRECTION below.
   season: ['moment', 'permission'],
   'data-source': ['figure'],
 }
@@ -94,6 +102,7 @@ export const DIRECTION_KEYS: Partial<Record<string, DirectionKey[]>> = {
  */
 export const RETIRED_DIRECTION: Partial<Record<string, DirectionKey[]>> = {
   voice: ['likeThis', 'avoidSay'],
+  concept: ['claim', 'likeThis'],
 }
 
 export interface DirectionEntry {
