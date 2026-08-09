@@ -93,7 +93,7 @@ import { CalendarView } from './CalendarView'
 import { FlowsHome } from './FlowsHome'
 import { apiFetch } from '../lib/apiFetch'
 import { AddRecordMenu, type ObjectCardOption } from './AddRecordMenu'
-import { assetMode, copyDiff, copyDiffStat, type AssetMode } from '../domain/assetMode'
+import { assetMode, copyDiff, copyDiffStat, isLiveAsset, type AssetMode } from '../domain/assetMode'
 import { readLinkFor } from '../domain/liveLink'
 
 /**
@@ -4315,6 +4315,9 @@ export function FlowsView() {
   const postFace = (r: TrafficRow): AssetMode => (faceOverride?.id === r.id ? faceOverride.mode : assetMode(r))
   /** What was typed into the Active face but not yet committed: the link, and the copy read back. */
   const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string } | null>(null)
+  /** The read-back in flight, and what it had to say. */
+  const [reading, setReading] = useState(false)
+  const [readNote, setReadNote] = useState<string | null>(null)
   /**
    * WHICH KIND'S RECORD LIST IS OPEN ON THE TOOLBAR — the one step between pressing a card kind and
    * that card landing on the board. Null the rest of the time, which is nearly always.
@@ -9371,6 +9374,28 @@ export function FlowsView() {
    * socialMetrics is open-ended, so whatever a connected account returns later lands beside these
    * without this list having to grow.
    */
+  /**
+   * WHY IT COULD NOT BE READ, as a sentence with the fix in it.
+   *
+   * The reader answers with a key rather than prose so the two halves stay in their own languages
+   * (see server/livePost.ts), and "connect Instagram" is not an error: it is the true and permanent
+   * shape of that platform until an account is connected. Anything unrecognised falls through to the
+   * one instruction that always works, which is the box directly underneath.
+   */
+  const readBackNote = (reason?: string): string => {
+    if (!reason) return 'Nothing came back from that link. Type it in below.'
+    if (reason.startsWith('connect-')) {
+      const p = reason.slice('connect-'.length)
+      const label = p.charAt(0).toUpperCase() + p.slice(1)
+      return `${label} only shows a post's words to the account that owns it. Connect ${label} to read this back, or type it in below.`
+    }
+    if (reason === 'no-youtube-key') return 'YouTube is not connected on this deployment. Type it in below.'
+    if (reason === 'youtube-not-a-video') return 'That is a channel or a playlist rather than one video.'
+    if (reason === 'youtube-not-found') return 'YouTube does not have that video. Check the link.'
+    if (reason === 'page-unreachable') return 'That page did not answer. Type it in below.'
+    return 'Could not read that one back. Type it in below.'
+  }
+
   const LIVE_METRICS: { key: string; label: string }[] = [
     { key: 'impressions', label: 'Impressions' },
     { key: 'reach', label: 'Reach' },
@@ -9395,6 +9420,48 @@ export function FlowsView() {
     const stat = copyDiffStat(lines)
     const live = selPost.live?.copy ?? {}
     const metrics = selPost.socialMetrics ?? {}
+
+    /**
+     * Fill the "as it ran" boxes from the post itself.
+     *
+     * ONLY WHAT IS EMPTY. Same rule generation works to: a person who has typed the caption in is not
+     * having it replaced by a reader that may have found a page title instead. The title lands on
+     * whichever component this format leads with, because that is what a headline IS on a page and
+     * on a video, and the body on the first multiline one.
+     */
+    const readBack = async () => {
+      if (!link || reading) return
+      setReading(true)
+      setReadNote(null)
+      try {
+        const res = await apiFetch('/api/read-live-post', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url: link }),
+        })
+        const d = (await res.json()) as { available?: boolean; reason?: string; title?: string; body?: string; publishedAt?: string }
+        if (!res.ok || !d?.available) {
+          setReadNote(readBackNote(d?.reason))
+          return
+        }
+        const head = fields[0]?.key
+        const long = fields.find((f) => f.multiline)?.key ?? fields[1]?.key
+        const next = { ...live }
+        if (head && d.title && !next[head]?.trim()) next[head] = d.title
+        if (long && d.body && !next[long]?.trim()) next[long] = d.body
+        if (!Object.keys(next).length) {
+          setReadNote('Nothing came back from that link.')
+          return
+        }
+        await setLiveCopy(selPost.id, next, selPost.live?.extractedCopy)
+        if (d.publishedAt && !selPost.publishedAt) await updateRow(selPost.id, { publishedAt: d.publishedAt })
+        setReadNote('Filled what was empty. Anything you had typed is untouched.')
+      } catch {
+        setReadNote('Could not reach the reader. Type it in below.')
+      } finally {
+        setReading(false)
+      }
+    }
 
     const attach = () => {
       const raw = draft?.url ?? ''
@@ -9474,6 +9541,16 @@ export function FlowsView() {
                   ? `It ran as planned, across ${stat.compared} ${stat.compared === 1 ? 'component' : 'components'}.`
                   : `${stat.changed} of ${stat.compared} changed between the plan and the post.`}
             </p>
+            {/* READ IT BACK, where the platform allows it: a YouTube video and any web page, neither
+                of which needs an account connected. Everything else says which connection would do
+                it rather than spinning and failing — and the boxes below always work, which is what
+                makes this an accelerator rather than the only way in. */}
+            <div className="flow-live-read">
+              <button className="flow-insp-open subtle" disabled={reading} onClick={() => void readBack()}>
+                {reading ? 'Reading…' : 'Read it back from the post'}
+              </button>
+              {readNote && <span className="flow-live-readnote">{readNote}</span>}
+            </div>
             <div className="flow-live-diff">
               {lines.map((l) => (
                 <div key={l.key} className={`flow-live-line${l.changed && !l.empty ? ' changed' : ''}`}>
@@ -11189,8 +11266,15 @@ export function FlowsView() {
                                     to a single post. Builder subcards below stay out: their ids are
                                     `node:index` placeholders with no row behind them yet, so a wire
                                     to one would resolve to nothing. */}
+                                {/* LIVE READS FROM ACROSS THE BOARD, which is most of what the mode
+                                    is for. A campaign part way through shipping is the normal state
+                                    of a real campaign, and until now a board of thirty cards said
+                                    nothing about which of them had actually gone out — you opened
+                                    them one at a time to find out. One class, read off the same
+                                    predicate the inspector opens on, so the board and the panel
+                                    cannot disagree about which an asset is. */}
                                 <div
-                                  className={`flow-node flow-brief-node${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
+                                  className={`flow-node flow-brief-node${isLiveAsset(r) ? ' live' : ''}${connectOver === r.id ? ' drop-target' : ''}${sel === r.id ? ' sel' : ''}${selected.has(r.id) ? ' multi' : ''}${pos[r.id] ? ' moved' : ''}${regenIds.has(r.id) ? ' generating' : ''}${trailCls(r.id)}`}
                                   data-node-id={r.id}
                                   data-role="output"
                                   style={{ transform: `translate(${pos[r.id]?.x ?? 0}px, ${pos[r.id]?.y ?? 0}px)` }}

@@ -36,6 +36,7 @@ export const API_ROUTES: Record<string, HandlerLoader> = {
   'scan-site': () => import('./scanSiteHandler.js').then((m) => m.runScanSite),
   'suggest-options': () => import('./suggestOptionsHandler.js').then((m) => m.runSuggestOptions),
   'ingest-site': () => import('./ingestSiteHandler.js').then((m) => m.runIngestSite),
+  'read-live-post': () => import('./livePostHandler.js').then((m) => m.runReadLivePost),
   'extract-copy': () => import('./extractCopyHandler.js').then((m) => m.runExtractCopy),
   'icp-review': () => import('./icpReviewHandler.js').then((m) => m.runIcpReview),
   'media-mix': () => import('./mediaMixHandler.js').then((m) => m.runMediaMix),
