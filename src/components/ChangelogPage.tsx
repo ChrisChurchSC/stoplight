@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.69',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A Concept card stops asking for the claim and the register, the same way a Voice card stopped asking for a sample line. A Concept card names a Concept record, and that record is already the answer to both: the big idea in one line, and the reference the work should feel like. Both are sent to the writer for every campaign that uses the record, so “The claim” and “Sounds like this” were the board putting the same two questions in a second vocabulary, once per campaign, where nothing could compare them to the record they duplicate. Anything already typed into those fields stays stored and stops reaching the writer, so what the panel shows and what the copy is written from agree again.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.68',
     dateLabel: 'August 9, 2026',
     groups: [
