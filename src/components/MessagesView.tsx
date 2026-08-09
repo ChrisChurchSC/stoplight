@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { splitRecordsByUse } from '../domain/audienceUsage'
+import { liveRecordUsage, splitRecordsByUse } from '../domain/audienceUsage'
 import { canvasBrandScope } from '../domain/brand'
 import { MESSAGE_COLUMNS, MESSAGE_FIELDS, MESSAGE_STATUSES } from '../domain/message'
 import { useHomeCanvases } from '../lib/useHomeCanvases'
@@ -42,7 +42,9 @@ export function MessagesView() {
   const flowBoards = useTrafficStore((s) => s.flowBoards)
   const smartObjects = useTrafficStore((s) => s.smartObjects)
   const campaignList = useTrafficStore((s) => s.campaignList)
-  const usage = { rows: allRows, boards: flowBoards, smartObjects, campaigns: campaignList }
+  // Only the LIVING workspace holds a record in place — see liveRecordUsage for why the dead
+  // (archived campaigns, boards outliving deleted campaigns) do not get a vote.
+  const usage = liveRecordUsage({ rows: allRows, boards: flowBoards, smartObjects, campaigns: campaignList })
   const { unused } = splitRecordsByUse(scoped, usage, { refType: 'message', cardKind: 'message' })
   const [confirmSweep, setConfirmSweep] = useState(false)
   const runSweep = () => {
@@ -51,7 +53,7 @@ export function MessagesView() {
     const liveScoped = live.messages.filter((m) => !m.brand || m.brand === brand)
     const split = splitRecordsByUse(
       liveScoped,
-      { rows: live.rows, boards: live.flowBoards, smartObjects: live.smartObjects, campaigns: live.campaignList },
+      liveRecordUsage({ rows: live.rows, boards: live.flowBoards, smartObjects: live.smartObjects, campaigns: live.campaignList }),
       { refType: 'message', cardKind: 'message' },
     )
     for (const m of split.unused) deleteMessage(m.id)
