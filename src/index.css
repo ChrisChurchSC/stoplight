@@ -1552,6 +1552,14 @@ button {
   border-radius: 6px;
   overflow: hidden;
 }
+/* POINTED AT, so Delete has something to act on. A ring in the chip's own hue rather than a fill:
+   the fill is already carrying "which kind is this", and a second use of the same channel would make
+   a selected Audience chip read as some third state. Drawn outside the border so it does not shift
+   the row by a pixel when it comes and goes. */
+.mf-chip.sel {
+  outline: 2px solid color-mix(in srgb, var(--note-tone, var(--accent)) 65%, transparent);
+  outline-offset: 1px;
+}
 /* Wired and holding nothing. It reaches the writer either way, so it shows either way — dashed,
    because what is missing is the record, not the card. */
 .mf-chip.unset {

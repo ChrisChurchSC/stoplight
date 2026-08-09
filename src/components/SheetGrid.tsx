@@ -10,6 +10,7 @@ import { cardsForRow } from '../domain/cardsForRow'
 import { usablePatterns } from '../domain/pattern'
 import { recordDetail } from '../domain/recordDetail'
 import { madeFrom } from '../domain/madeFrom'
+import { madeFromRemoval, type MadeFromRemoval } from '../domain/madeFromRemove'
 import { mergeAudiences } from '../domain/audiences'
 import { resolveBrandScope } from '../domain/brand'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
@@ -248,6 +249,8 @@ export function SheetGrid({
   const rangeNow = Date.now()
   const updateRow = useTrafficStore((s) => s.updateRow)
   const removeRow = useTrafficStore((s) => s.removeRow)
+  const saveFlowBoard = useTrafficStore((s) => s.saveFlowBoard)
+  const showToast = useTrafficStore((s) => s.showToast)
   const duplicateRow = useTrafficStore((s) => s.duplicateRow)
   const batchReview = useTrafficStore((s) => s.batchReview)
   const icp = useTrafficStore((s) => s.icp)
@@ -696,6 +699,62 @@ export function SheetGrid({
   const optsFor = (kind: CanvasObjectKind) => optionsByKind.get(kind) ?? []
 
   /**
+   * THE CHIP THE SHEET IS POINTED AT, so Delete has something to act on.
+   *
+   * Keyed by row and kind, which is the granularity everything that acts on a chip already uses: the
+   * caret sets the kind's primary, the drawer's ✕ takes the kind off the asset. `entryKey` tells the
+   * primary apart from the other cards of the same kind listed beside it — pressing one of those
+   * selects it and Delete then says why it is not the one to act on, which is more use than a chip
+   * that cannot be pressed at all.
+   */
+  const [selChip, setSelChip] = useState<{ rowId: string; kind: CanvasObjectKind; entryKey: string } | null>(null)
+
+  /**
+   * DELETE TAKES THE SELECTED CHIP OFF THE ASSET — the same removal the drawer's ✕ performs, reached
+   * from the cell instead of from two clicks inside a drawer.
+   *
+   * Backspace as well as Delete, and not as a nicety: the key labelled "delete" on an Apple keyboard
+   * reports as Backspace, so a handler listening for "Delete" alone does nothing on the machine most
+   * of this is used on.
+   *
+   * Ignored while a field or a dialog has the key, which is the same guard the sheet's other window
+   * listeners use — Backspace inside an input is a character, not a command.
+   *
+   * DELIBERATELY UNKEYED. removeSelectedChip reads the rows, the board and the pins as this render
+   * sees them, so a dependency list would hand the listener a snapshot and act on whichever of those
+   * happened to be true when the chip was first pressed. Rebinding one listener per render costs
+   * nothing and only happens while a chip is selected, which is rarely and briefly.
+   */
+  useEffect(() => {
+    if (!selChip) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setSelChip(null); return }
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      const t = e.target
+      if (t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], .drawer')) return
+      e.preventDefault()
+      removeSelectedChip()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  /**
+   * A press anywhere that is not a chip puts the selection away, so the sheet is never quietly armed
+   * with a Delete aimed at something you have stopped looking at.
+   */
+  useEffect(() => {
+    if (!selChip) return
+    const down = (e: MouseEvent) => {
+      const t = e.target
+      if (t instanceof Element && t.closest('.mf-chip')) return
+      setSelChip(null)
+    }
+    window.addEventListener('mousedown', down)
+    return () => window.removeEventListener('mousedown', down)
+  }, [selChip])
+
+  /**
    * THE AUDIENCE A ROW NAMES BY ITSELF, matched back to the segment it means.
    *
    * `row.audience` is a name, not an id — see setRowRecord below, which writes it alongside the
@@ -719,6 +778,65 @@ export function SheetGrid({
    * campaign to rebind, and is read-only anywhere the grid spans more than one.
    */
   const settable = (kind: CanvasObjectKind) => !!REF_TYPE_FOR_OBJECT_KIND[kind] || (kind === 'brand' && !!scopeCampaign)
+
+  /**
+   * WHAT AN ASSET IS MADE FROM, in one place. Three surfaces ask — the cell, the drawer, and the
+   * Delete key — and they were two copies of the same six arguments before the third arrived. They
+   * cannot answer differently now, which was already the reason rowAudienceFor above is shared.
+   */
+  const entriesFor = (row: TrafficRow) =>
+    madeFrom({
+      kinds: MADE_FROM_KINDS,
+      cards: cardsByRow.get(row.id) ?? [],
+      references: row.references,
+      // The brand's answer is the campaign's binding, so it is read from the row's own client rather
+      // than from a card: a campaign bound with no Brand card on the board still has a brand.
+      brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
+      // The asset's own audience, for when no card or pin names one. Set on the campaign canvas and
+      // by seeding, neither of which mints a reference.
+      rowAudience: rowAudienceFor(row),
+      nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
+    })
+
+  /**
+   * TAKE THE SELECTED CHIP OFF THE ASSET.
+   *
+   * madeFromRemoval decides what that can mean here and refuses where the answer is not this cell's
+   * to give (see the comment on it). Where it can be done, the wires it names are cut first and the
+   * pin is cleared after: clearing the pin alone would leave a card supplying the same record and
+   * the chip would come straight back, which is the failure this used to have from the drawer.
+   */
+  const removeSelectedChip = () => {
+    if (!selChip) return
+    const row = view.find((r) => r.id === selChip.rowId)
+    if (!row) { setSelChip(null); return }
+    const entry = entriesFor(row).find((e) => `${e.kind}:${e.cardId ?? e.refId ?? 'pin'}` === selChip.entryKey)
+    if (!entry) { setSelChip(null); return }
+    const noun = OBJECT_META[entry.kind].label.toLowerCase()
+    const board = scopeCampaign ? boardFor(flowBoards, scopeCampaign) : null
+    // No board at all (a grid spanning campaigns, or one never drawn) means nothing can be wired,
+    // so the pin is the whole of it and there is nothing to cut.
+    const verdict: MadeFromRemoval = board
+      ? madeFromRemoval({ entry, row, board, settable, nameFor })
+      : { can: true, cut: [] }
+    if (!verdict.can) {
+      showToast(
+        verdict.reason === 'brand'
+          ? `The brand is the campaign's, not this asset's. Change it from the Brand card on the canvas and every asset follows.`
+          : verdict.reason === 'campaign-wide'
+            ? `This ${noun} reaches every asset in the campaign from the brief. Unwire its card on the canvas to take it off all of them, or wire a different one to this asset.`
+            : verdict.reason === 'secondary'
+              ? `This ${noun} is a second card reaching the asset, and the cell reads the first. Take it off the campaign on the canvas.`
+              : `This cell cannot set a ${noun}.`,
+      )
+      return
+    }
+    if (board && verdict.cut.length) {
+      saveFlowBoard({ ...board, connectors: board.connectors.filter((c) => !verdict.cut.includes(c)) })
+    }
+    setRowRecord(row, entry.kind, '')
+    setSelChip(null)
+  }
 
   const cols = (() => {
     const out: { key: string; label: string; icon: string; width: number; fieldKey?: string }[] = []
@@ -1089,19 +1207,7 @@ export function SheetGrid({
                     */}
                   <td className="mf-cell">
                     {(() => {
-                      const entries = madeFrom({
-                        kinds: MADE_FROM_KINDS,
-                        cards: cardsByRow.get(row.id) ?? [],
-                        references: row.references,
-                        // The brand's answer is the campaign's binding, so it is read from the row's
-                        // own client rather than from a card: a campaign bound with no Brand card on
-                        // the board still has a brand, and the cell has to say which.
-                        brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
-                        // The asset's own audience, for when no card or pin names one. Set on the
-                        // campaign canvas and by seeding, neither of which mints a reference.
-                        rowAudience: rowAudienceFor(row),
-                        nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
-                      })
+                      const entries = entriesFor(row)
                       const present = new Set(entries.map((e) => e.kind))
                       // Only kinds that could actually land on this asset: settable here, not already
                       // on it, and with something to pick or a way to make one. An optgroup holding
@@ -1119,6 +1225,9 @@ export function SheetGrid({
                           {entries.map((e) => {
                             const meta = OBJECT_META[e.kind]
                             const name = e.label || `No ${meta.label.toLowerCase()} picked`
+                            const entryKey = `${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`
+                            const selected = selChip?.rowId === row.id && selChip.entryKey === entryKey
+                            const select = () => setSelChip({ rowId: row.id, kind: e.kind, entryKey })
                             const face = (
                               <>
                                 <span className="obj-ic" aria-hidden="true">
@@ -1146,34 +1255,31 @@ export function SheetGrid({
                               : `Also reaching this asset: ${e.label}`
                             return (
                               <span
-                                key={`${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`}
+                                key={entryKey}
                                 /* A doc-backed card is full — its .md reaches the writer — so it is
                                    not dashed as an absence. The dash means "contributes nothing",
                                    and that card is contributing the very brief someone uploaded. */
-                                className={`mf-chip${e.refId || e.doc ? '' : ' unset'}`}
+                                className={`mf-chip${e.refId || e.doc ? '' : ' unset'}${selected ? ' sel' : ''}`}
                                 style={{ ['--note-tone' as string]: meta.tone } as React.CSSProperties}
                               >
-                                {/* Pressing the chip opens the card, which is the gesture the canvas
-                                    already taught. Where nobody is listening for it — the workbench
-                                    grid renders no inspector — it is plain text rather than a button
-                                    that does nothing when pressed. */}
-                                {onPickObject ? (
-                                  <button
-                                    type="button"
-                                    className="mf-open"
-                                    title={`Open ${title}`}
-                                    onClick={(ev) => {
-                                      ev.stopPropagation()
-                                      onPickObject({ kind: e.kind, cardId: e.cardId, label: meta.label })
-                                    }}
-                                  >
-                                    {face}
-                                  </button>
-                                ) : (
-                                  <span className="mf-open" title={title}>
-                                    {face}
-                                  </span>
-                                )}
+                                {/* Pressing the chip SELECTS it, and opens the card where something is
+                                    listening. Selecting is what arms Delete, so this is a button on
+                                    the workbench grid too — it used to be plain text there on the
+                                    grounds that a button doing nothing when pressed is worse than no
+                                    button, which was right while opening the card was all it could do. */}
+                                <button
+                                  type="button"
+                                  className="mf-open"
+                                  title={onPickObject ? `Open ${title}` : title}
+                                  aria-pressed={selected}
+                                  onClick={(ev) => {
+                                    ev.stopPropagation()
+                                    select()
+                                    onPickObject?.({ kind: e.kind, cardId: e.cardId, label: meta.label })
+                                  }}
+                                >
+                                  {face}
+                                </button>
                                 {/* THE PICKER SETS THE KIND'S PRIMARY, so only the primary carries one.
                                     A second card of the same kind is listed and read-only: a caret on it
                                     would look like it set that card and would quietly set the other. */}
@@ -1495,14 +1601,7 @@ export function SheetGrid({
       {addFor && (() => {
         const row = view.find((r) => r.id === addFor)
         if (!row) return null
-        const entries = madeFrom({
-          kinds: MADE_FROM_KINDS,
-          cards: cardsByRow.get(row.id) ?? [],
-          references: row.references,
-          brandRefId: brandObjects.find((b) => b.name === (row.client ?? ''))?.id,
-          rowAudience: rowAudienceFor(row),
-          nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
-        })
+        const entries = entriesFor(row)
         /**
          * One row, in the shape the canvas states an object in: mark and kind in the object's own
          * hue, its name, and the line under it saying what it contributes. `sub` is deliberately
