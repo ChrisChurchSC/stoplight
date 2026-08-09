@@ -30,6 +30,7 @@ const RELEASES: Release[] = [
         tag: 'New',
         items: [
           'The Audiences page can sweep the records nobody uses. Every campaign build mints audience records for the segments it writes to — deliberately, so generation has something to resolve against — and over months a brand’s shelf fills with names nobody typed. They were invisible while the pickers read the wrong shelf, and a wall of strangers the moment that was fixed. “Clean up unused” shows exactly which audiences nothing points at — no asset, no board, no smart object, no campaign, checked by id, by name and by alias, archived work included — and removes only those, after you have read the list. Anything your work references is never offered.',
+          'Messages get the same sweep. The builder names a message record per campaign, so that shelf fills the same way, and “unused” means the same thing on both pages because it is the same rule underneath — one boundary, not two promises.',
         ],
       },
     ],
