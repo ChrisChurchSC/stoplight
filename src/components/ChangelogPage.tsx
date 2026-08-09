@@ -23,6 +23,19 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.72',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'A card’s record is chosen when the card is, instead of from a dropdown on its face. You used to drop a blank Audience card, press it, and a list of the brand’s audiences opened over the board — covering the cards around the one you were working on, and it was the only way a card ever got a record. Two things were wrong with that and neither was the list. A card that means nothing until you press it is a control wearing a card’s clothes; and a menu anchored to a card has to fight the board for every click it receives, because a card starts its drag the moment you press it. So the list moved to the step where it answers something: press a card kind on the toolbar and it asks which one, then the card lands already meaning it. The face is a face now — what the card says, not a button.',
+          'Gone with the dropdown: the tick beside the linked record, and Unlink. Both answered “change what this card points at”, which is not a question the board asks any more — a card that is wrong is deleted, and the one you meant is added. The two places that make a card for you follow the same rule: the prompt that offers to fix a missing audience now asks which audience before wiring one in, rather than answering “nothing is wired” with a card that names nothing either, and the grid’s “＋ New …” lands its card already asking for the name.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.71',
     dateLabel: 'August 9, 2026',
     groups: [
