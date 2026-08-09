@@ -297,6 +297,22 @@ export function SheetGrid({
    */
   const [addFor, setAddFor] = useState<string | null>(null)
   const [addQuery, setAddQuery] = useState('')
+  /**
+   * THE CARET OPENS A DRAWER, not a native menu. A <select> can list records and nothing else: no
+   * search, no detail line, and no way to manage the library you are picking from — so a record you
+   * wanted renamed or gone meant a trip to its Records page and back. The caret now slides out the
+   * same drawer surface the ＋ uses, scoped to the one kind the chip is: pick a record, rename it in
+   * place, or delete it from the library, in the place you noticed it needed doing.
+   */
+  const [kindPick, setKindPick] = useState<{ rowId: string; kind: CanvasObjectKind } | null>(null)
+  const [kindQuery, setKindQuery] = useState('')
+  const [renameId, setRenameId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const closeKindPick = () => {
+    setKindPick(null)
+    setKindQuery('')
+    setRenameId(null)
+  }
 
   function startResize(idx: number, e: React.MouseEvent) {
     e.preventDefault()
@@ -428,6 +444,55 @@ export function SheetGrid({
   const brandObjects = useTrafficStore((s) => s.brandObjects)
   const allBrandDatasets = useTrafficStore((s) => s.brandDatasets)
   const bindCampaignBrand = useTrafficStore((s) => s.bindCampaignBrand)
+  const setClientAudiences = useTrafficStore((s) => s.setClientAudiences)
+  const updateMessage = useTrafficStore((s) => s.updateMessage)
+  const deleteMessage = useTrafficStore((s) => s.deleteMessage)
+  const updateConcept = useTrafficStore((s) => s.updateConcept)
+  const deleteConcept = useTrafficStore((s) => s.deleteConcept)
+  const updateSeason = useTrafficStore((s) => s.updateSeason)
+  const deleteSeason = useTrafficStore((s) => s.deleteSeason)
+  const updateVoice = useTrafficStore((s) => s.updateVoice)
+  const deleteVoice = useTrafficStore((s) => s.deleteVoice)
+  const updatePattern = useTrafficStore((s) => s.updatePattern)
+  const deletePattern = useTrafficStore((s) => s.deletePattern)
+  const updateCompany = useTrafficStore((s) => s.updateCompany)
+  const deleteCompany = useTrafficStore((s) => s.deleteCompany)
+  const updatePerson = useTrafficStore((s) => s.updatePerson)
+  const deletePerson = useTrafficStore((s) => s.deletePerson)
+  const updateTrigger = useTrafficStore((s) => s.updateTrigger)
+  const deleteTrigger = useTrafficStore((s) => s.deleteTrigger)
+  const updateProduct = useTrafficStore((s) => s.updateProduct)
+
+  /**
+   * HOW EACH KIND'S LIBRARY IS EDITED FROM THE PICKER DRAWER. Only kinds whose records pages
+   * already allow the same edit get it here — the drawer is a shortcut to those pages, not a new
+   * power. Products have no delete anywhere, so none here; a Brand is the campaign's owner and a
+   * proof point is campaign-scoped, so both stay pick-only.
+   */
+  const recordActions = (
+    kind: CanvasObjectKind,
+  ): { rename?: (id: string, name: string) => void; remove?: (id: string) => void } => {
+    switch (kind) {
+      case 'audience': {
+        if (!clientFilter || clientFilter === 'all') return {}
+        const shelf = () => useTrafficStore.getState().clientAudiences[clientFilter] ?? []
+        return {
+          rename: (id, name) => setClientAudiences(clientFilter, shelf().map((a) => (a.id === id ? { ...a, name } : a))),
+          remove: (id) => setClientAudiences(clientFilter, shelf().filter((a) => a.id !== id)),
+        }
+      }
+      case 'message': return { rename: (id, name) => updateMessage(id, { name }), remove: deleteMessage }
+      case 'concept': return { rename: (id, name) => updateConcept(id, { name }), remove: deleteConcept }
+      case 'season': return { rename: (id, name) => updateSeason(id, { name }), remove: deleteSeason }
+      case 'voice': return { rename: (id, name) => updateVoice(id, { name }), remove: deleteVoice }
+      case 'pattern': return { rename: (id, name) => updatePattern(id, { name }), remove: deletePattern }
+      case 'company': return { rename: (id, name) => updateCompany(id, { name }), remove: deleteCompany }
+      case 'person': return { rename: (id, name) => updatePerson(id, { name }), remove: deletePerson }
+      case 'trigger': return { rename: (id, name) => updateTrigger(id, { name }), remove: deleteTrigger }
+      case 'product': return { rename: (id, name) => updateProduct(id, { name }) }
+      default: return {}
+    }
+  }
 
   /**
    * SCOPED TO THE BRAND, exactly as the canvas scopes the same lists. These fed the pickers raw,
@@ -1054,7 +1119,6 @@ export function SheetGrid({
                         <div className="mf-wrap">
                           {entries.map((e) => {
                             const meta = OBJECT_META[e.kind]
-                            const opts = optsFor(e.kind)
                             const name = e.label || `No ${meta.label.toLowerCase()} picked`
                             const face = (
                               <>
@@ -1116,38 +1180,22 @@ export function SheetGrid({
                                     would look like it set that card and would quietly set the other. */}
                                 {e.primary && settable(e.kind) && (
                                   <span className="mf-swap">
-                                    <select
+                                    {/* The caret slides out the kind's own drawer — pick, rename,
+                                        delete — instead of dropping a native menu that could only
+                                        list names. Same invisible-control-over-drawn-caret shape
+                                        the select used, so the chip looks and points the same. */}
+                                    <button
+                                      type="button"
                                       className="mf-pick"
-                                      value={e.refId ?? ''}
                                       title={`Which ${meta.label.toLowerCase()} this asset is made from`}
                                       aria-label={`Which ${meta.label.toLowerCase()} this asset is made from`}
-                                      onClick={(ev) => ev.stopPropagation()}
-                                      onChange={(ev) => {
-                                        if (ev.target.value === '__new__') {
-                                          onCreateObject?.({ kind: e.kind, rowId: row.id })
-                                          return
-                                        }
-                                        setRowRecord(row, e.kind, ev.target.value)
+                                      onClick={(ev) => {
+                                        ev.stopPropagation()
+                                        setKindQuery('')
+                                        setRenameId(null)
+                                        setKindPick({ rowId: row.id, kind: e.kind })
                                       }}
-                                    >
-                                      {/* Also how you take one off: choosing it writes no record, which
-                                          drops the pin and hands the question back to the campaign. */}
-                                      <option value="">Select {meta.label.toLowerCase()}</option>
-                                      {/* A record reaching this row from a card that is not in the picker's
-                                          list still has to be selectable, or opening the dropdown would
-                                          silently change the answer. */}
-                                      {e.refId && !opts.some((o) => o.id === e.refId) && (
-                                        <option value={e.refId}>{e.label || 'Set on the canvas'}</option>
-                                      )}
-                                      {opts.map((o) => (
-                                        <option key={o.id} value={o.id}>
-                                          {o.label}
-                                        </option>
-                                      ))}
-                                      {CREATABLE.has(e.kind) && onCreateObject && (
-                                        <option value="__new__">+ New {meta.label.toLowerCase()}…</option>
-                                      )}
-                                    </select>
+                                    />
                                   </span>
                                 )}
                               </span>
@@ -1605,6 +1653,187 @@ export function SheetGrid({
                       onCreateObject?.({ kind, rowId: row.id })
                     },
                   }),
+                )}
+              </div>
+            </aside>
+          </>
+        )
+      })()}
+
+      {/**
+        * THE KIND'S OWN DRAWER, opened from a chip's caret: every record of this kind you have
+        * made, pickable, renamable and deletable in place. The ＋ drawer answers "what else could
+        * reach this asset"; this one answers "which {kind}, and is the library right" — so it lists
+        * one kind deep instead of twelve kinds wide, and carries the library edits the records
+        * pages allow (see recordActions for which, and why some kinds are pick-only).
+        */}
+      {kindPick && (() => {
+        const row = view.find((r) => r.id === kindPick.rowId)
+        if (!row) return null
+        const kind = kindPick.kind
+        const meta = OBJECT_META[kind]
+        const word = meta.label.toLowerCase()
+        const opts = optsFor(kind)
+        const actions = recordActions(kind)
+        // The same resolution the cell renders from: the asset's own pin, then the wired card,
+        // then (audience only) the row's plain-string mirror.
+        const type = REF_TYPE_FOR_OBJECT_KIND[kind]
+        const pinned = type ? (row.references ?? []).find((r) => r.type === type) : undefined
+        const carded = (cardsByRow.get(row.id) ?? []).find((c) => c.kind === kind && c.refId)
+        const current =
+          pinned?.id ?? carded?.refId ?? (kind === 'audience' ? rowAudienceFor(row)?.refId : undefined)
+        const q = kindQuery.trim().toLowerCase()
+        const shown = q
+          ? opts.filter((o) => o.label.toLowerCase().includes(q) || (o.detail ?? '').toLowerCase().includes(q))
+          : opts
+        const commitRename = (id: string) => {
+          const name = renameDraft.trim()
+          // An empty rename is a cancel, not a record called nothing.
+          if (name) actions.rename?.(id, name)
+          setRenameId(null)
+        }
+        return (
+          <>
+            <div className="flow-recdrawer-scrim" onClick={closeKindPick} />
+            <aside className="flow-recdrawer" role="dialog" aria-label={`Pick the ${word} for ${row.assetName}`}>
+              <header className="flow-recdrawer-head">
+                <span className="flow-recdrawer-title">{meta.label} · {row.assetName}</span>
+                <button className="flow-recdrawer-x" onClick={closeKindPick} aria-label="Close">
+                  ✕
+                </button>
+              </header>
+              <input
+                className="flow-recdrawer-search"
+                placeholder={`Search ${word}s…`}
+                value={kindQuery}
+                onChange={(e) => setKindQuery(e.target.value)}
+                autoFocus
+              />
+              <div className="flow-recdrawer-list mf-objlist">
+                {/* A record reaching this row from the canvas that the brand's list does not carry
+                    still has to be shown, or opening the drawer would deny the cell's own answer. */}
+                {current && !opts.some((o) => o.id === current) && (
+                  <div className="flow-ctxrow mf-objrow sel">
+                    <button className="flow-ctxrow-open" title="Set on the canvas" onClick={closeKindPick}>
+                      <span className="flow-ctxrow-ic" style={{ color: meta.tone }} aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          {meta.icon}
+                        </svg>
+                      </span>
+                      <span className="flow-ctxrow-txt">
+                        <span className="flow-ctxrow-kind" style={{ color: meta.tone }}>{meta.label} · picked</span>
+                        <span className="flow-ctxrow-name">{pinned?.label || carded?.label || 'Set on the canvas'}</span>
+                      </span>
+                    </button>
+                  </div>
+                )}
+                {!shown.length && (
+                  <div className="flow-recdrawer-empty">
+                    {opts.length ? `No ${word}s match.` : `No ${word}s yet.`}
+                  </div>
+                )}
+                {shown.map((o) => (
+                  <div key={o.id} className={`flow-ctxrow mf-objrow${o.id === current ? ' sel' : ''}`}>
+                    {renameId === o.id ? (
+                      <input
+                        className="flow-recdrawer-search"
+                        value={renameDraft}
+                        autoFocus
+                        aria-label={`Rename ${o.label}`}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename(o.id)
+                          if (e.key === 'Escape') setRenameId(null)
+                        }}
+                        onBlur={() => commitRename(o.id)}
+                      />
+                    ) : (
+                      <>
+                        <button
+                          className="flow-ctxrow-open"
+                          title={o.id === current ? `${o.label} is picked` : `Make this asset from ${o.label}`}
+                          onClick={() => {
+                            setRowRecord(row, kind, o.id, o.label)
+                            closeKindPick()
+                          }}
+                        >
+                          <span className="flow-ctxrow-ic" style={{ color: meta.tone }} aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              {meta.icon}
+                            </svg>
+                          </span>
+                          <span className="flow-ctxrow-txt">
+                            <span className="flow-ctxrow-kind" style={{ color: meta.tone }}>
+                              {o.id === current ? '✓ picked' : meta.label}
+                            </span>
+                            <span className="flow-ctxrow-name">{o.label}</span>
+                            {o.detail && <span className="flow-ctxrow-sub">{o.detail}</span>}
+                          </span>
+                        </button>
+                        {actions.rename && (
+                          <button
+                            className="flow-ctxrow-del"
+                            title={`Rename ${o.label}`}
+                            aria-label={`Rename ${o.label}`}
+                            onClick={() => {
+                              setRenameDraft(o.label)
+                              setRenameId(o.id)
+                            }}
+                          >
+                            ✎
+                          </button>
+                        )}
+                        {actions.remove && (
+                          <button
+                            className="flow-ctxrow-del"
+                            title={`Delete ${o.label} from the library`}
+                            aria-label={`Delete ${o.label}`}
+                            onClick={() => {
+                              // Deleting the record you had picked also unpins it here, so the row
+                              // does not go on claiming a record that no longer exists.
+                              if (o.id === current) setRowRecord(row, kind, '')
+                              actions.remove?.(o.id)
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+                {(current || (CREATABLE.has(kind) && onCreateObject)) && <div className="mf-objsec">Actions</div>}
+                {current && (
+                  <div className="flow-ctxrow mf-objrow">
+                    <button
+                      className="flow-ctxrow-open"
+                      title="Drop the pin and hand the question back to the campaign"
+                      onClick={() => {
+                        setRowRecord(row, kind, '')
+                        closeKindPick()
+                      }}
+                    >
+                      <span className="flow-ctxrow-txt">
+                        <span className="flow-ctxrow-name"><em>No {word} — use the campaign’s</em></span>
+                      </span>
+                    </button>
+                  </div>
+                )}
+                {CREATABLE.has(kind) && onCreateObject && (
+                  <div className="flow-ctxrow mf-objrow">
+                    <button
+                      className="flow-ctxrow-open"
+                      title={`Make a new ${word} for this asset`}
+                      onClick={() => {
+                        closeKindPick()
+                        onCreateObject({ kind, rowId: row.id })
+                      }}
+                    >
+                      <span className="flow-ctxrow-txt">
+                        <span className="flow-ctxrow-name"><em>＋ New {word}…</em></span>
+                      </span>
+                    </button>
+                  </div>
                 )}
               </div>
             </aside>

@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.62',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'New',
+        items: [
+          'The caret on a Made from chip slides out a drawer instead of dropping a menu. A native menu could list record names and nothing else; the drawer is the same surface the ＋ already uses, scoped to the one kind the chip is — searchable, with each record’s own line under its name, ticking the one that is picked. And it carries the library edits that used to mean a trip to the Records page: rename a record in place, or delete it — with the same powers those pages grant, no more (products have no delete anywhere; a brand and a proof point stay pick-only). Deleting the record an asset had picked unpins it there too, so the row never claims a record that no longer exists.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.61',
     dateLabel: 'August 8, 2026',
     groups: [
