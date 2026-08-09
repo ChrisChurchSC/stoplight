@@ -149,6 +149,18 @@ export function SegmentsView() {
     )
   }
 
+  /**
+   * STARTING FRESH IS ALLOWED — the whole shelf, used and unused alike, after a confirm that says
+   * how much live wiring gets cut. See MessagesView for the twin and the rationale.
+   */
+  const [confirmWipe, setConfirmWipe] = useState(false)
+  const usedCount = audiences.length - unused.length
+  const runWipe = () => {
+    setClientAudiences(brand, [])
+    setConfirmWipe(false)
+    showToast('Audiences cleared. The next generation mints fresh records for what it writes.')
+  }
+
   // Recommend the three INTERPRETIVE fields (message angle, funnel stage, conversion outcome) for one
   // audience from its observable facts + the brand objective, so a user doesn't author them blank.
   // Fill-when-empty: never clobbers a value the user already wrote. Maps the recommender's funnel KEY
@@ -240,6 +252,34 @@ export function SegmentsView() {
         </div>
       </>
     )}
+    {confirmWipe && (
+      <>
+        <div className="drawer-scrim" onClick={() => setConfirmWipe(false)} />
+        <div className="confirm-modal" role="dialog" aria-label="Delete all audiences">
+          <strong className="confirm-title">
+            Start fresh — delete all {audiences.length} audience{audiences.length === 1 ? '' : 's'}?
+          </strong>
+          <p className="confirm-text">
+            {usedCount > 0
+              ? `${usedCount} of these are still referenced by live campaigns. Their cards and pins will keep the stored name and point at nothing until you re-pick or regenerate — the next generation mints fresh records for what it writes.`
+              : 'Nothing live references any of these. The next generation mints fresh records for what it writes.'}{' '}
+            Removed for good.
+          </p>
+          <p className="confirm-text" style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {audiences.map((a) => a.name || 'Untitled').join(' · ')}
+          </p>
+          <div className="confirm-foot">
+            <button className="btn sm" onClick={() => setConfirmWipe(false)}>
+              Cancel
+            </button>
+            <span className="spacer" />
+            <button className="btn sm danger" onClick={runWipe}>
+              Delete all {audiences.length}
+            </button>
+          </div>
+        </div>
+      </>
+    )}
     <RecordsTable
       title="Audiences"
       term="audience"
@@ -254,6 +294,7 @@ export function SegmentsView() {
         // Only offered while there is something to sweep: a standing "Clean up (0)" would be a
         // button that exists to be disabled.
         ...(unused.length ? [{ label: `Clean up unused (${unused.length})`, run: () => setConfirmSweep(true) }] : []),
+        ...(audiences.length ? [{ label: 'Start fresh…', run: () => setConfirmWipe(true) }] : []),
         { label: 'Guided', run: openAudienceWizard },
       ]}
       onAdd={() => {
