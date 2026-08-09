@@ -586,9 +586,20 @@ export function SheetGrid({
    * card's picker prints the same line under the same names, and when the two chose their own
    * fields the same Voice could read as its tone here and its summary there.
    */
-  const optionsFor = (kind: CanvasObjectKind): { id: string; label: string; detail?: string }[] => {
+  /**
+   * `name` is the record's OWN name and `label` is what a row in the list shows, which are the same
+   * string right up until the record has no name — and then they must not be confused.
+   *
+   * "Untitled" is a placeholder for a list: a row with nothing written on it cannot be pressed. It is
+   * not an answer to "what is this asset made from", and it used to become one, because the Made from
+   * column resolves a chip's text through this list. A card whose record was minted for it by the
+   * inspector (see ensureVoiceFor and its siblings — they mint `{ name: '' }` and fill the fields
+   * around it) then read as "Untitled" in the grid while the canvas showed the name on the card,
+   * which is the one place the two surfaces are supposed to agree.
+   */
+  const optionsFor = (kind: CanvasObjectKind): { id: string; name: string; label: string; detail?: string }[] => {
     const named = <T extends { id: string; name?: string }>(l: T[], detail?: (x: T) => string | undefined) =>
-      l.map((x) => ({ id: x.id, label: x.name || 'Untitled', detail: detail?.(x)?.trim() || undefined }))
+      l.map((x) => ({ id: x.id, name: x.name ?? '', label: x.name || 'Untitled', detail: detail?.(x)?.trim() || undefined }))
     switch (kind) {
       case 'brand': return named(brandObjects, recordDetail.brand)
       case 'product': return named(products, recordDetail.product)
@@ -608,13 +619,16 @@ export function SheetGrid({
       case 'trigger': return named(triggers, recordDetail.trigger)
       case 'data-source': return brandDatasets.map((d) => ({
         id: d.id,
+        name: d.name ?? '',
         label: d.name || 'Untitled data set',
         detail: recordDetail.dataSource(d),
       }))
       // Proof lives per campaign rather than per brand, which is why it is fetched differently
       // from every other kind here.
+      // A proof point calls its name `label`, which is the one kind that disagrees.
       case 'proof-point': return rtbsForCampaign(scopeCampaign).map((r) => ({
         id: r.id,
+        name: r.label ?? '',
         label: r.label || 'Untitled proof point',
         detail: recordDetail.proofPoint(r)?.trim() || undefined,
       }))
@@ -693,7 +707,7 @@ export function SheetGrid({
   })()
 
   /** The records you can pick, resolved once per render rather than once per row per kind. */
-  const optionsByKind = new Map<CanvasObjectKind, { id: string; label: string; detail?: string }[]>(
+  const optionsByKind = new Map<CanvasObjectKind, ReturnType<typeof optionsFor>>(
     MADE_FROM_KINDS.map((k) => [k, optionsFor(k)]),
   )
   const optsFor = (kind: CanvasObjectKind) => optionsByKind.get(kind) ?? []
@@ -795,7 +809,9 @@ export function SheetGrid({
       // The asset's own audience, for when no card or pin names one. Set on the campaign canvas and
       // by seeding, neither of which mints a reference.
       rowAudience: rowAudienceFor(row),
-      nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.label,
+      // The record's own name, and undefined where it has none — NOT the list's placeholder, which
+      // would beat the card's actual name in madeFrom's ladder and print "Untitled" over it.
+      nameOf: (kind, refId) => optsFor(kind).find((o) => o.id === refId)?.name || undefined,
     })
 
   /**
@@ -1224,7 +1240,15 @@ export function SheetGrid({
                         <div className="mf-wrap">
                           {entries.map((e) => {
                             const meta = OBJECT_META[e.kind]
-                            const name = e.label || `No ${meta.label.toLowerCase()} picked`
+                            /**
+                             * NAMELESS AND UNPICKED ARE DIFFERENT THINGS, and the chip has to say
+                             * which. A record the inspector minted for a card carries every field
+                             * that was written into it and no name, so it is picked, it is reaching
+                             * the writer, and there is nothing to call it — "No voice picked" about
+                             * it is simply false. Only a chip with no record at all says that.
+                             */
+                            const name =
+                              e.label || (e.refId ? `Untitled ${meta.label.toLowerCase()}` : `No ${meta.label.toLowerCase()} picked`)
                             const entryKey = `${e.kind}:${e.cardId ?? e.refId ?? 'pin'}`
                             const selected = selChip?.rowId === row.id && selChip.entryKey === entryKey
                             const select = () => setSelChip({ rowId: row.id, kind: e.kind, entryKey })
