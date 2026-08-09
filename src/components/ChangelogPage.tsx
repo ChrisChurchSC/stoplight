@@ -23,6 +23,18 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.75',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The campaign’s name in the header is its name, not a menu. It was a bordered pill with a caret, and pressing it dropped a list of the brand’s other campaigns with a “+ New campaign” above them — a second route to the page sitting one crumb to its left, which lists the same campaigns with their channels, their assets and their state where this gave a name and a count, and which has carried that same ＋ all along. It was also the only thing in the trail dressed as a button, while the segment that actually is one — Campaigns — is flat: the affordance pointed at the word you cannot press. The last step of a breadcrumb says where you are, so now it does.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.74',
     dateLabel: 'August 9, 2026',
     groups: [

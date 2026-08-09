@@ -3974,94 +3974,22 @@ button.mf-open:focus-visible,
 .flow-name:focus {
   background: var(--surface-2);
 }
-/* Campaign switcher in the header (open existing campaigns as flows). */
-.flow-switcher {
+/* WHERE YOU ARE, at the end of the trail. Was a bordered pill with a caret opening a list of the
+   brand's other campaigns — a second route to the page one crumb to the left, wearing the only
+   button chrome in a trail whose actually-clickable segment (.flow-crumb-home) is flat. Same type as
+   that one, at full strength rather than muted, because this is the segment you are standing on.
+   Padded to match it so the two sit on one line without the name stepping in or out. */
+.flow-crumb-now {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font: inherit;
   font-size: 13.5px;
   font-weight: 650;
   color: var(--text);
   padding: 4px 9px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-/* An unnamed campaign has nothing to switch away from, so it is a label wearing the same shape
-   rather than a menu that opens onto a list you are not in yet. */
-.flow-switcher-flat { cursor: default; }
-.flow-switcher-flat:hover { background: var(--surface); }
-.flow-switcher:hover {
-  background: var(--surface-2);
-}
-.flow-switcher-caret {
-  font-size: 10px;
-  color: var(--text-faint);
-}
-.flow-switch-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-}
-.flow-switch-menu {
-  position: absolute;
-  top: 46px;
-  left: 74px;
-  z-index: 31;
-  width: 280px;
-  max-height: 60vh;
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--border-strong, var(--border));
-  border-radius: 11px;
-  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.2);
-  padding: 6px;
-}
-.flow-switch-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  text-align: left;
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.flow-switch-item:hover {
-  background: var(--surface-2);
-}
-.flow-switch-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.flow-switch-new {
-  font-weight: 600;
-  color: var(--accent);
-}
-.flow-switch-name {
-  flex: 1;
   min-width: 0;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.flow-switch-count {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.flow-switch-sep {
-  height: 1px;
-  background: var(--border);
-  margin: 5px 4px;
+  white-space: nowrap;
 }
 .flow-tabs {
   display: flex;
@@ -24487,9 +24415,6 @@ table.aud-sheet td.stick .aud-cell {
     .flow-scan-btn,
     .flow-src-opt,
     .flow-step-apply,
-    .flow-switch-item,
-    .flow-switcher,
-    .flow-switcher-flat,
     .flow-tagpick-item,
     .flow-tagrow-del,
     .flow-tb-pal,
@@ -24555,7 +24480,6 @@ table.aud-sheet td.stick .aud-cell {
  * the page to carry on once the list is done. Containing those would trap the page instead of
  * freeing it, which is the same defect pointing the other way.
  */
-.flow-switch-menu,
 .flow-home-flightpick-menu,
 .task-pick-menu,
 .lib-add-menu,
