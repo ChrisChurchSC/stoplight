@@ -4355,7 +4355,7 @@ export function FlowsView() {
   const [faceOverride, setFaceOverride] = useState<{ id: string; mode: AssetMode } | null>(null)
   const postFace = (r: TrafficRow): AssetMode => (faceOverride?.id === r.id ? faceOverride.mode : assetMode(r))
   /** What was typed into the Active face but not yet committed: the link, and the copy read back. */
-  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string } | null>(null)
+  const [liveDraft, setLiveDraft] = useState<{ id: string; url: string; note?: string; blocked?: boolean } | null>(null)
   /**
    * The read in flight, and what it had to say — tagged with WHICH read, because the copy and the
    * numbers are pulled by two buttons in two sections and an answer printed under the other one
@@ -9561,10 +9561,27 @@ export function FlowsView() {
         return
       }
       const r = verdict.refusal
-      // A duplicate is the one refusal with no "do it anyway": two rows carrying one URL means every
-      // count of that post doubles, and sourceUrl is the dedup key the whole import path turns on.
+      /**
+       * A DUPLICATE IS THE ONE REFUSAL WITH NO "DO IT ANYWAY", and it has to LOOK like one.
+       *
+       * It did not. The button's label keyed off "is there a note", so a refusal that cannot be
+       * overruled still offered "Attach it anyway" — and pressing it ran this check again, set the
+       * same note, and did nothing, forever. A button that states an action it will never perform is
+       * worse than no button.
+       *
+       * So the draft carries whether it is blocked, and the message says where the other one IS. The
+       * common way to hit this is the site ingest: a brand's own pages are imported into its content
+       * library, so the page you are attaching is very often already an asset somewhere you did not
+       * think to look, and "it exists" without "it is over there" is a dead end.
+       */
       if (r?.kind === 'duplicate') {
-        setLiveDraft({ id: selPost.id, url: raw, note: `"${r.row.assetName}" is already this post. One asset per published post, or everything it did is counted twice.` })
+        const where = (r.row.campaign ?? '').trim()
+        setLiveDraft({
+          id: selPost.id,
+          url: raw,
+          blocked: true,
+          note: `Already attached to "${r.row.assetName}"${where ? ` in ${campaignShortName(where, clientForCampaign(where))}` : ''}. One asset per published post, or everything it did is counted twice — work on that one, or paste a different link.`,
+        })
         return
       }
       // The other two are questions. Pressing again is the answer, because the person can see the
@@ -9613,9 +9630,14 @@ export function FlowsView() {
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); attach() } }}
             />
             {draft?.note && <p className="flow-live-warn">{draft.note}</p>}
-            <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
-              {draft?.note ? 'Attach it anyway' : 'Attach this post'}
-            </button>
+            {/* No button at all where the answer is no. "Attach it anyway" is offered only for the
+                two refusals that are questions — a shape we have not seen, or a channel one of the
+                two got wrong — and never for the one that cannot be overruled. */}
+            {!draft?.blocked && (
+              <button className="flow-insp-open" disabled={!draft?.url.trim()} onClick={attach}>
+                {draft?.note ? 'Attach it anyway' : 'Attach this post'}
+              </button>
+            )}
           </>
         ) : (
           <>
