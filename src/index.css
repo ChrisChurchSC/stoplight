@@ -5290,9 +5290,12 @@ button.mf-open:focus-visible,
    below the only destructive control on the panel and must not compete with it, and the common
    answer is the object's own document, which is already there. Wrapped and gapped because two of
    them can show at once and the column is narrow. */
+/* Mixed row: a real button for taking a file, quiet links for the rare paths beside it. Centred
+   rather than baseline-aligned, because a bordered control and a bare underlined one do not share
+   a baseline that looks like anything. */
 .flow-doc-actions {
   margin: 7px 0 0;
-  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
 }
 .flow-doc-override { margin: 7px 0 0; }
 .flow-doc-override-go {
