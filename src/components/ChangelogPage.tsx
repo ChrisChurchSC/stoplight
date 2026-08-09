@@ -23,6 +23,20 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.71',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Fixed',
+        items: [
+          'A new campaign is nobody’s until you say whose. Starting one filed it under a brand and put that brand’s name on the front of the title before a word had been typed — and on a workspace holding a single brand it was always that brand, whatever the campaign was called and whoever it was for. The rename field could only edit the part after the prefix, so there was no gesture anywhere that could say “this one is not theirs”. The culprit was a brand SCOPE being read as an answer: the question “whose records should this canvas offer me” is allowed to fall back to the only brand you have, and naming and filing were reading it. They read the campaign’s own record now, which starts empty. A campaign begins in Drafts — real, listed, nobody’s — and the canvas already says how it leaves: wire a Brand card into the brief. That files it and renames it to match, so the title picks up the brand at the moment you choose one instead of before.',
+          'Renaming a campaign no longer leaves its board behind. A campaign’s name is the key its board, its chat thread, the objects made on it, its fan conditions, its RTBs and its last-open canvas all hang off, and a rename moved only the record, the assets, the flights and the open tabs. Everything else stayed filed under the old name — so the campaign arrived at its new title with an empty canvas and no thread, and the originals sat under a name nothing would ask for again. All of it moves together now. Found while making a Brand card able to rename the campaign it binds.',
+          'And a campaign in Drafts is no longer allowed to generate. “Is there a brand to write in the voice of” was answered by a check that knew about Unassigned and not about the Drafts space, which every other part of the app already treats as a shelf rather than a client — so copy would have been drawn from a bucket holding one placeholder audience and no proof. It asks for a Brand card first, in the same words it always used for a campaign with no brand at all.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.70',
     dateLabel: 'August 9, 2026',
     groups: [
