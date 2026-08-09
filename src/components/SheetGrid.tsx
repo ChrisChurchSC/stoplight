@@ -11,6 +11,7 @@ import { usablePatterns } from '../domain/pattern'
 import { recordDetail } from '../domain/recordDetail'
 import { madeFrom } from '../domain/madeFrom'
 import { madeFromRemoval, type MadeFromRemoval } from '../domain/madeFromRemove'
+import { isLiveAsset } from '../domain/assetMode'
 import { mergeAudiences } from '../domain/audiences'
 import { resolveBrandScope } from '../domain/brand'
 import { REF_TYPE_FOR_OBJECT_KIND } from '../domain/flowBoard'
@@ -1042,7 +1043,10 @@ export function SheetGrid({
                 <tr
                   key={row.id}
                   data-row-id={row.id}
-                  className={`data-row${pick?.kind === 'row' && pick.rowId === row.id ? ' sel' : ''}${
+                  /* Live reads down the sheet the same way it reads across the canvas, off the same
+                     predicate the inspector opens on — a green edge on the row number. Nothing marks
+                     a planned row: that is most of the sheet, and a mark on the majority is not one. */
+                  className={`data-row${isLiveAsset(row) ? ' live' : ''}${pick?.kind === 'row' && pick.rowId === row.id ? ' sel' : ''}${
                     row.id === selectedRowId ? ' on' : ''
                   }`}
                   /**
