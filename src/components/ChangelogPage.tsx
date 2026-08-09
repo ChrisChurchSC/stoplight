@@ -23,6 +23,31 @@ interface Release {
 // Reset to empty on 2 August 2026; every release up to v1.15 is in git history.
 const RELEASES: Release[] = [
   {
+    version: 'v1.66',
+    dateLabel: 'August 9, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'The generator on a card asks one thing. “Describe this brand” sat above two lines saying that a sentence is enough, that generating fills only what is still empty, and that nothing counts until the card is connected: more words than the box they explained, and together they read as a warning about using it. All three are true and none is urgent, so in a panel this narrow the instruction is now all that is there.',
+          'And the upload route stops introducing itself. “Hand it the document that already says it”, with a paragraph under it about a .md kept whole and read as what the card is, sat directly on top of a button reading “Upload a .md”: the heading restating its own control, the paragraph describing a document nobody had chosen yet. Both are gone wherever there is a prompt box above them. A Company card keeps its lead, because there nothing can be generated and the reason why is the whole point of the sentence.',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'v1.65',
+    dateLabel: 'August 8, 2026',
+    groups: [
+      {
+        tag: 'Improved',
+        items: [
+          'Saving a card as a smart object is where you can see it. The control went in under “Applied to”, which on a card with a document attached sits below the name, the record, the whole document panel and the list of everything that card feeds: most of a screen down a narrow column, and the report was simply that it was not there. It sits under the card’s Name now, the other thing on the panel that is about the card itself rather than about what the card says, so it is on screen the moment a card is selected.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'v1.64',
     dateLabel: 'August 8, 2026',
     groups: [

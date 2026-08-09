@@ -8260,15 +8260,15 @@ export function FlowsView() {
                     is — a second, separate answer to the same question. */}
                 {canGenerate && target && (
                   <div className="flow-fillbox">
-                    {/* Two facts you cannot see anywhere, and nothing you can. Generating will not
-                        overwrite what is already written, and none of this counts until the card is
-                        connected — everything else the controls say for themselves. */}
+                    {/* THE ASK, AND NOTHING ELSE.
+                        This carried two lines of caveat under it — a sentence is enough, it fills
+                        only what is empty, none of it counts until the card is connected — which is
+                        more words than the box they explain and reads as a warning about using it.
+                        All three are true and none is urgent: the box takes a description, and in a
+                        panel this narrow the instruction is the only part that has to be legible at
+                        a glance. */}
                     <div className="flow-fill-head">
                       <span className="flow-fill-title">Describe this {kindLabel}</span>
-                      <span className="flow-fill-help">
-                        A sentence is enough. Generating fills only what is still empty, and nothing
-                        on this card reaches the copy until it is connected.
-                      </span>
                     </div>
                     <textarea
                       className="flow-fill-input"
@@ -8329,28 +8329,31 @@ export function FlowsView() {
                       place when there is nothing there. */}
                   {!ref && (
                     <>
-                      <div className="flow-doc-lead">
-                        <span className="flow-doc-title">
-                          {canGenerate ? 'Hand it the document that already says it' : `Hand this ${kindLabel} its document`}
-                        </span>
-                        <span className="flow-doc-help">
-                          {canGenerate ? (
-                            <>
-                              A .md, kept whole and read by the copy writer as what this card is. It
-                              becomes this {kindLabel} in Records, so every campaign that uses it
-                              reads the same document.
-                            </>
-                          ) : (
-                            <>
-                              A {kindLabel} is a real organisation, so its context has to come from a
-                              document rather than from a description: a generated account is a page
-                              of confident guesses about somebody real. The document becomes the
-                              account in Records. Nothing here reaches the copy until this card is
-                              connected.
-                            </>
-                          )}
-                        </span>
-                      </div>
+                      {/* AND NO HEADING WHERE THE BUTTON IS ALREADY THE HEADING.
+                          The cut above took the pitch out of the attached state; this takes it out
+                          of the empty one too, wherever there is a prompt box above it. "Hand it
+                          the document that already says it" sat directly on top of a button reading
+                          "Upload a .md", so the heading restated its own control and the paragraph
+                          under it explained a document nobody had chosen yet. The consequence it
+                          was there to give — the file becomes the record, and every campaign using
+                          that record reads it — is said where it is actually true, on the attached
+                          document, a few lines below.
+
+                          A Company card keeps its lead. There it is not a second route to the same
+                          place: there is nothing to generate, and WHY a real organisation cannot be
+                          described into existence is the entire point of the sentence. */}
+                      {!canGenerate && (
+                        <div className="flow-doc-lead">
+                          <span className="flow-doc-title">Hand this {kindLabel} its document</span>
+                          <span className="flow-doc-help">
+                            A {kindLabel} is a real organisation, so its context has to come from a
+                            document rather than from a description: a generated account is a page
+                            of confident guesses about somebody real. The document becomes the
+                            account in Records. Nothing here reaches the copy until this card is
+                            connected.
+                          </span>
+                        </div>
+                      )}
                       <button
                         className="flow-fill-upload"
                         disabled={busy}
